@@ -120,6 +120,7 @@ final class Coverages {
                                 Symbols symbols, ReadingPolicy policy, Core body,
                                 souther.compiler.check.ElementBindings elements,
                                 CoverageSites.Plan plan, souther.compiler.query.Adequacy.Observed observed,
+                                souther.compiler.query.Adequacy.Level level,
                                 List<BorderAssessment> boundaries,
                                 PathReachability.Answers arrives,
                                 souther.compiler.check.StatedContract stated) {
@@ -150,7 +151,7 @@ final class Coverages {
                 continue;   // said by `undivided`, which also says which kind of nothing it is
             }
             if (axis.derivable()) {
-                axes.add(coverageOf(axis, readings));
+                axes.add(coverageOf(axis, readings, level.reports()));
                 divided.add(axis);
             }
         }
@@ -186,7 +187,7 @@ final class Coverages {
         return new PartitionEvidence(
                 PartitionDerivation.of(axes, partitioning.partitionClosure()),
                 BoundaryDerivation.of(boundaries, partitioning.borderClosure()),
-                pairsOf(behavior.name(), divided, readings),
+                pairsOf(behavior.name(), divided, readings, level.reports()),
                 partitioning.undivided(), partitioning.unread(), partitioning.blocked(),
                 partitioning.notSeparated(), List.copyOf(standing),
                 partitioning.omitted(),
@@ -325,7 +326,7 @@ final class Coverages {
      * single-position coverage is measured on its own and not derived from this.
      */
     private static PartitionEvidence.PairSpace pairsOf(String behavior, List<Axis> axes,
-                                                      Readings readings) {
+                                                      Readings readings, boolean asked) {
         // The product of what a row can be written at, not of what the types declare. A case the
         // rules refuse is not a class of its position at all, so the slice of the product it would
         // have taken part in is not here to be counted — which is a different thing from a pair
@@ -338,6 +339,11 @@ final class Coverages {
         }
         if (total == 0) {
             return PartitionEvidence.PairSpace.NONE;
+        }
+        // Before anything about the rows, because there are none to be about: a build that asked for
+        // no measurement read no row, and how large the space is stays what the model says it is.
+        if (!asked) {
+            return PartitionEvidence.PairSpace.notAsked((int) Math.min(total, Integer.MAX_VALUE));
         }
         // Before the size of the space is worth mentioning. A combination nothing tried to sit in is
         // not a combination left untried by anybody, and how many of them there are says nothing
@@ -410,7 +416,8 @@ final class Coverages {
                 && at.measured() && filed.term() != null ? filed.term().toString() : null;
     }
 
-    private static PartitionEvidence.AxisCoverage coverageOf(Axis axis, Readings readings) {
+    private static PartitionEvidence.AxisCoverage coverageOf(Axis axis, Readings readings,
+                                                             boolean asked) {
         List<String> classes = axis.classes().stream().map(PartitionClass::id).toList();
         // What the axis already says about which of this position's rules nothing accounted for,
         // each named. Read off the axis rather than worked out here, and in the questions' own
@@ -432,6 +439,12 @@ final class Coverages {
         // own, and what was declared about those positions is put beside it afterwards
         // ({@link ClaimReport}) — which is what keeps a claim from narrowing a denominator by being
         // in reach of the code that counts one.
+        // Which classes there are is the model's answer and is above; what the rows reach of them is
+        // below, and a build that asked for no measurement read no row.
+        if (!asked) {
+            return PartitionEvidence.AxisCoverage.notAsked(axis.id(),
+                    axis.term().toString(), classes, read);
+        }
         if (readings.noRows() && !readings.someRowsUnseen()) {
             return PartitionEvidence.AxisCoverage.noRows(axis.id(),
                     axis.term().toString(), classes, read);
@@ -513,7 +526,7 @@ final class Coverages {
      */
     static List<BorderAssessment> assess(
             Axis axis, BehaviorInputs where, souther.compiler.query.Adequacy.Observed observed,
-            boolean armsAsked, boolean knownWritable, Probe probe,
+            souther.compiler.query.Adequacy.Level level, boolean knownWritable, Probe probe,
             souther.compiler.inputs.Quantities rules, ReachingCuts reaching,
             souther.compiler.numeric.NumericDomain.Bounds within) {
         // Keyed by the line rather than by the reading of it. A guard inside a non-recursive helper
@@ -525,7 +538,7 @@ final class Coverages {
             out.merge(BoundaryLine.of(each),
                     assessed(each, shapeOf(each, where, knownWritable, probe, realizer,
                                     regionFor(each, rules, reaching)),
-                            observed, armsAsked),
+                            observed, level),
                     Coverages::whicheverSawMore);
         }
         return List.copyOf(out.values());
@@ -592,7 +605,7 @@ final class Coverages {
      */
     private static BorderAssessment assessed(Border border, OneShapeOfBorder shape,
                                              souther.compiler.query.Adequacy.Observed observed,
-                                             boolean armsAsked) {
+                                             souther.compiler.query.Adequacy.Level level) {
         // Whether meeting this border takes the comparison having run, asked of the rule rather than
         // read off which kind it is, and asked once for the border rather than once per point. A
         // guard's line is about a place in a body and is reached or not; an invariant's and a
@@ -600,8 +613,8 @@ final class Coverages {
         // a relation — so for both of those writing the value is the whole of what there is to reach.
         boolean guard = border.origin().comparisonAt().isPresent();
         Measurement<ItemAssessment.Coverage> absent = guard
-                ? whyNoGuardLine(observed, armsAsked)
-                : whyNoInvariantLine(observed.rows(), observed.someRowsUnseen());
+                ? whyNoGuardLine(observed, level)
+                : whyNoInvariantLine(observed, level);
 
         java.util.EnumMap<PointRole, ItemAssessment> items = new java.util.EnumMap<>(PointRole.class);
         for (PointRole role : PointRole.values()) {
@@ -985,7 +998,8 @@ final class Coverages {
      */
     static List<BorderAssessment> assessBetween(
             Partitions.Partitioning partitioning, BehaviorInputs where,
-            souther.compiler.query.Adequacy.Observed observed, boolean armsAsked, Probe probe) {
+            souther.compiler.query.Adequacy.Observed observed,
+            souther.compiler.query.Adequacy.Level level, Probe probe) {
         // Keyed by the line the author drew, the way a line at a place is. A guard inside a
         // non-recursive helper is read once per call of that helper, and the rows do not owe the same
         // line twice for having been offered it twice — nor may one reading of it take back what
@@ -997,7 +1011,7 @@ final class Coverages {
                     assessed(each, shapeOf(each, where, false, probe, realizer,
                                     regionFor(each, partitioning.quantities(),
                                             partitioning.reaching())), observed,
-                            armsAsked),
+                            level),
                     Coverages::whicheverSawMore);
         }
         return List.copyOf(out.values());
@@ -1090,8 +1104,13 @@ final class Coverages {
      * classes that record where the row went exist and survived.
      */
     private static Measurement<ItemAssessment.Coverage> whyNoGuardLine(
-            souther.compiler.query.Adequacy.Observed observed, boolean armsAsked) {
-        if (!armsAsked) {
+            souther.compiler.query.Adequacy.Observed observed,
+            souther.compiler.query.Adequacy.Level level) {
+        Measurement<ItemAssessment.Coverage> nobodyAsked = whyNothingWasAsked(level);
+        if (nobodyAsked != null) {
+            return nobodyAsked;
+        }
+        if (!level.runsInstrumentedRows()) {
             return new Measurement.NotMeasured<>(ItemAssessment.Coverage.NotAsked.ARMS_NOT_ASKED);
         }
         if (observed.armsUnseen()) {
@@ -1103,7 +1122,16 @@ final class Coverages {
             return new Measurement.FailedToMeasure<>(
                     ItemAssessment.Coverage.CouldNotAsk.ARMS_UNREADABLE, WeakeningSet.ofAll(by));
         }
-        return whyNoInvariantLine(observed.rows(), observed.someRowsUnseen());
+        return whyNoInvariantLine(observed, level);
+    }
+
+    /** What every line of every kind says where the build asked for no measurement: the rules drew
+     *  it, and nothing was read against it. Asked before either path below, because neither of them
+     *  is about a run that did not happen. */
+    private static Measurement<ItemAssessment.Coverage> whyNothingWasAsked(
+            souther.compiler.query.Adequacy.Level level) {
+        return level.reports() ? null
+                : new Measurement.NotMeasured<>(ItemAssessment.Coverage.NotAsked.NOT_ASKED);
     }
 
     /**
@@ -1115,7 +1143,14 @@ final class Coverages {
      * that could say so would be able to say something that is not true of it.
      */
     private static Measurement<ItemAssessment.Coverage> whyNoInvariantLine(
-            List<RowOutcome> rows, boolean someRowsUnseen) {
+            souther.compiler.query.Adequacy.Observed observed,
+            souther.compiler.query.Adequacy.Level level) {
+        Measurement<ItemAssessment.Coverage> nobodyAsked = whyNothingWasAsked(level);
+        if (nobodyAsked != null) {
+            return nobodyAsked;
+        }
+        List<RowOutcome> rows = observed.rows();
+        boolean someRowsUnseen = observed.someRowsUnseen();
         // Nothing read is not the same as nothing written. A source that could not be evaluated may
         // hold the row that is at this line, so the question is undecided rather than unasked, and
         // the reading below settles it that way.

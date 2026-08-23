@@ -170,8 +170,7 @@ final class AReportOfOneBorder {
                 1, 0, WeakeningSet.none(), null, partition,
                 souther.compiler.query.ClaimAnnotations.NONE, null, List.of());
         return new AdequacyReport(AdequacyReport.SCHEMA_VERSION, "test",
-                Adequacy.Asked.warningsAt(Adequacy.Level.ALL, held),
-                WeakeningSet.none(),
+                held, WeakeningSet.none(),
                 List.of(new AdequacyReport.ModuleReport("example.wide",
                         new SourceId("wide.sou"), WeakeningSet.none(),
                         List.of(), List.of(behavior))))

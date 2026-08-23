@@ -420,7 +420,6 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
         AdequacyReport armsNotAsked = reportOf(UNCOVERED_ONLY, Adequacy.Level.WITNESS);
         AdequacyReport armsAsked = reportOf(UNCOVERED_ONLY, Adequacy.Level.ALL);
 
-        assertEquals(Adequacy.Level.WITNESS, armsNotAsked.askedLevel());
         assertTrue(armsNotAsked.adequacyGaps().stream()
                         .noneMatch(f -> f.kind() == Adequacy.Kind.ARM_UNREACHED),
                 armsNotAsked.human(SourceNameResolver.identity()));
@@ -585,7 +584,7 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
                 covered.human(SourceNameResolver.identity()));
         assertEquals(AdequacyReport.AdequacyStatus.NOT_SATISFIED, uncovered.adequacy(),
                 uncovered.human(SourceNameResolver.identity()));
-        assertEquals(whole.askedLevel(), covered.askedLevel());
+        assertEquals(whole.held(), covered.held(), "filtering leaves the bar alone");
     }
 
     /** One module holding both of the models above, so that filtering has something to filter. */

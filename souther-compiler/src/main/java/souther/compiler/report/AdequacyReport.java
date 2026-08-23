@@ -54,13 +54,13 @@ import java.util.Set;
  * {@code status}: an evaluation that could not read everything must not be read as one that found
  * nothing, and the difference is not visible in the numbers.
  *
- * <p>{@code askedLevel} is what the measures were asked for, and it is here because the evidence
- * cannot be read without it. A measure nobody asked for and a measure that could not be made both
- * come back {@code UNAVAILABLE}; only what was asked tells the two apart, and {@link #adequacy()}
- * answers differently for each. It is an input carried through rather than a value derived from the
- * modules, so filtering the report leaves it alone.
+ * <p>{@code held} is the bar this report is written against, and it is the only thing here that the
+ * request decides. How much was measured is not carried: what a measure came to is the measure's own
+ * answer, and a report that held the level beside the evidence could read a measure's silence as
+ * something other than what the measure said (issue #955). It is an input carried through rather
+ * than a value derived from the modules, so filtering the report leaves it alone.
  */
-public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy.Asked asked,
+public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy.AdequacyBar held,
                              WeakeningSet weakenedBy, List<ModuleReport> modules) {
 
     /**
@@ -72,11 +72,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      */
     public MeasurementStatus status() {
         return ReportMeasurement.statusOf(weakenedBy);
-    }
-
-    /** How much was measured, which decides which measures have a number to show. */
-    public Adequacy.Level askedLevel() {
-        return asked.level();
     }
 
     public static final int SCHEMA_VERSION = 5;
@@ -161,8 +156,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             overall = overall.union(report.weakenedBy());
         }
         Adequacy.Asked asked = compilation.db().ask(new Adequacy.Requested()).value();
+        Adequacy.AdequacyBar held =
+                asked == null ? Adequacy.Asked.NOTHING.held() : asked.held();
         return new AdequacyReport(SCHEMA_VERSION, ModuleMetadata.compilerVersion(),
-                asked == null ? Adequacy.Asked.NOTHING : asked, overall, List.copyOf(modules));
+                held, overall, List.copyOf(modules));
     }
 
     /**
@@ -318,7 +315,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             kept.add(new ModuleReport(m.module(), m.declaredIn(), weakenedBy, gaps, behaviors));
             overall = overall.union(weakenedBy);
         }
-        return new AdequacyReport(schemaVersion, compilerVersion, asked, overall,
+        return new AdequacyReport(schemaVersion, compilerVersion, held, overall,
                 List.copyOf(kept));
     }
 
@@ -340,7 +337,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     /** The findings a build is entitled to refuse: an asked measure came to an answer and the answer
      *  was that something the rows are asked for is not there. */
     public List<Adequacy.Finding> adequacyGaps() {
-        return findings().stream().filter(f -> f.isAdequacyGap(asked.held())).toList();
+        return findings().stream().filter(f -> f.isAdequacyGap(held)).toList();
     }
 
     /**
@@ -387,7 +384,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         List<Measurement<?>> measures = new ArrayList<>();
         for (ModuleReport module : modules) {
             for (BehaviorReport behavior : module.behaviors()) {
-                if (askedLevel().reports() && behavior.signature() != null) {
+                if (behavior.signature() != null) {
                     add(measures, behavior.signature().counted());
                 }
                 add(measures, behavior.branch() == null ? null : behavior.branch().measured());
@@ -424,7 +421,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 // how much of the measurement was made and what a build is held to are two
                 // questions.
                 BorderAssessment.pointsOf(behavior.partition().boundaries()).stream()
-                        .filter(p -> asked.held().requires(p.role()))
+                        .filter(p -> held.requires(p.role()))
                         .forEach(p -> add(measures, measurementOf(p.item())));
                 // A dropped axis is not asked after here. What it was carrying went with it and no
                 // question stands for it, which is a fact about the measure's reading — so it
@@ -553,10 +550,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // three, with nothing saying the fourth did not apply — and hid the fact worth reading,
             // which is that a behavior answering a bare primitive gets less scrutiny than one
             // answering a sum.
-            out.append(String.format("    signature   %s%n",
-                    counted.reason() instanceof Adequacy.SignatureEvidence.NotASum
-                            ? "not applicable (this behavior's output is not a sum)"
-                            : "not measured (no row names this behavior)"));
+            // A measure nobody asked for is not said at all, the way the arms are not: what was
+            // asked for is an input to the whole run, and a line repeating it against every
+            // behavior says one fact as many times as the module has behaviors.
+            String why = switch (counted.reason()) {
+                case Adequacy.SignatureEvidence.NotASum _ ->
+                        "not applicable (this behavior's output is not a sum)";
+                case souther.compiler.query.NothingWasAsked _ -> null;
+                default -> "not measured (no row names this behavior)";
+            };
+            if (why != null) {
+                out.append(String.format("    signature   %s%n", why));
+            }
             return;
         }
         boolean decided = counted.inFull();
@@ -622,7 +627,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * a kind changed sides.
      */
     private String mark(Adequacy.Finding finding) {
-        return finding.isAdequacyGap(asked.held()) ? "!" : "·";
+        return finding.isAdequacyGap(held) ? "!" : "·";
     }
 
     /**
@@ -1139,8 +1144,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     private static String whyNoAxis(souther.compiler.observe.MeasureReason reason) {
-        return reason instanceof PartitionEvidence.AxisCoverage.NoRows
-                ? "no row names this behavior" : reason.name();
+        return switch (reason) {
+            case PartitionEvidence.AxisCoverage.NoRows _ -> "no row names this behavior";
+            case souther.compiler.query.NothingWasAsked _ -> "nothing was asked for";
+            default -> reason.name();
+        };
     }
 
     /**
@@ -1293,9 +1301,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             return "";
         }
         return switch (why) {
-            case ItemAssessment.Coverage.NotAsked it ->
-                    it == ItemAssessment.Coverage.NotAsked.ARMS_NOT_ASKED
-                            ? "the arms were not asked for" : "no row names this behavior";
+            case ItemAssessment.Coverage.NotAsked it -> switch (it) {
+                case NOT_ASKED -> "nothing was asked for";
+                case ARMS_NOT_ASKED -> "the arms were not asked for";
+                case NO_ROWS -> "no row names this behavior";
+            };
             case ItemAssessment.Coverage.CouldNotAsk _ -> "the arms could not be measured";
             default -> why.name();
         };
@@ -1921,7 +1931,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         for (Adequacy.Finding finding : of.findings()) {
             ObjectNode f = out.addObject();
             f.put("kind", word(finding.kind()));
-            f.put("disposition", word(finding.disposition(asked.held())));
+            f.put("disposition", word(finding.disposition(held)));
             f.put("subject", subject(finding, sources));
             // Which rule this is about, where the finding is about one. The words in `subject` are
             // how a reader finds it, and two rules an author named alike have the same words — so a

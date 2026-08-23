@@ -62,6 +62,9 @@ public sealed interface ItemAssessment {
 
         /** Why the question was not put. */
         enum NotAsked implements souther.compiler.observe.NotMeasuredReason {
+            /** The build asked for no measurement at all, so no row was read against any line.
+             *  Said by every line whatever drew it, unlike the two below. */
+            NOT_ASKED,
             /** The build did not ask for the arms, and a line a fork drew is met by reaching the
              *  comparison rather than by writing the value. Never a reason for an invariant's line,
              *  which needs no arms. */

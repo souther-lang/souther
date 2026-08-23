@@ -80,6 +80,14 @@ public record InputCaseEvidence(int at, Set<TypeSymbol> declared, Set<TypeSymbol
                 new Measurement.NotApplicable<>(NotASum.NOT_A_SUM));
     }
 
+    /** The same for one input, and for the reason {@link OutputCaseEvidence#notAsked} gives. */
+    public static InputCaseEvidence notAsked(int at, Set<TypeSymbol> declared,
+                                             Set<TypeSymbol> excluded) {
+        return declared.isEmpty() ? none(at)
+                : new InputCaseEvidence(at, declared, excluded,
+                        new Measurement.NotMeasured<>(NothingWasAsked.NOT_ASKED));
+    }
+
     /** The one place the states are chosen between. What {@code observed} is for is what
      *  {@link OutputCaseEvidence#of} says. */
     public static InputCaseEvidence of(String behavior, int at, Set<TypeSymbol> declared,

@@ -50,6 +50,7 @@ class PairSpaceTest {
 
     private static PartitionEvidence evidence(String source, String behavior) {
         Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, PartitionEvidence> all = compilation.db()
                 .ask(new Adequacy.Coverage(compilation.modules().get(0))).value();

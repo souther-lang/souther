@@ -385,6 +385,16 @@ public final class Adequacy {
                     new Measurement.NotMeasured<>(NoRows.NO_ROWS));
         }
 
+        /** Nobody asked for a measurement, so neither this nor anything under it was made. Its
+         *  parts are built the same way rather than being emptied here: {@link #of} is the union of
+         *  what they went without, and a measure nobody made went without nothing — so a signature
+         *  assembled that way over unmeasured parts would come out complete. */
+        public static SignatureEvidence notAsked(OutputCaseEvidence output,
+                                                 List<InputCaseEvidence> inputs) {
+            return new SignatureEvidence(output, inputs,
+                    new Measurement.NotMeasured<>(NothingWasAsked.NOT_ASKED));
+        }
+
         /** What the rows came to: the union of what its parts went without, and nothing else. An
          *  aggregate with a fact of its own would be a fact its parts do not have, and a reader of
          *  one of them would be right about a measure the whole contradicts. */
@@ -799,7 +809,11 @@ public final class Adequacy {
             if (!prepared.present() || !scope.present() || !sigs.present()) {
                 return Answer.absent();
             }
-            Map<String, Observed> byTarget = rowsOf(db, name);
+            // Whether anything was asked of the rows at all. Read here rather than at whoever wants
+            // the answer: what the level decides is what work to do, and the work this measure does
+            // is reading every row of the module (issue #955).
+            boolean asked = levelOf(db).reports();
+            Map<String, Observed> byTarget = asked ? rowsOf(db, name) : Map.of();
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             // What each body can answer with, so that a case only an unreachable arm produces is not
             // counted. Read from the same reachability the arms are counted by.
@@ -820,7 +834,7 @@ public final class Adequacy {
                 if (sig == null) {
                     continue;   // a behavior whose signature did not work out has nothing to measure
                 }
-                out.put(behavior.name(), evidenceOf(behavior.name(), sig, scope.value(),
+                out.put(behavior.name(), evidenceOf(behavior.name(), sig, scope.value(), asked,
                         byTarget.getOrDefault(behavior.name(), Observed.NONE),
                         behavior instanceof Hir.SpecBehavior spec ? spec.params().stream()
                                 .map(Hir.Param::name).toList() : List.of(),
@@ -870,7 +884,8 @@ public final class Adequacy {
                                     ? souther.compiler.coverage.DecisionSources.NONE
                                     : checked.decisions(),
                             checked == null ? souther.compiler.coverage.SuppliedRules.NONE : checked.supplied());
-            Map<String, Observed> byTarget = rowsOf(db, name);
+            Level level = levelOf(db);
+            Map<String, Observed> byTarget = level.reports() ? rowsOf(db, name) : Map.of();
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             // What the guards above each place leave, asked once for the module and read by
             // every measure below — the same reason the reading of the input is.
@@ -901,7 +916,7 @@ public final class Adequacy {
                         scope.value(), db.ask(new Front.Reading()).value(), bodies.get(spec.name()),
                         elementsOf.getOrDefault(spec.name(),
                                 souther.compiler.check.ElementBindings.NONE), plan, seen,
-                        boundaries == null ? List.of()
+                        level, boundaries == null ? List.of()
                                 : boundaries.getOrDefault(spec.name(), List.of()),
                         arrivalsOf(arrives, spec), statedOf(declared, spec)));
             }
@@ -954,18 +969,21 @@ public final class Adequacy {
                                     ? souther.compiler.coverage.DecisionSources.NONE
                                     : checked.decisions(),
                             checked == null ? souther.compiler.coverage.SuppliedRules.NONE : checked.supplied());
-            Map<String, Observed> byTarget = rowsOf(db, name);
+            // Whether a guard's boundary can be decided at all: meeting it takes the comparison having
+            // been evaluated, which only the instrumented classes say. And whether anything was
+            // measured against the rows at all, which is what `off` answers.
+            Level level = levelOf(db);
+            Map<String, Observed> byTarget = level.reports() ? rowsOf(db, name) : Map.of();
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             // What the guards above each place leave, asked once for the module and read by
             // every measure below — the same reason the reading of the input is.
             Map<String, souther.compiler.check.PathReachability.Answers> arrives =
                     db.ask(new PathReached(name)).value();
             Symbols symbols = scope.value();
-            // Whether a guard's boundary can be decided at all: meeting it takes the comparison having
-            // been evaluated, which only the instrumented classes say.
-            boolean armsAsked = levelOf(db).runsInstrumentedRows();
-            FixtureReader.Construction building = constructing(db, name,
-                    prepared.value().forExamples(), symbols);
+            // Nothing is built where nothing was asked: a point nobody measured is not one a row is
+            // owed at yet, so there is nothing for a candidate to be evidence of.
+            FixtureReader.Construction building = level.reports()
+                    ? constructing(db, name, prepared.value().forExamples(), symbols) : null;
             // And what each behavior states about its answer, which draws lines of its own.
             Map<String, souther.compiler.check.StatedContract> declared =
                     db.ask(new Bodies.StatedContracts(name)).value();
@@ -983,7 +1001,7 @@ public final class Adequacy {
                         bodies.get(spec.name()),
                         elementsOf.getOrDefault(spec.name(),
                                 souther.compiler.check.ElementBindings.NONE), plan,
-                        byTarget.getOrDefault(spec.name(), Observed.NONE), armsAsked, building,
+                        byTarget.getOrDefault(spec.name(), Observed.NONE), level, building,
                         domainOf(readInputs, spec), arrivalsOf(arrives, spec),
                         statedOf(declared, spec)));
             }
@@ -996,7 +1014,7 @@ public final class Adequacy {
                 souther.compiler.check.ReadingPolicy policy, souther.compiler.core.Core body,
                 souther.compiler.check.ElementBindings elements,
                 souther.compiler.coverage.CoverageSites.Plan plan, Observed observed,
-                boolean armsAsked, FixtureReader.Construction building, InputDomain domain,
+                Level level, FixtureReader.Construction building, InputDomain domain,
                 souther.compiler.check.PathReachability.Answers arrives,
                 souther.compiler.check.StatedContract stated) {
             List<String> parameters = spec.params().stream().map(Hir.Param::name).toList();
@@ -1017,12 +1035,12 @@ public final class Adequacy {
                 if (!axis.measurable()) {
                     continue;
                 }
-                out.addAll(Coverages.assess(axis, inputs, observed, armsAsked,
+                out.addAll(Coverages.assess(axis, inputs, observed, level,
                         partitioning.edgeIsKnownWritable(axis.term()), probe,
                         partitioning.quantities(), partitioning.reaching(),
                         partitioning.quantities().runsBetween(axis.term())));
             }
-            out.addAll(Coverages.assessBetween(partitioning, inputs, observed, armsAsked, probe));
+            out.addAll(Coverages.assessBetween(partitioning, inputs, observed, level, probe));
             return List.copyOf(out);
         }
 
@@ -1423,7 +1441,7 @@ public final class Adequacy {
             souther.compiler.query.Bodies.Elaborated checked =
                     db.ask(new Bodies.Checked(name)).value();
             Set<String> withBodies = checked == null ? Set.of() : checked.behaviorBodies().keySet();
-            Map<String, Observed> byTarget = rowsOf(db, name);
+            Map<String, Observed> byTarget = levelOf(db).reports() ? rowsOf(db, name) : Map.of();
             Set<Integer> lit = new LinkedHashSet<>();
             for (Observed observed : byTarget.values()) {
                 for (RowOutcome row : observed.rows()) {
@@ -2728,13 +2746,11 @@ public final class Adequacy {
 
         @Override
         public Answer<Map<String, List<Finding>>> compute(Db db) {
-            Level level = levelOf(db);
             Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
             if (!prepared.present()) {
                 return Answer.absent();
             }
-            Map<String, SignatureEvidence> signatures =
-                    level.reports() ? db.ask(new Witnesses(name)).value() : null;
+            Map<String, SignatureEvidence> signatures = db.ask(new Witnesses(name)).value();
             // Asked whatever the level is. Each of these says for itself how much of it was made —
             // a line a fork drew comes back `ARMS_NOT_ASKED` where the rows were not instrumented,
             // and a line an invariant drew is measured either way — so dropping them here was this
@@ -3301,7 +3317,8 @@ public final class Adequacy {
      *                   denominator here. Not the type's cases alone: a case the rules refuse is one
      *                   no row can be built at, and counting it holds the model short for ever
      */
-    static SignatureEvidence evidenceOf(String name, Sig sig, Symbols symbols, Observed seen,
+    static SignatureEvidence evidenceOf(String name, Sig sig, Symbols symbols, boolean asked,
+                                        Observed seen,
                                         List<String> parameters, InputDomain read,
                                         souther.compiler.core.Core body,
                                         souther.compiler.coverage.CoverageSites.Plan plan,
@@ -3332,6 +3349,22 @@ public final class Adequacy {
             inVerified.add(new LinkedHashSet<>());
             inExcluded.add(refusedAt(read, i < parameters.size() ? parameters.get(i) : null,
                     declared));
+        }
+
+        // What the model declares is settled above and holds whether or not anybody measured; what
+        // the rows made of it is below. A build that asked for nothing gets the first and says so
+        // about the second, in each measure and not in the one above them.
+        if (!asked) {
+            List<InputCaseEvidence> none = new ArrayList<>(ins.size());
+            for (int i = 0; i < ins.size(); i++) {
+                none.add(InputCaseEvidence.notAsked(i, declaredIn.get(i), inExcluded.get(i)));
+            }
+            OutputCaseEvidence out = OutputCaseEvidence.notAsked(declaredOut);
+            return out.cases() instanceof Measurement.NotApplicable<OutputCaseEvidence.Cases>
+                    && none.stream().allMatch(in ->
+                            in.cases() instanceof Measurement.NotApplicable<InputCaseEvidence.Cases>)
+                    ? SignatureEvidence.notASum(out, none)
+                    : SignatureEvidence.notAsked(out, none);
         }
 
         for (RowOutcome row : rows) {

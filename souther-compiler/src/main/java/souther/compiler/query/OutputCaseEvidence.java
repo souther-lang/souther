@@ -78,6 +78,17 @@ public record OutputCaseEvidence(Set<TypeSymbol> declared, Measurement<Cases> ca
         return new OutputCaseEvidence(Set.of(), new Measurement.NotApplicable<>(NotASum.NOT_A_SUM));
     }
 
+
+    /** What the model declares, with nothing counted against it, for a build that asked for no
+     *  measurement. Made here rather than by emptying a measurement above, because this is where the
+     *  states are chosen between and a parent that overwrote its children would be a document whose
+     *  cases say `complete` under a signature that says nobody measured. */
+    public static OutputCaseEvidence notAsked(Set<TypeSymbol> declared) {
+        return declared.isEmpty() ? none()
+                : new OutputCaseEvidence(declared,
+                        new Measurement.NotMeasured<>(NothingWasAsked.NOT_ASKED));
+    }
+
     /**
      * What the rows reached, from what they said and what could not be read of them. The one place
      * the states are chosen between.

@@ -63,6 +63,7 @@ class WitnessAcrossSourcesTest {
                 """);
 
         Compilation compilation = Compilation.ofDocuments(documents, Set.of(), ModulePath.EMPTY);
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         assertEquals(Map.of(), compilation.diagnostics().entrySet().stream()
                         .filter(e -> !e.getValue().isEmpty())
