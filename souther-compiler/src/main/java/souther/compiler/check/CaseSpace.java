@@ -194,7 +194,7 @@ sealed interface CaseSpace {
      * Cases whose carrier is the value itself, de-duplicated the way the subject states them: a
      * member written twice is one case, and the first spelling is the one the order keeps.
      *
-     * <p>What each covers is {@link ResolvedCase#direct}'s to work out. This says which cases there
+     * <p>What each covers is {@link ResolvedCase#resolve}'s to work out. This says which cases there
      * are and in what order; what one of them reaches is not restated here.
      */
     private static List<ResolvedCase> direct(Iterable<TypeSymbol> members, Symbols symbols) {

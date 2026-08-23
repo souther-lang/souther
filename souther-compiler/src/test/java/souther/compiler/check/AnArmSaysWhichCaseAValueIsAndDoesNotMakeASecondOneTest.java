@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -237,4 +238,90 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
         return new Core.Call(ReachName.of(FIND, "findIt", "demo"), FIND, List.of(),
                 Type.union(new java.util.LinkedHashSet<>(List.of(AN_INT, MISSING))), POS);
     }
+
+    // --- which rules an arm takes in, when a case has cases of its own ---------------------------
+
+    /** A sum two deep, so an arm and a rule can answer for different amounts of one subject. */
+    private static final String NESTED = """
+            module demo
+
+            data Station  = { at: String }
+            data Hospital = { at: String }
+            data Renkei   = { at: String }
+            data OnceKind  = Station | Hospital
+            data VisitKind = OnceKind | Renkei
+            """;
+
+    /**
+     * A rule holds of an arm when every value that could have taken the arm is one the rule is
+     * about, and not otherwise.
+     *
+     * <p>The inclusion has a direction and both ways round type-check. An arm naming a case under
+     * the rule's case answers for fewer values than the rule, so the rule holds of all of them; the
+     * other way round the arm has values the rule says nothing about, and carrying the rule in would
+     * be assuming of a hospital what was only stated of a station.
+     *
+     * <p>Asked of the operation directly. Reversing the inclusion answers the same on every program
+     * where an arm and a rule name one case — which is every program written before #966 — so a
+     * test that went through a compile would agree with the reversed reading and say nothing.
+     */
+    @Test
+    void aRuleHoldsOfAnArmWhoseValuesAreAllOnesItIsAbout() {
+        Symbols symbols = symbolsOf(NESTED);
+        PathEngine reading = new PathEngine(symbols, Map.of(), Terms.Of.THE_DISCHARGE_TREE,
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        TypeSymbol once = named(symbols, "OnceKind");
+        TypeSymbol station = named(symbols, "Station");
+        Guard aboutOnceKind = new Guard.Case(ResolvedCase.resolve(CaseSelector.direct(once), symbols));
+        Guard aboutStation = new Guard.Case(ResolvedCase.resolve(CaseSelector.direct(station), symbols));
+
+        assertTrue(reading.impliedBy(aboutOnceKind, single(station)),
+                "a station is one of the values the rule about OnceKind is stated of");
+        assertFalse(reading.impliedBy(aboutStation, single(once)),
+                "an arm over OnceKind takes hospitals too, which the rule says nothing of");
+    }
+
+    /** And an arm naming several answers for their union, which is what the rule is held against. */
+    @Test
+    void anArmNamingSeveralTakesARuleThatIsAboutAllOfThem() {
+        Symbols symbols = symbolsOf(NESTED);
+        PathEngine reading = new PathEngine(symbols, Map.of(), Terms.Of.THE_DISCHARGE_TREE,
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        TypeSymbol once = named(symbols, "OnceKind");
+        TypeSymbol station = named(symbols, "Station");
+        TypeSymbol hospital = named(symbols, "Hospital");
+        Type visitKind = Type.ref(named(symbols, "VisitKind"));
+        Core.ResolvedPattern both = new Core.ResolvedPattern.AnyOf(
+                List.of(CaseSelector.direct(station), CaseSelector.direct(hospital)), visitKind);
+
+        assertTrue(reading.impliedBy(
+                        new Guard.Case(ResolvedCase.resolve(CaseSelector.direct(once), symbols)), both),
+                "both alternatives are values the rule about OnceKind is stated of");
+        assertFalse(reading.impliedBy(
+                        new Guard.Case(ResolvedCase.resolve(CaseSelector.direct(station), symbols)), both),
+                "one of the alternatives is a value the rule says nothing of");
+    }
+
+    private static Core.ResolvedPattern single(TypeSymbol name) {
+        return new Core.ResolvedPattern.Single(CaseSelector.direct(name));
+    }
+
+    private static TypeSymbol named(Symbols symbols, String type) {
+        for (Hir.Def d : symbols.declarations().declaredIn("demo").values()) {
+            if (d.name().equals(type)) {
+                return d.declares();
+            }
+        }
+        throw new AssertionError("the module does not declare " + type);
+    }
+
+    private static Symbols symbolsOf(String source) {
+        java.util.Map<String, String> byId = new java.util.LinkedHashMap<>();
+        byId.put("m.sou", source);
+        return TypeChecker.symbols(
+                souther.compiler.query.Compilation.ofDocuments(byId, java.util.Set.of(),
+                                souther.compiler.meta.ModulePath.EMPTY)
+                        .db().ask(new souther.compiler.query.Names.Resolved("demo")).value());
+    }
+
 }

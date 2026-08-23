@@ -204,4 +204,37 @@ class CompileMatchOverANestedSumTest {
                 """));
         assertEquals("E1203", refused.diagnostic().code());
     }
+
+    /**
+     * Naming the subject itself is the arm that answers for everything.
+     *
+     * <p>A consequence of the rule and not an exception to it: inclusion holds of equal sets, so a
+     * type every value of which the subject can be includes the subject. Refusing it would mean
+     * adding that a candidate must not be the subject, which is a rule about names in a check that
+     * is otherwise entirely about values — and assignability reads it the same way, where a type is
+     * assignable to itself before anything about cases is asked.
+     *
+     * <p>So the language has an arm that answers for every value, reached by naming the subject.
+     * It is not a wildcard in the sense of matching whatever happens to be left: it answers for
+     * everything, so nothing can follow it.
+     */
+    @Test
+    void namingTheSubjectItselfAnswersForEveryValueOfIt() throws Exception {
+        String arms = """
+                        | VisitKind -> 1
+                """;
+        assertEquals(1L, fee(arms, "Station"));
+        assertEquals(1L, fee(arms, "Hospital"));
+        assertEquals(1L, fee(arms, "Renkei"));
+    }
+
+    /** And nothing can follow it, since it left no value for another arm to answer for. */
+    @Test
+    void nothingCanFollowTheArmThatAnsweredForEverything() {
+        assertThrows(CompileException.class, () -> Compiler.compile(feeOf("""
+                        | VisitKind -> 1
+                        | Renkei -> 2
+                """)));
+    }
+
 }

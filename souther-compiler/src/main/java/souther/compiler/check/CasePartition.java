@@ -13,7 +13,7 @@ import java.util.Set;
  * <p>A set operation and nothing more. Which arm of a {@code match} takes a value is decided by the
  * order the arms are written, and whether two arms may answer for one value at all is a policy —
  * a {@code match} partitions, a declared relation does not (its rules are a conjunction, and
- * {@code ContractDischarge} counts what no rule names). Neither is decided here. What is here is
+ * {@code ContractDischarge} counts what no rule reaches). Neither is decided here. What is here is
  * what those readers disagreed about while each worked it out for itself: which atoms are left, and
  * which an arm shares with one that came before it.
  *

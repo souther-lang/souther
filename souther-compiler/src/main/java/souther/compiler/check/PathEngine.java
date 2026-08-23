@@ -357,8 +357,13 @@ final class PathEngine {
      * the same spelling would be.
      *
      * <p>A rule under no case applies to every answer, so any arm reaching it is an arm it holds of.
+     *
+     * <p>Visible to this package so the inclusion can be held in both directions. Reversed, it
+     * assumes a rule about one case throughout an arm that has values the rule says nothing about,
+     * which is unsound and answers no differently on any program where the two coincide — so what
+     * pins it has to ask the question directly.
      */
-    private boolean impliedBy(Guard guard, Core.ResolvedPattern pattern) {
+    boolean impliedBy(Guard guard, Core.ResolvedPattern pattern) {
         if (guard instanceof Guard.Always) {
             return true;
         }

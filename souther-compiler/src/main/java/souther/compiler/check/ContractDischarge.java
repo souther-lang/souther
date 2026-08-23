@@ -95,12 +95,17 @@ public record ContractDischarge(List<RuleDischarge> rules,
     }
 
     /**
-     * The cases of the answer no rule names.
+     * What the answer can be that no rule reaches.
      *
-     * <p>Nothing is stated about them, which is what the declaration says and not a mistake in it:
-     * there is no wildcard arm, so a case left unnamed is a case the behavior promises nothing of.
-     * Answered here rather than reported, because a correct model may say nothing about most of what
-     * it answers, and a reader wanting to know asks.
+     * <p>Reaches and not names. A rule written about a case that has cases of its own states
+     * something about every one of them, so counting by the name each rule spells would report a
+     * leaf as unstated while a rule about the case above it stands (#966).
+     *
+     * <p>Nothing is stated about what is left, which is what the declaration says and not a mistake
+     * in it: a rule holds where its guard does and there is nothing that holds everywhere, so an
+     * answer no rule reaches is one the behavior promises nothing of. Answered here rather than
+     * reported, because a correct model may say nothing about most of what it answers, and a reader
+     * wanting to know asks.
      */
     private static List<TypeSymbol> unstatedCases(StatedContract contract, Symbols symbols) {
         // Over what the answer can be and not over what it declared. A rule may be written about a
