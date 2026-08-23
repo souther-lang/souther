@@ -2072,7 +2072,14 @@ public final class Adequacy {
                     // About a search that happened, and said in their own words beside the rows.
                     // Answering with one of them here would be the same fact under a second
                     // spelling, over a class the search never got to.
+                    //
+                    // `GroupsNotOffered` is here for a different reason: it is not about classes at
+                    // all. A group of the body's decisions is where a row for an <em>arm</em> is
+                    // looked for, and the classes are walked in a loop that never consults one — so
+                    // a class with nothing recorded was not left that way by a group being held
+                    // back, and saying it was would be a cause this run has no evidence for.
                     case souther.compiler.partition.GenerationReason.SearchLimit _,
+                            souther.compiler.partition.GenerationReason.GroupsNotOffered _,
                             souther.compiler.partition.GenerationReason.RowsNotConfirmed _ -> { }
                 }
             }

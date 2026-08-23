@@ -325,6 +325,21 @@ public final class Generator {
              */
             THE_POSITION_WAS_WITHHELD,
             /**
+             * The group of decisions this belongs to was wider than the walk offers, so no
+             * combination of it was looked in.
+             *
+             * <p>Told apart from {@link #SEARCH_LIMIT} for the reason {@link
+             * #THE_POSITION_WAS_WITHHELD} is: that one says the budget ran out while walking, and
+             * this says the walk never started. Raising the row budget changes the first and not
+             * the second.
+             *
+             * <p>Named at all because the alternative is silence. An arm claimed only by a group
+             * held back leaves no entry, and an arm with no entry is one no combination claims —
+             * so the report said the body never reaches it, which is a statement about the model
+             * this compiler was not entitled to make.
+             */
+            THE_GROUP_WAS_NOT_OFFERED,
+            /**
              * The rows were not read, so nothing was searched for at all.
              *
              * <p>What made them unreadable is said in its own words beside this, and is a fact
@@ -378,7 +393,7 @@ public final class Generator {
                     // model saying anything: another value of the same classes may well build.
                     case NOTHING_COMPOSES_ONE, ALL_CANDIDATES_REJECTED, SEARCH_LIMIT,
                          NOTHING_TO_BUILD_AGAINST, NO_VALUES_WERE_ASKED_FOR, LINKAGE_FAILED,
-                         NO_CERTIFIED_WITNESS,
+                         NO_CERTIFIED_WITNESS, THE_GROUP_WAS_NOT_OFFERED,
                          THE_POSITION_WAS_WITHHELD, THE_ROWS_WERE_NOT_READ,
                          NO_REASON_RECORDED -> false;
                 };
@@ -777,13 +792,21 @@ public final class Generator {
     public static Set<Integer> everyArmTheCombinationsTake(
             Subject subject, List<souther.compiler.interaction.Interaction> groups) {
         Set<Integer> out = new LinkedHashSet<>();
-        for (InteractionCells.Group group : InteractionCells.of(groups, ordered(subject))) {
+        InteractionCells.Offered offered = InteractionCells.of(groups, ordered(subject));
+        for (InteractionCells.Group group : offered.groups()) {
             for (int index = 0; index < group.size(); index++) {
                 CellSelection selection = group.at(index);
                 if (selection != null) {
                     out.addAll(claimed(selection));
                 }
             }
+        }
+        // And the arms behind a group the limit held back. They are arms the combinations take —
+        // what the limit settled is that nothing walked them, which is the search's answer and not
+        // a fact about which arms exist. Left out, a caller with no measurement beside it asks for
+        // fewer arms because this compiler declined to look, and never learns that it did.
+        for (InteractionCells.NotOffered held : offered.notOffered()) {
+            out.addAll(armsIn(held.claims()));
         }
         return out;
     }
@@ -936,8 +959,16 @@ public final class Generator {
         // are one silence, and a reader told the second where the first happened is told the model
         // settles something it does not.
         Set<Integer> cutOff = new LinkedHashSet<>();
+        // And the arms behind a group nothing walked, which is a second silence with a different
+        // cause. The one above is a budget that ran out with the arm still owed; this is a group
+        // the offer never opened, and raising the budget does not reach it.
+        InteractionCells.Offered offered = InteractionCells.of(groups, axes);
+        Set<Integer> notOffered = new LinkedHashSet<>();
+        for (InteractionCells.NotOffered held : offered.notOffered()) {
+            notOffered.addAll(armsIn(held.claims()));
+        }
         boolean unconfirmed = false;
-        for (InteractionCells.Group group : InteractionCells.of(groups, axes)) {
+        for (InteractionCells.Group group : offered.groups()) {
             for (int index = 0; index < group.size() && !left.isEmpty(); index++) {
                 CellSelection selection = group.at(index);
                 if (selection == null) {
@@ -993,10 +1024,18 @@ public final class Generator {
                 why.add(new UnresolvedCombination(List.of(),
                         UnresolvedCombination.Reason.SEARCH_LIMIT));
                 arms.add(new ArmAttempt.Unresolved(probe, why));
+            } else if (notOffered.contains(probe)) {
+                // Asked after the two above, so an arm some offered group reached or the budget
+                // stopped at keeps that answer. What is left here is an arm whose only claim came
+                // from a group nothing walked, and the union a held-back group is named by is a
+                // superset — which is why this is the last of the three and not the first.
+                why.add(new UnresolvedCombination(List.of(),
+                        UnresolvedCombination.Reason.THE_GROUP_WAS_NOT_OFFERED));
+                arms.add(new ArmAttempt.Unresolved(probe, why));
             } else if (!why.isEmpty()) {
                 arms.add(new ArmAttempt.Unresolved(probe, why));
             }
-            // And an arm with neither is one no combination claims, which is the one thing an
+            // And an arm with none of them is one no combination claims, which is the one thing an
             // absent entry may mean.
         }
         // Said once, at the end, and about both searches. One that ran out on the classes stopped
@@ -1008,6 +1047,14 @@ public final class Generator {
         if (classesLeft + cutOff.size() > 0) {
             reasons.add(new GenerationReason.SearchLimit(axes.get(0).id().behavior(),
                     classesLeft + cutOff.size()));
+        }
+        // Said whether or not any arm on the list was behind one of them. A group held back is work
+        // this generation did not do, and a reader is owed that whether the arms it claimed were
+        // reached another way or were never asked for — the count is of the groups, since the
+        // combinations in them are what nothing walked.
+        if (!offered.notOffered().isEmpty()) {
+            reasons.add(new GenerationReason.GroupsNotOffered(axes.get(0).id().behavior(),
+                    offered.notOffered().size()));
         }
         if (unconfirmed) {
             reasons.add(new GenerationReason.RowsNotConfirmed(axes.get(0).id().behavior()));
@@ -1023,8 +1070,14 @@ public final class Generator {
      * nothing about an arm is owed for it.
      */
     private static List<Integer> claimed(CellSelection selection) {
+        return armsIn(selection.claims());
+    }
+
+    /** The arms a list of claims names, by the numbers the plan gave them. Shared with the groups
+     *  the limit held back, which have claims and no cell to read them off. */
+    private static List<Integer> armsIn(List<souther.compiler.coverage.ControlClaim> claims) {
         List<Integer> out = new ArrayList<>();
-        for (souther.compiler.coverage.ControlClaim claim : selection.claims()) {
+        for (souther.compiler.coverage.ControlClaim claim : claims) {
             if (claim.at() instanceof souther.compiler.coverage.ControlPointId.ArmOccurrence arm
                     && arm.probe().isPresent()) {
                 out.add(arm.probe().getAsInt());

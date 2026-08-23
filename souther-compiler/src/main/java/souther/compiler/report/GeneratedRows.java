@@ -521,6 +521,14 @@ public final class GeneratedRows {
                         "// generation stopped for `%s`: %d %s past the row limit%n",
                         limit.behavior(), limit.owed(),
                         limit.owed() == 1 ? "class or arm" : "classes and arms");
+                // Beside the line above rather than folded into it. That one is a budget an author
+                // can raise; this is a walk that was never made, and a reader told the first where
+                // the second happened would raise a limit that changes nothing.
+                case GenerationReason.GroupsNotOffered held -> String.format(
+                        "// no rows offered for %d %s of `%s`: each has more combinations together"
+                                + " than this walks, so none of them was looked in%n",
+                        held.groups(), held.groups() == 1 ? "group of decisions" : "groups of"
+                                + " decisions", held.behavior());
                 case GenerationReason.NothingToBuildAgainst none -> String.format(
                         "// generation stopped for `%s`: there was nothing to build a candidate"
                                 + " against%n", none.behavior());
@@ -626,6 +634,9 @@ public final class GeneratedRows {
                     "every value tried was refused at construction, which does not make the"
                             + " combination impossible";
             case SEARCH_LIMIT -> "the search stopped before reaching it";
+            case THE_GROUP_WAS_NOT_OFFERED ->
+                    "the decisions that settle it have more combinations together than this offers"
+                            + " a row for, so none of them was looked in";
             case NO_CERTIFIED_WITNESS ->
                     "no row composed for it was seen reaching it, which does not make the"
                             + " combination unreachable";

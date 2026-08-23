@@ -175,7 +175,7 @@ class ACandidateThatMissedIsNotOfferedTest {
     private static List<ControlClaim> everyClaimOf(Model model) {
         List<ControlClaim> out = new ArrayList<>();
         for (InteractionCells.Group group : InteractionCells.of(model.groups(),
-                model.subject().axes())) {
+                model.subject().axes()).groups()) {
             for (int index = 0; index < group.size(); index++) {
                 CellSelection selection = group.at(index);
                 if (selection != null) {

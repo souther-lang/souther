@@ -207,21 +207,79 @@ public final class InteractionCells {
         }
     }
 
-    /** The groups worth offering, over the ordered {@code axes}. */
-    public static List<Group> of(List<Interaction> groups, List<Axis> axes) {
+    /**
+     * A group the limit kept from being offered, and what a run that took it would have been seen
+     * to do.
+     *
+     * <p>The claims and not the cells. Which combinations the group has is the product this declined
+     * to walk; which control points any of them could claim is the union over the way in and every
+     * outcome of every factor, which is one pass over what {@link #factorsOf} already built. So the
+     * arms behind the limit can be named without doing the work the limit exists to refuse.
+     *
+     * <p>A union and so a superset: no single combination claims all of these, and one of them may
+     * be claimed by another group that was offered. A caller reads it for what is left owed after
+     * every offered group has been searched, which is where the difference stops mattering.
+     */
+    public record NotOffered(List<souther.compiler.coverage.ControlClaim> claims) {
+
+        public NotOffered {
+            claims = List.copyOf(claims);
+        }
+    }
+
+    /**
+     * The groups to offer, and the ones the limit kept back.
+     *
+     * <p>Two answers because they are two facts and the second used to be neither returned nor
+     * recorded. A group dropped for its width claims arms, and an arm nothing offered a combination
+     * for is reported as an arm no combination claims — which says the body settles something it
+     * does not.
+     */
+    public record Offered(List<Group> groups, List<NotOffered> notOffered) {
+
+        public Offered {
+            groups = List.copyOf(groups);
+            notOffered = List.copyOf(notOffered);
+        }
+    }
+
+    /** The groups worth offering, over the ordered {@code axes}, and the ones held back. */
+    public static Offered of(List<Interaction> groups, List<Axis> axes) {
         List<Group> out = new ArrayList<>();
+        List<NotOffered> held = new ArrayList<>();
         for (Interaction group : groups) {
             Placed reach = placedBy(group.reach(), axes);
             if (reach == null) {
                 continue;
             }
             List<List<Placed>> placed = factorsOf(group, axes);
-            if (placed == null || productOf(placed) >= MOST_CELLS) {
+            if (placed == null) {
+                continue;
+            }
+            // Past the limit, and said so rather than dropped. What this costs is the combinations
+            // of one group going untried; what saying nothing cost is an arm among them reading as
+            // one the body never reaches.
+            if (productOf(placed) >= MOST_CELLS) {
+                held.add(new NotOffered(claimsOf(reach, placed)));
                 continue;
             }
             Group built = new Group(reach, placed);
             if (built.left(0) > 0) {
                 out.add(built);
+            }
+        }
+        return new Offered(out, held);
+    }
+
+    /** Every control point any combination of this group could claim, which is the union over the
+     *  way in and every outcome of every factor. One pass, and never the product. */
+    private static List<souther.compiler.coverage.ControlClaim> claimsOf(
+            Placed reach, List<List<Placed>> byFactor) {
+        java.util.LinkedHashSet<souther.compiler.coverage.ControlClaim> out =
+                new java.util.LinkedHashSet<>(reach.claims());
+        for (List<Placed> factor : byFactor) {
+            for (Placed outcome : factor) {
+                out.addAll(outcome.claims());
             }
         }
         return List.copyOf(out);
