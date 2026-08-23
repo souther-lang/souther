@@ -120,7 +120,7 @@ class TheAbsenceOfANameIsNotTheAbsenceOfAClauseTest {
     // --- what the check decided ------------------------------------------------------------------
 
     /**
-     * An unnamed clause the guards do not establish leaves the invariant unproven, the same as a
+     * An unnamed clause nothing known there establishes leaves the invariant unproven, the same as a
      * named one. Reading the answer off the names alone discharged it.
      */
     @Test
@@ -191,8 +191,8 @@ class TheAbsenceOfANameIsNotTheAbsenceOfAClauseTest {
 
     @Test
     void aWarningNamingBothSaysBoth() {
-        InvariantMessage.TheGuardsDoNotEstablishButDoEstablish said = assertInstanceOf(
-                InvariantMessage.TheGuardsDoNotEstablishButDoEstablish.class, warningOn(BOTH));
+        InvariantMessage.NothingKnownHereEstablishesButDoesEstablish said = assertInstanceOf(
+                InvariantMessage.NothingKnownHereEstablishesButDoesEstablish.class, warningOn(BOTH));
         assertEquals("ordered", said.unsettled());
         assertEquals("lowNonNegative", said.settled());
         assertTrue(rendered(BOTH).contains("Established here: lowNonNegative."),
@@ -203,8 +203,8 @@ class TheAbsenceOfANameIsNotTheAbsenceOfAClauseTest {
      * used to be written with the sentence in it and an empty list after the colon. */
     @Test
     void aWarningWithNothingEstablishedToNameDoesNotSayEstablished() {
-        InvariantMessage.TheGuardsDoNotEstablish said = assertInstanceOf(
-                InvariantMessage.TheGuardsDoNotEstablish.class, warningOn(UNSETTLED_ONLY));
+        InvariantMessage.NothingKnownHereEstablishes said = assertInstanceOf(
+                InvariantMessage.NothingKnownHereEstablishes.class, warningOn(UNSETTLED_ONLY));
         assertEquals("ordered", said.unsettled());
         assertFalse(rendered(UNSETTLED_ONLY).contains("Established here"),
                 "nothing was established to name, so nothing is said of it: "
@@ -218,8 +218,8 @@ class TheAbsenceOfANameIsNotTheAbsenceOfAClauseTest {
      */
     @Test
     void aWarningThatCannotNameWhatIsUnsettledStillSaysWhatIsEstablished() {
-        InvariantMessage.TheGuardsDoNotEstablishTheInvariantButDoEstablish said = assertInstanceOf(
-                InvariantMessage.TheGuardsDoNotEstablishTheInvariantButDoEstablish.class,
+        InvariantMessage.NothingKnownHereEstablishesTheInvariantButDoesEstablish said = assertInstanceOf(
+                InvariantMessage.NothingKnownHereEstablishesTheInvariantButDoesEstablish.class,
                 warningOn(SETTLED_ONLY));
         assertEquals("lowNonNegative", said.settled());
         String text = rendered(SETTLED_ONLY);
@@ -229,7 +229,7 @@ class TheAbsenceOfANameIsNotTheAbsenceOfAClauseTest {
 
     @Test
     void aWarningWithNeitherSideNameableSaysTheInvariant() {
-        assertInstanceOf(InvariantMessage.TheGuardsDoNotEstablishTheInvariant.class,
+        assertInstanceOf(InvariantMessage.NothingKnownHereEstablishesTheInvariant.class,
                 warningOn(NEITHER));
         assertFalse(rendered(NEITHER).contains("Established here"), rendered(NEITHER));
     }

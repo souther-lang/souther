@@ -138,7 +138,7 @@ class ACompileAnswersWithEveryErrorItFoundTest {
     /** A warning, which is not what a compile fails with however many of them there are. */
     private static Db.Found warningAt(int line, String says) {
         return new Db.Found("m.c", new SourceId("a.sou"), Report.of(Diagnostic
-                .say(new InvariantMessage.TheGuardsDoNotEstablishTheInvariant(says))
+                .say(new InvariantMessage.NothingKnownHereEstablishesTheInvariant(says))
                 .at(new SourcePos(line, 1, new SourceId("a.sou"))).build()));
     }
 
