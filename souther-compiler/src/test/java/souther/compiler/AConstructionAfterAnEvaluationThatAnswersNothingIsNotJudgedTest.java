@@ -171,6 +171,40 @@ class AConstructionAfterAnEvaluationThatAnswersNothingIsNotJudgedTest {
     }
 
     /**
+     * A field standing after one whose value aborts, and the same two fields the other way round.
+     *
+     * <p>The stop is not about a binding or an arm. `Pair` declares `l` and then `r`, and that is
+     * the order they run in, so the construction is after the abort in one of these and before it
+     * in the other — one program written two ways, and the answer follows the order.
+     */
+    @Test
+    void aSiblingAfterAnAbortingOneIsNotJudgedAndOneBeforeItIs() {
+        assertEquals(List.of(), reported(overflowingBeside(
+                "l = Negative(0 - a * a), r = Negative(x)")),
+                "the overflowing field runs first, so nothing after it is reached");
+        assertEquals(List.of("E2010"), reported(overflowingBeside(
+                "l = Negative(x), r = Negative(0 - a * a)")),
+                "and the very same construction runs first the other way round, where it is judged"
+                        + " and refused — which is what the row above must not reach");
+    }
+
+    /** A pair of {@code Negative}s built where {@code a * a} is a number no {@code Int} is and
+     * {@code x} is at or above nought, so one field aborts and the other is refused. */
+    private static String overflowingBeside(String fields) {
+        return DECLARATIONS + """
+                data Pair = { l: Negative, r: Negative }
+
+                behavior 組む : (a: Int, x: Int) -> Pair | Nothing
+                    constructs Pair, Negative
+                let 組む (a, x) = {
+                    guard a >= 5000000000 else Nothing
+                    guard x >= 0 else Nothing
+                    Pair { %s }
+                }
+                """.formatted(fields);
+    }
+
+    /**
      * A construction evaluated before the abort is a construction the program builds, and it is
      * judged.
      *
