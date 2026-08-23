@@ -1822,11 +1822,11 @@ public final class InvariantChecker {
     }
 
     /** Whether the value a construction builds is one its invariant rejects wherever it is built,
-     * which is the construction aborting. Asked of the judgment the check already made rather than
-     * worked out again: one construction, one verdict. */
+     * which is the construction aborting. Which verdicts those are is {@link Verdict#refuted}'s to
+     * say and is not counted again here — a second spelling of one set is a second set a verdict
+     * added later can land in differently. */
     private static boolean refused(Judgment judged) {
-        return judged != null && (judged.verdict() == Verdict.REFUTED_ALONE
-                || judged.verdict() == Verdict.REFUTED_NOT_ALONE);
+        return judged != null && judged.verdict().refuted();
     }
 
     /**

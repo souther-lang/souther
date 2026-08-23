@@ -54,6 +54,8 @@ final class PathCompletion {
      */
     Completion of(Core e, Known k, Denotations at) {
         if (k.reachesNothing()) {
+            // Nothing stands here, so there is no run to say anything about. Answered as the
+            // weaker of the two, since a state that holds nothing proves whatever it is asked.
             return Completion.MAY;
         }
         if (e instanceof Core.Unreachable said) {
@@ -92,11 +94,13 @@ final class PathCompletion {
     }
 
     /**
-     * {@code e} where it is an operation computing a value, and null where it is anything else.
+     * {@code e} where it is a node whose own value this reading records arithmetic for, and null
+     * where it is anything else.
      *
-     * <p>The two spellings the language has for arithmetic, and only those. An operator aborts where
-     * it runs out of room and a library call answers a case or aborts, and both are evaluations a
-     * run either leaves or does not.
+     * <p>Which is an operator and a library call, and it is those because those are what
+     * {@link Terms} records a recipe against — not because they are everything the language calls
+     * arithmetic. Negation is arithmetic and is neither, and nothing is recorded for it; a recipe
+     * written for it later belongs here, and until one is there would be nothing here to ask.
      *
      * <p>A name given such a value is not one of them. What a name reads was computed where it was
      * computed, and a run standing at the name has already come back from that — so asking here

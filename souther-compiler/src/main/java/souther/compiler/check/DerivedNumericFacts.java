@@ -153,11 +153,22 @@ final class DerivedNumericFacts {
         /** Too little is known here for the rule to fire, and nothing follows from that. */
         record AndNotEnoughIsKnown<T>() implements Operand<T> {}
 
-        /** What the rule this operand belongs to answers, where it is not one the rule can fire on.
-         * The atom is the rule's own, since it is that operation's answer that does not exist. */
+        /**
+         * What the rule this operand belongs to answers, where it is not one the rule can fire on.
+         * The atom is the rule's own, since it is that operation's answer that does not exist.
+         *
+         * <p>Asked of the two that are not, and it says so rather than answering for the third. An
+         * operand the rule fires on has no answer of this kind — what the rule comes to is what its
+         * arithmetic works out to — and a reading that handed back "nothing to say" there would be
+         * a rule silently dropping the operand it had.
+         */
         default Says saying(FactSubject atom) {
-            return this instanceof AndSoNoValueCameOfIt
-                    ? new Says.NoValueCameOfIt(atom) : Says.NOTHING;
+            return switch (this) {
+                case AndSoNoValueCameOfIt<T> ignored -> new Says.NoValueCameOfIt(atom);
+                case AndNotEnoughIsKnown<T> ignored -> Says.NOTHING;
+                case Usable<T> ignored -> throw new IllegalStateException(
+                        "a rule was asked what it answers over an operand it can fire on");
+            };
         }
     }
 

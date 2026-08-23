@@ -82,7 +82,13 @@ public final class Evaluated {
             // is the answer of a `&&` and a true left is the answer of an `||`, so what has to hold
             // for the right to run is the left coming out the other way.
             case Core.Binary binary when binary.op().stopsWhenItsAnswerIsSettled() ->
-                    binary.left() == null || binary.right() == null ? always(binary.left(), binary.right())
+                    binary.left() == null || binary.right() == null
+                            // A hole where an operand was. The left runs if it is there, and
+                            // without a left to come out one way nothing decides the right — so it
+                            // is not placed rather than placed wrongly. A body with a hole in it is
+                            // one a clause was refused of, and every reading of it is already
+                            // reading around what is missing.
+                            ? always(binary.left())
                             : List.of(new Step.Always(binary.left()),
                                     new Step.OnlyWhere(binary.left(), binary.op() == BinOp.AND,
                                             binary.right()));

@@ -126,35 +126,15 @@ class ADivideRoundedToAScaleIsReadTest {
     }
 
     /**
-     * A scale no {@code int} holds is a divide that answers nothing, so the arm below it is entered
-     * by no run.
-     *
-     * <p>A scale outside the ones the run time takes *aborts* (spec §stdlib-decimal), and this model
-     * holds the divisor off nought, so the call comes back as no case at all. Nothing under it is
-     * judged — not the construction, and not the clause it would otherwise owe.
-     *
-     * <p>Which is a different answer from the one below it, and the two used to be one. Read as "no
-     * scale here", an out-of-range scale and a scale a reading will not lay a grid out for both left
-     * the rule saying nothing; the first is the operation producing no value and the second is this
-     * compilation declining to work out where the value is. {@link #aScaleWiderThanAReadingLaysOutIsNoScale}
-     * is the control that says so: it is the same shape at a scale the run time does take, and it
-     * still reports.
-     *
-     * <p>Silence is read against {@link AConstructionAfterAnEvaluationThatAnswersNothingIsNotJudgedTest#
-     * aDivideAtAScaleTheRunTimeCannotTakeLeavesTheArmUnentered}, where the same scale stands over a
-     * construction the values refuse: at a scale that answers it is refused, and at this one nothing
-     * is said.
-     */
-    @Test
-    void aScaleTheRunTimeCannotDivideAtIsADivideThatAnswersNothing() {
-        assertEquals(List.of(), atScale("4294967298"));
-        assertEquals(List.of(), atScale("2"));
-    }
-
-    /**
      * A scale wider than a reading will lay a grid out for is no scale here.
      *
-     * <p>Two questions and not one. What the run time divides at is settled by the backend; what a
+     * <p>Three questions and not one, and the third is not here. A scale outside the ones the run
+     * time takes is a division that answers nothing at all, which is
+     * {@link AConstructionAfterAnEvaluationThatAnswersNothingIsNotJudgedTest#
+     * aDivideAtAScaleTheRunTimeCannotTakeLeavesTheArmUnentered} and reads as silence; these are
+     * scales the run time does take, so what is left is what a reading can afford, and it reports.
+     *
+     * <p>What the run time divides at is settled by the backend; what a
      * reading can afford to lay out is the compilation's
      * ({@link souther.compiler.check.ReadingPolicy}). A million places is a number a megabyte wide
      * at every corner of one divide, and the far ends of the whole-number range are scales
@@ -167,6 +147,10 @@ class ADivideRoundedToAScaleIsReadTest {
         assertEquals(List.of("E2011"), atScale("0 - 1000000"));
         assertEquals(List.of("E2011"), atScale("0 - 2147483648"));
         assertEquals(List.of("E2011"), atScale("2147483647"));
+        // The control, and the reason the four above are read as the reading declining rather than
+        // as the rule not running: the same model at a scale this reading does lay a grid out for
+        // discharges the clause.
+        assertEquals(List.of(), atScale("2"));
     }
 
     /** The model of {@link #aScaleAGuardSettlesIsAScale}, with the scale written at the call. */
