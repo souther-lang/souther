@@ -209,7 +209,8 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
                 souther.compiler.types.CoverageOrigin.unwritten(), Type.BOOL, POS);
         return new StatedContract(FIND, List.of(), Type.INT,
                 List.of(new StatedContract.StatedRule(new RuleId(FIND, 0, 0, AN_INT),
-                        new Guard.Case(CaseSelector.direct(AN_INT)), value, Optional.empty(),
+                        new Guard.Case(ResolvedCase.direct(AN_INT, Symbols.none())), value,
+                        Optional.empty(),
                         List.of(new StatedContract.Conjunct(POS,
                                 new souther.compiler.check.TypedClause.Typed(states))))));
     }

@@ -47,7 +47,7 @@ sealed interface CaseSpace {
      * <p>It is not the order arms are tried in. Which arm of a {@code match} takes a value is
      * decided by the order the arms are written, which is the match's and not the subject's.
      */
-    List<CaseSelector> selectors();
+    List<ResolvedCase> selectors();
 
     /** A subject with no cases: nothing selects from it and nothing opens it. */
     record Plain(Type subject) implements CaseSpace {
@@ -58,7 +58,7 @@ sealed interface CaseSpace {
         }
 
         @Override
-        public List<CaseSelector> selectors() {
+        public List<ResolvedCase> selectors() {
             return List.of();
         }
     }
@@ -71,7 +71,7 @@ sealed interface CaseSpace {
      * admits a different surface is an arm here, so gaining one is a compile error at each reader
      * that decides by form rather than a silent fall into the general reading.
      */
-    record Optional(Type subject, List<CaseSelector> selectors) implements CaseSpace {
+    record Optional(Type subject, List<ResolvedCase> selectors) implements CaseSpace {
 
         public Optional {
             selectors = List.copyOf(selectors);
@@ -84,7 +84,7 @@ sealed interface CaseSpace {
     }
 
     /** A subject whose cases are named data: a union's members, or a sum's declared cases. */
-    record Cases(Type subject, String described, List<CaseSelector> selectors) implements CaseSpace {
+    record Cases(Type subject, String described, List<ResolvedCase> selectors) implements CaseSpace {
 
         public Cases {
             selectors = List.copyOf(selectors);
@@ -100,15 +100,20 @@ sealed interface CaseSpace {
      */
     static CaseSpace of(Type subject, Symbols symbols) {
         if (subject instanceof Type.OptionOf option) {
+            // An optional's carriers cover themselves. What `Some` holds is the element, and the
+            // element's own atoms are not what an arm over an optional answers for: `Some` is the
+            // case, whatever it wraps.
             return new Optional(subject, List.of(
-                    CaseSelector.optionPresent(option.element()), CaseSelector.optionAbsent()));
+                    ResolvedCase.optionPresent(option.element()), ResolvedCase.optionAbsent()));
         }
         if (subject instanceof Type.Union union) {
-            return new Cases(subject, "union `" + Type.show(union) + "`", direct(union.members()));
+            return new Cases(subject, "union `" + Type.show(union) + "`",
+                    direct(union.members(), symbols));
         }
         if (subject instanceof Type.Ref ref
                 && symbols.declarations().declaration(ref.name().key()) instanceof Hir.SumData sum) {
-            return new Cases(subject, "data `" + sum.name() + "`", direct(TypeOps.caseNames(sum)));
+            return new Cases(subject, "data `" + sum.name() + "`",
+                    direct(TypeOps.caseNames(sum), symbols));
         }
         return new Plain(subject);
     }
@@ -119,10 +124,10 @@ sealed interface CaseSpace {
     }
 
     /** The case {@code name} selects, or null where it selects none of these. */
-    default CaseSelector selector(TypeSymbol name) {
-        for (CaseSelector selector : selectors()) {
-            if (selector.name().equals(name)) {
-                return selector;
+    default ResolvedCase selector(TypeSymbol name) {
+        for (ResolvedCase selected : selectors()) {
+            if (selected.name().equals(name)) {
+                return selected;
             }
         }
         return null;
@@ -131,22 +136,27 @@ sealed interface CaseSpace {
     /** The names of these cases, in the order the subject states them. */
     default List<TypeSymbol> names() {
         List<TypeSymbol> out = new ArrayList<>();
-        for (CaseSelector selector : selectors()) {
-            out.add(selector.name());
+        for (ResolvedCase selected : selectors()) {
+            out.add(selected.name());
         }
         return out;
     }
 
-    /** Cases whose carrier is the value itself, de-duplicated the way the subject states them: a
-     *  member written twice is one case, and the first spelling is the one the order keeps. */
-    private static List<CaseSelector> direct(Iterable<TypeSymbol> members) {
+    /**
+     * Cases whose carrier is the value itself, de-duplicated the way the subject states them: a
+     * member written twice is one case, and the first spelling is the one the order keeps.
+     *
+     * <p>What each covers is {@link ResolvedCase#direct}'s to work out. This says which cases there
+     * are and in what order; what one of them reaches is not restated here.
+     */
+    private static List<ResolvedCase> direct(Iterable<TypeSymbol> members, Symbols symbols) {
         Set<TypeSymbol> seen = new LinkedHashSet<>();
         for (TypeSymbol member : members) {
             seen.add(member);
         }
-        List<CaseSelector> out = new ArrayList<>();
+        List<ResolvedCase> out = new ArrayList<>();
         for (TypeSymbol member : seen) {
-            out.add(CaseSelector.direct(member));
+            out.add(ResolvedCase.direct(member, symbols));
         }
         return out;
     }

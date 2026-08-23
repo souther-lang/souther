@@ -5,7 +5,6 @@ import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
-import souther.compiler.types.CaseSelector;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
@@ -81,7 +80,7 @@ public record BehaviorContract(ValueName.Behavior behavior, List<ContractParam> 
         /** What {@code value} is read as here: what the case holds, or the whole answer where the
          *  rule applies to every answer. */
         public Type valueType(Type output) {
-            return guard instanceof Guard.Case c ? c.selector().bound() : output;
+            return guard instanceof Guard.Case c ? c.selected().bound() : output;
         }
 
         /**
@@ -125,8 +124,13 @@ public record BehaviorContract(ValueName.Behavior behavior, List<ContractParam> 
         /** The rule applies to every answer: the form written where the answer has no cases. */
         public record Always() implements Guard {}
 
-        /** The rule applies where the answer is this case. */
-        public record Case(CaseSelector selector) implements Guard {}
+        /** The rule applies where the answer is this case.
+         *
+         * <p>The case as this compile resolved it and not the selector alone: a reader deciding
+         * whether one rule's case is inside another's is asking about what each covers, and going
+         * back to the declarations for that is the second reading {@link CaseSpace} exists to stop.
+         */
+        public record Case(ResolvedCase selected) implements Guard {}
     }
 
     /**

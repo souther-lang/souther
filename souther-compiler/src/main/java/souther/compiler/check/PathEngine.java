@@ -348,11 +348,11 @@ final class PathEngine {
         if (guard instanceof Guard.Always) {
             return true;
         }
-        if (!(guard instanceof Guard.Case(CaseSelector selector))
+        if (!(guard instanceof Guard.Case(ResolvedCase selected))
                 || !(pattern instanceof Core.ResolvedPattern.Single single)) {
             return false;
         }
-        return single.selector().name().equals(selector.name());
+        return single.selector().name().equals(selected.name());
     }
 
     /** What the arm holds of the answer: what it binds where it binds one, and the answer itself
