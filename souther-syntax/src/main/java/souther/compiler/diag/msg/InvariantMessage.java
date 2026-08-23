@@ -6,49 +6,73 @@ import souther.compiler.diag.DiagnosticCode;
 public sealed interface InvariantMessage extends Message {
 
     /**
-     * The guards do not establish a clause, so the construction may abort.
+     * Nothing known where the construction stands establishes a clause, so it may abort.
      *
-     * <p>{@code unsettled} is the clauses it could not establish. Which clause it is, is what an
+     * <p>Said of what is known and not of what a guard did, because a guard is not where the
+     * knowledge comes from. What an input type declares is seeded at the construction, a `...`
+     * spread brings in what it took, and the conditions on the way here add to that; a guard is one
+     * of those sources. Naming the narrowest of them made the warning read as a report about
+     * guards, which is a mechanism, when what it reports is that the model has not said why this
+     * construction holds.
+     *
+     * <p>{@code unsettled} is the clauses nothing here establishes. Which clause it is, is what an
      * author acts on: the invariant is the conjunction of its clauses, and being told that "its
      * invariant" may be violated where four of five are settled leaves them to find the fifth by
      * writing one guard at a time.
      *
      * <p>One of four spellings, over two questions a construction answers separately: whether a
-     * clause the guards left standing can be named, and whether one they established can be. A
+     * clause left standing can be named, and whether one established here can be. A
      * spelling carries the names it is written around and no empty ones — a message with a list in
      * it is the message chosen where there is a list, so nothing here renders as punctuation with
      * nothing in front of it.
      */
     @Code(DiagnosticCode.E2011)
-    record TheGuardsDoNotEstablish(String data, String unsettled)
+    record NothingKnownHereEstablishes(String data, String unsettled)
             implements InvariantMessage, Reported {}
 
-    /** The same, where the guards did establish clauses that can be named: {@code settled}. */
+    /** The same, where clauses that can be named were established here: {@code settled}. */
     @Code(DiagnosticCode.E2011)
-    record TheGuardsDoNotEstablishButDoEstablish(String data, String unsettled, String settled)
+    record NothingKnownHereEstablishesButDoesEstablish(String data, String unsettled, String settled)
             implements InvariantMessage, Reported {}
 
-    /** The same, where every clause the check could not establish was written without a name. */
+    /** The same, where every clause nothing known here establishes was written without a name. */
     @Code(DiagnosticCode.E2011)
-    record TheGuardsDoNotEstablishTheInvariant(String data) implements InvariantMessage, Reported {}
+    record NothingKnownHereEstablishesTheInvariant(String data) implements InvariantMessage, Reported {}
 
     /**
-     * The same, where the guards did establish clauses that can be named.
+     * The same, where clauses that can be named were established here.
      *
      * <p>What the reader is told about is what was established, which is worth saying whether or not
      * the clause left standing beside it was given a name. Said with the invariant unnamed because
-     * the two are separate questions: an unnamed clause the guards did not establish does not take
-     * the established ones out of the warning with it.
+     * the two are separate questions: an unnamed clause nothing here establishes does not take the
+     * established ones out of the warning with it.
      */
     @Code(DiagnosticCode.E2011)
-    record TheGuardsDoNotEstablishTheInvariantButDoEstablish(String data, String settled)
+    record NothingKnownHereEstablishesTheInvariantButDoesEstablish(String data, String settled)
             implements InvariantMessage, Reported {}
 
-    /** What to write where a relation between inputs is what guarantees the clause. */
-    record ReifyTheRelationOntoAnInput(String data) implements InvariantMessage, Supporting {}
+    /**
+     * The two answers a construction nothing here establishes has, which is one modelling question
+     * asked of the author and not a list of tricks.
+     *
+     * <p>Whether the inputs the construction fails for are inputs this behavior takes. Where they
+     * are, the failure is a business one and is written as a branch — by a guard, or by attempting
+     * the construction, which is the same answer with the rule written once instead of twice
+     * (ADR-0070). Where they are not, the model has not said so yet, and where it says so is a data
+     * that owns the relation. That data need not already exist: a relation between two parameters
+     * belongs to no input, so writing it means introducing the input that holds them both.
+     *
+     * <p>There is deliberately no third answer. This warning is not one an author answers by saying
+     * the abort is acceptable — an invariant check is the safety net for a model bug, not a way to
+     * leave a modelling question open in the source.
+     *
+     * <p>Carries nothing. What it says is true of every construction this warning is written on, and
+     * the clause and the type are already said by the message it supports.
+     */
+    record GuardItOrLetADataOwnTheRelation() implements InvariantMessage, Supporting {}
 
     /**
-     * A clause the guards did not establish, said at the clause.
+     * A clause nothing known there establishes, said at the clause.
      *
      * <p>What E2011 points at. It says no more than that, because the clauses it is written over are
      * the ones nothing here established: some of them the values may fail, and some of them are

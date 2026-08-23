@@ -9,6 +9,7 @@ import souther.compiler.types.TypeSymbol;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -77,7 +78,10 @@ public record ContractDischarge(List<RuleDischarge> rules,
             named.add(param.binding());
         }
         named.add(rule.value());
-        Terms naming = new Terms(symbols, policy);
+        // Its own reading, over the clauses every declaration writes: a type another module
+        // declares is read off its declaration either way, and nothing here reads one at all.
+        Terms naming = new Terms(symbols, Terms.Of.THE_DISCHARGE_TREE, policy,
+                new Clauses(symbols, Map.of()));
         Denotations locations =
                 Denotations.none().locations(named, naming::placeSubject, naming::placeTerm);
 

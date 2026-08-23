@@ -25,7 +25,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -45,10 +44,20 @@ import java.util.stream.Stream;
  * {@code if} here). At every construction whose invariant it can carry, it asks whether what is known
  * there <em>discharges</em> it, or refutes it. A construction proven to violate its invariant on a
  * reachable path is a compile error (the path-sensitive generalization of the constant check
- * {@code Amount(-5)}); one it cannot prove is a warning (a possible abort — guard it, or reify the
- * relation into a type invariant). An invariant naming something it cannot name is left opaque (no
+ * {@code Amount(-5)}); one it cannot prove is a warning (a possible abort — see below for what an
+ * author answers it with). An invariant naming something it cannot name is left opaque (no
  * diagnostic; the run-time check stays), so every flagged construction is one whose clauses could be
  * read at the values it is being given.
+ *
+ * <p>What an author answers that warning with is one modelling question and not a list of moves:
+ * whether the inputs the construction fails for are inputs the behavior takes. Where they are, the
+ * failure is a business one and is written as a branch — by a guard, or by attempting the
+ * construction, which is the same answer with the invariant written once instead of twice
+ * (ADR-0070). Where they are not, the relation belongs to a data that owns it, and that data need
+ * not already exist: a relation between two parameters belongs to no input, so writing it means
+ * introducing the input that holds them both. Leaving the construction as written leaves the
+ * warning unanswered — the run-time check still stands there, as it stands under every
+ * construction, but standing is not an answer to what this check reported.
  *
  * <p>A violation is reported in the terms it was reached in, and no stronger: {@link Known} carries
  * beside itself the reading with nothing a condition on the path settled, and a clause that reading
@@ -336,7 +345,7 @@ public final class InvariantChecker {
         }
         try {
             return CapabilityResult.of(
-                    predicates.obligations(it.value(), Known.top(), locations, false));
+                    predicates.assumed(it.value(), locations, false));
         } catch (RuntimeException why) {
             // Fail-open, as the walk is — and said as a stop rather than as a conclusion, because
             // what the clause is outside of is what this did not find out.
@@ -558,7 +567,7 @@ public final class InvariantChecker {
                 // decide for itself which of the rules that draw a line it was looking at.
                 RuleRef.Invariant origin = new RuleRef.Invariant(Clause.Ref.of(declared));
                 written.add(new Written(origin, stated));
-                Predicates.Owed owed = c.predicates.obligations(stated, k, at, false,
+                Predicates.Owed owed = c.predicates.assumed(stated, at, false,
                         (part, said) -> gathering.constrained(origin, part, partRead(said)));
                 // And the reading that builds the numeric constraints, said by what it produced.
                 // `value * 2 >= 4` is beyond the two readings below and is taken in here about the
@@ -574,11 +583,11 @@ public final class InvariantChecker {
             for (Map.Entry<String, BindingId> field : bindings.entrySet()) {
                 Type type = fields.get(field.getKey());
                 if (type != null) {
-                    // No depth limit here: this is the reading a boundary is derived from, and a
-                    // rule the construction must satisfy is a rule wherever in the value it sits.
+                    // Every position: this is the reading a boundary is derived from, and a rule
+                    // the construction must satisfy is a rule wherever in the value it sits.
                     k = c.engine.seedAt(new Core.Read(field.getKey(), field.getValue(), type, NOWHERE),
                             data.newtype() ? FieldDomains.THE_VALUE : field.getKey(),
-                            k, at, 1, Integer.MAX_VALUE, new HashSet<>(), gathering, reach);
+                            k, at, new GuaranteeWalk.Extent.EveryPosition(), gathering, reach);
                 }
             }
             Map<String, FactSubject> atoms = new LinkedHashMap<>();
@@ -752,13 +761,13 @@ public final class InvariantChecker {
             inner = new Core.FieldAccess(inner, "value", under, NOWHERE);
             worn = under;
         }
-        if (depth > PathEngine.FIELDS_SEEDED || !(worn instanceof Type.Ref ref)
+        if (depth > GuaranteeWalk.FIELDS_SEEDED || !(worn instanceof Type.Ref ref)
                 || !(symbols.declarations().declaration(ref.name().key()) instanceof Hir.Data data) || data.newtype()) {
             return;
         }
         for (Map.Entry<String, Type> field : clauses.fieldsOf(data).entrySet()) {
             name(new Core.FieldAccess(inner, field.getKey(), field.getValue(), NOWHERE),
-                    PathEngine.under(path, field.getKey()), field.getValue(), at, symbols, depth + 1,
+                    GuaranteeWalk.under(path, field.getKey()), field.getValue(), at, symbols, depth + 1,
                     atoms, typeAt, held, keys);
         }
     }
@@ -2173,7 +2182,7 @@ public final class InvariantChecker {
      *
      * <p>One map and not a set per side, so a clause is on exactly one of them. The sides are read
      * off it: {@link #settled()} is what the guards establish, {@link #refuted()} is what the value
-     * fails, and {@link #unsettled()} is the two the guards did not establish — which is the
+     * fails, and {@link #unsettled()} is the two nothing known there establishes — which is the
      * question E2011 asks and E2010 does not.
      */
     record Judgment(Verdict verdict, SequencedMap<Clause.Id, Judged> found) {
@@ -2211,8 +2220,8 @@ public final class InvariantChecker {
             return new Judgment(Verdict.of(a.verdict(), b.verdict()), found);
         }
 
-        /** The clauses the guards did not establish — the ones this check could not settle and the
-         * ones the value fails, which is what E2011 is about. */
+        /** The clauses nothing known there establishes — the ones this check could not settle and
+         * the ones the value fails, which is what E2011 is about. */
         SequencedMap<Clause.Id, Clause> unsettled() {
             return where(ClauseStatus::unsettled);
         }
@@ -2250,14 +2259,14 @@ public final class InvariantChecker {
             return side;
         }
 
-        /** Whether a diagnostic can name a clause the guards did not establish. Not whether there
+        /** Whether a diagnostic can name a clause nothing known there establishes. Not whether there
          * was one: a clause the author wrote no name on is in here and cannot be named. */
         boolean canNameUnsettled() {
             return canName(unsettled());
         }
 
-        /** Whether a diagnostic can name a clause the guards did establish. Not whether there was
-         * one, for the same reason. */
+        /** Whether a diagnostic can name a clause that was established there. Not whether there
+         * was one, for the same reason. */
         boolean canNameSettled() {
             return canName(settled());
         }
@@ -2281,9 +2290,10 @@ public final class InvariantChecker {
 
     /**
      * What a possible violation of {@code type}'s invariant is said as, which is two questions and
-     * not one: whether a clause the guards did not establish can be named, and whether one they did
-     * can be. Neither answers the other, and neither answers whether there was such a clause — a
-     * clause written without a name is judged like any other and is in no set here.
+     * not one: whether a clause nothing known there establishes can be named, and whether one
+     * that was established can be. Neither answers the other, and neither answers whether there was
+     * such a clause — a clause written without a name is judged like any other and is in no set
+     * here.
      *
      * <p>Asked one at a time and of the sets, before anything is written out. One joined string
      * answering both is what ended this warning with `Established here: .`, and it could as easily
@@ -2293,19 +2303,19 @@ public final class InvariantChecker {
     private static Diagnostic.Builder mayViolate(Hir.Data type, Judgment judgment) {
         if (judgment.canNameUnsettled()) {
             if (judgment.canNameSettled()) {
-                return Diagnostic.say(new InvariantMessage.TheGuardsDoNotEstablishButDoEstablish(
+                return Diagnostic.say(new InvariantMessage.NothingKnownHereEstablishesButDoesEstablish(
                         type.name(), names(judgment.unsettled()),
                         names(judgment.settled())));
             }
-            return Diagnostic.say(new InvariantMessage.TheGuardsDoNotEstablish(
+            return Diagnostic.say(new InvariantMessage.NothingKnownHereEstablishes(
                     type.name(), names(judgment.unsettled())));
         }
         if (judgment.canNameSettled()) {
             return Diagnostic.say(
-                    new InvariantMessage.TheGuardsDoNotEstablishTheInvariantButDoEstablish(
+                    new InvariantMessage.NothingKnownHereEstablishesTheInvariantButDoesEstablish(
                             type.name(), names(judgment.settled())));
         }
-        return Diagnostic.say(new InvariantMessage.TheGuardsDoNotEstablishTheInvariant(type.name()));
+        return Diagnostic.say(new InvariantMessage.NothingKnownHereEstablishesTheInvariant(type.name()));
     }
 
     /**
@@ -2351,8 +2361,8 @@ public final class InvariantChecker {
                 if (!attempted) {
                     warnings.add(finish(
                             mayViolate(type, judgment)
-                                    .hint(new InvariantMessage.ReifyTheRelationOntoAnInput(
-                                            type.name())),
+                                    .hint(new InvariantMessage
+                                            .GuardItOrLetADataOwnTheRelation()),
                             pos, judgment.unsettled(),
                             new InvariantMessage.ThisClauseIsNotEstablishedHere()));
                 }
@@ -2878,7 +2888,7 @@ public final class InvariantChecker {
      * check gets both or neither.
      *
      * <p>Which clauses is the caller's, and is not something this works out from a judgment: E2011
-     * is about the clauses the guards did not establish and E2010 about the ones the value fails,
+     * is about the clauses nothing known there establishes and E2010 about the ones the value fails,
      * and those are the two questions the classification was split to keep apart. What this does
      * with the clauses it is handed is the same either way — every one of them that this compile can
      * quote, in the order the clauses were declared, labelled with what the caller says of them.
@@ -2921,7 +2931,7 @@ public final class InvariantChecker {
      *
      * <p>Which is why it is the refuted clauses that are named and not the unsettled ones. A value
      * that fails one clause may leave others standing that nothing here decides, and those are
-     * clauses the guards did not establish rather than clauses the value fails — a sentence saying
+     * clauses nothing known there establishes rather than clauses the value fails — a sentence saying
      * "the value being built is one that clause rejects" over a list holding both says something
      * untrue of some of them.
      *

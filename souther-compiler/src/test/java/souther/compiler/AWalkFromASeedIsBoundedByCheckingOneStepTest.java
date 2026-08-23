@@ -65,6 +65,24 @@ class AWalkFromASeedIsBoundedByCheckingOneStepTest {
                 { held: Holding
                 }
 
+            data Inner =
+                { amount: NonNegInt
+                }
+
+            data Middle =
+                { inner: Inner
+                }
+
+            data Deeper =
+                { mid: Middle
+                }
+
+            data DeepHolding = Deeper | Missing
+
+            data DeepBoxed =
+                { held: DeepHolding
+                }
+
             data Classed =
                 { kind: Kind
                 , amount: NonNegInt
@@ -703,24 +721,21 @@ class AWalkFromASeedIsBoundedByCheckingOneStepTest {
     }
 
     /**
-     * What choosing an arm settles is not read, so an arm whose body reads what the arm itself bound
-     * gets no range.
+     * What choosing an arm settles has two sources.
      *
-     * <p>The boundary as it stands, and narrower than it was. What the arm binds is entered before
-     * the arm is named ({@link souther.compiler.check.Terms#choosing}), so the body below reads the
-     * place it meant rather than a value nothing named. What is still not read is what choosing the
-     * arm <em>settles</em>: that {@code held} is the case that carries an amount, and that the
-     * attempt's construction held. Both are true only where that arm is the answer, so neither is
-     * among the facts that hold of every element a step is handed, and the step gets no range from
-     * them (#973).
+     * <p>What a condition states is the condition's ({@link souther.compiler.check.Conditions});
+     * what being a value of a type guarantees is the declaration's, and is the same answer a seeding
+     * reads of a parameter ({@link souther.compiler.check.TypeGuarantees}). A {@code match} arm
+     * binds the scrutinee refined to the case it names and an attempt binds what it built, so both
+     * were built through their type's checked constructor and both carry what that type states.
+     * Stated under the arm and not beside it: the value only exists because that arm was chosen.
      *
-     * <p>One gap and not three: a {@code match} arm's binding, an attempt's built value and an
-     * {@code if}'s condition are all what choosing an arm settles. Written down beside a neighbour
-     * that differs only in reading the element instead, so what is owed is the binding and not the
-     * branch.
+     * <p>One fact per test below. Written as one method, the first that failed hid the rest — which
+     * it did, and a reading of what the other two were doing was made from assertions that never
+     * ran.
      */
     @Test
-    void anArmReadingWhatItBoundGetsNoRange() {
+    void anArmReadingTheElementIsTheNeighbourThatWasAlwaysRead() {
         assertFalse(owed(compiled("""
                 behavior total : (xs: List<Flagged>) -> Money
                     constructs Money, NonNegInt
@@ -728,14 +743,22 @@ class AWalkFromASeedIsBoundedByCheckingOneStepTest {
                 let total (xs) = Money(List.fold((sum, x) ->
                     if NonNegInt(x.amount.value) as n then sum + x.amount.value else sum, 0, xs))
                 """)), "this arm reads the element, which the walk entered, so the step is read");
-        assertTrue(owed(compiled("""
+    }
+
+    @Test
+    void anArmReadingWhatAnAttemptBuiltIsReadByWhatItsTypeGuarantees() {
+        assertFalse(owed(compiled("""
                 behavior total : (xs: List<Flagged>) -> Money
                     constructs Money, NonNegInt
 
                 let total (xs) = Money(List.fold((sum, x) ->
                     if NonNegInt(x.amount.value) as n then sum + n.value else sum, 0, xs))
-                """)), "and this one reads what the attempt built, which nothing here has entered");
-        assertTrue(owed(compiled("""
+                """)), "this one reads what the attempt built, which its own type speaks for");
+    }
+
+    @Test
+    void anArmReadingWhatAMatchBoundIsReadByWhatItsTypeGuarantees() {
+        assertFalse(owed(compiled("""
                 behavior total : (xs: List<Boxed>) -> Money
                     constructs Money
 
@@ -744,4 +767,31 @@ class AWalkFromASeedIsBoundedByCheckingOneStepTest {
                     | Empty -> sum, 0, xs))
                 """)), "and this one reads what a `match` arm bound, which is the same thing again");
     }
+
+    /**
+     * What an arm bound guarantees is read wherever the rule is written under it.
+     *
+     * <p>The neighbour above reads a rule one position under what the arm bound, and a reading that
+     * stopped where a seeding stops would still have found it. This one is three under it, which is
+     * past what a walk over a body can afford — and the model says the same thing about both: a rule
+     * four records down refuses a value exactly as one on the top does.
+     *
+     * <p>Written down because the reading did borrow that number, and the borrowing was invisible
+     * from either side. The walk's own tests pass with a bound in place, since they say what a bound
+     * does; the recipe's tests pass, since a rule a position or two down is inside any of them. This
+     * is the case that fails the moment
+     * {@link souther.compiler.check.GuaranteeWalk.Scope#everyPosition} here becomes a number.
+     */
+    @Test
+    void whatAnArmBoundGuaranteesIsReadHoweverDeepTheRuleIsWritten() {
+        assertFalse(owed(compiled("""
+                behavior total : (xs: List<DeepBoxed>) -> Money
+                    constructs Money
+
+                let total (xs) = Money(List.fold((sum, x) -> match x.held with
+                    | Deeper as d -> sum + d.mid.inner.amount.value
+                    | Missing -> sum, 0, xs))
+                """)), "the rule is three positions under what the arm bound, and it is read");
+    }
+
 }
