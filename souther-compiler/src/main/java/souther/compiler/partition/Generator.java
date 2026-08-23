@@ -972,24 +972,23 @@ public final class Generator {
         // are one silence, and a reader told the second where the first happened is told the model
         // settles something it does not.
         Set<Integer> cutOff = new LinkedHashSet<>();
+        // The arms this run ended up answering with a group nobody walked, collected as those
+        // answers are made rather than worked out again afterwards. What decides one is the order
+        // the three answers are asked in below; a set built here from `left`, `cutOff` and
+        // `notOffered` would be that order written a second time, free to stop agreeing with it.
+        Set<Integer> wentUnwalked = new LinkedHashSet<>();
         // And the arms behind a group nothing walked, which is a second silence with a different
         // cause. The one above is a budget that ran out with the arm still owed; this is a group
         // the offer never opened, and raising the budget does not reach it.
         InteractionCells.Offered offered = InteractionCells.of(groups, axes, budget);
         Set<Integer> notOffered = new LinkedHashSet<>();
-        // And which of the groups held back were carrying an arm this run was asked for. A group
-        // claiming nothing on the list cost this generation nothing: what was owed was the arms and
-        // the classes, and walking a group is how a row for an arm is looked for rather than
-        // something anybody is owed. Counted off the obligation for the reason the search limit
-        // below is — a number counted off the search space instead tells a reader to raise a limit
-        // that would change nothing.
-        int heldBackAndOwed = 0;
+        // Which arms each held-back group could have been searched at, kept per group so that the
+        // summary at the end can be counted off the entries rather than worked out a second way.
+        List<List<Integer>> behindEachHeldGroup = new ArrayList<>();
         for (InteractionCells.NotOffered held : offered.notOffered()) {
             List<Integer> behindIt = armsIn(held.claims());
+            behindEachHeldGroup.add(behindIt);
             notOffered.addAll(behindIt);
-            if (behindIt.stream().anyMatch(armsOwed::contains)) {
-                heldBackAndOwed++;
-            }
         }
         boolean unconfirmed = false;
         for (InteractionCells.Group group : offered.groups()) {
@@ -1056,6 +1055,7 @@ public final class Generator {
                 why.add(new UnresolvedCombination(List.of(),
                         UnresolvedCombination.Reason.THE_GROUP_WAS_NOT_OFFERED));
                 arms.add(new ArmAttempt.Unresolved(probe, why));
+                wentUnwalked.add(probe);
             } else if (!why.isEmpty()) {
                 arms.add(new ArmAttempt.Unresolved(probe, why));
             }
@@ -1072,20 +1072,27 @@ public final class Generator {
             reasons.add(new GenerationReason.SearchLimit(axes.get(0).id().behavior(),
                     classesLeft + cutOff.size()));
         }
-        // And the groups the limit held back that were carrying one of them. Not every group it
-        // held back: a run asked for nothing behind a group lost nothing by not walking it, and a
-        // line saying no rows were offered there says rows were due where none were. Which is also
-        // what keeps this in step with the entries above — an arm gets its
-        // `THE_GROUP_WAS_NOT_OFFERED` only where it was owed, so a summary counting more than those
-        // is a number with no entry under it.
+        // And the groups the limit held back that an arm was left waiting on. Counted off the
+        // entries just made and not off the obligation this run started with, because the two are
+        // different sets: an arm owed at the start may have been built from another group that was
+        // offered, or stopped at by the row budget, and either way the entry for it says so and the
+        // group is not what it is waiting on. `NotOffered`'s own contract is that what it names is
+        // read for "what is left owed after every offered group has been searched", which is
+        // available here and nowhere earlier.
         //
-        // Asked of the arms the group may claim, which is a superset
-        // ({@link #everyArmACombinationMayTake}). A group named for an arm no combination of it
-        // actually reaches is the safe direction: the other one drops the news that a walk was not
-        // made, over an arm the report is about to call unreached.
-        if (heldBackAndOwed > 0) {
+        // Read off `wentUnwalked` rather than rebuilt from `left`, `cutOff` and `notOffered`. Those
+        // three would be the order the answers are asked in, written a second time beside the one
+        // that decides — and a summary that disagrees with the entries under it is worse than no
+        // summary, since a reader checks the number against them.
+        int heldBackAndWaitedOn = 0;
+        for (List<Integer> behindIt : behindEachHeldGroup) {
+            if (behindIt.stream().anyMatch(wentUnwalked::contains)) {
+                heldBackAndWaitedOn++;
+            }
+        }
+        if (heldBackAndWaitedOn > 0) {
             reasons.add(new GenerationReason.GroupsNotOffered(axes.get(0).id().behavior(),
-                    heldBackAndOwed));
+                    heldBackAndWaitedOn));
         }
         if (unconfirmed) {
             reasons.add(new GenerationReason.RowsNotConfirmed(axes.get(0).id().behavior()));

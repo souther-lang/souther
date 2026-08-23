@@ -16,6 +16,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.Scopes;
 import souther.compiler.query.Shapes;
 
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -306,6 +307,96 @@ class AGroupTooWideToWalkSaysSoTest {
         return total.composed().reasons().stream()
                 .filter(GenerationReason.GroupsNotOffered.class::isInstance)
                 .map(GenerationReason.GroupsNotOffered.class::cast).toList();
+    }
+
+    /**
+     * Three inner meetings and an outer one over their values, so an arm is claimed by two groups.
+     *
+     * <p>Each {@code +} settles a value from two decisions, and the {@code *} over the three is a
+     * meeting of those values — so the outer group's factors are the inner values and its claims
+     * carry the arms on the way to them. The outer group has four times four times four choices and
+     * each inner one has four, which is a budget between them away from being reachable.
+     */
+    private static final String NESTED = """
+            module example.nested
+
+            data On
+            data Off
+            data Flag = On | Off
+
+            data Fee = Int
+                invariant value >= 0
+
+            let fee1 (f: Flag): Int = match f with | On -> 1 | Off -> 0
+            let fee2 (f: Flag): Int = match f with | On -> 2 | Off -> 0
+            let fee3 (f: Flag): Int = match f with | On -> 4 | Off -> 0
+            let fee4 (f: Flag): Int = match f with | On -> 8 | Off -> 0
+            let fee5 (f: Flag): Int = match f with | On -> 16 | Off -> 0
+            let fee6 (f: Flag): Int = match f with | On -> 32 | Off -> 0
+
+            behavior total : (p1: Flag, p2: Flag, p3: Flag, p4: Flag, p5: Flag, p6: Flag) -> Fee
+                constructs Fee
+
+            let total (p1, p2, p3, p4, p5, p6) =
+                Fee((fee1(p1) + fee2(p2)) * (fee3(p3) + fee4(p4)) * (fee5(p5) + fee6(p6)))
+
+            example total
+                | "one" : (On, On, On, On, On, On) -> Fee(3 * 12 * 48)
+            """;
+
+    /**
+     * A group held back that every arm behind it was answered elsewhere for is not reported.
+     *
+     * <p>The case an obligation read at the start cannot see. Every arm the outer group claims is
+     * also on the way into one of the three inner ones, and those are offered — so each arm ends up
+     * {@code Built} and nothing is left waiting on the walk that was not made. Counted against the
+     * arms this run began owing, the group would be named while every entry under it said a row was
+     * composed.
+     *
+     * <p>Which is why the count is read off the entries. A set rebuilt here from what was owed, what
+     * the row budget stopped at and what the held groups claim would be the order those answers are
+     * asked in, written twice.
+     */
+    @Test
+    void aHeldGroupEveryArmOfWhichWasAnsweredElsewhereIsNotReported() {
+        Model model = Model.of(NESTED);
+        AdequacyPolicy.OfTheGeneration budget = atMost(8);
+
+        InteractionCells.Offered offered =
+                InteractionCells.of(model.groups(), model.subject().axes(), budget);
+        assertEquals(1, offered.notOffered().size(), "the outer group is past the budget");
+        assertEquals(3, offered.groups().size(), "and the three inner ones are offered");
+
+        Generator.GenerationResult composed = Generator.fill(model.subject(), List.of(),
+                Generator.CandidateCheck.ANY, model.groups(), Generator.Trial.NOTHING_RUNS, budget);
+
+        // The held group is one arms were owed behind: without this, the answer below would hold of
+        // a group that claimed nothing and would say nothing about when a group is named.
+        Set<Integer> owed = Generator.everyArmACombinationMayTake(
+                model.subject(), model.groups(), budget);
+        Set<Integer> behindTheHeldGroup = new LinkedHashSet<>(armsIn(offered.notOffered().get(0)));
+        behindTheHeldGroup.retainAll(owed);
+        assertFalse(behindTheHeldGroup.isEmpty(),
+                "arms were owed behind the group that was held back");
+
+        assertTrue(composed.arms().stream().allMatch(Generator.ArmAttempt.Built.class::isInstance),
+                () -> "every arm was answered by an offered group: " + composed.arms());
+        assertEquals(List.of(), composed.reasons().stream()
+                        .filter(GenerationReason.GroupsNotOffered.class::isInstance).toList(),
+                () -> "so nothing was left waiting on the walk that was not made: "
+                        + composed.reasons());
+    }
+
+    /** Which arms a group the limit held back could have been searched at. */
+    private static List<Integer> armsIn(InteractionCells.NotOffered held) {
+        List<Integer> out = new java.util.ArrayList<>();
+        for (souther.compiler.coverage.ControlClaim claim : held.claims()) {
+            if (claim.at() instanceof souther.compiler.coverage.ControlPointId.ArmOccurrence arm
+                    && arm.probe().isPresent()) {
+                out.add(arm.probe().getAsInt());
+            }
+        }
+        return out;
     }
 
     /** The behavior's inputs, its axes and the groups its body meets at, off one compile. */

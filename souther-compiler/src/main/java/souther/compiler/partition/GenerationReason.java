@@ -72,12 +72,13 @@ public sealed interface GenerationReason {
      * at all, and no number of rows reaches it. A reader acting on the first would raise a limit
      * that changes nothing here.
      *
-     * <p>And only the ones that were carrying an arm this generation was asked for. What a run owes
-     * is the classes and the arms a caller names; walking a group is how a row for an arm is looked
-     * for, not something anybody is owed. So a group claiming nothing on the list cost the run
-     * nothing, and a line about it would say rows were due where none were.
+     * <p>And only the ones an arm was left waiting on. What a run owes is the classes and the arms
+     * a caller names; walking a group is how a row for an arm is looked for, not something anybody
+     * is owed. So a group claiming nothing this run was asked for cost it nothing — and neither did
+     * one whose arms another group reached, or whose arms the row budget stopped at first, since
+     * those arms have an entry of their own saying what happened to them.
      *
-     * @param groups how many were held back <em>and</em> claimed an arm this run was owed, which is
+     * @param groups how many were held back with an arm still waiting on them at the end, which is
      *               the group's own count and not a count of the combinations in them — the whole
      *               of what this says is that the walk was never made, so how many cells it would
      *               have had is not something anything counted
