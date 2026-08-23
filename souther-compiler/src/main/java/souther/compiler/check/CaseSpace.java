@@ -104,9 +104,7 @@ sealed interface CaseSpace {
             // element's own atoms are not what an arm over an optional answers for: `Some` is the
             // case, whatever it wraps.
             return new Optional(subject, List.of(
-                    new ResolvedCase(CaseSelector.optionPresent(option.element()),
-                            List.of(TypeSymbol.SOME)),
-                    new ResolvedCase(CaseSelector.optionAbsent(), List.of(TypeSymbol.NONE))));
+                    ResolvedCase.optionPresent(option.element()), ResolvedCase.optionAbsent()));
         }
         if (subject instanceof Type.Union union) {
             return new Cases(subject, "union `" + Type.show(union) + "`",
@@ -148,9 +146,8 @@ sealed interface CaseSpace {
      * Cases whose carrier is the value itself, de-duplicated the way the subject states them: a
      * member written twice is one case, and the first spelling is the one the order keeps.
      *
-     * <p>What each covers is read from what it holds and not from its name: the {@code Int} of
-     * {@code Int | DivisionByZero} holds a primitive, which {@link CaseSelector#heldBy} has already
-     * worked out, and a case that is a sum holds that sum and covers the leaves under it.
+     * <p>What each covers is {@link ResolvedCase#direct}'s to work out. This says which cases there
+     * are and in what order; what one of them reaches is not restated here.
      */
     private static List<ResolvedCase> direct(Iterable<TypeSymbol> members, Symbols symbols) {
         Set<TypeSymbol> seen = new LinkedHashSet<>();
@@ -159,14 +156,7 @@ sealed interface CaseSpace {
         }
         List<ResolvedCase> out = new ArrayList<>();
         for (TypeSymbol member : seen) {
-            CaseSelector selector = CaseSelector.direct(member);
-            // A case whose name denotes no type holds nothing to descend — `Raw`, which a stage may
-            // be unioned with and which no declaration takes apart — and covers no atom. The same
-            // answer {@link AtomSpace} gives a type that names no case, said here because the type
-            // to ask it about is the one that is missing.
-            Type held = selector.bound();
-            out.add(new ResolvedCase(selector,
-                    held == null ? List.of() : AtomSpace.subjectAtoms(held, symbols)));
+            out.add(ResolvedCase.direct(member, symbols));
         }
         return out;
     }
