@@ -8,6 +8,7 @@ import souther.compiler.check.PathEngine.Entered;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.core.Core;
+import souther.compiler.core.Evaluated;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.InvariantMessage;
@@ -163,6 +164,23 @@ public final class InvariantChecker {
      */
     static List<Opening> OPENING;
 
+    /** One opened split: how many binders it stood inside, and whether what it handed its
+     * continuation is the state that was read inside them. */
+    record Carried(int binders, boolean handedOnWhatWasReadInside) {}
+
+    /**
+     * Where a test in this package reads what an opened split handed the expression it stands in,
+     * one entry per split opened, and null everywhere else.
+     *
+     * <p>Beside {@link #OPENING} and for the reason that one gives. A split standing inside binders
+     * is read inside them, and what it settles there is stated where the continuation is not — so
+     * what may be handed on is that something leaves and not what was found. No diagnostic says
+     * this: the facts that differ are about the binders themselves, which a continuation outside
+     * cannot name, so nothing downstream reads them either way. What a reading of a warning would
+     * be reading is whether some other route happened to establish the same thing.
+     */
+    static List<Carried> CARRIED;
+
     /**
      * What this check reads: one behavior's body and the invariants of the types around it, both in
      * the representation the rules are written at ({@link InliningPolicy#DISCHARGE}) rather than the
@@ -207,6 +225,8 @@ public final class InvariantChecker {
     private final Terms terms;
     /** What a clause owes and what a guard settles. */
     private final Predicates predicates;
+    /** Whether an evaluation can answer, which is what decides that a continuation is reached. */
+    private final PathCompletion completion;
     private final List<CompileException> errors = new ArrayList<>();
     private final List<Diagnostic> warnings = new ArrayList<>();
 
@@ -227,6 +247,7 @@ public final class InvariantChecker {
         this.clauses = engine.clauses();
         this.terms = engine.terms();
         this.predicates = engine.predicates();
+        this.completion = new PathCompletion(this.terms, this.predicates);
     }
 
     /**
@@ -1499,68 +1520,98 @@ public final class InvariantChecker {
     // --- the walk ------------------------------------------------------------------------------
 
     /**
-     * Reads what the answers under {@code e} guarantee, and walks {@code e} over it — which is
-     * {@link #walk}'s one requirement, met here.
+     * Walks {@code e} as a region of its own, over what holds where the region begins.
      *
-     * <p>How far the reading runs is {@link PathEngine#answering}'s question, and it stops where
-     * reading ahead would be wrong rather than merely early: at a branch, at a block, and at a
-     * binding's body, each of which is read with something further settled. Those are the places
-     * that come back through here, so a call is read once, where it stands, and not once for every
-     * node standing over it — read again from a descendant it lands on the subjects it already
-     * holds, and costs the cost of a body over again at every node of it (#826).
+     * <p>Nothing more than that, and it used to be more. What the answers under {@code e} guarantee
+     * was read here, over the whole subtree, before anything in it was walked — so a construction
+     * standing in an argument was judged under what the call around it promises about the very
+     * answer that argument has not yet produced, and under what a sibling evaluated after it
+     * answers. Facts flowed backwards through the evaluation. They are taken in where the walk
+     * evaluates the expression that answers them now ({@link PathEngine#answeredHere}), which is
+     * the order they hold in.
+     *
+     * <p>What the region left, which is not the same as what holds outside it. An arm is read under
+     * the condition that chose it and a binding's body under what the binding holds, and a caller
+     * standing outside is somewhere none of that is true — so what a caller may take from this is
+     * whether anything leaves at all, and the rest only where it can say that this region is the
+     * whole of the way on ({@link #carriedOnFrom}).
+     *
+     * <p>Which is the whole of why this answers at all. It answered nothing while the walk did, and
+     * kept on answering nothing after the walk began carrying what a step leaves into the next — so
+     * every region boundary was a place the two halves came apart again: the facts were dropped,
+     * rightly, and the one thing a caller is owed went with them. There is one rule and it is
+     * applied at every boundary, rather than at the boundary a defect was found at.
      *
      * <p>Nothing reaches what this was handed, so there is nothing under it to be about. Asked here
-     * and again of the reading, because the reading is itself a place the conditions can come to
-     * contradict.
+     * and again in the walk, because the walk is itself where the conditions can come to contradict.
      */
-    private void entering(Core e, Known given, Denotations at, ContextMultiplicity copies) {
-        entering(e, e, given, at, copies);
-    }
-
-    /**
-     * The same, where {@code given} already meets that requirement over part of {@code e}:
-     * {@code unread} is the part it does not, or null where there is no such part.
-     *
-     * <p>Which is what a walk that rebuilds an expression is owed. Entering a binding that stood
-     * inside a value walks the expression with the binding's body put where the binding was, and
-     * opening a case split a value is handed walks it once with each arm put there. Either way
-     * the tree is the whole expression — what the source would have written without the helper or
-     * the split, and what the rest of this walk reads — while everything but the part put in
-     * was read where the region was entered.
-     *
-     * <p>Reading that part again would land on the subjects it already holds, under a denotation it
-     * cannot tell apart: a binder an expansion introduced was written around its own body, and the
-     * binders a split stands inside scope over the split and no further, so nothing
-     * standing beside either was written where it could name them.
-     *
-     * <p>And nothing is unread where what was put in went somewhere the reading had already stopped.
-     * The requirement is over what the reading reaches from here, which is not past a region
-     * boundary; a branch put in beyond one is read by the region that owns it, when the walk arrives
-     * there. Which of the two a split is, is what {@link SplitSite#read} answers.
-     */
-    private void entering(Core e, Core unread, Known given, Denotations at, ContextMultiplicity copies) {
+    private Known entering(Core e, Known given, Denotations at, ContextMultiplicity copies) {
         if (given.reachesNothing()) {
-            return;
+            return given;
         }
-        walk(e, unread == null ? given : engine.answering(unread, given, at), at, copies);
+        return walk(e, given, at, copies);
     }
 
     /**
-     * One step of a region, over facts that already hold of it.
+     * What a fork leaves a continuation: what stood before it, what each way out of it left, and
+     * where the ways were read.
      *
-     * <p>What every step is handed, and the one thing every caller owes: {@code k} holds what
-     * {@link PathEngine#answering} derives over {@code e}, as far as that reading goes from
-     * {@code e}. It is owed because a construction is judged at its own step while the answers it is
-     * built from stand underneath it — judged against {@code k} alone, it would be judged before the
-     * value it was handed had said anything. {@link #entering} is where it is met.
+     * <p>A way that reaches nothing is not a way out. Where none is left, no run leaves the fork and
+     * the continuation is reached by nothing — which is the fork's completion and is a different
+     * thing from any of its arms' facts.
      *
-     * <p>Every descent from here that is not a region of its own hands {@code k} on unchanged, and
-     * may: a reading that covers this step covers a child exactly as far. So a step that reaches
-     * nothing stands in a region that reached nothing, and that was settled where it was entered.
+     * <p>Where exactly one is left, what that way settled holds of the continuation. Not a branch
+     * fact escaping its branch: a continuation reached through one way and through no other is
+     * reached under what that way settled, and calling it a branch fact there would be reading the
+     * fork as though it still had two.
+     *
+     * <p>And only where that way was read where the continuation stands. An arm reads its binding
+     * under denotations the continuation is outside of, and what is stated there names a place a
+     * caller cannot see; what survives such a way is that something did, and no more.
+     *
+     * <p>Which is what {@link Entered} is taken for and not a {@code Known} beside a
+     * {@code Denotations}. Those are the two halves of one answer — a state and where it is stated —
+     * and handed over as two parameters they can be got from two places: a state settled inside a
+     * binder, paired with the denotations outside it, reads as a state that holds out there. Taken
+     * as the pair, that is not a thing a caller can write.
+     *
+     * <p>Where more than one is left, what stood before the fork. Two states have no join here —
+     * making one is a different thing to build — and what stood before them is what they still
+     * agree on.
      */
-    private void walk(Core e, Known k, Denotations at, ContextMultiplicity copies) {
+    private static Known carriedOnFrom(Entered before, List<Entered> ways) {
+        List<Entered> left = ways.stream().filter(w -> !w.known().reachesNothing()).toList();
+        if (left.isEmpty()) {
+            return before.known().reachingNothing();
+        }
+        return left.size() == 1 && left.getFirst().at() == before.at()
+                ? left.getFirst().known() : before.known();
+    }
+
+    /**
+     * One step of a region, over facts that already hold where the step begins — and what a
+     * continuation of {@code e} inside this region may take out of it.
+     *
+     * <p><b>What is answered is what {@code e} having answered leaves true.</b> Everything
+     * {@code e} evaluates on its way is walked first and in the order it runs
+     * ({@link souther.compiler.core.Evaluated}), each handing what it left to the next, and what
+     * {@code e} itself guarantees is added last ({@link PathEngine#answeredHere}) — because an
+     * evaluation answers after the values it was computed from have answered. A construction is
+     * therefore judged under what its own fields have answered and under nothing that is evaluated
+     * after it.
+     *
+     * <p><b>Branch facts do not come out.</b> An arm is read under the condition that chose it and
+     * a binding's body under what the binding holds, and neither is true of a continuation standing
+     * outside; those are regions of their own ({@link #entering}) and answer nothing back. What
+     * comes out of a fork is what the fork's own strict prefix left — its condition, its scrutinee,
+     * the construction an attempt tried — and what the fork itself guarantees.
+     *
+     * <p>So a step that reaches nothing answers a state that reaches nothing, and every step after
+     * it in the same region is handed one.
+     */
+    private Known walk(Core e, Known k, Denotations at, ContextMultiplicity copies) {
         if (k.reachesNothing()) {
-            return;
+            return k;
         }
         Core.LetIn standing = bindingInValueIn(e);
         if (standing != null) {
@@ -1572,13 +1623,16 @@ public final class InvariantChecker {
             // the source would have written with a `let`, which is the tree the rest of this walk
             // already reads — so a construction moved into a helper reads the terms its caller's
             // guards settled, which is what the expansion is for.
-            if (!(standing.value() instanceof Core.Block)) {
-                walk(standing.value(), k, at, copies);
-            }
-            Entered in = bindLet(standing, k, at);
-            entering(without(e, Set.of(standing), standing.body()), standing.body(), in.known(),
-                    in.at(), copies);
-            return;
+            Known held = standing.value() instanceof Core.Block ? k
+                    : walk(standing.value(), k, at, copies);
+            Entered in = bindLet(standing, held, at);
+            // The rebuilt tree is the whole of this expression, so it is the one way on. What it
+            // settles is inside the binder the expansion introduced and does not come back out;
+            // that no run leaves it is about this expression and does.
+            return carriedOnFrom(new Entered(held, at), List.of(new Entered(
+                    entering(without(e, Set.of(standing), standing.body()), in.known(), in.at(),
+                            copies),
+                    in.at())));
         }
         SplitSite site = splitValueIn(e);
         Split split = site == null ? null : splitOf(site.split());
@@ -1600,74 +1654,104 @@ public final class InvariantChecker {
             Entered inside = scopeOf(site, k, at);
             Known within = inside.known();
             Denotations there = inside.at();
-            // What the split asks is read here only where the reading stopped short of it. Reached
-            // from where the region was entered, it stands in `within` already.
-            if (site.read()) {
-                walk(split.asked(), within, there, copies);
-            } else {
-                entering(split.asked(), within, there, copies);
-            }
+            // What the split asks is evaluated before any arm is, so it is walked here and what it
+            // leaves is what the arms are read under.
+            within = walk(split.asked(), within, there, copies);
             Set<Core> alike = sameSplit(e, value, there);
             // The readings start from where the split stood, not from outside it. The tree each is
             // given still holds those binders and walks into them again, which is why entering one
             // already entered is nothing: a second transition would forget what the arm settled.
-            // Only the arm is unread. Everything beside the split was read where this region was
-            // entered and stands in `within`, and the readings differ in what choosing an arm settles
-            // rather than in what stands outside it. Where the reading stopped short of the split,
-            // nothing here is: the arm stands where the region that owns it reads it, and this walk
-            // reaches that region on its way down.
             List<Map<Occurrence, Reported>> readings = new ArrayList<>();
+            List<Entered> ways = new ArrayList<>();
             for (Arm arm : split.arms()) {
                 Entered under = arm.under().entering(within, there);
-                readings.add(reading(without(e, alike, arm.body()),
-                        site.read() ? arm.body() : null,
-                        under.known(), under.at(), inAnArm));
+                Read read = reading(without(e, alike, arm.body()), under.known(), under.at(),
+                        inAnArm);
+                readings.add(read.found());
+                ways.add(new Entered(read.left(), under.at()));
             }
             say(readings);
-            return;
+            // The readings are the ways this expression is left, one per arm, and they are two
+            // answers rather than one: what each found is said once ({@link #say}), and whether any
+            // of them leaves anything at all is what a continuation after the split is reached by.
+            // What the split asks was read inside every binder on the way down to it, so what it
+            // settled is stated where the continuation is not. Taking it back out is the same rule
+            // again — the binders are a region and the asking is its one way — and it is asked
+            // before the arms are folded, so that what the arms are held against is a state the
+            // caller can read.
+            Known prefix = carriedOnFrom(new Entered(k, at), List.of(new Entered(within, there)));
+            carried(site.scope().size(), prefix == within);
+            return carriedOnFrom(new Entered(prefix, at), ways);
         }
-        switch (e) {
+        Known evaluated = switch (e) {
             case Core.Construct made -> {
-                judge(made, k, at, false);
-                Core.forEachChild(made, child -> walk(child, k, at, copies));
+                // The fields are what a construction evaluates, and it is built once they have all
+                // answered — so it is judged after them and under what they left, and not before
+                // them under what stood outside.
+                Known out = evaluating(made, k, at, copies);
+                if (out.reachesNothing()) {
+                    yield out;
+                }
+                // A construction the value fails wherever it is built is one that aborts, so what
+                // is written after it is written after nothing — the same shape as an operation
+                // that answers no value, and taken in through the same door.
+                yield carriedOn(out, refused(judge(made, out, at, false))
+                        ? new Completion.CannotComplete(
+                                new Completion.NoCompletionProof.RefutedConstruction(made))
+                        : Completion.MAY);
             }
             case Core.If iff -> {
-                walk(iff.cond(), k, at, copies);
-                entering(iff.then(), predicates.assumeCond(iff.cond(), k, at, true).known(), at,
-                        copies);
-                entering(iff.els(), predicates.assumeCond(iff.cond(), k, at, false).known(), at,
-                        copies);
+                Known out = walk(iff.cond(), k, at, copies);
+                Known held = entering(iff.then(),
+                        predicates.assumeCond(iff.cond(), out, at, true).known(), at, copies);
+                Known otherwise = entering(iff.els(),
+                        predicates.assumeCond(iff.cond(), out, at, false).known(), at, copies);
+                yield carriedOnFrom(new Entered(out, at),
+                        List.of(new Entered(held, at), new Entered(otherwise, at)));
             }
             case Core.IfConstructed ic -> {
                 // The attempt's own construction cannot abort — a failing invariant is the else
                 // branch — so it is checked for a decided violation and never warned about as a
                 // possible one. Its field values are walked on their own so a construction nested
                 // inside an argument is still an ordinary, aborting one.
-                judge(ic.construct(), k, at, true);
-                Core.forEachChild(ic.construct(), child -> walk(child, k, at, copies));
+                Known out = evaluating(ic.construct(), k, at, copies);
+                if (out.reachesNothing()) {
+                    yield out;
+                }
+                // An attempt is the one construction a failing invariant does not abort: the
+                // departure is taken and the run carries on, so what this comes out as says nothing
+                // about whether anything is reached.
+                judge(ic.construct(), out, at, true);
                 // Reaching `then` is the construction having held, so the binding carries the type's
                 // invariant exactly as an input of that type does — which is a location, and not the
                 // construction read again. What the construction denotes is what the check could say
                 // of the attempt, and an attempt is written where it could not say enough: an
                 // expression it cannot name denotes nothing, and inheriting that would drop the one
                 // thing reaching this branch established.
-                Entered in = engine.enteringBuilt(ic, k, at);
-                entering(ic.then(), in.known(), in.at(), copies);
+                Entered in = engine.enteringBuilt(ic, out, at);
+                List<Entered> ways = new ArrayList<>();
+                ways.add(new Entered(entering(ic.then(), in.known(), in.at(), copies), in.at()));
                 // Each departure stands where the invariant did not hold, and nothing was built
                 // there, so none of them is seeded with anything the attempt would have guaranteed.
-                ic.els().forEach(arm -> entering(arm.body(), k, at, copies));
+                Known departing = out;
+                ic.els().forEach(arm ->
+                        ways.add(new Entered(entering(arm.body(), departing, at, copies), at)));
+                yield carriedOnFrom(new Entered(out, at), ways);
             }
             case Core.LetIn li -> {
                 // A closure is read where it is applied: what its parameter holds is decided there,
                 // and reading it here would read every construction in it with the element unknown.
-                if (!(li.value() instanceof Core.Block)) {
-                    walk(li.value(), k, at, copies);
-                }
-                Entered in = bindLet(li, k, at);
-                entering(li.body(), in.known(), in.at(), copies);
+                Known out = li.value() instanceof Core.Block ? k
+                        : walk(li.value(), k, at, copies);
+                Entered in = bindLet(li, out, at);
+                // The body is the one way on: what a `let` answers is what its body answers, so a
+                // body no run leaves is a `let` no run leaves.
+                yield carriedOnFrom(new Entered(out, at), List.of(new Entered(
+                        entering(li.body(), in.known(), in.at(), copies), in.at())));
             }
             case Core.Match m -> {
-                walk(m.scrutinee(), k, at, copies);
+                Known out = walk(m.scrutinee(), k, at, copies);
+                List<Entered> ways = new ArrayList<>();
                 for (Core.Case c : m.cases()) {
                     // A sum has no fields of its own, so the scrutinee is not a location any clause
                     // could have named — the case's value names only itself. What the arm binds is a
@@ -1676,52 +1760,144 @@ public final class InvariantChecker {
                     // The scrutinee travels with the arm: what a caller may assume of an answer is
                     // decided by which behavior answered and which case this arm opened, and the
                     // first of those is a question about what is being matched.
-                    Entered in = engine.enteringArm(c, m.scrutinee(), k, at);
-                    entering(c.body(), in.known(), in.at(), copies);
+                    Entered in = engine.enteringArm(c, m.scrutinee(), out, at);
+                    ways.add(new Entered(entering(c.body(), in.known(), in.at(), copies), in.at()));
                 }
+                yield carriedOnFrom(new Entered(out, at), ways);
             }
             case Core.PreservedCall call -> walkCall(call, k, at, copies);
             // A closure the reading stopped at, reached as a value like any other. What its body
             // answers is decided where the closure is applied, so nothing out here read it, and it
             // is a region of its own however it was arrived at.
-            case Core.Block block -> Core.forEachChild(block, b -> entering(b, k, at, copies));
-            default -> Core.forEachChild(e, child -> walk(child, k, at, copies));
+            case Core.Block block -> {
+                Core.forEachChild(block, b -> entering(b, k, at, copies));
+                yield k;
+            }
+            default -> evaluating(e, k, at, copies);
+        };
+        if (evaluated.reachesNothing()) {
+            return evaluated;
+        }
+        // Between the values this was computed from and what it answers, which is the one point the
+        // question can be asked at: the operands have answered and this has not, so nothing here
+        // assumes the very answer whose existence is being asked about. What comes back is about
+        // the transition and is given to the continuation alone — this evaluation was walked, and a
+        // construction standing among the values it was waiting on was judged on the way.
+        Known carried = carriedOn(evaluated, completion.of(e, evaluated, at));
+        return carried.reachesNothing() ? carried : engine.answeredHere(e, carried, at);
+    }
+
+    /**
+     * {@code known} as a continuation of the evaluation {@code done} is about.
+     *
+     * <p>The one place a completion becomes a state, and the reason there is one: what shows that an
+     * evaluation answers nothing differs — a primitive's arithmetic here, a construction the values
+     * refuse there, and whatever comes to show it next — and what follows from it does not. The
+     * proof is not read. What to tell an author about an evaluation no run leaves is a question
+     * about diagnostics, and answering it here would tie a reporting policy to the mechanism.
+     */
+    private static Known carriedOn(Known known, Completion done) {
+        return done instanceof Completion.CannotComplete ? known.reachingNothing() : known;
+    }
+
+    /**
+     * What {@code e} evaluates, walked in the order it runs, each step handed what the one before it
+     * left.
+     *
+     * <p>The order is {@link Evaluated}'s and not this walk's: a construction runs the field
+     * declared first and not the one written first, and a second account of that here would be a
+     * second thing to keep in step with the emitter. So is which steps run at all — a
+     * short-circuiting operator's right operand runs on the runs its left did not answer for, and a
+     * walk that decided that for itself would be a second reading of what {@code &&} means.
+     *
+     * <p>A step that runs only sometimes is a region, entered under what has to hold for it to run.
+     * Which is the same treatment a branch gets and for the same reason: what it settles is true
+     * only there, and an evaluation inside it that answers nothing stops nothing outside it.
+     */
+    private Known evaluating(Core e, Known k, Denotations at, ContextMultiplicity copies) {
+        Known out = k;
+        for (Evaluated.Step step : Evaluated.inOrder(e)) {
+            switch (step) {
+                case Evaluated.Step.Always(Core each) -> out = walk(each, out, at, copies);
+                case Evaluated.Step.OnlyWhere(Core asked, boolean comesOut, Core each) -> {
+                    // Two ways on, and the operator is the fork between them: the runs that
+                    // evaluated this step, and the runs the left already answered for. A run leaves
+                    // the operator down one of them, so what it leaves is what they leave.
+                    Known taken = entering(each,
+                            predicates.assumeCond(asked, out, at, comesOut).known(), at, copies);
+                    Known skipped = predicates.assumeCond(asked, out, at, !comesOut).known();
+                    out = carriedOnFrom(new Entered(out, at),
+                            List.of(new Entered(taken, at), new Entered(skipped, at)));
+                }
+            }
+        }
+        return out;
+    }
+
+    /** Records what an opened split handed on, where a test in this package is reading them. */
+    private static void carried(int binders, boolean handedOnWhatWasReadInside) {
+        List<Carried> watching = CARRIED;
+        if (watching != null) {
+            watching.add(new Carried(binders, handedOnWhatWasReadInside));
         }
     }
 
-    /** Walks a call the representation kept standing, entering a combinator closure's parameters as
+    /**
+     * Walks a call the representation kept standing, entering a combinator closure's parameters as
      * the locations the application introduces — the element at the container's element type, and
      * every other at what the closure was typed with — so a construction inside the closure is
      * analyzed rather than left opaque. A closure is where its parameters are values, which is here
-     * and not where the block is written. */
-    private void walkCall(Core.PreservedCall call, Known k, Denotations at, ContextMultiplicity copies) {
+     * and not where the block is written.
+     *
+     * <p><b>Every argument first, and the closure's body after all of them.</b> Evaluating a closure
+     * position makes the function; the body runs inside the operation, which is entered once every
+     * argument has answered. {@code List.map} takes the function before the container, so a body
+     * read as the argument list was walked was read before the container was evaluated — under a
+     * state missing what the container answered, and on runs the container's own evaluation stops
+     * before the operation is ever entered. The first is the backward reading this walk was
+     * straightened to end; the second is a construction judged after an abort, which is what all of
+     * this is about. Both come of reading the body where the closure is written rather than where it
+     * runs.
+     */
+    private Known walkCall(Core.PreservedCall call, Known k, Denotations at,
+                           ContextMultiplicity copies) {
         Handed handed = Combinators.handedTo(call, at);
+        // The arguments run in the order they are written, each over what the ones before it left.
+        // A closure position evaluates nothing: it makes a function.
+        Known out = k;
         for (Core arg : call.args()) {
             // The closure is asked by identity: a call may write one expression twice, and only the
             // argument the operation applies is the one an element arrives in.
             if (handed == null || arg != handed.closure()) {
-                walk(arg, k, at, copies);
-                continue;
+                out = walk(arg, out, at, copies);
             }
-            Core container = handed.container();
-            Type elem = Terms.elementType(container.type());
-            // The container is read where the call is written, so what is known of its elements
-            // is looked up before the closure's parameter stands for anything.
-            List<Quantified> relations = predicates.elementRelations(container, k, at);
-            Core.Read element = Terms.read(handed.element(), elem, handed.step().pos());
-            // an element of a container is not a location the body can otherwise name
-            Entered in = enter(element, k, at);   // the element carries its type's invariant
-            // What a fold hands its step beside the element is a value of the type it was seeded
-            // with, built through that type's checked constructor like any other — so it carries
-            // that type's invariant, and the accumulator is not the one binding that has to give
-            // its newtype up to be reasoned about.
-            in = enterOthers(handed, in);
-            Known k2 = in.known();
-            for (Quantified q : relations) {
-                k2 = predicates.instantiate(q, element, k2, in.at());
-            }
-            entering(handed.step().body(), k2, in.at(), copies);
         }
+        if (handed == null || out.reachesNothing()) {
+            // Nothing leaves the arguments, so the operation is never entered and the closure is
+            // never applied.
+            return out;
+        }
+        Core container = handed.container();
+        Type elem = Terms.elementType(container.type());
+        // The container is read under what every argument answered, which is what holds where the
+        // operation is entered.
+        List<Quantified> relations = predicates.elementRelations(container, out, at);
+        Core.Read element = Terms.read(handed.element(), elem, handed.step().pos());
+        // an element of a container is not a location the body can otherwise name
+        Entered in = enter(element, out, at);   // the element carries its type's invariant
+        // What a fold hands its step beside the element is a value of the type it was seeded
+        // with, built through that type's checked constructor like any other — so it carries
+        // that type's invariant, and the accumulator is not the one binding that has to give
+        // its newtype up to be reasoned about.
+        in = enterOthers(handed, in);
+        Known k2 = in.known();
+        for (Quantified q : relations) {
+            k2 = predicates.instantiate(q, element, k2, in.at());
+        }
+        // A region of its own, and what it leaves stays in it: the body runs once per element, on
+        // no element where the container is empty, and what it settles is not what the call answers.
+        entering(handed.step().body(), k2, in.at(), copies);
+        return out;
     }
 
     /** {@code in} with the closure's parameters other than the element entered at the types the
@@ -1757,10 +1933,21 @@ public final class InvariantChecker {
      * there is nothing to recognise here: a construction was settled where the tree was built, and
      * what it builds and what each of its fields is given came with it.
      */
-    private void judge(Core.Construct made, Known k, Denotations at, boolean attempted) {
-        if (symbols.declarations().declaration(made.typeName().key()) instanceof Hir.Data type) {
-            report(made, type, made.pos(), attempted, verdictOf(made, type, k, at));
+    private Judgment judge(Core.Construct made, Known k, Denotations at, boolean attempted) {
+        if (!(symbols.declarations().declaration(made.typeName().key()) instanceof Hir.Data type)) {
+            return null;
         }
+        Judgment judged = verdictOf(made, type, k, at);
+        report(made, type, made.pos(), attempted, judged);
+        return judged;
+    }
+
+    /** Whether the value a construction builds is one its invariant rejects wherever it is built,
+     * which is the construction aborting. Which verdicts those are is {@link Verdict#refuted}'s to
+     * say and is not counted again here — a second spelling of one set is a second set a verdict
+     * added later can land in differently. */
+    private static boolean refused(Judgment judged) {
+        return judged != null && judged.verdict().refuted();
     }
 
     /**
@@ -1943,32 +2130,25 @@ public final class InvariantChecker {
     /**
      * The domain {@code owed} is read against, built from what {@code base} holds.
      *
-     * <p>Two steps that are one operation. What each clause states of the sizes it names is taken
-     * as holding, and then what follows about the arithmetic the domain cannot carry — a product of
-     * two values, a truncating quotient — is derived from what the reading proves of the values it
-     * was computed from. The second reads the first: a size a clause bounds is one the arithmetic
-     * over it can be read against, so the derivation has to come after, and a clause added to the
-     * first step without the second being asked again is a construction judged against arithmetic
-     * nothing was derived for. Written as one step so there is no order for a caller to keep.
+     * <p>Two steps that are one operation, and both are inside {@link DerivedNumericFacts}: what
+     * every value the reading can reach carries is taken as holding, and then what follows about the
+     * arithmetic the domain cannot carry — a product of two values, a truncating quotient — is
+     * derived from what the reading proves of the values it was computed from. The second reads the
+     * first, so the order is not a caller's to keep and cannot be: a reading is made by the one
+     * function that makes one ({@link DerivedNumericFacts#readingOf}).
      *
      * <p>Each reading answers with its own. A bound derived here is derived from what this reading
      * assumed, so it belongs to the reading and not to the value — which is why the construction's
      * two readings are built by two calls rather than sharing one domain.
      */
     private NumericDomain<FactSubject> readingOf(NumericDomain<FactSubject> base, List<Owing> owed) {
-        NumericDomain<FactSubject> out = base;
-        // What the clauses are decided by, which is one half of what the derivation can reach. The
-        // other half is what the domain speaks of, and that is the domain's own to answer — asked
-        // after this loop, since assuming a clause's statements is what puts its atoms there.
+        // What the clauses are decided by, which is one half of what the reading can reach. The
+        // other half is what the domain speaks of, and that is the domain's own to answer.
         Set<FactSubject> asked = new LinkedHashSet<>();
         for (Owing owing : owed) {
-            Predicates.Clause c = owing.owed();
-            for (NumericConstraint known : c.known()) {
-                out = out.assume(known.form(), known.rel(), terms.kindsOf(known.form()));
-            }
-            asked.addAll(c.atomsItIsDecidedBy());
+            asked.addAll(owing.owed().atomsItIsDecidedBy());
         }
-        return DerivedNumericFacts.refine(out, terms, asked);
+        return DerivedNumericFacts.refine(base, terms, asked);
     }
 
     /**
@@ -2293,20 +2473,33 @@ public final class InvariantChecker {
         }
     }
 
-    /** What reading {@code e} finds. A branch nothing reaches finds nothing, which is the walk's
-     * answer ({@link Known#reachesNothing}) and not a second one taken here: this collects what the
-     * reading found and decides nothing about whether there was anything to find. */
-    private Map<Occurrence, Reported> reading(Core e, Core unread, Known k, Denotations at,
-                                              ContextMultiplicity copies) {
+    /**
+     * One reading of an expression: what it found, and what it left.
+     *
+     * <p>Two answers and not one. What was found is said once over all the readings, since one
+     * construction read on each arm is one construction ({@link #say}); what was left is per
+     * reading, since it is that arm's run that either carries on or does not. Answered together
+     * because they come of one walk, and a reader that had only the first would have to decide from
+     * an empty list of findings whether the arm found nothing or was never entered — which are
+     * different things and neither is the other's evidence.
+     */
+    private record Read(Map<Occurrence, Reported> found, Known left) {}
+
+    /** What reading {@code e} finds, and what it leaves. A branch nothing reaches finds nothing,
+     * which is the walk's answer ({@link Known#reachesNothing}) and not a second one taken here:
+     * this collects what the reading found and decides nothing about whether there was anything to
+     * find. */
+    private Read reading(Core e, Known k, Denotations at, ContextMultiplicity copies) {
         Capture outer = capturing;
         Capture mine = Capture.empty();
         capturing = mine;
+        Known left;
         try {
-            entering(e, unread, k, at, copies);
+            left = entering(e, k, at, copies);
         } finally {
             capturing = outer;
         }
-        return mine.found();
+        return new Read(mine.found(), left);
     }
 
     /**
@@ -2326,24 +2519,12 @@ public final class InvariantChecker {
      * a construction written inside a condition is a construction like any other, and reading it
      * where its binders are not entered is reading it as something nothing can be said of.
      */
-    private record SplitSite(Core split, List<Binder> scope, boolean read) {
+    private record SplitSite(Core split, List<Binder> scope) {
 
         static SplitSite at(Core split) {
-            return new SplitSite(split, List.of(), true);
+            return new SplitSite(split, List.of());
         }
 
-        /**
-         * The same site, found past somewhere the reading stops.
-         *
-         * <p>What the reading covers is what {@link PathEngine#answering} walks from where the region
-         * was entered, and the search below goes further: into a binding's body, into an arm, into an
-         * attempt's success and into a departure. A site found there stands where nothing has been
-         * read, so the branch put in its place is read here; a site the reading reached stands where
-         * everything has, and reading it again would seed what is already held.
-         */
-        SplitSite pastTheReading() {
-            return new SplitSite(split, scope, false);
-        }
 
         /** One binder the split stands inside, as the environment its body is read in. */
         private interface Binder {
@@ -2356,7 +2537,7 @@ public final class InvariantChecker {
             List<Binder> outer = new ArrayList<>();
             outer.add(binder);
             outer.addAll(scope);
-            return new SplitSite(split, List.copyOf(outer), read);
+            return new SplitSite(split, List.copyOf(outer));
         }
 
         /** A {@code let}'s body, read with the name standing for what it was given. */
@@ -2603,7 +2784,7 @@ public final class InvariantChecker {
             }
             SplitSite inside = splitIn(li.body());
             return inside == null ? null
-                    : inside.pastTheReading().under(SplitSite.of(li));
+                    : inside.under(SplitSite.of(li));
         }
         if (e instanceof Core.Match m) {
             // What it asks is computed on the way to its own value, so a split found there is inside
@@ -2622,14 +2803,14 @@ public final class InvariantChecker {
             }
             SplitSite held = splitIn(ic.then());
             if (held != null) {
-                return held.pastTheReading().under(SplitSite.of(ic));
+                return held.under(SplitSite.of(ic));
             }
             // A departure stands where the invariant did not hold and nothing was built, so it is
             // inside nothing the attempt would have guaranteed.
             for (Core.ElseArm arm : ic.els()) {
                 SplitSite departed = splitIn(arm.body());
                 if (departed != null) {
-                    return departed.pastTheReading();
+                    return departed;
                 }
             }
             return null;

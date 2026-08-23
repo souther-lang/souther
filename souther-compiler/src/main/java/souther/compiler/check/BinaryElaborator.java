@@ -10,7 +10,6 @@ import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import java.util.List;
-import java.util.Set;
 
 /**
  * Typing a binary operator, including the rules that let a single-value newtype compare with and
@@ -162,8 +161,8 @@ public final class BinaryElaborator {
                     throw CompileException.of(Diagnostic
                                     .at(bin.pos(), 2).say(new TypeMessage.AFunctionHasNoValueToCompare(Type.show(carrier))).build());
                 }
-                Set<TypeSymbol> lCases = TypeOps.leafCases(lt, ctx.symbols());
-                Set<TypeSymbol> rCases = TypeOps.leafCases(rt, ctx.symbols());
+                List<TypeSymbol> lCases = AtomSpace.subjectAtoms(lt, ctx.symbols());
+                List<TypeSymbol> rCases = AtomSpace.subjectAtoms(rt, ctx.symbols());
                 boolean caseOfSum = !lCases.isEmpty() && !rCases.isEmpty()
                         && (lCases.containsAll(rCases) || rCases.containsAll(lCases));
                 if (!lt.equals(rt) && !eqCoercible(lt, rt, bin.left(), bin.right(), ctx.symbols())

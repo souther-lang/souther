@@ -1,6 +1,7 @@
 package souther.compiler.claims;
 
 import souther.compiler.core.Core;
+import souther.compiler.core.Evaluated;
 import souther.compiler.coverage.NormalReturn;
 
 import java.util.List;
@@ -104,12 +105,19 @@ public final class UnreachableReasons {
         return firstThatAborts(Evaluated.inOrder(nd), answering);
     }
 
-    /** The first of a run of strict positions that does not answer, which is where evaluation stops
-     * and where every reason below it stops being one. */
-    private static Core firstThatAborts(List<Core> evaluated, NormalReturn answering) {
-        for (Core each : evaluated) {
-            if (!answering.at(each)) {
-                return each;
+    /**
+     * The first of what an expression evaluates that does not answer, which is where evaluation
+     * stops and where every reason below it stops being one.
+     *
+     * <p>A step that runs only sometimes is read like any other here. This is reached only where the
+     * whole expression answers nothing, and that reading already knows which operands a
+     * short-circuiting operator runs ({@link souther.compiler.flow.ValueArrivals}) — so a right
+     * operand that aborts is reached here exactly where every run really does reach it.
+     */
+    private static Core firstThatAborts(List<Evaluated.Step> evaluated, NormalReturn answering) {
+        for (Evaluated.Step each : evaluated) {
+            if (!answering.at(each.expression())) {
+                return each.expression();
             }
         }
         return null;

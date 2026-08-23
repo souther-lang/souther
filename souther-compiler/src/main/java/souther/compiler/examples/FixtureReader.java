@@ -2,6 +2,7 @@ package souther.compiler.examples;
 
 import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.ast.Hir;
+import souther.compiler.check.AtomSpace;
 import souther.compiler.check.CallElaborator;
 import souther.compiler.check.FixtureEvidence;
 import souther.compiler.check.Prelude;
@@ -346,7 +347,7 @@ public final class FixtureReader {
         if (value == null) {
             return null;
         }
-        for (TypeSymbol candidate : TypeOps.leafCases(outType, symbols)) {
+        for (TypeSymbol candidate : AtomSpace.subjectAtoms(outType, symbols)) {
             if (represents(candidate, value)) {
                 return candidate;
             }
@@ -540,7 +541,7 @@ public final class FixtureReader {
                     && spells(v, r.name());
             case Type.Ref _, Type.Union _ -> {
                 TypeSymbol name = named(a);
-                yield name != null && TypeOps.leafCases(type, symbols).contains(name)
+                yield name != null && AtomSpace.subjectAtoms(type, symbols).contains(name)
                         && parts(a, name);
             }
             case Type.ListOf l -> a instanceof Asserted.Elements(Asserted.Container stated,
@@ -1238,7 +1239,7 @@ public final class FixtureReader {
     /**
      * What {@code position} takes.
      *
-     * <p>{@link TypeOps#leafCases} answers the nominal side rather than a reading of its own: it
+     * <p>{@link AtomSpace#subjectAtoms} answers the nominal side rather than a reading of its own: it
      * expands a sum to its cases and stops at everything else, so a record takes itself, a sum takes
      * the cases it lists and a newtype takes its own name, with no arm here for any of the three.
      *
@@ -1250,7 +1251,8 @@ public final class FixtureReader {
         return switch (position) {
             case Type.OptionOf o -> new Admits.OrAbsent(admits(o.element()));
             case Type.Ref r when r.name().isPrimitive() -> NO_NAME;
-            case Type.Ref r -> new Admits.OneOf(TypeOps.leafCases(Type.ref(r.name()), symbols));
+            case Type.Ref r -> new Admits.OneOf(
+                    new LinkedHashSet<>(AtomSpace.subjectAtoms(Type.ref(r.name()), symbols)));
             case Type.Prim _, Type.ListOf _, Type.SetOf _, Type.MapOf _, Type.TupleOf _ -> NO_NAME;
             case null, default -> UNSAID;
         };

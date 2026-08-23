@@ -246,22 +246,15 @@ final class PathEngine {
      */
     private Entered whatTakingThisCaseSays(Core.Case arm, Core scrutinee, Entered in) {
         Core called = terms.originating(scrutinee, in.at(), new HashSet<>());
-        DischargeRules.NumericResult result = called == null ? null
-                : DischargeRules.numericResult(Terms.operationOf(called));
-        if (result == null || result.unless() == null
-                || !(result.at() instanceof DischargeRules.Answered.InTheCaseCarrying(
-                        Type answersIn))) {
+        Core condition = TheOtherCase.conditionAt(called);
+        Type answersIn = TheOtherCase.theCaseItAnswersIn(called);
+        if (condition == null || answersIn == null) {
             return in;
         }
         Boolean answered = whetherItAnswered(arm, answersIn);
         if (answered == null) {
             return in;
         }
-        Core args = Terms.argsOf(called)
-                .get(result.unless().argument().positionIn(Terms.operationOf(called)));
-        Core condition = new Core.Binary(result.unless().op(), args,
-                numberOf(result.unless().than(), args.type(), args.pos()),
-                souther.compiler.types.CoverageOrigin.unwritten(), Type.BOOL, args.pos());
         return new Entered(assuming(condition, in.known(), in.at(), !answered).known(), in.at());
     }
 
@@ -280,13 +273,6 @@ final class PathEngine {
         return itsCase == another ? null : itsCase;
     }
 
-    /** {@code n} written at the type the argument is, so that the condition compares two values of
-     * one type as a source-written one would. */
-    private static Core numberOf(long n, Type type, souther.compiler.diag.SourcePos pos) {
-        return type == Type.DECIMAL
-                ? new Core.Decimal(java.math.BigDecimal.valueOf(n), type, pos)
-                : new Core.Int(n, type, pos);
-    }
 
     /**
      * The arm's binding entered as the value it opens, and seeded.
@@ -457,8 +443,9 @@ final class PathEngine {
     // --- seeding -------------------------------------------------------------------------------
 
     /**
-     * {@code k} with what every answer read here guarantees taken as holding of it: what its type
-     * states of any value of that type, and what its behavior declared of every answer it gives.
+     * {@code k} with what {@code e}, having answered, guarantees taken as holding of it: what its
+     * type states of any value of that type, and what its behavior declared of every answer it
+     * gives.
      *
      * <p>An answer is a value of its type, built through that type's checked constructor — the same
      * argument {@link #enter} rests on for a parameter, for what a {@code match} arm binds, and for
@@ -488,22 +475,21 @@ final class PathEngine {
      * value is named, and an evaluation is named at one place, so there is no branch on which it is
      * less true.
      *
-     * <p>Read over the expression rather than at each call's own step in the walk, because a
-     * construction is judged when the walk reaches it and the answers it is built from stand
-     * underneath it.
+     * <p>Of this expression and of nothing inside it. What a subexpression guarantees is taken in
+     * where the walk evaluates that subexpression, which is before it gets here: an evaluation
+     * answers after the values it was computed from have answered, and a guarantee read the other
+     * way round is a fact about this answer standing where the operands that produce it are still
+     * being judged. Read over the whole subtree from out here, that is what it was — a call's
+     * guarantee constrains the arguments it relates the answer to, so a construction written in an
+     * argument was being discharged by what the call around it promises about a value it has not
+     * been given yet.
      *
-     * <p>As far as the expression is <em>reached</em>, and no further. Standing in the subtree is not
-     * standing where the walk is: a branch is read under the condition that chose it, and a call in
-     * the arm beside it is one this path never evaluates. Taken in from there, what that call
-     * guarantees is a fact about a value that was never produced — and since a guarantee constrains
-     * the arguments it relates the answer to, it lands on the very values the condition is about. One
-     * arm's answer then contradicts the other arm's condition, the reading comes out reaching
-     * nothing, and the arm is walked no further: its constructions are not judged and nothing is
-     * said. So this stops where the walk branches, and each branch's own reading seeds what stands in
-     * it. Blocks stop it too — what a closure's body answers is decided where the closure is applied,
-     * and what a binding inside one holds is not settled from out here.
+     * <p>Which also puts the walk and this in one order rather than two. The walk knows what an
+     * expression evaluates and when ({@link souther.compiler.core.Evaluated}); a second reading that
+     * descended on its own would have to know it again, and the two would answer for a construction
+     * and for the answers it is built from separately.
      */
-    Known answering(Core e, Known k, Denotations at) {
+    Known answeredHere(Core e, Known k, Denotations at) {
         if (e instanceof Core.Block) {
             return k;
         }
@@ -512,23 +498,8 @@ final class PathEngine {
             seeded(e);
             out = seedAt(e, out, at);
         }
-        out = assuming(answeredBy(e, at), e, guard -> guard instanceof Guard.Always,
+        return assuming(answeredBy(e, at), e, guard -> guard instanceof Guard.Always,
                 new Entered(out, at)).known();
-        // Only what is evaluated by reaching here. What each branch holds is that branch's to read.
-        return switch (e) {
-            case Core.If x -> answering(x.cond(), out, at);
-            case Core.Match x -> answering(x.scrutinee(), out, at);
-            case Core.IfConstructed x -> answering(x.construct(), out, at);
-            // A binding's body is read once the binding is entered, and not from out here: what its
-            // initializer denotes is not settled until `bindLet` has run, so an answer read through a
-            // name from here would be given a subject the name does not have yet.
-            case Core.LetIn x -> answering(x.value(), out, at);
-            default -> {
-                Known[] threaded = {out};
-                Core.forEachChild(e, child -> threaded[0] = answering(child, threaded[0], at));
-                yield threaded[0];
-            }
-        };
     }
 
     /** Records an answer this read a guarantee off, where a test is reading them. */

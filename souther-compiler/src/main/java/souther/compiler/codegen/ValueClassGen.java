@@ -1,5 +1,6 @@
 package souther.compiler.codegen;
 
+import souther.compiler.check.AtomSpace;
 import souther.compiler.check.Symbols;
 import souther.compiler.ast.Hir;
 import souther.compiler.types.BindingId;
@@ -193,7 +194,7 @@ final class ValueClassGen {
             caseCds.add(cd(Backend.names(caseName)));
         }
         boolean enumeration = TypeOps.isUnitOnlySum(sum, symbols);
-        List<TypeSymbol> cases = TypeOps.leafCases(sum, symbols);
+        List<TypeSymbol> cases = AtomSpace.subjectAtoms(Type.ref(sum.declares()), symbols);
         out.put(valueOf(sum), build(cdX, cb -> {
             cb.withFlags(pub(sum.name()) | ClassFile.ACC_INTERFACE | ClassFile.ACC_ABSTRACT);
             // A sum may itself be a case of another sum (spec §sum-data), and then it carries that sum's

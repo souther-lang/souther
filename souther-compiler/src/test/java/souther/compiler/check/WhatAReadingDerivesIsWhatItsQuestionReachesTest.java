@@ -45,9 +45,25 @@ class WhatAReadingDerivesIsWhatItsQuestionReachesTest {
                 .toList();
     }
 
-    /** The recipes each reading of the module evaluated, by the name each atom renders as. */
+    /**
+     * The recipes each of the module's construction readings evaluated, by the name each atom
+     * renders as.
+     *
+     * <p>Those readings and not every reading there is. Whether one operation answers a value is
+     * asked of these same recipes, once per operation the walk reaches
+     * ({@link DerivedNumericFacts.Question#WHETHER_AN_OPERATION_ANSWERS}), and that count moves with
+     * how much arithmetic a behavior holds — which is right for it and is the very thing this asks
+     * must not happen to a construction's own reading. Run together they would hide each other.
+     */
     private static List<Set<String>> derivedWhileCompiling(String module) {
-        List<List<FactSubject>> watching = new ArrayList<>();
+        return derivedWhileCompiling(module,
+                DerivedNumericFacts.Question.WHAT_A_CONSTRUCTION_IS_JUDGED_AGAINST);
+    }
+
+    /** The same, for whichever of the two questions is being asked about. */
+    private static List<Set<String>> derivedWhileCompiling(String module,
+                                                           DerivedNumericFacts.Question asked) {
+        List<DerivedNumericFacts.Reading> watching = new ArrayList<>();
         DerivedNumericFacts.WATCHING = watching;
         try {
             Compiler.compileWithWarnings(module);
@@ -55,7 +71,8 @@ class WhatAReadingDerivesIsWhatItsQuestionReachesTest {
             DerivedNumericFacts.WATCHING = null;
         }
         return watching.stream()
-                .map(one -> one.stream().map(FactSubject::rendered)
+                .filter(one -> one.asked() == asked)
+                .map(one -> one.evaluated().stream().map(FactSubject::rendered)
                         .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new)))
                 .map(one -> (Set<String>) one)
                 .toList();
@@ -82,6 +99,29 @@ class WhatAReadingDerivesIsWhatItsQuestionReachesTest {
                 "each of the construction's two readings derived the product it is over");
         assertEquals(none, derivedWhileCompiling(behaviorWith(10)));
         assertEquals(none, derivedWhileCompiling(behaviorWith(100)));
+    }
+
+    /**
+     * The other question asked of these recipes: whether one operation answers a value. There is one
+     * such reading per operation the walk reaches, so how many there are does grow with the
+     * arithmetic a behavior holds — and what each of them evaluates does not.
+     *
+     * <p>Which is the whole of what it may cost. A reading that answered about one operation by
+     * deriving what the body holds would be the shape the reading above was made to end, arriving
+     * by the other door: the work at each node would be the size of the behavior, and a behavior
+     * with a hundred products would pay a hundred times over at every one of them.
+     */
+    @Test
+    void whatOneOperationsReadingDerivesIsItsOwnRecipe() {
+        for (int unrelated : List.of(0, 10, 100)) {
+            List<Set<String>> asked = derivedWhileCompiling(behaviorWith(unrelated),
+                    DerivedNumericFacts.Question.WHETHER_AN_OPERATION_ANSWERS);
+            assertEquals(unrelated + 1, asked.size(),
+                    "one reading per operation the walk reaches, over " + unrelated
+                            + " products beside the one the construction is over");
+            assertEquals(List.of(), asked.stream().filter(one -> one.size() > 1).toList(),
+                    "and each of them derived its own recipe and nothing else");
+        }
     }
 
     /** A behavior whose construction is over {@code a * b}, with {@code unrelated} further products
