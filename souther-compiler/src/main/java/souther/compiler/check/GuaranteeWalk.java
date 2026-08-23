@@ -47,21 +47,68 @@ final class GuaranteeWalk {
     /**
      * How far a reader is asking this walk to go.
      *
-     * <p>Not one number for everybody. What a walk over a body can afford to read of a parameter is
-     * a cost bound; what a construction has to satisfy has no depth at all, since a rule four
-     * records down refuses the outermost value exactly as one on the top does.
-     *
-     * @param depth           how many positions down to read
+     * @param extent          how far down to read
      * @param stopAt          names this reader is supposing hold values whatever is written under
      *                        them, so nothing under one of them is read
      * @param withoutClauses  names whose own clauses this reader asked to leave out, what is under
      *                        them still being read
      */
-    record Scope(int depth, Predicate<TypeSymbol> stopAt, Predicate<TypeSymbol> withoutClauses) {
+    record Scope(Extent extent, Predicate<TypeSymbol> stopAt, Predicate<TypeSymbol> withoutClauses) {
 
-        /** Every rule down to {@code depth} positions, wherever it is written. */
-        static Scope asFarAs(int depth) {
-            return new Scope(depth, _ -> false, _ -> false);
+        /** Every rule down to {@code positions} positions, wherever it is written. */
+        static Scope asFarAs(int positions) {
+            return new Scope(new Extent.AsFarAs(positions), _ -> false, _ -> false);
+        }
+
+        /** Every rule the model writes under this value. */
+        static Scope everyPosition() {
+            return new Scope(new Extent.EveryPosition(), _ -> false, _ -> false);
+        }
+    }
+
+    /**
+     * How far down a reader reads.
+     *
+     * <p>Two answers and not one number. A reader that cannot afford the whole value states what it
+     * can afford; a reader whose question has no depth in it says so. Held as a number for both,
+     * the second has to invent one — and the numbers that get invented are a bound belonging to some
+     * other question, or a sentinel standing for "not applicable" inside a type that cannot say it.
+     * Either way the depth a reader could afford becomes part of what a declaration is taken to say.
+     */
+    sealed interface Extent {
+
+        /** Whether a position {@code down} steps from the root is one this reader reads. */
+        boolean reaches(int down);
+
+        /**
+         * As far as the model goes.
+         *
+         * <p>What a value guarantees has no depth in it: a rule four records down refuses the
+         * outermost value exactly as one on the top does, and a reading that stopped short would
+         * make what a declaration says depend on how deeply an author nested a field. Terminating
+         * because a name met on the way down is not entered again, which is a fact about the type
+         * graph and not a budget.
+         */
+        record EveryPosition() implements Extent {
+
+            @Override
+            public boolean reaches(int down) {
+                return true;
+            }
+        }
+
+        /**
+         * As far as {@code positions} steps down, and no further.
+         *
+         * <p>A cost bound, and only ever that. A reader states one where reading further is work it
+         * cannot afford — never where the question it is asking runs deeper than it wants to go.
+         */
+        record AsFarAs(int positions) implements Extent {
+
+            @Override
+            public boolean reaches(int down) {
+                return down <= positions;
+            }
         }
     }
 
@@ -117,7 +164,7 @@ final class GuaranteeWalk {
         // Asked one at a time, because a stop says two things and only one of them is the same for
         // all of these: whether the rules under it were read, and whether a construction could have
         // got out of making the value they are about.
-        if (depth > scope.depth()) {
+        if (!scope.extent().reaches(depth)) {
             reader.stopped(path, root.type(), Stop.PAST_THE_DEPTH);
             return;
         }

@@ -24,7 +24,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -580,11 +579,11 @@ public final class InvariantChecker {
             for (Map.Entry<String, BindingId> field : bindings.entrySet()) {
                 Type type = fields.get(field.getKey());
                 if (type != null) {
-                    // No depth limit here: this is the reading a boundary is derived from, and a
-                    // rule the construction must satisfy is a rule wherever in the value it sits.
+                    // Every position: this is the reading a boundary is derived from, and a rule
+                    // the construction must satisfy is a rule wherever in the value it sits.
                     k = c.engine.seedAt(new Core.Read(field.getKey(), field.getValue(), type, NOWHERE),
                             data.newtype() ? FieldDomains.THE_VALUE : field.getKey(),
-                            k, at, 1, Integer.MAX_VALUE, gathering, reach);
+                            k, at, new GuaranteeWalk.Extent.EveryPosition(), gathering, reach);
                 }
             }
             Map<String, FactSubject> atoms = new LinkedHashMap<>();

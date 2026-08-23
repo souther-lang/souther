@@ -64,8 +64,17 @@ final class Terms {
      */
     private final Predicates predicates;
 
-    /** What a type guarantees of a value, over the positions under it. */
-    private final GuaranteeWalk guarantees;
+    /**
+     * What a type guarantees of a value.
+     *
+     * <p>The one there is. A reader that built its own would be a second owner of an answer this
+     * whole reading exists to have one of, and the day it remembers anything the two are two
+     * readers — the argument {@link #predicates} is held here for, and the same one.
+     */
+    private final TypeGuarantees guarantees;
+
+    /** Getting to the positions that reading is asked about, which is nobody's semantics. */
+    private final GuaranteeWalk walk;
 
     private final Map<TypeSymbol, java.util.Optional<Type>> affineScalarBases = new HashMap<>();
     /** How the values of each atom this has named are spaced. Kept here because this is where an
@@ -181,6 +190,16 @@ final class Terms {
         return predicates;
     }
 
+    /** What a type guarantees of a value, read through this reading. */
+    TypeGuarantees guarantees() {
+        return guarantees;
+    }
+
+    /** The positions under a value, walked for a reader of this reading. */
+    GuaranteeWalk walk() {
+        return walk;
+    }
+
     /**
      * A reading over the discharge tree, reading every declaration's clauses off the declaration.
      *
@@ -209,7 +228,8 @@ final class Terms {
         this.reading = reading;
         this.policy = policy;
         this.predicates = new Predicates(this);
-        this.guarantees = new GuaranteeWalk(new TypeGuarantees(symbols, clauses, predicates));
+        this.guarantees = new TypeGuarantees(symbols, clauses, predicates);
+        this.walk = new GuaranteeWalk(guarantees);
     }
 
     /**
@@ -971,8 +991,10 @@ final class Terms {
             return List.of();
         }
         List<NumericConstraint> out = new ArrayList<>();
-        guarantees.from(root, FieldDomains.THE_VALUE, inside,
-                GuaranteeWalk.Scope.asFarAs(GuaranteeWalk.FIELDS_SEEDED),
+        // Every position, because this question has no depth in it. What the value guarantees is
+        // what its type states wherever the rule is written, and a bound here would make a
+        // derivation depend on how deeply an author nested a field rather than on what was declared.
+        walk.from(root, FieldDomains.THE_VALUE, inside, GuaranteeWalk.Scope.everyPosition(),
                 (path, guarantee) -> out.addAll(guarantee.owed().relations()));
         return out;
     }

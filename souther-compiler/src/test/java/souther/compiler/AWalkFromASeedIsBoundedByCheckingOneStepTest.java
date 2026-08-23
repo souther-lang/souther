@@ -703,22 +703,21 @@ class AWalkFromASeedIsBoundedByCheckingOneStepTest {
     }
 
     /**
-     * An arm whose body reads what the arm itself bound is read against what that value's type
-     * guarantees.
+     * What choosing an arm settles has two sources.
      *
-     * <p>What choosing an arm settles has two sources. What a condition states is the condition's
-     * ({@link souther.compiler.check.Conditions}); what being a value of a type guarantees is the
-     * declaration's, and is the same answer a seeding reads of a parameter
-     * ({@link souther.compiler.check.TypeGuarantees}). A {@code match} arm binds the scrutinee
-     * refined to the case it names and an attempt binds what it built, so both were built through
-     * their type's checked constructor and both carry what that type states.
+     * <p>What a condition states is the condition's ({@link souther.compiler.check.Conditions});
+     * what being a value of a type guarantees is the declaration's, and is the same answer a seeding
+     * reads of a parameter ({@link souther.compiler.check.TypeGuarantees}). A {@code match} arm
+     * binds the scrutinee refined to the case it names and an attempt binds what it built, so both
+     * were built through their type's checked constructor and both carry what that type states.
+     * Stated under the arm and not beside it: the value only exists because that arm was chosen.
      *
-     * <p>Stated under the arm and not beside it: the value only exists because that arm was chosen.
-     * Written down beside a neighbour that reads the element instead, so what is read is the
-     * binding and not the branch.
+     * <p>One fact per test below. Written as one method, the first that failed hid the rest — which
+     * it did, and a reading of what the other two were doing was made from assertions that never
+     * ran.
      */
     @Test
-    void anArmReadingWhatItBoundIsReadByWhatItsTypeGuarantees() {
+    void anArmReadingTheElementIsTheNeighbourThatWasAlwaysRead() {
         assertFalse(owed(compiled("""
                 behavior total : (xs: List<Flagged>) -> Money
                     constructs Money, NonNegInt
@@ -726,13 +725,21 @@ class AWalkFromASeedIsBoundedByCheckingOneStepTest {
                 let total (xs) = Money(List.fold((sum, x) ->
                     if NonNegInt(x.amount.value) as n then sum + x.amount.value else sum, 0, xs))
                 """)), "this arm reads the element, which the walk entered, so the step is read");
+    }
+
+    @Test
+    void anArmReadingWhatAnAttemptBuiltIsReadByWhatItsTypeGuarantees() {
         assertFalse(owed(compiled("""
                 behavior total : (xs: List<Flagged>) -> Money
                     constructs Money, NonNegInt
 
                 let total (xs) = Money(List.fold((sum, x) ->
                     if NonNegInt(x.amount.value) as n then sum + n.value else sum, 0, xs))
-                """)), "and this one reads what the attempt built, which its own type speaks for");
+                """)), "this one reads what the attempt built, which its own type speaks for");
+    }
+
+    @Test
+    void anArmReadingWhatAMatchBoundIsReadByWhatItsTypeGuarantees() {
         assertFalse(owed(compiled("""
                 behavior total : (xs: List<Boxed>) -> Money
                     constructs Money
@@ -742,4 +749,5 @@ class AWalkFromASeedIsBoundedByCheckingOneStepTest {
                     | Empty -> sum, 0, xs))
                 """)), "and this one reads what a `match` arm bound, which is the same thing again");
     }
+
 }

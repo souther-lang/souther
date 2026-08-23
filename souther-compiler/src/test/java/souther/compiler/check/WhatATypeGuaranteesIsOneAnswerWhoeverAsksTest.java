@@ -41,7 +41,7 @@ class WhatATypeGuaranteesIsOneAnswerWhoeverAsksTest {
     private static final SourcePos POS = new SourcePos(1, 1);
 
     private static final String SOURCE = """
-            module demo exposing ( Money, Wrapped, Chain, Bounded, Plain, keep )
+            module demo exposing ( Money, Wrapped, Chain, Bounded, Deeper, Plain, keep )
 
             data NonNegInt = Int
                 invariant value >= 0
@@ -54,6 +54,10 @@ class WhatATypeGuaranteesIsOneAnswerWhoeverAsksTest {
 
             data Bounded = { cap: NonNegInt }
                 invariant cap.value <= 100
+
+            data Middle = { inner: Money }
+
+            data Deeper = { mid: Middle }
 
             data Plain = { label: String }
 
@@ -182,7 +186,7 @@ class WhatATypeGuaranteesIsOneAnswerWhoeverAsksTest {
     @Test
     void aNameTheReaderStopsAtIsNotDescendedInto() {
         GuaranteeWalk.Scope stopping =
-                new GuaranteeWalk.Scope(4, named("NonNegInt")::equals, _ -> false);
+                new GuaranteeWalk.Scope(new GuaranteeWalk.Extent.AsFarAs(4), named("NonNegInt")::equals, _ -> false);
 
         assertTrue(guaranteedUnder("Money", stopping).isEmpty(),
                 "the only clause under Money is NonNegInt's, and this reader stops there");
@@ -203,11 +207,32 @@ class WhatATypeGuaranteesIsOneAnswerWhoeverAsksTest {
                 "both rules stand: Bounded's own, and NonNegInt's about the field");
 
         GuaranteeWalk.Scope without =
-                new GuaranteeWalk.Scope(2, _ -> false, named("Bounded")::equals);
+                new GuaranteeWalk.Scope(new GuaranteeWalk.Extent.AsFarAs(2), _ -> false, named("Bounded")::equals);
 
         assertEquals(List.of("cap"),
                 List.copyOf(guaranteedUnder("Bounded", without).keySet()),
                 "the one left out is Bounded's own, and the field's is read as it was");
+    }
+
+    /**
+     * A rule is where it is written, and a reader asking for every position gets it there.
+     *
+     * <p>The failure this is written against: a reader whose question has no depth in it borrowing
+     * the number a reader with a cost bound uses. Held as one {@code int}, "as far as I can afford"
+     * and "as far as the model goes" are the same kind of answer and the first gets copied into the
+     * second — which makes what a declaration is taken to say depend on how deeply an author nested
+     * a field. {@code Deeper} writes nothing, and the rule is three positions under it.
+     */
+    @Test
+    void aReaderAskingForEveryPositionIsNotBoundedByWhatAnotherCanAfford() {
+        assertEquals(List.of("mid.inner.amount"),
+                List.copyOf(guaranteedUnder("Deeper", GuaranteeWalk.Scope.everyPosition()).keySet()),
+                "the rule three positions down is read, and read at the position it governs");
+        assertTrue(guaranteedUnder("Deeper",
+                        new GuaranteeWalk.Scope(new GuaranteeWalk.Extent.AsFarAs(2), _ -> false,
+                                _ -> false)).isEmpty(),
+                "a reader that can afford two positions does not reach it — which is what makes"
+                        + " borrowing its number a change to what the model says");
     }
 
     /**

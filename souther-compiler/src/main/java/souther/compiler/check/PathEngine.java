@@ -9,7 +9,6 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -59,7 +58,8 @@ final class PathEngine {
     /** What a clause owes and what a guard settles. */
     private final Predicates predicates;
 
-    /** The one reading of what a declaration guarantees. This walk is one of its consumers. */
+    /** The one reading of what a declaration guarantees, which this reading owns and this walk is
+     * one consumer of. */
     private final TypeGuarantees guarantees;
 
     /** Getting to the positions that reading is asked about, which is nobody's semantics. */
@@ -97,8 +97,8 @@ final class PathEngine {
         this.clauses = new Clauses(symbols, dischargeInvariants);
         this.terms = new Terms(symbols, reading, policy, clauses);
         this.predicates = terms.predicates();
-        this.guarantees = new TypeGuarantees(symbols, clauses, predicates);
-        this.walk = new GuaranteeWalk(guarantees);
+        this.guarantees = terms.guarantees();
+        this.walk = terms.walk();
         this.contracts = Map.copyOf(contracts);
     }
 
@@ -154,7 +154,7 @@ final class PathEngine {
     Entered enter(Core.Read root, Known known, Denotations at) {
         Denotations next = at.location(root.binding(), terms.placeSubject(root.binding()),
                 terms.placeTerm(root.binding()));
-        return new Entered(seedAt(root, known, next, 0), next);
+        return new Entered(seedAt(root, known, next), next);
     }
 
     /**
@@ -304,7 +304,7 @@ final class PathEngine {
     private Entered opening(Core.Case arm, Core scrutinee, Known k, Denotations at) {
         Core.Read root = Terms.read(arm.binder(), arm.bindType(), arm.pos());
         Denotations next = terms.choosing(new Choice.Decides.ACase(arm, scrutinee), at);
-        return new Entered(seedAt(root, k, next, 0), next);
+        return new Entered(seedAt(root, k, next), next);
     }
 
 
@@ -451,7 +451,7 @@ final class PathEngine {
     Entered enteringBuilt(Core.IfConstructed ic, Known k, Denotations at) {
         Core.Read root = Terms.read(ic.binder(), ic.construct().type(), ic.pos());
         Denotations next = terms.choosing(new Choice.Decides.ItWasBuilt(ic), at);
-        return new Entered(seedAt(root, k, next, 0), next);
+        return new Entered(seedAt(root, k, next), next);
     }
 
     // --- seeding -------------------------------------------------------------------------------
@@ -510,7 +510,7 @@ final class PathEngine {
         Known out = k;
         if (isACheckedProducer(e)) {
             seeded(e);
-            out = seedAt(e, out, at, 0);
+            out = seedAt(e, out, at);
         }
         out = assuming(answeredBy(e, at), e, guard -> guard instanceof Guard.Always,
                 new Entered(out, at)).known();
@@ -569,9 +569,10 @@ final class PathEngine {
      * clause is the declaration's either way, and where it is established and where it is owed differ
      * only in direction.
      */
-    Known seedAt(Core root, Known k, Denotations at, int depth) {
-        return seedAt(root, FieldDomains.THE_VALUE, k, at, depth, GuaranteeWalk.FIELDS_SEEDED,
-                null, InvariantChecker.Reach.EVERYTHING);
+    Known seedAt(Core root, Known k, Denotations at) {
+        return seedAt(root, FieldDomains.THE_VALUE, k, at,
+                new GuaranteeWalk.Extent.AsFarAs(GuaranteeWalk.FIELDS_SEEDED), null,
+                InvariantChecker.Reach.EVERYTHING);
     }
 
     /**
@@ -590,12 +591,11 @@ final class PathEngine {
      *                  that list has to be told here or walk the same descent again and rebase it a
      *                  second way.
      */
-    Known seedAt(Core root, String path, Known k, Denotations at, int depth, int limit,
+    Known seedAt(Core root, String path, Known k, Denotations at, GuaranteeWalk.Extent extent,
                  InvariantChecker.Gathering gathering, InvariantChecker.Reach reach) {
         Seeding seeding = new Seeding(k, gathering);
         walk.from(root, path, at,
-                new GuaranteeWalk.Scope(limit - depth, reach.stopAt(), reach.withoutClauses()),
-                seeding);
+                new GuaranteeWalk.Scope(extent, reach.stopAt(), reach.withoutClauses()), seeding);
         return seeding.known;
     }
 
