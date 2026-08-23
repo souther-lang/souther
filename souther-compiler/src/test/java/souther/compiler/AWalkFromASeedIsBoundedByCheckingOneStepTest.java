@@ -503,19 +503,68 @@ class AWalkFromASeedIsBoundedByCheckingOneStepTest {
     }
 
     /**
-     * What chose the arm is not read, so a step whose arm stays inside the range only because of its
-     * condition is owed. The clause has an end above it and the arm reaches that end by the test
-     * beside it; read on the arms alone, that arm answers anything at all.
+     * A step whose arm stays inside the range only because of its condition is read, because the arm
+     * is read under what chose it.
+     *
+     * <p>The clause has an end above it and the arm reaches that end by the test beside it. Read on
+     * the arms alone that arm answers anything at all, which is what this was owed for until the
+     * relations a condition states stood beside the arms ({@link
+     * souther.compiler.check.Derivation.Chosen.Arm#settles}). A clamp written this way is the shape
+     * an author reaches for first, and the rewrite that made it read — lifting the condition into a
+     * {@code List.filter} — was a change to the model made to satisfy the checker.
      */
     @Test
-    void aStepWhoseArmIsInRangeOnlyByItsConditionIsOwed() {
-        assertTrue(owed(compiled("""
+    void aStepWhoseArmIsInRangeByItsConditionIsRead() {
+        assertFalse(owed(compiled("""
                 behavior total : (xs: List<Flagged>) -> UpToAHundred
                     constructs UpToAHundred
 
                 let total (xs) = UpToAHundred(List.fold((sum, x) ->
                     if sum + x.amount.value < 100 then sum + x.amount.value else 100, 0, xs))
-                """)), "the condition is what holds the first arm below a hundred and it is not read");
+                """)), "the condition holds the first arm below a hundred and the arm is read under it");
+    }
+
+    /**
+     * And it is still read under four conditions that say nothing about a number.
+     *
+     * <p>What a split costs is what it copies a reading into, and a reader is copied only where its
+     * arms are read against different domains. A condition on a flag gives this reader the domain it
+     * already had, so it is one reading and not two, and however many of them stand around a clamp
+     * the clamp is opened on its own terms. Counted by the arms instead, four of them spend the
+     * whole of what splits may compound to, and a value the reading was about to hold below a
+     * hundred goes back to being owed because something numerically silent was written around it.
+     */
+    @Test
+    void aClampInsideConditionsThatSayNothingAboutANumberIsStillRead() {
+        assertFalse(owed(compiled("""
+                behavior total : (xs: List<Flagged>) -> UpToAHundred
+                    constructs UpToAHundred
+
+                let total (xs) = UpToAHundred(List.fold((sum, x) ->
+                    if x.on then
+                        (if x.on then
+                            (if x.on then
+                                (if x.on then
+                                    (if sum + x.amount.value < 100 then sum + x.amount.value
+                                        else 100)
+                                    else 100)
+                                else 100)
+                            else 100)
+                        else 100, 0, xs))
+                """)), "a flag says nothing about a number, so none of those four is a split here");
+    }
+
+    /** And the same step with the condition saying nothing about what the arm answers is owed, so
+     * what discharged the one above was the condition and not the shape of a clamp. */
+    @Test
+    void aStepWhoseConditionSaysNothingAboutItsArmIsOwed() {
+        assertTrue(owed(compiled("""
+                behavior total : (xs: List<Flagged>) -> UpToAHundred
+                    constructs UpToAHundred
+
+                let total (xs) = UpToAHundred(List.fold((sum, x) ->
+                    if x.on then sum + x.amount.value else 100, 0, xs))
+                """)), "nothing here holds the first arm below a hundred");
     }
 
     /**
@@ -583,10 +632,18 @@ class AWalkFromASeedIsBoundedByCheckingOneStepTest {
      * What choosing an arm settles is not read, so an arm whose body reads what the arm itself bound
      * gets no range.
      *
-     * <p>The boundary as it stands. One gap and not three: a {@code match} arm's binding, an
-     * attempt's built value and an {@code if}'s condition are all what choosing an arm settles, and
-     * none of them is read. Written down beside a neighbour that differs only in reading the element
-     * instead, so what is owed is the binding and not the branch.
+     * <p>The boundary as it stands, and narrower than it was. What the arm binds is entered before
+     * the arm is named ({@link souther.compiler.check.Terms#choosing}), so the body below reads the
+     * place it meant rather than a value nothing named. What is still not read is what choosing the
+     * arm <em>settles</em>: that {@code held} is the case that carries an amount, and that the
+     * attempt's construction held. Both are true only where that arm is the answer, so neither is
+     * among the facts that hold of every element a step is handed, and the step gets no range from
+     * them (#973).
+     *
+     * <p>One gap and not three: a {@code match} arm's binding, an attempt's built value and an
+     * {@code if}'s condition are all what choosing an arm settles. Written down beside a neighbour
+     * that differs only in reading the element instead, so what is owed is the binding and not the
+     * branch.
      */
     @Test
     void anArmReadingWhatItBoundGetsNoRange() {

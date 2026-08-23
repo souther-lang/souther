@@ -936,7 +936,7 @@ public final class InvariantChecker {
 
     /** What one reading of one part came to, as the reading itself says it. */
     static PartRead partRead(Predicates.Owed said) {
-        List<Predicates.Constraint> stated = new ArrayList<>();
+        List<NumericConstraint> stated = new ArrayList<>();
         for (Predicates.Part eachC : said.parts()) {
             if (!(eachC instanceof Predicates.Part.Carried carriedC)) {
                 continue;
@@ -966,7 +966,7 @@ public final class InvariantChecker {
      * @param stated      the forms themselves, to be asked of the projection at the end
      */
     record PartRead(Set<FactSubject> constrained, Set<FactSubject> narrowable,
-                    List<Predicates.Constraint> stated) {
+                    List<NumericConstraint> stated) {
 
         PartRead {
             constrained = Set.copyOf(constrained);
@@ -1954,7 +1954,7 @@ public final class InvariantChecker {
         Set<FactSubject> asked = new LinkedHashSet<>();
         for (Owing owing : owed) {
             Predicates.Clause c = owing.owed();
-            for (Predicates.Constraint known : c.known()) {
+            for (NumericConstraint known : c.known()) {
                 out = out.assume(known.form(), known.rel(), terms.kindsOf(known.form()));
             }
             asked.addAll(c.atomsItIsDecidedBy());

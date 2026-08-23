@@ -1,7 +1,6 @@
 package souther.compiler.check;
 
 import souther.compiler.types.BinOp;
-import souther.compiler.types.CoverageOrigin;
 import souther.compiler.check.Combinators.Handed;
 import souther.compiler.check.DischargeRules.Cardinality;
 import souther.compiler.check.DischargeRules.Carrying;
@@ -14,7 +13,6 @@ import souther.compiler.numeric.NumericDomain.LinearForm;
 import souther.compiler.numeric.NumericDomain.Rel;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
-import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
@@ -99,13 +97,13 @@ final class Predicates {
      * polarity. Only a stated quantifier is recorded — denying one says some element fails the
      * predicate, and which one is not something this check can name. */
     void quantifiedBy(Core raw, Denotations at, boolean positive, List<Quantified> out) {
-        Core e = asSizeComparison(raw);
+        Core e = Conditions.asSizeComparison(raw);
         if (e instanceof Core.Binary b && b.op() == BinOp.AND && positive) {
             quantifiedBy(b.left(), at, true, out);
             quantifiedBy(b.right(), at, true, out);
             return;
         }
-        Core under = negated(e);
+        Core under = Conditions.negated(e);
         if (under != null) {
             quantifiedBy(under, at, !positive, out);
             return;
@@ -139,14 +137,6 @@ final class Predicates {
         return found[0];
     }
 
-    record Constraint(LinearForm<FactSubject> form, Rel rel) {
-
-        /** The atoms this relation is written over. */
-        Set<FactSubject> atoms() {
-            return form.coefs().keySet();
-        }
-    }
-
     /**
      * A predicate stated of a term. {@code keys} is the term as written first, then each container it
      * was built from by a construction that carries the predicate — any one of them settled is this
@@ -177,7 +167,7 @@ final class Predicates {
      * @param kinds how the values of every atom either of them names are spaced, so that a case can
      *              be taken into a domain without asking anything further of the caller
      */
-    record Case(Constraint numeric, List<Constraint> given, Map<FactSubject, Granularity> kinds) {
+    record Case(NumericConstraint numeric, List<NumericConstraint> given, Map<FactSubject, Granularity> kinds) {
 
         /**
          * Every atom this case is decided by.
@@ -196,7 +186,7 @@ final class Predicates {
         /** {@code d} with this case's conditions on the arguments taken as holding. */
         private NumericDomain<FactSubject> in(NumericDomain<FactSubject> d) {
             NumericDomain<FactSubject> out = d;
-            for (Constraint one : given) {
+            for (NumericConstraint one : given) {
                 out = out.assume(one.form(), one.rel(), kinds);
             }
             return out;
@@ -274,7 +264,7 @@ final class Predicates {
 
     /** A clause that cannot hold, said in the language the domain reads: {@code -1 >= 0}. */
     static final Clause VIOLATED = new Clause(
-            new Constraint(LinearForm.constant(BigDecimal.ONE.negate()), Rel.GE), null, List.of(),
+            new NumericConstraint(LinearForm.constant(BigDecimal.ONE.negate()), Rel.GE), null, List.of(),
             null);
 
     /**
@@ -283,7 +273,7 @@ final class Predicates {
      * present either one discharging the clause is enough — a guard is written one way and a clause
      * another, and which of the two routes carries it is not the author's concern.
      */
-    record Clause(Constraint numeric, Fact fact, List<Constraint> known, Piecewise piecewise) {
+    record Clause(NumericConstraint numeric, Fact fact, List<NumericConstraint> known, Piecewise piecewise) {
 
         /**
          * Every atom a numeric domain could decide this clause differently by.
@@ -308,7 +298,7 @@ final class Predicates {
             if (numeric != null) {
                 out.addAll(numeric.atoms());
             }
-            for (Constraint one : known) {
+            for (NumericConstraint one : known) {
                 out.addAll(one.atoms());
             }
             if (piecewise != null) {
@@ -542,8 +532,8 @@ final class Predicates {
      */
     private Owed obligations(Core rawInv, Known k, Denotations at, Set<Core> unnamed,
                              boolean positive, boolean decidesFalse, Read way, PerPart per) {
-        Core sized = asSizeComparison(rawInv);
-        Core ordered = asOrderComparison(sized, at);
+        Core sized = Conditions.asSizeComparison(rawInv);
+        Core ordered = Conditions.asOrderComparison(terms, sized, at);
         Owed read = read(ordered, k, at, unnamed, positive, decidesFalse, way, per);
         Owed out = ordered != sized && read.unreadable()
                 ? read(sized, k, at, unnamed, positive, decidesFalse, way, per) : read;
@@ -567,7 +557,7 @@ final class Predicates {
             return obligations(b.left(), k, at, unnamed, true, decidesFalse, way, per)
                     .and(obligations(b.right(), k, at, unnamed, true, decidesFalse, way, per));
         }
-        Core under = negated(inv);
+        Core under = Conditions.negated(inv);
         if (under != null) {
             return obligations(under, k, at, unnamed, !positive, decidesFalse, way, per);
         }
@@ -589,10 +579,10 @@ final class Predicates {
         // unchanged, and the fold is said beside it: a reader classifying the clause needs it, and
         // taking the reading away here would change what this caller is answered.
         Fold fold = folded == null ? Fold.NOT_DECIDED : Fold.FAILS;
-        Constraint numeric = null;
+        NumericConstraint numeric = null;
         Piecewise piecewise = null;
-        if (inv instanceof Core.Binary b && relOf(b.op()) != null) {
-            Rel eff = positive ? relOf(b.op()) : negateRel(relOf(b.op()));
+        if (inv instanceof Core.Binary b && Conditions.relOf(b.op()) != null) {
+            Rel eff = positive ? Conditions.relOf(b.op()) : Conditions.negateRel(Conditions.relOf(b.op()));
             LinearForm<FactSubject> la = eff == null ? null : terms.affineOf(b.left(), at);
             LinearForm<FactSubject> ra = eff == null ? null : terms.affineOf(b.right(), at);
             // Asked of the relation, not of its two sides. An atom on both sides cancels, and one
@@ -601,14 +591,14 @@ final class Predicates {
             // author was never asked about.
             LinearForm<FactSubject> between = la == null || ra == null ? null : la.minus(ra);
             if (between != null && canBeDischargedFrom(between, k, way)) {
-                numeric = new Constraint(between, eff);
+                numeric = new NumericConstraint(between, eff);
                 // The same clause read as the cases of whatever chooses inside it. Both readings are
                 // kept: a guard may name the call itself, which the clause as it stands is what
                 // settles, and reading it case by case never takes that away.
                 piecewise = piecewiseOf(numeric, inv, at);
             }
         }
-        Polar polar = polar(inv, positive);
+        Conditions.Polar polar = Conditions.polar(inv, positive);
         // A predicate over a value no guard could be written about is not a predicate a guard will
         // settle, so it is not owed as one — where the domain can say something of that value it has
         // already said it above, and where it cannot the run-time check stands for the clause.
@@ -619,7 +609,7 @@ final class Predicates {
         if (numeric == null && fact == null) {
             return Owed.unreadable(inv).alsoFolded(fold);
         }
-        List<Constraint> known = new ArrayList<>();
+        List<NumericConstraint> known = new ArrayList<>();
         sizeFacts(inv, at, known);
         resultFacts(inv, at, known);
         return Owed.of(new Clause(numeric, fact, known, piecewise)).alsoFolded(fold);
@@ -682,7 +672,7 @@ final class Predicates {
      * numeric domain, a stdlib predicate settles a fact. A condition of neither shape, and an operand
      * outside the affine fragment, leave {@code k} unchanged (sound). */
     Assumed assumeCond(Core rawCond, Known k, Denotations at, boolean positive) {
-        Core cond = asSizeComparison(rawCond);
+        Core cond = Conditions.asSizeComparison(rawCond);
         // Two answers, and they were one until a condition could name something without this having
         // read what it says. What was taken in is what a proof about this path may rest on; what was
         // read is what an unsettled arm may be explained by. A condition whose shape ran out still
@@ -690,7 +680,7 @@ final class Predicates {
         // set of conditions that can all hold and say they cannot.
         boolean taken = false;
         boolean shapeRead = false;
-        Core ordered = asOrderComparison(cond, at);
+        Core ordered = Conditions.asOrderComparison(terms, cond, at);
         if (ordered != cond) {
             // Both hold of the same values: the order the call decides, and the bound on the sign
             // that decides it. Which one a clause is read against is settled where the clause is
@@ -710,17 +700,17 @@ final class Predicates {
             return assumeCond(b.right(), left.known(), at, positive)
                     .alsoRead(left.taken() || taken, left.shapeRead() || shapeRead);
         }
-        Core under = negated(cond);
+        Core under = Conditions.negated(cond);
         if (under != null) {
             return assumeCond(under, k, at, !positive).alsoRead(taken, shapeRead);
         }
         Known out = k;
         // What holds of the sizes the condition names, and of what the operations in it answer,
         // whichever way the condition itself is read.
-        List<Constraint> known = new ArrayList<>();
+        List<NumericConstraint> known = new ArrayList<>();
         sizeFacts(cond, at, known);
         resultFacts(cond, at, known);
-        for (Constraint c : known) {
+        for (NumericConstraint c : known) {
             // A size is never negative whether or not the condition holds, so this holds of the value
             // and not of the path — the condition is only where the container got named.
             out = out.taking(c.form(), c.rel(), Known.Held.OF_THE_VALUE, terms.kindsOf(c.form()));
@@ -738,8 +728,8 @@ final class Predicates {
         taken |= !known.isEmpty();
         shapeRead |= !known.isEmpty();
         if (cond instanceof Core.Binary b) {
-            Rel rel = relOf(b.op());
-            Rel eff = rel == null ? null : positive ? rel : negateRel(rel);
+            Rel rel = Conditions.relOf(b.op());
+            Rel eff = rel == null ? null : positive ? rel : Conditions.negateRel(rel);
             LinearForm<FactSubject> la = eff == null ? null : terms.affineOf(b.left(), at);
             LinearForm<FactSubject> ra = eff == null ? null : terms.affineOf(b.right(), at);
             if (la != null && ra != null) {
@@ -761,7 +751,7 @@ final class Predicates {
         shapeRead |= !quantified.isEmpty();
         // Both routes, always: which one carries a clause is decided where the clause is read, and a
         // guard does not know which that will be.
-        Polar polar = polar(cond, positive);
+        Conditions.Polar polar = Conditions.polar(cond, positive);
         FactSubject key = terms.subjectOf(polar.expr(), at);
         return key == null ? new Assumed(out, taken, shapeRead)
                 : new Assumed(out.taking(key, polar.positive(), Known.Held.ON_THE_PATH), true,
@@ -803,52 +793,6 @@ final class Predicates {
         return named;
     }
 
-    /** A predicate as one of {@code ==}/{@code <} states it, and whether it is being stated or denied. */
-    record Polar(Core expr, boolean positive) {}
-
-    /**
-     * {@code e}, asserted with polarity {@code positive}, as the comparison of {@code ==} or {@code <}
-     * that says the same thing: {@code a /= b} is {@code a == b} denied, {@code a >= b} is
-     * {@code a < b} denied, and {@code a > b} is {@code b < a}. A fact is settled by key equality, so
-     * without this the six ways to compare two terms are six facts, and a guard written one way would
-     * leave a clause written the other unsettled.
-     */
-    static Polar polar(Core e, boolean positive) {
-        if (!(e instanceof Core.Binary b) || relOf(b.op()) == null) {
-            return new Polar(e, positive);
-        }
-        return switch (b.op()) {
-            case NE -> new Polar(comparison(BinOp.EQ, b.left(), b.right(), b), !positive);
-            case GE -> new Polar(comparison(BinOp.LT, b.left(), b.right(), b), !positive);
-            case GT -> new Polar(comparison(BinOp.LT, b.right(), b.left(), b), positive);
-            case LE -> new Polar(comparison(BinOp.LT, b.right(), b.left(), b), !positive);
-            default -> new Polar(e, positive);
-        };
-    }
-
-    static Core.Binary comparison(BinOp op, Core left, Core right, Core.Binary of) {
-        return new Core.Binary(op, left, right, of.origin(), of.type(), of.pos());
-    }
-
-    /** What a negation is applied to, or {@code null} if {@code e} is not one. {@code Bool.not} is an
-     * ordinary helper: the analysis representation keeps it as a call, and a clause read off an
-     * imported declaration is the body it expands to — {@code if b then false else true} over a
-     * binding holding the argument. Both are read. */
-    static Core negated(Core e) {
-        if (e instanceof Core.PreservedCall call && call.operation().equals(DischargeRules.NOT)
-                && call.args().size() == 1) {
-            return call.args().get(0);
-        }
-        if (e instanceof Core.LetIn li) {
-            Core inner = negated(li.body());
-            return inner instanceof Core.Read r && r.binding().equals(li.binder().binding())
-                    ? li.value() : null;
-        }
-        return e instanceof Core.If iff
-                && iff.then() instanceof Core.Bool t && !t.value()
-                && iff.els() instanceof Core.Bool f && f.value()
-                ? iff.cond() : null;
-    }
 
 
     /**
@@ -868,7 +812,7 @@ final class Predicates {
                 continue;
             }
             Clause c = carriedC.clause();
-            for (Constraint known : c.known()) {
+            for (NumericConstraint known : c.known()) {
                 named.addAll(known.form().coefs().keySet());
             }
             if (c.numeric() != null) {
@@ -929,7 +873,7 @@ final class Predicates {
                 continue;
             }
             Clause c = carriedC.clause();
-            for (Constraint known : c.known()) {
+            for (NumericConstraint known : c.known()) {
                 // What is known of a size holds of the container itself, whatever established the
                 // clause it was read out of.
                 out = out.taking(known.form(), known.rel(), Known.Held.OF_THE_VALUE,
@@ -952,7 +896,7 @@ final class Predicates {
 
     /** What is known of the size of every container an expression names: never negative, and no
      * greater than the size of what it was built from wherever the building can only drop elements. */
-    void sizeFacts(Core e, Denotations at, List<Constraint> out) {
+    void sizeFacts(Core e, Denotations at, List<NumericConstraint> out) {
         // A name is what it was given, here as everywhere: what is known of a size does not depend on
         // whether the size was written where it is read or bound first.
         if (e instanceof Core.Read r && at.valueOf(r.binding()) != null) {
@@ -969,7 +913,7 @@ final class Predicates {
             // of, and a count over something the term grammar cannot read is still a count.
             FactSubject atom = terms.subjectOf(call, at);
             if (atom != null) {
-                out.add(new Constraint(LinearForm.atom(atom), Rel.GE));   // a size is never negative
+                out.add(new NumericConstraint(LinearForm.atom(atom), Rel.GE));   // a size is never negative
                 bounds(call.operation(), DischargeRules.sizeSource(container), at, out);
             }
         }
@@ -988,7 +932,7 @@ final class Predicates {
      * answer, and what they are read as is this reading's answer — a name given a constant is that
      * constant, here as everywhere.
      */
-    void resultFacts(Core e, Denotations at, List<Constraint> out) {
+    void resultFacts(Core e, Denotations at, List<NumericConstraint> out) {
         // A name is what it was given, as in `sizeFacts`: an operation's guarantee does not depend on
         // whether its call was written where it is read or bound first.
         if (e instanceof Core.Read r && at.valueOf(r.binding()) != null) {
@@ -1007,7 +951,7 @@ final class Predicates {
                         ? LinearForm.constant(bound.offset())
                         : addTo(terms.affineOf(bound.against().of(call), at), bound.offset());
                 if (against != null) {
-                    out.add(new Constraint(LinearForm.atom(result).minus(against), bound.rel()));
+                    out.add(new NumericConstraint(LinearForm.atom(result).minus(against), bound.rel()));
                 }
             }
         }
@@ -1028,16 +972,16 @@ final class Predicates {
      * never builds.
      */
     private boolean noCaseSatisfies(Core cond, Known k, Denotations at, boolean positive) {
-        if (!(cond instanceof Core.Binary b) || relOf(b.op()) == null) {
+        if (!(cond instanceof Core.Binary b) || Conditions.relOf(b.op()) == null) {
             return false;
         }
-        Rel stated = positive ? relOf(b.op()) : negateRel(relOf(b.op()));
+        Rel stated = positive ? Conditions.relOf(b.op()) : Conditions.negateRel(Conditions.relOf(b.op()));
         LinearForm<FactSubject> la = stated == null ? null : terms.affineOf(b.left(), at);
         LinearForm<FactSubject> ra = stated == null ? null : terms.affineOf(b.right(), at);
         if (la == null || ra == null) {
             return false;
         }
-        Piecewise cases = piecewiseOf(new Constraint(la.minus(ra), stated), cond, at);
+        Piecewise cases = piecewiseOf(new NumericConstraint(la.minus(ra), stated), cond, at);
         return cases != null && cases.refutedBy(k.numbers());
     }
 
@@ -1051,7 +995,7 @@ final class Predicates {
      * keys as — so replacing the atom answers both, where rewriting the expression would answer the
      * first and leave the second saying nothing.
      */
-    private Piecewise piecewiseOf(Constraint owed, Core inv, Denotations at) {
+    private Piecewise piecewiseOf(NumericConstraint owed, Core inv, Denotations at) {
         Map<FactSubject, Core.PreservedCall> choosing = new LinkedHashMap<>();
         chosenCalls(inv, at, choosing);
         choosing.keySet().retainAll(owed.form().coefs().keySet());
@@ -1070,13 +1014,13 @@ final class Predicates {
             LinearForm<FactSubject> instead = owed.form()
                     .minus(LinearForm.atom(atom).times(coefficient))
                     .plus(answered.times(coefficient));
-            List<Constraint> given = new ArrayList<>(one.given().size() + 1);
+            List<NumericConstraint> given = new ArrayList<>(one.given().size() + 1);
             Map<FactSubject, Granularity> kinds = new HashMap<>(terms.kindsOf(instead));
             // What the call answers here, said of the call itself: in this case the two are one
             // value. Without it a guard written about the call would stand outside the cases, and a
             // clause could come out established by these and refused by that.
             LinearForm<FactSubject> answeredHere = LinearForm.atom(atom).minus(answered);
-            given.add(new Constraint(answeredHere, Rel.EQ));
+            given.add(new NumericConstraint(answeredHere, Rel.EQ));
             kinds.putAll(terms.kindsOf(answeredHere));
             for (DischargeRules.ArgumentsStand stands : one.given()) {
                 LinearForm<FactSubject> left = terms.affineOf(stands.left().of(call), at);
@@ -1085,10 +1029,10 @@ final class Predicates {
                     return null;
                 }
                 LinearForm<FactSubject> between = left.minus(right);
-                given.add(new Constraint(between, stands.rel()));
+                given.add(new NumericConstraint(between, stands.rel()));
                 kinds.putAll(terms.kindsOf(between));
             }
-            cases.add(new Case(new Constraint(instead, owed.rel()), List.copyOf(given),
+            cases.add(new Case(new NumericConstraint(instead, owed.rel()), List.copyOf(given),
                     Map.copyOf(kinds)));
         }
         return new Piecewise(List.copyOf(cases));
@@ -1118,7 +1062,7 @@ final class Predicates {
      * fact and the clause meet at one term. Where either value is named by nothing there is no such
      * atom, and nothing is stated.
      */
-    private void shiftFact(Core.PreservedCall call, Denotations at, List<Constraint> out) {
+    private void shiftFact(Core.PreservedCall call, Denotations at, List<NumericConstraint> out) {
         DischargeRules.Shift shift = DischargeRules.shiftBy(call);
         if (shift == null) {
             return;
@@ -1129,7 +1073,7 @@ final class Predicates {
         if (from == null || to == null || amount == null) {
             return;
         }
-        out.add(new Constraint(
+        out.add(new NumericConstraint(
                 LinearForm.atom(terms.measureKeyOf(shift.measure(), from, to))
                         .minus(amount.times(shift.per())),
                 Rel.EQ));
@@ -1148,7 +1092,7 @@ final class Predicates {
 
     /** How the size of a container relates to the size of what it was built from, down the chain.
      * Which way it is stated is what the construction's {@link Cardinality} says. */
-    void bounds(ValueName sizeCall, Core container, Denotations at, List<Constraint> out) {
+    void bounds(ValueName sizeCall, Core container, Denotations at, List<NumericConstraint> out) {
         // A construction's result is never smaller than each source named for it. A rule may name
         // more than one, so this is a loop where the building below is a single answer — and it is
         // asked of the expression rather than of a call, since `a ++ b` is one of these and is
@@ -1171,13 +1115,13 @@ final class Predicates {
      * down whatever that one was built from. A container neither of them has a key for is one
      * nothing can be said of, and stops the walk. */
     private void stated(ValueName sizeCall, Core container, Core source, Rel rel, Denotations at,
-                        List<Constraint> out) {
+                        List<NumericConstraint> out) {
         Term here = terms.bodyKey(container, at);
         Term there = terms.bodyKey(source, at);
         if (here == null || there == null) {
             return;
         }
-        out.add(new Constraint(
+        out.add(new NumericConstraint(
                 LinearForm.atom(terms.sizeKeyOf(sizeCall, here))
                         .minus(LinearForm.atom(terms.sizeKeyOf(sizeCall, there))),
                 rel));
@@ -1364,101 +1308,4 @@ final class Predicates {
         }
     }
 
-    /**
-     * A comparison against zero of an operation answering an order, as the comparison of the two
-     * values it orders — or {@code e} unchanged.
-     *
-     * <p>What such an operation answers is a sign ({@link DischargeRules#orderStatedBy}), so where
-     * its answer stands against zero the comparison is between the two arguments themselves. One
-     * account: the relation is the one written, taken between the argument a positive answer says is
-     * the greater and the other one, so the six relations and the two sides of the zero are all read
-     * from the row the library's operation has rather than from a case for each.
-     *
-     * <p>Only against zero. A sign compared with anything else bounds how far the answer is from
-     * zero, which is a statement about the number and not about the order it decides.
-     *
-     * <p>And only where both values are ones this check can name. The sign is a number the domain
-     * carries whatever it is the order of, so a comparison of two values it cannot name is less than
-     * what it already had: a clause reading {@code daysBetween(acquiredOn, lostOn) >= 0} is a bound
-     * on that count, and rewriting it into a comparison of two dates the check cannot relate would
-     * leave the clause unreadable — a construction dropped from the check where it had been reported.
-     * Reading a predicate never takes a reading away.
-     */
-    Core asOrderComparison(Core e, Denotations at) {
-        if (!(e instanceof Core.Binary b) || relOf(b.op()) == null) {
-            return e;
-        }
-        boolean callFirst = b.left() instanceof Core.PreservedCall;
-        Core side = callFirst ? b.left() : b.right();
-        Core zero = callFirst ? b.right() : b.left();
-        if (!(side instanceof Core.PreservedCall call) || call.args().size() != 2
-                || !isZero(zero)) {
-            return e;
-        }
-        DischargeRules.PositiveOrder positive = DischargeRules.orderStatedBy(call.operation());
-        if (positive == null
-                || terms.bodyKey(call.args().get(0), at) == null
-                || terms.bodyKey(call.args().get(1), at) == null) {
-            return e;
-        }
-        // The relation the source wrote, read from the sign's side of the zero, and between the
-        // arguments in the order this operation counts them.
-        BinOp written = callFirst ? b.op() : mirrored(b.op());
-        return comparison(written, positive.greaterOf(call), positive.lesserOf(call), b);
-    }
-
-    /** Whether {@code e} is the number zero as written. */
-    private static boolean isZero(Core e) {
-        return e instanceof Core.Int i && i.value() == 0
-                || e instanceof Core.Decimal d && d.value().signum() == 0;
-    }
-
-    /** {@code op} with its two sides exchanged: what the same fact is called when it is written the
-     * other way round. */
-    static BinOp mirrored(BinOp op) {
-        return switch (op) {
-            case LT -> BinOp.GT;
-            case GT -> BinOp.LT;
-            case LE -> BinOp.GE;
-            case GE -> BinOp.LE;
-            default -> op;
-        };
-    }
-
-    /** An emptiness check as the comparison it means, or {@code e} unchanged. */
-    static Core asSizeComparison(Core e) {
-        if (e instanceof Core.PreservedCall call && call.args().size() == 1
-                && DischargeRules.sizeMeantBy(call.operation()) != null) {
-            Core size = new Core.PreservedCall(DischargeRules.sizeMeantBy(call.operation()), call.args(),
-                    Type.INT, call.pos());
-            return new Core.Binary(BinOp.EQ, size, new Core.Int(0, Type.INT, call.pos()),
-                    CoverageOrigin.unwritten(),
-                    Type.BOOL, call.pos());
-        }
-        return e;
-    }
-
-
-    static Rel relOf(BinOp op) {
-        return switch (op) {
-            case GE -> Rel.GE;
-            case GT -> Rel.GT;
-            case LE -> Rel.LE;
-            case LT -> Rel.LT;
-            case EQ -> Rel.EQ;
-            case NE -> Rel.NE;
-            default -> null;
-        };
-    }
-
-    static Rel negateRel(Rel rel) {
-        return switch (rel) {
-            case GE -> Rel.LT;
-            case GT -> Rel.LE;
-            case LE -> Rel.GT;
-            case LT -> Rel.GE;
-            case EQ -> Rel.NE;
-            case NE -> Rel.EQ;
-        };
-    }
 }

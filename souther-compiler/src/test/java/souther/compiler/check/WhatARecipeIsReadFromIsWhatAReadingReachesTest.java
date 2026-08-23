@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.numeric.NumericDomain.Bounds;
 import souther.compiler.numeric.NumericDomain.LinearForm;
+import souther.compiler.numeric.NumericDomain.Rel;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 
@@ -16,6 +17,7 @@ import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -67,12 +69,41 @@ class WhatARecipeIsReadFromIsWhatAReadingReachesTest {
         FactSubject choice = marker();
         terms.derivations().put(product,
                 new Derivation.Product(LinearForm.atom(left), LinearForm.atom(right)));
-        terms.derivations().put(choice, new Derivation.Chosen(
-                List.of(LinearForm.atom(product), LinearForm.atom(other))));
+        terms.derivations().put(choice, new Derivation.Chosen(List.of(
+                new Derivation.Chosen.Arm(LinearForm.atom(product), List.of()),
+                new Derivation.Chosen.Arm(LinearForm.atom(other), List.of()))));
 
         assertEquals(Set.of(choice, product, other, left, right),
                 terms.reached(LinearForm.atom(choice)),
                 "the arms, and what the recipes under the arms are read from");
+    }
+
+    /**
+     * And a value only what decides an arm names is reached, though no arm answers it.
+     *
+     * <p>The dependency that arrives inside something else. What an arm's context settles is read
+     * later and against a domain, but what that reading may reach is decided now: a value it needs
+     * and this does not reach arrives with its guarantee already dropped by {@link StepInputFacts},
+     * and the walk fails to prove what the declarations say with nothing saying why.
+     *
+     * <p>Beside the reflection test below and not covered by it. That one catches a form a recipe
+     * holds and does not declare; this catches a form the producer never put in the recipe at all,
+     * which is a hand-written list being wrong rather than incomplete.
+     */
+    @Test
+    void aReadingReachesWhatDecidedAnArmAndNotOnlyWhatTheArmsAnswer() {
+        Terms terms = new Terms(Symbols.none(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        FactSubject answered = marker();
+        FactSubject askedAbout = marker();
+        FactSubject choice = marker();
+        terms.derivations().put(choice, new Derivation.Chosen(List.of(
+                new Derivation.Chosen.Arm(LinearForm.atom(answered),
+                        List.of(new NumericConstraint(LinearForm.atom(askedAbout), Rel.GE))),
+                new Derivation.Chosen.Arm(LinearForm.atom(answered), List.of()))));
+
+        assertTrue(terms.reached(LinearForm.atom(choice)).contains(askedAbout),
+                "no arm answers it and deciding between them reads it, which is what the arm's"
+                        + " context will be read from");
     }
 
     /** And a name nothing was filed against reaches only itself, so the answer above is the
@@ -85,6 +116,63 @@ class WhatARecipeIsReadFromIsWhatAReadingReachesTest {
         assertEquals(Set.of(named), terms.reached(LinearForm.atom(named)),
                 "nothing is filed against it, so there is nothing under it to reach");
     }
+
+    /**
+     * Two recipes reading the same forms and stating the same relations are not the same recipe
+     * where the relations stand beside different arms.
+     *
+     * <p>What a recipe is read from and what makes two of them one are different questions, and the
+     * first flattens what the second turns on. A choice whose first arm is held below nought and
+     * whose second is not reads the same forms as one where the second is held and the first is
+     * not, and states the same relation; read as two flat lists they are one recipe. Filed under one
+     * atom the second would be passed over as the first already recorded, and what that atom lies
+     * between would turn on which reading named it first.
+     *
+     * <p>Held against {@link Terms#recording}'s own answer rather than against a comparison written
+     * here: what it does with two recipes it takes for one is pass the second over, and what it does
+     * with two it can tell apart is refuse them both ({@link Terms.OneTermTwoDerivations}).
+     */
+    @Test
+    void twoChoicesDifferingOnlyInWhichArmStatesTheRelationAreNotOneRecipe() {
+        Terms terms = new Terms(Symbols.none(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        FactSubject answered = marker();
+        FactSubject other = marker();
+        FactSubject atom = marker();
+        Derivation stated = new Derivation.Chosen(List.of(
+                new Derivation.Chosen.Arm(LinearForm.atom(answered),
+                        List.of(new NumericConstraint(LinearForm.atom(other), Rel.LT))),
+                new Derivation.Chosen.Arm(LinearForm.atom(other), List.of())));
+        Derivation moved = new Derivation.Chosen(List.of(
+                new Derivation.Chosen.Arm(LinearForm.atom(answered), List.of()),
+                new Derivation.Chosen.Arm(LinearForm.atom(other),
+                        List.of(new NumericConstraint(LinearForm.atom(other), Rel.LT)))));
+
+        Set<FactSubject> readFrom = new LinkedHashSet<>();
+        stated.formsRead().forEach(f -> readFrom.addAll(f.coefs().keySet()));
+        Set<FactSubject> alsoReadFrom = new LinkedHashSet<>();
+        moved.formsRead().forEach(f -> alsoReadFrom.addAll(f.coefs().keySet()));
+        assertEquals(readFrom, alsoReadFrom,
+                "the two are read from the same places, which is why the flat list cannot tell"
+                        + " them apart");
+
+        assertFalse(stated.sameAs(moved, SAME_NUMBERS),
+                "the relation holds where a different arm is the answer, so they are two recipes");
+        assertTrue(stated.sameAs(stated, SAME_NUMBERS), "and a recipe is itself");
+    }
+
+    /** Numbers compared as {@link Terms} compares them, so this asks the question the check asks. */
+    private static final Derivation.Same SAME_NUMBERS = new Derivation.Same() {
+
+        @Override
+        public boolean forms(LinearForm<FactSubject> a, LinearForm<FactSubject> b) {
+            return a.equals(b);
+        }
+
+        @Override
+        public boolean extents(Bounds a, Bounds b) {
+            return a == b;
+        }
+    };
 
     /**
      * And what a recipe says it is read from is every form it holds.
@@ -127,6 +215,9 @@ class WhatARecipeIsReadFromIsWhatAReadingReachesTest {
         }
         if (type == Bounds.class) {
             return new Bounds(null, null);   // a range, and no form stands in one
+        }
+        if (type.isEnum()) {
+            return type.getEnumConstants()[0];   // one of a fixed set, and no form stands in one
         }
         if (type.isRecord()) {
             return record(type, put);

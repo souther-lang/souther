@@ -19,11 +19,12 @@ import java.util.List;
  *
  * <p><b>What decides an arm is named here and read nowhere.</b> {@link Decides} is the node that
  * decides — a condition and which way it went, a case of a sum, an attempt that held or departed —
- * and this puts no interpretation on it. What such a node <em>settles</em> is a different question,
- * needing an environment to settle it in, and it has its own reader ({@link PathEngine}) which not
- * every caller here can reach (#973). Keeping the two apart is what lets a reader that only wants
- * the values have them, while a reader that wants more is handed the node rather than going back to
- * the tree to find it for itself.
+ * and this puts no interpretation on it. What such a node means is asked of it in two places, and
+ * they ask different questions: what choosing the arm <em>binds</em> is {@link Terms#choosing}'s
+ * answer, because what a binder denotes is that class's throughout; what choosing it
+ * <em>settles</em> needs a domain to settle it against and is answered where that domain is.
+ * Keeping the two apart is what lets a reader that only wants the values have them, while a reader
+ * that wants more is handed the node rather than going back to the tree to find it for itself.
  *
  * <p>Which is also where a reader is made to stop. {@link Kind} on its own stops nobody: it is a
  * label, and a kind nothing produces is inert — adding one and answering for it compiles, and

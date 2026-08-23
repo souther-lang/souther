@@ -12,6 +12,7 @@ import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.ConstructionOrigin;
+import souther.compiler.types.Refinement;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ReachName;
@@ -687,6 +688,157 @@ final class Terms {
     }
 
     /**
+     * The environment an arm's answer is read in: {@code at} with what choosing that arm binds
+     * entered.
+     *
+     * <p>Here for the reason {@link #inside} is here. What a binder denotes is this class's answer,
+     * and a reader deciding it for itself is a second account of it — weaker than the first wherever
+     * it was written for a narrower purpose. An arm's binder was the one binder without that rule:
+     * the walk over a region worked it out in {@link PathEngine} and the naming of an expression
+     * could not reach it, which is why an arm whose body read what the arm bound was named against
+     * an environment the name was not in and got no recipe at all.
+     *
+     * <p>Denotations and nothing else. What choosing an arm <em>settles</em> — the constraints of a
+     * condition, what a construction guarantees, what a case refines the scrutinee to — is a
+     * different question, needs a domain to settle it against, and is answered where that domain is
+     * ({@link DerivedBounds}). A {@link Known} or a {@link NumericConstraint} coming back from
+     * here would be this reader answering it a second way.
+     */
+    Denotations choosing(Choice.Decides decidedBy, Denotations at) {
+        return switch (decidedBy) {
+            // A condition binds nothing. What it settles is read where the arm is read.
+            case Choice.Decides.ACondition ignored -> at;
+            // A departure is taken where nothing was built, so it has nothing to enter.
+            case Choice.Decides.ItDeparted ignored -> at;
+            case Choice.Decides.ACase(Core.Case arm, Core scrutinee) -> opening(arm, scrutinee, at);
+            case Choice.Decides.ItWasBuilt(Core.IfConstructed ic) ->
+                    entering(read(ic.binder(), ic.construct().type(), ic.pos()), at);
+        };
+    }
+
+    /**
+     * The arm's binding entered as the value it opens.
+     *
+     * <p>An arm that names one case of a declared sum, and one that names several, bind the value
+     * they were given — the case's own class is what is tested and the value read is that instance
+     * ({@link Refinement.Direct}). So the arm is not introducing a value; it is saying which case the
+     * one already there is, and what it binds is about that same value. Entered as a place all the
+     * same, because a place is what a clause may be read against and what the seeding writes about,
+     * and which value it is and what may be done with it are two answers.
+     *
+     * <p>Introduced afresh where the two are really different values. An optional's present carrier
+     * binds what stands under it, which is not the optional.
+     *
+     * <p>Held one way and not two: an arm that made a second subject for the value it opened had
+     * every fact about the answer filed under one and every fact the arm added under the other, and
+     * the two agreed only for as long as nothing could tell them apart (#824).
+     */
+    private Denotations opening(Core.Case arm, Core scrutinee, Denotations at) {
+        if (arm.binder() == null || arm.bindType() == null) {
+            return at;
+        }
+        Core.Read root = read(arm.binder(), arm.bindType(), arm.pos());
+        Opens opens = opens(arm, scrutinee, at);
+        return opens == null
+                ? entering(root, at)
+                : at.opened(root.binding(), opens.value(), opens.subject(),
+                        placeTerm(root.binding()), opens.numeric());
+    }
+
+    /** {@code at} with {@code root} entered as a location: somewhere nothing else names, holding a
+     * value of its type. */
+    private Denotations entering(Core.Read root, Denotations at) {
+        return at.location(root.binding(), placeSubject(root.binding()),
+                placeTerm(root.binding()));
+    }
+
+    /** What an arm's binding stands for: the value the walk reached where the two are one value, and
+     * the subject facts about it are filed under, and which arithmetic it is.
+     *
+     * <p>Taken together because they are one answer about one binding, and handing them over apart is
+     * how one of them was left behind. Three answers and not one: the value is where it came from,
+     * which is how a rule declared about an answer is found through however many names the answer
+     * went by, and the arithmetic is what was computed to make it. An arm opening the number a
+     * library operation answered as a case is where the two are furthest apart — the value it stands
+     * for is the union, and the number it is is a quotient of two operands the union does not carry.
+     *
+     * <p>What the term grammar names it by is not among them, and is the place it is. A binding an
+     * arm opens is a place — that is what lets a clause be read against it — and a place is named by
+     * where it is: the two readers of what a binding's term is ({@link #keyOfNowhere},
+     * {@link #computesAsWhatItWasGiven}) are the readers of a binding that is <em>not</em> one.
+     * A term written here would be a second account of what names a binding, and the one nobody
+     * reads. */
+    private record Opens(Core value, FactSubject subject, NumericMeaning numeric) {}
+
+    /**
+     * What the arm's binding opens, or null where nothing here says.
+     *
+     * <p>Asked of what the pattern binds and not of what the arm looks like. A case whose carrier is
+     * the value binds that value, so the binding stands for the scrutinee and is about it. An
+     * optional's present carrier binds what stands under it: a different value, named as what that
+     * optional holds, and one no expression here is — so it is about something while standing for
+     * nothing. An absent carrier binds nothing at all. That is the whole of it — {@link Refinement}
+     * has three answers and each one settles this.
+     */
+    private Opens opens(Core.Case arm, Core scrutinee, Denotations at) {
+        FactSubject of = subjectOf(scrutinee, at);
+        if (of == null) {
+            return null;
+        }
+        return switch (arm.pattern().binding()) {
+            case Refinement.Direct(Type carried) -> arithmetic(carried, scrutinee, at);
+            case Refinement.OptionPresent ignored -> new Opens(null, heldBy(of), null);
+            case Refinement.OptionAbsent ignored -> null;
+        };
+    }
+
+    /**
+     * The arm's binding as the number a library operation computed, where the case it opened is
+     * where that operation answers one — and as the value the walk reached otherwise.
+     *
+     * <p>Which case was opened is decided here and the arithmetic is not. What an operation computes
+     * and where it answers it is one row of one table (spec §invariant-discharge-arithmetic), and
+     * this reads the row: a reader that recognised {@code divide} for itself would be a second place
+     * deciding which spellings are divisions, and the next operation answering a number as a case
+     * would be a third.
+     *
+     * <p>Read through the names the call was given, as everything else about a scrutinee is: {@code
+     * let q = Int.divide(a, b)} and a {@code match} written straight over the call are the same
+     * program, and a binding between the two is a name for the call rather than a step away from it.
+     */
+    private Opens arithmetic(Type carried, Core scrutinee, Denotations at) {
+        Core called = originating(scrutinee, at, new HashSet<>());
+        DischargeRules.NumericResult result = called == null ? null
+                : DischargeRules.numericResult(operationOf(called));
+        if (result == null || !(result.at() instanceof DischargeRules.Answered.InTheCaseCarrying(
+                Type answersIn)) || !answersIn.equals(carried)) {
+            return new Opens(scrutinee, subjectOf(scrutinee, at), null);
+        }
+        NumericMeaning meaning = computedBy(result, argsOf(called), carried);
+        FactSubject subject = subjectOpenedAs(meaning, carried, called, at);
+        // A call the term grammar cannot name leaves the number it answers named by nothing this can
+        // relate to anything else, and a binding standing for the value it opened is what an arm has
+        // always given. Nothing is lost by declining here; what is lost by naming it anyway is the
+        // one thing an atom asserts, which is that two writings of it are one value.
+        return subject == null ? new Opens(scrutinee, subjectOf(scrutinee, at), null)
+                : new Opens(scrutinee, subject, meaning);
+    }
+
+    /** The call {@code value} came from, through however many names it was given, or null where it
+     * came from something else. What an operation computes is a question about the operation, not
+     * about which tree is being read, so a call in either representation is one. */
+    Core originating(Core value, Denotations at, Set<BindingId> seen) {
+        if (operationOf(value) != null) {
+            return value;
+        }
+        if (value instanceof Core.Read read && seen.add(read.binding())) {
+            Core given = at.valueOf(read.binding());
+            return given == null || given == value ? null : originating(given, at, seen);
+        }
+        return null;
+    }
+
+    /**
      * The recipe {@code choice} is, or null where it is no choice or an arm of it is one this cannot
      * read.
      *
@@ -697,26 +849,29 @@ final class Terms {
      * that the readers of that question cannot come to disagree about it, which they had — an
      * attempted construction answers one of several and three spellings of the question left it out.
      *
-     * <p>Read where the choice stands, in the environment the choice stands in. An arm is not
-     * entered: what a {@code match} arm binds, what an {@code if}'s condition settles, and what an
-     * attempt's construction guarantees are facts about the arm and this records none of them
-     * ({@link Derivation.Chosen}). So an arm whose body reads what the arm itself bound reads a name
-     * nothing here has entered, and answers a place with no facts against it — sound, and no range
-     * (#973).
+     * <p>Each arm is read in the environment choosing it puts the reading in ({@link #choosing}), so
+     * an arm whose body reads what the arm itself bound reads a name that is entered. What choosing
+     * it states is recorded beside it as relations ({@link Conditions#settledBy}), which the naming
+     * of an expression may hold: a relation is the same wherever it is read, and what it comes to
+     * against a domain is not ({@link #recording}).
+     *
+     * <p>The decider itself is read where it stands, outside the arm: a condition and a scrutinee
+     * are written where the choice is, and the binder an arm introduces scopes over the arm alone.
      */
     private Derivation chosen(Choice choice, Denotations at) {
         if (choice == null) {
             return null;
         }
-        List<LinearForm<FactSubject>> forms = new ArrayList<>();
-        for (Core arm : choice.alternatives()) {
-            LinearForm<FactSubject> form = affineOf(arm, at);
+        List<Derivation.Chosen.Arm> arms = new ArrayList<>();
+        for (Choice.Arm arm : choice.arms()) {
+            LinearForm<FactSubject> form = affineOf(arm.answers(), choosing(arm.decidedBy(), at));
             if (form == null) {
                 return null;
             }
-            forms.add(form);
+            arms.add(new Derivation.Chosen.Arm(form,
+                    Conditions.settledBy(this, arm.decidedBy(), at)));
         }
-        return new Derivation.Chosen(forms);
+        return new Derivation.Chosen(arms);
     }
 
     /**
@@ -796,29 +951,32 @@ final class Terms {
      * of {@code 0.1} are one number, and a record's own equality says they are two. What this is for
      * is catching the check naming two values alike, and a difference in scale is not that.
      *
-     * <p>Asked of the recipe and not of its kind. Every part of a recipe is either one of the forms
-     * it is read from or the extent of its divisor, so a recipe added later is compared by what it
-     * answers rather than by a case somebody remembered to write — and a case nobody wrote would
-     * take two readings for one, which is the disagreement this exists to catch going the wrong way.
-     *
-     * <p>In order, which matters for the one recipe whose forms are not interchangeable: an arm
-     * answers where the condition beside it does, so a choice reordered is a different recipe and
-     * not this one read twice.
+     * <p>Asked of the recipe ({@link Derivation#sameAs}) and not worked out here from what it is
+     * read from. Those are two questions: what a recipe is read from is a set of forms to reach, and
+     * a reader comparing recipes by that list takes two recipes with the same forms grouped
+     * differently for one. A choice is where the grouping carries meaning — a relation states what
+     * it states of the arm it stands beside — so a recipe added later answers for its own shape
+     * rather than being compared by a case somebody remembered to write.
      */
     private static boolean sameDerivation(Derivation a, Derivation b) {
-        if (a.getClass() != b.getClass() || a.formsRead().size() != b.formsRead().size()) {
-            return false;
-        }
-        for (int i = 0; i < a.formsRead().size(); i++) {
-            if (!sameForm(a.formsRead().get(i), b.formsRead().get(i))) {
-                return false;
-            }
-        }
-        if (a.divisorExtent() == null || b.divisorExtent() == null) {
-            return a.divisorExtent() == b.divisorExtent();
-        }
-        return sameExtent(a.divisorExtent(), b.divisorExtent());
+        return a.sameAs(b, SAME_NUMBERS);
     }
+
+    /** How the numbers in a recipe are compared, which is this reading's answer and not the
+     * recipe's: what is being caught is the check naming two values alike, and a difference in
+     * scale is not that. */
+    private static final Derivation.Same SAME_NUMBERS = new Derivation.Same() {
+
+        @Override
+        public boolean forms(LinearForm<FactSubject> a, LinearForm<FactSubject> b) {
+            return sameForm(a, b);
+        }
+
+        @Override
+        public boolean extents(NumericDomain.Bounds a, NumericDomain.Bounds b) {
+            return a == null || b == null ? a == b : sameExtent(a, b);
+        }
+    };
 
     /** Whether two extents run between the same places. Asked on the order and not of the record's
      * own equality, for the reason the numbers are: {@code 0.00} and {@code 0} are one place, and
