@@ -36,6 +36,10 @@ public sealed interface ValueOrigin<K> {
     /** The expression is the position itself, or a number taken of it. */
     record IsAPosition<K>(K at) implements ValueOrigin<K> {
 
+        public IsAPosition {
+            java.util.Objects.requireNonNull(at, "this one names the position it is");
+        }
+
         @Override
         public Set<K> positions() {
             return Set.of(at);
@@ -54,6 +58,7 @@ public sealed interface ValueOrigin<K> {
             implements ValueOrigin<K> {
 
         public Applied {
+            java.util.Objects.requireNonNull(operation, "an application names its operation");
             arguments = List.copyOf(arguments);
         }
 
@@ -75,6 +80,11 @@ public sealed interface ValueOrigin<K> {
 
         public Composed {
             parts = List.copyOf(parts);
+            if (parts.isEmpty()) {
+                // Composed of nothing is not composition. An expression with nothing under it is a
+                // value written out or one this reader cannot name, and both of those say so.
+                throw new IllegalArgumentException("an expression composed of nothing is a leaf");
+            }
         }
 
         @Override
@@ -101,6 +111,10 @@ public sealed interface ValueOrigin<K> {
      * that a reader asking either gets the answer to the one it asked.
      */
     record MadeFromAPosition<K>(K at) implements ValueOrigin<K> {
+
+        public MadeFromAPosition {
+            java.util.Objects.requireNonNull(at, "this one names where the value came from");
+        }
 
         @Override
         public Set<K> positions() {

@@ -1442,28 +1442,27 @@ public final class InvariantChecker {
      */
     private UnreadComparison.Quantity<String> quantityOf(Core.Binary comparison, Denotations at,
                                                          Map<FactSubject, Coordinate> byName) {
-        // Each side's own answer, so that a reading which stopped and a reading which went all the
-        // way are never one absence. Where it stopped, the expression comes back with the
-        // environment it was being read in.
-        for (Core side : java.util.List.of(comparison.left(), comparison.right())) {
-            AffineForms.Outcome<FactSubject, Denotations> read = terms.outcomeOf(side, at);
-            if (read instanceof AffineForms.Outcome.StoppedAt<FactSubject, Denotations> stopped) {
+        // Named against this reader's own coordinates rather than against every number the
+        // discharge procedure can identify. A value that is a number and is no coordinate of the
+        // subject is one the walk stops at, so the expression and its environment come back
+        // together — read as an atom and found unprojectable afterwards, both were already gone.
+        AffineForms.Outcome<FactSubject, Denotations> left =
+                terms.outcomeOf(comparison.left(), at, byName::containsKey);
+        AffineForms.Outcome<FactSubject, Denotations> right =
+                terms.outcomeOf(comparison.right(), at, byName::containsKey);
+        for (AffineForms.Outcome<FactSubject, Denotations> side : java.util.List.of(left, right)) {
+            if (side instanceof AffineForms.Outcome.StoppedAt<FactSubject, Denotations> stopped) {
                 return new UnreadComparison.Quantity.NotRead<>(
                         placesIn(stopped.node(), stopped.at(), byName).origin());
             }
         }
-        NumericDomain.LinearForm<FactSubject> left = terms.affineOf(comparison.left(), at);
-        NumericDomain.LinearForm<FactSubject> right = terms.affineOf(comparison.right(), at);
+        NumericDomain.LinearForm<FactSubject> whole =
+                ((AffineForms.Outcome.Composed<FactSubject, Denotations>) left).form()
+                        .minus(((AffineForms.Outcome.Composed<FactSubject, Denotations>) right)
+                                .form());
         java.util.Set<String> over = new LinkedHashSet<>();
-        for (FactSubject atom : left.minus(right).coefs().keySet()) {
-            Coordinate here = byName.get(atom);
-            if (here == null) {
-                // An atom this reading has no coordinate for. Its own answer: nothing about the form
-                // was unreadable and the form does cut something, so calling it a reading that
-                // stopped would say this compiler fell short of a rule it read from end to end.
-                return new UnreadComparison.Quantity.NotProjected<>();
-            }
-            over.add(here.path());
+        for (FactSubject atom : whole.coefs().keySet()) {
+            over.add(byName.get(atom).path());
         }
         return over.isEmpty() ? new UnreadComparison.Quantity.CutsNothing<>()
                 : new UnreadComparison.Quantity.Over<>(over);

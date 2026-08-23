@@ -128,7 +128,12 @@ public final class AffineForms {
     public sealed interface Outcome<A, E> {
 
         /** The arithmetic, over whatever the caller calls an atom. */
-        record Composed<A, E>(LinearForm<A> form) implements Outcome<A, E> {}
+        record Composed<A, E>(LinearForm<A> form) implements Outcome<A, E> {
+
+            public Composed {
+                java.util.Objects.requireNonNull(form, "a reading that composed one has a form");
+            }
+        }
 
         /**
          * The expression this has no rule for and the caller could not name either, and what it was
@@ -140,7 +145,13 @@ public final class AffineForms {
          * whatever it happened to hold, which is that reading being done twice and the second one
          * free to disagree — and the day the two environments come apart, silently.
          */
-        record StoppedAt<A, E>(Core node, E at) implements Outcome<A, E> {}
+        record StoppedAt<A, E>(Core node, E at) implements Outcome<A, E> {
+
+            public StoppedAt {
+                java.util.Objects.requireNonNull(node, "a reading that stopped stopped somewhere");
+                java.util.Objects.requireNonNull(at, "and was reading it in something");
+            }
+        }
     }
 
     /**

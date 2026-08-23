@@ -440,7 +440,50 @@ final class Terms {
      * {@link AffineForms.ReadThrough} gives.
      */
     AffineForms.Outcome<FactSubject, Denotations> outcomeOf(Core raw, Denotations at) {
-        return AffineForms.outcome(raw, at, affineReading);
+        return outcomeOf(raw, at, subject -> true);
+    }
+
+    /**
+     * The same, naming only the atoms {@code names} accepts.
+     *
+     * <p>For a reader whose subjects are narrower than this one's. What may be named here is what
+     * the discharge procedure can carry a fact about, which is every number it can identify; what a
+     * measure may name is a coordinate of the value a clause is written about, which is fewer. A
+     * reader that took this one's atoms and then found it had no coordinate for one of them was
+     * holding a form it could not use and had thrown away the expression that made it — after which
+     * what it said about the rule came from the shape of the whole side.
+     *
+     * <p>So the narrowing goes in rather than the failure coming out. An expression whose value this
+     * reader cannot name is one the walk stops at, and a stop comes back with the expression and the
+     * environment it was read in, like every other.
+     */
+    AffineForms.Outcome<FactSubject, Denotations> outcomeOf(Core raw, Denotations at,
+            java.util.function.Predicate<FactSubject> names) {
+        return AffineForms.outcome(raw, at, new AffineForms.Reading<FactSubject, Denotations>() {
+
+            @Override
+            public LinearForm<FactSubject> leafOf(Core e, Denotations where) {
+                LinearForm<FactSubject> named = affineReading.leafOf(e, where);
+                return named == null || named.coefs().keySet().stream().allMatch(names)
+                        ? named : null;
+            }
+
+            @Override
+            public Denotations inside(Core.LetIn li, Denotations where) {
+                return affineReading.inside(li, where);
+            }
+
+            @Override
+            public AffineForms.ReadThrough<Denotations> readThrough(Core.Read read,
+                                                                    Denotations where) {
+                return affineReading.readThrough(read, where);
+            }
+
+            @Override
+            public boolean readsThrough(Core.FieldAccess fa, Denotations where) {
+                return affineReading.readsThrough(fa, where);
+            }
+        });
     }
 
     /**

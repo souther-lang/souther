@@ -62,14 +62,25 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
     sealed interface OfAComparison {
 
         /** The line the comparison draws. */
-        record Cuts(AffineReading read) implements OfAComparison {}
+        record Cuts(AffineReading read) implements OfAComparison {
+
+            public Cuts {
+                java.util.Objects.requireNonNull(read, "a comparison that cuts has a line");
+            }
+        }
 
         /** Read to the end, and the quantity it cuts is nothing: a comparison of constants, or one
          *  whose positions cancel. Nothing is missing here. */
         record CutsNothing() implements OfAComparison {}
 
         /** The reading stopped, at this expression and in the environment it was being read in. */
-        record Stopped(Core node, InputReads at) implements OfAComparison {}
+        record Stopped(Core node, InputReads at) implements OfAComparison {
+
+            public Stopped {
+                java.util.Objects.requireNonNull(node, "a reading that stopped stopped somewhere");
+                java.util.Objects.requireNonNull(at, "and was reading it in something");
+            }
+        }
     }
 
     /** The same, saying which of the three it is. */

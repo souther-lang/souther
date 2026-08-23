@@ -186,6 +186,26 @@ class WhatStoppedAComparisonIsReadOffWhatItIsTest {
                 whyAt(measured(named), "a"));
     }
 
+    /**
+     * An operation with arithmetic written round it is still the operation that stopped the
+     * reading, and a clause of the same shape says the same thing.
+     *
+     * <p>The two readers name different things: a body names a position of an input, and a clause
+     * names a coordinate of the value it is written about, of which an operation's answer is not
+     * one. Read as an atom and found unprojectable afterwards, the clause reader had thrown the
+     * operation away and answered from the shape of the whole side — so one token of arithmetic
+     * outside the call was the difference between two sentences for one rule.
+     */
+    @Test
+    void arithmeticRoundAnOperationDoesNotChangeWhatStoppedTheReading() {
+        for (String condition : List.of("Date.daysBetween(a, b) <= 30",
+                "Int.add(Date.daysBetween(a, b), 1) <= 30",
+                "Int.add(1, Date.daysBetween(a, b)) <= 30")) {
+            assertEquals(List.of(UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE),
+                    whyAt(guard("a: Date, b: Date", condition), "a"), condition);
+        }
+    }
+
     private static PartitionEvidence guard(String parameters, String condition) {
         String model = """
                 module demo

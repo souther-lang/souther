@@ -217,6 +217,33 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
     }
 
     /**
+     * A clause written over what an operation answered says so, with or without arithmetic round
+     * the call — and says what a {@code guard} of the same shape says.
+     *
+     * <p>What this reader may name is a coordinate of the value the clause is written about, and an
+     * operation's answer is not one. Named as an atom all the same and found to have no coordinate
+     * afterwards, the operation was gone by the time anything asked what stopped the reading, and
+     * the answer came from the shape of the whole side: one token of arithmetic outside the call
+     * was the difference between two sentences for one rule.
+     */
+    @Test
+    void aClauseOverWhatAnOperationAnsweredSaysSoHoweverItIsWrittenRound() {
+        for (String clause : List.of("Date.daysBetween(from, to) <= 30",
+                "Int.add(Date.daysBetween(from, to), 1) <= 30",
+                "Int.add(1, Date.daysBetween(from, to)) <= 30")) {
+            FieldDomains read = readingOf("""
+                    module example.spans
+
+                    data Span = { from: Date, to: Date }
+                        invariant within = %s
+                    """.formatted(clause), "Span");
+
+            assertEquals(List.of(new BlockReason.RuleAboutADerivedValue()),
+                    reasonsAt(read, "from"), clause);
+        }
+    }
+
+    /**
      * But one position on both sides of a comparison is not two positions.
      *
      * <p>{@code x < x + 1} names {@code x} either side of it and there is no other position for a

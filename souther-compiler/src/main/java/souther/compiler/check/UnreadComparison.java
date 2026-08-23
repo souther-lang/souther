@@ -36,10 +36,15 @@ public final class UnreadComparison {
     /**
      * What the arithmetic made of the comparison.
      *
-     * <p>Two cases and not a set that may be absent. That the arithmetic read no form at all is an
+     * <p>Three cases and not a set that may be absent. That the arithmetic read no form at all is an
      * answer about the comparison, and holding it as a missing set made it an answer about the
      * reader — after which the word a report printed turned on which side of the affine fragment an
      * operation happened to fall, which is no fact about the rule.
+     *
+     * <p><b>Each of them carries what it stands for.</b> A quantity over nothing is not a quantity,
+     * and a reading that stopped is not one without somewhere it stopped — held as cases that can be
+     * made from nothing, one of them stands in for another and whoever reads it reconstructs the
+     * difference from whatever else is to hand.
      */
     public sealed interface Quantity<K> {
 
@@ -48,6 +53,12 @@ public final class UnreadComparison {
 
             public Over {
                 positions = java.util.Collections.unmodifiableSet(new LinkedHashSet<>(positions));
+                if (positions.isEmpty()) {
+                    // A quantity over no position is what {@link CutsNothing} says, and saying it
+                    // twice lets a reader answer one of them for the other.
+                    throw new IllegalArgumentException(
+                            "a quantity is over something; nothing cut is CutsNothing");
+                }
             }
         }
 
@@ -61,16 +72,6 @@ public final class UnreadComparison {
          * compiler read completely.
          */
         record CutsNothing<K>() implements Quantity<K> {}
-
-        /**
-         * The arithmetic read a form and one of its atoms is not a position this reader names.
-         *
-         * <p>Told apart from both of the others because it is neither: nothing about the form was
-         * unreadable, and the form does cut something. What is missing is a coordinate of this
-         * reader's for one of the things it cuts, which is a fact about this reader and not about
-         * the rule.
-         */
-        record NotProjected<K>() implements Quantity<K> {}
 
         /**
          * The arithmetic read no form here, and what it was looking at when it stopped.
@@ -165,10 +166,9 @@ public final class UnreadComparison {
             // stops at the product, and read off the sides it came back as a rule about the
             // length — an operation this reads, named for the one it does not.
             case Quantity.NotRead<K> notRead -> whatThisSideSays(notRead.stoppedAt(), ordered);
-            // A form was read and still divides no position, or one of the things it cuts is not a
-            // position this reader names. What is left to say either way is about the side the
-            // threshold would have been read off.
-            case Quantity.Over<K> _, Quantity.NotProjected<K> _ -> whatThisSideSays(side, ordered);
+            // A form was read and still divides no position. What is left to say is about the side
+            // the threshold would have been read off.
+            case Quantity.Over<K> _ -> whatThisSideSays(side, ordered);
             // Answered above, and here so that the switch stays total.
             case Quantity.CutsNothing<K> _ -> new BlockReason.ComparisonCuttingNothing();
         };
