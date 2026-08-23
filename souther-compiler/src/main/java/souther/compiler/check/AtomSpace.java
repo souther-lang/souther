@@ -83,6 +83,11 @@ public final class AtomSpace {
      * <p>By name, which is the only thing a union's members have that the union itself did not
      * choose. What is downstream of it is a derived artifact's contents and the order a report
      * reads in, and neither may move because of how a set happened to be built.
+     *
+     * <p>Not what {@link Type#show} does with a union, which renders the members as it finds them.
+     * Putting this there would render the standard library's `+Int | DivisionByZero+` as
+     * `+DivisionByZero | Int+` — the order a reader wants there is the one the author wrote, and a
+     * union does not keep it. That is a wider question than the order an answer comes out in.
      */
     static List<TypeSymbol> statedBy(Type.Union union) {
         List<TypeSymbol> members = new ArrayList<>(union.members());

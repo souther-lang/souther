@@ -138,11 +138,12 @@ sealed interface CaseSpace {
                     ResolvedCase.resolve(CaseSelector.optionAbsent(), symbols)));
         }
         if (subject instanceof Type.Union union) {
-            // In the order a union states its members, which is worked out where the atoms are:
-            // asked of the set here and of {@link AtomSpace} there, the two would order one union
-            // two ways, and a report saying what a match left out reads one of them.
-            return new Cases(subject, "union `" + Type.show(union) + "`",
-                    direct(AtomSpace.statedBy(union), symbols));
+            // Described from the members this lists and not by showing the union again. What a
+            // report names the subject as and what it says the subject is made of are one answer;
+            // shown from the type, the members would come out in whatever order its set iterates,
+            // and the two halves of one message would order the same union two ways.
+            List<TypeSymbol> members = AtomSpace.statedBy(union);
+            return new Cases(subject, "union `" + shown(members) + "`", direct(members, symbols));
         }
         if (subject instanceof Type.Ref ref
                 && symbols.declarations().declaration(ref.name().key()) instanceof Hir.SumData sum) {
@@ -192,6 +193,23 @@ sealed interface CaseSpace {
             out.add(selected.name());
         }
         return out;
+    }
+
+    /**
+     * A union written out as its members, in the order it states them.
+     *
+     * <p>Not {@link Type#show}, which renders a union's members as it finds them. What that does is
+     * a wider question than this one — the standard library's {@code Int | DivisionByZero} would
+     * read {@code DivisionByZero | Int}, and the order a reader wants there is the one the author
+     * wrote, which a union does not keep — so what is settled here is only that one report orders
+     * one union one way.
+     */
+    private static String shown(List<TypeSymbol> members) {
+        List<String> names = new ArrayList<>();
+        for (TypeSymbol member : members) {
+            names.add(Type.show(Type.ref(member)));
+        }
+        return String.join(" | ", names);
     }
 
     /**

@@ -237,7 +237,24 @@ class CompileMatchOverANestedSumTest {
                 "the union written the other way round is the same union");
     }
 
+    /** And the subject the report names it on is the same union, however it was written. */
+    @Test
+    void theUnionAReportNamesReadsInThatOrderToo() {
+        assertEquals(saidOverUnion("A | B | C"), saidOverUnion("C | A | B"),
+                "what the match is said to be on is the union, not the order it was written in");
+        assertTrue(saidOverUnion("C | A | B").contains("A | B | C"),
+                () -> "in the order the union states its members, said " + saidOverUnion("C | A | B"));
+    }
+
+    private String saidOverUnion(String members) {
+        return refusedOverUnion(members).diagnostic().said().toString();
+    }
+
     private List<String> unansweredOfUnion(String members) {
+        return hinted(refusedOverUnion(members));
+    }
+
+    private CompileException refusedOverUnion(String members) {
         CompileException refused = assertThrows(CompileException.class, () -> Compiler.compile("""
                 module demo
 
@@ -255,7 +272,7 @@ class CompileMatchOverANestedSumTest {
                         | A -> 1
                 """.formatted(members)));
         assertEquals("E1201", refused.diagnostic().code());
-        return hinted(refused);
+        return refused;
     }
 
     /**
