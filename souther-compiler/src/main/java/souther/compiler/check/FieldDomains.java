@@ -1206,7 +1206,7 @@ public final class FieldDomains {
         // to leave, and it is worked out from those.
         Set<ProjectionEvidence.Cause.Lossy> lossy = new LinkedHashSet<>();
         readBy.forEach((rule, byPart) -> byPart.values().forEach(read -> {
-            for (Predicates.Constraint each : read.stated()) {
+            for (NumericConstraint each : read.stated()) {
                 if (constraints.numbers()
                         .provenByTheBoxAndItsDifferences(each.form(), each.rel())) {
                     continue;

@@ -65,13 +65,10 @@ final class DerivedNumericFacts {
      * {@link Relating}s as it has relations, and adding a field per kind of thing a recipe might
      * one day say is how a list of facts turns into a shape nobody can add to.
      */
-    sealed interface Fact {
+    sealed interface Fact permits Fact.Between, NumericConstraint {
 
         /** {@code atom} lies between {@code bounds}. */
         record Between(FactSubject atom, Bounds bounds) implements Fact {}
-
-        /** {@code form rel 0}, over however many atoms the form names. */
-        record Relating(LinearForm<FactSubject> form, Rel rel) implements Fact {}
     }
 
     /** At or above nought, as a range, for asking whether a reading put a value on that side. */
@@ -131,7 +128,7 @@ final class DerivedNumericFacts {
         Memo derived = new Memo();
         if ((!terms.derivations().isEmpty() || !terms.reductions().isEmpty()) && !base.isBottom()) {
             for (FactSubject atom : roots(terms, base, asked)) {
-                derive(atom, base, terms, derived, new LinkedHashSet<>());
+                derive(atom, base, terms, derived, new LinkedHashSet<>(), ContextMultiplicity.ofOneReading());
             }
         }
         derived.watched();
@@ -214,7 +211,7 @@ final class DerivedNumericFacts {
      * being answered would mean the naming built an atom out of itself.
      */
     private static List<Fact> derive(FactSubject atom, NumericDomain<FactSubject> base, Terms terms,
-                                     Memo done, Set<FactSubject> deriving) {
+                                     Memo done, Set<FactSubject> deriving, ContextMultiplicity copies) {
         List<Fact> had = done.answered.get(atom);
         if (had != null) {
             return had;
@@ -223,7 +220,7 @@ final class DerivedNumericFacts {
             throw new AnAtomComputedFromItself(atom);
         }
         done.evaluating(atom);
-        List<Fact> facts = factsFor(atom, base, terms, done, deriving);
+        List<Fact> facts = factsFor(atom, base, terms, done, deriving, copies);
         deriving.remove(atom);
         done.answered.put(atom, facts);
         return facts;
@@ -242,7 +239,7 @@ final class DerivedNumericFacts {
      * product of two folds reaches them through its factors.
      */
     private static List<Fact> factsFor(FactSubject atom, NumericDomain<FactSubject> base, Terms terms,
-                                       Memo done, Set<FactSubject> deriving) {
+                                       Memo done, Set<FactSubject> deriving, ContextMultiplicity copies) {
         InductiveBounds.Walk walk = terms.reductions().get(atom);
         if (walk != null) {
             // Each reading of the walk's own forms gets a memo of its own, since each is against a
@@ -251,7 +248,7 @@ final class DerivedNumericFacts {
             // true of a recipe whatever domain it is read in.
             return between(atom, InductiveBounds.provenOf(walk, base, terms, (form, domain) -> {
                 Memo memo = new Memo();
-                Bounds answer = boundsOf(form, domain, terms, memo, deriving);
+                Bounds answer = boundsOf(form, domain, terms, memo, deriving, copies);
                 // A reading, and watched as one. What the walk reads is where a step's own recipes
                 // are evaluated, so a reading that could not be seen here was the one place the
                 // memo could stop holding without anything saying so.
@@ -261,16 +258,16 @@ final class DerivedNumericFacts {
         }
         return switch (terms.derivations().get(atom)) {
             case Derivation.Product product -> between(atom, Intervals.product(
-                    boundsOf(product.left(), base, terms, done, deriving),
-                    boundsOf(product.right(), base, terms, done, deriving)), terms);
+                    boundsOf(product.left(), base, terms, done, deriving, copies),
+                    boundsOf(product.right(), base, terms, done, deriving, copies)), terms);
             case Derivation.TruncatingQuotient quotient ->
-                    quotient(atom, quotient, base, terms, done, deriving);
+                    quotient(atom, quotient, base, terms, done, deriving, copies);
             case Derivation.TruncatingRemainder remainder ->
-                    remainder(atom, remainder, base, terms, done, deriving);
+                    remainder(atom, remainder, base, terms, done, deriving, copies);
             case Derivation.RoundedQuotient rounded ->
-                    rounded(atom, rounded, base, terms, done, deriving);
+                    rounded(atom, rounded, base, terms, done, deriving, copies);
             case Derivation.Chosen chosen ->
-                    between(atom, chosen(chosen, base, terms, done, deriving), terms);
+                    between(atom, chosen(chosen, base, terms, done, deriving, copies), terms);
         };
     }
 
@@ -293,13 +290,95 @@ final class DerivedNumericFacts {
      * path through them would.
      */
     private static Bounds chosen(Derivation.Chosen chosen, NumericDomain<FactSubject> base,
-                                 Terms terms, Memo done, Set<FactSubject> deriving) {
-        List<LinearForm<FactSubject>> arms = chosen.arms();
-        Bounds out = boundsOf(arms.get(0), base, terms, done, deriving);
-        for (LinearForm<FactSubject> arm : arms.subList(1, arms.size())) {
-            out = Bounds.spanning(out, boundsOf(arm, base, terms, done, deriving));
+                                 Terms terms, Memo done, Set<FactSubject> deriving,
+                                 ContextMultiplicity copies) {
+        List<Derivation.Chosen.Arm> arms = chosen.arms();
+        ContextMultiplicity inAnArm = copies.opening(contextsIn(arms));
+        Bounds out = null;
+        for (Derivation.Chosen.Arm arm : arms) {
+            if (inAnArm == null || arm.settles().isEmpty()) {
+                // Read where the caller is reading: the split was not opened, or this arm states
+                // nothing this reader can use and so is not a reading of its own.
+                out = spanned(out, boundsOf(arm.answer(), base, terms, done, deriving, copies));
+                continue;
+            }
+            NumericDomain<FactSubject> under = stating(arm, base, terms);
+            // An arm whose statements cannot all hold is an arm this choice never answers, so it
+            // contributes no values to the span. Spanning with what it would have answered widens
+            // the range by an arm that is not there — which is how a value every arm of which is
+            // the accumulator stopped being the accumulator.
+            if (under.isBottom()) {
+                continue;
+            }
+            out = spanned(out, readingAnArm(arm, under, terms, deriving, inAnArm));
+        }
+        if (out != null) {
+            return out;
+        }
+        // Every arm's statements were refused together, which is a disagreement about reachability
+        // this is not the reader to settle. Read them as they stand.
+        for (Derivation.Chosen.Arm arm : arms) {
+            out = spanned(out, boundsOf(arm.answer(), base, terms, done, deriving, copies));
         }
         return out;
+    }
+
+    private static Bounds spanned(Bounds out, Bounds answered) {
+        return out == null ? answered : Bounds.spanning(out, answered);
+    }
+
+    /**
+     * How many readings this choice comes to, which is what opening it would copy the reading into.
+     *
+     * <p>Asked of what this reader gets and not of how the choice was written. A split of arms is a
+     * split of readings only where the arms are read against different domains; an arm that states
+     * nothing this reader can use is read against the domain the caller was reading against, and is
+     * that reading rather than a copy of it. So a conditional on a flag — {@code if x.on then …} —
+     * comes to one, which {@link ContextMultiplicity} opens for nothing, and a clamp written inside
+     * one is opened on its own terms rather than after a budget something numerically silent had
+     * already spent.
+     *
+     * <p>Two arms stating the same relations are counted as two, since what makes two statements one
+     * is a comparison of forms this does not make. That is a count too high and never too low, so it
+     * spends budget where it need not and refuses nothing that a smaller count would have admitted
+     * to be unsound.
+     */
+    private static int contextsIn(List<Derivation.Chosen.Arm> arms) {
+        int stating = 0;
+        boolean anySilent = false;
+        for (Derivation.Chosen.Arm arm : arms) {
+            if (arm.settles().isEmpty()) {
+                anySilent = true;
+            } else {
+                stating++;
+            }
+        }
+        return stating + (anySilent ? 1 : 0);
+    }
+
+    /** {@code base} with what choosing {@code arm} states taken as holding. */
+    private static NumericDomain<FactSubject> stating(Derivation.Chosen.Arm arm,
+                                                      NumericDomain<FactSubject> base, Terms terms) {
+        NumericDomain<FactSubject> under = base;
+        for (NumericConstraint settled : arm.settles()) {
+            under = under.assume(settled.form(), settled.rel(), terms.kindsOf(settled.form()));
+        }
+        return under;
+    }
+
+    /** What one arm answers, read against {@code under}, out of a memo of its own.
+     *
+     * <p>A memo of its own because a memo is what one reading answered, and a reading is against one
+     * domain: an atom answered under one arm's statements is not what it comes to under another's.
+     * {@code deriving} is shared, since an atom built out of itself is built out of itself whatever
+     * domain it is read in. */
+    private static Bounds readingAnArm(Derivation.Chosen.Arm arm, NumericDomain<FactSubject> under,
+                                       Terms terms, Set<FactSubject> deriving,
+                                       ContextMultiplicity copies) {
+        Memo memo = new Memo();
+        Bounds answered = boundsOf(arm.answer(), under, terms, memo, deriving, copies);
+        memo.watched();
+        return answered;
     }
 
     /**
@@ -380,13 +459,13 @@ final class DerivedNumericFacts {
      */
     private static List<Fact> quotient(FactSubject atom, Derivation.TruncatingQuotient quotient,
                                        NumericDomain<FactSubject> base, Terms terms,
-                                       Memo done, Set<FactSubject> deriving) {
+                                       Memo done, Set<FactSubject> deriving, ContextMultiplicity copies) {
         Bounds divisor = divisorOf(quotient.divisor(), quotient.divisorExtent(), base, terms, done,
-                deriving);
+                deriving, copies);
         if (divisor == null) {
             return List.of();
         }
-        Bounds numerator = boundsOf(quotient.numerator(), base, terms, done, deriving);
+        Bounds numerator = boundsOf(quotient.numerator(), base, terms, done, deriving, copies);
         Bounds held = heldToWhatItCanBe(atom,
                 Intervals.truncatingQuotient(numerator, divisor), terms);
         // Nothing at all, and not the halves that do not mention the range. What is left of a
@@ -422,14 +501,14 @@ final class DerivedNumericFacts {
      */
     private static List<Fact> remainder(FactSubject atom, Derivation.TruncatingRemainder remainder,
                                         NumericDomain<FactSubject> base, Terms terms,
-                                        Memo done, Set<FactSubject> deriving) {
+                                        Memo done, Set<FactSubject> deriving, ContextMultiplicity copies) {
         Bounds divisor = divisorOf(remainder.divisor(), remainder.divisorExtent(), base, terms, done,
-                deriving);
+                deriving, copies);
         if (divisor == null) {
             return List.of();
         }
         return leftOver(LinearForm.atom(atom), divisor,
-                boundsOf(remainder.numerator(), base, terms, done, deriving));
+                boundsOf(remainder.numerator(), base, terms, done, deriving, copies));
     }
 
     /**
@@ -461,15 +540,15 @@ final class DerivedNumericFacts {
                                        Bounds dividend) {
         List<Fact> facts = new ArrayList<>();
         if (dividend.liesWithin(AT_OR_ABOVE_NOUGHT)) {
-            facts.add(new Fact.Relating(left, Rel.GE));
+            facts.add(new NumericConstraint(left, Rel.GE));
         }
         if (dividend.liesWithin(AT_OR_BELOW_NOUGHT)) {
-            facts.add(new Fact.Relating(left, Rel.LE));
+            facts.add(new NumericConstraint(left, Rel.LE));
         }
         BigDecimal magnitude = noFurtherFromNoughtThan(divisor);
         if (magnitude != null) {
-            facts.add(new Fact.Relating(left.minus(LinearForm.constant(magnitude)), Rel.LT));
-            facts.add(new Fact.Relating(left.plus(LinearForm.constant(magnitude)), Rel.GT));
+            facts.add(new NumericConstraint(left.minus(LinearForm.constant(magnitude)), Rel.LT));
+            facts.add(new NumericConstraint(left.plus(LinearForm.constant(magnitude)), Rel.GT));
         }
         return facts;
     }
@@ -494,14 +573,14 @@ final class DerivedNumericFacts {
      */
     private static List<Fact> rounded(FactSubject atom, Derivation.RoundedQuotient rounded,
                                       NumericDomain<FactSubject> base, Terms terms,
-                                      Memo done, Set<FactSubject> deriving) {
+                                      Memo done, Set<FactSubject> deriving, ContextMultiplicity copies) {
         Bounds divisor = divisorOf(rounded.divisor(), rounded.divisorExtent(), base, terms, done,
-                deriving);
+                deriving, copies);
         if (divisor == null) {
             return List.of();
         }
-        Bounds numerator = boundsOf(rounded.numerator(), base, terms, done, deriving);
-        Integer places = placesOf(boundsOf(rounded.scale(), base, terms, done, deriving),
+        Bounds numerator = boundsOf(rounded.numerator(), base, terms, done, deriving, copies);
+        Integer places = placesOf(boundsOf(rounded.scale(), base, terms, done, deriving, copies),
                 terms.policy());
         Bounds answered = Intervals.roundedQuotient(numerator, divisor,
                 places == null ? 0 : places);
@@ -510,10 +589,10 @@ final class DerivedNumericFacts {
         }
         List<Fact> facts = new ArrayList<>();
         if (answered.liesWithin(AT_OR_ABOVE_NOUGHT)) {
-            facts.add(new Fact.Relating(LinearForm.atom(atom), Rel.GE));
+            facts.add(new NumericConstraint(LinearForm.atom(atom), Rel.GE));
         }
         if (answered.liesWithin(AT_OR_BELOW_NOUGHT)) {
-            facts.add(new Fact.Relating(LinearForm.atom(atom), Rel.LE));
+            facts.add(new NumericConstraint(LinearForm.atom(atom), Rel.LE));
         }
         return facts;
     }
@@ -584,8 +663,8 @@ final class DerivedNumericFacts {
      * {@link #quotient}. */
     private static Bounds divisorOf(LinearForm<FactSubject> form, Bounds extent,
                                     NumericDomain<FactSubject> base, Terms terms,
-                                    Memo done, Set<FactSubject> deriving) {
-        Bounds divisor = boundsOf(form, base, terms, done, deriving).meet(extent);
+                                    Memo done, Set<FactSubject> deriving, ContextMultiplicity copies) {
+        Bounds divisor = boundsOf(form, base, terms, done, deriving, copies).meet(extent);
         return !divisor.holdsAValue() || divisor.admits(Count.ZERO) ? null : divisor;
     }
 
@@ -598,11 +677,11 @@ final class DerivedNumericFacts {
      * everything else the reading has recorded.
      */
     private static Bounds boundsOf(LinearForm<FactSubject> form, NumericDomain<FactSubject> base, Terms terms,
-                                   Memo done, Set<FactSubject> deriving) {
+                                   Memo done, Set<FactSubject> deriving, ContextMultiplicity copies) {
         NumericDomain<FactSubject> with = base;
         for (FactSubject atom : form.coefs().keySet()) {
             if (recorded(terms, atom)) {
-                with = taking(with, derive(atom, base, terms, done, deriving), terms);
+                with = taking(with, derive(atom, base, terms, done, deriving, copies), terms);
             }
         }
         return with.boundsOf(form);
@@ -618,7 +697,7 @@ final class DerivedNumericFacts {
             out = switch (fact) {
                 case Fact.Between(FactSubject atom, Bounds bounds) ->
                         out.assuming(atom, bounds, terms.kindsOf(LinearForm.atom(atom)));
-                case Fact.Relating(LinearForm<FactSubject> form, Rel rel) ->
+                case NumericConstraint(LinearForm<FactSubject> form, Rel rel) ->
                         out.assume(form, rel, terms.kindsOf(form));
             };
         }

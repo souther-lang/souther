@@ -82,15 +82,22 @@ class ARecipeIsEvaluatedOnceForTheReadingThatAsksItTest {
     }
 
     /**
-     * The cost of one more level of nesting is the same at every depth.
+     * One more level of nesting stops costing more once the splits have compounded as far as they
+     * may.
      *
-     * <p>Which follows from the memo and from nothing else here: the readings are the same readings
-     * at every depth — one per candidate range, against one domain each — and what changes is only
-     * how many recipes stand under the step's own form. So a level costs its own recipes once, and
-     * the increments hold still.
+     * <p>Which is the claim now that an arm is read under what chose it. Two arms are two domains,
+     * so a recipe under them is asked twice and rightly — the memo holds within a reading and these
+     * are two readings. What the memo still keeps out is a reading of every path: within one arm's
+     * domain, a choice below it is derived once however many arms stand over it.
+     *
+     * <p>So what stops the doubling is not the memo but the limit
+     * ({@link ContextMultiplicity}), and this holds the two together: the increments grow while the
+     * splits are opened and hold still once opening one more would compound past it. A depth beyond
+     * that costs what the depth before it cost, which is what a bound on compounding means measured
+     * in recipes.
      */
     @Test
-    void oneMoreLevelOfNestingCostsTheSameAtEveryDepth() {
+    void nestingStopsCostingMoreOnceTheSplitsHaveCompoundedAsFarAsTheyMay() {
         List<Integer> counts = new ArrayList<>();
         for (int depth = 1; depth <= 6; depth++) {
             counts.add(recipesEvaluated(nestedInAStep(depth)));
@@ -102,16 +109,35 @@ class ARecipeIsEvaluatedOnceForTheReadingThatAsksItTest {
             steps.add(counts.get(i) - counts.get(i - 1));
         }
         assertTrue(steps.get(0) > 0, "a level costs something, or this is watching nothing: " + counts);
+        assertEquals(steps.get(steps.size() - 2), steps.get(steps.size() - 1),
+                "the last level costs what the one before it cost, so the splits had compounded as"
+                        + " far as they may and a further depth buys no factor: " + counts);
         for (int i = 1; i < steps.size(); i++) {
-            assertEquals(steps.get(0), steps.get(i),
-                    "the sixth level costs what the second did, so a recipe under two arms was"
-                            + " evaluated for the reading and not for each arm: " + counts);
+            assertTrue(steps.get(i) >= steps.get(i - 1),
+                    "a level never costs less than the one before it: " + counts);
         }
+    }
+
+    /** And the increments really did grow before they held still, so the assertion above is about a
+     * limit being reached and not about a reading that never opened a split at all. */
+    @Test
+    void theIncrementsGrowBeforeTheyHoldStill() {
+        int one = recipesEvaluated(nestedInAStep(1));
+        int two = recipesEvaluated(nestedInAStep(2));
+        int three = recipesEvaluated(nestedInAStep(3));
+        assertTrue(three - two > two - one,
+                "the second level costs more than the first, which is the compounding this bounds");
     }
 
     /** And the body it is counting is one the rule reads to the end: every arm is the accumulator,
      * so the walk answers the seed and the construction is discharged. A body the reading gave up on
-     * would hold the increments still for a reason that has nothing to do with the memo. */
+     * would hold the increments still for a reason that has nothing to do with the memo.
+     *
+     * <p>It is also where an arm no path reaches shows. Nested, the conditions come to combinations
+     * that cannot all hold — {@code x > 1} under {@code x <= 0} — and an arm whose statements
+     * contradict is an arm this choice never answers. Spanning with what such an arm would have
+     * answered widens the range by an arm that is not there, and a value every arm of which is the
+     * accumulator stops being the accumulator. */
     @Test
     void theNestedStepIsOneTheRuleReads() {
         for (int depth = 1; depth <= 6; depth++) {

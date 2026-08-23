@@ -69,7 +69,7 @@ interface ClauseReading<S> {
     }
 
     private S readInto(Core e, boolean positive, java.util.function.BiConsumer<Core, S> per) {
-        Core under = Predicates.negated(e);
+        Core under = Conditions.negated(e);
         if (under != null) {
             return read(under, !positive, per);
         }

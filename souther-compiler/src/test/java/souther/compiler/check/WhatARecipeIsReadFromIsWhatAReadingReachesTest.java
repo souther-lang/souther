@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.numeric.NumericDomain.Bounds;
 import souther.compiler.numeric.NumericDomain.LinearForm;
+import souther.compiler.numeric.NumericDomain.Rel;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 
@@ -67,12 +68,41 @@ class WhatARecipeIsReadFromIsWhatAReadingReachesTest {
         FactSubject choice = marker();
         terms.derivations().put(product,
                 new Derivation.Product(LinearForm.atom(left), LinearForm.atom(right)));
-        terms.derivations().put(choice, new Derivation.Chosen(
-                List.of(LinearForm.atom(product), LinearForm.atom(other))));
+        terms.derivations().put(choice, new Derivation.Chosen(List.of(
+                new Derivation.Chosen.Arm(LinearForm.atom(product), List.of()),
+                new Derivation.Chosen.Arm(LinearForm.atom(other), List.of()))));
 
         assertEquals(Set.of(choice, product, other, left, right),
                 terms.reached(LinearForm.atom(choice)),
                 "the arms, and what the recipes under the arms are read from");
+    }
+
+    /**
+     * And a value only what decides an arm names is reached, though no arm answers it.
+     *
+     * <p>The dependency that arrives inside something else. What an arm's context settles is read
+     * later and against a domain, but what that reading may reach is decided now: a value it needs
+     * and this does not reach arrives with its guarantee already dropped by {@link StepInputFacts},
+     * and the walk fails to prove what the declarations say with nothing saying why.
+     *
+     * <p>Beside the reflection test below and not covered by it. That one catches a form a recipe
+     * holds and does not declare; this catches a form the producer never put in the recipe at all,
+     * which is a hand-written list being wrong rather than incomplete.
+     */
+    @Test
+    void aReadingReachesWhatDecidedAnArmAndNotOnlyWhatTheArmsAnswer() {
+        Terms terms = new Terms(Symbols.none(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        FactSubject answered = marker();
+        FactSubject askedAbout = marker();
+        FactSubject choice = marker();
+        terms.derivations().put(choice, new Derivation.Chosen(List.of(
+                new Derivation.Chosen.Arm(LinearForm.atom(answered),
+                        List.of(new NumericConstraint(LinearForm.atom(askedAbout), Rel.GE))),
+                new Derivation.Chosen.Arm(LinearForm.atom(answered), List.of()))));
+
+        assertTrue(terms.reached(LinearForm.atom(choice)).contains(askedAbout),
+                "no arm answers it and deciding between them reads it, which is what the arm's"
+                        + " context will be read from");
     }
 
     /** And a name nothing was filed against reaches only itself, so the answer above is the
@@ -127,6 +157,9 @@ class WhatARecipeIsReadFromIsWhatAReadingReachesTest {
         }
         if (type == Bounds.class) {
             return new Bounds(null, null);   // a range, and no form stands in one
+        }
+        if (type.isEnum()) {
+            return type.getEnumConstants()[0];   // one of a fixed set, and no form stands in one
         }
         if (type.isRecord()) {
             return record(type, put);
