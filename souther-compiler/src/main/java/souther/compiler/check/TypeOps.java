@@ -376,34 +376,11 @@ public final class TypeOps {
 
     /** The cases of {@code t} when it is a sum — a declared {@code data S = A | B} or the union a
      * branch widened to — with a case that is itself a sum folded to its own cases. Null when
-     * {@code t} is not a sum at all. */
+     * {@code t} is not a sum at all, which is the answer this has that {@link LeafSpace} does not:
+     * a reader here is asking whether there are cases to read, and a type that is its own one leaf
+     * is not that. */
     static List<TypeSymbol> sumCases(Type t, Symbols symbols) {
-        return sumCases(t, symbols, new HashSet<>());
-    }
-
-    private static List<TypeSymbol> sumCases(Type t, Symbols symbols, Set<TypeSymbol> visiting) {
-        List<TypeSymbol> names;
-        if (t instanceof Type.Ref ref && symbols.declarations().declaration(ref.name().key()) instanceof Hir.SumData sum) {
-            if (!visiting.add(ref.name())) {
-                return List.of();   // a sum reaching itself; DataChecker reports it, this must terminate
-            }
-            names = caseNames(sum);
-        } else if (t instanceof Type.Union union) {
-            names = List.copyOf(union.members());
-        } else {
-            return null;
-        }
-        List<TypeSymbol> leaves = new ArrayList<>();
-        for (TypeSymbol name : names) {
-            List<TypeSymbol> nested = symbols.declarations().declaration(name.key()) instanceof Hir.SumData
-                    ? sumCases(Type.ref(name), symbols, visiting) : null;
-            if (nested == null) {
-                leaves.add(name);
-            } else {
-                leaves.addAll(nested);
-            }
-        }
-        return leaves;
+        return isSumType(t, symbols) ? LeafSpace.leavesOf(t, symbols) : null;
     }
 
     /** A sum's cases: what each name it lists denotes. A name that denotes nothing lists no case —
@@ -940,25 +917,7 @@ public final class TypeOps {
 
     /** The set of leaf (non-sum) case names a data-like type covers, flattening nested sums. */
     public static Set<TypeSymbol> leafCases(Type t, Symbols symbols) {
-        Set<TypeSymbol> out = new LinkedHashSet<>();
-        collectLeafCases(t, symbols, out, new HashSet<>());
-        return out;
-    }
-
-    private static void collectLeafCases(Type t, Symbols symbols, Set<TypeSymbol> out,
-                                         Set<TypeSymbol> visiting) {
-        for (TypeSymbol name : namesOf(t)) {
-            if (symbols.declarations().declaration(name.key()) instanceof Hir.SumData s) {
-                if (!visiting.add(name)) {
-                    continue;   // a sum reaching itself; DataChecker reports it, this must terminate
-                }
-                for (TypeSymbol caseName : caseNames(s)) {
-                    collectLeafCases(Type.ref(caseName), symbols, out, visiting);
-                }
-            } else {
-                out.add(name);
-            }
-        }
+        return new LinkedHashSet<>(LeafSpace.leavesOf(t, symbols));
     }
 
     /**
@@ -1380,11 +1339,7 @@ public final class TypeOps {
 
     /** A sum's leaf cases in declaration order, nested sums flattened where they are written. */
     public static List<TypeSymbol> leafCases(Hir.SumData sum, Symbols symbols) {
-        Set<TypeSymbol> leaves = new LinkedHashSet<>();
-        for (TypeSymbol c : caseNames(sum)) {
-            leaves.addAll(leafCases(Type.ref(c), symbols));
-        }
-        return List.copyOf(leaves);
+        return LeafSpace.leavesOf(sum, symbols);
     }
 
     /** The key of the first {@code Map} inside {@code t} that cannot cross the boundary, or null when
