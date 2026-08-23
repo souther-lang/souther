@@ -1318,44 +1318,63 @@ public final class InvariantChecker {
      */
     private List<Coordinate> coordinatesIn(Core e, Denotations at,
                                            Map<FactSubject, Coordinate> byName) {
+        Places places = placesIn(e, at, byName);
         List<Coordinate> out = new ArrayList<>();
-        // By the place and not by the whole of what a coordinate is. One place answers to more than
-        // one name, and two of its names carry the same rules; kept apart, a clause about one
-        // position would be filed twice.
-        for (Coordinate each : originOf(e, at, byName).positions()) {
-            if (out.stream().noneMatch(had -> had.path().equals(each.path()))) {
-                out.add(each);
-            }
+        for (String path : places.origin().positions()) {
+            out.add(places.met().get(path));
         }
         return out;
     }
 
     /**
-     * What {@code e} is made of, in this reader's coordinates.
+     * What one expression is made of here, and which coordinate each place it named turned out to
+     * be.
+     *
+     * <p>By the place and not by the whole of what a coordinate is. One place answers to more than
+     * one name and the names carry the same rules, so a clause about one position is named once —
+     * held under the coordinate instead, two names of one place would be two.
+     */
+    private record Places(ValueOrigin<String> origin, Map<String, Coordinate> met) {}
+
+    /** What the place {@code path} is counted on, off whichever side of the comparison met it. */
+    private static Carrier carrierAt(String path, Places left, Places right) {
+        Coordinate here = left.met().containsKey(path) ? left.met().get(path)
+                : right.met().get(path);
+        return here == null ? null : here.carrier();
+    }
+
+    /**
+     * What {@code e} is made of, in this reader's places.
      *
      * <p>The walk is {@link ValueOrigin}'s, so a clause and a {@code guard}'s comparison of the same
      * shape are taken apart the same way. What is this reader's own is the lookup: a clause names a
      * coordinate of the value it is written about, where a body names a position of an input.
      */
-    private ValueOrigin<Coordinate> originOf(Core e, Denotations at,
-                                             Map<FactSubject, Coordinate> byName) {
-        return ValueOrigin.of(e, at, new ValueOrigin.Reading<Coordinate, Denotations>() {
+    private Places placesIn(Core e, Denotations at, Map<FactSubject, Coordinate> byName) {
+        Map<String, Coordinate> met = new LinkedHashMap<>();
+        ValueOrigin<String> origin = ValueOrigin.of(e, at,
+                new ValueOrigin.Reading<String, Denotations>() {
 
             @Override
-            public Coordinate positionOf(Core here, Denotations where) {
+            public String positionOf(Core here, Denotations where) {
                 FactSubject named = nameOf(here, where);
-                return named == null ? null : byName.get(named);
+                Coordinate found = named == null ? null : byName.get(named);
+                if (found == null) {
+                    return null;
+                }
+                met.putIfAbsent(found.path(), found);
+                return found.path();
             }
 
             /** A clause is written about the value in front of it, and there is no operation here
              *  that hands one of its parts out under a name of its own. */
             @Override
-            public Coordinate madeFrom(Core here, Denotations where) {
+            public String madeFrom(Core here, Denotations where) {
                 return null;
             }
 
             @Override
-            public AffineForms.ReadThrough<Denotations> readThrough(Core.Read read,
+            public AffineForms.ReadThrough<Denotations> readThrough(Core.Read name,
                                                                     Denotations where) {
                 return null;
             }
@@ -1365,6 +1384,7 @@ public final class InvariantChecker {
                 return where;
             }
         });
+        return new Places(origin, met);
     }
 
     /**
@@ -1391,8 +1411,11 @@ public final class InvariantChecker {
         if (!InvariantBound.ordering(comparison.op())) {
             return;
         }
-        BlockReason.AboutARule why = UnreadComparison.why(sideOf(comparison.left(), at, byName),
-                sideOf(comparison.right(), at, byName), quantityOf(comparison, at, byName));
+        Places left = placesIn(comparison.left(), at, byName);
+        Places right = placesIn(comparison.right(), at, byName);
+        BlockReason.AboutARule why = UnreadComparison.why(left.origin(), right.origin(),
+                quantityOf(comparison, at, byName),
+                place -> carrierAt(place, left, right) != null);
         for (Coordinate each : coordinatesIn(comparison, at, byName)) {
             FieldDomains.Unread said =
                     new FieldDomains.Unread(each.path(), each.measured(), from, comparison, why);
@@ -1411,12 +1434,12 @@ public final class InvariantChecker {
      * of the same shape in a body two declarations away is described in the same words — which is
      * what {@code invariant Int.add(length.value, width.value) <= 150} and the guard beside it are.
      */
-    private java.util.Set<String> quantityOf(Core.Binary comparison, Denotations at,
-                                             Map<FactSubject, Coordinate> byName) {
+    private UnreadComparison.Quantity<String> quantityOf(Core.Binary comparison, Denotations at,
+                                                         Map<FactSubject, Coordinate> byName) {
         NumericDomain.LinearForm<FactSubject> left = terms.affineOf(comparison.left(), at);
         NumericDomain.LinearForm<FactSubject> right = terms.affineOf(comparison.right(), at);
         if (left == null || right == null) {
-            return null;
+            return new UnreadComparison.Quantity.NotRead<>();
         }
         java.util.Set<String> over = new LinkedHashSet<>();
         for (FactSubject atom : left.minus(right).coefs().keySet()) {
@@ -1426,38 +1449,11 @@ public final class InvariantChecker {
                 // positions would come back as one and this reader would describe the rule
                 // differently from the one that reads the same shape in a body — which is the thing
                 // sharing the rule was meant to stop.
-                return null;
+                return new UnreadComparison.Quantity.NotRead<>();
             }
             over.add(here.path());
         }
-        return over;
-    }
-
-    /**
-     * What one side of a comparison came to here.
-     *
-     * <p>Which coordinates it names is the recursive question and whether it <em>is</em> one is the
-     * narrower one, and the two are what tell a coordinate inside an expression from a coordinate.
-     * Asked the narrow question alone, {@code y + 1} named nothing and a clause relating two
-     * coordinates came back as a form nobody could read — which is the answer a {@code guard}
-     * writing the same comparison does not get.
-     *
-     * <p>By the place and not by the name. A place answers to more than one name — a number is
-     * called one thing by the interval algebra and another by everything else — so two sides
-     * naming one place through two of its names would be a comparison against another position.
-     */
-    private UnreadComparison.Side<String> sideOf(Core e, Denotations at,
-                                                 Map<FactSubject, Coordinate> byName) {
-        List<Coordinate> named = coordinatesIn(e, at, byName);
-        if (named.isEmpty()) {
-            return new UnreadComparison.Side.NamesNothing<>();
-        }
-        FactSubject itself = nameOf(e, at);
-        Coordinate here = itself == null ? null : byName.get(itself);
-        return here == null
-                ? new UnreadComparison.Side.NamesInside<>(new LinkedHashSet<>(
-                        named.stream().map(Coordinate::path).toList()))
-                : new UnreadComparison.Side.IsOne<>(here.path(), here.carrier() != null);
+        return new UnreadComparison.Quantity.Over<>(over);
     }
 
     /**

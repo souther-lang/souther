@@ -360,9 +360,26 @@ public final class GuardThresholds {
      */
     static BlockReason.AboutARule why(Core.Binary comparison, InputReads reads,
                            Symbols symbols) {
-        return UnreadComparison.why(sideOf(comparison.left(), reads, symbols),
-                sideOf(comparison.right(), reads, symbols),
-                quantityOf(comparison, reads, symbols));
+        return UnreadComparison.why(originOf(comparison.left(), reads, symbols),
+                originOf(comparison.right(), reads, symbols),
+                quantityOf(comparison, reads, symbols),
+                at -> orderableAt(at, reads, symbols));
+    }
+
+    /**
+     * Whether a line can be drawn on what the position at {@code path} carries.
+     *
+     * <p>Off the reading that found the position, which is what holds its declared type. Asked of
+     * the expression the comparison was written with instead, the answer was the same wherever the
+     * side was the position and came from a second account of where a value is read.
+     */
+    private static boolean orderableAt(TermPath path, InputReads reads, Symbols symbols) {
+        for (souther.compiler.inputs.Position each : reads.read().positions()) {
+            if (each.term().path().equals(path)) {
+                return orderable(each.type(), symbols);
+            }
+        }
+        return false;
     }
 
     /**
@@ -373,17 +390,18 @@ public final class GuardThresholds {
      * parameter. What is done with the answer is {@link UnreadComparison}'s, so a clause of the same
      * shape two declarations away is described in the same words.
      */
-    private static java.util.Set<TermPath> quantityOf(Core.Binary comparison, InputReads reads,
-                                                      Symbols symbols) {
+    private static UnreadComparison.Quantity<TermPath> quantityOf(Core.Binary comparison,
+                                                                  InputReads reads,
+                                                                  Symbols symbols) {
         AffineReading read = AffineReading.of(comparison, reads, symbols);
         if (read == null) {
-            return null;
+            return new UnreadComparison.Quantity.NotRead<>();
         }
         java.util.Set<TermPath> over = new java.util.LinkedHashSet<>();
         for (NumericTerm atom : read.form().coefs().keySet()) {
             over.add(atom.path());
         }
-        return over;
+        return new UnreadComparison.Quantity.Over<>(over);
     }
 
     /**
@@ -399,18 +417,6 @@ public final class GuardThresholds {
      * one, a side would be carrying two answers to "which position is this about" and the
      * comparison between them would be settled by whichever the caller looked at.
      */
-    private static UnreadComparison.Side<TermPath> sideOf(Core e, InputReads reads,
-                                                          Symbols symbols) {
-        List<TermPath> named = mentionedIn(e, reads, symbols);
-        if (named.isEmpty()) {
-            return new UnreadComparison.Side.NamesNothing<>();
-        }
-        return termOf(e, reads, symbols) == null
-                ? new UnreadComparison.Side.NamesInside<>(new java.util.LinkedHashSet<>(named))
-                : new UnreadComparison.Side.IsOne<>(named.getFirst(),
-                        orderable(e.type(), symbols));
-    }
-
     static List<TermPath> mentionedIn(Core e, InputReads reads, Symbols symbols) {
         return new ArrayList<>(originOf(e, reads, symbols).positions());
     }

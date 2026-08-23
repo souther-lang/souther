@@ -114,8 +114,10 @@ class WhatStoppedADerivationIsWhatIsReportedTest {
         // And the comparison outside the closure still says what it could not do. It names the
         // same position — the length it takes is of a list built from these elements — and a
         // position carries more than one statement, so one of them being read is no answer about
-        // the other.
-        assertEquals(List.of(UndividedPosition.Reason.UNSUPPORTED_SYNTAX),
+        // the other. What it says is that the rule is about a value made from what stands here:
+        // the count of a filtered list is not a syntax nobody reads, and an author told that goes
+        // looking for a spelling that was never the difficulty.
+        assertEquals(List.of(UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE),
                 whyAt(measured, "items[*].charge"),
                 () -> "said " + whyAt(measured, "items[*].charge"));
         assertFalse(couldNotDerive(measured, "items[*].charge"),
