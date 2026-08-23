@@ -2,8 +2,10 @@ package souther.compiler.report;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import souther.compiler.diag.SourceNameResolver;
+import souther.compiler.examples.EvaluationPolicy;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Measurement;
@@ -63,11 +65,36 @@ class AMeasureWeakerThanCompleteSaysWhatMadeItSoTest {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
-    private static AdequacyReport report() {
+    /**
+     * Steps enough for every row of {@link #MODEL} that comes to an answer, and few enough that the
+     * one that does not is done spending them at once.
+     *
+     * <p>What the model is here for is a row whose evaluation is stopped rather than finished, and
+     * the default limit is a hundred million steps — so at the default this class spends most of a
+     * minute interpreting {@code spin} to reach a conclusion it reaches just as well at a
+     * thousandth of it. Which number the default is set to is not what is being checked here; that
+     * it is reached and reported is, and {@code ARowIsHeldToStepsAndNotToTheClock} is where the
+     * limit itself is held to anything.
+     */
+    private static final EvaluationPolicy BOUNDED =
+            EvaluationPolicy.DEFAULT.withStepLimit(100_000L);
+
+    /**
+     * The report of {@link #MODEL}, built once for the class.
+     *
+     * <p>Read and never written by the tests below — it is a record over copied lists, and every
+     * accessor they reach for derives its answer rather than keeping one — so building it per test
+     * only pays for the same compilation again.
+     */
+    private static AdequacyReport report;
+
+    @BeforeAll
+    static void theModelIsMeasured() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
+        compilation.withEvaluationPolicy(BOUNDED);
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        return AdequacyReport.of(compilation);
+        report = AdequacyReport.of(compilation);
     }
 
     /**
@@ -80,7 +107,7 @@ class AMeasureWeakerThanCompleteSaysWhatMadeItSoTest {
     @Test
     void everyMeasurementInTheDocumentSaysWhatItIsAndWhatItWentWithout() throws Exception {
         List<JsonNode> measurements = new ArrayList<>();
-        collect(JSON.readTree(report().json(SourceNameResolver.identity())), measurements);
+        collect(JSON.readTree(report.json(SourceNameResolver.identity())), measurements);
         assertTrue(measurements.size() > 10,
                 "the model produces measurements of every kind: " + measurements.size());
         // What this walk is worth is what it met. A run in which no measure came back weaker than
@@ -131,7 +158,6 @@ class AMeasureWeakerThanCompleteSaysWhatMadeItSoTest {
      */
     @Test
     void aMeasurementThatCouldNotBeFinishedIsTheOneUnavailableWithAWeakening() {
-        AdequacyReport report = report();
         List<Measurement<?>> failed = new ArrayList<>();
         for (AdequacyReport.ModuleReport module : report.modules()) {
             for (AdequacyReport.BehaviorReport behavior : module.behaviors()) {
@@ -168,8 +194,8 @@ class AMeasureWeakerThanCompleteSaysWhatMadeItSoTest {
      */
     @Test
     void whatABuildRefusesOverIsWhatNothingWeakened() {
-        Adequacy.AdequacyBar held = report().held();
-        List<Adequacy.Finding> findings = report().findings();
+        Adequacy.AdequacyBar held = report.held();
+        List<Adequacy.Finding> findings = report.findings();
         assertFalse(findings.isEmpty(), "the model produces findings");
         for (Adequacy.Finding each : findings) {
             Adequacy.Finding.Disposition said = each.disposition(held);

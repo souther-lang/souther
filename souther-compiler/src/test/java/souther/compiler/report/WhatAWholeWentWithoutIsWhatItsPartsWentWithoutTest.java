@@ -1,6 +1,7 @@
 package souther.compiler.report;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.examples.EvaluationPolicy;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
@@ -72,8 +73,21 @@ class WhatAWholeWentWithoutIsWhatItsPartsWentWithoutTest {
                 | (Draft { n = 1 }) -> Done { n = 1 }
             """;
 
+    /**
+     * Steps enough for every row of {@link #MODEL} that comes to an answer, and few enough that the
+     * one that does not is done spending them at once.
+     *
+     * <p>{@code spin} is here to leave a measure short of a fact, not to spend the shipped limit of
+     * a hundred million steps finding that out — which is nine seconds of interpreting for a
+     * weakening that arrives the same at a thousandth of it. What the limit is set to is held to
+     * something in {@code ARowIsHeldToStepsAndNotToTheClock}, not here.
+     */
+    private static final EvaluationPolicy BOUNDED =
+            EvaluationPolicy.DEFAULT.withStepLimit(100_000L);
+
     private static AdequacyReport report() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
+        compilation.withEvaluationPolicy(BOUNDED);
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return AdequacyReport.of(compilation);
