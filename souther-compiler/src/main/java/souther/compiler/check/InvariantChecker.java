@@ -2040,7 +2040,7 @@ public final class InvariantChecker {
      *
      * <p>One map and not a set per side, so a clause is on exactly one of them. The sides are read
      * off it: {@link #settled()} is what the guards establish, {@link #refuted()} is what the value
-     * fails, and {@link #unsettled()} is the two the guards did not establish — which is the
+     * fails, and {@link #unsettled()} is the two nothing known there establishes — which is the
      * question E2011 asks and E2010 does not.
      */
     record Judgment(Verdict verdict, SequencedMap<Clause.Id, Judged> found) {
@@ -2078,8 +2078,8 @@ public final class InvariantChecker {
             return new Judgment(Verdict.of(a.verdict(), b.verdict()), found);
         }
 
-        /** The clauses the guards did not establish — the ones this check could not settle and the
-         * ones the value fails, which is what E2011 is about. */
+        /** The clauses nothing known there establishes — the ones this check could not settle and
+         * the ones the value fails, which is what E2011 is about. */
         SequencedMap<Clause.Id, Clause> unsettled() {
             return where(ClauseStatus::unsettled);
         }
@@ -2117,14 +2117,14 @@ public final class InvariantChecker {
             return side;
         }
 
-        /** Whether a diagnostic can name a clause the guards did not establish. Not whether there
+        /** Whether a diagnostic can name a clause nothing known there establishes. Not whether there
          * was one: a clause the author wrote no name on is in here and cannot be named. */
         boolean canNameUnsettled() {
             return canName(unsettled());
         }
 
-        /** Whether a diagnostic can name a clause the guards did establish. Not whether there was
-         * one, for the same reason. */
+        /** Whether a diagnostic can name a clause that was established there. Not whether there
+         * was one, for the same reason. */
         boolean canNameSettled() {
             return canName(settled());
         }
@@ -2148,9 +2148,10 @@ public final class InvariantChecker {
 
     /**
      * What a possible violation of {@code type}'s invariant is said as, which is two questions and
-     * not one: whether a clause the guards did not establish can be named, and whether one they did
-     * can be. Neither answers the other, and neither answers whether there was such a clause — a
-     * clause written without a name is judged like any other and is in no set here.
+     * not one: whether a clause nothing known there establishes can be named, and whether one
+     * that was established can be. Neither answers the other, and neither answers whether there was
+     * such a clause — a clause written without a name is judged like any other and is in no set
+     * here.
      *
      * <p>Asked one at a time and of the sets, before anything is written out. One joined string
      * answering both is what ended this warning with `Established here: .`, and it could as easily
@@ -2160,19 +2161,19 @@ public final class InvariantChecker {
     private static Diagnostic.Builder mayViolate(Hir.Data type, Judgment judgment) {
         if (judgment.canNameUnsettled()) {
             if (judgment.canNameSettled()) {
-                return Diagnostic.say(new InvariantMessage.TheGuardsDoNotEstablishButDoEstablish(
+                return Diagnostic.say(new InvariantMessage.NothingKnownHereEstablishesButDoesEstablish(
                         type.name(), names(judgment.unsettled()),
                         names(judgment.settled())));
             }
-            return Diagnostic.say(new InvariantMessage.TheGuardsDoNotEstablish(
+            return Diagnostic.say(new InvariantMessage.NothingKnownHereEstablishes(
                     type.name(), names(judgment.unsettled())));
         }
         if (judgment.canNameSettled()) {
             return Diagnostic.say(
-                    new InvariantMessage.TheGuardsDoNotEstablishTheInvariantButDoEstablish(
+                    new InvariantMessage.NothingKnownHereEstablishesTheInvariantButDoesEstablish(
                             type.name(), names(judgment.settled())));
         }
-        return Diagnostic.say(new InvariantMessage.TheGuardsDoNotEstablishTheInvariant(type.name()));
+        return Diagnostic.say(new InvariantMessage.NothingKnownHereEstablishesTheInvariant(type.name()));
     }
 
     /**
@@ -2218,8 +2219,8 @@ public final class InvariantChecker {
                 if (!attempted) {
                     warnings.add(finish(
                             mayViolate(type, judgment)
-                                    .hint(new InvariantMessage.ReifyTheRelationOntoAnInput(
-                                            type.name())),
+                                    .hint(new InvariantMessage
+                                            .GuardItOrLetADataOwnTheRelation()),
                             pos, judgment.unsettled(),
                             new InvariantMessage.ThisClauseIsNotEstablishedHere()));
                 }
@@ -2722,7 +2723,7 @@ public final class InvariantChecker {
      * check gets both or neither.
      *
      * <p>Which clauses is the caller's, and is not something this works out from a judgment: E2011
-     * is about the clauses the guards did not establish and E2010 about the ones the value fails,
+     * is about the clauses nothing known there establishes and E2010 about the ones the value fails,
      * and those are the two questions the classification was split to keep apart. What this does
      * with the clauses it is handed is the same either way — every one of them that this compile can
      * quote, in the order the clauses were declared, labelled with what the caller says of them.
@@ -2765,7 +2766,7 @@ public final class InvariantChecker {
      *
      * <p>Which is why it is the refuted clauses that are named and not the unsettled ones. A value
      * that fails one clause may leave others standing that nothing here decides, and those are
-     * clauses the guards did not establish rather than clauses the value fails — a sentence saying
+     * clauses nothing known there establishes rather than clauses the value fails — a sentence saying
      * "the value being built is one that clause rejects" over a list holding both says something
      * untrue of some of them.
      *

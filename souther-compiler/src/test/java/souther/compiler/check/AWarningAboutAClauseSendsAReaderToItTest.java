@@ -112,7 +112,7 @@ class AWarningAboutAClauseSendsAReaderToItTest {
     void aWarningAboutAnUnnamedClauseSaysWhereItIs() {
         Diagnostic warning = warning(NEITHER_NAMED);
 
-        assertInstanceOf(InvariantMessage.TheGuardsDoNotEstablishTheInvariant.class, warning.said(),
+        assertInstanceOf(InvariantMessage.NothingKnownHereEstablishesTheInvariant.class, warning.said(),
                 "the clause has no name, so the sentence has none to write");
         assertEquals(List.of(7), lines(warning),
                 "and the reader is sent to it anyway");
@@ -153,7 +153,7 @@ class AWarningAboutAClauseSendsAReaderToItTest {
     @Test
     void aNamedClauseIsPointedAtLikeAnyOther() {
         assertEquals(lines(warning(NEITHER_NAMED)).size(), lines(warning(ONE_NAMED)).size());
-        assertInstanceOf(InvariantMessage.TheGuardsDoNotEstablish.class, warning(ONE_NAMED).said(),
+        assertInstanceOf(InvariantMessage.NothingKnownHereEstablishes.class, warning(ONE_NAMED).said(),
                 "the sentence names it, and the region points at it too");
     }
 
@@ -263,7 +263,7 @@ class AWarningAboutAClauseSendsAReaderToItTest {
                 InvariantChecker.Judgment.pointsTo(judgment.unsettled()).toList(),
                 "written where this compile has no file, and saying which module that is");
 
-        assertInstanceOf(InvariantMessage.TheGuardsDoNotEstablishTheInvariant.class,
+        assertInstanceOf(InvariantMessage.NothingKnownHereEstablishesTheInvariant.class,
                 warnings.get(0).said(), "the clause was written without a name");
         assertEquals(List.of(), lines(warnings.get(0)),
                 "and there is no source here to send the reader to");

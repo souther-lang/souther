@@ -1319,11 +1319,11 @@ An invariant is checked at run time on every construction (<<invariant-mvp>>), a
 
 [[a-construction-is-judged-by-what-it-builds]]A construction is judged by what it builds. What each field is given is what the check reads, whether the source wrote that field a value, took it from another value with a `+...+` spread (<<record-literal>>), or wrote no field at all — a newtype's constructor and the arithmetic that re-wraps one (<<newtype-arithmetic>>) build a value like any other and owe its invariant where they stand. Two ways of writing one construction are one construction: they owe the same clauses, over the same values, and come to the same verdict.
 
-The check is intraprocedural. Within a behavior's `+let+` body it seeds what the input types guarantee — a newtype's own invariant, a product data's invariant over its fields — which is sound because an input of type `+T+` was built through `+T+`'s checked construction. It refines that along each `+guard+` / `+if+` guard (<<guard>>, <<if>>), and at every construction asks whether the guards prove its invariant.
+The check is intraprocedural. Within a behavior's `+let+` body it seeds what the input types guarantee — a newtype's own invariant, a product data's invariant over its fields — which is sound because an input of type `+T+` was built through `+T+`'s checked construction. It refines that along each `+guard+` / `+if+` guard (<<guard>>, <<if>>), and at every construction asks whether what is known there proves its invariant. A guard is one of those sources and not the whole of them, which is why what a report of this check says is what is known and not what a guard did.
 
-* *Discharged* — the guards prove the invariant. No diagnostic; the construction cannot abort here (overflow aside).
-* [[construction-satisfies-its-invariant]]*Definitely violated* — the guards prove the invariant false on a reachable path. A compile error — the path-sensitive generalization of the constant check `+Money(-5)+` (<<newtype>>).
-* [[construction-invariant-is-discharged]]*Possibly violated* — expressible but not proven. A warning: a possible abort. Guard it with `+guard+`, reify the relation into a type invariant (below), or attempt the construction (<<attempted-construction>>), which cannot abort.
+* *Discharged* — what is known there proves the invariant. No diagnostic; the construction cannot abort here (overflow aside).
+* [[construction-satisfies-its-invariant]]*Definitely violated* — what is known there proves the invariant false on a reachable path. A compile error — the path-sensitive generalization of the constant check `+Money(-5)+` (<<newtype>>).
+* [[construction-invariant-is-discharged]]*Possibly violated* — expressible but not proven. A warning: a possible abort. Two answers and three spellings: where the failing inputs are ones the behavior takes, the failure is a business one — guard it with `+guard+`, or attempt the construction (<<attempted-construction>>), which states the invariant check once rather than restating it as a guard; where they are not inputs the model admits, the relation belongs to a data that owns it and is reified into that data's invariant (below), which means introducing the data where none holds the values the relation is about. There is no third answer that leaves the construction as written and accepts the abort.
 * *Not expressible* — a clause outside the checked fragment. No diagnostic for it; the run-time check stands. The other clauses of the same invariant are answered on their own, so writing one the check cannot read beside one it can does not cost the second its report (<<invariant-discharge-capability>>).
 
 Guards that cannot all hold describe a path the behavior does not take, and a construction standing on one is neither of the middle two: nothing is built there, so nothing is reported. That the guards contradict is itself derived over the same fragment — `+a <= b+` with `+b <= 0+` bounds `+a+` above without a word about `+a+` — so a path is dead whenever the relations say so, whatever order they were written in.
@@ -6408,7 +6408,7 @@ value, or guard the path so the violating case cannot reach here.
 
 Neither names what decided it: the check knows the values alone did not, and not which of the things known there did.
 
-The secondary regions identify only the invariant clauses shown to reject the value wherever it is built. A clause the check could settle neither way is a clause the guards did not establish, which is what <<e2011>> reports; it is not presented here as one the value fails.
+The secondary regions identify only the invariant clauses shown to reject the value wherever it is built. A clause the check could settle neither way is a clause nothing known there establishes, which is what <<e2011>> reports; it is not presented here as one the value fails.
 
 Where the paths reaching a construction fail different clauses, every path violates the invariant and no clause is one every path fails. The message then names no clause — there is none to name — and the regions identify the clauses a path here fails, saying that of them and not that the value fails them.
 
@@ -6420,22 +6420,27 @@ Where the paths reaching a construction fail different clauses, every path viola
 model.sou:7:5
 7|     invariant charged <= limit
        ^^^^^^^^^^^^^^^^^^^^^^^^^^
-The guards do not establish this clause.
+Nothing known here establishes this clause.
 
-Constructing `Amount` here may violate its invariant: the guards do not establish it. Guard
-it with `guard`, or reify the relation into `Amount`'s (or an input's) invariant so it is
-assumed here.
-Hint: If a relation between inputs guarantees this, declare it as an `invariant` on the
-input data so it is checked once at its boundary and assumed here.
+Constructing `Amount` here may violate its invariant: nothing known here establishes it.
+Hint: If inputs for which the construction fails are ones the behavior accepts, that failure
+is a business case: guard the construction, or attempt it with `... as name else ...`, which
+states the invariant check once. If those inputs are not admitted by the model, the relation
+belongs to a data — declare it as an `invariant` on the input that holds these values,
+introducing such a data where none exists.
 ----
 
-The secondary regions identify the invariant clauses the guards did not establish, at the declarations that write them. Every one of them, in the order they are declared, and however many there are.
+The message says what the check found and the hint says what the model has left to say, and the two are not the same sentence. What was found is that nothing known where the construction stands establishes the clause — not that a guard is missing. What is known there is what the input types declare, what a `+...+` spread brought in, and what the conditions on the way there add; a guard is one of those and naming it alone read as a report about guards.
+
+The hint states the modelling question, which has two answers and three spellings. Where the inputs the construction fails for are ones the behavior takes, the failure is a business one and is written as a branch — by a guard, or by attempting the construction (<<attempted-construction>>), which is the same answer with the invariant written once instead of twice. Where they are not inputs the model admits, the relation belongs to a data that owns it, which need not already exist: a relation between two parameters belongs to no input, so writing it means introducing the input that holds them both. There is deliberately no third answer that leaves the construction as it is and accepts the abort — an invariant check is the safety net for a model bug (<<violation-destination>>), not a way to record an unanswered modelling question in the source.
+
+The secondary regions identify the invariant clauses nothing there established, at the declarations that write them. Every one of them, in the order they are declared, and however many there are.
 
 What a clause is called and where it is written are separate things a report may carry, and neither is the other's fallback. Of the clauses a report is about, the message names the ones an author wrote a name on (<<invariant-declaration>>), and the regions point at the ones this compile has the source of — which is every clause but those of a module read off the module path, whose declarations arrive as text reassembled from what the module carries. A clause with a name and no source to quote is named and not pointed at; a clause with a source and no name is pointed at and said to be "its invariant". The same holds of <<e2010>>.
 
 Which clauses a report is about is a third thing, and the message and the regions need not be about the same ones: they say different things, and what may truthfully be said of a clause is what decides which of them says it. E2010 where the paths fail different clauses is that case.
 
-A warning, and the one diagnostic in this chapter that says nothing about whether the model is wrong. E2010 is the check having proved the invariant false; this is the check having proved nothing either way, so what was always going to happen still happens — the invariant is tested when the value is built, and a violation aborts there (<<violation-destination>>). A model whose guards do establish the invariant by an argument the check cannot follow is told this too, and is not thereby wrong.
+A warning, and the one diagnostic in this chapter that says nothing about whether the model is wrong. E2010 is the check having proved the invariant false; this is the check having proved nothing either way, so what was always going to happen still happens — the invariant is tested when the value is built, and a violation aborts there (<<violation-destination>>). A model that does establish the invariant, by an argument the check cannot follow, is told this too, and is not thereby wrong.
 
 What to do about it is therefore a choice and not a repair. Guarding the construction puts the reason where the check can read it. Reifying the relation — declaring it as an `+invariant+` on an input's own data — moves it to that data's boundary, where it is tested once and assumed everywhere the value reaches afterwards (<<invariant-discharge>>). Leaving it is the third: the run-time test is the guarantee, and the warning says it is still the thing doing the work.
 

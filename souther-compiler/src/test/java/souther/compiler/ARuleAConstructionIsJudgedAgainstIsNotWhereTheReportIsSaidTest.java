@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>The invariant is the rule the construction is judged against, and the report is about the
  * construction: E2010 says the value being built is one the invariant rejects, and E2011 that the
- * guards do not establish it. Neither says anything is wrong with the invariant, so the file it is
+ * nothing known there establishes it. Neither says anything is wrong with the invariant, so the file it is
  * declared in gets no marker — the clause is pointed at because a reader needs to see what was not
  * met, which is a different thing from the problem being written there.
  *
