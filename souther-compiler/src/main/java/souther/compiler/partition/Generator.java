@@ -28,15 +28,21 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * Rows that would fill the combinations nothing has written yet.
+ * Rows for the classes and the arms a caller says are owed one.
+ *
+ * <p>The plan comes in and this composes for nothing of its own. Which class of which position no
+ * row sits in, and which arm no row goes through, is what a measure reads off the rows and reports;
+ * a search working either out again is a second reading of one fact, free to offer a row at a class
+ * the report calls reached. A combination of the body's decisions is where a witness for an arm is
+ * looked for and is not itself a thing anyone is owed a row at.
  *
  * <p>What comes out is inputs and nothing else. The expected answer is left for a person, because the
  * compiler does not know it: the whole point of a model with no {@code let} is that the answer lives in
  * a legacy system or in someone's head, and a generator that guessed would turn a question into an
  * assertion nobody made.
  *
- * <p>What it reports is not only the rows. A combination it could produce nothing for is said out
- * loud, with which of {@link UnresolvedCombination.Reason} it was — the list is that enum's to keep,
+ * <p>What it reports is not only the rows. Everything on the plan gets an entry saying what came of
+ * it, with which of {@link UnresolvedCombination.Reason} it was — the list is that enum's to keep,
  * and naming it here would be a second copy going stale. A generator that returned only the rows it
  * managed would read as though the rest were covered, and one that gave the same answer to every kind
  * would send an author looking for a value that does not exist while a row they could write in a line
@@ -232,11 +238,11 @@ public final class Generator {
     /**
      * A row that is already written, as the two things this reads it for.
      *
-     * <p>Where its values sit is what says which classes and which pairs it fills; what its run did
-     * is what says which combinations of the body's decisions it fills. The second is not derivable
-     * from the first, which is the whole of what this issue is about — a row whose values sit in a
-     * combination's classes and whose run went elsewhere fills nothing, and looks from the values
-     * alone exactly like one that fills it.
+     * <p>Where its values sit is what says which classes it fills; what its run did is what says
+     * which arms of the body it goes through. The second is not derivable from the first, which is
+     * the whole of what this issue is about — a row whose values sit in a combination's classes and
+     * whose run went elsewhere took none of the arms it names, and looks from the values alone
+     * exactly like one that took them.
      *
      * @param at      which class of each divided position the row's values fall in
      * @param watched what came of running it. A sum and not an account that may be empty: a run
@@ -698,15 +704,14 @@ public final class Generator {
         record NoAccount() implements Watched {}
     }
 
-    // --- filling the pairs ----------------------------------------------------------------------
+    // --- composing the rows ---------------------------------------------------------------------
 
     /**
-     * Rows for the two-class combinations the existing rows do not sit in.
+     * Rows for every class of the behavior's positions no written row sits in.
      *
-     * <p>Greedy and deterministic, in the shape IPO has: take the first combination nothing covers, fix
-     * those two positions, and choose every other position for how many further uncovered combinations
-     * it brings in. Ties go to the lower index, the axes are ordered before anything starts, and nothing
-     * consults a clock or a hash order — the same model and the same rows produce the same rows twice.
+     * <p>Deterministic: the axes are ordered before anything starts, ties go to the lower index, and
+     * nothing consults a clock or a hash order — the same model and the same rows produce the same
+     * rows twice. Nothing is asked about the body here, so no arm is looked for.
      */
     public static GenerationResult fill(Subject subject, List<ObservedRow> existing,
                                         CandidateCheck check) {
@@ -714,14 +719,13 @@ public final class Generator {
     }
 
     /**
-     * The same, offering a row for each combination of the decisions that settle one value together
-     * before it fills what is left of the pairs.
+     * The same, and a row through every arm the body's combinations take.
      *
-     * <p>Two questions and one set of rows. A cell is what the body says has to be varied together;
-     * a pair is what the types divide, which is what can still be asked of a behavior with no body
-     * to read. The cells go first because they fix the most and leave the least to choose, and what
-     * they leave free is what the pairs are spent on — so the rows a cell needs are rows the pair
-     * space was going to want anyway, rather than rows added beside them.
+     * <p>Two questions and one set of rows. A class is what the model divides a position into and is
+     * answerable with no body to read; an arm is a way through the body, and where a row through it
+     * is looked for is the combinations the decisions settle together. The classes go first: what
+     * each is owed is one row, and a budget the arms spent first left a class the report names with
+     * nothing offered for it.
      */
     public static GenerationResult fill(Subject subject, List<ObservedRow> existing,
                                         CandidateCheck check,
@@ -730,16 +734,15 @@ public final class Generator {
     }
 
     /**
-     * The same, running each row composed for a combination to see whether it got there.
+     * The same, running each row composed at a combination to see whether it took the arm.
      *
      * <p>Which is the only thing that can say so. A row is composed by narrowing each position to
      * the classes the combination leaves it, and every step of that narrowing is a reading of the
      * body — so a row that misses is what a reading being wrong looks like, and a row that misses
      * looks like one that arrives until something watches it.
      *
-     * <p>A row that missed is not offered and the combination stays untried. It is not evidence
-     * that the combination is unreachable: what was shown is that these candidates were not
-     * witnesses (ADR-0091).
+     * <p>A row that missed is not offered and the arm stays unanswered. It is not evidence that the
+     * arm is unreachable: what was shown is that these candidates were not witnesses (ADR-0091).
      */
     public static GenerationResult fill(Subject subject, List<ObservedRow> existing,
                                         CandidateCheck check,
@@ -1043,11 +1046,11 @@ public final class Generator {
      * A row for one class: composed against what the model already says where it can be, and moving
      * as little else as it takes.
      *
-     * <p>The origins are walked before the repairs, and both outward from what a reader would
-     * recognise. A value the model states is what a row is written against where there is one, and
-     * the classes are what is left when there is not — so the order is {@code baseline} then
-     * {@code composed}, and within each, the target alone before the target and one supporting
-     * position, before the target and two.
+     * <p>Outward from what a reader would recognise: the target alone before the target and one
+     * supporting position, before the target and two, and within one distance the values the model
+     * states in the order they were gathered, the classes last. What that order is and why is
+     * {@link #nearestFirst}'s to say; what this does is walk it and stop at the first row that
+     * lands in the class.
      *
      * <p><b>Not the other way round.</b> The synthetic composition used to run first and its
      * failure ended the class: a row the baseline could have been written for came back as one
@@ -1068,18 +1071,13 @@ public final class Generator {
         String classId = axis.classes().get(cls).id();
         String label = label(axis, cls);
         Attempt last = null;
-        // The values the model states first, in the order they were gathered, and the classes after
-        // — each walked outward from the target alone. A row composed from the classes moves every
-        // position away from what the model says, so it is further from what a reader recognises
-        // than a baseline row with a supporting move; and one baseline is nearer than another only
-        // in how far the row has to move from it, which is what the distance below measures. So the
-        // origins are the outer loop and the distance the inner.
-        //
         // Every baseline the module states rather than the one this compiler picked. Narrowed to
         // the only value of a type, a module that states a second one lost the spread from every
         // row of every behavior taking it — a change somewhere else in the file, answering a
-        // question nobody asked it.
-        for (Candidate candidate : nearestFirst(subject, axes, at, cls, baselines, check)) {
+        // question nobody asked it. What order they are walked in is
+        // {@link #nearestFirst}'s to say.
+        Perturbations walk = nearestFirst(subject, axes, at, cls, baselines, check);
+        for (Candidate candidate : walk.candidates()) {
             Map<String, FixtureTemplate> given = candidate.from().isEmpty() ? Map.of()
                     : against(subject, axes, candidate.stands(), at, candidate.where(),
                             candidate.from());
@@ -1099,7 +1097,12 @@ public final class Generator {
             return new ClassAttempt.Built(axis.id(), classId, new GeneratedRow(
                     new Purpose.ForAClass(axis.id(), classId, label), made.row().inputs()));
         }
-        UnresolvedCombination why = last == null || last.row() != null
+        // What the walk came to, and the budget first. A search that stopped says so whatever the
+        // last assignment it got to came to: the refusal of the sixty-fourth candidate is a fact
+        // about that candidate, and offered as the class's answer it stands for a space the search
+        // never entered — the value one place further on that builds, and the composition behind
+        // the baselines that was never reached.
+        UnresolvedCombination why = walk.cutShort() || last == null || last.row() != null
                 ? new UnresolvedCombination(List.of(label),
                         UnresolvedCombination.Reason.SEARCH_LIMIT)
                 : new UnresolvedCombination(List.of(label), last.reason(), last.detail(),
@@ -1117,6 +1120,21 @@ public final class Generator {
      * @param where  the classes this assignment puts every position at
      */
     private record Candidate(Baseline from, int[] stands, int[] where) {}
+
+    /**
+     * The assignments a class was given to try, and whether they are all of them.
+     *
+     * <p><b>The budget is a fact about the search and travels with what the search returned.</b> A
+     * list alone cannot say whether it ran out or was cut off, and a caller reading the end of it
+     * as the end of the space answered a class with the last refusal it saw — "every value tried
+     * was refused" over a search that stopped at the sixty-fourth of them, with a value that builds
+     * one place further on. The same fault as an absent ledger entry: one silence standing for two
+     * pieces of news, and the stronger one read off it.
+     *
+     * @param candidates the assignments to try, nearest what the model already says first
+     * @param cutShort   whether the budget stopped this before the assignments ran out
+     */
+    private record Perturbations(List<Candidate> candidates, boolean cutShort) {}
 
     /**
      * The assignments to try for one class, nearest what the model already says first.
@@ -1141,16 +1159,21 @@ public final class Generator {
      * the same order, a row composed from the classes won against every baseline that needed one
      * supporting field — which is the objective read backwards.
      */
-    private static List<Candidate> nearestFirst(Subject subject, List<Axis> axes, int at, int cls,
-                                                List<Baseline> baselines, CandidateCheck check) {
+    private static Perturbations nearestFirst(Subject subject, List<Axis> axes, int at, int cls,
+                                              List<Baseline> baselines, CandidateCheck check) {
         List<Candidate> out = new ArrayList<>();
         List<Baseline> stated = new ArrayList<>(baselines);
         List<int[]> stand = new ArrayList<>();
         for (Baseline baseline : stated) {
             stand.add(stands(subject, axes, baseline, check));
         }
-        for (int moved = 0; moved < axes.size() && out.size() < MOST_REPAIRS; moved++) {
-            for (int origin = 0; origin < stated.size() && out.size() < MOST_REPAIRS; origin++) {
+        // Set where an assignment was there to be taken and the budget was already full, which is
+        // the one place the two can be told apart. Read off the length instead, a list that filled
+        // the budget exactly and a space that had nothing more are the same list.
+        boolean cutShort = false;
+        walk:
+        for (int moved = 0; moved < axes.size(); moved++) {
+            for (int origin = 0; origin < stated.size(); origin++) {
                 if (stand.get(origin) == null) {
                     continue;   // nothing built this origin's values, so nothing measures it
                 }
@@ -1158,7 +1181,8 @@ public final class Generator {
                     for (int[] where
                             : assignmentsOver(axes, stand.get(origin), at, cls, supporting)) {
                         if (out.size() >= MOST_REPAIRS) {
-                            break;
+                            cutShort = true;
+                            break walk;
                         }
                         out.add(new Candidate(stated.get(origin), stand.get(origin), where));
                     }
@@ -1167,17 +1191,23 @@ public final class Generator {
         }
         Baseline classes = new Baseline(Map.of());
         int[] composed = composes(axes);
-        for (int moved = 0; moved < axes.size() && out.size() < MOST_REPAIRS; moved++) {
+        // Reached only where the baselines left room. A composition that builds sits behind a
+        // budget the baselines spent, and a caller told the baselines were all refused would go
+        // looking for a value the model cannot hold — so the fact that this was never reached is
+        // what {@code cutShort} carries.
+        composing:
+        for (int moved = 0; !cutShort && moved < axes.size(); moved++) {
             for (int[] supporting : supportingSets(axes, at, moved)) {
                 for (int[] where : assignmentsOver(axes, composed, at, cls, supporting)) {
                     if (out.size() >= MOST_REPAIRS) {
-                        break;
+                        cutShort = true;
+                        break composing;
                     }
                     out.add(new Candidate(classes, composed, where));
                 }
             }
         }
-        return out;
+        return new Perturbations(out, cutShort);
     }
 
     /**
@@ -1739,8 +1769,11 @@ public final class Generator {
      *
      * <p>The cell says which classes a position may hold and the row holds one of them, so the name
      * is read off the row: a name carrying the set would say what the cell allows rather than what
-     * this row is. Positions the cell says nothing about stay out — they are what the pass filling
-     * the rest of the row spent on the pairs, and this row is not for them.
+     * this row is. Positions the cell says nothing about stay out — the assignment chose them and
+     * the combination says nothing about where they stand.
+     *
+     * <p>For saying which combination a search went to and came back from, and not for naming a
+     * row: a row is composed for the arms it was looked for.
      */
     private static List<String> labels(List<Axis> axes, InteractionCells.Cell cell, int[] where) {
         List<String> out = new ArrayList<>();
@@ -1781,7 +1814,7 @@ public final class Generator {
      * A row that fills {@code selection}, looked for among the assignments it leaves open.
      *
      * <p>Composing and confirming are one act here and are two questions. A candidate is composed by
-     * fixing every position, which the combination settles for some of them and the pair search
+     * fixing every position, which the combination settles for some of them and the assignment
      * settles for the rest; then it is run, and what it did is held against what the combination
      * says a row filling it does. A candidate that went elsewhere is dropped and another assignment
      * is tried, because which assignment was chosen is a choice this made rather than something the
