@@ -55,6 +55,27 @@ final class Terms {
     private final ReadingPolicy policy;
 
     private final Symbols symbols;
+    /**
+     * What a clause states, read through this very reading.
+     *
+     * <p>Here and not built by each caller, so that there is one of it. {@link Predicates} holds
+     * nothing but the reading it was given, so two of them would answer alike today — and the day
+     * one of them remembers something, two of them are two readers.
+     */
+    private final Predicates predicates;
+
+    /**
+     * What a type guarantees of a value.
+     *
+     * <p>The one there is. A reader that built its own would be a second owner of an answer this
+     * whole reading exists to have one of, and the day it remembers anything the two are two
+     * readers — the argument {@link #predicates} is held here for, and the same one.
+     */
+    private final TypeGuarantees guarantees;
+
+    /** Getting to the positions that reading is asked about, which is nobody's semantics. */
+    private final GuaranteeWalk walk;
+
     private final Map<TypeSymbol, java.util.Optional<Type>> affineScalarBases = new HashMap<>();
     /** How the values of each atom this has named are spaced. Kept here because this is where an
      * atom's name is made: the key and the kind of number behind it are decided in one step, and
@@ -164,14 +185,51 @@ final class Terms {
         return policy;
     }
 
+    /** What a clause states, read through this reading. */
+    Predicates predicates() {
+        return predicates;
+    }
+
+    /** What a type guarantees of a value, read through this reading. */
+    TypeGuarantees guarantees() {
+        return guarantees;
+    }
+
+    /** The positions under a value, walked for a reader of this reading. */
+    GuaranteeWalk walk() {
+        return walk;
+    }
+
+    /**
+     * A reading over the discharge tree, reading every declaration's clauses off the declaration.
+     *
+     * <p>Which is what a type another module declares is read by either way (spec
+     * §invariant-discharge-representation). A reading of the module being checked has its clauses in
+     * the representation the discharge rules are written at and passes them.
+     */
     Terms(Symbols symbols, ReadingPolicy policy) {
         this(symbols, Of.THE_DISCHARGE_TREE, policy);
     }
 
+    /** The same, over {@code reading}'s tree. */
     Terms(Symbols symbols, Of reading, ReadingPolicy policy) {
+        this(symbols, reading, policy, new Clauses(symbols, Map.of()));
+    }
+
+    /**
+     * A reading over {@code reading}'s tree, told where the declarations' invariants are.
+     *
+     * <p>{@code clauses} is what lets a recipe say what choosing an arm settles where the arm binds
+     * a value: the answer is what that value's type guarantees, read through the one reading of a
+     * declaration there is ({@link TypeGuarantees}).
+     */
+    Terms(Symbols symbols, Of reading, ReadingPolicy policy, Clauses clauses) {
         this.symbols = symbols;
         this.reading = reading;
         this.policy = policy;
+        this.predicates = new Predicates(this);
+        this.guarantees = new TypeGuarantees(symbols, clauses, predicates);
+        this.walk = new GuaranteeWalk(guarantees);
     }
 
     /**
@@ -713,18 +771,49 @@ final class Terms {
      * here would be this reader answering it a second way.
      */
     Denotations choosing(Choice.Decides decidedBy, Denotations at) {
+        return chose(decidedBy, at).at();
+    }
+
+    /**
+     * Where a reading stands once an arm is chosen, and the value that arm opened.
+     *
+     * <p>Both halves from one reader. Which value an arm opens and where the reading then stands are
+     * one answer about one node, and a second method working the first out for itself would be a
+     * second account of a node that has an owner — the thing the sum
+     * ({@link Choice.Decides}) is a sum for. So this is the only reader here that names the ways of
+     * deciding, and what wants either half asks it.
+     *
+     * @param opened the value the arm brought into being, or null where it brought none: a
+     *               condition names values that stand whatever arm is chosen, a departure was taken
+     *               where nothing was built, and an operation whose arms are chosen by how its
+     *               arguments stand relates arguments that were already there
+     */
+    record Chose(Denotations at, Core.Read opened) {}
+
+    /** The same question {@link #choosing} answers, with what it opened said beside it. */
+    Chose chose(Choice.Decides decidedBy, Denotations at) {
         return switch (decidedBy) {
             // A condition binds nothing. What it settles is read where the arm is read.
-            case Choice.Decides.ACondition ignored -> at;
+            case Choice.Decides.ACondition ignored -> new Chose(at, null);
             // A departure is taken where nothing was built, so it has nothing to enter.
-            case Choice.Decides.ItDeparted ignored -> at;
-            case Choice.Decides.ACase(Core.Case arm, Core scrutinee) -> opening(arm, scrutinee, at);
-            case Choice.Decides.ItWasBuilt(Core.IfConstructed ic) ->
-                    entering(read(ic.binder(), ic.construct().type(), ic.pos()), at);
+            case Choice.Decides.ItDeparted ignored -> new Chose(at, null);
+            case Choice.Decides.ACase(Core.Case arm, Core scrutinee) ->
+                    new Chose(opening(arm, scrutinee, at), openedByArm(arm));
+            case Choice.Decides.ItWasBuilt(Core.IfConstructed ic) -> {
+                Core.Read root = read(ic.binder(), ic.construct().type(), ic.pos());
+                yield new Chose(entering(root, at), root);
+            }
             // An operation defined by cases answers a value the call was already given, written
             // where the call is. It introduces no name, so there is nothing to enter.
-            case Choice.Decides.ByArgumentRelations ignored -> at;
+            case Choice.Decides.ByArgumentRelations ignored -> new Chose(at, null);
         };
+    }
+
+    /** What a {@code match} arm binds, or null where it binds nothing — which is the same condition
+     * {@link #opening} leaves the reading where it found it under. */
+    private static Core.Read openedByArm(Core.Case arm) {
+        return arm.binder() == null || arm.bindType() == null
+                ? null : read(arm.binder(), arm.bindType(), arm.pos());
     }
 
     /**
@@ -875,14 +964,63 @@ final class Terms {
         }
         List<Derivation.Chosen.Arm> arms = new ArrayList<>();
         for (Choice.Arm arm : choice.arms()) {
-            LinearForm<FactSubject> form = affineOf(arm.answers(), choosing(arm.decidedBy(), at));
+            Terms.Chose chose = chose(arm.decidedBy(), at);
+            LinearForm<FactSubject> form = affineOf(arm.answers(), chose.at());
             if (form == null) {
                 return null;
             }
-            arms.add(new Derivation.Chosen.Arm(form,
-                    Conditions.settledBy(this, arm.decidedBy(), at)));
+            arms.add(new Derivation.Chosen.Arm(form, settledBy(arm.decidedBy(), at, chose)));
         }
         return new Derivation.Chosen(arms);
+    }
+
+    /**
+     * Everything choosing {@code decidedBy} settles, as relations.
+     *
+     * <p>Two sources and one question. What a condition states is read where the condition is
+     * written, which is {@code outside} the arm; what a type guarantees of what the arm bound is
+     * read where that name stands, which is {@code inside} it. Both are relations, and a relation
+     * is the same statement wherever it was read, so they stand together beside the arm.
+     */
+    private List<NumericConstraint> settledBy(Choice.Decides decidedBy, Denotations outside,
+                                              Chose chose) {
+        List<NumericConstraint> out =
+                new ArrayList<>(Conditions.settledBy(this, decidedBy, outside));
+        out.addAll(guaranteedBy(chose.opened(), chose.at()));
+        return out;
+    }
+
+    /**
+     * What the type of the value choosing {@code decidedBy} opens guarantees of it, as relations.
+     *
+     * <p>The other half of what choosing an arm settles. A {@code match} arm binds the scrutinee
+     * refined to the case it names, and an attempt binds what it built; either way the value was
+     * built through its type's checked constructor, so what that type states holds of it. That is
+     * the same argument a seeding rests on for a parameter, and it is the same reading — asked here
+     * of a value a recipe names rather than of a place a walk stands at.
+     *
+     * <p>Under the arm and not beside it. The value only exists because that arm was chosen, so what
+     * it guarantees is stated of that arm and of no other.
+     *
+     * <p>Nothing for an arm that opened no value, which is {@link #chose}'s answer and not this
+     * method's: asking the node a second time here would be a second account of it.
+     *
+     * <p>Only the relations. A clause states what it states, and what a recipe can record beside an
+     * arm is a relation ({@link NumericConstraint}); a fact about a value is settled where facts
+     * are, and leaving it out costs precision where taking it in as something else would not be
+     * sound.
+     */
+    private List<NumericConstraint> guaranteedBy(Core.Read root, Denotations inside) {
+        if (root == null) {
+            return List.of();
+        }
+        List<NumericConstraint> out = new ArrayList<>();
+        // Every position, because this question has no depth in it. What the value guarantees is
+        // what its type states wherever the rule is written, and a bound here would make a
+        // derivation depend on how deeply an author nested a field rather than on what was declared.
+        walk.from(root, FieldDomains.THE_VALUE, inside, GuaranteeWalk.Scope.everyPosition(),
+                (path, guarantee) -> out.addAll(guarantee.owed().relations()));
+        return out;
     }
 
     /**

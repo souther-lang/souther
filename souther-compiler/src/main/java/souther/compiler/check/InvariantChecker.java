@@ -24,7 +24,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -342,7 +341,7 @@ public final class InvariantChecker {
         }
         try {
             return CapabilityResult.of(
-                    predicates.obligations(it.value(), Known.top(), locations, false));
+                    predicates.assumed(it.value(), locations, false));
         } catch (RuntimeException why) {
             // Fail-open, as the walk is — and said as a stop rather than as a conclusion, because
             // what the clause is outside of is what this did not find out.
@@ -564,7 +563,7 @@ public final class InvariantChecker {
                 // decide for itself which of the rules that draw a line it was looking at.
                 RuleRef.Invariant origin = new RuleRef.Invariant(Clause.Ref.of(declared));
                 written.add(new Written(origin, stated));
-                Predicates.Owed owed = c.predicates.obligations(stated, k, at, false,
+                Predicates.Owed owed = c.predicates.assumed(stated, at, false,
                         (part, said) -> gathering.constrained(origin, part, partRead(said)));
                 // And the reading that builds the numeric constraints, said by what it produced.
                 // `value * 2 >= 4` is beyond the two readings below and is taken in here about the
@@ -580,11 +579,11 @@ public final class InvariantChecker {
             for (Map.Entry<String, BindingId> field : bindings.entrySet()) {
                 Type type = fields.get(field.getKey());
                 if (type != null) {
-                    // No depth limit here: this is the reading a boundary is derived from, and a
-                    // rule the construction must satisfy is a rule wherever in the value it sits.
+                    // Every position: this is the reading a boundary is derived from, and a rule
+                    // the construction must satisfy is a rule wherever in the value it sits.
                     k = c.engine.seedAt(new Core.Read(field.getKey(), field.getValue(), type, NOWHERE),
                             data.newtype() ? FieldDomains.THE_VALUE : field.getKey(),
-                            k, at, 1, Integer.MAX_VALUE, new HashSet<>(), gathering, reach);
+                            k, at, new GuaranteeWalk.Extent.EveryPosition(), gathering, reach);
                 }
             }
             Map<String, FactSubject> atoms = new LinkedHashMap<>();
@@ -758,13 +757,13 @@ public final class InvariantChecker {
             inner = new Core.FieldAccess(inner, "value", under, NOWHERE);
             worn = under;
         }
-        if (depth > PathEngine.FIELDS_SEEDED || !(worn instanceof Type.Ref ref)
+        if (depth > GuaranteeWalk.FIELDS_SEEDED || !(worn instanceof Type.Ref ref)
                 || !(symbols.declarations().declaration(ref.name().key()) instanceof Hir.Data data) || data.newtype()) {
             return;
         }
         for (Map.Entry<String, Type> field : clauses.fieldsOf(data).entrySet()) {
             name(new Core.FieldAccess(inner, field.getKey(), field.getValue(), NOWHERE),
-                    PathEngine.under(path, field.getKey()), field.getValue(), at, symbols, depth + 1,
+                    GuaranteeWalk.under(path, field.getKey()), field.getValue(), at, symbols, depth + 1,
                     atoms, typeAt, held, keys);
         }
     }

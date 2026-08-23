@@ -54,7 +54,10 @@ class AReaderOfHowAnArmWasDecidedNamesEveryWayThereIsTest {
      * keep to one.
      */
     private static final Map<String, String> READERS = new LinkedHashMap<>(Map.of(
-            "souther.compiler.check.Terms#choosing", "what choosing the arm binds",
+            "souther.compiler.check.Terms#chose", "what choosing the arm binds, and the value it"
+                    + " opened. Both from one reader: a recipe wanting to say what that value's type"
+                    + " guarantees needs the second half, and working it out for itself would be a"
+                    + " second account of this node",
             "souther.compiler.check.Conditions#settledBy", "what choosing the arm states, as"
                     + " relations",
             "souther.compiler.check.InvariantChecker#opening", "what a walk over paths reads of it:"
