@@ -164,6 +164,23 @@ public final class InvariantChecker {
      */
     static List<Opening> OPENING;
 
+    /** One opened split: how many binders it stood inside, and whether what it handed its
+     * continuation is the state that was read inside them. */
+    record Carried(int binders, boolean handedOnWhatWasReadInside) {}
+
+    /**
+     * Where a test in this package reads what an opened split handed the expression it stands in,
+     * one entry per split opened, and null everywhere else.
+     *
+     * <p>Beside {@link #OPENING} and for the reason that one gives. A split standing inside binders
+     * is read inside them, and what it settles there is stated where the continuation is not — so
+     * what may be handed on is that something leaves and not what was found. No diagnostic says
+     * this: the facts that differ are about the binders themselves, which a continuation outside
+     * cannot name, so nothing downstream reads them either way. What a reading of a warning would
+     * be reading is whether some other route happened to establish the same thing.
+     */
+    static List<Carried> CARRIED;
+
     /**
      * What this check reads: one behavior's body and the invariants of the types around it, both in
      * the representation the rules are written at ({@link InliningPolicy#DISCHARGE}) rather than the
@@ -1663,6 +1680,7 @@ public final class InvariantChecker {
             // before the arms are folded, so that what the arms are held against is a state the
             // caller can read.
             Known prefix = carriedOnFrom(new Entered(k, at), List.of(new Entered(within, there)));
+            carried(site.scope().size(), prefix == within);
             return carriedOnFrom(new Entered(prefix, at), ways);
         }
         Known evaluated = switch (e) {
@@ -1814,6 +1832,14 @@ public final class InvariantChecker {
             }
         }
         return out;
+    }
+
+    /** Records what an opened split handed on, where a test in this package is reading them. */
+    private static void carried(int binders, boolean handedOnWhatWasReadInside) {
+        List<Carried> watching = CARRIED;
+        if (watching != null) {
+            watching.add(new Carried(binders, handedOnWhatWasReadInside));
+        }
     }
 
     /**
