@@ -105,7 +105,7 @@ class AGroupTooWideToWalkSaysSoTest {
     void aGroupPastTheLimitIsHeldBackAndSaidSo() {
         Model model = Model.of(THIRTEEN);
         InteractionCells.Offered offered =
-                InteractionCells.of(model.groups(), model.subject().axes());
+                InteractionCells.of(model.groups(), model.subject().axes(), Budgets.generation());
 
         assertEquals(List.of(), offered.groups(),
                 "the group is not offered, which is what the limit is for");
@@ -120,7 +120,7 @@ class AGroupTooWideToWalkSaysSoTest {
     void andUnderTheLimitTheGroupIsOffered() {
         Model model = Model.of(ELEVEN);
         InteractionCells.Offered offered =
-                InteractionCells.of(model.groups(), model.subject().axes());
+                InteractionCells.of(model.groups(), model.subject().axes(), Budgets.generation());
 
         assertEquals(List.of(), offered.notOffered(),
                 "nothing is held back");
@@ -141,9 +141,9 @@ class AGroupTooWideToWalkSaysSoTest {
         Model narrow = Model.of(ELEVEN);
 
         Set<Integer> fromWide =
-                Generator.everyArmTheCombinationsTake(wide.subject(), wide.groups());
+                Generator.everyArmTheCombinationsTake(wide.subject(), wide.groups(), Budgets.generation());
         Set<Integer> fromNarrow =
-                Generator.everyArmTheCombinationsTake(narrow.subject(), narrow.groups());
+                Generator.everyArmTheCombinationsTake(narrow.subject(), narrow.groups(), Budgets.generation());
 
         assertFalse(fromWide.isEmpty(),
                 "the arms behind the group the limit held back are still named");
@@ -163,7 +163,7 @@ class AGroupTooWideToWalkSaysSoTest {
         Model model = Model.of(THIRTEEN);
 
         Generator.GenerationResult composed = Generator.fill(model.subject(), List.of(),
-                Generator.CandidateCheck.ANY, model.groups(), Generator.Trial.NOTHING_RUNS);
+                Generator.CandidateCheck.ANY, model.groups(), Generator.Trial.NOTHING_RUNS, Budgets.generation());
 
         List<GenerationReason.GroupsNotOffered> said = composed.reasons().stream()
                 .filter(GenerationReason.GroupsNotOffered.class::isInstance)

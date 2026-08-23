@@ -72,7 +72,7 @@ class ASelectionsClassesAndClaimsAreOfTheSameChoiceTest {
                                 new InteractionCells.Placed(holding(2), List.of(at(11))),
                                 new InteractionCells.Placed(holding(3), List.of(at(12)))),
                         List.of(new InteractionCells.Placed(holding(0, 2, 3), List.of(at(20))),
-                                new InteractionCells.Placed(holding(1, 2, 3), List.of(at(21))))));
+                                new InteractionCells.Placed(holding(1, 2, 3), List.of(at(21))))), Budgets.generation().cellsPerGroup());
 
         assertEquals(6, group.size(), "three ways and two ways");
         List<List<Integer>> byIndex = List.of(
@@ -99,7 +99,7 @@ class ASelectionsClassesAndClaimsAreOfTheSameChoiceTest {
                         List.of(new InteractionCells.Placed(holding(0), List.of(at(10))),
                                 new InteractionCells.Placed(holding(1), List.of(at(11)))),
                         List.of(new InteractionCells.Placed(holding(0), List.of(at(20))),
-                                new InteractionCells.Placed(holding(1), List.of(at(21))))));
+                                new InteractionCells.Placed(holding(1), List.of(at(21))))), Budgets.generation().cellsPerGroup());
 
         assertEquals(2, group.left(0), "two of the four choices are combinations");
         assertNull(group.at(1), "the first way of one factor and the second of the other agree "
@@ -121,7 +121,7 @@ class ASelectionsClassesAndClaimsAreOfTheSameChoiceTest {
         InteractionCells.Group group = new InteractionCells.Group(
                 new InteractionCells.Placed(holding(0, 1, 2, 3), List.of(at(9))),
                 List.of(List.of(new InteractionCells.Placed(holding(0, 1), List.of(at(10))),
-                        new InteractionCells.Placed(holding(2, 3), List.of(at(11))))));
+                        new InteractionCells.Placed(holding(2, 3), List.of(at(11))))), Budgets.generation().cellsPerGroup());
         CellSelection selection = group.at(0);
 
         assertTrue(selection.certifying(new int[] {1}, lit(9, 10)).isPresent(),
@@ -156,7 +156,7 @@ class ASelectionsClassesAndClaimsAreOfTheSameChoiceTest {
         InteractionCells.Group group = new InteractionCells.Group(
                 new InteractionCells.Placed(holding(0, 1, 2, 3), List.of(at(9))),
                 List.of(List.of(new InteractionCells.Placed(holding(0, 1), List.of(at(10))),
-                        new InteractionCells.Placed(holding(2, 3), List.of(at(11))))));
+                        new InteractionCells.Placed(holding(2, 3), List.of(at(11))))), Budgets.generation().cellsPerGroup());
         CellSelection selection = group.at(0);
         int[] where = {0};
 
@@ -183,7 +183,7 @@ class ASelectionsClassesAndClaimsAreOfTheSameChoiceTest {
         InteractionCells.Group group = new InteractionCells.Group(
                 new InteractionCells.Placed(holding(0, 1, 2, 3), List.of(at(9))),
                 List.of(List.of(new InteractionCells.Placed(holding(0, 1), List.of(at(10))),
-                        new InteractionCells.Placed(holding(2, 3), List.of(at(11))))));
+                        new InteractionCells.Placed(holding(2, 3), List.of(at(11))))), Budgets.generation().cellsPerGroup());
         CellSelection selection = group.at(0);
 
         assertTrue(selection.certifiedBy(lit(9, 10)), "a run that did both did this combination");

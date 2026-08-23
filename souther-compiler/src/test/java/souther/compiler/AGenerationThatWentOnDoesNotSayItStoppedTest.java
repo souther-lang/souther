@@ -13,6 +13,7 @@ import souther.compiler.observe.Classification;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.partition.Axis;
 import souther.compiler.partition.AxisId;
+import souther.compiler.partition.Budgets;
 import souther.compiler.partition.GenerationReason;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.Partitions;
@@ -105,7 +106,7 @@ class AGenerationThatWentOnDoesNotSayItStoppedTest {
 
         Generator.GenerationResult filled =
                 Generator.fill(subject, List.of(Generator.ObservedRow.unseen(row)),
-                        Generator.CandidateCheck.ANY);
+                        Generator.CandidateCheck.ANY, Budgets.generation());
 
         assertFalse(filled.rows().isEmpty(), "the positions it could read were filled");
         assertInstanceOf(GenerationReason.PositionWithheld.class, filled.reasons().get(0));

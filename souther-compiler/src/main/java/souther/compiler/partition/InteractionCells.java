@@ -38,18 +38,6 @@ import java.util.List;
  */
 public final class InteractionCells {
 
-    /**
-     * How many ways of choosing an outcome from each factor a group may have and still be offered.
-     *
-     * <p>A group is taken from while there is budget for a row and no further, so what this bounds
-     * is not how many rows come out of it. It bounds the walk over its choices, which goes on past
-     * the ones already answered, the ones the factors disagree about and the ones nothing could be
-     * built for — and a group whose choices run to the billions would have that walk stand between
-     * the author and every other group. The number is the group's own and known before any of it is
-     * built.
-     */
-    private static final int MOST_CELLS = 4096;
-
     private InteractionCells() {}
 
     /**
@@ -144,10 +132,12 @@ public final class InteractionCells {
      * a combination a written row already sits in costs no row, so a caller that stopped enumerating
      * at the budget would leave the ones past that point untried while the budget still held.
      *
-     * @param reach    what the path to the meeting leaves open, which every combination is under
-     * @param byFactor what each outcome of each factor leaves open, one list per factor
+     * @param reach     what the path to the meeting leaves open, which every combination is under
+     * @param byFactor  what each outcome of each factor leaves open, one list per factor
+     * @param mostCells what the walk over the choices is held to, carried here because {@link #size}
+     *                  is asked of the group after the compilation that set it is out of reach
      */
-    public record Group(Placed reach, List<List<Placed>> byFactor) {
+    public record Group(Placed reach, List<List<Placed>> byFactor, int mostCells) {
 
         public Group {
             byFactor = List.copyOf(byFactor);
@@ -164,8 +154,8 @@ public final class InteractionCells {
             long size = 1;
             for (List<Placed> factor : byFactor) {
                 size *= factor.size();
-                if (size >= MOST_CELLS) {
-                    return MOST_CELLS;
+                if (size >= mostCells) {
+                    return mostCells;
                 }
             }
             return (int) size;
@@ -244,7 +234,8 @@ public final class InteractionCells {
     }
 
     /** The groups worth offering, over the ordered {@code axes}, and the ones held back. */
-    public static Offered of(List<Interaction> groups, List<Axis> axes) {
+    public static Offered of(List<Interaction> groups, List<Axis> axes,
+                             AdequacyPolicy.OfTheGeneration budget) {
         List<Group> out = new ArrayList<>();
         List<NotOffered> held = new ArrayList<>();
         for (Interaction group : groups) {
@@ -259,11 +250,11 @@ public final class InteractionCells {
             // Past the limit, and said so rather than dropped. What this costs is the combinations
             // of one group going untried; what saying nothing cost is an arm among them reading as
             // one the body never reaches.
-            if (productOf(placed) >= MOST_CELLS) {
+            if (productOf(placed, budget.cellsPerGroup()) >= budget.cellsPerGroup()) {
                 held.add(new NotOffered(claimsOf(reach, placed)));
                 continue;
             }
-            Group built = new Group(reach, placed);
+            Group built = new Group(reach, placed, budget.cellsPerGroup());
             if (built.left(0) > 0) {
                 out.add(built);
             }
@@ -286,12 +277,12 @@ public final class InteractionCells {
     }
 
     /** How far the product runs, stopping where it is past anything that would be offered. */
-    private static long productOf(List<List<Placed>> placed) {
+    private static long productOf(List<List<Placed>> placed, int mostCells) {
         long size = 1;
         for (List<Placed> factor : placed) {
             size *= factor.size();
-            if (size >= MOST_CELLS) {
-                return MOST_CELLS;
+            if (size >= mostCells) {
+                return mostCells;
             }
         }
         return size;

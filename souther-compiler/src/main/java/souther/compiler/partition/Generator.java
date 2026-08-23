@@ -50,10 +50,6 @@ import java.util.Set;
  */
 public final class Generator {
 
-    /** How many rows one call will write. Past this the output stops being something a person reads
-     * and pastes, and a model that wants more than this has axes it should be measured at fewer of. */
-    static final int MAX_ROWS = 200;
-
     /** How many assignments of values one parameter is tried at in one pass. The choices multiply, so
      * this is a bound on the search and not on any one position — and reaching it is reported as the
      * search having stopped, which is a different thing from every assignment having been refused. A
@@ -742,8 +738,9 @@ public final class Generator {
      * rows twice. Nothing is asked about the body here, so no arm is looked for.
      */
     public static GenerationResult fill(Subject subject, List<ObservedRow> existing,
-                                        CandidateCheck check) {
-        return fill(subject, existing, check, List.of());
+                                        CandidateCheck check,
+                                        AdequacyPolicy.OfTheGeneration budget) {
+        return fill(subject, existing, check, List.of(), budget);
     }
 
     /**
@@ -757,8 +754,9 @@ public final class Generator {
      */
     public static GenerationResult fill(Subject subject, List<ObservedRow> existing,
                                         CandidateCheck check,
-                                        List<souther.compiler.interaction.Interaction> groups) {
-        return fill(subject, existing, check, groups, Trial.NOTHING_RUNS);
+                                        List<souther.compiler.interaction.Interaction> groups,
+                                        AdequacyPolicy.OfTheGeneration budget) {
+        return fill(subject, existing, check, groups, Trial.NOTHING_RUNS, budget);
     }
 
     /**
@@ -775,10 +773,10 @@ public final class Generator {
     public static GenerationResult fill(Subject subject, List<ObservedRow> existing,
                                         CandidateCheck check,
                                         List<souther.compiler.interaction.Interaction> groups,
-                                        Trial trial) {
+                                        Trial trial, AdequacyPolicy.OfTheGeneration budget) {
         return fill(subject, existing, check, groups, trial, List.of(),
                 everyClassNoRowSitsIn(subject, existing),
-                everyArmTheCombinationsTake(subject, groups));
+                everyArmTheCombinationsTake(subject, groups, budget), budget);
     }
 
     /**
@@ -790,9 +788,10 @@ public final class Generator {
      * rather than one the search makes for itself.
      */
     public static Set<Integer> everyArmTheCombinationsTake(
-            Subject subject, List<souther.compiler.interaction.Interaction> groups) {
+            Subject subject, List<souther.compiler.interaction.Interaction> groups,
+            AdequacyPolicy.OfTheGeneration budget) {
         Set<Integer> out = new LinkedHashSet<>();
-        InteractionCells.Offered offered = InteractionCells.of(groups, ordered(subject));
+        InteractionCells.Offered offered = InteractionCells.of(groups, ordered(subject), budget);
         for (InteractionCells.Group group : offered.groups()) {
             for (int index = 0; index < group.size(); index++) {
                 CellSelection selection = group.at(index);
@@ -864,7 +863,8 @@ public final class Generator {
                                         List<souther.compiler.interaction.Interaction> groups,
                                         Trial trial, List<Baseline> baselines,
                                         Set<ClassOwed> classesOwed,
-                                        Set<Integer> armsOwed) {
+                                        Set<Integer> armsOwed,
+                                        AdequacyPolicy.OfTheGeneration budget) {
         List<Axis> ordered = ordered(subject);
         // A position where some row's value could not be read is a position nothing is known about.
         // A row generated for a class there may be a row that is already written, and telling an
@@ -924,7 +924,7 @@ public final class Generator {
         int classesLeft = 0;
         for (int i = 0; i < owed.size(); i++) {
             int[] at = owed.get(i);
-            if (rows.size() >= MAX_ROWS) {
+            if (rows.size() >= budget.rows()) {
                 classesLeft = owed.size() - i;
                 for (int cut = i; cut < owed.size(); cut++) {
                     Axis axis = axes.get(owed.get(cut)[0]);
@@ -962,7 +962,7 @@ public final class Generator {
         // And the arms behind a group nothing walked, which is a second silence with a different
         // cause. The one above is a budget that ran out with the arm still owed; this is a group
         // the offer never opened, and raising the budget does not reach it.
-        InteractionCells.Offered offered = InteractionCells.of(groups, axes);
+        InteractionCells.Offered offered = InteractionCells.of(groups, axes, budget);
         Set<Integer> notOffered = new LinkedHashSet<>();
         for (InteractionCells.NotOffered held : offered.notOffered()) {
             notOffered.addAll(armsIn(held.claims()));
@@ -981,7 +981,7 @@ public final class Generator {
                 if (takes.isEmpty()) {
                     continue;   // no arm on the list is looked for here
                 }
-                if (rows.size() >= MAX_ROWS) {
+                if (rows.size() >= budget.rows()) {
                     cutOff.addAll(takes);
                     continue;
                 }

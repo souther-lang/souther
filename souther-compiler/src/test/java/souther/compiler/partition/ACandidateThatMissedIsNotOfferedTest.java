@@ -168,14 +168,13 @@ class ACandidateThatMissedIsNotOfferedTest {
 
     private static Generator.GenerationResult fill(Model model, Generator.Trial trial) {
         return Generator.fill(model.subject(), List.of(), Generator.CandidateCheck.ANY,
-                model.groups(), trial);
+                model.groups(), trial, Budgets.generation());
     }
 
     /** Every claim any combination of the model makes, so that one run answers all of them. */
     private static List<ControlClaim> everyClaimOf(Model model) {
         List<ControlClaim> out = new ArrayList<>();
-        for (InteractionCells.Group group : InteractionCells.of(model.groups(),
-                model.subject().axes()).groups()) {
+        for (InteractionCells.Group group : InteractionCells.of(model.groups(), model.subject().axes(), Budgets.generation()).groups()) {
             for (int index = 0; index < group.size(); index++) {
                 CellSelection selection = group.at(index);
                 if (selection != null) {

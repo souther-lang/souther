@@ -53,6 +53,10 @@ public final class Compilation {
         // The one place a reading policy is made. Everything that reads a declaration is handed
         // this one, so a declaration read twice in one compilation is read the same way both times.
         db.set(new Front.Reading(), Front.Reading.STANDARD);
+        // And the one place an adequacy budget is made. Every measure of one behavior is handed
+        // this one, so a behavior measured twice in one compilation is measured under the same
+        // limits both times.
+        db.set(new Front.Adequacy(), Front.Adequacy.STANDARD);
     }
 
     /** A compile of several sources identified by their position, the way a build hands them over.
@@ -377,6 +381,18 @@ public final class Compilation {
      */
     Compilation withReadingPolicy(souther.compiler.check.ReadingPolicy policy) {
         db.set(new Front.Reading(), policy);
+        return this;
+    }
+
+    /**
+     * The same for what measuring a behavior and composing rows for it may spend.
+     *
+     * <p>Not a knob a build has either. What it is here for is holding a measurement to a small
+     * limit and watching what the limit reports — a model that reaches any of the three defaults is
+     * larger than anything in this repository, so the paths past them would rot unread otherwise.
+     */
+    Compilation withAdequacyPolicy(souther.compiler.partition.AdequacyPolicy policy) {
+        db.set(new Front.Adequacy(), policy);
         return this;
     }
 

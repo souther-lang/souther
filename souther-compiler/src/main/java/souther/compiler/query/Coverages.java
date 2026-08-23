@@ -123,7 +123,8 @@ final class Coverages {
                                 souther.compiler.query.Adequacy.Level level,
                                 List<BorderAssessment> boundaries,
                                 PathReachability.Answers arrives,
-                                souther.compiler.check.StatedContract stated) {
+                                souther.compiler.check.StatedContract stated,
+                                souther.compiler.partition.AdequacyPolicy.OfTheMeasures budget) {
         List<RowOutcome> rows = observed.rows();
         List<String> parameters = behavior.params().stream().map(Hir.Param::name).toList();
         // What a row's values are, where they sit and what they are written as, read together:
@@ -187,7 +188,7 @@ final class Coverages {
         return new PartitionEvidence(
                 PartitionDerivation.of(axes, partitioning.partitionClosure()),
                 BoundaryDerivation.of(boundaries, partitioning.borderClosure()),
-                pairsOf(behavior.name(), divided, readings, level.readsRows()),
+                pairsOf(behavior.name(), divided, readings, level.readsRows(), budget),
                 partitioning.undivided(), partitioning.unread(), partitioning.blocked(),
                 partitioning.notSeparated(), List.copyOf(standing),
                 whyUnclassified(readings.byRow(),
@@ -308,9 +309,6 @@ final class Coverages {
         }
     }
 
-    /** How many pairs of classes across two positions the rows are enough to sit in at once. */
-    private static final int PAIR_LIMIT = 20_000;
-
     /**
      * The two-class combinations the rows reach.
      *
@@ -325,7 +323,9 @@ final class Coverages {
      * single-position coverage is measured on its own and not derived from this.
      */
     private static PartitionEvidence.PairSpace pairsOf(String behavior, List<Axis> axes,
-                                                      Readings readings, boolean asked) {
+                                                      Readings readings, boolean asked,
+                                                      souther.compiler.partition.AdequacyPolicy
+                                                              .OfTheMeasures budget) {
         // The product of what a row can be written at, not of what the types declare. A case the
         // rules refuse is not a class of its position at all, so the slice of the product it would
         // have taken part in is not here to be counted — which is a different thing from a pair
@@ -350,8 +350,8 @@ final class Coverages {
         if (readings.noRows() && !readings.someRowsUnseen()) {
             return PartitionEvidence.PairSpace.noRows((int) Math.min(total, Integer.MAX_VALUE));
         }
-        if (total > PAIR_LIMIT) {
-            return PartitionEvidence.PairSpace.truncated(behavior, total, PAIR_LIMIT);
+        if (total > budget.pairSpace()) {
+            return PartitionEvidence.PairSpace.truncated(behavior, total, budget.pairSpace());
         }
         Set<String> covered = new LinkedHashSet<>();
         for (Map<AxisId, Classification> where : readings.byRow()) {
