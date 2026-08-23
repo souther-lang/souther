@@ -32,9 +32,11 @@ class EveryKernelIsDeclaredTest {
 
     @Test
     void everyDeclaredKernelHasAnEmitterOrIsWrittenOutInTheBackend() {
-        // The three partial divisions answer a case rather than a number when the divisor is zero,
-        // so they emit a branch and are written out in BodyGen rather than held as a table row.
-        Set<String> writtenOut = Set.of("int.divide", "int.truncatingRemainder", "decimal.divide");
+        // The two partial Int divisions answer a case rather than a number when the divisor is
+        // zero, so they emit a branch and are written out in BodyGen rather than held as a table
+        // row. `decimal.divide` was a third until the runtime that owns Decimal arithmetic took the
+        // whole operation, zero divisor included (ADR-0112).
+        Set<String> writtenOut = Set.of("int.divide", "int.truncatingRemainder");
 
         Set<String> declaredWithNoEmitter = new LinkedHashSet<>();
         for (String key : declaredKeys()) {

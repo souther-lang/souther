@@ -24,13 +24,14 @@ import java.util.List;
  * value of that scale's grid, and what a range says of it is the two points of that grid the exact
  * quotient lies between (spec §invariant-discharge-arithmetic). Laying one out costs a digit per
  * place, so a scale written large enough is a grid no reading should try to name — a million places
- * is a number a megabyte wide, and the ends of the whole-number range are scales
- * {@code BigDecimal} refuses outright. A scale past the limit is a scale this reading has no grid
- * for, which is what a scale it cannot read as one number already is.
+ * is a number a megabyte wide. A scale past the limit is a scale this reading has no grid for,
+ * which is what a scale it cannot read as one number already is.
  *
- * <p>The two questions a scale raises are not one. What the run time divides at is settled by the
- * backend, which narrows a scale to what a {@code BigDecimal} takes; what a reading can lay out is
- * settled here. A reading that asked only the first would be one whose cost the source decides.
+ * <p>The two questions a scale raises are not one. What the run time takes is settled by the
+ * language, which holds a scale to what can be handed over as the number it is and aborts outside
+ * that (spec §stdlib-decimal); what a reading can lay out is settled here. A reading that asked
+ * only the first would be one whose cost the source decides, and one that merged the two would put
+ * a resource bound where a statement about the arithmetic belongs.
  *
  * <p><b>Owned by the compilation and not made here.</b> Nothing that reads a declaration decides
  * what it may be read with: a policy made where it is needed is one that can differ between two

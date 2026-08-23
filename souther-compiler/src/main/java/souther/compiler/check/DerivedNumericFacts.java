@@ -484,8 +484,8 @@ final class DerivedNumericFacts {
      * <p>With one, the answer lies between the two points of that scale's grid the exact quotient
      * lies between, whichever way the call rounds ({@link Intervals#roundedQuotient}) — and the grid
      * is the one the run time will use, which is why a scale no {@code int} holds is no scale here:
-     * what the backend divides at is that scale narrowed, so a proof over the number as written
-     * would be a proof about a different division.
+     * the run time takes a scale it cannot receive unchanged as no scale either and answers nothing
+     * at it (spec §stdlib-decimal), so there is no quotient for a rule to be about.
      *
      * <p>With none, the side of nought is still the same. Rounding to a grid never crosses zero — a
      * quotient at or above nought lands on a grid point at or above nought at every scale — so which
@@ -526,16 +526,27 @@ final class DerivedNumericFacts {
      * the reading leaves anywhere else is a grid this cannot name — the answer lands on one grid and
      * a rule stated over two of them is a rule about neither.
      *
-     * <p>And a number the run time divides at. The backend narrows the scale to an {@code int}, so a
-     * place count outside that is a division at a scale nothing proved here was about.
+     * <p>And a number the run time can receive as the number it is. A scale is an {@code Int}, which
+     * is 64 bits, and what a divide is given is 32; a scale outside those aborts rather than being
+     * narrowed (spec §stdlib-decimal), so a division at one produces no value and there is nothing
+     * for a range to hold. This is the same question the run time asks and not a reading of what the
+     * backend happens to emit: the specification states the range, and the compiler and the run time
+     * answer it separately — a reading that called into the run time would be a reading whose
+     * soundness depended on which backend was linked. The two are held together by a test over the
+     * ends rather than by shared code.
      *
-     * <p>And a grid this reading will lay out, which is a second question and not a sharpening of
-     * the first. What the run time divides at is settled by the backend; what a reading can afford
-     * to name is settled by the compilation ({@link ReadingPolicy#laysOutAGridAt}) — a scale of a
-     * million places is a number a megabyte wide at every corner of the divide, and the far ends of
-     * the whole-number range are scales {@code BigDecimal} refuses outright. Asked only the first,
-     * what a reading costs would be the source's to decide, and the refusal at the far ends arrived
-     * as an exception the fail-open catch turned into a behavior that says nothing.
+     * <p>And a grid this reading will lay out, which is a third question and not a sharpening of the
+     * second. What the run time takes is what the language says; what a reading can afford to name
+     * is settled by the compilation ({@link ReadingPolicy#laysOutAGridAt}) — a scale of a million
+     * places is a number a megabyte wide at every corner of the divide. Asked only the first two,
+     * what a reading costs would be the source's to decide.
+     *
+     * <p>What none of them asks is whether the division at that scale has an answer. A scale of
+     * {@code 2147483647} is received exactly and still leaves no quotient a {@code Decimal} holds,
+     * which the run time reports as an abort of that operation (spec §stdlib-decimal). A range
+     * stated here is a range over the values the operation produced, and a call that produces none
+     * leaves it nothing to be wrong about — the same reading a divide that aborts already gets
+     * (spec §invariant-discharge-arithmetic).
      */
     private static Integer placesOf(Bounds scale, ReadingPolicy policy) {
         Endpoint low = scale.min();
@@ -544,10 +555,8 @@ final class DerivedNumericFacts {
                 || Count.number(low.at()).compareTo(high.at()) != 0) {
             return null;
         }
-        int places;
-        try {
-            places = Count.number(low.at()).at().intValueExact();
-        } catch (ArithmeticException _) {
+        Integer places = ScaleRange.receivedUnchanged(Count.number(low.at()).at());
+        if (places == null) {
             return null;
         }
         return policy.laysOutAGridAt(places) ? places : null;
