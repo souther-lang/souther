@@ -744,6 +744,7 @@ public final class Generator {
                                         List<souther.compiler.interaction.Interaction> groups,
                                         Trial trial) {
         return fill(subject, existing, check, groups, trial, List.of(),
+                everyClassNoRowSitsIn(subject, existing),
                 everyArmTheCombinationsTake(subject, groups));
     }
 
@@ -769,6 +770,45 @@ public final class Generator {
         return out;
     }
 
+    /** One class of one position, which is what a row can be owed for. */
+    public record ClassOwed(AxisId at, String classId) {}
+
+    /**
+     * Every class of every position no row the author wrote sits in.
+     *
+     * <p><b>Not what a build asks for.</b> Which classes are owed a row is what the partition
+     * measure established, and a build hands that in. This is for a caller with no measurement
+     * beside it — a test standing the search up on its own — and it says so by being a list the
+     * caller passes rather than one the search makes for itself.
+     *
+     * <p>Read off the values the rows state, which needs nothing run: where a row stands is settled
+     * by what is written at each position. So the answer is the same one the measure reaches, and a
+     * build that ran nothing is not a build with nothing to generate for.
+     *
+     * <p>A row of the author's can sit in more than one class of a position at once — a list with
+     * one element under a line and one over it — and each of them is covered. Read as one class,
+     * the rest would be asked for again, which is work the author has already done.
+     */
+    public static Set<ClassOwed> everyClassNoRowSitsIn(Subject subject,
+                                                       List<ObservedRow> existing) {
+        Set<ClassOwed> out = new LinkedHashSet<>();
+        for (Axis axis : ordered(subject)) {
+            Set<String> covered = new LinkedHashSet<>();
+            for (ObservedRow row : existing) {
+                Classification here = row.at().get(axis.id());
+                if (here != null) {
+                    covered.addAll(here.classIds());
+                }
+            }
+            for (PartitionClass cls : axis.classes()) {
+                if (!covered.contains(cls.id())) {
+                    out.add(new ClassOwed(axis.id(), cls.id()));
+                }
+            }
+        }
+        return out;
+    }
+
     /**
      * The same, composing each row's positions against a value the module already states where
      * there is one for them.
@@ -782,6 +822,7 @@ public final class Generator {
                                         CandidateCheck check,
                                         List<souther.compiler.interaction.Interaction> groups,
                                         Trial trial, List<Baseline> baselines,
+                                        Set<ClassOwed> classesOwed,
                                         Set<Integer> armsOwed) {
         List<Axis> ordered = ordered(subject);
         // A position where some row's value could not be read is a position nothing is known about.
@@ -807,11 +848,23 @@ public final class Generator {
         if (axes.isEmpty()) {
             return new GenerationResult(List.of(), List.of(), undecided);
         }
-        // Which class of which position no row the author wrote is in. Settled here, from what is
-        // written, and not touched again: a row this run offers is a question and not evidence, and
-        // letting one take a class out of the list would leave that class with nothing named for it
-        // while the row that displaced it was named for something else.
-        List<int[]> owed = owedClasses(axes, existing);
+        // Which class of which position is owed a row, handed in by whoever read the rows. The
+        // search keeps no list of its own: a class is owed one where nothing sits in it, and what
+        // sits where is what the partition measure reads off the rows — so a search working it out
+        // a second time is a second reading of one fact, free to disagree with the reported one.
+        //
+        // Walked in the search's own order over the positions it kept, so a plan naming a class of
+        // a position nothing could be read at is dropped with that position: why it went is already
+        // said, and it is not a class this run failed at.
+        List<int[]> owed = new ArrayList<>();
+        for (int i = 0; i < axes.size(); i++) {
+            for (int c = 0; c < axes.get(i).classes().size(); c++) {
+                if (classesOwed.contains(
+                        new ClassOwed(axes.get(i).id(), axes.get(i).classes().get(c).id()))) {
+                    owed.add(new int[] {i, c});
+                }
+            }
+        }
 
         List<GeneratedRow> rows = new ArrayList<>();
         List<ClassAttempt> attempts = new ArrayList<>();
@@ -1322,37 +1375,6 @@ public final class Generator {
             moved.put(field.name(), values.written().get(0));
         }
         return moved.isEmpty() ? null : FixtureTemplate.spreading(type, baseline, moved);
-    }
-
-    /**
-     * Which class of which position no row the author wrote is in, as {@code [axis, class]}.
-     *
-     * <p>Off the written rows and nothing else. What this run composes is what the list is answered
-     * with, so a row it offers must not shorten it — a class taken out by a row composed for
-     * something else is a class an author is told nothing about, and the row that took it out is
-     * named for its own reason and says nothing about this one.
-     *
-     * <p>A row of the author's can sit in more than one class of a position at once — a list with
-     * one element under a line and one over it — and each of them is covered. Read as one class,
-     * the rest would be asked for again, which is work the author has already done.
-     */
-    private static List<int[]> owedClasses(List<Axis> axes, List<ObservedRow> existing) {
-        List<int[]> owed = new ArrayList<>();
-        for (int i = 0; i < axes.size(); i++) {
-            Set<String> covered = new LinkedHashSet<>();
-            for (ObservedRow row : existing) {
-                Classification here = row.at().get(axes.get(i).id());
-                if (here != null) {
-                    covered.addAll(here.classIds());
-                }
-            }
-            for (int c = 0; c < axes.get(i).classes().size(); c++) {
-                if (!covered.contains(axes.get(i).classes().get(c).id())) {
-                    owed.add(new int[] {i, c});
-                }
-            }
-        }
-        return owed;
     }
 
     /**

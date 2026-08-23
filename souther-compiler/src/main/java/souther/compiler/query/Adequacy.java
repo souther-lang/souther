@@ -1733,6 +1733,8 @@ public final class Adequacy {
                             byTarget.getOrDefault(spec.name(), Observed.NONE), building,
                             domainOf(readInputs, spec), arrivalsOf(arrives, spec),
                             statedOf(declared, spec), runningRowsOf(trials, spec.name(), sig),
+                            partitions == null ? PartitionEvidence.NONE
+                                    : partitions.getOrDefault(spec.name(), PartitionEvidence.NONE),
                             levelOf(db).measuresArms());
                 } catch (LinkageError _) {
                     // The generated classes would not link, so nothing can be built to find out
@@ -2229,7 +2231,7 @@ public final class Adequacy {
                 FixtureReader.Construction building, InputDomain domain,
                 souther.compiler.check.PathReachability.Answers arrives,
                 souther.compiler.check.StatedContract stated, Generator.Trial trial,
-                boolean recording) {
+                PartitionEvidence evidence, boolean recording) {
             if (observed.someRowsUnseen()) {
                 // Rows exist that nothing read. What they cover is unknown, so what is left uncovered
                 // is unknown too — and a generated row is a specific piece of work handed to a person,
@@ -2273,7 +2275,38 @@ public final class Adequacy {
             }
             return Generator.fill(subject, existing, check,
                     souther.compiler.interaction.Interactions.of(body, plan, domain, symbols),
-                    trial, baselines, armsOwed);
+                    trial, baselines, classesOwed(evidence), armsOwed);
+        }
+
+        /**
+         * The classes this build is owed a row at, off the partition measure's own reading.
+         *
+         * <p>The same evidence a class finding is made from, taken a second way. Where the measure
+         * reached a class, nothing is owed there; where it did not, a row is. What separates the two
+         * projections is that a finding is a gap and needs the rows to have been measured to be one
+         * — a behavior nothing wrote a row for has no gaps, which is not the same as having nothing
+         * to write. So a position with no reading behind it is owed a row at every class, which is
+         * what an empty {@code covered} says, and the report's own line about it is said elsewhere.
+         *
+         * <p>A behavior the coverage query holds nothing for arrives as {@link
+         * PartitionEvidence#NONE} and is owed nothing. Reading the written rows a second time here
+         * would be a plan derived from something other than the evidence, which is the arrangement
+         * this replaces — and it would be one no test covers, the query answering every behavior
+         * the generator reaches.
+         */
+        private static Set<Generator.ClassOwed> classesOwed(PartitionEvidence evidence) {
+            Set<Generator.ClassOwed> out = new LinkedHashSet<>();
+            for (PartitionEvidence.AxisCoverage axis : evidence.axes()) {
+                Set<String> covered = axis.reached().made()
+                        .map(PartitionEvidence.AxisCoverage.Reached::covered)
+                        .orElseGet(Set::of);
+                for (String cls : axis.classes()) {
+                    if (!covered.contains(cls)) {
+                        out.add(new Generator.ClassOwed(axis.at(), cls));
+                    }
+                }
+            }
+            return out;
         }
     }
 

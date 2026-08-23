@@ -107,10 +107,44 @@ class ARowNothingRanFillsNoCombinationTest {
                 "and asked about none of them, nothing here composes for the combination itself");
     }
 
+    /**
+     * A class is composed for when it is on the list, and no class is on it by the search's doing.
+     *
+     * <p>The same question the arms are asked, at the other measure. Which classes are owed a row is
+     * what the partition measure reads off the rows, and a search working it out again for itself
+     * is a second reading of one fact — free to offer an author a row at a class the report calls
+     * reached, or to say nothing at one it calls unreached.
+     */
+    @Test
+    void aClassIsComposedForWhenItIsOnTheListAndNotOtherwise() {
+        Model model = Model.of(SHIPPING, "shippingFee");
+        Set<Generator.ClassOwed> every =
+                Generator.everyClassNoRowSitsIn(model.subject(), List.of());
+        assertFalse(every.isEmpty(), "the model divides its positions");
+        Generator.ClassOwed one = every.iterator().next();
+
+        assertEquals(List.of(), composedFor(model, Set.of()),
+                "asked for no class, nothing is composed");
+        assertEquals(List.of(one), composedFor(model, Set.of(one)),
+                "and asked for one, that one and nothing beside it");
+    }
+
+    /** Which classes the generator composes a row for when it is asked about {@code classes}. */
+    private static List<Generator.ClassOwed> composedFor(Model model,
+                                                         Set<Generator.ClassOwed> classes) {
+        return Generator.fill(model.subject(), List.of(), Generator.CandidateCheck.ANY,
+                        model.groups(), Generator.Trial.NOTHING_RUNS, List.of(), classes,
+                        java.util.Set.of())
+                .rows().stream().map(Generator.GeneratedRow::purpose)
+                .map(Generator.Purpose.ForAClass.class::cast)
+                .map(at -> new Generator.ClassOwed(at.at(), at.classId())).toList();
+    }
+
     /** What the generator offers when it is asked about {@code arms}, as the classes of each. */
     private static List<String> offeredFor(Model model, java.util.Set<Integer> arms) {
         return Generator.fill(model.subject(), List.of(), Generator.CandidateCheck.ANY,
-                        model.groups(), Generator.Trial.NOTHING_RUNS, List.of(), arms)
+                        model.groups(), Generator.Trial.NOTHING_RUNS, List.of(),
+                        Generator.everyClassNoRowSitsIn(model.subject(), List.of()), arms)
                 .rows().stream().map(Generator.GeneratedRow::description).toList();
     }
 
