@@ -132,7 +132,7 @@ public final class Analyzer {
     /** Whether anything is being measured, which is what decides if an offer can exist where there
      * is no diagnostic to fix. */
     public boolean measuring() {
-        return measure.level().reports();
+        return measure.level().readsRows();
     }
 
     /** What this editor measures from now on. A change starts the workspace compile again, because
@@ -476,7 +476,7 @@ public final class Analyzer {
      * uncovered — which is worse than saying nothing, being wrong rather than absent.
      */
     public List<CodeLens> codeLenses(String uri, ModuleGraph graph) {
-        if (!measure.level().reports()) {
+        if (!measure.level().readsRows()) {
             return List.of();
         }
         Compilation compilation = compileOf(graph);
@@ -687,7 +687,7 @@ public final class Analyzer {
      */
     private List<CodeAction> rowsToWrite(String uri, String text, Range requested,
                                          ModuleGraph graph) {
-        if (!measure.level().reports()) {
+        if (!measure.level().readsRows()) {
             return List.of();
         }
         Compilation compilation = compileOf(graph);
@@ -711,16 +711,21 @@ public final class Analyzer {
             // An id stands for itself here: a workspace compilation is keyed on the document URIs
             // this server was given, so what identifies a source is already what this server calls
             // it.
-            String block = souther.compiler.report.GeneratedRows.of(compilation, module,
-                    behavior.name(), true,
-                    souther.compiler.diag.SourceNameResolver.identity());
-            if (block.isBlank()) {
+            souther.compiler.report.GeneratedRows.Block block =
+                    souther.compiler.report.GeneratedRows.of(compilation, module,
+                            behavior.name(), true,
+                            souther.compiler.diag.SourceNameResolver.identity());
+            // Whether there is a row to write, asked of the generator. Read off the text, a block
+            // holding only the reason nothing was composed is not blank — so this offered to write
+            // rows for a behavior it had none for, and what it wrote into somebody's source was a
+            // comment (issue #955). A level that composes no value produces exactly that block.
+            if (block.rows() == 0) {
                 continue;
             }
             Position end = new Position((int) text.lines().count(), 0);
             return List.of(new CodeAction(
                     "Write the rows `" + behavior.name() + "` does not cover", uri,
-                    new Range(end, end), System.lineSeparator() + block));
+                    new Range(end, end), System.lineSeparator() + block.text()));
         }
         return List.of();
     }

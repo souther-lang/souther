@@ -188,8 +188,8 @@
         "status": { "$ref": "#/$defs/status" },
         "weakening": { "$ref": "#/$defs/weakening" },
         "reason": {
-          "description": "Why there is no number, present exactly where `status` is `unavailable`. `no_body` is a behavior that has no arms to measure at all — a `>->` composition or one with no `let` — rather than arms nothing measured; `not_asked` is a build that did not ask for them; `unreadable` is a run whose instrumentation could not be tied back to the body; `no_rows` is a behavior no row names.",
-          "enum": ["no_body", "not_asked", "unreadable", "no_rows"]
+          "description": "Why there is no number, present exactly where `status` is `unavailable`. The first two are a behavior with no arm to measure at all rather than arms nothing measured, and no row would give it one: `no_body` is a `>->` composition or a behavior with no `let`, and `no_arm_obligations` is a body that owes no arm — one that forks nowhere a row can be in or out of, or whose every fork the model's own rules prove nothing arrives at. The rest are a behavior that does owe arms: `not_asked` is a build that did not ask for them; `unreadable` is a run whose instrumentation could not be tied back to the body; `no_rows` is a behavior no row names.",
+          "enum": ["no_body", "no_arm_obligations", "not_asked", "unreadable", "no_rows"]
         },
         "arms": { "type": "integer", "minimum": 0 },
         "covered": { "type": "integer", "minimum": 0 },
@@ -322,8 +322,8 @@
               "status": { "$ref": "#/$defs/status" },
               "weakening": { "$ref": "#/$defs/weakening" },
               "reason": {
-                "description": "Why there is no number, present exactly where `status` is `unavailable`. A behavior no row names was not measured here, so the classes nothing sits in are not classes nothing reaches.",
-                "enum": ["no_rows"]
+                "description": "Why there is no number, present exactly where `status` is `unavailable`. A behavior no row names was not measured here, so the classes nothing sits in are not classes nothing reaches. `not_asked` is a build that asked for no measurement at all, which reads no row anywhere.",
+                "enum": ["no_rows", "not_asked"]
               }
             }
           }
@@ -380,8 +380,9 @@
                     "status": { "$ref": "#/$defs/status" },
                     "weakening": { "$ref": "#/$defs/weakening" },
                     "reason": {
-                      "description": "Why there is no answer, present exactly where `status` is `unavailable`. `arms_not_asked` and `arms_unreadable` belong to a line a fork of a body drew, which is met by getting the comparison to produce a value rather than by writing the value — and that holds of all four of its points. An invariant's line is met by writing the value and is never waiting on the instrumentation. `no_arm_witnesses_it` was a guard's line whose comparison sat inside a condition whose arms did not separate the rows that reached it from the rows that did not — the second operand of an `&&` on the side where it is false. No compiler writes it any more: the comparison carries a site of its own and is observed where it runs. It is here because reports of this version were written carrying it, and a version says what its documents may carry rather than what is emitted today.",
-                      "enum": ["arms_not_asked", "arms_unreadable", "no_rows", "no_arm_witnesses_it"]
+                      "description": "Why there is no answer, present exactly where `status` is `unavailable`. `not_asked` is a build that asked for no measurement, which every line of every kind says. `arms_not_asked` and `arms_unreadable` belong to a line a fork of a body drew, which is met by getting the comparison to produce a value rather than by writing the value — and that holds of all four of its points. An invariant's line is met by writing the value and is never waiting on the instrumentation. `no_arm_witnesses_it` was a guard's line whose comparison sat inside a condition whose arms did not separate the rows that reached it from the rows that did not — the second operand of an `&&` on the side where it is false. No compiler writes it any more: the comparison carries a site of its own and is observed where it runs. It is here because reports of this version were written carrying it, and a version says what its documents may carry rather than what is emitted today.",
+                      "enum": ["not_asked", "arms_not_asked", "arms_unreadable", "no_rows",
+                               "no_arm_witnesses_it"]
                     }
                   }
                 }
@@ -414,8 +415,8 @@
             "description": "`partial` where some rows were not read at all: a combination none of the rows seen reaches has not been left untried by anybody."
           },
           "reason": {
-            "description": "Why there are no numbers, present exactly where `status` is `unavailable`. How large the space is says nothing about a behavior no row names.",
-            "enum": ["no_rows"]
+            "description": "Why there are no numbers, present exactly where `status` is `unavailable`. How large the space is says nothing about a behavior no row names, nor about a build that asked for no measurement (`not_asked`).",
+            "enum": ["no_rows", "not_asked"]
           }
           }
         },
@@ -506,8 +507,8 @@
         "status": { "$ref": "#/$defs/status" },
         "weakening": { "$ref": "#/$defs/weakening" },
         "reason": {
-          "description": "Why there is no number, present exactly where `status` is `unavailable`. `no_rows` is a behavior no row names; `not_a_sum` is a signature with no sum anywhere in it, which no row could give a case to cover.",
-          "enum": ["no_rows", "not_a_sum"]
+          "description": "Why there is no number, present exactly where `status` is `unavailable`. `no_rows` is a behavior no row names; `not_a_sum` is a signature with no sum anywhere in it, which no row could give a case to cover; `not_asked` is a build that asked for no measurement, which every measure that reads the rows says and which the sets under it say too.",
+          "enum": ["no_rows", "not_a_sum", "not_asked"]
         },
         "output": {
           "type": "object",
@@ -536,7 +537,7 @@
               "$ref": "#/$defs/status",
               "description": "Whether the rows were counted here at all. `unavailable` where the position is not a sum, and where no row names the behavior — in both, the sets below are absent rather than empty, since a set nobody filled and a set nothing reached read alike."
             },
-            "reason": { "enum": ["not_a_sum", "no_rows"] },
+            "reason": { "enum": ["not_a_sum", "no_rows", "not_asked"] },
             "weakening": { "$ref": "#/$defs/weakening" }
           }
         },
@@ -564,7 +565,7 @@
                 "$ref": "#/$defs/status",
                 "description": "Whether the rows were counted here at all. `unavailable` where the position is not a sum, and where no row names the behavior — in both, the sets below are absent rather than empty, since a set nobody filled and a set nothing reached read alike."
               },
-              "reason": { "enum": ["not_a_sum", "no_rows"] },
+              "reason": { "enum": ["not_a_sum", "no_rows", "not_asked"] },
               "weakening": { "$ref": "#/$defs/weakening" }
             }
           }

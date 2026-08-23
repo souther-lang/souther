@@ -327,7 +327,7 @@ class CompileExampleGenerateTest {
                 "the tab is written the way a literal spells one");
 
         String block = GeneratedRows.of("example.tabbed", generated(tabbed), Map.of(), false,
-                SourceNameResolver.identity());
+                SourceNameResolver.identity()).text();
         String pasted = tabbed + block.lines()
                 .filter(line -> line.startsWith("//     ") || line.equals("// example take"))
                 .map(line -> line.substring("// ".length()).replace("<?>", "Ok { n = 0 }"))
@@ -653,7 +653,7 @@ class CompileExampleGenerateTest {
     /** The rows of the block, with the placeholder answered the way an author answers it. */
     private static String answered(String source, String expected) {
         String block = GeneratedRows.of("example.trip", generated(source), Map.of(), false,
-                SourceNameResolver.identity());
+                SourceNameResolver.identity()).text();
         String rows = block.lines()
                 .filter(line -> line.startsWith("//     ") || line.equals("// example submit"))
                 .map(line -> line.substring("// ".length()).replace("<?>", expected))
@@ -699,7 +699,7 @@ class CompileExampleGenerateTest {
                     row.identity().shown() + " -> " + row.failurePhase());
         }
         assertEquals("", GeneratedRows.of("example.trip", generated(source), Map.of(), false,
-                        SourceNameResolver.identity()),
+                        SourceNameResolver.identity()).text(),
                 "nothing is left to fill");
     }
 
@@ -727,7 +727,7 @@ class CompileExampleGenerateTest {
     @Test
     void theBlockPastedUnchangedLeavesTheModelWhereItWas() {
         String block = GeneratedRows.of("example.trip", generated(TRIP), Map.of(), false,
-                SourceNameResolver.identity());
+                SourceNameResolver.identity()).text();
         String pasted = TRIP + block;
 
         Compilation compilation = Compilation.ofSource(pasted, "Main");
@@ -735,7 +735,7 @@ class CompileExampleGenerateTest {
 
         assertEquals(1, outcomes(compilation).size(), "no row was added");
         assertEquals(block, GeneratedRows.of("example.trip", generated(pasted), Map.of(), false,
-                        SourceNameResolver.identity()),
+                        SourceNameResolver.identity()).text(),
                 "the same rows are still owed");
     }
 
@@ -806,7 +806,7 @@ class CompileExampleGenerateTest {
                     row.identity().shown() + " -> " + row.failurePhase());
         }
         assertEquals("", GeneratedRows.of("example.trip", generated(source), Map.of(), false,
-                        SourceNameResolver.identity()),
+                        SourceNameResolver.identity()).text(),
                 "and nothing is left to offer once they are answered");
     }
 
@@ -947,7 +947,7 @@ class CompileExampleGenerateTest {
     @Test
     void theBlockIsWrittenInTheFormattersOwnShape() {
         String block = GeneratedRows.of("example.trip", generated(TRIP), Map.of(), false,
-                SourceNameResolver.identity());
+                SourceNameResolver.identity()).text();
         String rows = block.lines()
                 .filter(line -> line.startsWith("//     ") || line.equals("// example submit"))
                 .map(line -> line.substring("// ".length()).replace("<?>", "unanswered__"))
@@ -1005,7 +1005,7 @@ class CompileExampleGenerateTest {
                 souther.compiler.meta.ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        String block = GeneratedRows.of(compilation, null, null, false, SourceNameResolver.identity());
+        String block = GeneratedRows.of(compilation, null, null, false, SourceNameResolver.identity()).text();
 
         assertEquals(declared, block.lines()
                         .filter(line -> line.startsWith("// example "))
@@ -1024,7 +1024,7 @@ class CompileExampleGenerateTest {
                 """;
 
         assertEquals("", GeneratedRows.of("example.trip", generated(covered), Map.of(), false,
-                SourceNameResolver.identity()));
+                SourceNameResolver.identity()).text());
     }
 
     /**
@@ -1066,9 +1066,9 @@ class CompileExampleGenerateTest {
         Map<String, Adequacy.Filling> generated = generated(EVERY_POINT_UNFILLED);
 
         String asked = GeneratedRows.of("sz.gen", generated, Map.of(), true,
-                SourceNameResolver.identity());
+                SourceNameResolver.identity()).text();
         String notAsked = GeneratedRows.of("sz.gen", generated, Map.of(), false,
-                SourceNameResolver.identity());
+                SourceNameResolver.identity()).text();
 
         // One against the line and one away from it, so neither kind is answering for the other.
         assertTrue(asked.contains("// no row for `s = 5` in `label`"), asked);

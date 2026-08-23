@@ -53,6 +53,28 @@ class AdequacyLensTest {
                 | (Draft { cost = Amount(50) }) -> Submitted { cost = Amount(50) }
             """;
 
+    private static final String EDGES = "file:///edges.sou";
+
+    /** A behavior whose only gaps are the two lines its invariant draws: the output is one data, the
+     *  body forks nowhere, and the one row covers the one class the position divides into. So the
+     *  block a person is offered holds boundary rows or nothing. */
+    private static final String ONLY_EDGES = """
+            module edges
+
+            data Amount = Int
+                invariant value >= 0 && value <= 10
+
+            data Ok = { n: Amount }
+
+            behavior keep : (a: Amount) -> Ok
+                constructs Ok
+
+            let keep (a) = Ok { n = a }
+
+            example keep
+                | "mid" : (Amount(5)) -> Ok { n = Amount(5) }
+            """;
+
     private static ModuleGraph graphOf(Map<String, String> documents) {
         return ModuleGraph.of(new LinkedHashMap<>(documents));
     }
@@ -151,6 +173,26 @@ class AdequacyLensTest {
             assertTrue(line.startsWith("//"), "every line is a comment: " + line);
         }
         assertTrue(actions.get(0).newText().contains("-> <?>"), actions.get(0).newText());
+    }
+
+    /**
+     * And nothing is offered where no value was composed, whatever the notes say.
+     *
+     * <p>An offer to write rows has to write rows. At {@code witness} nothing is composed — a
+     * candidate costs a decoder run for each point it settles, which is not what that level
+     * promises — so the block holds the reason and no row, and an editor reading the block for
+     * whether there is work would offer to write rows and put a comment in somebody's source
+     * (issue #955). What there is to write is the generator's answer.
+     */
+    @Test
+    void nothingIsOfferedWhereNoValueWasComposed() {
+        assertEquals(1, measuring(Adequacy.Level.ALL)
+                        .codeActions(EDGES, ONLY_EDGES, on(7),
+                                graphOf(Map.of(EDGES, ONLY_EDGES))).size(),
+                "at `all` the two lines are rows to write");
+
+        assertEquals(List.of(), measuring(Adequacy.Level.WITNESS)
+                .codeActions(EDGES, ONLY_EDGES, on(7), graphOf(Map.of(EDGES, ONLY_EDGES))));
     }
 
     /** With one document there is nothing to offer: the values a row writes are built through the

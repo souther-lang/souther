@@ -49,6 +49,9 @@ class CompileExampleWitnessTest {
 
     private static Map<String, Adequacy.SignatureEvidence> evidence(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
+        // Asked for, because a measure nobody asks for is not made: what this reads is what a
+        // report of this model would hold.
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, Adequacy.SignatureEvidence> out = compilation.db()
                 .ask(new Adequacy.Witnesses(compilation.modules().get(0))).value();

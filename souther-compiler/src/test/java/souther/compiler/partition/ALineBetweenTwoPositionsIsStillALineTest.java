@@ -521,7 +521,7 @@ class ALineBetweenTwoPositionsIsStillALineTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return souther.compiler.report.GeneratedRows.of(compilation, null, null, true,
-                SourceNameResolver.identity());
+                SourceNameResolver.identity()).text();
     }
 
     /** Held here so a rename of the report's own words does not quietly turn every assertion above

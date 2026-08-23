@@ -90,7 +90,9 @@ class AMeasureWithNoNumberSaysWhyTest {
 
             behavior sift : (p: Pair) -> Res
                 constructs Res
-            let sift (p) = Res { n = 0 }
+            let sift (p) = match p.left with
+                | Yes -> Res { n = 1 }
+                | No -> Res { n = 0 }
             """;
 
     /**
@@ -162,13 +164,13 @@ class AMeasureWithNoNumberSaysWhyTest {
                     partition   not applicable (the rules of this behavior divide no position)
                       · not derivable: w.v
                     border      not applicable (the rules of this behavior draw no line)
-                    branch      not measured (no row names this behavior)
+                    branch      not applicable (this body owes no arm)
                   narrow                   implemented   rows 0    pending 0
                     signature   not applicable (this behavior's output is not a sum)
                     partition   not applicable (the rules of this behavior divide no position)
                       · not derivable: m.v
                     border      not applicable (the rules of this behavior draw no line)
-                    branch      not measured (no row names this behavior)
+                    branch      not applicable (this body owes no arm)
                   both                     implemented   rows 1    pending 0
                     signature   not applicable (this behavior's output is not a sum)
                     branch      not applicable (this behavior has no body)
@@ -189,13 +191,13 @@ class AMeasureWithNoNumberSaysWhyTest {
                       · no OUT point is owed at r.cost = 0 (invariant Amount #1): excluded — the rules leave no value there
                       · no OFF point is owed at r.cost = 1000 (invariant Amount #1): excluded — the rules leave no value there
                       · no OUT point is owed at r.cost = 1000 (invariant Amount #1): excluded — the rules leave no value there
-                    branch      not measured (no row names this behavior)
+                    branch      not applicable (this body owes no arm)
                   classify                 implemented   rows 1    pending 0
                     signature   not applicable (this behavior's output is not a sum)
                     partition   axes 1   equivalence partitions 1/2
                       · no row is in `No` at q.flag
                     border      not applicable (the rules of this behavior draw no line)
-                    branch      0/0
+                    branch      not applicable (this body owes no arm)
                   sift                     implemented   rows 0    pending 0
                     signature   not applicable (this behavior's output is not a sum)
                     partition   axes 2   equivalence partitions 0/0   (2 not measured: no row names this behavior)
@@ -259,7 +261,7 @@ class AMeasureWithNoNumberSaysWhyTest {
     void aCompositionSaysItsArmsDoNotApply() {
         Adequacy.BranchEvidence branch = branches().get("both");
         assertEquals(MeasurementStatus.NOT_APPLICABLE, AdequacyReport.statusOf(branch.measured()));
-        assertEquals(Adequacy.BranchEvidence.NoBody.NO_BODY, branch.measured().why());
+        assertEquals(Adequacy.BranchEvidence.NoArms.NO_BODY, branch.measured().why());
         assertFalse(branch.applicable(), "nothing here is owed a branch measure");
     }
 
@@ -268,16 +270,25 @@ class AMeasureWithNoNumberSaysWhyTest {
     @Test
     void anInjectedBehaviorSaysTheSame() {
         Adequacy.BranchEvidence branch = branches().get("baseRate");
-        assertEquals(Adequacy.BranchEvidence.NoBody.NO_BODY, branch.measured().why());
+        assertEquals(Adequacy.BranchEvidence.NoArms.NO_BODY, branch.measured().why());
     }
 
     /** A body with arms, that no row names, is a measure that was not made rather than one that does
      * not apply. The verdict reads these apart. */
     @Test
     void aBodyNoRowNamesIsUnmeasuredAndNotInapplicable() {
-        Adequacy.BranchEvidence branch = branches().get("rated");
+        Adequacy.BranchEvidence branch = branches().get("sift");
         assertEquals(Adequacy.BranchEvidence.NotAsked.NO_ROWS, branch.measured().why());
         assertTrue(branch.applicable(), "there are arms here; nothing asked about them");
+    }
+
+    /** A body that forks nowhere owes no arm, and a row would not give it one. Told apart from the
+     * one above, which is the same absence of numbers and asks the author for a row. */
+    @Test
+    void aBodyThatForksNowhereOwesNoArm() {
+        Adequacy.BranchEvidence branch = branches().get("rated");
+        assertEquals(Adequacy.BranchEvidence.NoArms.NO_ARM_OBLIGATIONS, branch.measured().why());
+        assertFalse(branch.applicable(), "nothing here is owed a branch measure");
     }
 
     /**
@@ -291,9 +302,45 @@ class AMeasureWithNoNumberSaysWhyTest {
      */
     @Test
     void aMeasureThatDoesNotApplyIsNotTheSameStatusAsOneNobodyMade() {
-        assertNotEquals(branches().get("rated").measured().why(),
+        assertNotEquals(branches().get("sift").measured().why(),
                 branches().get("both").measured().why(),
                 "a body no row names and a composition with no arms are not one answer");
+    }
+
+    /**
+     * What a behavior owes is the same answer at every level.
+     *
+     * <p>The arms a body has are read off the checked bodies, and nothing in that reading waits on
+     * the instrumented classes. So a build that did not ask for the arms gets the applicability
+     * answer all the same, and only the behaviors that owe one come back as a measurement nobody
+     * made — which is what keeps a verdict from being held open by a body that forks nowhere
+     * (issue #955).
+     */
+    @Test
+    void whatABehaviorOwesIsTheSameAnswerAtEveryLevel() {
+        Map<String, Adequacy.BranchEvidence> asked = branchesAt(Adequacy.Level.ALL);
+        Map<String, Adequacy.BranchEvidence> notAsked = branchesAt(Adequacy.Level.WITNESS);
+
+        for (Map.Entry<String, Adequacy.BranchEvidence> each : asked.entrySet()) {
+            String behavior = each.getKey();
+            assertEquals(each.getValue().applicable(), notAsked.get(behavior).applicable(),
+                    behavior + " owes what it owes whether or not the build asked for the arms");
+            if (!each.getValue().applicable()) {
+                assertEquals(each.getValue().measured().why(),
+                        notAsked.get(behavior).measured().why(),
+                        behavior + " says the same reason either way");
+            }
+        }
+        // And the one that does owe arms is the one the level changes the answer for.
+        assertEquals(Adequacy.BranchEvidence.NotAsked.NOT_ASKED,
+                notAsked.get("sift").measured().why());
+    }
+
+    private static Map<String, Adequacy.BranchEvidence> branchesAt(Adequacy.Level level) {
+        Compilation compilation = Compilation.ofSource(MODEL, "Main");
+        compilation.measure(Adequacy.Asked.reportOnly(level));
+        compilation.answerEverything();
+        return compilation.db().ask(new Adequacy.BranchCoverage("example.repro")).value();
     }
 
     /** A line an invariant drew is met by writing the value, so it is never waiting on the arms.
@@ -334,7 +381,9 @@ class AMeasureWithNoNumberSaysWhyTest {
 
             behavior take : (request: Draft) -> Ok
                 constructs Ok
-            let take (request) = Ok { n = request.cost.value }
+            let take (request) = match request.flag with
+                | Yes -> Ok { n = request.cost.value }
+                | No -> Ok { n = 0 }
 
             behavior elsewhere : (request: Draft) -> Ok
                 constructs Ok
@@ -480,10 +529,11 @@ class AMeasureWithNoNumberSaysWhyTest {
 
         // Every behavior of the model whose signature does not apply still reads `satisfied` where
         // the measures that were asked came to an answer — the inapplicable ones are not what holds
-        // this open. `classify` is the one whose positions were divided and whose arms were run.
+        // this open. `classify` is the one whose positions were divided and whose rows were read.
         String classify = behaviorBlock(human(), "classify");
         assertTrue(classify.contains("not applicable"), classify);
-        assertTrue(classify.contains("branch      0/0"), classify);
+        assertTrue(classify.contains("branch      not applicable (this body owes no arm)"),
+                classify);
     }
 
     /** Every measure the model produces, as (what it is, what it came to). */

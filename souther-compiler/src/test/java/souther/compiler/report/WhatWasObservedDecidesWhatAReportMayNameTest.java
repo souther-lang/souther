@@ -76,7 +76,7 @@ class WhatWasObservedDecidesWhatAReportMayNameTest {
     void andNothingSaysARowWasNotRead() {
         StringBuilder out = new StringBuilder();
         new AdequacyReport(AdequacyReport.SCHEMA_VERSION, "x",
-                souther.compiler.query.Adequacy.Asked.fullReport(), WeakeningSet.none(),
+                souther.compiler.query.Adequacy.AdequacyBar.RELIABLE_DOMAIN, WeakeningSet.none(),
                 List.of()).branch(out,
                 new AdequacyReport.BehaviorReport("b", BehaviorImplementation.IMPLEMENTED, 1, 0,
                         WeakeningSet.none(), null, null, null, read(), List.of()),

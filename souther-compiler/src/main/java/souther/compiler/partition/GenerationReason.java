@@ -24,6 +24,16 @@ public sealed interface GenerationReason {
      */
     record PositionWithheld(AxisId axis) implements GenerationReason {}
 
+    /**
+     * No value was composed anywhere, because the build asked for none.
+     *
+     * <p>A row offered at a boundary is a value that went through the module's decoders, and
+     * composing one costs a decoder run per point — which is work a build that asked to read what
+     * its rows already established did not ask for. What the report says about those points is
+     * unchanged; what is missing is the row a person could paste.
+     */
+    record NoValuesWereAskedFor(String behavior) implements GenerationReason {}
+
 
     /**
      * Rows exist that nothing read, so nothing was offered at all.

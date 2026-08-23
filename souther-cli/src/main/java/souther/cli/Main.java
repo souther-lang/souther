@@ -391,7 +391,7 @@ public final class Main {
                 // Beside it rather than in it where the report is JSON: the rows are source, and
                 // source in the middle of a JSON document is not a document.
                 if (generate) {
-                    String rows = GeneratedRows.of(compilation, module, behavior, boundaries, names);
+                    String rows = GeneratedRows.of(compilation, module, behavior, boundaries, names).text();
                     (render.json() ? System.err : System.out).print(rows);
                 }
             }

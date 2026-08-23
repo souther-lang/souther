@@ -300,6 +300,11 @@ public record PartitionEvidence(Measurement<List<AxisCoverage>> partitioned,
             return new PairSpace(total, new Measurement.NotMeasured<>(NoRows.NO_ROWS));
         }
 
+        /** The same, where nobody asked for a measurement at all. */
+        public static PairSpace notAsked(int total) {
+            return new PairSpace(total, new Measurement.NotMeasured<>(NothingWasAsked.NOT_ASKED));
+        }
+
         /** A space too large to walk to the end of. What it is measured in part by is the fact that
          *  stopped it, said once. */
         public static PairSpace truncated(String behavior, long size, int limit) {
@@ -427,6 +432,13 @@ public record PartitionEvidence(Measurement<List<AxisCoverage>> partitioned,
                                           List<String> classes, Reading read) {
             return new AxisCoverage(at, path, classes, read,
                     new Measurement.NotMeasured<>(NoRows.NO_ROWS));
+        }
+
+        /** The same, where nobody asked for a measurement at all. */
+        public static AxisCoverage notAsked(souther.compiler.partition.AxisId at, String path,
+                                            List<String> classes, Reading read) {
+            return new AxisCoverage(at, path, classes, read,
+                    new Measurement.NotMeasured<>(NothingWasAsked.NOT_ASKED));
         }
 
         public AxisCoverage {

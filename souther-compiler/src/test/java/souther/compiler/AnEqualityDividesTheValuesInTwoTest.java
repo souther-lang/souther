@@ -140,7 +140,7 @@ class AnEqualityDividesTheValuesInTwoTest {
                 .ask(new Adequacy.Generated(compilation.modules().get(0))).value();
         assertNotNull(all, "the model under test compiles");
         return GeneratedRows.of("example.ratio", all, Map.of(), false,
-                SourceNameResolver.identity());
+                SourceNameResolver.identity()).text();
     }
 
     /** An ordering comparison beside it is a distinction the model does draw, and is kept. */

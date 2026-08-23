@@ -3,6 +3,7 @@ package souther.compiler;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Db;
@@ -21,6 +22,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * already established is free; finding out which arms they went through means generating a second set
  * of classes and running every row again, and a build that did not ask for that must not pay for it —
  * an editor recompiles on every keystroke.
+ *
+ * <p>Which findings a level carries is every measure's own answer and not a list kept here. A line a
+ * fork drew is met by getting the comparison to answer, so nothing can say whether a row met it
+ * until the rows are instrumented; a line an invariant drew is met by writing the value, so it is
+ * measured wherever the rows ran. The two are told apart by the measure and arrive at the level that
+ * can make them (issue #955).
  */
 class CompileAdequacyWarningTest {
 
@@ -50,17 +57,26 @@ class CompileAdequacyWarningTest {
             """;
 
     private static List<String> codesAt(Adequacy.Level level) {
+        List<String> codes = new ArrayList<>();
+        for (Db.Found found : warningsAt(level)) {
+            codes.add(found.report().diagnostic().code());
+        }
+        return codes;
+    }
+
+    /** Every adequacy warning one level raises about this model, in the order it raised them. */
+    private static List<Db.Found> warningsAt(Adequacy.Level level) {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(level);
         compilation.answerEverything();
-        List<String> codes = new ArrayList<>();
-        for (Db.Found found : compilation.db().allReports()) {
-            Diagnostic d = found.report().diagnostic();
-            if (!found.report().isError() && d.code() != null && d.code().startsWith("E19")) {
-                codes.add(d.code());
+        List<Db.Found> found = new ArrayList<>();
+        for (Db.Found each : compilation.db().allReports()) {
+            Diagnostic d = each.report().diagnostic();
+            if (!each.report().isError() && d.code() != null && d.code().startsWith("E19")) {
+                found.add(each);
             }
         }
-        return codes;
+        return found;
     }
 
     /** The default. A build that did not ask is told nothing, and nothing is measured to tell it. */
@@ -81,8 +97,39 @@ class CompileAdequacyWarningTest {
 
         assertTrue(codes.contains("E1913"), codes.toString());
         assertTrue(codes.contains("E1915"), codes.toString());
-        assertFalse(codes.contains("E1916"), "a boundary takes running the rows again: " + codes);
-        assertFalse(codes.contains("E1918"), "and so does an arm: " + codes);
+        assertFalse(codes.contains("E1918"), "an arm takes running the rows again: " + codes);
+    }
+
+    /**
+     * A line an invariant drew is told at every level that measured the rows, and a line a fork drew
+     * at the level that instrumented them.
+     *
+     * <p>The same code and two measures behind it. `Amount`'s bound is met by writing the value, so
+     * the rows the compile already ran answer it; the `guard`'s line is met by getting the
+     * comparison to answer, and until the classes record that, no row can be shown to have reached
+     * it. A level that dropped both was dropping a gap it had established, and the build a person
+     * asked for the cheap measures went on being called adequate against a line nobody was at.
+     */
+    @Test
+    void aBoundaryIsToldWhereItsOwnMeasureCouldBeMade() {
+        assertEquals(List.of("invariant Amount #1"), bordersWarnedAbout(Adequacy.Level.WITNESS));
+        assertEquals(List.of("invariant Amount #1", "cost <= 100", "cost <= 100"),
+                bordersWarnedAbout(Adequacy.Level.ALL));
+    }
+
+    /** Which rule each {@code E1916} is about, in the order they were raised. A rule names itself; a
+     *  line a fork drew is named by the comparison. */
+    private static List<String> bordersWarnedAbout(Adequacy.Level level) {
+        List<String> rules = new ArrayList<>();
+        for (Db.Found found : warningsAt(level)) {
+            switch (found.report().diagnostic().said()) {
+                case ExampleMessage.NoRowIsAtThePointOfTheBorderARuleDrew it -> rules.add(it.rule());
+                case ExampleMessage.NoRowIsAtThePointOfTheBorderAConstructDrew _ ->
+                        rules.add("cost <= 100");
+                default -> { }
+            }
+        }
+        return rules;
     }
 
     /** Asking for everything adds what the second run answers, and nothing that was there is lost. */

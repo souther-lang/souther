@@ -192,7 +192,7 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return souther.compiler.report.GeneratedRows.of(compilation, "d", "charge", true,
-                SourceNameResolver.identity());
+                SourceNameResolver.identity()).text();
     }
 
     /**

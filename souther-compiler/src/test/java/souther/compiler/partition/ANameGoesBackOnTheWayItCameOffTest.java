@@ -168,7 +168,7 @@ class ANameGoesBackOnTheWayItCameOffTest {
 
         assertEquals(List.of("Approved", "Rejected"), evidence.axes().get(0).classes());
         String rows = GeneratedRows.of(compilation, "demo", "run", true,
-                SourceNameResolver.identity());
+                SourceNameResolver.identity()).text();
         assertTrue(rows.contains("DecisionN(Approved { id = 0 })"), rows);
         assertTrue(rows.contains("DecisionN(Rejected)"), rows);
     }

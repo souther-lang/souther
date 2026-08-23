@@ -287,7 +287,7 @@ class CompilePartialAdequacyTest {
                 "the flag's classes are undecided, so nothing is written for them");
         assertFalse(generated.get("take").composed().reasons().isEmpty(),
                 "and the position that could not be read is named");
-        String written = GeneratedRows.of("example.budget", generated, Map.of(), true, SourceNameResolver.identity());
+        String written = GeneratedRows.of("example.budget", generated, Map.of(), true, SourceNameResolver.identity()).text();
         assertFalse(written.contains("example take"), "no row is offered: " + written);
         assertTrue(written.contains("no rows offered at"),
                 "the position it could not read is what there is to say: " + written);
@@ -369,7 +369,10 @@ class CompilePartialAdequacyTest {
                 behavior cancel : (request: Draft) -> Gone
                     constructs Gone
 
-                let cancel (request) = Gone { why = "x" }
+                let cancel (request) = {
+                    guard request.n > 0 else Gone { why = "none" }
+                    Gone { why = "x" }
+                }
 
                 example submit
                     | (Draft { n = 1 }) -> Ok { n = 1 }
@@ -380,8 +383,11 @@ class CompilePartialAdequacyTest {
         AdequacyReport whole = AdequacyReport.of(compilation);
 
         assertEquals(MeasurementStatus.PARTIAL, whole.status(), "`cancel` did not finish");
-        assertEquals(List.of("cancel"), whole.modules().get(0).incompleteness().stream()
-                .map(souther.compiler.observe.Incompleteness::subject).toList());
+        // Both of them `cancel`'s: the row that did not finish, and the position of its guard whose
+        // value that row was the only one to write.
+        assertEquals(List.of("cancel", "cancel/request.n"),
+                whole.modules().get(0).incompleteness().stream()
+                        .map(souther.compiler.observe.Incompleteness::subject).toList());
 
         AdequacyReport one = whole.only(null, "submit");
         assertEquals(MeasurementStatus.COMPLETE, one.status());
@@ -475,7 +481,7 @@ class CompilePartialAdequacyTest {
 
         assertEquals(List.of(), generated.get("take").composed().rows());
         assertEquals(List.of(), generated.get("take").boundaries().rows());
-        String written = GeneratedRows.of("example.split", generated, Map.of(), true, SourceNameResolver.identity());
+        String written = GeneratedRows.of("example.split", generated, Map.of(), true, SourceNameResolver.identity()).text();
         assertFalse(written.contains("example take"),
                 "the row may be sitting in the file that could not be read: " + written);
         assertTrue(written.contains("generation stopped"),

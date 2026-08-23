@@ -141,7 +141,7 @@ at.coverage().made().orElseThrow());
         compilation.answerEverything();
 
         String block = souther.compiler.report.GeneratedRows.of(
-                compilation, "example.proven", "place", true, SourceNameResolver.identity());
+                compilation, "example.proven", "place", true, SourceNameResolver.identity()).text();
 
         assertTrue(block.contains("no row for `amount = 0` in `place`"), block);
         assertTrue(block.contains("every value tried was refused"), block);
@@ -313,17 +313,65 @@ at.coverage().made().orElseThrow());
     /** The point against a line at {@code value}, which is what a row there is owed for. */
     private static ItemAssessment.Owed assessmentAt(String model, String module, String behavior,
                                                     String value) {
-        return pointsAt(model, module, behavior).stream()
+        return assessmentAt(model, module, behavior, value, Adequacy.Level.ALL);
+    }
+
+    private static ItemAssessment.Owed assessmentAt(String model, String module, String behavior,
+                                                    String value, Adequacy.Level level) {
+        return pointsAt(model, module, behavior, level).stream()
                 .filter(p -> p.role().againstTheLine()).filter(p -> p.owed() != null)
                 .filter(p -> value.equals(p.against()))
                 .findFirst().map(BorderAssessment.Point::owed).orElseThrow(
                         () -> new AssertionError("no boundary at " + value + " of " + behavior));
     }
 
+    /**
+     * A level that composes no value falls back on what the rules prove, and says why it built none.
+     *
+     * <p>Composing a candidate costs a decoder run for each point it settles — sixteen seconds over
+     * the corpus this was measured on, against a second for everything else a build at
+     * {@code witness} does. That is not reading what the rows already established, so it is not what
+     * the level promises, and it composes none (issue #955).
+     *
+     * <p>What it does not cost is the answer. Nothing a search does can take a proof away, so an
+     * edge inside what every rule reaching it leaves is writable because the rules say so, whichever
+     * level asked — and the row that is owed there is owed at both. What a composed value adds is a
+     * witness for the edges the rules cannot reach, and what a person is offered to paste.
+     *
+     * <p>And the two nothings are told apart. Read off the same field, an edge nobody tried to build
+     * at and an edge every value tried at was refused are one answer, and only the first is this
+     * build's doing.
+     */
+    @Test
+    void aLevelThatComposesNoValueStillReadsWhatTheRulesProve() {
+        ItemAssessment.Owed built = assessmentAt(HOLED, "example.holed", "f", "1");
+        assertInstanceOf(ItemAssessment.Writability.WitnessedByConstruction.class,
+                built.writability(), "at `all` a value at it went through the decoder");
+
+        ItemAssessment.Owed unbuilt = assessmentAt(HOLED, "example.holed", "f", "1",
+                Adequacy.Level.WITNESS);
+        assertInstanceOf(ItemAssessment.Writability.ProvenByProjection.class,
+                unbuilt.writability(), "and the rules prove it whether or not anything was built");
+        assertEquals(ItemAssessment.Attempt.Reason.VALUES_NOT_ASKED_FOR,
+                assertInstanceOf(ItemAssessment.Attempt.NotAttempted.class, unbuilt.attempt())
+                        .reason(),
+                "said as this build's doing and not as a refusal");
+        assertInstanceOf(Measurement.Complete.class, unbuilt.coverage(),
+                "the rows were read all the same: what is missing is the value, not the reading");
+        assertTrue(unbuilt.coverage().made().orElseThrow() instanceof ItemAssessment.Coverage.NoHit
+                        && unbuilt.writability().known(),
+                "so the row is owed at both levels, and this one offers no value to write there");
+    }
+
     private static List<BorderAssessment.Point> pointsAt(String model, String module,
                                                          String behavior) {
+        return pointsAt(model, module, behavior, Adequacy.Level.ALL);
+    }
+
+    private static List<BorderAssessment.Point> pointsAt(String model, String module,
+                                                         String behavior, Adequacy.Level level) {
         Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.measure(Adequacy.Asked.reportOnly(level));
         compilation.answerEverything();
         Map<String, List<BorderAssessment>> boundaries =
                 compilation.db().ask(new Adequacy.Boundaries(module)).value();
@@ -379,7 +427,7 @@ at.coverage().made().orElseThrow());
             compilation.measure(Adequacy.Asked.fullReport());
             compilation.answerEverything();
             String block = souther.compiler.report.GeneratedRows.of(
-                    compilation, "example.temporal", each[0], true, SourceNameResolver.identity());
+                    compilation, "example.temporal", each[0], true, SourceNameResolver.identity()).text();
 
             assertTrue(block.contains("no row for `" + each[1] + "`"), block);
             assertTrue(block.contains("does not make the combination impossible"), block);
