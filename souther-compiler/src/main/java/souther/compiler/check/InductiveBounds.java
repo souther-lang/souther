@@ -1,7 +1,6 @@
 package souther.compiler.check;
 
 import souther.compiler.numeric.Granularity;
-import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.NumericDomain.Bounds;
 import souther.compiler.numeric.NumericDomain.LinearForm;
 
