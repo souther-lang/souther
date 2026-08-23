@@ -60,6 +60,29 @@ class AGroupTooWideToWalkSaysSoTest {
      *  can only be reached at a power of two; a budget the caller names can be reached anywhere. */
     private static final String TWO = model(2);
 
+    /** The same behavior with rows, so a compilation can be asked what it is still owed. Each row
+     *  settles every parameter the same way, which takes one arm of each helper. */
+    private static String modelWithRows(int decisions, boolean bothWays) {
+        StringBuilder rows = new StringBuilder();
+        for (String at : bothWays ? new String[] {"On", "Off"} : new String[] {"On"}) {
+            StringBuilder values = new StringBuilder();
+            int total = 0;
+            for (int i = 1; i <= decisions; i++) {
+                if (i > 1) {
+                    values.append(", ");
+                }
+                values.append(at);
+                total += at.equals("On") ? i : 0;
+            }
+            rows.append("""
+                    example total
+                        | "%s" : (%s) -> Fee(%d)
+
+                    """.formatted(at, values, total));
+        }
+        return model(decisions) + "\n" + rows;
+    }
+
     private static String model(int decisions) {
         StringBuilder params = new StringBuilder();
         StringBuilder names = new StringBuilder();
@@ -220,6 +243,69 @@ class AGroupTooWideToWalkSaysSoTest {
                         .anyMatch(why -> why.reason() == Generator.UnresolvedCombination.Reason
                                 .THE_GROUP_WAS_NOT_OFFERED)),
                 () -> "each saying the walk was never made: " + unresolved);
+    }
+
+    /**
+     * A group held back that nothing on the list was behind is not reported.
+     *
+     * <p>What a run owes is the classes and the arms a caller names. Walking a group is how a row
+     * for an arm is looked for and is not itself owed, so a run asked for nothing behind a group
+     * lost nothing by not walking it — and a line saying no rows were offered there says rows were
+     * due where none were.
+     *
+     * <p>Which is also what keeps the summary in step with the entries. An arm is answered
+     * {@code THE_GROUP_WAS_NOT_OFFERED} only where it was owed, so a count of every group held back
+     * is a number with no entry under it.
+     */
+    @Test
+    void aGroupNothingWasAskedForBehindIsNotReported() {
+        Model model = Model.of(THIRTEEN);
+
+        Generator.GenerationResult asked = Generator.fill(model.subject(), List.of(),
+                Generator.CandidateCheck.ANY, model.groups(), Generator.Trial.NOTHING_RUNS,
+                List.of(), Set.of(), Set.of(), Budgets.generation());
+
+        assertEquals(List.of(), asked.reasons().stream()
+                        .filter(GenerationReason.GroupsNotOffered.class::isInstance).toList(),
+                () -> "nothing was owed behind it: " + asked.reasons());
+        assertEquals(List.of(), asked.arms(), "and no arm was answered for");
+    }
+
+    /**
+     * Through a compilation, an arm still owed brings the group back and an arm covered does not.
+     *
+     * <p>The production path, where what is owed comes from what measuring the arms established
+     * rather than from a set a caller wrote. Held with the same model twice and only the rows
+     * differing, so the two answers are the rows' and not the model's — and the group is past the
+     * budget in both, which is what says the difference is the obligation and not the limit.
+     */
+    @Test
+    void whatIsOwedDecidesWhetherTheHeldGroupIsNamed() {
+        assertEquals(1, groupsNotOfferedFor(modelWithRows(13, false)).size(),
+                "one row leaves the other arm of each helper owed, and the group is named for it");
+        assertEquals(List.of(), groupsNotOfferedFor(modelWithRows(13, true)),
+                "two rows take every arm, so nothing is owed and the group is not named");
+    }
+
+    private static List<GenerationReason.GroupsNotOffered> groupsNotOfferedFor(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(souther.compiler.query.Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        // The rows have to have run for what is owed to be what the arms established. A model whose
+        // examples failed is owed nothing for a reason of its own, and an empty answer from one of
+        // those would look exactly like the answer this test is about.
+        assertEquals(List.of(), compilation.db().allReports().stream()
+                        .filter(found -> found.report().isError())
+                        .map(found -> found.report().diagnostic().code().toString()).toList(),
+                "the model compiles and its rows run");
+        Map<String, souther.compiler.query.Adequacy.Filling> filling = compilation.db()
+                .ask(new souther.compiler.query.Adequacy.Generated("example.wide")).value();
+        assertNotNull(filling, "the module was asked for rows");
+        souther.compiler.query.Adequacy.Filling total = filling.get("total");
+        assertNotNull(total, "the behavior was asked for rows");
+        return total.composed().reasons().stream()
+                .filter(GenerationReason.GroupsNotOffered.class::isInstance)
+                .map(GenerationReason.GroupsNotOffered.class::cast).toList();
     }
 
     /** The behavior's inputs, its axes and the groups its body meets at, off one compile. */

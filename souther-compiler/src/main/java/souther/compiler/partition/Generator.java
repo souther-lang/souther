@@ -977,8 +977,19 @@ public final class Generator {
         // the offer never opened, and raising the budget does not reach it.
         InteractionCells.Offered offered = InteractionCells.of(groups, axes, budget);
         Set<Integer> notOffered = new LinkedHashSet<>();
+        // And which of the groups held back were carrying an arm this run was asked for. A group
+        // claiming nothing on the list cost this generation nothing: what was owed was the arms and
+        // the classes, and walking a group is how a row for an arm is looked for rather than
+        // something anybody is owed. Counted off the obligation for the reason the search limit
+        // below is — a number counted off the search space instead tells a reader to raise a limit
+        // that would change nothing.
+        int heldBackAndOwed = 0;
         for (InteractionCells.NotOffered held : offered.notOffered()) {
-            notOffered.addAll(armsIn(held.claims()));
+            List<Integer> behindIt = armsIn(held.claims());
+            notOffered.addAll(behindIt);
+            if (behindIt.stream().anyMatch(armsOwed::contains)) {
+                heldBackAndOwed++;
+            }
         }
         boolean unconfirmed = false;
         for (InteractionCells.Group group : offered.groups()) {
@@ -1061,13 +1072,20 @@ public final class Generator {
             reasons.add(new GenerationReason.SearchLimit(axes.get(0).id().behavior(),
                     classesLeft + cutOff.size()));
         }
-        // Said whether or not any arm on the list was behind one of them. A group held back is work
-        // this generation did not do, and a reader is owed that whether the arms it claimed were
-        // reached another way or were never asked for — the count is of the groups, since the
-        // combinations in them are what nothing walked.
-        if (!offered.notOffered().isEmpty()) {
+        // And the groups the limit held back that were carrying one of them. Not every group it
+        // held back: a run asked for nothing behind a group lost nothing by not walking it, and a
+        // line saying no rows were offered there says rows were due where none were. Which is also
+        // what keeps this in step with the entries above — an arm gets its
+        // `THE_GROUP_WAS_NOT_OFFERED` only where it was owed, so a summary counting more than those
+        // is a number with no entry under it.
+        //
+        // Asked of the arms the group may claim, which is a superset
+        // ({@link #everyArmACombinationMayTake}). A group named for an arm no combination of it
+        // actually reaches is the safe direction: the other one drops the news that a walk was not
+        // made, over an arm the report is about to call unreached.
+        if (heldBackAndOwed > 0) {
             reasons.add(new GenerationReason.GroupsNotOffered(axes.get(0).id().behavior(),
-                    offered.notOffered().size()));
+                    heldBackAndOwed));
         }
         if (unconfirmed) {
             reasons.add(new GenerationReason.RowsNotConfirmed(axes.get(0).id().behavior()));
