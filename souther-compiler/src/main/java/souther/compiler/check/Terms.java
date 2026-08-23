@@ -103,25 +103,23 @@ final class Terms {
      * terms equal ({@link Term}).
      */
     private final Term.Interner interned = new Term.Interner();
-    /** How each atom outside the affine fragment was computed. */
-    private final Map<FactSubject, Derivation> derivations = new HashMap<>();
-
     /**
-     * The walk each atom that is a reduction's answer was reached by.
+     * What this reading knows about each atom it has named by knowing which value it is: how the
+     * value was reached, and what it carries whatever reached it ({@link AtomKnowledge}).
      *
-     * <p>Beside {@link #derivations} and not among them. A derivation is what one expression is made
-     * of — a product of two values, a quotient by a written number — and it is read off the operands
-     * where they stand. A walk is what a library operation does with a closure it applies over and
-     * over, which no arrangement of an expression's parts says. Held as two tables because they are
-     * two facts: an operation the library gains is a row here and never a new shape of arithmetic,
-     * and a shape of arithmetic the language gains is the other way about.
+     * <p>One table and not one per kind of thing worth knowing. Held as a table of recipes beside a
+     * table of walks, the two were enumerated by name wherever an atom was read, and what a reader
+     * did not enumerate an atom silently did not have — which is how a size named inside a
+     * reduction's step came out with nothing known of it whatever the step did with it (#988). It
+     * also let one atom stand in both tables at once, which is two answers to what one value is, and
+     * neither table could see it.
      *
-     * <p>What is held is what was read of the walk here, as numbers. Nothing in it is a tree to be
-     * read again and nothing in it holds what the names around the call denoted — a walk whose parts
-     * could not be read at naming time is not recorded at all, rather than recorded as somewhere to
-     * go back to.
+     * <p>What is held is what was read at naming time, as numbers. Nothing in it is a tree to be
+     * read again and nothing in it holds what the names around a call denoted — a walk whose parts
+     * could not be read then is not recorded at all, rather than recorded as somewhere to go back
+     * to.
      */
-    private final Map<FactSubject, InductiveBounds.Walk> reductions = new HashMap<>();
+    private final Map<FactSubject, AtomKnowledge> knowledge = new HashMap<>();
 
     /** The subject each evaluation this could not name is, made once per occurrence. Identity-keyed:
      * an occurrence is a node, and two nodes are two evaluations however alike they are written. */
@@ -131,14 +129,71 @@ final class Terms {
     /** What each node a rewrite built stands for, so an occurrence keeps its identity through one. */
     private final java.util.IdentityHashMap<Core, Core> builtFrom = new java.util.IdentityHashMap<>();
 
-    /** What each atom this named outside the affine fragment was computed from. */
-    Map<FactSubject, Derivation> derivations() {
-        return derivations;
+    /**
+     * What this knows about {@code atom}, which is never null: an atom nothing was recorded about is
+     * one known to be reached no way and to carry nothing.
+     *
+     * <p>One lookup and three questions. What a reader wants of an atom is not one thing — which
+     * atoms it reads, whether a recipe has to be put through a reading, what holds of it in every
+     * reading — and answering them from one record is what keeps a reader from having to know how
+     * many tables there are ({@link AtomKnowledge}).
+     */
+    AtomKnowledge knowledgeOf(FactSubject atom) {
+        AtomKnowledge had = knowledge.get(atom);
+        return had == null ? AtomKnowledge.nothing() : had;
     }
 
-    /** The walk each atom this named as a reduction's answer was reached by. */
-    Map<FactSubject, InductiveBounds.Walk> reductions() {
-        return reductions;
+    /** Whether anything at all has been recorded about any atom, which is what says a reading has
+     * nothing to derive rather than nothing to derive it from. */
+    boolean knowsAnything() {
+        return !knowledge.isEmpty();
+    }
+
+    /**
+     * Records that {@code atom} was reached by {@code how}.
+     *
+     * <p>One value is reached one way. An atom recorded as reached two ways is the naming and the
+     * reading disagreeing about which value the atom is, and every bound derived under that name is
+     * about neither of them — which is as true of a walk recorded beside a piece of arithmetic as of
+     * two pieces of arithmetic, and was checked only within each table until they were one.
+     */
+    void computedBy(FactSubject atom, AtomKnowledge.Computation how) {
+        AtomKnowledge had = knowledgeOf(atom);
+        if (!(had.computation() instanceof AtomKnowledge.Computation.None)
+                && !sameComputation(had.computation(), how)) {
+            throw new OneTermTwoDerivations("atom `" + atom.rendered() + "` was reached as "
+                    + had.computation() + " and as " + how);
+        }
+        knowledge.put(atom, had.computedBy(how));
+    }
+
+    /**
+     * Records that {@code atom} carries {@code facts} whatever reached it.
+     *
+     * <p>One answer whoever named it. What a value carries is a function of which value it is, so
+     * two namings of one atom that came to different answers is one of them having read a rule the
+     * other did not — and merging the two would make what an atom carries depend on how many readers
+     * had got to it, with the reader that asked first answered from half of it.
+     *
+     * <p>Saying nothing is not one of the two answers. An expression may be named while the reading
+     * cannot make out the operation behind it — a library operation applied bare reaches the naming
+     * as an application and reaches {@link #asOperator} as nothing — and what comes back then is not
+     * "this value carries nothing" but "this reader had nothing to read". Both writings are one
+     * value and one atom, so the reading that did make out the operation answers for it, and nothing
+     * about the order they were named in shows through: an absence never replaces an answer and
+     * never disagrees with one. Two answers that are both answers still disagree, which is the case
+     * this is here for.
+     */
+    void carrying(FactSubject atom, List<NumericConstraint> facts) {
+        AtomKnowledge had = knowledgeOf(atom);
+        if (facts.isEmpty()) {
+            return;
+        }
+        if (!had.intrinsic().isEmpty() && !sameFacts(had.intrinsic(), facts)) {
+            throw new OneTermTwoIntrinsicAnswers("atom `" + atom.rendered() + "` carries "
+                    + had.intrinsic() + " and carries " + facts);
+        }
+        knowledge.put(atom, had.carrying(facts));
     }
 
     /**
@@ -158,24 +213,46 @@ final class Terms {
      * answering a semantic question by a naming convention, and this is the reader that would go
      * wrong quietly — a form it does not reach leaves the places under it unbounded and nothing else
      * says so ({@link StepInputFacts}).
+     *
+     * <p>Both kinds of edge, and a closure taken with a visited set. What an atom carries relates it
+     * to other values as surely as a recipe reads from them — a size no greater than the size of
+     * what it was built from is a statement about two atoms, and reaching one of them without the
+     * other leaves the relation saying nothing. Repetition is where this stops and is not an error:
+     * intrinsic relations carry no ordering, so an atom reachable from itself through them is two
+     * true statements rather than a value built out of itself. That is the opposite of what
+     * repetition means over computation edges alone, which is why the two walks are separate and
+     * neither is written in terms of the other ({@link DerivedNumericFacts}).
      */
     Set<FactSubject> reached(LinearForm<FactSubject> form) {
+        return reachedFrom(form.coefs().keySet());
+    }
+
+    /** Every atom reading {@code from} reaches, the ones named among them. */
+    Set<FactSubject> reachedFrom(java.util.Collection<FactSubject> from) {
         Set<FactSubject> out = new java.util.LinkedHashSet<>();
-        java.util.Deque<FactSubject> todo = new java.util.ArrayDeque<>(form.coefs().keySet());
+        java.util.Deque<FactSubject> todo = new java.util.ArrayDeque<>(from);
         while (!todo.isEmpty()) {
             FactSubject atom = todo.poll();
             if (!out.add(atom)) {
                 continue;
             }
-            Derivation recipe = derivations.get(atom);
-            if (recipe != null) {
-                recipe.formsRead().forEach(f -> todo.addAll(f.coefs().keySet()));
-            }
-            InductiveBounds.Walk under = reductions.get(atom);
-            if (under != null) {
-                todo.addAll(under.seed().coefs().keySet());
-                todo.addAll(under.step().coefs().keySet());
-            }
+            todo.addAll(knowledgeOf(atom).directlyReads(atom));
+        }
+        return out;
+    }
+
+    /**
+     * What every value reachable from {@code from} carries, as relations.
+     *
+     * <p>The closure and not the atoms themselves. What a size carries relates it to the size of
+     * what it was built from, and that one carries its own being at or above nought — so a reader
+     * taking in only what the atoms it named carry would take in the relation and leave the value at
+     * the other end of it unspoken for.
+     */
+    List<NumericConstraint> carriedBy(java.util.Collection<FactSubject> from) {
+        List<NumericConstraint> out = new ArrayList<>();
+        for (FactSubject atom : reachedFrom(from)) {
+            out.addAll(knowledgeOf(atom).intrinsic());
         }
         return out;
     }
@@ -546,7 +623,7 @@ final class Terms {
      * could not be read, since it was read to decide whether that value had a name at all.
      */
     FactSubject atomOf(Core e, Denotations at) {
-        FactSubject size = sizeAtomOf(e, arg -> bodyKey(arg, at));
+        FactSubject size = sizeAtomOf(e, at);
         if (size != null) {
             return size;
         }
@@ -569,7 +646,7 @@ final class Terms {
      * domain carries nothing of — an enumeration, a string — is called something and is no number.
      */
     Position positionOf(Core e, Denotations at) {
-        FactSubject size = sizeAtomOf(e, arg -> bodyKey(arg, at));
+        FactSubject size = sizeAtomOf(e, at);
         FactSubject key = subjectOf(e, at);
         if (size != null) {
             return new Position(key, size);
@@ -594,6 +671,12 @@ final class Terms {
         if (atom != null) {
             atomExtents.putIfAbsent(atom, extentOf(affineScalarBase(e.type())));
             recording(atom, e, at);
+            // What the value carries is filed where the value is named, so that a reader holding the
+            // atom and no tree has it. Asked of the operation the value came from, whichever surface
+            // it was written on — the same normalisation the recipe is read through.
+            if (asOperator(e) instanceof Core.PreservedCall call) {
+                carrying(atom, IntrinsicNumericFacts.ofCall(call, atom, at, this));
+            }
         }
         return atom;
     }
@@ -654,11 +737,7 @@ final class Terms {
         if (made == null) {
             return;
         }
-        Derivation had = derivations.putIfAbsent(atom, made);
-        if (had != null && !sameDerivation(had, made)) {
-            throw new OneTermTwoDerivations("atom `" + atom.rendered() + "` was computed as "
-                    + had + " and as " + made);
-        }
+        computedBy(atom, new AtomKnowledge.Computation.Derived(made));
     }
 
     /**
@@ -711,13 +790,13 @@ final class Terms {
         // The accumulator is a number of the kind the walk answers, whether or not the step read it:
         // a step that ignores it names it nowhere, and a range is still asserted about it here.
         named(accumulator, granularityOf(e.type()));
+        // What the step reaches is asked after the step has been read, which is what names the atoms
+        // inside it and files what each of them carries. A place a relation of theirs names is one
+        // this has to keep, so the reaching is taken over both kinds of edge and not over the
+        // recipes alone ({@link #reached}).
         InductiveBounds.Walk made = new InductiveBounds.Walk(seed, accumulator, step,
                 StepInputFacts.of(walk, inside, this, symbols, policy, reached(step)));
-        InductiveBounds.Walk had = reductions.putIfAbsent(atom, made);
-        if (had != null && !had.equals(made)) {
-            throw new OneTermTwoDerivations("atom `" + atom.rendered() + "` is the answer of two"
-                    + " different walks");
-        }
+        computedBy(atom, new AtomKnowledge.Computation.Reduction(made));
     }
 
     /**
@@ -1111,6 +1190,36 @@ final class Terms {
         return a.sameAs(b, SAME_NUMBERS);
     }
 
+    /** Whether two readings reached a value the same way. A walk is compared by the numbers it was
+     * read as, which is what it is here. */
+    private static boolean sameComputation(AtomKnowledge.Computation a, AtomKnowledge.Computation b) {
+        return switch (a) {
+            case AtomKnowledge.Computation.None ignored ->
+                    b instanceof AtomKnowledge.Computation.None;
+            case AtomKnowledge.Computation.Derived(Derivation recipe) ->
+                    b instanceof AtomKnowledge.Computation.Derived it
+                            && sameDerivation(recipe, it.recipe());
+            case AtomKnowledge.Computation.Reduction(InductiveBounds.Walk walk) ->
+                    b instanceof AtomKnowledge.Computation.Reduction it && walk.equals(it.walk());
+        };
+    }
+
+    /** Whether two readings came to the same answer about what a value carries. Compared on the
+     * numbers and not on the records' own equality, for the reason a recipe is: {@code 0.10} and
+     * {@code 0.1} are one number, and two readings differing in nothing but a scale are not this
+     * check disagreeing with itself. */
+    private static boolean sameFacts(List<NumericConstraint> a, List<NumericConstraint> b) {
+        if (a.size() != b.size()) {
+            return false;
+        }
+        for (int i = 0; i < a.size(); i++) {
+            if (a.get(i).rel() != b.get(i).rel() || !sameForm(a.get(i).form(), b.get(i).form())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     /** How the numbers in a recipe are compared, which is this reading's answer and not the
      * recipe's: what is being caught is the check naming two values alike, and a difference in
      * scale is not that. */
@@ -1165,15 +1274,58 @@ final class Terms {
         }
     }
 
-    /** The atom of the size {@code e} takes of a container {@code key} can name, or null where it
-     * takes none or names none. */
-    FactSubject sizeAtomOf(Core e, java.util.function.Function<Core, Term> key) {
+    /**
+     * One atom this said carries two different things.
+     *
+     * <p>Beside {@link OneTermTwoDerivations} and for its reason. What a value carries is a function
+     * of which value it is, so two namings answering differently is one of them having read a rule
+     * the other did not — and the reader that asked between them was answered from half of it.
+     */
+    static final class OneTermTwoIntrinsicAnswers extends TheCheckDisagreesWithItself {
+        private static final long serialVersionUID = 1L;
+
+        OneTermTwoIntrinsicAnswers(String message) {
+            super(message);
+        }
+    }
+
+    /** The atom of the size {@code e} takes of a container this can name, or null where it takes
+     * none or names none. */
+    FactSubject sizeAtomOf(Core e, Denotations at) {
         Core container = DischargeRules.sizeArgOf(e);
-        if (container == null) {
+        return container == null ? null
+                : sizeAtomFor(((Core.PreservedCall) e).operation(), container, at);
+    }
+
+    /**
+     * The atom the size {@code size} of {@code container} is, named and with what it carries filed.
+     *
+     * <p>The one route to a size's atom, so that a size named while reading a clause and a size named
+     * while relating one container to another are one value that carries one thing. Reached from
+     * {@link IntrinsicNumericFacts} as well, which states one edge of a chain and leaves the rest to
+     * the naming of the atom at the other end of it — so the chain is walked by this, once per atom,
+     * rather than by a reader that had to remember to walk it.
+     *
+     * <p>Two readings of the container and they are not one. What the atom is <em>called</em> is read
+     * off the container as written, which is how it has always been named and is what makes a size
+     * over a name and a size over the expression it was given one atom ({@link #bodyKey} is what
+     * resolves the name). What the atom <em>carries</em> is read off the value that name was given,
+     * because the rules are about how the container was built and a name is not a way of building
+     * one. Resolving before naming makes naming fail where the value has no key of its own though
+     * the name has; asking the rules of the name instead states nothing where the expression states
+     * something, and one atom then has two answers.
+     */
+    FactSubject sizeAtomFor(ValueName size, Core container, Denotations at) {
+        Term counted = bodyKey(DischargeRules.sizeSource(container), at);
+        if (counted == null) {
             return null;
         }
-        Term arg = key.apply(DischargeRules.sizeSource(container));
-        return arg == null ? null : sizeKeyOf(((Core.PreservedCall) e).operation(), arg);
+        FactSubject atom = sizeKeyOf(size, counted);
+        if (atom != null) {
+            carrying(atom, IntrinsicNumericFacts.ofSize(size,
+                    DischargeRules.sizeSource(listedOut(container, at)), atom, at, this));
+        }
+        return atom;
     }
 
     /** The size {@code size} takes of {@code container}, named as the whole number it is. A size
@@ -1181,7 +1333,7 @@ final class Terms {
      * that takes it and nothing besides, which is the term a clause reading one builds and the term a
      * guard stating one builds — so the two are one value rather than two writings that have to keep
      * spelling each other alike. */
-    FactSubject sizeKeyOf(ValueName size, Term container) {
+    private FactSubject sizeKeyOf(ValueName size, Term container) {
         return named(interned.called(size, List.of(container)), Granularity.DISCRETE);
     }
 

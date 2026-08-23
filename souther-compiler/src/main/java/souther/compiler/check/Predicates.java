@@ -2,7 +2,6 @@ package souther.compiler.check;
 
 import souther.compiler.types.BinOp;
 import souther.compiler.check.Combinators.Handed;
-import souther.compiler.check.DischargeRules.Cardinality;
 import souther.compiler.check.DischargeRules.Carrying;
 import souther.compiler.check.DischargeRules.Projection;
 import souther.compiler.check.DischargeRules.Shape;
@@ -13,7 +12,6 @@ import souther.compiler.numeric.NumericDomain.LinearForm;
 import souther.compiler.numeric.NumericDomain.Rel;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
-import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -677,12 +675,63 @@ final class Predicates {
         if (numeric == null && fact == null) {
             return Owed.unreadable(inv).alsoFolded(fold);
         }
-        List<NumericConstraint> known = new ArrayList<>();
-        sizeFacts(inv, at, known);
-        resultFacts(inv, at, known);
+        // What the values this clause names carry, read off the atoms rather than off the tree: an
+        // atom files what it carries where it is named, so having read the clause into forms is
+        // having read them ({@link IntrinsicNumericFacts}).
+        List<NumericConstraint> known = terms.carriedBy(namedBy(numeric, fact));
         return Owed.of(new Clause(numeric, fact, known, piecewise)).alsoFolded(fold);
     }
 
+
+    /**
+     * The atoms {@code cond} names as numbers: the two sides of a comparison where it is one, and
+     * the value it is otherwise.
+     *
+     * <p>Naming and not walking. Reading either side into a form is what names every value in it,
+     * and an atom files what it carries where it is named — so this asks for the names and takes what
+     * was filed against them, where the same question used to be answered by descending the tree a
+     * second time and reading the library's tables again.
+     *
+     * <p>What the forms name and what they reach, and nothing else. A number standing somewhere no
+     * form reads it from — an argument of an operation that answers something the domain does not
+     * carry — is named by this condition and left out here, where the walk down the tree would have
+     * stated what it carries. Nothing is lost while a value the reading cannot name in a form is a
+     * value no clause and no other guard can be written over either: a fact about it could not have
+     * been the reason a construction was discharged. That stops being true the day a clause can be
+     * decided by an atom no form of any condition reaches, and this is where to look when it is.
+     */
+    private Set<FactSubject> atomsNamedBy(Core cond, Denotations at) {
+        Set<FactSubject> out = new LinkedHashSet<>();
+        if (cond instanceof Core.Binary b && Conditions.relOf(b.op()) != null) {
+            LinearForm<FactSubject> left = terms.affineOf(b.left(), at);
+            LinearForm<FactSubject> right = terms.affineOf(b.right(), at);
+            if (left != null) {
+                out.addAll(left.coefs().keySet());
+            }
+            if (right != null) {
+                out.addAll(right.coefs().keySet());
+            }
+            return out;
+        }
+        FactSubject atom = terms.atomOf(cond, at);
+        if (atom != null) {
+            out.add(atom);
+        }
+        return out;
+    }
+
+    /** The atoms a clause read this far names: the ones its relation is written over, and the one a
+     * predicate it states is keyed on. */
+    private static Set<FactSubject> namedBy(NumericConstraint numeric, Fact fact) {
+        Set<FactSubject> out = new LinkedHashSet<>();
+        if (numeric != null) {
+            out.addAll(numeric.atoms());
+        }
+        if (fact != null) {
+            out.addAll(fact.keys());
+        }
+        return out;
+    }
 
     /** Whether {@code inv} is decided outright: the clause, with the construction's own values
      * already standing where it read a field, folded. {@code null} where it does not fold — which is
@@ -752,11 +801,12 @@ final class Predicates {
             return assumeCond(under, k, at, !positive).alsoRead(taken, shapeRead);
         }
         Known out = k;
-        // What holds of the sizes the condition names, and of what the operations in it answer,
-        // whichever way the condition itself is read.
-        List<NumericConstraint> known = new ArrayList<>();
-        sizeFacts(cond, at, known);
-        resultFacts(cond, at, known);
+        // What the values this condition names carry, whichever way the condition itself is read.
+        // Read off the atoms the condition was named into and not by walking it again: naming an
+        // expression is what files what its values carry, so the reading that named it has them
+        // ({@link IntrinsicNumericFacts}). Taken before the condition is read at all, for the reason
+        // the reachability question below is asked with them.
+        List<NumericConstraint> known = terms.carriedBy(atomsNamedBy(cond, at));
         for (NumericConstraint c : known) {
             // A size is never negative whether or not the condition holds, so this holds of the value
             // and not of the path — the condition is only where the container got named.
@@ -941,72 +991,6 @@ final class Predicates {
 
     // --- affine forms --------------------------------------------------------------------------
 
-    /** What is known of the size of every container an expression names: never negative, and no
-     * greater than the size of what it was built from wherever the building can only drop elements. */
-    void sizeFacts(Core e, Denotations at, List<NumericConstraint> out) {
-        // A name is what it was given, here as everywhere: what is known of a size does not depend on
-        // whether the size was written where it is read or bound first.
-        if (e instanceof Core.Read r && at.valueOf(r.binding()) != null) {
-            sizeFacts(at.valueOf(r.binding()), at, out);
-            return;
-        }
-        if (!(e instanceof Core.PreservedCall call)) {
-            Core.forEachChild(e, child -> sizeFacts(child, at, out));
-            return;
-        }
-        Core container = DischargeRules.sizeArgOf(call);
-        if (container != null) {
-            // The subject and not the symbolic key: a size is never negative whatever it is taken
-            // of, and a count over something the term grammar cannot read is still a count.
-            FactSubject atom = terms.subjectOf(call, at);
-            if (atom != null) {
-                out.add(new NumericConstraint(LinearForm.atom(atom), Rel.GE));   // a size is never negative
-                bounds(call.operation(), DischargeRules.sizeSource(container), at, out);
-            }
-        }
-        for (Core arg : call.args()) {
-            sizeFacts(arg, at, out);
-        }
-    }
-
-    /**
-     * What is known of the result of every operation an expression names, whatever its arguments are:
-     * an absolute value is not negative, a remainder by a written divisor is below it.
-     *
-     * <p>The sibling of {@link #sizeFacts}, and read in both the places that one is: what an
-     * operation guarantees holds where a clause is read against the call and where a condition names
-     * it alike. A bound whose rule asks something of the arguments is stated only where the arguments
-     * answer, and what they are read as is this reading's answer — a name given a constant is that
-     * constant, here as everywhere.
-     */
-    void resultFacts(Core e, Denotations at, List<NumericConstraint> out) {
-        // A name is what it was given, as in `sizeFacts`: an operation's guarantee does not depend on
-        // whether its call was written where it is read or bound first.
-        if (e instanceof Core.Read r && at.valueOf(r.binding()) != null) {
-            resultFacts(at.valueOf(r.binding()), at, out);
-            return;
-        }
-        if (!(e instanceof Core.PreservedCall call)) {
-            Core.forEachChild(e, child -> resultFacts(child, at, out));
-            return;
-        }
-        FactSubject result = terms.atomOf(call, at);
-        if (result != null) {
-            for (DischargeRules.ResultBound bound
-                    : DischargeRules.boundsOn(call, arg -> constantOf(arg, at))) {
-                LinearForm<FactSubject> against = bound.against() == null
-                        ? LinearForm.constant(bound.offset())
-                        : addTo(terms.affineOf(bound.against().of(call), at), bound.offset());
-                if (against != null) {
-                    out.add(new NumericConstraint(LinearForm.atom(result).minus(against), bound.rel()));
-                }
-            }
-        }
-        shiftFact(call, at, out);
-        for (Core arg : call.args()) {
-            resultFacts(arg, at, out);
-        }
-    }
 
     /**
      * Whether {@code cond}, asserted with polarity {@code positive}, fails in every case an
@@ -1102,89 +1086,6 @@ final class Predicates {
         Core.forEachChild(e, child -> chosenCalls(child, at, out));
     }
 
-    /**
-     * What {@code call} states through the measure that counts what it shifted and what it answered
-     * apart, where it is a shift this has a rule about.
-     *
-     * <p>The measure over the two values is the atom a clause written in that measure builds, so the
-     * fact and the clause meet at one term. Where either value is named by nothing there is no such
-     * atom, and nothing is stated.
-     */
-    private void shiftFact(Core.PreservedCall call, Denotations at, List<NumericConstraint> out) {
-        DischargeRules.Shift shift = DischargeRules.shiftBy(call);
-        if (shift == null) {
-            return;
-        }
-        Term from = terms.bodyKey(shift.of().of(call), at);
-        Term to = terms.bodyKey(call, at);
-        LinearForm<FactSubject> amount = terms.affineOf(shift.amount().of(call), at);
-        if (from == null || to == null || amount == null) {
-            return;
-        }
-        out.add(new NumericConstraint(
-                LinearForm.atom(terms.measureKeyOf(shift.measure(), from, to))
-                        .minus(amount.times(shift.per())),
-                Rel.EQ));
-    }
-
-    /** {@code form} with {@code offset} added, or null where the form could not be read. */
-    private static LinearForm<FactSubject> addTo(LinearForm<FactSubject> form, BigDecimal offset) {
-        return form == null ? null : form.plus(LinearForm.constant(offset));
-    }
-
-    /** The constant {@code e} reads as, or null where it reads as none. */
-    private BigDecimal constantOf(Core e, Denotations at) {
-        LinearForm<FactSubject> form = terms.affineOf(e, at);
-        return form == null || !form.coefs().isEmpty() ? null : form.constant();
-    }
-
-    /** How the size of a container relates to the size of what it was built from, down the chain.
-     * Which way it is stated is what the construction's {@link Cardinality} says. */
-    void bounds(ValueName sizeCall, Core container, Denotations at, List<NumericConstraint> out) {
-        // A construction's result is never smaller than each source named for it. A rule may name
-        // more than one, so this is a loop where the building below is a single answer — and it is
-        // asked of the expression rather than of a call, since `a ++ b` is one of these and is
-        // written as an operator.
-        for (Core added : DischargeRules.noSmallerThan(container)) {
-            stated(sizeCall, container, DischargeRules.sizeSource(added), Rel.GE, at, out);
-        }
-        if (!(container instanceof Core.PreservedCall call)) {
-            return;
-        }
-        Source built = DischargeRules.builtFrom(call);
-        Rel rel = built == null ? null : relationOf(built.size());
-        if (rel == null) {
-            return;
-        }
-        stated(sizeCall, container, DischargeRules.sizeSource(built.container()), rel, at, out);
-    }
-
-    /** States how the size of {@code container} relates to the size of {@code source}, and goes on
-     * down whatever that one was built from. A container neither of them has a key for is one
-     * nothing can be said of, and stops the walk. */
-    private void stated(ValueName sizeCall, Core container, Core source, Rel rel, Denotations at,
-                        List<NumericConstraint> out) {
-        Term here = terms.bodyKey(container, at);
-        Term there = terms.bodyKey(source, at);
-        if (here == null || there == null) {
-            return;
-        }
-        out.add(new NumericConstraint(
-                LinearForm.atom(terms.sizeKeyOf(sizeCall, here))
-                        .minus(LinearForm.atom(terms.sizeKeyOf(sizeCall, there))),
-                rel));
-        bounds(sizeCall, source, at, out);
-    }
-
-    /** How {@code size} is stated of the two sizes, or null where there is nothing to state: a
-     * construction of the same size answers both with one atom ({@code DischargeRules.sizeSource}),
-     * so a constraint between them would say a name is itself. */
-    private static Rel relationOf(Cardinality size) {
-        return switch (size) {
-            case AT_MOST -> Rel.LE;
-            case SAME -> null;
-        };
-    }
 
     /** The keys a guard could have settled to establish this clause: the predicate as written, and
      * the same predicate of each container the written one was built from by a construction that

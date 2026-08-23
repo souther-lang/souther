@@ -195,7 +195,8 @@ class AProductIsHeldToWhatThePathKnowsOfItsFactorsTest {
         FactSubject second = terms.affineOf(arithmetic(BinOp.MUL, read("a", a), read("b", b)), at).coefs().keySet().iterator().next();
 
         assertEquals(first, second);
-        assertEquals(1, terms.derivations().size());
+        assertTrue(terms.knowledgeOf(first).computation()
+                instanceof AtomKnowledge.Computation.Derived, "the one atom holds the one recipe");
     }
 
     /** A product of two whole numbers is a whole number, which is what the domain records it as. */

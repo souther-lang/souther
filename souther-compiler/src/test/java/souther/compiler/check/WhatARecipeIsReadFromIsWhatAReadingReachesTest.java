@@ -67,11 +67,11 @@ class WhatARecipeIsReadFromIsWhatAReadingReachesTest {
         FactSubject product = marker();
         FactSubject other = marker();
         FactSubject choice = marker();
-        terms.derivations().put(product,
-                new Derivation.Product(LinearForm.atom(left), LinearForm.atom(right)));
-        terms.derivations().put(choice, new Derivation.Chosen(List.of(
+        terms.computedBy(product, new AtomKnowledge.Computation.Derived(
+                new Derivation.Product(LinearForm.atom(left), LinearForm.atom(right))));
+        terms.computedBy(choice, new AtomKnowledge.Computation.Derived(new Derivation.Chosen(List.of(
                 new Derivation.Chosen.Arm(LinearForm.atom(product), List.of()),
-                new Derivation.Chosen.Arm(LinearForm.atom(other), List.of()))));
+                new Derivation.Chosen.Arm(LinearForm.atom(other), List.of())))));
 
         assertEquals(Set.of(choice, product, other, left, right),
                 terms.reached(LinearForm.atom(choice)),
@@ -96,10 +96,10 @@ class WhatARecipeIsReadFromIsWhatAReadingReachesTest {
         FactSubject answered = marker();
         FactSubject askedAbout = marker();
         FactSubject choice = marker();
-        terms.derivations().put(choice, new Derivation.Chosen(List.of(
+        terms.computedBy(choice, new AtomKnowledge.Computation.Derived(new Derivation.Chosen(List.of(
                 new Derivation.Chosen.Arm(LinearForm.atom(answered),
                         List.of(new NumericConstraint(LinearForm.atom(askedAbout), Rel.GE))),
-                new Derivation.Chosen.Arm(LinearForm.atom(answered), List.of()))));
+                new Derivation.Chosen.Arm(LinearForm.atom(answered), List.of())))));
 
         assertTrue(terms.reached(LinearForm.atom(choice)).contains(askedAbout),
                 "no arm answers it and deciding between them reads it, which is what the arm's"
