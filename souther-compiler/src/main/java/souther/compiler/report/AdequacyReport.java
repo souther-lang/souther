@@ -390,7 +390,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 if (askedLevel().reports() && behavior.signature() != null) {
                     add(measures, behavior.signature().counted());
                 }
-                if (!askedLevel().measuresArms()) {
+                if (!askedLevel().runsInstrumentedRows()) {
                     continue;
                 }
                 add(measures, behavior.branch() == null ? null : behavior.branch().measured());

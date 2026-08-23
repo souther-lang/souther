@@ -47,16 +47,31 @@ public final class Adequacy {
      * through means generating a second set of classes and running every row again. A build that did
      * not ask for the second should not pay for it, and a report that quietly measured anyway would
      * make every keystroke in an editor generate bytecode nobody reads.
+     *
+     * <p>Which measures a level leaves out is not read off this. A level says what work to do, and
+     * every measure says for itself how much of it was made — so a caller deciding from here what a
+     * measure's silence means is a second answer to a question the measure already answered.
      */
     public enum Level {
         /** Nothing is measured and nothing is said. */
         OFF,
-        /** The cases of the signature, read off rows the compile already ran. */
+        /** What the rows already ran established, and what the rules say without running anything.
+         *  Nothing is instrumented and no row runs a second time. */
         WITNESS,
-        /** Those, and what the arms and the boundaries took running the rows again to find out. */
+        /** That, and what the arms took instrumenting the classes and running every row again to
+         *  find out. */
         ALL;
 
-        public boolean measuresArms() {
+        /**
+         * Whether the classes are instrumented and the rows run again to record what they went
+         * through.
+         *
+         * <p>Named for the work and not for what a measure comes to. It was {@code measuresArms},
+         * which reads as "nothing about the arms is available" — and the arms a body has are read
+         * off the checked bodies whatever this says, so that reading is exactly what a caller
+         * gating on the name went without (issue #955).
+         */
+        public boolean runsInstrumentedRows() {
             return this == ALL;
         }
 
@@ -325,7 +340,8 @@ public final class Adequacy {
      * and asking for a wider report does not re-run the rows.
      */
     static Output.CoverageMode coverageAsked(Db db) {
-        return levelOf(db).measuresArms() ? Output.CoverageMode.ARMS : Output.CoverageMode.NONE;
+        return levelOf(db).runsInstrumentedRows()
+                ? Output.CoverageMode.ARMS : Output.CoverageMode.NONE;
     }
 
     /**
@@ -947,7 +963,7 @@ public final class Adequacy {
             Symbols symbols = scope.value();
             // Whether a guard's boundary can be decided at all: meeting it takes the comparison having
             // been evaluated, which only the instrumented classes say.
-            boolean armsAsked = levelOf(db).measuresArms();
+            boolean armsAsked = levelOf(db).runsInstrumentedRows();
             FixtureReader.Construction building = constructing(db, name,
                     prepared.value().forExamples(), symbols);
             // And what each behavior states about its answer, which draws lines of its own.
@@ -1359,7 +1375,7 @@ public final class Adequacy {
             if (!prepared.present()) {
                 return Answer.absent();
             }
-            boolean measured = levelOf(db).measuresArms();
+            boolean measured = levelOf(db).runsInstrumentedRows();
             souther.compiler.coverage.CoverageSites.Plan plan =
                     souther.compiler.coverage.CoverageSites.Plan.NONE;
             if (measured) {
@@ -1735,7 +1751,7 @@ public final class Adequacy {
                             statedOf(declared, spec), runningRowsOf(trials, spec.name(), sig),
                             partitions == null ? PartitionEvidence.NONE
                                     : partitions.getOrDefault(spec.name(), PartitionEvidence.NONE),
-                            levelOf(db).measuresArms());
+                            levelOf(db).runsInstrumentedRows());
                 } catch (LinkageError _) {
                     // The generated classes would not link, so nothing can be built to find out
                     // what a model admits. Saying so is not the same as saying the combinations are
@@ -2373,7 +2389,7 @@ public final class Adequacy {
      */
     static souther.compiler.examples.RowTrial.Trials trialling(Db db, String module,
             souther.compiler.check.Prepared.ExampleExecution written, Symbols symbols) {
-        if (!levelOf(db).measuresArms()) {
+        if (!levelOf(db).runsInstrumentedRows()) {
             return null;
         }
         souther.compiler.generated.EvaluationArtifact artifact =
@@ -2669,9 +2685,9 @@ public final class Adequacy {
             Map<String, SignatureEvidence> signatures =
                     level.reports() ? db.ask(new Witnesses(name)).value() : null;
             Map<String, PartitionEvidence> partitions =
-                    level.measuresArms() ? db.ask(new Coverage(name)).value() : null;
+                    level.runsInstrumentedRows() ? db.ask(new Coverage(name)).value() : null;
             Map<String, BranchEvidence> branches =
-                    level.measuresArms() ? db.ask(new BranchCoverage(name)).value() : null;
+                    level.runsInstrumentedRows() ? db.ask(new BranchCoverage(name)).value() : null;
 
             Map<String, List<Finding>> out = new LinkedHashMap<>();
             for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
