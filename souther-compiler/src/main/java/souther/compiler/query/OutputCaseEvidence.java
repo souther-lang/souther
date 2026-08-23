@@ -78,23 +78,32 @@ public record OutputCaseEvidence(Set<TypeSymbol> declared, Measurement<Cases> ca
         return new OutputCaseEvidence(Set.of(), new Measurement.NotApplicable<>(NotASum.NOT_A_SUM));
     }
 
-    /** What the rows reached, from what they said and what could not be read of them. The one place
-     *  the states are chosen between. */
+    /**
+     * What the rows reached, from what they said and what could not be read of them. The one place
+     * the states are chosen between.
+     *
+     * @param anyRowWasSeen whether anything was observed here at all
+     * @param observed      what the rows this was counted over went without: a source none of whose
+     *                      rows were seen may hold the row that covers a case, so a count taken over
+     *                      what remains is a count over some of them. It reaches this measure rather
+     *                      than only the signature above it, because it is this measure's numbers it
+     *                      makes weaker — read only above, a case set could say {@code complete}
+     *                      under a signature saying it went without something, and a child
+     *                      contradicting its parent is what this whole model is against
+     */
     public static OutputCaseEvidence of(String behavior, Set<TypeSymbol> declared, Cases cases,
-                                        boolean anyRows) {
+                                        boolean anyRowWasSeen, WeakeningSet observed) {
         if (declared.isEmpty()) {
             return none();
         }
-        // Nothing was read where nothing was written. Counted as a reading that found no case, this
-        // said `complete` under a signature saying `no rows` — a child contradicting its parent,
-        // which is the shape the whole measurement model is against.
-        if (!anyRows) {
+        // Nothing was written and nothing went missing, so nobody counted and nobody was going to.
+        if (!anyRowWasSeen && observed.isEmpty()) {
             return new OutputCaseEvidence(declared, new Measurement.NotMeasured<>(NoRows.NO_ROWS));
         }
-        return new OutputCaseEvidence(declared, cases.unclassifiedRows() == 0
-                ? new Measurement.Complete<>(cases)
-                : new Measurement.Partial<>(cases,
-                        WeakeningSet.of(new Weakening.OutputCasesUnreadable(behavior))));
+        WeakeningSet by = cases.unclassifiedRows() == 0 ? observed
+                : observed.union(WeakeningSet.of(new Weakening.OutputCasesUnreadable(behavior)));
+        return new OutputCaseEvidence(declared, by.isEmpty()
+                ? new Measurement.Complete<>(cases) : new Measurement.Partial<>(cases, by));
     }
 
     /** What the rows reached, where a measurement was made. Throws where none was: a measure with

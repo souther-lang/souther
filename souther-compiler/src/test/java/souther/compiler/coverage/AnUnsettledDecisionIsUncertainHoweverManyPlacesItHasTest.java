@@ -3,7 +3,6 @@ package souther.compiler.coverage;
 import souther.compiler.query.WeakeningSet;
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.query.Adequacy;
 import souther.compiler.types.CoverageConstruct;
 import souther.compiler.types.CoverageOrigin;

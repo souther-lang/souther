@@ -266,17 +266,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     .filter(r -> r.disposition() == souther.compiler.observe.Disposition.PENDING)
                     .count();
             // Anything larger than a behavior holds this one: a source that could not be evaluated is
-            // missing rows for whatever it wrote, and a module whose classes could not be
-            // instrumented is missing arms for all of them. The scope says which, so nothing here
-            // has to guess.
-            //
-            // Beside the measures and not instead of them. Every one of these reaches the behavior
-            // through the measure that lost by it as well, and the union takes the two copies as
-            // one; what it is here for is that a fact the module holds is the module's own to
-            // contribute, not that this report decides what a measure came to.
-            WeakeningSet unreadable = WeakeningSet.ofAll(incompleteness.stream()
-                    .filter(i -> i.countsAgainst(behavior.name()))
-                    .map(souther.compiler.query.Weakening.ObservationIncomplete::new).toList());
             Adequacy.SignatureEvidence signature =
                     signatures == null ? null : signatures.get(behavior.name());
             PartitionEvidence partition = partitions == null ? null
@@ -288,7 +277,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             behaviors.add(new BehaviorReport(behavior.name(),
                     module.implementationOf(behavior),
                     rows.size(), pending,
-                    unreadable.union(wentWithout(signature, partition, branch)),
+                    wentWithout(signature, partition, branch),
                     signature, partition,
                     claims == null ? ClaimAnnotations.NONE
                             : claims.getOrDefault(behavior.name(), ClaimAnnotations.NONE),
@@ -296,8 +285,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     findings == null ? List.of()
                             : findings.getOrDefault(behavior.name(), List.of())));
         }
-        WeakeningSet weakenedBy = WeakeningSet.ofAll(incompleteness.stream()
-                .map(souther.compiler.query.Weakening.ObservationIncomplete::new).toList());
+        // The union of its behaviors, and nothing of its own. What a module could not read reaches
+        // it through the measures that lost by it — a source none of whose rows were seen counts
+        // against every behavior the module has, and every measure counted over those rows says so.
+        // Read a second time from the module's own list, this report was giving a raw fact its
+        // meaning as a weakening, which is a measure's answer and not a renderer's (issue #953).
+        WeakeningSet weakenedBy = WeakeningSet.none();
         for (BehaviorReport behavior : behaviors) {
             weakenedBy = weakenedBy.union(behavior.weakenedBy());
         }
@@ -328,8 +321,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     : m.incompleteness().stream()
                             .filter(gap -> gap.behavior().map(shown::contains).orElse(true))
                             .toList();
-            WeakeningSet weakenedBy = WeakeningSet.ofAll(gaps.stream()
-                    .map(souther.compiler.query.Weakening.ObservationIncomplete::new).toList());
+            WeakeningSet weakenedBy = WeakeningSet.none();
             for (BehaviorReport shownBehavior : behaviors) {
                 weakenedBy = weakenedBy.union(shownBehavior.weakenedBy());
             }
@@ -2106,8 +2098,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case Weakening.ModelReadingIncomplete it -> switch (it.cause()) {
                 case souther.compiler.partition.ClosureGap.RuleUnread _ ->
                         WeakeningWord.RULE_UNREAD;
-                case souther.compiler.partition.ClosureGap.PositionBlocked _,
-                     souther.compiler.partition.ClosureGap.PositionNotReachedInto _ ->
+                case souther.compiler.partition.ClosureGap.PositionNotReachedInto _ ->
                         WeakeningWord.POSITION_NOT_READ;
                 case souther.compiler.partition.ClosureGap.QuestionUnanswered _,
                      souther.compiler.partition.ClosureGap.ComparisonUnanswered _ ->

@@ -2,7 +2,6 @@ package souther.compiler.partition;
 
 import souther.compiler.check.RuleAccounting;
 import souther.compiler.inputs.BlockReason;
-import souther.compiler.inputs.PositionReadingBlocked;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.UnreadRule;
 
@@ -30,9 +29,6 @@ public sealed interface ClosureGap {
      *  ({@link BlockReason.AboutARule#leavesShort}). */
     record RuleUnread(UnreadRule rule) implements ClosureGap {}
 
-    /** The reading did not get to the rules of a position, so there is no rule to name. */
-    record PositionBlocked(PositionReadingBlocked position) implements ClosureGap {}
-
     /** A question the rules written about one position raise that nothing answered. */
     record QuestionUnanswered(AxisId at, RuleAccounting.Unanswered question) implements ClosureGap {}
 
@@ -45,7 +41,16 @@ public sealed interface ClosureGap {
      *  one — which is why it is a gap of its own and not one of the two above. */
     record RulesNotReached(AxisId at) implements ClosureGap {}
 
-    /** A position the walk could not reach into, with what the structural reading found instead. */
+    /**
+     * A position the walk could not reach into, with what the structural reading found instead.
+     *
+     * <p>The one arm for a position with no rule to name. There were two for a while — this and a
+     * {@code PositionBlocked} taking {@code PositionReadingBlocked}, which is the same fact keyed by
+     * path rather than by axis. It was written from the list {@code PartitionEvidence} keeps beside
+     * the measures rather than from what {@link MeasureClosure#of} finds, so nothing ever built one:
+     * an arm taken from a second representation of a fact, which is the mistake #953 is about, in
+     * miniature.
+     */
     record PositionNotReachedInto(AxisId at, BlockReason.AboutThePosition why) implements ClosureGap {}
 
     /** A position dropped past the axis limit, with what dropping it cost. */

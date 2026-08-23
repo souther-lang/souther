@@ -3,7 +3,6 @@ package souther.compiler;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.InputCaseEvidence;
-import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.query.OutputCaseEvidence;
 import souther.compiler.query.About;
 import souther.compiler.query.Adequacy;
@@ -99,7 +98,6 @@ class WhatAFindingIsAboutIsHeldByTheTypeTest {
     }
 
     private static Adequacy.SignatureEvidence signature(List<InputCaseEvidence> inputs) {
-        return Adequacy.SignatureEvidence.of(OutputCaseEvidence.none(), inputs,
-                souther.compiler.query.WeakeningSet.none());
+        return Adequacy.SignatureEvidence.of(OutputCaseEvidence.none(), inputs);
     }
 }

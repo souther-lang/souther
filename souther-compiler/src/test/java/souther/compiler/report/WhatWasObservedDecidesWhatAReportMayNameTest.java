@@ -12,7 +12,6 @@ import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.DecidedBy;
 import souther.compiler.coverage.SourceOutcome;
 import souther.compiler.diag.SourceNameResolver;
-import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.query.Adequacy;
 import souther.compiler.types.CoverageConstruct;
 import souther.compiler.types.CoverageOrigin;

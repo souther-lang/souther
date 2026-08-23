@@ -1,7 +1,6 @@
 package souther.cli;
 
 
-import souther.compiler.query.Measurement;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceNameResolver;

@@ -1,7 +1,5 @@
 package souther.bench;
 
-import souther.compiler.query.PartitionDerivation;
-import souther.compiler.query.BoundaryDerivation;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -69,14 +67,14 @@ class AMeasureIsIntroducedInOnePlaceTest {
             Map.entry("souther.compiler.query.PartitionDerivation#noSubject()Lsouther/compiler/query/Measurement;", 1),
             Map.entry("souther.compiler.query.PartitionDerivation#of(Ljava/util/List;Lsouther/compiler/partition/MeasureClosure$OfThePartition;)Lsouther/compiler/query/Measurement;", 4),
             Map.entry("souther.compiler.query.OutputCaseEvidence#none()Lsouther/compiler/query/OutputCaseEvidence;", 1),
-            Map.entry("souther.compiler.query.OutputCaseEvidence#of(Ljava/lang/String;Ljava/util/Set;Lsouther/compiler/query/OutputCaseEvidence$Cases;Z)Lsouther/compiler/query/OutputCaseEvidence;", 3),
+            Map.entry("souther.compiler.query.OutputCaseEvidence#of(Ljava/lang/String;Ljava/util/Set;Lsouther/compiler/query/OutputCaseEvidence$Cases;ZLsouther/compiler/query/WeakeningSet;)Lsouther/compiler/query/OutputCaseEvidence;", 3),
             Map.entry("souther.compiler.query.InputCaseEvidence#none(I)Lsouther/compiler/query/InputCaseEvidence;", 1),
-            Map.entry("souther.compiler.query.InputCaseEvidence#of(Ljava/lang/String;ILjava/util/Set;Ljava/util/Set;Lsouther/compiler/query/InputCaseEvidence$Cases;Z)Lsouther/compiler/query/InputCaseEvidence;", 3),
+            Map.entry("souther.compiler.query.InputCaseEvidence#of(Ljava/lang/String;ILjava/util/Set;Ljava/util/Set;Lsouther/compiler/query/InputCaseEvidence$Cases;ZLsouther/compiler/query/WeakeningSet;)Lsouther/compiler/query/InputCaseEvidence;", 3),
             Map.entry("souther.compiler.query.BoundaryDerivation#noSubject()Lsouther/compiler/query/Measurement;", 1),
             Map.entry("souther.compiler.query.BoundaryDerivation#of(Ljava/util/List;Lsouther/compiler/partition/MeasureClosure$OfTheBorder;)Lsouther/compiler/query/Measurement;", 4),
             Map.entry("souther.compiler.query.Adequacy$SignatureEvidence#notASum(Lsouther/compiler/query/OutputCaseEvidence;Ljava/util/List;)Lsouther/compiler/query/Adequacy$SignatureEvidence;", 1),
             Map.entry("souther.compiler.query.Adequacy$SignatureEvidence#noRows(Lsouther/compiler/query/OutputCaseEvidence;Ljava/util/List;)Lsouther/compiler/query/Adequacy$SignatureEvidence;", 1),
-            Map.entry("souther.compiler.query.Adequacy$SignatureEvidence#of(Lsouther/compiler/query/OutputCaseEvidence;Ljava/util/List;Lsouther/compiler/query/WeakeningSet;)Lsouther/compiler/query/Adequacy$SignatureEvidence;", 2),
+            Map.entry("souther.compiler.query.Adequacy$SignatureEvidence#of(Lsouther/compiler/query/OutputCaseEvidence;Ljava/util/List;)Lsouther/compiler/query/Adequacy$SignatureEvidence;", 2),
             Map.entry("souther.compiler.query.PartitionEvidence$AxisCoverage#noRows(Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Lsouther/compiler/query/PartitionEvidence$AxisCoverage$Reading;)Lsouther/compiler/query/PartitionEvidence$AxisCoverage;", 1),
             Map.entry("souther.compiler.query.PartitionEvidence$PairSpace#noRows(I)Lsouther/compiler/query/PartitionEvidence$PairSpace;", 1),
             Map.entry("souther.compiler.query.PartitionEvidence$PairSpace#truncated(Ljava/lang/String;JI)Lsouther/compiler/query/PartitionEvidence$PairSpace;", 1),

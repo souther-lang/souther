@@ -6,9 +6,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.query.Adequacy;
-import souther.compiler.query.BoundaryDerivation;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.PartitionDerivation;
 import souther.compiler.query.PartitionEvidence;
 
 import java.util.Map;

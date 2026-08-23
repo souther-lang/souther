@@ -80,20 +80,22 @@ public record InputCaseEvidence(int at, Set<TypeSymbol> declared, Set<TypeSymbol
                 new Measurement.NotApplicable<>(NotASum.NOT_A_SUM));
     }
 
-    /** The one place the states are chosen between. */
+    /** The one place the states are chosen between. What {@code observed} is for is what
+     *  {@link OutputCaseEvidence#of} says. */
     public static InputCaseEvidence of(String behavior, int at, Set<TypeSymbol> declared,
-                                       Set<TypeSymbol> excluded, Cases cases, boolean anyRows) {
+                                       Set<TypeSymbol> excluded, Cases cases,
+                                       boolean anyRowWasSeen, WeakeningSet observed) {
         if (declared.isEmpty()) {
             return none(at);
         }
-        if (!anyRows) {
+        if (!anyRowWasSeen && observed.isEmpty()) {
             return new InputCaseEvidence(at, declared, excluded,
                     new Measurement.NotMeasured<>(NoRows.NO_ROWS));
         }
-        return new InputCaseEvidence(at, declared, excluded, cases.unclassifiedRows() == 0
-                ? new Measurement.Complete<>(cases)
-                : new Measurement.Partial<>(cases,
-                        WeakeningSet.of(new Weakening.InputCasesUnreadable(behavior, at))));
+        WeakeningSet by = cases.unclassifiedRows() == 0 ? observed
+                : observed.union(WeakeningSet.of(new Weakening.InputCasesUnreadable(behavior, at)));
+        return new InputCaseEvidence(at, declared, excluded, by.isEmpty()
+                ? new Measurement.Complete<>(cases) : new Measurement.Partial<>(cases, by));
     }
 
     /** What the rows reached at this position, where a measurement was made. Throws where none was,

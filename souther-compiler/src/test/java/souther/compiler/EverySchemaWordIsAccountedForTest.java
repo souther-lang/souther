@@ -254,6 +254,17 @@ class EverySchemaWordIsAccountedForTest {
             // already has, and everything else writes a word of its own — one field, because a
             // consumer reading what weakened a measurement does not care which of the two a word
             // came from.
+            // The two leaves of a signature, which have a measurement of their own since #953: a
+            // position that is not a sum has nothing to count, and one no row names was not counted.
+            new Vocabulary("signature.output.reason",
+                    List.of("$defs", "signature", "properties", "output", "properties", "reason"),
+                    souther.compiler.query.OutputCaseEvidence.NotASum.class,
+                    souther.compiler.query.OutputCaseEvidence.NoRows.class),
+            new Vocabulary("signature.inputs[].reason",
+                    List.of("$defs", "signature", "properties", "inputs", "items", "properties",
+                            "reason"),
+                    souther.compiler.query.InputCaseEvidence.NotASum.class,
+                    souther.compiler.query.InputCaseEvidence.NoRows.class),
             new Vocabulary("weakening[]", List.of("$defs", "weakening", "items"),
                     Set.of("probe_mapping_lost"),
                     Incompleteness.Code.class,

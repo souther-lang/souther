@@ -39,11 +39,16 @@ class OnlyAProjectionSaysHowFarAMeasurementGotTest {
     private static final String STATUS = "souther.compiler.observe.MeasurementStatus";
 
     /**
-     * The one class that may read the four words.
+     * The classes that may read the four words, named one at a time.
      *
-     * <p>{@code AdequacyReport} is the renderer and {@code ReportMeasurement} is the projection it
-     * asks; the enum's own file names its constants. Everything else that wants to know what a
+     * <p>{@code ReportMeasurement} is the projection and {@code AdequacyReport} is what prints what
+     * it makes; the enum's own file names its constants. Everything else that wants to know what a
      * measurement is asks the measurement.
+     *
+     * <p><b>Named and not a package.</b> Excusing {@code souther.compiler.report} as a whole would
+     * let a renderer added later switch over the five states itself, which is the one thing this is
+     * for — the word a document uses is decided once, and a second decision is not caught by being
+     * made next door to the first.
      */
     private static final Set<String> MAY_READ_THE_WORDS = Set.of(
             "souther.compiler.report.ReportMeasurement",
@@ -53,12 +58,26 @@ class OnlyAProjectionSaysHowFarAMeasurementGotTest {
     @Test
     void onlyTheProjectionReadsTheWordsADocumentUses() throws IOException {
         Set<String> readers = new LinkedHashSet<>();
+        int reached = 0;
         for (Compiled.Site site : Compiled.sites()) {
-            if (site.owner().equals(STATUS) && !MAY_READ_THE_WORDS.contains(site.from())
-                    && !site.from().startsWith("souther.compiler.report.")) {
-                readers.add(site.from());
+            if (site.owner().equals(STATUS)) {
+                reached++;
+            }
+            // By the class the site is in, with a nested one answering for the file it is written
+            // in: a lambda or a record inside the projection is the projection.
+            String from = site.from();
+            int nested = from.indexOf('$');
+            String outer = nested < 0 ? from : from.substring(0, nested);
+            if (site.owner().equals(STATUS) && !MAY_READ_THE_WORDS.contains(outer)) {
+                readers.add(from);
             }
         }
+        // Reading a constant is a field read and not a call, so a walk over calls alone meets no
+        // reader of an enum at all and passes by seeing nothing. Said before the rule, because that
+        // is exactly how this check spent its first afternoon.
+        assertTrue(reached > 0,
+                "nothing in the compiled classes reaches these words, so the rule below is held"
+                        + " over nothing — ask Compiled for a way of reaching that can see it");
         assertEquals(Set.of(), readers,
                 "a measurement's word is the document's, and these worked it out for themselves");
     }

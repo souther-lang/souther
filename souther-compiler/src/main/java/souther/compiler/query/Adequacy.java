@@ -273,11 +273,12 @@ public final class Adequacy {
                     new Measurement.NotMeasured<>(NoRows.NO_ROWS));
         }
 
-        /** What the rows came to, with what the parts went without folded in. The one place the
-         *  states are chosen between. */
+        /** What the rows came to: the union of what its parts went without, and nothing else. An
+         *  aggregate with a fact of its own would be a fact its parts do not have, and a reader of
+         *  one of them would be right about a measure the whole contradicts. */
         public static SignatureEvidence of(OutputCaseEvidence output,
-                                           List<InputCaseEvidence> inputs, WeakeningSet own) {
-            WeakeningSet by = own.union(output.cases().weakening());
+                                           List<InputCaseEvidence> inputs) {
+            WeakeningSet by = output.cases().weakening();
             for (InputCaseEvidence each : inputs) {
                 by = by.union(each.cases().weakening());
             }
@@ -1452,8 +1453,18 @@ public final class Adequacy {
             }
         }
         everywhere = distinct(everywhere);
+        // Every behavior of the module, and not only the ones something was seen of. A gap larger
+        // than a behavior counts against all of them — which is what the branch above says as it
+        // records one — and keying this on what was seen gave it to exactly the behaviors it was
+        // least about: one with no row at all is the case a source nobody could evaluate matters
+        // most for, and it was the one that got nothing. The report patched over it by reading the
+        // module's own list a second time, behind the measures (issue #953).
         Set<String> named = new LinkedHashSet<>(rows.keySet());
         named.addAll(stopped.keySet());
+        Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(module));
+        if (prepared.present() && prepared.value() != null) {
+            prepared.value().behaviors().forEach(each -> named.add(each.name()));
+        }
         Map<String, Observed> out = new LinkedHashMap<>();
         for (String behavior : named) {
             List<Incompleteness> gaps = new ArrayList<>(everywhere);
@@ -2842,19 +2853,28 @@ public final class Adequacy {
             }
         }
 
-        // Whether anything was read at all. A behavior no row names has cases nobody counted, and
-        // a source that could not be evaluated may hold the rows that would have counted them —
-        // which is a measure that could not be finished rather than one nobody asked for, and is
-        // why this is not simply `rows.isEmpty()`.
-        boolean anyRows = !rows.isEmpty() || seen.someRowsUnseen();
+        // What the rows this was counted over went without. A source none of whose rows were seen
+        // may hold the row that covers a case, so a count over what remains is a count over some of
+        // them — and that is these measures' own business, not something the signature above them
+        // holds on their behalf. A row that was seen and did not finish is not here: it arrives
+        // through the case it could not be classified into, which is what the counts already say.
+        Set<Weakening> unseen = new LinkedHashSet<>();
+        for (Incompleteness gap : seen.incompleteness()) {
+            if (gap.code().leftNoRowRead()) {
+                unseen.add(new Weakening.ObservationIncomplete(gap));
+            }
+        }
+        WeakeningSet observedWentWithout = WeakeningSet.ofAll(unseen);
+        boolean anyRowWasSeen = !rows.isEmpty();
         OutputCaseEvidence output = OutputCaseEvidence.of(name, declaredOut,
                 new OutputCaseEvidence.Cases(specified, observed, verified, unreadableOut,
-                        answered), anyRows);
+                        answered), anyRowWasSeen, observedWentWithout);
         List<InputCaseEvidence> inputs = new ArrayList<>(ins.size());
         for (int i = 0; i < ins.size(); i++) {
             inputs.add(InputCaseEvidence.of(name, i, declaredIn.get(i), inExcluded.get(i),
                     new InputCaseEvidence.Cases(inSpecified.get(i), inExecuted.get(i),
-                            inVerified.get(i), unreadableIn[i]), anyRows));
+                            inVerified.get(i), unreadableIn[i]), anyRowWasSeen,
+                    observedWentWithout));
         }
         // Asked before the rows are, because it is not about them. A signature with no sum anywhere
         // in it has nothing for this measure to be about, and writing every row anybody could write
@@ -2867,19 +2887,10 @@ public final class Adequacy {
         if (rows.isEmpty() && seen.complete()) {
             return SignatureEvidence.noRows(output, inputs);
         }
-        // Nothing was measured where nothing was written: a behavior with no rows has no gaps to
-        // report, only an absence of evidence, and saying so is not the same as saying it is
-        // covered. A source that could not be evaluated is a set of rows nothing has seen, and a
-        // case they may have covered reads exactly like a case nothing covers. A row that did not
-        // finish is already counted by its case being unreadable: its state is dropped rather than
-        // read, so it has no arm and no input case.
-        Set<Weakening> unseen = new LinkedHashSet<>();
-        for (Incompleteness gap : seen.incompleteness()) {
-            if (gap.code().leftNoRowRead()) {
-                unseen.add(new Weakening.ObservationIncomplete(gap));
-            }
-        }
-        return SignatureEvidence.of(output, inputs, WeakeningSet.ofAll(unseen));
+        // And the signature is the union of its parts, with nothing of its own. What the rows went
+        // without reaches it through every case measure that was counted over them, so holding it
+        // here as well would be the one fact arriving twice.
+        return SignatureEvidence.of(output, inputs);
     }
 
     private Adequacy() {}

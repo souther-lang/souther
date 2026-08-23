@@ -408,6 +408,7 @@
               "description": "Combinations shown impossible. A candidate that failed to build is not one of these — another value of the same two classes may build."
             },
             "unknown": { "type": "integer", "minimum": 0 },
+            "weakening": { "$ref": "#/$defs/weakening" },
             "status": {
             "$ref": "#/$defs/status",
             "description": "`partial` where some rows were not read at all: a combination none of the rows seen reaches has not been left untried by anybody."
@@ -415,8 +416,7 @@
           "reason": {
             "description": "Why there are no numbers, present exactly where `status` is `unavailable`. How large the space is says nothing about a behavior no row names.",
             "enum": ["no_rows"]
-          },
-          "truncated": { "type": "boolean" }
+          }
           }
         },
         "unanswered": {
@@ -511,7 +511,7 @@
         },
         "output": {
           "type": "object",
-          "required": ["declared", "specified", "observed", "verified", "unclassifiedRows"],
+          "required": ["declared", "status"],
           "additionalProperties": false,
           "properties": {
             "declared": { "$ref": "#/$defs/caseNames" },
@@ -531,7 +531,13 @@
               "type": "integer",
               "minimum": 0,
               "description": "Rows whose case could not be read. Above zero, a missing case is undecided rather than missing."
-            }
+            },
+            "status": {
+              "$ref": "#/$defs/status",
+              "description": "Whether the rows were counted here at all. `unavailable` where the position is not a sum, and where no row names the behavior — in both, the sets below are absent rather than empty, since a set nobody filled and a set nothing reached read alike."
+            },
+            "reason": { "enum": ["not_a_sum", "no_rows"] },
+            "weakening": { "$ref": "#/$defs/weakening" }
           }
         },
         "inputs": {
@@ -539,7 +545,7 @@
           "description": "One entry per parameter, in order. A parameter that is not a sum has nothing to cover and reports empty sets.",
           "items": {
             "type": "object",
-            "required": ["declared", "specified", "executed", "verified", "unclassifiedRows"],
+            "required": ["declared", "status"],
             "additionalProperties": false,
             "properties": {
               "declared": { "$ref": "#/$defs/caseNames" },
@@ -553,7 +559,13 @@
                 "$ref": "#/$defs/caseNames",
                 "description": "Cases the position's own rules refuse. Declared and not coverable: no value of one can be constructed, so they are counted out of what the rows are held to."
               },
-              "unclassifiedRows": { "type": "integer", "minimum": 0 }
+              "unclassifiedRows": { "type": "integer", "minimum": 0 },
+              "status": {
+                "$ref": "#/$defs/status",
+                "description": "Whether the rows were counted here at all. `unavailable` where the position is not a sum, and where no row names the behavior — in both, the sets below are absent rather than empty, since a set nobody filled and a set nothing reached read alike."
+              },
+              "reason": { "enum": ["not_a_sum", "no_rows"] },
+              "weakening": { "$ref": "#/$defs/weakening" }
             }
           }
         }

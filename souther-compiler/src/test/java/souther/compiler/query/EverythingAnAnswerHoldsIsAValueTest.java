@@ -1,8 +1,6 @@
 package souther.compiler.query;
 
 import souther.compiler.query.Measurement;
-import souther.compiler.query.PartitionDerivation;
-import souther.compiler.query.BoundaryDerivation;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Array;
