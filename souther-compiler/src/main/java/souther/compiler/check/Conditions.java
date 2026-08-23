@@ -66,9 +66,10 @@ final class Conditions {
      * and not statements the condition makes. An arm read here is read without them, so
      * {@code List.size(xs)} under {@code not List.isEmpty(xs)} comes to "not nought" here where the
      * walk has "above nought". Not two readings of one question — it is one question this reader
-     * does not ask. What a case and an attempt rest on is the same family and is now asked, of the
-     * value the arm opens; this is the value a condition <em>names</em>, which no arm opened and
-     * nothing here has been given a place to read from.
+     * does not ask. It was written down as the same family as what a case and an attempt rest on,
+     * and it is not: a value built through a checked constructor carries what its declaration
+     * states ({@link TypeGuarantees}), and a list carries a length that is never negative because of
+     * what a length is, with no declaration saying so. A third source, and #988.
      */
     static List<NumericConstraint> settledBy(Terms terms, Choice.Decides decidedBy, Denotations at) {
         List<NumericConstraint> out = new ArrayList<>();
