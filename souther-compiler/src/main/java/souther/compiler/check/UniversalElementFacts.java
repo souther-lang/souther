@@ -246,13 +246,19 @@ record UniversalElementFacts(Map<String, Bounds> byPath) {
      * source states are assumed of it: what the reading proves of the form holds of every element of
      * the list answered, since it was proved of an element nothing but those facts is true of.
      *
-     * <p>The reading is the one that owns the question ({@link NumericDomain}) and is asked on a
-     * domain of its own. Nothing of where the call stands is assumed into it: a closure is applied
-     * to every element, so what is true where the call was written is not true of what it answers,
-     * and a reader that assumed the surrounding facts would prove of every element what is true
-     * where one of them was named. What that leaves outside is arithmetic the affine fragment does
-     * not carry — a product of two places is an atom this domain holds nothing of — and outside is
-     * where it stays until a reader that carries recipes asks the question.
+     * <p>The reading is the one that reads recipes and what values carry
+     * ({@link DerivedNumericFacts#refine}), and not one assembled here. What a form is worth is two
+     * stages — everything the atoms it reaches carry, and then what follows about the arithmetic the
+     * affine fragment cannot hold — and a caller that asked a raw domain instead would get a second
+     * reader that knows neither: {@code x -> x.value * x.value} names an atom whose recipe says it
+     * is a product, and {@code x -> Int.abs(x)} names one the library says is never negative. Both
+     * are read where a fold's step is read, and a walk over what the closure built would have lost
+     * them — the same value readable or not by where the tree put it, which is what this class is
+     * for.
+     *
+     * <p>What is assumed into that reading is what every element satisfies and nothing else. Nothing
+     * of where the call stands goes in: a closure is applied to every element, so what is true where
+     * one of them was named is not true of what it answers.
      */
     private static Map<String, Bounds> throughTheClosure(Core.PreservedCall call, Core source,
                                                          Denotations at, Terms terms,
@@ -279,7 +285,9 @@ record UniversalElementFacts(Map<String, Bounds> byPath) {
                 given = given.assuming(one.getKey(), one.getValue(), spacing);
             }
         }
-        Bounds bounds = given.isBottom() ? null : given.boundsOf(answered);
+        NumericDomain<FactSubject> read =
+                DerivedNumericFacts.refine(given, terms, answered.coefs().keySet());
+        Bounds bounds = read.isBottom() ? null : read.boundsOf(answered);
         return bounds == null || bounds.saysNothing() ? Map.of()
                 : Map.of(FieldDomains.THE_VALUE, bounds);
     }

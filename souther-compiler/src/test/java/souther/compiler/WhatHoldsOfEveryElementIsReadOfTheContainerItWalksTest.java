@@ -104,6 +104,28 @@ class WhatHoldsOfEveryElementIsReadOfTheContainerItWalksTest {
     }
 
     /**
+     * And it is read by the reading that reads recipes and what values carry, not by a domain
+     * assembled beside it.
+     *
+     * <p>A product of two places is an atom the affine fragment holds nothing of, and what it is a
+     * product of is a recipe; that the library's {@code Int.abs} never answers below nought is
+     * something the atom carries. Both are read where a fold's step is read, so a walk over what a
+     * closure built has to be read the same way — asked of a raw domain, the value would be readable
+     * or not by where the tree put it, which is the defect this class is for.
+     */
+    @Test
+    void whatAClosureAnsweredIsReadByTheReadingThatReadsRecipes() {
+        assertFalse(owed("List.fold((acc, x) -> acc + x.value * x.value, 0, xs)"),
+                "a square of a number at or above nought, read in the step");
+        assertFalse(owed("List.fold((acc, y) -> acc + y, 0, List.map(x -> x.value * x.value, xs))"),
+                "and the same square read through the map that built the list");
+        assertFalse(owed("List.fold((acc, x) -> acc + Int.abs(x), 0, ns)"),
+                "what the library says of its own operation, read in the step");
+        assertFalse(owed("List.fold((acc, y) -> acc + y, 0, List.map(x -> Int.abs(x), ns))"),
+                "and read through the map");
+    }
+
+    /**
      * An element that is one of two things is bounded by both.
      *
      * <p>{@code Map.updateIfPresent} answers the map it was given with one value replaced, and its
