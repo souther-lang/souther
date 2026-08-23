@@ -86,7 +86,8 @@ final class InductiveBounds {
         // Taking it is what keeps the answer from depending on the order they were proposed in: a
         // generator lengthened later makes the answer sharper or leaves it alone.
         Bounds proved = null;
-        for (Bounds candidate : InvariantCandidates.from(seed, read.of(walk.step(), given))) {
+        for (Bounds candidate : InvariantCandidates.from(
+                seed, read.of(walk.step(), given), walk.inputs().at().values())) {
             if (!inductive(walk, candidate, seed, given, terms, read)) {
                 continue;
             }

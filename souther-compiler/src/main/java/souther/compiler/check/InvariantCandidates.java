@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.numeric.NumericDomain.Bounds;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -27,8 +28,8 @@ final class InvariantCandidates {
     private InvariantCandidates() {}
 
     /**
-     * The ranges to try, given what the seed lies between and what the step answers with nothing
-     * assumed about the accumulator.
+     * The ranges to try, given what the seed lies between, what the step answers with nothing
+     * assumed about the accumulator, and what holds of everything the step is handed besides it.
      *
      * <p>Four, and each is a different thing a fold does. The seed itself is what a step preserving
      * its accumulator answers. Open above the seed and open below it are the two directions an
@@ -42,8 +43,20 @@ final class InvariantCandidates {
      * is an atom the domain holds nothing about — so the join is unbounded too and proves nothing. A
      * test of the step's shape would answer the same and would be a second place that decides what a
      * step does with what it was handed.
+     *
+     * <p>Then the seed joined with each of the inputs, which is the symmetry the proof already has.
+     * {@link InductiveBounds} reads what holds of everything the step is handed while checking that
+     * the step stays inside a range, and nothing was reading it while deciding which ranges to put
+     * through that — so a product of elements at or above nought, started at one, was proved by no
+     * candidate anybody proposed. A walk carries its accumulator through what it was handed, so
+     * where the answer runs is where the two together run.
+     *
+     * <p>Each input separately, and no reading of which of them the step uses. {@code Map.fold} is
+     * handed a key and a value bounded by different declarations, and which of the two an answer
+     * follows is what the proof settles; a guess that follows neither is one check and is discarded.
      */
-    static List<Bounds> from(Bounds seed, Bounds stepWithNothingAssumed) {
+    static List<Bounds> from(Bounds seed, Bounds stepWithNothingAssumed,
+                             Collection<Bounds> whatTheStepIsHanded) {
         List<Bounds> out = new ArrayList<>();
         add(out, seed);
         if (seed.min() != null) {
@@ -53,6 +66,9 @@ final class InvariantCandidates {
             add(out, new Bounds(null, seed.max()));
         }
         add(out, Bounds.spanning(seed, stepWithNothingAssumed));
+        for (Bounds handed : whatTheStepIsHanded) {
+            add(out, Bounds.spanning(seed, handed));
+        }
         return out;
     }
 

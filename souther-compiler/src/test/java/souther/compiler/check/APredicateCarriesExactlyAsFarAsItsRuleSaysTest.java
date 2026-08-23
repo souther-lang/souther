@@ -85,10 +85,12 @@ class APredicateCarriesExactlyAsFarAsItsRuleSaysTest {
                             Travels.NO_SUCH_CONSTRUCTION, Travels.STOPS)),
             // A mapping over a map answers one value for each key and leaves the keys alone, so a key
             // being there does survive it — and `MAPS` does not say that, being about the elements
-            // and not about what they are held under. Stating it would need a shape that does.
+            // and not about what they are held under. Stating it would need a shape that does. The
+            // same is true through `Map.updateIfPresent`, which replaces one value and removes no
+            // key: what the four words say of a run holding some of each is nothing.
             new Predicate("Map", "Map<String, Int>", "Map.containsKey(\"a\", %s)",
                     travels(Travels.NO_SUCH_CONSTRUCTION, Travels.STOPS, Travels.STOPS,
-                            Travels.NO_SUCH_CONSTRUCTION)));
+                            Travels.STOPS)));
 
     /** How a container of each kind is built from another of the same kind, by shape, or null where
      * the library has no such construction. */
@@ -102,6 +104,7 @@ class APredicateCarriesExactlyAsFarAsItsRuleSaysTest {
             case "Set.COLLAPSES" -> "Set.map(n -> 0, c)";
             case "Map.SUBSET" -> "Map.filterEntries((k, v) -> v >= 5, c)";
             case "Map.MAPS" -> "Map.mapValues((k, v) -> 0, c)";
+            case "Map.COLLAPSES" -> "Map.updateIfPresent(\"a\", v -> v + 1, c)";
             default -> null;
         };
     }

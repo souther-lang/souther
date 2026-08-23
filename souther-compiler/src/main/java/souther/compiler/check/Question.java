@@ -102,6 +102,48 @@ enum Question {
         }
     },
 
+    /**
+     * Whether it accumulates what its container holds ({@link Accumulations}). Asked of an operation
+     * answering a value of the type one of its container arguments holds: the question is whether
+     * that answer is the elements started from an identity and carried through one binary combine
+     * over the accumulator and an element, both of the type it answers.
+     *
+     * <p>The range is read off the shape of the declaration and not off what the answer could be
+     * used for. {@code (List<'a>) -> 'a} says of {@code List.sum} exactly what it says of
+     * {@code String.concat}: an operation that answers one of the thing it was given many of. Which
+     * of those a check can carry as a number is asked after the answer, by the check that needs one
+     * — a range drawn where the numeric domain stops would put the library's own reading of
+     * {@code concat} out of reach of the question it is an answer to.
+     *
+     * <p>Beside {@link #REDUCTION} and not folded into it. A reduction is handed its step and its
+     * seed as arguments, so what it walks is read off the call; an accumulation is handed neither,
+     * and a range that took the one for the other would ask nothing of an operation whose whole
+     * meaning is what it does not take.
+     */
+    ACCUMULATION("whether it accumulates what its container holds, and from what through what") {
+        @Override
+        boolean asksOf(Prelude.Signature signature) {
+            Type result = signature.result();
+            return result != null && signature.params().stream().anyMatch(
+                    t -> holdsElements(t) && result.equals(Terms.elementType(t)));
+        }
+
+        @Override
+        boolean answeredFor(ValueName operation) {
+            return Accumulations.of(operation) != null;
+        }
+
+        @Override
+        Set<ValueName> answeredOperations() {
+            return Accumulations.answered();
+        }
+
+        @Override
+        Set<ValueName> nothingSaidOf() {
+            return Accumulations.NO_SIMPLE_ACCUMULATION;
+        }
+    },
+
     /** What it keeps of the container it was built from ({@link DischargeRules#builtFrom}). Asked of
      * an operation that answers a container and is given one. A string is not in range: a shape says
      * what became of a container's elements, and of a string this names only its length. */

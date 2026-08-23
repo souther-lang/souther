@@ -205,9 +205,14 @@ public sealed interface ElementLineage {
      * The element came from any one of these, and nothing here says which.
      *
      * <p>{@code List.append} and a union: every element of the answer was an element of one of the
-     * arguments, and the answer holds neither argument's elements alone. A single source is what
-     * {@link DischargeRules.Shape} needs and has no word for the absence of, which is why these sit
-     * outside its table with only their count recorded.
+     * arguments, and the answer holds neither argument's elements alone.
+     *
+     * <p>Two things can be unsettled and they are not the same thing. Which argument an element came
+     * from is one — that is {@code append}, whose alternatives name two arguments. What happened to
+     * it on the way is the other: {@code Map.updateIfPresent} answers the map it was given with the
+     * value under one key replaced, so every value in its answer came from the argument, and each is
+     * either that argument's own value or what the closure made of it. Read as one alternative, it
+     * would say of every value what is true of one of them.
      */
     record OneOf(List<ElementLineage> alternatives) implements ElementLineage {
 
@@ -219,10 +224,23 @@ public sealed interface ElementLineage {
             }
         }
 
-        /** Null: which of them is not settled, so there is no one argument the elements come from. */
+        /**
+         * The place they all came from, where they came from one, and null where they did not.
+         *
+         * <p>Where the alternatives differ in what happened rather than in where it came from, there
+         * is one argument to answer with and a reader asking where the elements are from is owed it.
+         * Where they name different arguments there is none, and saying so is what keeps a rule
+         * about {@code List.append} from being read as a rule about its first argument.
+         */
         @Override
         public Source source() {
-            return null;
+            Source common = alternatives.get(0).source();
+            for (ElementLineage alternative : alternatives) {
+                if (common == null || !common.equals(alternative.source())) {
+                    return null;
+                }
+            }
+            return common;
         }
     }
 }

@@ -131,6 +131,44 @@ class WhereAnAnswersElementsCameFromCanBeSaidTest {
         assertThrows(IllegalStateException.class, built::shape);
     }
     /**
+     * An element that is one of several things that happened to it, all at one place.
+     *
+     * <p>{@code Map.updateIfPresent} answers the map it was given with the value under one key
+     * replaced. Every value in the answer came from that argument, and each is either the value that
+     * was there or what the closure made of it — so what is unsettled is what happened, not where it
+     * came from, and a reader asking where is owed the argument.
+     */
+    @Test
+    void anElementThatIsOneOfSeveralThingsAtOnePlace() {
+        ElementLineage said = new ElementLineage.OneOf(List.of(
+                new ElementLineage.SameAs(new Source(CONTAINER, 1)),
+                new ElementLineage.ClosureResult(new Source(CONTAINER, 1))));
+
+        assertEquals(new Source(CONTAINER, 1), said.source(),
+                "they came from one place, whatever happened to them there");
+    }
+
+    /**
+     * And the word the four-word projection reads of it is the one that licenses nothing.
+     *
+     * <p>Neither {@code PERMUTES} nor {@code MAPS} is true of a run holding some of each: a reader
+     * of the four words that took the first would assume of every value what is true of the ones the
+     * closure never saw, and one that took the second would assume of them what is true of the one
+     * it did. So the projection answers with the word for elements nothing was kept of, and a reader
+     * that wants more asks the lineage, which says both.
+     */
+    @Test
+    void aRunHoldingSomeOfEachIsProjectedToTheWordThatLicensesNothing() {
+        DischargeRules.Built updated = new DischargeRules.Built(
+                new ElementLineage.OneOf(List.of(
+                        new ElementLineage.SameAs(new Source(CONTAINER, 1)),
+                        new ElementLineage.ClosureResult(new Source(CONTAINER, 1)))),
+                DischargeRules.Cardinality.SAME);
+
+        assertEquals(DischargeRules.Shape.COLLAPSES, updated.shape());
+    }
+
+    /**
      * And the shape is coarser than what it is read off, which is why it is read off and not
      * declared.
      *

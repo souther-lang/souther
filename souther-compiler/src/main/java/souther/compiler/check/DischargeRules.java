@@ -163,17 +163,40 @@ final class DischargeRules {
          * a fifth thing to keep in step with it.
          */
         Shape shape() {
-            boolean asMany = size == Cardinality.SAME;
-            return switch (lineage()) {
+            return wordFor(lineage(), size == Cardinality.SAME);
+        }
+
+        /**
+         * The word for one lineage, given whether the result has as many elements as its source.
+         *
+         * <p>Elements that are each one of several things are each of them read, and the word is the
+         * one they all read where they read one — otherwise the word for elements nothing was kept
+         * of, which licenses nothing and so is true of a run holding some of each.
+         * {@code Map.updateIfPresent} is that: every value is the argument's own or what the closure
+         * made of it, so neither {@code PERMUTES} nor {@code MAPS} is true of the run, and what a
+         * reader of the four words may assume of it is nothing.
+         */
+        private Shape wordFor(ElementLineage lineage, boolean asMany) {
+            return switch (lineage) {
                 case ElementLineage.SameAs _ -> asMany ? Shape.PERMUTES : Shape.SUBSET;
                 case ElementLineage.ClosureResult _ -> asMany ? Shape.MAPS : Shape.COLLAPSES;
                 // What the closure answered holds it, so what was stated of the source says nothing
                 // of it, and there may be any number of them. No word of the four is about that,
                 // and the nearest is the one for elements nothing was kept of.
                 case ElementLineage.InsideClosureResult _ -> Shape.COLLAPSES;
-                case ElementLineage.OneOf _ -> throw new IllegalStateException(
-                        "a construction whose elements come from more than one place has no single"
-                                + " source for a shape to be about: " + outputs);
+                case ElementLineage.OneOf one -> {
+                    if (one.source() == null) {
+                        throw new IllegalStateException(
+                                "a construction whose elements come from more than one place has no"
+                                        + " single source for a shape to be about: " + outputs);
+                    }
+                    Shape word = null;
+                    for (ElementLineage alternative : one.alternatives()) {
+                        Shape read = wordFor(alternative, asMany);
+                        word = word == null || word == read ? read : Shape.COLLAPSES;
+                    }
+                    yield word;
+                }
             };
         }
     }
@@ -221,8 +244,13 @@ final class DischargeRules {
                     new ElementLineage.Source(at(0), 1)), Cardinality.AT_MOST)),
             Map.entry(op("Set", "difference"), new Built(new ElementLineage.SameAs(
                     new ElementLineage.Source(at(0), 1)), Cardinality.AT_MOST)),
-            Map.entry(op("Map", "updateIfPresent"), new Built(new ElementLineage.ClosureResult(
-                    new ElementLineage.Source(CONTAINER, 1)), Cardinality.SAME)),
+            // Every value in the answer came from the map it was given: the one under the key is
+            // what the closure made of it, and every other is the value that was there. Read as a
+            // closure result alone, what is true of one value would be said of all of them.
+            Map.entry(op("Map", "updateIfPresent"), new Built(new ElementLineage.OneOf(List.of(
+                    new ElementLineage.SameAs(new ElementLineage.Source(CONTAINER, 1)),
+                    new ElementLineage.ClosureResult(new ElementLineage.Source(CONTAINER, 1)))),
+                    Cardinality.SAME)),
             // Inside what the closure answered, which is an optional here and a list in a
             // `flatMap`. One lineage for the two, told apart by what the closure's own signature
             // says it answers with.
@@ -1446,6 +1474,27 @@ final class DischargeRules {
                 && same.source().elements() == 1
                 ? same.source().argument() : null;
     }
+
+    /**
+     * The container {@code call} built its result from, and where each element of what it answers
+     * came from — the lineage itself, for a reader that has an answer per alternative.
+     *
+     * <p>Beside {@link #builtFrom} and not instead of it. The four words are what a reader asking
+     * "does what I know survive this" wants, and they are a projection; a reader that can say
+     * something different about each of the things an element may be wants what the projection was
+     * read off. Null where the elements came from more than one place, as the projection is refused
+     * there: without one container there is nothing to ask the question of.
+     */
+    static Kept keptFrom(Core.PreservedCall call) {
+        Built built = Bound.BUILDINGS.get(call.operation());
+        if (built == null || built.outputs().size() != 1 || built.lineage().source() == null) {
+            return null;
+        }
+        return new Kept(built.from().of(call), built.lineage());
+    }
+
+    /** A construction's source container and the lineage of the elements it answers. */
+    record Kept(Core container, ElementLineage lineage) {}
 
     /** The container {@code call} built its result from, or null where the check has no rule about
      * what the operation keeps. */

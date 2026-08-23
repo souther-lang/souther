@@ -610,17 +610,38 @@ final class Terms {
         if (container == null) {
             return null;
         }
-        return listedOut(container, at) instanceof Core.ListLit list
+        return given(container, at).value() instanceof Core.ListLit list
                 ? BigDecimal.valueOf(list.elements().size()) : null;
     }
 
-    /** The list {@code e} is, written where it is or written where the name it is was given one. */
-    Core listedOut(Core e, Denotations at) {
-        if (!(e instanceof Core.Read r)) {
-            return e;
+    /** An expression a value is written at, and the environment that expression is read in — which
+     * travel together, since following a name into a binding is what makes them differ. */
+    record Given(Core value, Denotations at) {}
+
+    /**
+     * The expression {@code e}'s value is written at, and where it is read.
+     *
+     * <p>A name is not a way of building a value, and neither is a binding. {@code xs} given
+     * {@code List.map(f, ys)} is that call, and a helper the discharge tree expanded is
+     * {@code let $0 = ys in List.map(f, $0)} and is that call too — so a reader asking what a value
+     * is asks here, and what comes back is the expression that built it beside the environment its
+     * names mean something in.
+     *
+     * <p>One peeler and not one per reader. Every reader of a value meets the same two ways of
+     * re-naming one, and each that answered for itself answered for the shapes its author had met:
+     * a container read through its name and not through a binding, a closure's answer read through
+     * neither. What is left to the reader is what is genuinely about the value — the fields a
+     * construction is built from, the arithmetic a number is — and never how it was written down.
+     */
+    Given given(Core e, Denotations at) {
+        if (e instanceof Core.Read r) {
+            Core given = at.valueOf(r.binding());
+            return given == null || given == e ? new Given(e, at) : given(given, at);
         }
-        Core given = at.valueOf(r.binding());
-        return given == null || given == e ? e : listedOut(given, at);
+        if (e instanceof Core.LetIn li) {
+            return given(li.body(), inside(li, at));
+        }
+        return new Given(e, at);
     }
 
     static <A> LinearForm<A> negate(LinearForm<A> f) {
@@ -768,6 +789,11 @@ final class Terms {
                 && Reductions.reducing(call, at) instanceof Reductions.Reducing walk) {
             recordingWalk(atom, walk, e, at);
             return;
+        } else if (asOperator(e) instanceof Core.PreservedCall accumulation
+                && Accumulations.accumulating(accumulation)
+                        instanceof Accumulations.Accumulating accumulating) {
+            recordingAccumulation(atom, accumulating, e, at);
+            return;
         } else {
             // What is left is a value that is one of several. Asked last because being one of
             // several is what a value is where nothing else says what it was computed from — a
@@ -844,6 +870,81 @@ final class Terms {
         InductiveBounds.Walk made = new InductiveBounds.Walk(seed, accumulator, step,
                 StepInputFacts.of(walk, inside, this, symbols, policy, reached(step)));
         computedBy(atom, new AtomKnowledge.Computation.Reduction(made));
+    }
+
+    /**
+     * Records the walk {@code atom} is the answer of, where the operation is handed no step and no
+     * seed and what it repeats is what it means ({@link Accumulations}).
+     *
+     * <p>The same walk, made of the same numbers. {@link InductiveBounds} is written against a seed,
+     * an accumulator, a step and what holds of what the step is handed, and asks for no tree and no
+     * operation's name — so an accumulation is one of its walks as soon as those four are made, and
+     * a total written {@code List.sum(ns)} is proved by what proves the fold that spells it out.
+     *
+     * <p>Nothing is expanded to get them. The accumulator and the element are places of this walk,
+     * as a reduction's parameters are, and the seed is the identity the operation starts from read
+     * at the type the call answers — not a literal written into a tree for the types to be inferred
+     * off again, which is the reading ADR-0082 has going the other way.
+     *
+     * <p>Both places are named with how their values are spaced, for the reason
+     * {@link #recordingWalk} names its accumulator: {@link InductiveBounds} asks the domain to
+     * assume a range for the accumulator, and a range asserted about an atom whose spacing was never
+     * recorded is one the domain refuses — which would be a walk of the right shape that settles
+     * nothing.
+     */
+    private void recordingAccumulation(FactSubject atom, Accumulations.Accumulating accumulating,
+                                       Core e, Denotations at) {
+        Granularity spacing = granularityOf(e.type());
+        FactSubject accumulator =
+                named(FactSubject.of(interned.handed(atom.identity(), 0)), spacing);
+        FactSubject element = named(FactSubject.of(interned.handed(atom.identity(), 1)), spacing);
+        LinearForm<FactSubject> seed = startedFrom(accumulating.what().identity());
+        LinearForm<FactSubject> step =
+                repeating(accumulating.what().combine(), accumulator, element, spacing);
+        if (seed == null || step == null) {
+            return;
+        }
+        UniversalElementFacts elements =
+                UniversalElementFacts.of(accumulating.container(), at, this, symbols, policy);
+        computedBy(atom, new AtomKnowledge.Computation.Reduction(new InductiveBounds.Walk(
+                seed, accumulator, step,
+                StepInputFacts.ofTheElement(elements, element, this, reached(step)))));
+    }
+
+    /** The value an accumulation starts from, as a number — or null where the domain carries no such
+     * value. The empty list a {@code List.concat} starts from is a value the library states and this
+     * reading has no number for, which is a fact about this reading. */
+    private LinearForm<FactSubject> startedFrom(Accumulations.Identity identity) {
+        return switch (identity) {
+            case ZERO -> LinearForm.constant(java.math.BigDecimal.ZERO);
+            case ONE -> LinearForm.constant(java.math.BigDecimal.ONE);
+            case EMPTY -> null;
+        };
+    }
+
+    /**
+     * The step an accumulation repeats, as a form over the two places it is applied to — or null
+     * where the domain carries no such arithmetic.
+     *
+     * <p>A product is not a form, so it is an atom that stands for one, recorded against the recipe
+     * that says what it is — the same recipe the naming makes of a product written in a fold's step,
+     * so what proves one proves the other. Under the induction hypothesis the two operands are both
+     * bounded and the recipe answers a range; read with nothing assumed of the accumulator it
+     * answers none, which is what leaves the unprovable candidates unproved.
+     */
+    private LinearForm<FactSubject> repeating(Accumulations.Combine combine, FactSubject accumulator,
+                                              FactSubject element, Granularity spacing) {
+        return switch (combine) {
+            case ADD -> LinearForm.atom(accumulator).plus(LinearForm.atom(element));
+            case MULTIPLY -> {
+                FactSubject product = named(FactSubject.of(interned.operator(
+                        BinOp.MUL, accumulator.identity(), element.identity())), spacing);
+                computedBy(product, new AtomKnowledge.Computation.Derived(new Derivation.Product(
+                        LinearForm.atom(accumulator), LinearForm.atom(element))));
+                yield LinearForm.atom(product);
+            }
+            case APPEND -> null;
+        };
     }
 
     /**
@@ -1369,8 +1470,12 @@ final class Terms {
         }
         FactSubject atom = sizeKeyOf(size, counted);
         if (atom != null) {
+            // The rules are about how the container was built, so they are read of the expression
+            // that built it — and in the environment that expression's own names mean something in,
+            // which is not the one the name was read in where a binding stands between them.
+            Given built = given(container, at);
             carrying(atom, IntrinsicNumericFacts.ofSize(size,
-                    DischargeRules.sizeSource(listedOut(container, at)), atom, at, this));
+                    DischargeRules.sizeSource(built.value()), atom, built.at(), this));
         }
         return atom;
     }
