@@ -96,6 +96,53 @@ class WhatACaseMeansIsDecidedInOnePlaceTest {
                         + " names it wrote is working out what the checker already answered");
     }
 
+
+    /** The one file that says a set of values in the model's own names, and the one that reads it. */
+    private static final String NAMES_THEM = "check/CoveringNames.java";
+    private static final List<String> MAY_READ_THE_NAMES = List.of("check/MatchElaborator.java");
+
+    /**
+     * Naming a set of values the way the model declares them is only ever for a report.
+     *
+     * <p>#966 was a check decided over the cases a declaration listed while everything else read the
+     * values under them. The check reads the values now, and what is left of the old reading is a
+     * report: what no arm answered for is said in the model's own names, because a model that gave a
+     * group of cases a type of its own wrote that type to say something.
+     *
+     * <p>Which is a reading that must not come back the other way. A check that asked for the
+     * declared names and then decided over what came back would be #966 again, arrived at through a
+     * helper written for a message — and it would look reasonable at the call, because the names are
+     * the ones the author wrote.
+     *
+     * <p>What this sees is the file that reads it and not what that file does with it. The reader is
+     * where the report is composed and also where the check is, so a use inside a check is not
+     * visible here; what is visible is the reading spreading to a pass that has no report to write,
+     * which is the step that would have to come first.
+     */
+    @Test
+    void namingValuesTheWayTheModelDeclaresThemIsOnlyForAReport() throws IOException {
+        List<Path> sources = mainSources();
+        assertTrue(sources.size() > 20,
+                () -> "the scan found only " + sources.size() + " sources, which is not the tree");
+
+        List<String> readers = new ArrayList<>();
+        boolean found = false;
+        for (Path source : sources) {
+            String where = where(source);
+            if (where.equals(NAMES_THEM)) {
+                found = true;
+                continue;
+            }
+            if (Files.readString(source, StandardCharsets.UTF_8).contains("CoveringNames")) {
+                readers.add(where);
+            }
+        }
+        assertTrue(found, "the file this rule is about moved, so it was asked of nothing");
+        assertEquals(MAY_READ_THE_NAMES, readers.stream().sorted().toList(),
+                "a set of values is said in the model's names to report it; a pass reading them to"
+                        + " decide with is deciding over what a declaration listed, which is #966");
+    }
+
     /** The module-relative name a rule is written against: {@code check/CaseSpace.java}. */
     private static String where(Path source) {
         return source.getParent().getFileName() + "/" + source.getFileName();

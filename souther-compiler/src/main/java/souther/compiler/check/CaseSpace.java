@@ -41,8 +41,9 @@ sealed interface CaseSpace {
      * <p>Ordered so that two readings of one subject list them alike — a report saying what a match
      * left out reads this, and an order that came out differently each time would move a message
      * nothing about the program had changed. A sum's cases come as declared and an optional's
-     * present carrier before its absent one; a union's members are a set, so what comes out is that
-     * set's iteration order and no claim is made about which member was written first.
+     * present carrier before its absent one; a union states no order of its own, so the one
+     * {@link AtomSpace#statedBy} puts on it is used rather than the order its set happens to
+     * iterate in — which is not an order anything about the program decided.
      *
      * <p>It is not the order arms are tried in. Which arm of a {@code match} takes a value is
      * decided by the order the arms are written, which is the match's and not the subject's.
@@ -137,8 +138,12 @@ sealed interface CaseSpace {
                     ResolvedCase.resolve(CaseSelector.optionAbsent(), symbols)));
         }
         if (subject instanceof Type.Union union) {
-            return new Cases(subject, "union `" + Type.show(union) + "`",
-                    direct(union.members(), symbols));
+            // Described from the members this lists and not by showing the union again. What a
+            // report names the subject as and what it says the subject is made of are one answer;
+            // shown from the type, the members would come out in whatever order its set iterates,
+            // and the two halves of one message would order the same union two ways.
+            List<TypeSymbol> members = AtomSpace.statedBy(union);
+            return new Cases(subject, "union `" + shown(members) + "`", direct(members, symbols));
         }
         if (subject instanceof Type.Ref ref
                 && symbols.declarations().declaration(ref.name().key()) instanceof Hir.SumData sum) {
@@ -188,6 +193,23 @@ sealed interface CaseSpace {
             out.add(selected.name());
         }
         return out;
+    }
+
+    /**
+     * A union written out as its members, in the order it states them.
+     *
+     * <p>Not {@link Type#show}, which renders a union's members as it finds them. What that does is
+     * a wider question than this one — the standard library's {@code Int | DivisionByZero} would
+     * read {@code DivisionByZero | Int}, and the order a reader wants there is the one the author
+     * wrote, which a union does not keep — so what is settled here is only that one report orders
+     * one union one way.
+     */
+    private static String shown(List<TypeSymbol> members) {
+        List<String> names = new ArrayList<>();
+        for (TypeSymbol member : members) {
+            names.add(Type.show(Type.ref(member)));
+        }
+        return String.join(" | ", names);
     }
 
     /**

@@ -163,14 +163,14 @@ public final class MatchElaborator {
             arms.add(new Core.Case(pattern, CoreBinders.of(c.binding()), body, c.pos()));
             branchType = mergeBranch(m, branchType, body.type(), c, expected);
         }
-        List<String> missing = new ArrayList<>();
-        for (TypeSymbol atom : partition.unanswered()) {
-            missing.add(atom.name());
-        }
-        if (!missing.isEmpty()) {
-            // Left in the order the subject states them, which is the order the model declares
-            // them in. Sorted, a report of a nesting would read in an order nothing wrote.
-            throw nonExhaustive(m.pos(), what, missing);
+        List<TypeSymbol> unanswered = partition.unanswered();
+        if (!unanswered.isEmpty()) {
+            // Said in the model's own names, which is a second reading of a question already
+            // answered and is why it happens here rather than in the check. Left in the order the
+            // subject states them: sorted, a report of a nesting would read in an order nothing
+            // wrote.
+            throw nonExhaustive(m.pos(), what,
+                    CoveringNames.of(scrutinee, unanswered, ctx.symbols()));
         }
         if (branchType == null) {
             throw CompileException.of(Diagnostic.at(m.pos(), 5).say(new MatchMessage.ThisMatchHasNoCases()).build());

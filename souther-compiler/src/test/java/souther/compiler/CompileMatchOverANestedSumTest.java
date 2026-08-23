@@ -4,6 +4,7 @@ import souther.compiler.diag.CompileException;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -168,23 +169,157 @@ class CompileMatchOverANestedSumTest {
     }
 
     /**
-     * What is missing is named as the values that are missing.
+     * What no arm answered for is named the way the model declares it.
      *
-     * <p>The leaves and not the case the subject declared. It is what the check decided over, so it
-     * is what the report says; naming {@code OnceKind} here would be a second reading of the same
-     * question, made only to shorten a message.
+     * <p>The check is settled over the values, because that is what an arm answers for. The report
+     * is not owed in those terms: the model wrote {@code OnceKind} to say something, and a report
+     * of its two leaves is about a declaration nobody made.
      */
     @Test
-    void whatNoArmAnsweredForIsNamedAsTheValuesItIs() {
-        CompileException refused = assertThrows(CompileException.class, () -> Compiler.compile(feeOf("""
+    void whatNoArmAnsweredForIsNamedTheWayTheModelDeclaresIt() {
+        assertEquals(List.of("OnceKind"), unanswered("""
                         | Renkei -> 3
-                """)));
-        String hints = refused.diagnostic().notes().stream().map(n -> n.said().toString()).toList()
-                .toString();
-        assertTrue(hints.contains("Station, Hospital"),
-                () -> "every value no arm answered for is named, in the order the model declares "
-                        + "them, hinted " + hints);
+                """));
+    }
+
+    /** And is opened where only part of a declared case is missing, since the case is not. */
+    @Test
+    void aCaseOnlyPartlyMissingIsOpenedRatherThanNamed() {
+        assertEquals(List.of("Station"), unanswered("""
+                        | Hospital -> 2
+                        | Renkei -> 3
+                """));
+    }
+
+    /**
+     * Both at once, in the order the model declares them.
+     *
+     * <p>{@code AB} is missing entirely and is named; {@code CD} is missing only {@code D} and is
+     * opened. A report that did one of the two everywhere would be wrong about the other half.
+     */
+    @Test
+    void whatIsNamedAndWhatIsOpenedComeInTheOrderTheModelDeclaresThem() {
+        CompileException refused = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module demo
+
+                data A = { at: String }
+                data B = { at: String }
+                data C = { at: String }
+                data D = { at: String }
+                data AB  = A | B
+                data CD  = C | D
+                data All = AB | CD
+
+                behavior fee : (k: All) -> Int
+
+                let fee (k) =
+                    match k with
+                        | C -> 1
+                """));
         assertEquals("E1201", refused.diagnostic().code());
+        assertEquals(List.of("AB", "D"), hinted(refused));
+    }
+
+
+    /**
+     * An anonymous union states no order, so the report is not left holding the set's.
+     *
+     * <p>A union is a set. Which order it iterates in follows from how it was built and not from
+     * anything about the program, so a report reading it would move between two runs of one
+     * compiler. The order is put on the union in one place; both the values a match answers for and
+     * the names a report says are read from it, and writing the members the other way round is the
+     * same union.
+     */
+    @Test
+    void aReportOverAnAnonymousUnionReadsInAnOrderTheCompilerDecided() {
+        assertEquals(List.of("B", "C"), unansweredOfUnion("A | B | C"));
+        assertEquals(List.of("B", "C"), unansweredOfUnion("C | A | B"),
+                "the union written the other way round is the same union");
+    }
+
+    /** And the subject the report names it on is the same union, however it was written. */
+    @Test
+    void theUnionAReportNamesReadsInThatOrderToo() {
+        assertEquals(saidOverUnion("A | B | C"), saidOverUnion("C | A | B"),
+                "what the match is said to be on is the union, not the order it was written in");
+        assertTrue(saidOverUnion("C | A | B").contains("A | B | C"),
+                () -> "in the order the union states its members, said " + saidOverUnion("C | A | B"));
+    }
+
+    private String saidOverUnion(String members) {
+        return refusedOverUnion(members).diagnostic().said().toString();
+    }
+
+    private List<String> unansweredOfUnion(String members) {
+        return hinted(refusedOverUnion(members));
+    }
+
+    private CompileException refusedOverUnion(String members) {
+        CompileException refused = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module demo
+
+                data A = { at: String }
+                data B = { at: String }
+                data C = { at: String }
+                data Seen = { at: String }
+
+                behavior pick : (s: Seen) -> %s
+
+                behavior fee : (s: Seen) -> Int
+
+                let fee (s) =
+                    match pick(s) with
+                        | A -> 1
+                """.formatted(members)));
+        assertEquals("E1201", refused.diagnostic().code());
+        return refused;
+    }
+
+    /**
+     * Where two cases of one subject both cover what is missing, the first is named and the second
+     * is opened.
+     *
+     * <p>A value may be a case of more than one declaration, so {@code AB} and {@code ABC} both
+     * cover {@code A} and {@code B}. Naming both would report a value twice and would offer two
+     * arms that cannot both be written — they answer for one value, which a match refuses. So the
+     * names that come back share nothing: {@code AB}, and then what is left of {@code ABC}.
+     */
+    @Test
+    void whereTwoCasesBothCoverWhatIsMissingTheNamesStillShareNothing() {
+        CompileException refused = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module demo
+
+                data A = { at: String }
+                data B = { at: String }
+                data C = { at: String }
+                data D = { at: String }
+                data AB  = A | B
+                data ABC = A | B | C
+                data All = AB | ABC | D
+
+                behavior fee : (k: All) -> Int
+
+                let fee (k) =
+                    match k with
+                        | D -> 1
+                """));
+        assertEquals("E1201", refused.diagnostic().code());
+        assertEquals(List.of("AB", "C"), hinted(refused));
+    }
+
+    /** The cases a `match` was refused for not answering, as its report names them. */
+    private List<String> unanswered(String arms) {
+        CompileException refused = assertThrows(CompileException.class,
+                () -> Compiler.compile(feeOf(arms)));
+        assertEquals("E1201", refused.diagnostic().code());
+        return hinted(refused);
+    }
+
+    private static List<String> hinted(CompileException refused) {
+        String cases = refused.diagnostic().notes().stream()
+                .map(n -> String.valueOf(souther.compiler.diag.msg.MessageValues.of(n.said()).get("cases")))
+                .findFirst().orElseThrow();
+        return List.of(cases.split(", "));
     }
 
     /**
