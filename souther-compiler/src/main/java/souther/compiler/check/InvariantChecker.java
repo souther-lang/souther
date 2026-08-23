@@ -758,7 +758,7 @@ public final class InvariantChecker {
             inner = new Core.FieldAccess(inner, "value", under, NOWHERE);
             worn = under;
         }
-        if (depth > PathEngine.FIELDS_SEEDED || !(worn instanceof Type.Ref ref)
+        if (depth > GuaranteeWalk.FIELDS_SEEDED || !(worn instanceof Type.Ref ref)
                 || !(symbols.declarations().declaration(ref.name().key()) instanceof Hir.Data data) || data.newtype()) {
             return;
         }

@@ -703,24 +703,22 @@ class AWalkFromASeedIsBoundedByCheckingOneStepTest {
     }
 
     /**
-     * What choosing an arm settles is not read, so an arm whose body reads what the arm itself bound
-     * gets no range.
+     * An arm whose body reads what the arm itself bound is read against what that value's type
+     * guarantees.
      *
-     * <p>The boundary as it stands, and narrower than it was. What the arm binds is entered before
-     * the arm is named ({@link souther.compiler.check.Terms#choosing}), so the body below reads the
-     * place it meant rather than a value nothing named. What is still not read is what choosing the
-     * arm <em>settles</em>: that {@code held} is the case that carries an amount, and that the
-     * attempt's construction held. Both are true only where that arm is the answer, so neither is
-     * among the facts that hold of every element a step is handed, and the step gets no range from
-     * them (#973).
+     * <p>What choosing an arm settles has two sources. What a condition states is the condition's
+     * ({@link souther.compiler.check.Conditions}); what being a value of a type guarantees is the
+     * declaration's, and is the same answer a seeding reads of a parameter
+     * ({@link souther.compiler.check.TypeGuarantees}). A {@code match} arm binds the scrutinee
+     * refined to the case it names and an attempt binds what it built, so both were built through
+     * their type's checked constructor and both carry what that type states.
      *
-     * <p>One gap and not three: a {@code match} arm's binding, an attempt's built value and an
-     * {@code if}'s condition are all what choosing an arm settles. Written down beside a neighbour
-     * that differs only in reading the element instead, so what is owed is the binding and not the
-     * branch.
+     * <p>Stated under the arm and not beside it: the value only exists because that arm was chosen.
+     * Written down beside a neighbour that reads the element instead, so what is read is the
+     * binding and not the branch.
      */
     @Test
-    void anArmReadingWhatItBoundGetsNoRange() {
+    void anArmReadingWhatItBoundIsReadByWhatItsTypeGuarantees() {
         assertFalse(owed(compiled("""
                 behavior total : (xs: List<Flagged>) -> Money
                     constructs Money, NonNegInt
@@ -728,14 +726,14 @@ class AWalkFromASeedIsBoundedByCheckingOneStepTest {
                 let total (xs) = Money(List.fold((sum, x) ->
                     if NonNegInt(x.amount.value) as n then sum + x.amount.value else sum, 0, xs))
                 """)), "this arm reads the element, which the walk entered, so the step is read");
-        assertTrue(owed(compiled("""
+        assertFalse(owed(compiled("""
                 behavior total : (xs: List<Flagged>) -> Money
                     constructs Money, NonNegInt
 
                 let total (xs) = Money(List.fold((sum, x) ->
                     if NonNegInt(x.amount.value) as n then sum + n.value else sum, 0, xs))
-                """)), "and this one reads what the attempt built, which nothing here has entered");
-        assertTrue(owed(compiled("""
+                """)), "and this one reads what the attempt built, which its own type speaks for");
+        assertFalse(owed(compiled("""
                 behavior total : (xs: List<Boxed>) -> Money
                     constructs Money
 

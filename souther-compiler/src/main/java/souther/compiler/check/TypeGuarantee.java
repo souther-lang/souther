@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.core.Core;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -40,6 +41,32 @@ record TypeGuarantee(RuleRef.Invariant rule, Core clause, Predicates.Owed owed,
     TypeGuarantee {
         quantified = List.copyOf(quantified);
         parts = List.copyOf(parts);
+    }
+
+    /**
+     * What this guarantee comes to as relations.
+     *
+     * <p>What a clause states of the value, and what is known of the size of any container it names.
+     * Both hold of the value itself, which is what makes them recordable where a range could not be
+     * ({@link NumericConstraint}).
+     *
+     * <p>A clause this reading could not state as a relation is not here, and neither is one it
+     * read as a fact. Under-answering costs precision; answering with something else would not be
+     * sound.
+     */
+    List<NumericConstraint> relations() {
+        List<NumericConstraint> out = new ArrayList<>();
+        for (Predicates.Part each : owed.parts()) {
+            if (!(each instanceof Predicates.Part.Carried carried)) {
+                continue;
+            }
+            Predicates.Clause clause = carried.clause();
+            out.addAll(clause.known());
+            if (clause.numeric() != null) {
+                out.add(clause.numeric());
+            }
+        }
+        return List.copyOf(out);
     }
 
     /** What one part of a clause came to, beside the part it was read from. */

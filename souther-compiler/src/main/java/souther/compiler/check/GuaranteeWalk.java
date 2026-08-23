@@ -32,6 +32,19 @@ final class GuaranteeWalk {
     }
 
     /**
+     * How far into a value's fields a walk over a body can afford to read.
+     *
+     * <p>A type's own invariant is what its fields guarantee, and a field's type carries its own;
+     * past a couple of levels what a clause could be read against is a value the body would have had
+     * to name, and it names it by reading it.
+     *
+     * <p>A cost bound and not a rule of the model: a rule four records down refuses the outermost
+     * construction exactly as one on its own fields does. What a construction has to satisfy has no
+     * depth at all, and a reader answering for that asks for one that has none.
+     */
+    static final int FIELDS_SEEDED = 2;
+
+    /**
      * How far a reader is asking this walk to go.
      *
      * <p>Not one number for everybody. What a walk over a body can afford to read of a parameter is

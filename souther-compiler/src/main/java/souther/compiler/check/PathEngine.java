@@ -50,10 +50,6 @@ final class PathEngine {
      */
     static List<Core> SEEDED;
 
-    /** How far into a value's fields the seeding reads. A type's own invariant is what its fields
-     * guarantee, and a field's type carries its own; past a couple of levels what a clause could be
-     * read against is a value the body would have had to name, and it names it by reading it. */
-    static final int FIELDS_SEEDED = 2;
 
     private final Symbols symbols;
     /** The declarations' invariants, typed where they are declared and read where a value is built. */
@@ -99,7 +95,7 @@ final class PathEngine {
                ReadingPolicy policy) {
         this.symbols = symbols;
         this.clauses = new Clauses(symbols, dischargeInvariants);
-        this.terms = new Terms(symbols, reading, policy);
+        this.terms = new Terms(symbols, reading, policy, clauses);
         this.predicates = new Predicates(terms);
         this.guarantees = new TypeGuarantees(symbols, clauses, predicates);
         this.walk = new GuaranteeWalk(guarantees);
@@ -568,7 +564,7 @@ final class PathEngine {
      * only in direction.
      */
     Known seedAt(Core root, Known k, Denotations at, int depth) {
-        return seedAt(root, FieldDomains.THE_VALUE, k, at, depth, FIELDS_SEEDED, new HashSet<>(),
+        return seedAt(root, FieldDomains.THE_VALUE, k, at, depth, GuaranteeWalk.FIELDS_SEEDED, new HashSet<>(),
                 null, InvariantChecker.Reach.EVERYTHING);
     }
 
@@ -576,7 +572,7 @@ final class PathEngine {
      * The same, as far as {@code limit} levels down, with the types on the way recorded.
      *
      * <p>How far to seed is not one number. What a walk over a body can afford to read of a
-     * parameter is a cost bound and stops at {@code FIELDS_SEEDED}; what a construction has to
+     * parameter is a cost bound and stops at {@link GuaranteeWalk#FIELDS_SEEDED}; what a construction has to
      * satisfy has no depth at all, since a rule four records down refuses the outermost value
      * exactly as one on the top does. A projection that stopped at two and was then classified by a
      * walk that did not would call a bound complete that a rule below it moves.

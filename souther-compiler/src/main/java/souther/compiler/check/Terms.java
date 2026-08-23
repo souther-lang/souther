@@ -164,14 +164,31 @@ final class Terms {
         return policy;
     }
 
+    /** What a type guarantees of a value, or null where this reading was given no declarations to
+     * read. A recipe built from such a reading says what a condition states and no more. */
+    private final GuaranteeWalk guarantees;
+
+    /** A reading that names places and reads no declaration. What a type guarantees is not asked
+     * here, so nothing that needs it may be built from this one. */
     Terms(Symbols symbols, ReadingPolicy policy) {
-        this(symbols, Of.THE_DISCHARGE_TREE, policy);
+        this(symbols, Of.THE_DISCHARGE_TREE, policy, null);
     }
 
-    Terms(Symbols symbols, Of reading, ReadingPolicy policy) {
+    /**
+     * A reading over {@code reading}'s tree, told where the declarations' invariants are.
+     *
+     * <p>{@code clauses} is what lets a recipe say what choosing an arm settles where the arm binds
+     * a value: the answer is what that value's type guarantees, and it is read through the one
+     * reading of a declaration there is ({@link TypeGuarantees}). Its own {@link Predicates} over
+     * this very reading, which is the same reader a seeding asks — {@link Predicates} holds nothing
+     * but the reading it was given, so two of them answer alike.
+     */
+    Terms(Symbols symbols, Of reading, ReadingPolicy policy, Clauses clauses) {
         this.symbols = symbols;
         this.reading = reading;
         this.policy = policy;
+        this.guarantees = clauses == null
+                ? null : new GuaranteeWalk(new TypeGuarantees(symbols, clauses, new Predicates(this)));
     }
 
     /**
@@ -875,14 +892,58 @@ final class Terms {
         }
         List<Derivation.Chosen.Arm> arms = new ArrayList<>();
         for (Choice.Arm arm : choice.arms()) {
-            LinearForm<FactSubject> form = affineOf(arm.answers(), choosing(arm.decidedBy(), at));
+            Denotations inside = choosing(arm.decidedBy(), at);
+            LinearForm<FactSubject> form = affineOf(arm.answers(), inside);
             if (form == null) {
                 return null;
             }
-            arms.add(new Derivation.Chosen.Arm(form,
-                    Conditions.settledBy(this, arm.decidedBy(), at)));
+            // Two sources and one question. What a condition states is read where the condition is
+            // written, which is outside the arm; what a type guarantees of what the arm bound is
+            // read where that name stands, which is inside it.
+            List<NumericConstraint> settles =
+                    new ArrayList<>(Conditions.settledBy(this, arm.decidedBy(), at));
+            settles.addAll(guaranteedBy(arm.decidedBy(), inside));
+            arms.add(new Derivation.Chosen.Arm(form, settles));
         }
         return new Derivation.Chosen(arms);
+    }
+
+    /**
+     * What the type of the value choosing {@code decidedBy} opens guarantees of it, as relations.
+     *
+     * <p>The other half of what choosing an arm settles. A {@code match} arm binds the scrutinee
+     * refined to the case it names, and an attempt binds what it built; either way the value was
+     * built through its type's checked constructor, so what that type states holds of it. That is
+     * the same argument a seeding rests on for a parameter, and it is the same reading — asked here
+     * of a value a recipe names rather than of a place a walk stands at.
+     *
+     * <p>Under the arm and not beside it. The value only exists because that arm was chosen, so what
+     * it guarantees is stated of that arm and of no other.
+     *
+     * <p>A condition settles nothing here, and a departure settles nothing at all: nothing was
+     * built, so there is no value for a type to guarantee anything of.
+     *
+     * <p>Only the relations. A clause states what it states, and what a recipe can record beside an
+     * arm is a relation ({@link NumericConstraint}); a fact about a value is settled where facts
+     * are, and leaving it out costs precision where taking it in as something else would not be
+     * sound.
+     */
+    private List<NumericConstraint> guaranteedBy(Choice.Decides decidedBy, Denotations inside) {
+        Core.Read root = switch (decidedBy) {
+            case Choice.Decides.ACase it -> read(it.arm().binder(), it.arm().bindType(),
+                    it.arm().pos());
+            case Choice.Decides.ItWasBuilt it -> read(it.attempt().binder(),
+                    it.attempt().construct().type(), it.attempt().pos());
+            case Choice.Decides.ACondition _, Choice.Decides.ItDeparted _ -> null;
+        };
+        if (guarantees == null || root == null) {
+            return List.of();
+        }
+        List<NumericConstraint> out = new ArrayList<>();
+        guarantees.from(root, FieldDomains.THE_VALUE, inside,
+                GuaranteeWalk.Scope.asFarAs(GuaranteeWalk.FIELDS_SEEDED),
+                (path, guarantee) -> out.addAll(guarantee.relations()));
+        return out;
     }
 
     /**

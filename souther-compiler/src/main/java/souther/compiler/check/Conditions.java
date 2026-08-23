@@ -45,8 +45,9 @@ final class Conditions {
      * ({@link Derivation.Chosen.Arm}), and worth keeping straight.
      *
      * <p>A case and an attempt state nothing here. What choosing them settles is what the value's
-     * type guarantees of what the arm binds, which is a guarantee about a place rather than a
-     * relation a condition wrote, and it is read where places are seeded.
+     * type guarantees of what the arm binds, which is a declaration's answer and not a relation a
+     * condition wrote, so it is read through the one reading of a declaration there is
+     * ({@link TypeGuarantees}) and composed with this beside the arm ({@link Terms#chosen}).
      *
      * <p>An operation the library defines by cases states the relations its case is reached under,
      * which arrive already lowered to the values the call was given ({@link Choice}). Nothing about
@@ -65,8 +66,9 @@ final class Conditions {
      * and not statements the condition makes. An arm read here is read without them, so
      * {@code List.size(xs)} under {@code not List.isEmpty(xs)} comes to "not nought" here where the
      * walk has "above nought". Not two readings of one question — it is one question this reader
-     * does not ask — but the same family as the type guarantees a case and an attempt rest on, and
-     * it is answered where those are (#982).
+     * does not ask. What a case and an attempt rest on is the same family and is now asked, of the
+     * value the arm opens; this is the value a condition <em>names</em>, which no arm opened and
+     * nothing here has been given a place to read from.
      */
     static List<NumericConstraint> settledBy(Terms terms, Choice.Decides decidedBy, Denotations at) {
         List<NumericConstraint> out = new ArrayList<>();
