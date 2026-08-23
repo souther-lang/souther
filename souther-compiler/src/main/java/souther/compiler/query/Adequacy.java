@@ -1722,6 +1722,8 @@ public final class Adequacy {
                 Generator.GenerationResult pairs;
                 try {
                     pairs = pairsFor(spec, sig, symbols, db.ask(new Front.Reading()).value(),
+                            baselines(name, spec, sig,
+                                    db.ask(new Bodies.ModuleDefinitions(name)).value(), symbols),
                             bodies.get(spec.name()),
                             elementsOf.getOrDefault(spec.name(),
                                     souther.compiler.check.ElementBindings.NONE), plan,
@@ -2040,9 +2042,62 @@ public final class Adequacy {
                     .orElseGet(Generator.Watched.NoAccount::new);
         }
 
+        /**
+         * The value a row's positions are composed against at each parameter, where the module
+         * states one.
+         *
+         * <p>A {@code let} of the parameter's own type, taken by name. Which one: the only one, and
+         * no one where the module states several — a row written against a value a reader would
+         * have to pick between says less than one written against the classes, and picking for them
+         * would be this compiler deciding which of an author's values is the ordinary one.
+         *
+         * <p>The name and nothing else. What the value is, is read where the row is read, by the
+         * same reading a written row naming it goes through — so nothing here holds a copy of it to
+         * disagree with.
+         */
+        private static Map<String, Generator.Baseline> baselines(
+                String module, Hir.SpecBehavior spec, Sig sig, Map<String, Hir.FnDef> values,
+                Symbols symbols) {
+            if (values == null) {
+                return Map.of();
+            }
+            // What a value is declared to be, asked of the one walk that answers it. A second
+            // reading of a definition's type here would be a second answer about what a row may
+            // name, differing from the reading that builds the row at whatever either forgot.
+            souther.compiler.check.FixtureEvidence evidence =
+                    new souther.compiler.check.FixtureEvidence(symbols, values);
+            Map<TypeSymbol, String> only = new LinkedHashMap<>();
+            Set<TypeSymbol> several = new LinkedHashSet<>();
+            for (Map.Entry<String, Hir.FnDef> each : values.entrySet()) {
+                if (!each.getValue().params().isEmpty()
+                        || !(each.getValue().body() instanceof Hir.FnBody.Written written)
+                        || !(evidence.declaredTypeOf(written.expr())
+                                instanceof souther.compiler.types.Type.Ref(TypeSymbol of))) {
+                    continue;
+                }
+                if (only.put(of, each.getKey()) != null) {
+                    several.add(of);
+                }
+            }
+            Map<String, Generator.Baseline> out = new LinkedHashMap<>();
+            List<Hir.Param> takes = spec.params();
+            for (int p = 0; p < takes.size() && p < sig.inputTypes().size(); p++) {
+                if (!(sig.inputTypes().get(p) instanceof souther.compiler.types.Type.Ref(
+                        TypeSymbol of))) {
+                    continue;
+                }
+                String named = only.get(of);
+                if (named != null && !several.contains(of)) {
+                    out.put(takes.get(p).name(), new Generator.Baseline(module, named));
+                }
+            }
+            return Map.copyOf(out);
+        }
+
         private static Generator.GenerationResult pairsFor(
                 Hir.SpecBehavior spec, Sig sig, Symbols symbols,
-                souther.compiler.check.ReadingPolicy policy, souther.compiler.core.Core body,
+                souther.compiler.check.ReadingPolicy policy,
+                Map<String, Generator.Baseline> baselines, souther.compiler.core.Core body,
                 souther.compiler.check.ElementBindings elements,
                 souther.compiler.coverage.CoverageSites.Plan plan, Observed observed,
                 FixtureReader.Construction building, InputDomain domain,
@@ -2082,7 +2137,7 @@ public final class Adequacy {
                     .toList();
             return Generator.fill(subject, existing, check,
                     souther.compiler.interaction.Interactions.of(body, plan, domain, symbols),
-                    trial);
+                    trial, baselines);
         }
     }
 

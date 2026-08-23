@@ -740,6 +740,77 @@ class CompileExampleGenerateTest {
     }
 
     /**
+     * A row for a class is written against a value the module already states.
+     *
+     * <p>The model issue #967 was reported from. Its gap is a class at one position, and the row a
+     * reader of the table it copies wants is that class against the values already beside it — one
+     * column moved, and the rest as the model says. Composed from the classes alone, every position
+     * held whatever the search named there and a reader had to work out which of the three
+     * differences the answer turned on.
+     */
+    private static final String AGAINST_A_LET = """
+            module example.trip
+
+            data C
+            data B
+            data F = C | B
+
+            data G1
+            data G2
+            data G = G1 | G2
+
+            data Cond = { f: F, g: G }
+            data Out = { n: Int }
+
+            let none = Cond { f = B, g = G1 }
+
+            behavior calc : (c: Cond) -> Out
+                constructs Out
+
+            let calc (c) = Out { n = 0 }
+
+            example calc
+                | "base" : (none) -> Out { n = 0 }
+            """;
+
+    @Test
+    void aRowForAClassIsWrittenAgainstTheValueTheModuleStates() {
+        Generator.GenerationResult filled = generated(AGAINST_A_LET).get("calc").pairs();
+
+        assertEquals(List.of("Cond { ...none, f = C }", "Cond { ...none, g = G2 }"),
+                inputs(filled));
+        assertEquals(List.of(List.of("c.f=C"), List.of("c.g=G2")),
+                filled.rows().stream().map(Generator.GeneratedRow::classes).toList(),
+                "each named for the one class it moves");
+    }
+
+    /**
+     * And the spread is the value, not a way of printing one.
+     *
+     * <p>What a row is written as and what a decoder builds it from are two forms of one value
+     * ({@code FixtureTemplate}), so the row offered goes back through the reading a written row
+     * goes through. Printed as a spread over a tree that had the record written out, the two would
+     * be one value under two spellings — and the row an author pasted would be a row nobody built.
+     */
+    @Test
+    void theSpreadRowsHoldWhenTheyArePastedBack() {
+        String source = answered(AGAINST_A_LET, "Out { n = 0 }");
+
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.answerEverything();
+        List<souther.compiler.observe.RowOutcome> rows = outcomes(compilation);
+
+        assertEquals(3, rows.size(), "the row that was there, and the two generated");
+        for (souther.compiler.observe.RowOutcome row : rows) {
+            assertEquals(souther.compiler.observe.Disposition.HELD, row.disposition(),
+                    row.identity().shown() + " -> " + row.failurePhase());
+        }
+        assertEquals("", GeneratedRows.of("example.trip", generated(source), Map.of(), false,
+                        SourceNameResolver.identity()),
+                "and nothing is left to offer once they are answered");
+    }
+
+    /**
      * The rows come out in the form {@code souther fmt} writes them.
      *
      * <p>These lines are meant to be pasted into a file the formatter then runs over. A block in a

@@ -325,6 +325,20 @@ public final class Generator {
     }
 
     /**
+     * A value the module already states that a row's positions can be composed against.
+     *
+     * <p>A name and nothing else. What the value <em>is</em> is the module's to say, and a row
+     * naming it is a row an author writes today — the reading that builds a fixture expands the
+     * name where the row is read, so nothing here has to hold the value or agree with it.
+     *
+     * <p>Why a row wants one: where the gap is a class at one position, the row a reader of a table
+     * recognises is that class against values the model already puts beside it. Composed from the
+     * classes alone, every position of the row holds whatever the search happened to name there,
+     * and a reader has to work out which of the differences the answer turned on (issue #967).
+     */
+    public record Baseline(String module, String name) {}
+
+    /**
      * What composing a row for one class of one position came to.
      *
      * <p>Held per class and keyed by the class, because a class is what a finding is about and the
@@ -461,6 +475,22 @@ public final class Generator {
                                         CandidateCheck check,
                                         List<souther.compiler.interaction.Interaction> groups,
                                         Trial trial) {
+        return fill(subject, existing, check, groups, trial, Map.of());
+    }
+
+    /**
+     * The same, composing each row's positions against a value the module already states where
+     * there is one for them.
+     *
+     * <p>Which changes what a row says rather than what it is for. A row is composed for one class
+     * either way; what a baseline settles is where the positions the row is <em>not</em> about
+     * stand, and a value the model already names is one a reader recognises — so the difference
+     * between the row and what is already written is the class, and the class alone.
+     */
+    public static GenerationResult fill(Subject subject, List<ObservedRow> existing,
+                                        CandidateCheck check,
+                                        List<souther.compiler.interaction.Interaction> groups,
+                                        Trial trial, Map<String, Baseline> baselines) {
         List<Axis> ordered = ordered(subject);
         // A position where some row's value could not be read is a position nothing is known about.
         // A row generated for a class there may be a row that is already written, and telling an
@@ -586,8 +616,8 @@ public final class Generator {
             // holds a value because a row has to, and what those values turn out to settle is a
             // fact about this run rather than what the row is: a name carrying them would move
             // when something elsewhere in the model did.
-            GeneratedRow named =
-                    new GeneratedRow(List.of(label(axis, at[1])), built.row().inputs());
+            GeneratedRow named = new GeneratedRow(List.of(label(axis, at[1])),
+                    against(subject, axis, at[1], baselines, check, built.row().inputs()));
             rows.add(named);
             attempts.add(new ClassAttempt.Built(axis.id(), classId, named));
         }
@@ -606,6 +636,76 @@ public final class Generator {
                     withheld));
         }
         return new GenerationResult(rows, unresolved, reasons, attempts);
+    }
+
+    /**
+     * {@code composed} with every position a baseline names written against that baseline.
+     *
+     * <p>The position the row is about is written as the baseline with that one field moved, which
+     * is the whole of what the row says. Every other position a baseline names is written as the
+     * baseline itself — the value is already in the model and the row is not about it, so naming it
+     * says so.
+     *
+     * <p>What a baseline cannot be used for is kept as it was composed, and silently: this is how a
+     * row is written and not whether one could be. A position the baseline's own type does not
+     * reach through one field, a class with no value to put there, a value the model refuses beside
+     * the rest of the row — each of them leaves that position composed from its classes, which is a
+     * row that says the same thing in more words.
+     */
+    private static List<FixtureTemplate> against(Subject subject, Axis moved, int cls,
+                                                 Map<String, Baseline> baselines,
+                                                 CandidateCheck check,
+                                                 List<FixtureTemplate> composed) {
+        if (baselines.isEmpty()) {
+            return composed;
+        }
+        List<FixtureTemplate> out = new ArrayList<>(composed);
+        for (int p = 0; p < subject.parameters().size() && p < out.size(); p++) {
+            String parameter = subject.parameters().get(p);
+            Baseline baseline = baselines.get(parameter);
+            if (baseline == null) {
+                continue;
+            }
+            FixtureTemplate named = FixtureTemplate.named(baseline.module(), baseline.name());
+            FixtureTemplate written = parameter.equals(moved.path().head())
+                    ? withOneFieldMoved(subject, p, moved, cls, named)
+                    : named;
+            // Kept as composed where the baseline cannot be written here, and where writing it
+            // would be a value the model refuses: what a row is written as never decides what it
+            // is for, so a position that cannot take the baseline takes what the classes gave it.
+            if (written != null && check.refuse(p, written).isEmpty()) {
+                out.set(p, written);
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    /**
+     * The baseline with the field {@code moved} names set to a value of {@code cls}, or null where
+     * this cannot be written.
+     *
+     * <p>One field, reached in one step. A position further down is a record inside a record, and
+     * writing it means spreading the value at every step on the way — which is a row that names
+     * values this has not been asked whether it can name. Such a position keeps what the classes
+     * composed for it, which says the same thing and says it in full.
+     */
+    private static FixtureTemplate withOneFieldMoved(Subject subject, int p, Axis moved, int cls,
+                                                     FixtureTemplate baseline) {
+        if (moved.path().steps().size() != 1
+                || !(moved.path().steps().get(0) instanceof TermPath.Step.Field field)) {
+            return null;
+        }
+        if (!(subject.types().get(p) instanceof Type.Ref(TypeSymbol built))
+                || !(subject.symbols().scope().reach(built) instanceof TypeReachName.Written type)) {
+            return null;
+        }
+        // The class's own values, and only those: a class composed through a constructor is a walk
+        // this does not do, and one nothing can produce a value for has nothing to put here.
+        if (!(moved.classes().get(cls).representatives().evaluate()
+                instanceof RepresentativeSource.Evaluation.Values values)) {
+            return null;
+        }
+        return FixtureTemplate.spreading(type, baseline, field.name(), values.written().get(0));
     }
 
     /**
