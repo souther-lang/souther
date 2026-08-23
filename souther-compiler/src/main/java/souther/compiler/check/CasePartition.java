@@ -3,8 +3,10 @@ package souther.compiler.check;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -26,7 +28,7 @@ import java.util.Set;
 final class CasePartition {
 
     private final Set<TypeSymbol> subject;
-    private final Set<TypeSymbol> taken = new LinkedHashSet<>();
+    private final Map<TypeSymbol, Integer> taken = new LinkedHashMap<>();
 
     private CasePartition(List<TypeSymbol> atoms) {
         subject = new LinkedHashSet<>(atoms);
@@ -38,33 +40,76 @@ final class CasePartition {
     }
 
     /**
-     * Takes {@code arm}'s atoms, and answers those an earlier arm had already taken.
+     * Takes the atoms of the arm at {@code index}, and answers where one was already taken.
      *
-     * <p>Empty where the arm answers for something nothing before it did — which is every arm of a
+     * <p>Null where the arm answers for something nothing before it did, which is every arm of a
      * {@code match} that divides its subject. The atoms are taken either way: a caller that refuses
-     * an overlap stops, and one that allows it is asking what is left over all the arms.
+     * an overlap stops there, and one that allows it is asking what is left over all the arms.
      *
-     * <p>An arm answering for several cases takes their union. Two of its own alternatives reaching
-     * one atom is not an overlap with anything: the arm answers for that value once, however many
-     * of its names reach it.
+     * <p>An arm answering for several cases takes their union, so two of its own alternatives
+     * reaching one atom is not an overlap with anything — the arm answers for that value once,
+     * however many of its names reach it. Whether writing it that way is worth reporting is a
+     * different question and a different reader's ({@link #redundantIn}).
+     *
+     * <p>The first atom that was already taken and not all of them. What a report needs is one
+     * value the two arms both answer for; listing every shared value says the same thing at
+     * whatever length the declaration happens to have.
      */
-    List<TypeSymbol> take(List<TypeSymbol> arm) {
-        List<TypeSymbol> already = new ArrayList<>();
-        // The arm's own atoms first, so two of its alternatives reaching one atom is one answer and
-        // not this arm overlapping itself.
+    Overlap take(List<TypeSymbol> arm, int index) {
+        Overlap found = null;
         for (TypeSymbol atom : new LinkedHashSet<>(arm)) {
-            if (!taken.add(atom)) {
-                already.add(atom);
+            Integer earlier = taken.putIfAbsent(atom, index);
+            if (earlier != null && found == null) {
+                found = new Overlap(atom, earlier, index);
             }
         }
-        return already;
+        return found;
     }
+
+    /** One value two arms both answer for, and which arms they are. */
+    record Overlap(TypeSymbol value, int earlier, int here) {}
+
+    /**
+     * An alternative of one arm that answers for nothing the arm did not already answer for.
+     *
+     * <p>Null where each alternative adds something. What makes one redundant is inclusion and not
+     * spelling: {@code | Station | OnceKind} answers for a station under either name, and so does
+     * {@code | Station | Station}. Held because an arm is a list of what it answers for, and an
+     * entry that adds nothing to that list is a line the author wrote for a reason that did not
+     * happen — most often the case they meant is not the one they named.
+     *
+     * <p>Where two alternatives answer for exactly the same values, the later one is the redundant
+     * one: the arm reads left to right, and the first is where the reader learns what it answers
+     * for.
+     */
+    static Redundant redundantIn(List<ResolvedCase> alternatives) {
+        for (int here = 0; here < alternatives.size(); here++) {
+            Set<TypeSymbol> mine = new LinkedHashSet<>(alternatives.get(here).atoms());
+            for (int other = 0; other < alternatives.size(); other++) {
+                if (other == here) {
+                    continue;
+                }
+                Set<TypeSymbol> theirs = new LinkedHashSet<>(alternatives.get(other).atoms());
+                // An equal pair is reported at the later of the two, so `other` may only be the
+                // earlier one when the two answer alike.
+                boolean covered = theirs.containsAll(mine)
+                        && (!mine.containsAll(theirs) || other < here);
+                if (covered) {
+                    return new Redundant(here, other);
+                }
+            }
+        }
+        return null;
+    }
+
+    /** An alternative that adds nothing, and the one that already answered for it. */
+    record Redundant(int adds, int already) {}
 
     /** The atoms no arm answered for, in the order the subject states them. */
     List<TypeSymbol> unanswered() {
         List<TypeSymbol> left = new ArrayList<>();
         for (TypeSymbol atom : subject) {
-            if (!taken.contains(atom)) {
+            if (!taken.containsKey(atom)) {
                 left.add(atom);
             }
         }

@@ -3743,7 +3743,7 @@ Four more hold of the arms themselves:
 
 [[a-pattern-opens-what-the-value-is]]A pattern that opens a value with `+(...)+` MUST be opening something that has one to open, and the type it names MUST be what is inside — a newtype's wrapped value, an optional's payload. This holds wherever the pattern is written, in a `+match+` arm or in a binding (<<binding-patterns>>).
 
-[[an-or-pattern-binds-the-sum-and-opens-nothing]]An or-pattern binds the sum and opens nothing. It says these cases are treated the same (<<match>>), and what they carry is not the same, so there is nothing shared for it to name. Exhaustiveness is decided over what a value of the subject can be, which for a sum whose case is a sum is the leaves under it and not the cases it listed. Such a case is transparent as a value (<<sum-data>>), so an arm may name the inner sum (`+OwnCost+` of `+data CostBearer = OwnCost | ClientCost+` being further `+Reimbursement | Advance | CorporateCard+`) or name one of the leaves under it, and the two are the same kind of arm: one answers for the three, the other for one of them. An arm may name any type every value of which the subject can be, whether or not the subject's declaration reaches it; naming the subject itself is therefore an arm, and it answers for every value, so no arm may follow it. Two arms may not answer for one value, and a match is exhaustive when no value of the subject is left unanswered.
+[[an-or-pattern-binds-the-sum-and-opens-nothing]]An or-pattern binds the sum and opens nothing. It says these cases are treated the same (<<match>>), and what they carry is not the same, so there is nothing shared for it to name. Exhaustiveness is decided over what a value of the subject can be, which for a sum whose case is a sum is the leaves under it and not the cases it listed. Such a case is transparent as a value (<<sum-data>>), so an arm may name the inner sum (`+OwnCost+` of `+data CostBearer = OwnCost | ClientCost+` being further `+Reimbursement | Advance | CorporateCard+`) or name one of the leaves under it, and the two are the same kind of arm: one answers for the three, the other for one of them. An arm may name any type every value of which the subject can be, whether or not the subject's declaration reaches it; naming the subject itself is therefore an arm, and it answers for every value, so no arm may follow it. Two arms may not answer for one value, and a match is exhaustive when no value of the subject is left unanswered. [[an-arms-alternatives-each-add-what-it-answers-for]]An arm's alternatives each add to what it answers for. Writing one that answers for nothing another of them did not — the same name twice, or a case and something that already covers it — is refused, since the line was written for a reason that did not happen.
 
 [#unreachable]
 ==== An arm may say its combination cannot arise
@@ -5134,6 +5134,16 @@ An `+if+` names both of its branches, there being two of them and each with a ty
 ----
 This branch produces Int. The preceding branches produce Blue | Red.
 ----
+
+[#e1209]
+=== An arm's alternative adds nothing to it
+
+[,text]
+----
+`Station` adds nothing to this arm: `OnceKind` already answers for every value it does.
+----
+
+Reported at the arm (<<an-arms-alternatives-each-add-what-it-answers-for>>). The same name written twice reads `This arm names `Station` twice, and the second says nothing the first did not.`
 
 [#e1301]
 === Use of null

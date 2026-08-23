@@ -70,6 +70,7 @@ public enum DiagnosticCode {
     E1206("a-pattern-opens-what-the-value-is", "check.open.title"),
     E1207("an-or-pattern-binds-the-sum-and-opens-nothing", "check.match.title"),
     E1208("branches-agree-on-a-type", "check.type.mismatch.title"),
+    E1209("an-arms-alternatives-each-add-what-it-answers-for", "check.match.title"),
 
     // --- what the language does not have ---
     E1301("no-null", "e1301.title"),

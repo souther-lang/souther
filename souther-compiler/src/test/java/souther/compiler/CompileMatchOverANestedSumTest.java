@@ -111,19 +111,60 @@ class CompileMatchOverANestedSumTest {
                         | Station -> 2
                         | Renkei -> 3
                 """)));
+        assertEquals("E1204", refused.diagnostic().code());
         assertTrue(refused.diagnostic().said().toString().contains("Station"),
                 () -> "the report names the value both arms answer for, said " + refused.diagnostic().said());
+        assertEquals(1, refused.diagnostic().secondary().size(),
+                "and points at the arm that answers for it first");
     }
 
-    /** One arm naming one case twice is still refused, which is a mistake in the arm and not two
-     *  arms disagreeing. Held because the coverage of such an arm is a union and would say nothing. */
+    /**
+     * One arm naming one case twice is refused as a mistake in that arm.
+     *
+     * <p>Not as two arms answering for one value. An arm answers for the union of its alternatives,
+     * so the second {@code Station} changes nothing about what the arm takes — which is exactly why
+     * it has to be reported: the line was written for a reason that did not happen.
+     */
     @Test
     void oneArmNamingOneCaseTwiceIsRefused() {
-        assertThrows(CompileException.class, () -> Compiler.compile(feeOf("""
+        CompileException refused = assertThrows(CompileException.class, () -> Compiler.compile(feeOf("""
                         | Station | Station -> 1
                         | Hospital -> 2
                         | Renkei -> 3
                 """)));
+        assertEquals("E1209", refused.diagnostic().code());
+        assertTrue(refused.diagnostic().said().toString().contains("Station"));
+    }
+
+    /**
+     * And so is an alternative another alternative of the same arm already answers for.
+     *
+     * <p>The same defect one level up, and the one the author is more likely to have made: naming a
+     * leaf beside the sum above it usually means the case they meant is not the case they named.
+     */
+    @Test
+    void anAlternativeCoveredByAnotherOfTheSameArmIsRefused() {
+        CompileException refused = assertThrows(CompileException.class, () -> Compiler.compile(feeOf("""
+                        | Station | OnceKind -> 1
+                        | Renkei -> 2
+                """)));
+        assertEquals("E1209", refused.diagnostic().code());
+        String said = refused.diagnostic().said().toString();
+        assertTrue(said.contains("Station") && said.contains("OnceKind"),
+                () -> "the report names the alternative that adds nothing and the one that covers "
+                        + "it, said " + said);
+    }
+
+    /** An arm whose alternatives each add something is not that, however deep they sit. */
+    @Test
+    void alternativesThatEachAddSomethingStandTogether() throws Exception {
+        String arms = """
+                        | Station | Renkei -> 1
+                        | Hospital -> 2
+                """;
+        assertEquals(1L, fee(arms, "Station"));
+        assertEquals(1L, fee(arms, "Renkei"));
+        assertEquals(2L, fee(arms, "Hospital"));
     }
 
     /**
@@ -235,6 +276,39 @@ class CompileMatchOverANestedSumTest {
                         | VisitKind -> 1
                         | Renkei -> 2
                 """)));
+    }
+
+
+    /**
+     * Where two alternatives answer alike, the later one is the one that adds nothing.
+     *
+     * <p>{@code OnceKind} and {@code OtherKind} answer for the same two values, so neither covers
+     * the other by being wider and the tie is broken by where they are written: an arm reads left
+     * to right, and the first is where a reader learns what it answers for.
+     */
+    @Test
+    void whereTwoAlternativesAnswerAlikeTheLaterOneAddsNothing() {
+        CompileException refused = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module demo
+
+                data Station  = { at: String }
+                data Hospital = { at: String }
+                data Renkei   = { at: String }
+                data OnceKind  = Station | Hospital
+                data OtherKind = Station | Hospital
+                data VisitKind = OnceKind | Renkei
+
+                behavior fee : (k: VisitKind) -> Int
+
+                let fee (k) =
+                    match k with
+                        | OnceKind | OtherKind -> 1
+                        | Renkei -> 2
+                """));
+        assertEquals("E1209", refused.diagnostic().code());
+        assertEquals("AnAlternativeAddsNothingToThisArm[alternative=OtherKind, covering=OnceKind]",
+                refused.diagnostic().said().toString(),
+                "the later of two that answer alike is the one that adds nothing");
     }
 
 }

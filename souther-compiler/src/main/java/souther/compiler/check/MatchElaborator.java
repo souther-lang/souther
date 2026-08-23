@@ -14,7 +14,6 @@ import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -104,35 +103,38 @@ public final class MatchElaborator {
         CasePartition partition = CasePartition.of(AtomSpace.subjectAtoms(scrutinee, ctx.symbols()));
         List<Core.Case> arms = new ArrayList<>();
         Type branchType = null;
-        for (Hir.Case c : m.cases()) {
+        for (int armIndex = 0; armIndex < m.cases().size(); armIndex++) {
+            Hir.Case c = m.cases().get(armIndex);
             List<CaseSelector> selected = new ArrayList<>();
             List<TypeSymbol> answersFor = new ArrayList<>();
-            Set<TypeSymbol> named = new LinkedHashSet<>();
+            List<ResolvedCase> alternatives = new ArrayList<>();
             for (Hir.Name written : c.caseTypes()) {
                 TypeSymbol caseName = names(written);
                 ResolvedCase resolved = space.selector(caseName, ctx.symbols());
                 if (resolved == null) {
                     throw notCase(written, what, c, m, cases, ctx.symbols());
                 }
-                // One arm naming one case twice is the same name written twice, which is a mistake
-                // in the arm rather than two arms disagreeing. Held by name because that is what was
-                // written; what the arm answers for is the union either way.
-                if (!named.add(caseName)) {
-                    throw CompileException.of(Diagnostic.at(c.pos())
-                            .say(new MatchMessage.MatchedByMoreThanOneCase(written.written()))
-                            .build());
-                }
+                alternatives.add(resolved);
                 answersFor.addAll(resolved.atoms());
                 // What goes into the arm is the selector. An arm is emitted from what it tests
                 // and reads, which is all of a case that survives into `Core`; what it covers is
                 // this pass's to hold and is not carried past it.
                 selected.add(resolved.selector());
             }
-            List<TypeSymbol> taken = partition.take(answersFor);
-            if (!taken.isEmpty()) {
+            // What the arm's own alternatives say about each other, before what they say about the
+            // arms before them. An alternative that adds nothing is a mistake inside this arm, and
+            // reporting it as this arm overlapping another one would name the wrong two lines.
+            CasePartition.Redundant redundant = CasePartition.redundantIn(alternatives);
+            if (redundant != null) {
+                throw redundantAlternative(c, redundant);
+            }
+            CasePartition.Overlap overlap = partition.take(answersFor, armIndex);
+            if (overlap != null) {
                 throw CompileException.of(Diagnostic.at(c.pos())
-                        .say(new MatchMessage.MatchedByMoreThanOneCase(
-                                taken.get(0).name())).build());
+                        .secondary(souther.compiler.diag.Region.point(m.cases().get(overlap.earlier()).pos()),
+                                new MatchMessage.AnEarlierArmAnswersForIt(overlap.value().name()))
+                        .say(new MatchMessage.MatchedByMoreThanOneCase(overlap.value().name()))
+                        .build());
             }
             Core.ResolvedPattern pattern = selected.size() == 1
                     ? new Core.ResolvedPattern.Single(selected.get(0))
@@ -327,6 +329,24 @@ public final class MatchElaborator {
         throw CompileException.of(Diagnostic.at(c.pos())
                 .say(new MatchMessage.TheBranchesDisagree(Type.show(branchType), Type.show(bt)))
                 .diff(Type.show(bt, branchType), Type.show(branchType, bt)).build());
+    }
+
+    /**
+     * An alternative of an arm that answers for nothing another of its alternatives did not.
+     *
+     * <p>Two messages under one rule. A name written twice is one mistake and a name covered by
+     * another is a different one — the first is a slip, the second is usually the case the author
+     * meant not being the case they named — and telling an author which of the two they made is the
+     * whole use of the report.
+     */
+    private static CompileException redundantAlternative(Hir.Case c, CasePartition.Redundant of) {
+        String adds = c.caseTypes().get(of.adds()).written();
+        String already = c.caseTypes().get(of.already()).written();
+        return CompileException.of(Diagnostic.at(c.pos())
+                .say(adds.equals(already)
+                        ? new MatchMessage.ThisArmNamesOneCaseTwice(adds)
+                        : new MatchMessage.AnAlternativeAddsNothingToThisArm(adds, already))
+                .build());
     }
 
     /** A non-exhaustive-match error (E1201) listing every missing case. The legacy message names the

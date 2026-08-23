@@ -23,6 +23,18 @@ public sealed interface MatchMessage extends Message {
     @Code(DiagnosticCode.E1204)
     record MatchedByMoreThanOneCase(String caseName) implements MatchMessage, Reported {}
 
+    /** Where the arm that answers for it first is. */
+    record AnEarlierArmAnswersForIt(String caseName) implements MatchMessage, Supporting {}
+
+    /** One arm names one case twice, so the second says nothing the first did not. */
+    @Code(DiagnosticCode.E1209)
+    record ThisArmNamesOneCaseTwice(String caseName) implements MatchMessage, Reported {}
+
+    /** One alternative of an arm answers for nothing another of its alternatives did not. */
+    @Code(DiagnosticCode.E1209)
+    record AnAlternativeAddsNothingToThisArm(String alternative, String covering)
+            implements MatchMessage, Reported {}
+
     /** A match with nothing to answer with. */
     @Code(DiagnosticCode.E1205)
     record ThisMatchHasNoCases() implements MatchMessage, Reported {}
