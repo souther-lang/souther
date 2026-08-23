@@ -7,6 +7,7 @@ import souther.compiler.check.Required;
 import souther.compiler.check.RuleAccounting;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.UnreadComparison;
+import souther.compiler.check.ValueOrigin;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
@@ -303,45 +304,50 @@ public final class GuardThresholds {
      * the derivation does not model into a position nothing compares: {@code p.x + 1 < 10} named no
      * position, and came back as one the model divides no way two tokens from a comparison about it.
      */
-    private static void mentioned(Core e, InputReads reads, Symbols symbols,
-                                  List<TermPath> out) {
-        // A name is what the reading of the input says it is, and there are four answers rather
-        // than a position and nothing. A name given arithmetic over positions mentions those
-        // positions, and reading it as a node with no children left every rule written over such a
-        // name looking like a rule about nothing — which is the same answer a model with no rule
-        // there gives.
-        if (e instanceof Core.Read read) {
-            switch (reads.meaningOf(read, symbols)) {
-                case ReadMeaning.Position at -> {
-                    if (!out.contains(at.path())) {
-                        out.add(at.path());
-                    }
+    static ValueOrigin<TermPath> originOf(Core e, InputReads reads, Symbols symbols) {
+        return ValueOrigin.of(e, reads, new ValueOrigin.Reading<TermPath, InputReads>() {
+
+            /**
+             * A name is what the reading of the input says it is, and there are four answers rather
+             * than a position and nothing. Only the first of them is a position; a name given
+             * arithmetic over positions is read through, and the two that name nothing are told
+             * apart by where the difference is read rather than here.
+             */
+            @Override
+            public TermPath positionOf(Core here, InputReads at) {
+                if (here instanceof Core.Read read) {
+                    return at.meaningOf(read, symbols) instanceof ReadMeaning.Position position
+                            ? position.path() : null;
                 }
-                // In the environment the answer came with, which is the one the arithmetic reads
-                // it in too. Taking the one this walk happens to hold would be this reader deciding
-                // for itself where a name's value is read, beside a reader that was told.
-                case ReadMeaning.Through through ->
-                        mentioned(through.value(), through.at(), symbols, out);
-                // An element an operation handed out that stands at no position, and a name this
-                // reading knows nothing about. Neither mentions a position, and they are told apart
-                // where the difference is read rather than here.
-                case ReadMeaning.Element _ -> { }
-                case ReadMeaning.Unknown _ -> { }
+                // A call the language defines the meaning of stands for what it answers and not for
+                // a location, however the reading spells the two apart.
+                return here instanceof Core.PreservedCall ? null : at.pathOf(here, symbols);
             }
-            return;
-        }
-        if (!(e instanceof Core.PreservedCall)) {
-            TermPath here = reads.pathOf(e, symbols);
-            if (here != null) {
-                if (!out.contains(here)) {
-                    out.add(here);
-                }
-                return;   // what is under it is the same position, named once
+
+            @Override
+            public TermPath madeFrom(Core here, InputReads at) {
+                return at.cameFrom(here, symbols);
             }
-        }
-        InputReads inside = e instanceof Core.LetIn let ? reads.and(let.binder(), let.value())
-                : reads;
-        Core.forEachChild(e, child -> mentioned(child, inside, symbols, out));
+
+            /**
+             * In the environment the answer came with, which is the one the arithmetic reads it in
+             * too. Taking the one this walk happens to hold would be this reader deciding for
+             * itself where a name's value is read, beside a reader that was told.
+             */
+            @Override
+            public souther.compiler.check.AffineForms.ReadThrough<InputReads> readThrough(
+                    Core.Read read, InputReads at) {
+                return at.meaningOf(read, symbols) instanceof ReadMeaning.Through through
+                        ? new souther.compiler.check.AffineForms.ReadThrough<>(
+                                through.value(), through.at())
+                        : null;
+            }
+
+            @Override
+            public InputReads inside(Core.LetIn li, InputReads at) {
+                return at.and(li.binder(), li.value());
+            }
+        });
     }
 
     /**
@@ -406,9 +412,16 @@ public final class GuardThresholds {
     }
 
     static List<TermPath> mentionedIn(Core e, InputReads reads, Symbols symbols) {
-        List<TermPath> out = new ArrayList<>();
-        mentioned(e, reads, symbols, out);
-        return out;
+        return new ArrayList<>(originOf(e, reads, symbols).positions());
+    }
+
+    /** The same, added to what a caller has already gathered from beside it. */
+    private static void mentioned(Core e, InputReads reads, Symbols symbols, List<TermPath> out) {
+        for (TermPath each : originOf(e, reads, symbols).positions()) {
+            if (!out.contains(each)) {
+                out.add(each);
+            }
+        }
     }
 
     /**
