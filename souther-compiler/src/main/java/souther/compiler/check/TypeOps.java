@@ -374,9 +374,17 @@ public final class TypeOps {
                 || (t instanceof Type.Ref r && symbols.declarations().declaration(r.name().key()) instanceof Hir.SumData);
     }
 
-    /** A sum's cases: what each name it lists denotes. A name that denotes nothing lists no case —
-     * it is reported where it is written, and a reader counting the cases counts what is there. */
-    public static List<TypeSymbol> caseNames(Hir.SumData sum) {
+    /**
+     * A sum's cases: what each name it lists denotes. A name that denotes nothing lists no case —
+     * it is reported where it is written, and a reader counting the cases counts what is there.
+     *
+     * <p>One layer, which is what a descent over the cases would be built out of: hold this and the
+     * declarations, and a transitive closure is a loop away. There is one such closure and it is
+     * {@link AtomSpace}. Package-private for that reason and not by accident of who happens to call
+     * it — every reader of a case list is in this package, so nothing outside it can write a second
+     * closure at all, and that much is javac's to say rather than a test's.
+     */
+    static List<TypeSymbol> caseNames(Hir.SumData sum) {
         List<TypeSymbol> names = new ArrayList<>();
         for (Hir.Name c : sum.cases()) {
             if (c.answered() instanceof Hir.Name.Denoting named) {

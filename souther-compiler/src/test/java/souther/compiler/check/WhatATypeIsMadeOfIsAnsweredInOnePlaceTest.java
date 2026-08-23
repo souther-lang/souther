@@ -19,9 +19,12 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -218,38 +221,87 @@ class WhatATypeIsMadeOfIsAnsweredInOnePlaceTest {
     // --- who can build a case closure at all -----------------------------------------------------
 
     /**
-     * A sum's own case list — one layer, what a descent would be built out of — is read in four
-     * places, and a fifth is where a second closure would start.
+     * A sum's own case list is read at four call sites, all of them in the package that declares it.
      *
-     * <p>The axis the earlier tripwire could not hold. That one watched whether an optional was
-     * decided in one place, which says nothing about the descent; and {@code Hir.SumData} is named
-     * in twenty-five production files, so naming the declaration cannot be the axis either. What a
-     * second closure needs is the one thing a closure is made of, so that is what is counted.
+     * <p>What a second closure would be built out of is one layer of a sum plus the declarations:
+     * hold both and a loop away is a descent. The declarations are everywhere, so the layer is the
+     * part that can be held down, and {@code TypeOps.caseNames} is package-private for that reason.
+     * That is where most of this rule lives — no code outside {@code check} can write a second
+     * closure at all, and javac says so rather than a scan guessing at spellings.
      *
-     * <p>The three that are not the descent read one layer on purpose. A {@code match} is decided
-     * over the cases the sum declared and not over what they reach (spec
-     * §an-or-pattern-binds-the-sum-and-opens-nothing), which is #966 itself; when that changes they
+     * <p>What is left for a scan is the package itself, and it counts <em>calls</em> rather than
+     * files. A file already reading one layer is where a second reading is cheapest to add, so a
+     * check that stops at the file name would see nothing: the reader most likely to grow a descent
+     * is one of the four already listed.
+     *
+     * <p>Called out by file and not by line. A line number moves whenever anything above it is
+     * edited, and a tripwire that goes red on an unrelated edit is one that gets deleted. The name
+     * repeated is what a second call site in an existing reader shows up as.
+     *
+     * <p>Three of the four are not the descent and read one layer on purpose: a {@code match} is
+     * decided over the cases the sum declared and not over what they reach (spec
+     * §an-or-pattern-binds-the-sum-and-opens-nothing), which is #966 itself. When that changes they
      * ask {@link AtomSpace} and this list gets shorter, never longer.
      *
-     * <p>A tripwire and not a proof: a helper in between defeats it. What it does see is the line
-     * that has to be written first.
+     * <p><b>What this does not see.</b> A descent written around a call that is already here. Both
+     * halves are about who can reach the material — the visibility bounds who may, and this bounds
+     * how many do — and neither reads what a caller does with what it got.
      */
     @Test
-    void oneLayerOfASumIsReadWhereAClosureCouldNotBeBuiltFromIt() throws IOException {
-        List<Path> sources = mainSources();
-        assertTrue(sources.size() > 20,
-                () -> "the scan found only " + sources.size() + " sources, which is not the tree");
+    void aSumsOwnCaseListIsReadAtFourCallSitesInTheOnePackageThatCanReadIt() throws IOException {
+        List<Path> sources = sourcesOfTheCheckPackage();
+        assertTrue(sources.size() > 100,
+                () -> "the scan found only " + sources.size() + " sources, which is not the package");
 
-        List<String> readers = new ArrayList<>();
+        List<String> calls = new ArrayList<>();
         for (Path source : sources) {
-            if (code(source).contains("caseNames(sum)") || code(source).contains("TypeOps.caseNames(")) {
-                readers.add(source.getParent().getFileName() + "/" + source.getFileName());
+            String code = code(source);
+            assertFalse(code.contains("static souther.compiler.check.TypeOps.caseNames"),
+                    () -> source.getFileName() + " imports the case list under a bare name, "
+                            + "which is a call site this counts by the spelling it is written in");
+            int here = count(QUALIFIED, code);
+            if (source.getFileName().toString().equals(DECLARES_IT)) {
+                // Its own calls are written without the class name, and the declaration is not one.
+                here += count(UNQUALIFIED, code) - count(DECLARATION, code);
+            }
+            for (int each = 0; each < here; each++) {
+                calls.add(source.getFileName().toString());
             }
         }
-        assertEquals(List.of("check/AtomSpace.java", "check/CaseSpace.java",
-                        "check/MatchElaborator.java", "check/TypeOps.java"),
-                readers,
-                "a reader of a sum's own case list can descend it; these read it");
+        assertEquals(List.of("AtomSpace.java", "CaseSpace.java", "MatchElaborator.java", "TypeOps.java"),
+                calls,
+                "a reader holding one layer of a sum can descend it; these hold it");
+    }
+
+    /** The file that declares the case list, whose own calls to it carry no class name. */
+    private static final String DECLARES_IT = "TypeOps.java";
+
+    private static final Pattern QUALIFIED = Pattern.compile("TypeOps\\.caseNames\\s*\\(");
+
+    /** A call written without the class name — {@code caseNamesOf} is a different reader and is not
+     *  one, which is why the name is closed with its own parenthesis. */
+    private static final Pattern UNQUALIFIED = Pattern.compile("(?<![\\w.])caseNames\\s*\\(");
+
+    /** The declaration, which {@link #UNQUALIFIED} matches and which is no call. */
+    private static final Pattern DECLARATION = Pattern.compile("caseNames\\s*\\(\\s*Hir\\.SumData");
+
+    private static int count(Pattern pattern, String code) {
+        int found = 0;
+        Matcher at = pattern.matcher(code);
+        while (at.find()) {
+            found++;
+        }
+        return found;
+    }
+
+    private static List<Path> sourcesOfTheCheckPackage() throws IOException {
+        List<Path> sources = new ArrayList<>();
+        for (Path each : mainSources()) {
+            if (each.getParent().getFileName().toString().equals("check")) {
+                sources.add(each);
+            }
+        }
+        return sources;
     }
 
     private static String code(Path source) throws IOException {
