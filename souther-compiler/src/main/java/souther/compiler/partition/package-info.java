@@ -13,9 +13,10 @@
  * expands to. Four rules govern all of them, decided in ADR-0113. They are stated here rather than
  * beside any one limit, because what they are about is where a limit may be put at all.
  *
- * <p><b>This is what the subsystem is held to, and not a claim that every limit in it conforms
- * today.</b> Axis discovery conforms since #969. The three limits named above meet rule 1 and rule
- * 2; where they do not yet meet rules 3 and 4 is written down and tracked in #1005.
+ * <p><b>This is what the subsystem is held to.</b> Axis discovery conforms since #969, and the
+ * three limits above conform since #1005: each is held where its own cost is incurred, each says
+ * what exhausting it left undone, and all three are read off {@link
+ * souther.compiler.partition.AdequacyPolicy}, which the compilation sets and hands to the analysis.
  *
  * <p><b>1. Semantic evidence is never pre-selected by a resource budget.</b> Every semantic subject
  * the reading reaches is offered to the readers that measure it. A reading may still fail to derive
@@ -45,7 +46,10 @@
  * <p><b>4. Resource policy belongs to the compilation.</b> A limit is an input the query graph hands
  * to the analysis, the way {@link souther.compiler.check.ReadingPolicy} and
  * {@link souther.compiler.examples.EvaluationPolicy} already are, rather than a private constant or
- * a system property read wherever the work happens.
+ * a system property read wherever the work happens. {@link
+ * souther.compiler.partition.AdequacyPolicy} is where the three are written, grouped by which
+ * result each weakens — a caller raising one to lift a partial measurement should not as readily
+ * raise one that cannot change it.
  *
  * <h2>What these were written from</h2>
  *

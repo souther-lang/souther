@@ -49,7 +49,7 @@ class APositionWithAFloorIsOfferedAValueThatMeetsItTest {
     /** The value at the position the row wrote, which is the one the search reached first. */
     private static String firstValueAt(String source, String behavior, int position) {
         Generator.GenerationResult filled =
-                Generator.fill(subjectOf(source, behavior), List.of(), Generator.CandidateCheck.ANY);
+                Generator.fill(subjectOf(source, behavior), List.of(), Generator.CandidateCheck.ANY, Budgets.generation());
         assertEquals(List.of(), filled.unresolved(), "nothing should have gone unresolved");
         return filled.rows().get(0).inputs().get(position).text();
     }

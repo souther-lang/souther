@@ -91,15 +91,18 @@ class ARowNothingRanFillsNoCombinationTest {
     @Test
     void aCombinationIsSearchedForAnArmOnTheListAndForNothingElse() {
         Model model = Model.of(SHIPPING, "shippingFee");
-        List<InteractionCells.Group> groups =
-                InteractionCells.of(model.groups(), model.subject().axes());
+        InteractionCells.Offered offered =
+                InteractionCells.of(model.groups(), model.subject().axes(), Budgets.generation());
+        List<InteractionCells.Group> groups = offered.groups();
         assertEquals(1, groups.size(), "the two decisions meet once");
+        assertEquals(List.of(), offered.notOffered(),
+                "and none of them was held back, so what follows is about a group that was walked");
         CellSelection first = groups.get(0).at(0);
         assertNotNull(first, "and its first choice is a combination");
         assertFalse(first.claims().isEmpty(), "which a run can be held to");
 
         Set<Integer> every =
-                Generator.everyArmTheCombinationsTake(model.subject(), model.groups());
+                Generator.everyArmACombinationMayTake(model.subject(), model.groups(), Budgets.generation());
         assertTrue(offeredFor(model, every).containsAll(claimedBy(first)),
                 "asked about the arms this combination takes, a row is composed for each of them");
         assertEquals(Set.of(), offeredFor(model, Set.of()),
@@ -116,15 +119,15 @@ class ARowNothingRanFillsNoCombinationTest {
     @Test
     void aRowIsComposedForTheArmsAndNotForWhereTheyWereFound() {
         Model model = Model.of(SHIPPING, "shippingFee");
-        CellSelection first =
-                InteractionCells.of(model.groups(), model.subject().axes()).get(0).at(0);
+        CellSelection first = InteractionCells.of(model.groups(), model.subject().axes(), Budgets.generation())
+                .groups().get(0).at(0);
         assertNotNull(first);
         Set<Integer> takes = claimedBy(first);
         assertTrue(takes.size() > 1, "the combination takes an arm of each decision: " + takes);
 
         List<Generator.GeneratedRow> composed = Generator.fill(model.subject(), List.of(),
                         Generator.CandidateCheck.ANY, model.groups(),
-                        Generator.Trial.NOTHING_RUNS, List.of(), Set.of(), takes)
+                        Generator.Trial.NOTHING_RUNS, List.of(), Set.of(), takes, Budgets.generation())
                 .rows();
 
         assertEquals(1, composed.size(), "one row answers both: " + composed);
@@ -149,10 +152,10 @@ class ARowNothingRanFillsNoCombinationTest {
     void anArmKeepsWhatEveryCombinationClaimingItCameTo() {
         Model model = Model.of(SHIPPING, "shippingFee");
         Set<Integer> every =
-                Generator.everyArmTheCombinationsTake(model.subject(), model.groups());
+                Generator.everyArmACombinationMayTake(model.subject(), model.groups(), Budgets.generation());
         Generator.GenerationResult filled = Generator.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.refusing((_, _) -> java.util.Optional.of("no")),
-                model.groups(), Generator.Trial.NOTHING_RUNS, List.of(), Set.of(), every);
+                model.groups(), Generator.Trial.NOTHING_RUNS, List.of(), Set.of(), every, Budgets.generation());
 
         assertEquals(List.of(), filled.rows(), "nothing builds, so nothing is composed");
         for (int probe : every) {
@@ -175,14 +178,14 @@ class ARowNothingRanFillsNoCombinationTest {
     void oneRowThroughAnArmIsTheAnswerWhateverTheOthersCameTo() {
         Model model = Model.of(SHIPPING, "shippingFee");
         Set<Integer> every =
-                Generator.everyArmTheCombinationsTake(model.subject(), model.groups());
+                Generator.everyArmACombinationMayTake(model.subject(), model.groups(), Budgets.generation());
         // Refuses the first case of the first position, so the combinations naming it fail and the
         // ones beside them build. Every arm of the second decision is claimed by both.
         Generator.GenerationResult filled = Generator.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.refusing((_, candidate) ->
                         candidate.text().contains("Premium")
                                 ? java.util.Optional.of("no") : java.util.Optional.empty()),
-                model.groups(), Generator.Trial.NOTHING_RUNS, List.of(), Set.of(), every);
+                model.groups(), Generator.Trial.NOTHING_RUNS, List.of(), Set.of(), every, Budgets.generation());
 
         assertFalse(filled.rows().isEmpty(), "the combinations that build compose their rows");
         List<Integer> built = every.stream()
@@ -246,12 +249,12 @@ class ARowNothingRanFillsNoCombinationTest {
     void anArmTheLimitCutOffSaysSoRatherThanReadingAsUnreachable() {
         Model model = Model.of(wide(), "submit");
         Set<Integer> every =
-                Generator.everyArmTheCombinationsTake(model.subject(), model.groups());
+                Generator.everyArmACombinationMayTake(model.subject(), model.groups(), Budgets.generation());
         assertFalse(every.isEmpty(), "the body has arms");
 
         Generator.GenerationResult filled = Generator.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.ANY, model.groups(), Generator.Trial.NOTHING_RUNS,
-                List.of(), Generator.everyClassNoRowSitsIn(model.subject(), List.of()), every);
+                List.of(), Generator.everyClassNoRowSitsIn(model.subject(), List.of()), every, Budgets.generation());
 
         assertTrue(filled.reasons().stream()
                         .anyMatch(GenerationReason.SearchLimit.class::isInstance),
@@ -305,7 +308,7 @@ class ARowNothingRanFillsNoCombinationTest {
                                                          Set<Generator.ClassOwed> classes) {
         return Generator.fill(model.subject(), List.of(), Generator.CandidateCheck.ANY,
                         model.groups(), Generator.Trial.NOTHING_RUNS, List.of(), classes,
-                        java.util.Set.of())
+                        java.util.Set.of(), Budgets.generation())
                 .rows().stream().flatMap(row -> row.purposes().stream())
                 .map(Generator.Purpose.ForAClass.class::cast)
                 .map(at -> new Generator.ClassOwed(at.at(), at.classId())).toList();
@@ -314,7 +317,7 @@ class ARowNothingRanFillsNoCombinationTest {
     /** Which arms the generator composes a row for when it is asked about {@code arms}. */
     private static Set<Integer> offeredFor(Model model, Set<Integer> arms) {
         return Generator.fill(model.subject(), List.of(), Generator.CandidateCheck.ANY,
-                        model.groups(), Generator.Trial.NOTHING_RUNS, List.of(), Set.of(), arms)
+                        model.groups(), Generator.Trial.NOTHING_RUNS, List.of(), Set.of(), arms, Budgets.generation())
                 .rows().stream().flatMap(row -> row.purposes().stream())
                 .map(Generator.Purpose.ForAnArm.class::cast)
                 .map(Generator.Purpose.ForAnArm::probe)

@@ -50,10 +50,6 @@ import java.util.Set;
  */
 public final class Generator {
 
-    /** How many rows one call will write. Past this the output stops being something a person reads
-     * and pastes, and a model that wants more than this has axes it should be measured at fewer of. */
-    static final int MAX_ROWS = 200;
-
     /** How many assignments of values one parameter is tried at in one pass. The choices multiply, so
      * this is a bound on the search and not on any one position — and reaching it is reported as the
      * search having stopped, which is a different thing from every assignment having been refused. A
@@ -325,6 +321,21 @@ public final class Generator {
              */
             THE_POSITION_WAS_WITHHELD,
             /**
+             * The group of decisions this belongs to was wider than the walk offers, so no
+             * combination of it was looked in.
+             *
+             * <p>Told apart from {@link #SEARCH_LIMIT} for the reason {@link
+             * #THE_POSITION_WAS_WITHHELD} is: that one says the budget ran out while walking, and
+             * this says the walk never started. Raising the row budget changes the first and not
+             * the second.
+             *
+             * <p>Named at all because the alternative is silence. An arm claimed only by a group
+             * held back leaves no entry, and an arm with no entry is one no combination claims —
+             * so the report said the body never reaches it, which is a statement about the model
+             * this compiler was not entitled to make.
+             */
+            THE_GROUP_WAS_NOT_OFFERED,
+            /**
              * The rows were not read, so nothing was searched for at all.
              *
              * <p>What made them unreadable is said in its own words beside this, and is a fact
@@ -378,7 +389,7 @@ public final class Generator {
                     // model saying anything: another value of the same classes may well build.
                     case NOTHING_COMPOSES_ONE, ALL_CANDIDATES_REJECTED, SEARCH_LIMIT,
                          NOTHING_TO_BUILD_AGAINST, NO_VALUES_WERE_ASKED_FOR, LINKAGE_FAILED,
-                         NO_CERTIFIED_WITNESS,
+                         NO_CERTIFIED_WITNESS, THE_GROUP_WAS_NOT_OFFERED,
                          THE_POSITION_WAS_WITHHELD, THE_ROWS_WERE_NOT_READ,
                          NO_REASON_RECORDED -> false;
                 };
@@ -727,8 +738,9 @@ public final class Generator {
      * rows twice. Nothing is asked about the body here, so no arm is looked for.
      */
     public static GenerationResult fill(Subject subject, List<ObservedRow> existing,
-                                        CandidateCheck check) {
-        return fill(subject, existing, check, List.of());
+                                        CandidateCheck check,
+                                        AdequacyPolicy.OfTheGeneration budget) {
+        return fill(subject, existing, check, List.of(), budget);
     }
 
     /**
@@ -742,8 +754,9 @@ public final class Generator {
      */
     public static GenerationResult fill(Subject subject, List<ObservedRow> existing,
                                         CandidateCheck check,
-                                        List<souther.compiler.interaction.Interaction> groups) {
-        return fill(subject, existing, check, groups, Trial.NOTHING_RUNS);
+                                        List<souther.compiler.interaction.Interaction> groups,
+                                        AdequacyPolicy.OfTheGeneration budget) {
+        return fill(subject, existing, check, groups, Trial.NOTHING_RUNS, budget);
     }
 
     /**
@@ -760,30 +773,52 @@ public final class Generator {
     public static GenerationResult fill(Subject subject, List<ObservedRow> existing,
                                         CandidateCheck check,
                                         List<souther.compiler.interaction.Interaction> groups,
-                                        Trial trial) {
+                                        Trial trial, AdequacyPolicy.OfTheGeneration budget) {
         return fill(subject, existing, check, groups, trial, List.of(),
                 everyClassNoRowSitsIn(subject, existing),
-                everyArmTheCombinationsTake(subject, groups));
+                everyArmACombinationMayTake(subject, groups, budget), budget);
     }
 
     /**
-     * Every arm the body's combinations take.
+     * Every arm a combination of the body may take, which is at least every arm one does take.
      *
      * <p><b>Not what a build asks for.</b> Which arms are owed a row is what measuring them
      * established, and a build hands that in. This is for a caller with no measurement beside it —
      * a test standing the search up on its own — and it says so by being a list the caller passes
      * rather than one the search makes for itself.
+     *
+     * <p><b>And <em>may</em> rather than <em>does</em>, which the name carries because the answer
+     * cannot.</b> An offered group is walked, so what it contributes is exact: a choice whose
+     * factors leave a position nothing is not a combination and is not counted. A group the budget
+     * held back is not walked, and what it contributes is the union over the way in and every
+     * outcome of every factor — which includes arms no single combination of it claims, since two
+     * factors that disagree about a position have choices no row sits in.
+     *
+     * <p>That direction is the safe one and the other is not. An arm left out is an arm nothing
+     * asks for, and an arm nothing asks for is reported as one no combination claims — which says
+     * the body settles something it does not. An arm asked for and not found is answered
+     * {@link UnresolvedCombination.Reason#THE_GROUP_WAS_NOT_OFFERED}, which is true of it however
+     * many combinations of the held-back group would have claimed it.
      */
-    public static Set<Integer> everyArmTheCombinationsTake(
-            Subject subject, List<souther.compiler.interaction.Interaction> groups) {
+    public static Set<Integer> everyArmACombinationMayTake(
+            Subject subject, List<souther.compiler.interaction.Interaction> groups,
+            AdequacyPolicy.OfTheGeneration budget) {
         Set<Integer> out = new LinkedHashSet<>();
-        for (InteractionCells.Group group : InteractionCells.of(groups, ordered(subject))) {
+        InteractionCells.Offered offered = InteractionCells.of(groups, ordered(subject), budget);
+        for (InteractionCells.Group group : offered.groups()) {
             for (int index = 0; index < group.size(); index++) {
                 CellSelection selection = group.at(index);
                 if (selection != null) {
                     out.addAll(claimed(selection));
                 }
             }
+        }
+        // And the arms behind a group the limit held back. They are arms the combinations take —
+        // what the limit settled is that nothing walked them, which is the search's answer and not
+        // a fact about which arms exist. Left out, a caller with no measurement beside it asks for
+        // fewer arms because this compiler declined to look, and never learns that it did.
+        for (InteractionCells.NotOffered held : offered.notOffered()) {
+            out.addAll(armsIn(held.claims()));
         }
         return out;
     }
@@ -841,7 +876,8 @@ public final class Generator {
                                         List<souther.compiler.interaction.Interaction> groups,
                                         Trial trial, List<Baseline> baselines,
                                         Set<ClassOwed> classesOwed,
-                                        Set<Integer> armsOwed) {
+                                        Set<Integer> armsOwed,
+                                        AdequacyPolicy.OfTheGeneration budget) {
         List<Axis> ordered = ordered(subject);
         // A position where some row's value could not be read is a position nothing is known about.
         // A row generated for a class there may be a row that is already written, and telling an
@@ -901,7 +937,7 @@ public final class Generator {
         int classesLeft = 0;
         for (int i = 0; i < owed.size(); i++) {
             int[] at = owed.get(i);
-            if (rows.size() >= MAX_ROWS) {
+            if (rows.size() >= budget.rows()) {
                 classesLeft = owed.size() - i;
                 for (int cut = i; cut < owed.size(); cut++) {
                     Axis axis = axes.get(owed.get(cut)[0]);
@@ -936,8 +972,26 @@ public final class Generator {
         // are one silence, and a reader told the second where the first happened is told the model
         // settles something it does not.
         Set<Integer> cutOff = new LinkedHashSet<>();
+        // The arms this run ended up answering with a group nobody walked, collected as those
+        // answers are made rather than worked out again afterwards. What decides one is the order
+        // the three answers are asked in below; a set built here from `left`, `cutOff` and
+        // `notOffered` would be that order written a second time, free to stop agreeing with it.
+        Set<Integer> wentUnwalked = new LinkedHashSet<>();
+        // And the arms behind a group nothing walked, which is a second silence with a different
+        // cause. The one above is a budget that ran out with the arm still owed; this is a group
+        // the offer never opened, and raising the budget does not reach it.
+        InteractionCells.Offered offered = InteractionCells.of(groups, axes, budget);
+        Set<Integer> notOffered = new LinkedHashSet<>();
+        // Which arms each held-back group could have been searched at, kept per group so that the
+        // summary at the end can be counted off the entries rather than worked out a second way.
+        List<List<Integer>> behindEachHeldGroup = new ArrayList<>();
+        for (InteractionCells.NotOffered held : offered.notOffered()) {
+            List<Integer> behindIt = armsIn(held.claims());
+            behindEachHeldGroup.add(behindIt);
+            notOffered.addAll(behindIt);
+        }
         boolean unconfirmed = false;
-        for (InteractionCells.Group group : InteractionCells.of(groups, axes)) {
+        for (InteractionCells.Group group : offered.groups()) {
             for (int index = 0; index < group.size() && !left.isEmpty(); index++) {
                 CellSelection selection = group.at(index);
                 if (selection == null) {
@@ -950,7 +1004,7 @@ public final class Generator {
                 if (takes.isEmpty()) {
                     continue;   // no arm on the list is looked for here
                 }
-                if (rows.size() >= MAX_ROWS) {
+                if (rows.size() >= budget.rows()) {
                     cutOff.addAll(takes);
                     continue;
                 }
@@ -993,10 +1047,19 @@ public final class Generator {
                 why.add(new UnresolvedCombination(List.of(),
                         UnresolvedCombination.Reason.SEARCH_LIMIT));
                 arms.add(new ArmAttempt.Unresolved(probe, why));
+            } else if (notOffered.contains(probe)) {
+                // Asked after the two above, so an arm some offered group reached or the budget
+                // stopped at keeps that answer. What is left here is an arm whose only claim came
+                // from a group nothing walked, and the union a held-back group is named by is a
+                // superset — which is why this is the last of the three and not the first.
+                why.add(new UnresolvedCombination(List.of(),
+                        UnresolvedCombination.Reason.THE_GROUP_WAS_NOT_OFFERED));
+                arms.add(new ArmAttempt.Unresolved(probe, why));
+                wentUnwalked.add(probe);
             } else if (!why.isEmpty()) {
                 arms.add(new ArmAttempt.Unresolved(probe, why));
             }
-            // And an arm with neither is one no combination claims, which is the one thing an
+            // And an arm with none of them is one no combination claims, which is the one thing an
             // absent entry may mean.
         }
         // Said once, at the end, and about both searches. One that ran out on the classes stopped
@@ -1008,6 +1071,28 @@ public final class Generator {
         if (classesLeft + cutOff.size() > 0) {
             reasons.add(new GenerationReason.SearchLimit(axes.get(0).id().behavior(),
                     classesLeft + cutOff.size()));
+        }
+        // And the groups the limit held back that an arm was left waiting on. Counted off the
+        // entries just made and not off the obligation this run started with, because the two are
+        // different sets: an arm owed at the start may have been built from another group that was
+        // offered, or stopped at by the row budget, and either way the entry for it says so and the
+        // group is not what it is waiting on. `NotOffered`'s own contract is that what it names is
+        // read for "what is left owed after every offered group has been searched", which is
+        // available here and nowhere earlier.
+        //
+        // Read off `wentUnwalked` rather than rebuilt from `left`, `cutOff` and `notOffered`. Those
+        // three would be the order the answers are asked in, written a second time beside the one
+        // that decides — and a summary that disagrees with the entries under it is worse than no
+        // summary, since a reader checks the number against them.
+        int heldBackAndWaitedOn = 0;
+        for (List<Integer> behindIt : behindEachHeldGroup) {
+            if (behindIt.stream().anyMatch(wentUnwalked::contains)) {
+                heldBackAndWaitedOn++;
+            }
+        }
+        if (heldBackAndWaitedOn > 0) {
+            reasons.add(new GenerationReason.GroupsNotOffered(axes.get(0).id().behavior(),
+                    heldBackAndWaitedOn));
         }
         if (unconfirmed) {
             reasons.add(new GenerationReason.RowsNotConfirmed(axes.get(0).id().behavior()));
@@ -1023,8 +1108,14 @@ public final class Generator {
      * nothing about an arm is owed for it.
      */
     private static List<Integer> claimed(CellSelection selection) {
+        return armsIn(selection.claims());
+    }
+
+    /** The arms a list of claims names, by the numbers the plan gave them. Shared with the groups
+     *  the limit held back, which have claims and no cell to read them off. */
+    private static List<Integer> armsIn(List<souther.compiler.coverage.ControlClaim> claims) {
         List<Integer> out = new ArrayList<>();
-        for (souther.compiler.coverage.ControlClaim claim : selection.claims()) {
+        for (souther.compiler.coverage.ControlClaim claim : claims) {
             if (claim.at() instanceof souther.compiler.coverage.ControlPointId.ArmOccurrence arm
                     && arm.probe().isPresent()) {
                 out.add(arm.probe().getAsInt());

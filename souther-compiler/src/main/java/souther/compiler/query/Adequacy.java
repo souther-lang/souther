@@ -969,7 +969,8 @@ public final class Adequacy {
                                 souther.compiler.check.ElementBindings.NONE), plan, seen,
                         level, boundaries == null ? List.of()
                                 : boundaries.getOrDefault(spec.name(), List.of()),
-                        arrivalsOf(arrives, spec), statedOf(declared, spec)));
+                        arrivalsOf(arrives, spec), statedOf(declared, spec),
+                        db.ask(new Front.Adequacy()).value().measures()));
             }
             return Answer.of(Ordered.map(out));
         }
@@ -1875,7 +1876,8 @@ public final class Adequacy {
                             statedOf(declared, spec), runningRowsOf(trials, spec.name(), sig),
                             partitions == null ? PartitionEvidence.NONE
                                     : partitions.getOrDefault(spec.name(), PartitionEvidence.NONE),
-                            levelOf(db).runsInstrumentedRows());
+                            levelOf(db).runsInstrumentedRows(),
+                            db.ask(new Front.Adequacy()).value().generation());
                 } catch (LinkageError _) {
                     // The generated classes would not link, so nothing can be built to find out
                     // what a model admits. Saying so is not the same as saying the combinations are
@@ -2072,7 +2074,14 @@ public final class Adequacy {
                     // About a search that happened, and said in their own words beside the rows.
                     // Answering with one of them here would be the same fact under a second
                     // spelling, over a class the search never got to.
+                    //
+                    // `GroupsNotOffered` is here for a different reason: it is not about classes at
+                    // all. A group of the body's decisions is where a row for an <em>arm</em> is
+                    // looked for, and the classes are walked in a loop that never consults one — so
+                    // a class with nothing recorded was not left that way by a group being held
+                    // back, and saying it was would be a cause this run has no evidence for.
                     case souther.compiler.partition.GenerationReason.SearchLimit _,
+                            souther.compiler.partition.GenerationReason.GroupsNotOffered _,
                             souther.compiler.partition.GenerationReason.RowsNotConfirmed _ -> { }
                 }
             }
@@ -2391,7 +2400,8 @@ public final class Adequacy {
                 FixtureReader.Construction building, InputDomain domain,
                 souther.compiler.check.PathReachability.Answers arrives,
                 souther.compiler.check.StatedContract stated, Generator.Trial trial,
-                PartitionEvidence evidence, boolean recording) {
+                PartitionEvidence evidence, boolean recording,
+                souther.compiler.partition.AdequacyPolicy.OfTheGeneration budget) {
             if (observed.someRowsUnseen()) {
                 // Rows exist that nothing read. What they cover is unknown, so what is left uncovered
                 // is unknown too — and a generated row is a specific piece of work handed to a person,
@@ -2435,7 +2445,7 @@ public final class Adequacy {
             }
             return Generator.fill(subject, existing, check,
                     souther.compiler.interaction.Interactions.of(body, plan, domain, symbols),
-                    trial, baselines, classesOwed(evidence), armsOwed);
+                    trial, baselines, classesOwed(evidence), armsOwed, budget);
         }
 
         /**

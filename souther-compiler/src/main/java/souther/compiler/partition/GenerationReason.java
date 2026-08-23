@@ -64,6 +64,28 @@ public sealed interface GenerationReason {
     record SearchLimit(String behavior, int owed) implements GenerationReason {}
 
     /**
+     * Groups of the body's decisions this did not offer any combination of, because each was wider
+     * than the walk offers.
+     *
+     * <p>Beside {@link SearchLimit} rather than folded into it. That one is a budget that ran out
+     * part way through a plan and is lifted by allowing more rows; this is a group nothing walked
+     * at all, and no number of rows reaches it. A reader acting on the first would raise a limit
+     * that changes nothing here.
+     *
+     * <p>And only the ones an arm was left waiting on. What a run owes is the classes and the arms
+     * a caller names; walking a group is how a row for an arm is looked for, not something anybody
+     * is owed. So a group claiming nothing this run was asked for cost it nothing — and neither did
+     * one whose arms another group reached, or whose arms the row budget stopped at first, since
+     * those arms have an entry of their own saying what happened to them.
+     *
+     * @param groups how many were held back with an arm still waiting on them at the end, which is
+     *               the group's own count and not a count of the combinations in them — the whole
+     *               of what this says is that the walk was never made, so how many cells it would
+     *               have had is not something anything counted
+     */
+    record GroupsNotOffered(String behavior, int groups) implements GenerationReason {}
+
+    /**
      * The module's classes were not there to put a candidate through.
      *
      * <p>Which is not the classes refusing to link — that is {@link LinkageFailed}, and it is what

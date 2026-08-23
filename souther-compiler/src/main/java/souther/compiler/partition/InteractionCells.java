@@ -38,18 +38,6 @@ import java.util.List;
  */
 public final class InteractionCells {
 
-    /**
-     * How many ways of choosing an outcome from each factor a group may have and still be offered.
-     *
-     * <p>A group is taken from while there is budget for a row and no further, so what this bounds
-     * is not how many rows come out of it. It bounds the walk over its choices, which goes on past
-     * the ones already answered, the ones the factors disagree about and the ones nothing could be
-     * built for — and a group whose choices run to the billions would have that walk stand between
-     * the author and every other group. The number is the group's own and known before any of it is
-     * built.
-     */
-    private static final int MOST_CELLS = 4096;
-
     private InteractionCells() {}
 
     /**
@@ -159,16 +147,18 @@ public final class InteractionCells {
          * <p>Not how many combinations the group has: two factors reading one position have choices
          * that leave it nothing, and no row is written at those. This is the space the choices are
          * counted off, and {@link #at} says which of them are cells.
+         *
+         * <p>The product itself, with nothing to saturate at. A group exists only where {@link #of}
+         * found the product within what the compilation allows, so the number fits an {@code int}
+         * by having been checked before this was built — and a limit carried in here to be reached
+         * would be the budget living on in a value the budget already admitted.
          */
         public int size() {
-            long size = 1;
+            int size = 1;
             for (List<Placed> factor : byFactor) {
                 size *= factor.size();
-                if (size >= MOST_CELLS) {
-                    return MOST_CELLS;
-                }
             }
-            return (int) size;
+            return size;
         }
 
         /**
@@ -207,16 +197,61 @@ public final class InteractionCells {
         }
     }
 
-    /** The groups worth offering, over the ordered {@code axes}. */
-    public static List<Group> of(List<Interaction> groups, List<Axis> axes) {
+    /**
+     * A group the limit kept from being offered, and what a run that took it would have been seen
+     * to do.
+     *
+     * <p>The claims and not the cells. Which combinations the group has is the product this declined
+     * to walk; which control points any of them could claim is the union over the way in and every
+     * outcome of every factor, which is one pass over what {@link #factorsOf} already built. So the
+     * arms behind the limit can be named without doing the work the limit exists to refuse.
+     *
+     * <p>A union and so a superset: no single combination claims all of these, and one of them may
+     * be claimed by another group that was offered. A caller reads it for what is left owed after
+     * every offered group has been searched, which is where the difference stops mattering.
+     */
+    public record NotOffered(List<souther.compiler.coverage.ControlClaim> claims) {
+
+        public NotOffered {
+            claims = List.copyOf(claims);
+        }
+    }
+
+    /**
+     * The groups to offer, and the ones the limit kept back.
+     *
+     * <p>Two answers because they are two facts and the second used to be neither returned nor
+     * recorded. A group dropped for its width claims arms, and an arm nothing offered a combination
+     * for is reported as an arm no combination claims — which says the body settles something it
+     * does not.
+     */
+    public record Offered(List<Group> groups, List<NotOffered> notOffered) {
+
+        public Offered {
+            groups = List.copyOf(groups);
+            notOffered = List.copyOf(notOffered);
+        }
+    }
+
+    /** The groups worth offering, over the ordered {@code axes}, and the ones held back. */
+    public static Offered of(List<Interaction> groups, List<Axis> axes,
+                             AdequacyPolicy.OfTheGeneration budget) {
         List<Group> out = new ArrayList<>();
+        List<NotOffered> held = new ArrayList<>();
         for (Interaction group : groups) {
             Placed reach = placedBy(group.reach(), axes);
             if (reach == null) {
                 continue;
             }
             List<List<Placed>> placed = factorsOf(group, axes);
-            if (placed == null || productOf(placed) >= MOST_CELLS) {
+            if (placed == null) {
+                continue;
+            }
+            // Past the limit, and said so rather than dropped. What this costs is the combinations
+            // of one group going untried; what saying nothing cost is an arm among them reading as
+            // one the body never reaches.
+            if (productOf(placed, budget.cellsPerGroup()) > budget.cellsPerGroup()) {
+                held.add(new NotOffered(claimsOf(reach, placed)));
                 continue;
             }
             Group built = new Group(reach, placed);
@@ -224,16 +259,37 @@ public final class InteractionCells {
                 out.add(built);
             }
         }
+        return new Offered(out, held);
+    }
+
+    /** Every control point any combination of this group could claim, which is the union over the
+     *  way in and every outcome of every factor. One pass, and never the product. */
+    private static List<souther.compiler.coverage.ControlClaim> claimsOf(
+            Placed reach, List<List<Placed>> byFactor) {
+        java.util.LinkedHashSet<souther.compiler.coverage.ControlClaim> out =
+                new java.util.LinkedHashSet<>(reach.claims());
+        for (List<Placed> factor : byFactor) {
+            for (Placed outcome : factor) {
+                out.addAll(outcome.claims());
+            }
+        }
         return List.copyOf(out);
     }
 
-    /** How far the product runs, stopping where it is past anything that would be offered. */
-    private static long productOf(List<List<Placed>> placed) {
+    /**
+     * How far the product runs, stopping once it is past anything that would be offered.
+     *
+     * <p>Stopped rather than run to the end, because a body of enough factors multiplies past what a
+     * {@code long} holds and the answer this is asked for is only whether the limit was passed. One
+     * over the limit is as good an answer as the true product for that, and is the largest number
+     * this ever returns.
+     */
+    private static long productOf(List<List<Placed>> placed, int mostCells) {
         long size = 1;
         for (List<Placed> factor : placed) {
             size *= factor.size();
-            if (size >= MOST_CELLS) {
-                return MOST_CELLS;
+            if (size > mostCells) {
+                return mostCells + 1L;
             }
         }
         return size;

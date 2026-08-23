@@ -1309,6 +1309,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case NOTHING_COMPOSES_ONE -> "nothing here could build a representative for " + at;
             case ALL_CANDIDATES_REJECTED -> "every value tried at " + at + " was refused";
             case SEARCH_LIMIT -> "the search stopped before reaching " + at;
+            // What is missing here, and not what cannot exist. The combinations are there and this
+            // declined to walk them, so a reader is told the offer was not made rather than that
+            // nothing reaches the arm — and told that raising the row budget is not what lifts it.
+            case THE_GROUP_WAS_NOT_OFFERED ->
+                    "the decisions that settle " + at + " have more combinations together than this"
+                            + " offers a row for, so none of them was looked in";
             case THE_RULES_LEAVE_NOTHING_THERE ->
                     "the rules leave no value at " + at;
             case NOTHING_TO_BUILD_AGAINST -> "there was nothing to build a candidate against";

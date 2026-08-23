@@ -167,6 +167,38 @@ public final class Front {
                 new souther.compiler.check.ReadingPolicy(64, 1000);
     }
 
+    /**
+     * What measuring a behavior and composing rows for it may spend.
+     *
+     * <p>Held as an input for the reason the two above are: it belongs to the compilation, and every
+     * measurement of one behavior has to be under the same one. Read here and handed to the
+     * analysis, which never makes one — a budget made where it is needed is one two measurements of
+     * a model can differ by, and each would report different coverage of it while both stayed
+     * sound.
+     */
+    public record Adequacy()
+            implements Input<souther.compiler.partition.AdequacyPolicy> {
+
+        /**
+         * What a compilation sets, and the one place the three numbers are written.
+         *
+         * <p>Guardrails and not precision settings, each set with room over anything observed. The
+         * pair space is twenty thousand: a behavior of a dozen positions of a handful of classes
+         * each runs to hundreds, and past twenty thousand the count is of a space no set of rows
+         * addresses. The row limit is two hundred, which is where a block stops being something a
+         * person reads and pastes. A group's choices are capped at four thousand and ninety-six,
+         * which a body reaches only by settling thirteen decisions on one value.
+         *
+         * <p>Held here rather than beside the policy it makes, so that measuring a behavior cannot
+         * reach it: what governs a measurement is handed to it, and a default it could pick up is a
+         * default two measurements of one behavior can differ by.
+         */
+        static final souther.compiler.partition.AdequacyPolicy STANDARD =
+                new souther.compiler.partition.AdequacyPolicy(
+                        new souther.compiler.partition.AdequacyPolicy.OfTheMeasures(20_000),
+                        new souther.compiler.partition.AdequacyPolicy.OfTheGeneration(200, 4096));
+    }
+
     /** One source, parsed, with the text of each declaration kept for publishing. Every position in
      * what comes back names this source, so a writing that later joins another file's module still
      * says where it was written. */
