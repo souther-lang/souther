@@ -13,6 +13,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -135,17 +136,22 @@ class ARowIsOfferedForEveryCombinationOfTheDecisionsOneValueIsMadeOfTest {
     }
 
     /**
-     * The cells share the budget the pairs are held to. A group has as many combinations as the
-     * product of its factors, which grows with the body rather than with the number of inputs, and
-     * a generation that offered all of them would hand an author a list nobody reads.
+     * A group's combinations cost rows only where an arm is owed one.
+     *
+     * <p>A group has as many combinations as the product of its factors, which grows with the body
+     * rather than with the number of inputs. Offered for their own sake they were a list nobody
+     * reads, and the row limit was what stood between an author and it. Nothing is owed a row for a
+     * combination now, so what a group costs is bounded by its arms — of which a body has as many
+     * as it has ways through, and every one of them is a line the author wrote.
      */
     @Test
-    void agroupBiggerThanTheBudgetIsOfferedWhatTheBudgetHolds() {
+    void aGroupCostsRowsOnlyWhereAnArmIsOwedOne() {
         String block = block(FIVE);
 
         assertTrue(rows(block) <= 200, "the rows offered stay inside the row limit: " + rows(block));
-        assertTrue(block.contains("generation stopped"),
-                "and a search that stopped says so rather than reading as complete: " + block);
+        assertFalse(block.contains("generation stopped"),
+                "and the search does not run out, the combinations costing nothing of their own: "
+                        + block);
     }
 
     /**
@@ -226,16 +232,21 @@ class ARowIsOfferedForEveryCombinationOfTheDecisionsOneValueIsMadeOfTest {
             """;
 
     /**
-     * Every combination of the group is offered, and how many there are is the product of its
-     * factors. Nothing prepares a list of them beforehand: which ones get offered is the row
-     * budget's to decide, and a list cut to the budget would leave the ones past that point untried
-     * while the budget still held — a combination a row already sits in costs no row.
+     * A group's combinations cost no rows of their own.
+     *
+     * <p>Three outcomes against four used to be twelve rows — the product of the group's factors,
+     * which is the space the search walked and which nothing reports. What is offered here is the
+     * classes: three of one position and four of the other, two of which meet in one row, so six.
+     * No row is written for a combination, and this model writes none either — it has no `example`
+     * block, so nothing read its rows and no arm is established as unreached for one to be owed at.
      */
     @Test
-    void everyCombinationOfAGroupInsideTheBudgetIsOffered() {
+    void aGroupsCombinationsCostNoRowsOfTheirOwn() {
         String block = block(TWELVE);
 
-        assertEquals(12, rows(block), "three outcomes against four is twelve rows: " + block);
+        assertEquals(6, rows(block),
+                "the seven classes, two of them meeting in one row — not the twelve combinations "
+                        + "they make: " + block);
         assertTrue(!block.contains("generation stopped"),
                 "and nothing was left for a limit to cut off: " + block);
     }
@@ -262,25 +273,21 @@ class ARowIsOfferedForEveryCombinationOfTheDecisionsOneValueIsMadeOfTest {
             """;
 
     /**
-     * Every row offered for the group takes the arm the group is in.
+     * And a body whose decisions sit inside an arm is offered nothing for their combinations.
      *
-     * <p>A row that goes the other way round the fork never reaches the operator, so varying the
-     * three decisions on that side exercises it not at all — and a row already written over there
-     * would read as one that covers the combination.
+     * <p>The eight ways the three decisions can come out used to be eight rows on the far side of
+     * the fork. They are not a thing anyone is owed: what the report names under a body is its arms,
+     * and this model has no `example` block, so nothing read its rows and no arm is established as
+     * unreached. Where one is — a model with rows — the row that takes it is what answers it, which
+     * is {@code EveryFindingHasAGenerationDispositionTest}.
      */
     @Test
-    void everyRowOfferedForAGroupTakesThePathToIt() {
+    void aBodyWhoseDecisionsSitInsideAnArmIsOfferedNothingForTheirCombinations() {
         String block = block(INSIDE_AN_ARM);
 
-        for (String a : List.of("true", "false")) {
-            for (String b : List.of("true", "false")) {
-                for (String c : List.of("true", "false")) {
-                    String row = "(B, " + a + ", " + b + ", " + c + ")";
-                    assertTrue(block.contains(row),
-                            "the combination is offered on the side that reaches it: " + row
-                                    + " in " + block);
-                }
-            }
-        }
+        assertEquals(List.of(), names(block).stream().filter(name -> name.contains(" x ")).toList(),
+                "every row is named for one class, none for a combination of them: " + block);
+        assertEquals(5, rows(block),
+                "the four positions' second classes and the one they meet in: " + block);
     }
 }

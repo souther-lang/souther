@@ -1725,6 +1725,8 @@ public final class Adequacy {
                             baselines(name, spec, sig,
                                     db.ask(new Bodies.ModuleDefinitions(name)).value(),
                                     prepared.value(), symbols),
+                            findings == null ? List.of()
+                                    : findings.getOrDefault(spec.name(), List.of()),
                             bodies.get(spec.name()),
                             elementsOf.getOrDefault(spec.name(),
                                     souther.compiler.check.ElementBindings.NONE), plan,
@@ -1925,8 +1927,7 @@ public final class Adequacy {
                     // Answering with one of them here would be the same fact under a second
                     // spelling, over a class the search never got to.
                     case souther.compiler.partition.GenerationReason.SearchLimit _,
-                            souther.compiler.partition.GenerationReason.RowsNotConfirmed _,
-                            souther.compiler.partition.GenerationReason.CombinationsWithheld _ -> { }
+                            souther.compiler.partition.GenerationReason.RowsNotConfirmed _ -> { }
                 }
             }
             return Generator.UnresolvedCombination.Reason.NO_REASON_RECORDED;
@@ -2221,7 +2222,8 @@ public final class Adequacy {
         private static Generator.GenerationResult rowsFor(
                 Hir.SpecBehavior spec, Sig sig, Symbols symbols,
                 souther.compiler.check.ReadingPolicy policy,
-                List<Generator.Baseline> baselines, souther.compiler.core.Core body,
+                List<Generator.Baseline> baselines, List<Finding> owed,
+                souther.compiler.core.Core body,
                 souther.compiler.check.ElementBindings elements,
                 souther.compiler.coverage.CoverageSites.Plan plan, Observed observed,
                 FixtureReader.Construction building, InputDomain domain,
@@ -2259,9 +2261,19 @@ public final class Adequacy {
                             InputClassifications.of(row.inputs(), inputs, partitioning.axes()),
                             watched(row, recording)))
                     .toList();
+            // The arms this build is owed a row at, which the measure established and this reads.
+            // A combination the body settles together is where one is looked for and is not itself
+            // owed a row — nothing reports one — so what is searched follows from the findings
+            // rather than from the shape of the search space.
+            Set<Integer> armsOwed = new LinkedHashSet<>();
+            for (Finding finding : owed) {
+                if (finding.about() instanceof About.AnArmNoRowGoesThrough(var arm)) {
+                    armsOwed.add(arm.index());
+                }
+            }
             return Generator.fill(subject, existing, check,
                     souther.compiler.interaction.Interactions.of(body, plan, domain, symbols),
-                    trial, baselines);
+                    trial, baselines, armsOwed);
         }
     }
 

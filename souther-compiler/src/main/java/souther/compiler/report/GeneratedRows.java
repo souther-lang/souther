@@ -446,14 +446,6 @@ public final class GeneratedRows {
                 // Not a stop. The rows above it are there and are worth writing; what is said is
                 // that nothing ran them, so what each is offered for is a reading of the body
                 // rather than something anything watched.
-                // Not a stop either. What is said is that rows were held back over rows already
-                // here, and that whether those fill what they sit in was not established.
-                case GenerationReason.CombinationsWithheld withheld -> String.format(
-                        "// %d %s for `%s` offered no row: one already written sits where a row"
-                                + " filling it would, and nothing ran to say whether it does%n",
-                        withheld.combinations(),
-                        withheld.combinations() == 1 ? "combination" : "combinations",
-                        withheld.behavior());
                 case GenerationReason.RowsNotConfirmed unconfirmed -> String.format(
                         "// rows offered for `%s` were not run, so which combination each reaches"
                                 + " is read off the body rather than observed%n",

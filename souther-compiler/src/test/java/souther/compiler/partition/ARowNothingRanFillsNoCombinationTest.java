@@ -75,16 +75,20 @@ class ARowNothingRanFillsNoCombinationTest {
             """;
 
     /**
-     * A row is counted against a combination on what a run says, and on what kind of row it is.
+     * A combination is where an arm's row is looked for, and is not itself owed one.
      *
-     * <p>Three rows, one set of values. Seen doing what the combination names, it fills it. Seen
-     * doing something else, it does not — which is the whole of this issue: the values sit in the
-     * classes either way, and the reading that put them there is what was wrong. And where nothing
-     * could watch it, an author's row is given the benefit of it, because a combination re-offered
-     * over a row already in the file is a specific piece of work handed to someone who has done it.
+     * <p>This used to be about which rows filled a combination: seen doing what it names it filled
+     * one, seen doing something else it did not, and where nothing could watch it an author's row
+     * was given the benefit. All three were the generator counting rows against a space nothing
+     * reports — and it counted them from a reading of the body, which is what could be wrong.
+     *
+     * <p>The three answers are still there and they are one measure's: whether an arm was reached
+     * is what {@code BranchEvidence} establishes, and an arm nothing read the rows for is not
+     * established as unreached at all. What is left here is that the search looks where it is told
+     * to and composes for nothing of its own.
      */
     @Test
-    void aRowIsCountedAgainstACombinationOnWhatARunSaysAndOnWhoseRowItIs() {
+    void aCombinationIsSearchedForAnArmOnTheListAndForNothingElse() {
         Model model = Model.of(SHIPPING, "shippingFee");
         List<InteractionCells.Group> groups =
                 InteractionCells.of(model.groups(), model.subject().axes());
@@ -96,23 +100,17 @@ class ARowNothingRanFillsNoCombinationTest {
         Map<AxisId, Classification> sitting = at(model.subject().axes(), first);
         String combination = labelOf(model.subject().axes(), sitting);
 
-        assertFalse(offeredFor(model, new Generator.Watched.Ran(doing(first.claims())))
-                        .contains(combination),
-                "a row seen doing what the combination names fills it");
-        assertTrue(offeredFor(model, new Generator.Watched.Ran(Observation.NONE))
-                        .contains(combination),
-                "a row seen doing something else leaves it owed, sit where its values may");
-        assertFalse(offeredFor(model, new Generator.Watched.NoAccount()).contains(combination),
-                "and a row of the author's nothing could watch is withheld over, not counted");
+        assertTrue(offeredFor(model, Generator.everyArmTheCombinationsTake(
+                        model.subject(), model.groups())).contains(combination),
+                "asked about the arms this combination takes, a row is composed for it");
+        assertFalse(offeredFor(model, java.util.Set.of()).contains(combination),
+                "and asked about none of them, nothing here composes for the combination itself");
     }
 
-    /** What the generator offers when this row is already written, as the classes of each. */
-    private static List<String> offeredFor(Model model, Generator.Watched watched) {
-        List<InteractionCells.Group> groups =
-                InteractionCells.of(model.groups(), model.subject().axes());
-        Map<AxisId, Classification> sitting = at(model.subject().axes(), groups.get(0).at(0));
-        return Generator.fill(model.subject(), List.of(new Generator.ObservedRow(sitting, watched)),
-                        Generator.CandidateCheck.ANY, model.groups())
+    /** What the generator offers when it is asked about {@code arms}, as the classes of each. */
+    private static List<String> offeredFor(Model model, java.util.Set<Integer> arms) {
+        return Generator.fill(model.subject(), List.of(), Generator.CandidateCheck.ANY,
+                        model.groups(), Generator.Trial.NOTHING_RUNS, List.of(), arms)
                 .rows().stream().map(Generator.GeneratedRow::description).toList();
     }
 

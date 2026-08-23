@@ -71,20 +71,6 @@ public sealed interface GenerationReason {
     record RowsNotConfirmed(String behavior) implements GenerationReason {}
 
     /**
-     * Combinations no row was offered for, because a row already written may already fill them.
-     *
-     * <p>Which is not that it does. The row sits where one filling the combination would sit, and
-     * whether it takes the path the combination names is settled by running it — so where nothing
-     * could say, the row is given the benefit of it and no work is handed to an author who may have
-     * done it.
-     *
-     * <p>Said because the alternative is silence, and silence here reads as a combination covered.
-     * What an author has is a combination nothing established anything about, and the way to
-     * establish it is to measure.
-     */
-    record CombinationsWithheld(String behavior, int combinations) implements GenerationReason {}
-
-    /**
      * The generated classes would not link, so the decoders could not be reached.
      *
      * <p>What the JVM raised is a {@code LinkageError}, and which of its causes it was is not

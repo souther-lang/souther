@@ -743,7 +743,30 @@ public final class Generator {
                                         CandidateCheck check,
                                         List<souther.compiler.interaction.Interaction> groups,
                                         Trial trial) {
-        return fill(subject, existing, check, groups, trial, List.of());
+        return fill(subject, existing, check, groups, trial, List.of(),
+                everyArmTheCombinationsTake(subject, groups));
+    }
+
+    /**
+     * Every arm the body's combinations take.
+     *
+     * <p><b>Not what a build asks for.</b> Which arms are owed a row is what measuring them
+     * established, and a build hands that in. This is for a caller with no measurement beside it —
+     * a test standing the search up on its own — and it says so by being a list the caller passes
+     * rather than one the search makes for itself.
+     */
+    public static Set<Integer> everyArmTheCombinationsTake(
+            Subject subject, List<souther.compiler.interaction.Interaction> groups) {
+        Set<Integer> out = new LinkedHashSet<>();
+        for (InteractionCells.Group group : InteractionCells.of(groups, ordered(subject))) {
+            for (int index = 0; index < group.size(); index++) {
+                CellSelection selection = group.at(index);
+                if (selection != null) {
+                    out.addAll(claimed(selection));
+                }
+            }
+        }
+        return out;
     }
 
     /**
@@ -758,7 +781,8 @@ public final class Generator {
     public static GenerationResult fill(Subject subject, List<ObservedRow> existing,
                                         CandidateCheck check,
                                         List<souther.compiler.interaction.Interaction> groups,
-                                        Trial trial, List<Baseline> baselines) {
+                                        Trial trial, List<Baseline> baselines,
+                                        Set<Integer> armsOwed) {
         List<Axis> ordered = ordered(subject);
         // A position where some row's value could not be read is a position nothing is known about.
         // A row generated for a class there may be a row that is already written, and telling an
@@ -794,83 +818,10 @@ public final class Generator {
         List<ArmAttempt> arms = new ArrayList<>();
         List<UnresolvedCombination> unresolved = new ArrayList<>();
         List<GenerationReason> reasons = new ArrayList<>(undecided);
-        // What the author wrote, and only that. Settled here for the same reason the classes
-        // above are: a row this run offers is a question, and a combination it happens to reach is
-        // not evidence that the combination is covered. Added to as candidates arrived, the answer
-        // for one combination depended on which of the others had been reached first — so a
-        // combination went unoffered because an earlier candidate had been seen in it, and the
-        // author was handed a row named for something else and told nothing about this one.
-        List<Placement> written = new ArrayList<>();
-        for (ObservedRow row : existing) {
-            written.add(new Placement(whereIn(row.at(), axes), row.watched()));
-        }
-        // Built here and not handed in: a cell is one class per position of the axes this
-        // generation kept, and the caller's list is neither ordered the same nor filtered the same.
-        // No more of any one group than could be offered, since the rest would be built to be
-        // thrown away.
-        List<InteractionCells.Group> byGroup = InteractionCells.of(groups, axes);
-        int[] taken = new int[byGroup.size()];
-        // One from each group in turn, while there is budget for a row. A group met first would
-        // otherwise spend the whole budget and leave the rest of them nothing; and taken this way
-        // there is no count of how many of a group to prepare, so a combination a written row
-        // already sits in costs no row and does not stand in for one that would have.
-        boolean anyLeft = true;
-        boolean unconfirmed = false;
-        int withheld = 0;
-        while (anyLeft && rows.size() < MAX_ROWS) {
-            anyLeft = false;
-            for (int g = 0; g < byGroup.size() && rows.size() < MAX_ROWS; g++) {
-                InteractionCells.Group group = byGroup.get(g);
-                if (taken[g] >= group.size()) {
-                    continue;
-                }
-                CellSelection selection = group.at(taken[g]++);
-                anyLeft = true;
-                if (selection == null) {
-                    // The factors this choice takes leave a position nothing, so it is not a
-                    // combination the body has a path to and there is nothing to ask for.
-                    continue;
-                }
-                CombinationStanding standing = standingOf(written, selection);
-                if (standing instanceof CombinationStanding.Filled) {
-                    continue;   // a row was seen filling it, so nothing is owed
-                }
-                if (standing instanceof CombinationStanding.MayBeWritten) {
-                    // Not filled and not offered: a row in the file sits where one filling this
-                    // would, and nothing could say whether it does. Counted so that it is said —
-                    // an author told nothing here would read it as a combination covered.
-                    withheld++;
-                    continue;
-                }
-                switch (witnessFor(subject, axes, selection, check, trial)) {
-                    case Witness.None none -> {
-                        UnresolvedCombination why = new UnresolvedCombination(
-                                none.classes(), none.reason(), none.detail(), none.said());
-                        unresolved.add(why);
-                        claimed(selection).forEach(probe ->
-                                arms.add(new ArmAttempt.Unresolved(probe, List.of(why))));
-                    }
-                    case Witness.Certified found -> {
-                        rows.add(found.row());
-                        claimed(selection).forEach(
-                                probe -> arms.add(new ArmAttempt.Built(probe, found.row())));
-                    }
-                    case Witness.Unconfirmed offer -> {
-                        rows.add(offer.row());
-                        claimed(selection).forEach(
-                                probe -> arms.add(new ArmAttempt.Built(probe, offer.row())));
-                        // Nothing watched it, so what it is offered for is what the reading says
-                        // and not what anything saw. Said once for the behavior: it is one fact
-                        // about this generation.
-                        unconfirmed = true;
-                    }
-                }
-            }
-        }
-        int cellsLeft = 0;
-        for (int g = 0; g < byGroup.size(); g++) {
-            cellsLeft += byGroup.get(g).left(taken[g]);
-        }
+        // The classes first. What each is owed is one row, and the arms below are looked for among
+        // combinations that would be composed either way — so a budget the combinations spent
+        // first left a class the report names with nothing offered for it and a search limit
+        // beside it, over rows nobody is owed.
         int classesLeft = 0;
         for (int i = 0; i < owed.size(); i++) {
             int[] at = owed.get(i);
@@ -890,19 +841,64 @@ public final class Generator {
                 case ClassAttempt.Unresolved none -> unresolved.add(none.why());
             }
         }
-        // Said once, at the end, and about both searches. One that ran out on the cells stopped
-        // whether or not the classes had anything left to do, and two limits reported apart would
-        // be read as two searches.
-        if (cellsLeft + classesLeft > 0) {
+        // And the arms this run was asked for, looked for among the combinations the body settles
+        // together. A combination is where a witness is found and is not itself owed a row: nothing
+        // reports one, so a search that composed for every combination was filling a space nobody
+        // asked about — which is what the pair space was, arriving a second time under another
+        // name. So a combination claiming no arm on the list is not searched, and one is dropped
+        // from the list as soon as a row goes through it.
+        Set<Integer> left = new LinkedHashSet<>(armsOwed);
+        boolean unconfirmed = false;
+        for (InteractionCells.Group group : InteractionCells.of(groups, axes)) {
+            for (int index = 0; index < group.size() && rows.size() < MAX_ROWS; index++) {
+                if (left.isEmpty()) {
+                    break;
+                }
+                CellSelection selection = group.at(index);
+                if (selection == null) {
+                    // The factors this choice takes leave a position nothing, so it is not a
+                    // combination the body has a path to and there is nothing to look in.
+                    continue;
+                }
+                List<Integer> takes = new ArrayList<>(claimed(selection));
+                takes.retainAll(left);
+                if (takes.isEmpty()) {
+                    continue;   // no arm on the list is looked for here
+                }
+                switch (witnessFor(subject, axes, selection, check, trial)) {
+                    case Witness.None none -> {
+                        UnresolvedCombination why = new UnresolvedCombination(
+                                none.classes(), none.reason(), none.detail(), none.said());
+                        unresolved.add(why);
+                        takes.forEach(probe ->
+                                arms.add(new ArmAttempt.Unresolved(probe, List.of(why))));
+                    }
+                    case Witness.Certified found -> {
+                        rows.add(found.row());
+                        takes.forEach(probe -> arms.add(new ArmAttempt.Built(probe, found.row())));
+                        takes.forEach(left::remove);
+                    }
+                    case Witness.Unconfirmed offer -> {
+                        rows.add(offer.row());
+                        takes.forEach(probe -> arms.add(new ArmAttempt.Built(probe, offer.row())));
+                        takes.forEach(left::remove);
+                        // Nothing watched it, so what it is offered for is what the reading says
+                        // and not what anything saw. Said once for the behavior: it is one fact
+                        // about this generation.
+                        unconfirmed = true;
+                    }
+                }
+            }
+        }
+        // Said once, at the end, and about both searches. One that ran out on the classes stopped
+        // whether or not the arms had anything left to do, and two limits reported apart would be
+        // read as two searches.
+        if (classesLeft + left.size() > 0) {
             reasons.add(new GenerationReason.SearchLimit(axes.get(0).id().behavior(),
-                    cellsLeft + classesLeft));
+                    classesLeft + left.size()));
         }
         if (unconfirmed) {
             reasons.add(new GenerationReason.RowsNotConfirmed(axes.get(0).id().behavior()));
-        }
-        if (withheld > 0) {
-            reasons.add(new GenerationReason.CombinationsWithheld(axes.get(0).id().behavior(),
-                    withheld));
         }
         return new GenerationResult(rows, unresolved, reasons, attempts, arms);
     }
@@ -1646,79 +1642,6 @@ public final class Generator {
     }
 
     /**
-    /**
-     * A row this generation counts the combinations against: where it sits, and what came of
-     * running it.
-     *
-     * <p>A row the author wrote, and nothing else. This used to hold rows this search composed as
-     * well, and the answer for one combination then depended on which of the others had been
-     * reached first — a combination went unoffered because a candidate composed for something else
-     * had been seen in it, which is a reading read back as evidence for itself.
-     *
-     * <p>What a candidate reaches is worth knowing and is not this. It is what the row would show
-     * once somebody answers it and it is in the file; until then the row is a question, and a
-     * question does not cover anything.
-     */
-    private record Placement(int[] where, Watched watched) {}
-
-    /**
-     * Where one combination stands before anything is composed for it.
-     *
-     * <p>Named at length because {@link Standing} beside it is where a value stands against a line,
-     * and a nested type sharing that word would answer to it inside this file and to the other one
-     * everywhere else.
-     *
-     * <p>Three answers because two questions are being asked of the rows, and folding them into one
-     * is what this issue is about. Whether a combination is filled is a question about evidence, and
-     * only a run answers it. Whether a row for it is worth putting in front of an author is a
-     * question about what is already in their file, and a row they have written answers that
-     * whatever anything can establish about it — re-offering a combination over such a row hands
-     * back work already done.
-     *
-     * <p>Kept apart because the second is not the first. A combination withheld is not one anything
-     * showed to be filled, so it is not counted as such and it is not passed over in silence: it is
-     * said, and what it says is that a row in the file may fill it and nothing here could tell.
-     */
-    private sealed interface CombinationStanding {
-
-        /** A row was seen filling it. The witness is what says so and the only thing that can. */
-        record Filled(CellSelection.CertifiedWitness by) implements CombinationStanding {}
-
-        /** A row already in the author's file sits where one filling this would, and nothing could
-         *  say whether it does. Not evidence, and not silence either. */
-        record MayBeWritten() implements CombinationStanding {}
-
-        /** Nothing here says anything about it. */
-        record Owed() implements CombinationStanding {}
-    }
-
-    /**
-     * Where {@code selection} stands against the rows counted so far.
-     *
-     * <p>Evidence first and on its own terms: a row of either kind, seen doing what the combination
-     * names and sitting where it leaves room, fills it — one question put to one thing that can
-     * answer it. Only where nothing was established does whose row it is come into it, and then it
-     * decides what to offer rather than what is true.
-     */
-    private static CombinationStanding standingOf(List<Placement> written, CellSelection selection) {
-        boolean maybe = false;
-        for (Placement row : written) {
-            if (row.watched() instanceof Watched.Ran ran) {
-                Optional<CellSelection.CertifiedWitness> found =
-                        selection.certifying(row.where(), ran.seen());
-                if (found.isPresent()) {
-                    return new CombinationStanding.Filled(found.get());
-                }
-            } else if (selection.cell().holds(row.where())) {
-                // A row in the file sits where one filling this would, and nothing could say
-                // whether it does. Not evidence, and not silence either: offering a row here risks
-                // handing an author work they have already done.
-                maybe = true;
-            }
-        }
-        return maybe ? new CombinationStanding.MayBeWritten() : new CombinationStanding.Owed();
-    }
-
     /**
      * Every position at the first class {@code cell} admits it, which is the assignment a row for
      * that cell is first tried at.
