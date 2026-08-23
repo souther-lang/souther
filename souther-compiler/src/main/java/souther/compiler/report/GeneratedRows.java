@@ -118,7 +118,7 @@ public final class GeneratedRows {
     }
 
     /**
-     * The gaps this run is answering for.
+     * The findings this block owes a reader a word about.
      *
      * <p>An edge is offered where the caller asked for edges, and everything else is offered either
      * way: a run that did not ask about the lines a model draws still printed the arms and the cases
@@ -128,11 +128,18 @@ public final class GeneratedRows {
      * rows at four points and they arrive under two kinds — the two against the line and the two away
      * from it — so a flag written to one of the kinds offered the caller who asked for no edges the
      * other two.
+     *
+     * <p>A finding row synthesis is not about is left out. This block is rows to write and notes
+     * about rows that could not be written; a measure this compiler could not make has no row
+     * waiting behind it, and a line here saying nothing offers one would put our own shortfall in
+     * a list of the author's work. The report says those findings, which is where they belong.
      */
-    private static List<Adequacy.GapDisposition> shown(Adequacy.Filling filling, boolean boundaries) {
-        return filling.gaps().stream()
+    private static List<Adequacy.GenerationDisposition> shown(Adequacy.Filling filling,
+                                                              boolean boundaries) {
+        return filling.generation().stream()
+                .filter(each -> !(each.outcome() instanceof GenerationOutcome.NotApplicable))
                 .filter(each -> boundaries
-                        || !(each.gap().about() instanceof About.APointOfABorder))
+                        || !(each.finding().about() instanceof About.APointOfABorder))
                 .toList();
     }
 
@@ -325,22 +332,26 @@ public final class GeneratedRows {
             say(out, said, String.format("// no row for `%s` in `%s`: %s%n",
                     each.subject(), behavior, saidOf(each)));
         }
-        // Every gap, and not only the ones a strategy took. A gap printed in the report and left out
-        // of this block is one an author is told nothing about, while the rows above it read as
-        // though they filled everything.
-        for (Adequacy.GapDisposition each : shown(filling, boundaries)) {
+        // Every finding a row could answer, and not only the ones a strategy took. One printed in
+        // the report and left out of this block is one an author is told nothing about, while the
+        // rows above it read as though they filled everything.
+        for (Adequacy.GenerationDisposition each : shown(filling, boundaries)) {
             switch (each.outcome()) {
                 case GenerationOutcome.Generated _ -> { }
                 case GenerationOutcome.CannotGenerate cannot -> say(out, said,
                         String.format("// no row for `%s` in `%s`: %s%n", cannot.why().subject(),
                                 behavior, saidOf(cannot.why())));
                 // Told apart from the one above it in its own words. A strategy that tried and
-                // composed nothing and a gap nothing takes are different pieces of news: the first
-                // says a row may still be writable by hand, the second says no run of this will
-                // offer one until something is written for it.
+                // composed nothing and a finding nothing takes are different pieces of news: the
+                // first says a row may still be writable by hand, the second says no run of this
+                // will offer one until something is written for it.
                 case GenerationOutcome.NotSupported none -> say(out, said,
                         String.format("// nothing offers a row for `%s` in `%s`: %s%n",
-                                about(each.gap()), behavior, none.reason().said()));
+                                about(each.finding()), behavior, none.reason().said()));
+                // Filtered out above, and listed here so that the switch stays exhaustive: a
+                // fourth answer added later has to be given words rather than falling silently
+                // into whichever arm a default would have put it in.
+                case GenerationOutcome.NotApplicable _ -> { }
             }
         }
         List<GenerationReason> stopped = new ArrayList<>(filling.pairs().reasons());
@@ -417,16 +428,13 @@ public final class GeneratedRows {
      * <p>Read off the value the finding was established with, so that a subject printed here and
      * a subject printed in the report are the same words about the same thing.
      */
-    private static String about(Adequacy.Finding gap) {
-        return switch (gap.about()) {
-            case About.APointOfABorder(var point) -> {
-                if (!point.role().againstTheLine()) {
-                    // Reported under no code, so no build refuses over it and no disposition is
-                    // held for one.
-                    throw new IllegalStateException("not a gap a build refuses: " + gap);
-                }
-                yield point.border().axis() + " = " + point.against();
-            }
+    private static String about(Adequacy.Finding finding) {
+        return switch (finding.about()) {
+            // The point's own words, which is what the edge's own attempt is named by a few lines
+            // above ({@code saidOf}). Spelled out here as well, the two vocabularies differed by
+            // the role: a point away from the line was written as the value the line is at, which
+            // is the one place in reach that such a point is not.
+            case About.APointOfABorder(var point) -> point.said();
             // The arm's own short name, which is what the report writes and what the document's
             // `subject` joins on. The finding carries the arm rather than words about it, so that
             // the sentence a diagnostic says in the reader's language and the words written here
@@ -434,16 +442,21 @@ public final class GeneratedRows {
             case About.AnArmNoRowGoesThrough(var arm) -> ArmVocabulary.label(arm);
             case About.ACaseNoRowAppliesItTo(var input, var missing) -> missing.name();
             case About.ACaseNoRowExpects(var missing) -> missing.name();
-            // Not gaps a build refuses, and a disposition is not held for one. Listed rather than
-            // defaulted so that a shape added later has to be given words here.
-            case About.ACaseNothingWasSeenToProduce _, About.AClassNoRowIsIn _,
+            // The class and the position it is a class of, which a class name alone does not say:
+            // two parameters of one type divide into classes of the same names.
+            case About.AClassNoRowIsIn(var missing) ->
+                    missing.name() + " at " + missing.axis().path();
+            // Findings row synthesis is not about, which `shown` leaves out and nothing here is
+            // asked to name. Listed rather than defaulted so that a shape added later has to be
+            // given words here.
+            case About.ACaseNothingWasSeenToProduce _,
                     About.APositionNoLineDivides _, About.APositionThisCouldNotRead _,
                     About.ARuleThisCouldNotRead _,
                     About.AQuestionNothingAnswered _,
                     About.APositionWhoseRulesWereNotReached _,
                     About.APositionReadWiderThanItsRules _,
                     About.APositionPastTheAxisLimit _ ->
-                    throw new IllegalStateException("not a gap a build refuses: " + gap);
+                    throw new IllegalStateException("no row answers this finding: " + finding);
         };
     }
 

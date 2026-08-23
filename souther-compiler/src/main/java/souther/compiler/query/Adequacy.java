@@ -1631,25 +1631,30 @@ public final class Adequacy {
      * take one without the other.
      */
     public record Filling(Generator.GenerationResult pairs, Generator.GenerationResult boundaries,
-                          List<GapDisposition> gaps) {
+                          List<GenerationDisposition> generation) {
 
         public static final Filling NONE = new Filling(Generator.GenerationResult.NONE,
                 Generator.GenerationResult.NONE, List.of());
 
         public Filling {
-            gaps = List.copyOf(gaps);
+            generation = List.copyOf(generation);
         }
 
     }
 
     /**
-     * One gap a build refuses, and what the generator can do about it.
+     * One finding, and what the generator can do about it.
      *
-     * <p>Held as a pair rather than as rows with the gap forgotten, because what an author needs to
-     * read is which part of the shortfall was answered and which was not. A block that printed only
-     * what it managed reads as though it filled everything.
+     * <p>Held as a pair rather than as rows with the finding forgotten, because what an author needs
+     * to read is which part of the shortfall was answered and which was not. A block that printed
+     * only what it managed reads as though it filled everything.
+     *
+     * <p>Named for generation and not for gaps, which is what it used to be called. A gap is what
+     * some bar refuses over, and that is not what decides whether a row can be composed for a
+     * finding: the two are separate readings of one set of findings, and a name that said gap kept
+     * the older arrangement alive in every reader that met it.
      */
-    public record GapDisposition(Finding gap, GenerationOutcome outcome) {}
+    public record GenerationDisposition(Finding finding, GenerationOutcome outcome) {}
 
     public record Generated(String name) implements Key<Map<String, Filling>> {
 
@@ -1739,7 +1744,7 @@ public final class Adequacy {
                                     .LinkageFailed(spec.name())));
                 }
                 out.put(spec.name(), new Filling(pairs, offered(spec.name(), edges),
-                        dispositions(askedOf(db).held(), findings == null ? List.of()
+                        dispositions(findings == null ? List.of()
                                         : findings.getOrDefault(spec.name(), List.of()),
                                 edges, partitions == null ? null : partitions.get(spec.name()),
                                 pairs, spec)));
@@ -1761,34 +1766,40 @@ public final class Adequacy {
          * never by what a search came back with. The kinds are listed one at a time so that a kind
          * added later does not compile until somebody has said which of the three it is.
          */
-        private static List<GapDisposition> dispositions(AdequacyBar held, List<Finding> findings,
+        private static List<GenerationDisposition> dispositions(List<Finding> findings,
                                                       List<BorderAssessment> edges,
                                                       PartitionEvidence partition,
                                                       Generator.GenerationResult pairs,
                                                       Hir.SpecBehavior spec) {
-            List<GapDisposition> out = new ArrayList<>();
-            for (Finding gap : findings) {
-                if (!gap.isAdequacyGap(held)) {
-                    continue;
-                }
-                out.add(new GapDisposition(gap, switch (gap.about()) {
-                    case About.APointOfABorder(var point) -> atEdge(gap, point);
+            List<GenerationDisposition> out = new ArrayList<>();
+            for (Finding finding : findings) {
+                out.add(new GenerationDisposition(finding, switch (finding.about()) {
+                    case About.APointOfABorder(var point) -> atEdge(finding, point);
                     case About.ACaseNoRowAppliesItTo(var input, var missing) ->
                             atCase(input, missing, partition, pairs, spec);
+                    case About.AClassNoRowIsIn _ -> new GenerationOutcome.NotSupported(
+                            GenerationOutcome.NotSupported.Reason.NO_SEARCH_IS_ASKED_FOR_ONE_CLASS);
                     case About.AnArmNoRowGoesThrough _ -> new GenerationOutcome.NotSupported(
                             GenerationOutcome.NotSupported.Reason.NO_STRATEGY_FOR_AN_ARM);
                     case About.ACaseNoRowExpects _ -> new GenerationOutcome.NotSupported(
                             GenerationOutcome.NotSupported.Reason.NO_STRATEGY_FOR_AN_OUTPUT_CASE);
-                    // Not gaps a build refuses, and the loop above does not reach them. Listed so
-                    // that the switch stays exhaustive over what a finding can be about rather than
-                    // over the ones thought of here.
-                    case About.ACaseNothingWasSeenToProduce _, About.AClassNoRowIsIn _,
-                            About.APositionNoLineDivides _, About.APositionThisCouldNotRead _, About.ARuleThisCouldNotRead _,
+                    // What the rows were seen doing rather than what they owe.
+                    case About.ACaseNothingWasSeenToProduce _ ->
+                            new GenerationOutcome.NotApplicable(GenerationOutcome.NotApplicable
+                                    .Reason.AN_ACCOUNT_OF_WHAT_THE_ROWS_DID);
+                    // What the model says, read to the end. A row does not change it.
+                    case About.APositionNoLineDivides _, About.APositionPastTheAxisLimit _ ->
+                            new GenerationOutcome.NotApplicable(GenerationOutcome.NotApplicable
+                                    .Reason.A_FACT_ABOUT_THE_MODEL);
+                    // What this compiler could not read. A row would answer a question nothing
+                    // asked, and offering one would be reporting our own shortfall as the
+                    // author's work.
+                    case About.APositionThisCouldNotRead _, About.ARuleThisCouldNotRead _,
                             About.APositionWhoseRulesWereNotReached _,
                             About.APositionReadWiderThanItsRules _,
-                            About.AQuestionNothingAnswered _,
-                            About.APositionPastTheAxisLimit _ ->
-                            throw new IllegalStateException("not a gap a build refuses: " + gap);
+                            About.AQuestionNothingAnswered _ ->
+                            new GenerationOutcome.NotApplicable(GenerationOutcome.NotApplicable
+                                    .Reason.NOTHING_WAS_MEASURED);
                 }));
             }
             return out;

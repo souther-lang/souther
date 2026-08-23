@@ -3,21 +3,29 @@ package souther.compiler.partition;
 import java.util.List;
 
 /**
- * What the generator can do about one gap a build refuses.
+ * What the generator can do about one finding.
  *
- * <p>Every such gap has one of these, and a gap with none is a gap an author is told nothing about
+ * <p>Every finding has one of these, and a finding with none is one an author is told nothing about
  * while the block above it reads as though it filled everything.
  *
- * <p>Which of the three it is, is a question about strategies and not about searches. A strategy that
- * takes a gap of this kind and composed nothing is {@link CannotGenerate}; a gap no strategy takes is
- * {@link NotSupported}. Whether anything was tried belongs in the reason. Reading the kind off a
- * search — nothing enumerated, so nothing supported — would settle what the generator is able to do
- * from what one run happened to touch, and the answer would move with the model rather than with the
- * compiler.
+ * <p><b>Asked of every finding and not of the ones a build refuses over.</b> What a bar refuses is
+ * one question and what a search can compose a row for is another, and the first used to decide
+ * which findings the second was asked about — so a finding some bar would refuse over and no bar
+ * had been asked for went unanswered, and a strategy could only ever be written for what the bars
+ * already gated on. The two are projections of one set of findings now, neither through the other.
  *
- * <p>So a gap moves between the three as strategies are written, and a strategy that gains a form it
- * can read moves gaps from {@link NotSupported} to one of the others. That is the whole of what these
- * say.
+ * <p>Which of the four it is, is a question about strategies and not about searches. A strategy
+ * that takes a finding of this kind and composed nothing is {@link CannotGenerate}; a finding no
+ * strategy takes and one a strategy could be written for is {@link NotSupported}; a finding row
+ * synthesis is not the answer to at all is {@link NotApplicable}. Whether anything was tried
+ * belongs in the reason. Reading the kind off a search — nothing enumerated, so nothing supported —
+ * would settle what the generator is able to do from what one run happened to touch, and the answer
+ * would move with the model rather than with the compiler.
+ *
+ * <p>So a finding moves between the first three as strategies are written, and a strategy that
+ * gains a form it can read moves findings from {@link NotSupported} to one of the others.
+ * {@link NotApplicable} is not on that path: nothing anyone writes turns a measure this compiler
+ * could not make into a row somebody can write.
  */
 public sealed interface GenerationOutcome {
 
@@ -37,7 +45,51 @@ public sealed interface GenerationOutcome {
      */
     record CannotGenerate(Generator.UnresolvedCombination why) implements GenerationOutcome {}
 
-    /** No strategy takes a gap of this kind, or the form this one would need. */
+    /**
+     * Nothing here answers a finding row synthesis is not about.
+     *
+     * <p>Told apart from {@link NotSupported} because they are different pieces of news and only
+     * one of them is a promise. That one says a strategy could be written and none has been; this
+     * says there is nothing for a strategy to do — what a measure could not read is this compiler
+     * falling short, and a position the model draws no line through is a fact about the model.
+     * Written as one, a reader could not tell a row nobody has got round to composing from a
+     * finding no row would answer, and every measurement shortfall would read as generator work
+     * waiting to be done.
+     */
+    record NotApplicable(Reason reason) implements GenerationOutcome {
+
+        /** Why row synthesis is not what answers it — a fact about the finding, not about a run. */
+        public enum Reason {
+
+            /** The measure could not be made, so what it did not find is not a set of gaps. */
+            NOTHING_WAS_MEASURED(
+                    "this is a measure this compiler could not make, and a row would answer a"
+                            + " question that was never asked"),
+
+            /** The model was read to the end and says this, which is not a shortfall in the rows. */
+            A_FACT_ABOUT_THE_MODEL(
+                    "this is what the model says rather than what its rows do not cover, and no row"
+                            + " changes it"),
+
+            /** What the rows were seen doing, which is an account and not an obligation. */
+            AN_ACCOUNT_OF_WHAT_THE_ROWS_DID(
+                    "this is what the rows were observed doing rather than something owed, so"
+                            + " there is nothing here to compose a row for");
+
+            private final String said;
+
+            Reason(String said) {
+                this.said = said;
+            }
+
+            /** The reason as a report writes it. */
+            public String said() {
+                return said;
+            }
+        }
+    }
+
+    /** No strategy takes a finding of this kind, or the form this one would need. */
     record NotSupported(Reason reason) implements GenerationOutcome {
 
         /**
@@ -60,8 +112,9 @@ public sealed interface GenerationOutcome {
 
             /** Nothing composes an input for the sake of the path it would take through a body. */
             NO_STRATEGY_FOR_AN_ARM(
-                    "rows here are composed for classes and for boundaries, and nothing composes"
-                            + " one for the sake of an arm"),
+                    "rows here are composed for the combinations a behavior's positions"
+                            + " make and for boundaries, and nothing composes one for the"
+                            + " sake of an arm"),
 
             /** Nothing searches for an input by the output it produces. */
             NO_STRATEGY_FOR_AN_OUTPUT_CASE(
@@ -70,7 +123,20 @@ public sealed interface GenerationOutcome {
 
             /** The position the case belongs to is not one any axis was derived at. */
             NO_AXIS_AT_THIS_POSITION("no axis was derived at the position this case belongs to, so"
-                    + " no classes were derived there to compose a row from");
+                    + " no classes were derived there to compose a row from"),
+
+            /**
+             * Rows are composed for the classes of a position and no search is asked for one class.
+             *
+             * <p>Which is not that nothing composes them. The search that fills the combinations
+             * writes rows the classes of a position are covered by, and it is asked for
+             * combinations rather than for one class — so what it produces is not indexed to this
+             * finding, and nothing here can say that any of it answers this one.
+             */
+            NO_SEARCH_IS_ASKED_FOR_ONE_CLASS(
+                    "rows here are composed for the combinations a behavior's positions make, and"
+                            + " no search is asked for one class of one position — so nothing"
+                            + " offered can be said to answer this");
 
             private final String said;
 
