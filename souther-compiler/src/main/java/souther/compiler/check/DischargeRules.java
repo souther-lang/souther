@@ -669,8 +669,8 @@ final class DischargeRules {
      * and reading a coincidence as a case would state a condition the definition does not have.
      *
      * <p>{@code Decimal.fromInt} answers the number it was given in another type, which
-     * {@link #ANSWERS_ITS_ARGUMENT} states unconditionally. A case would put a condition on a
-     * statement that has none.
+     * {@link souther.compiler.semantics.OperationFact.AnswersItsArgument} states unconditionally. A
+     * case would put a condition on a statement that has none.
      */
     static final Set<ValueName> CHOOSES_NOTHING = Set.of(
             op("Int", "add"), op("Int", "subtract"), op("Int", "multiply"),
@@ -679,22 +679,6 @@ final class DischargeRules {
             op("Int", "abs"), op("Decimal", "abs"), op("Decimal", "toInt"), op("Decimal", "round"),
             op("Decimal", "fromInt"));
 
-    /**
-     * The operations whose result is the number an argument already is, and which argument that is.
-     *
-     * <p>Such a call is read into the form its argument has rather than given an atom of its own, so
-     * a guard about the argument settles a clause about the call. {@code Decimal.fromInt(n)} is the
-     * one the library has: every {@code Int} is a {@code Decimal} exactly, and the widening states
-     * nothing of its own.
-     *
-     * <p>Not a choice among arguments ({@link #CHOOSES}). What a choice answers is one of two values,
-     * decided by the arguments, and which one it is has to be reasoned about case by case; this
-     * answers one value unconditionally, in another type. Reading the second as a choice with one
-     * candidate would put every value-preserving conversion under a table about selection, and the
-     * two stop being one question the moment the library gains a conversion that is not a widening.
-     */
-    private static final Map<ValueName, ArgumentRef> ANSWERS_ITS_ARGUMENT =
-            Map.of(op("Decimal", "fromInt"), at(0));
 
     /**
      * The operations answering a number from a number that answer none of them back, in three groups.
@@ -1100,7 +1084,7 @@ final class DischargeRules {
     }
 
     static Set<ValueName> formOperations() {
-        return Bound.FORMS.keySet();
+        return Bound.answersItsArgument();
     }
 
     /** Those of them the read-through table has, by name, for the test that holds each to a
@@ -1203,7 +1187,7 @@ final class DischargeRules {
         if (!(e instanceof Core.PreservedCall call)) {
             return null;
         }
-        ArgumentRef reads = Bound.FORMS.get(call.operation());
+        ArgumentRef reads = Bound.answersItsArgument(call.operation());
         return reads == null ? null : CallArguments.of(reads, call);
     }
 
@@ -1249,9 +1233,28 @@ final class DischargeRules {
         private static final Map<ValueName, List<ArgumentRef>> LOWER_BOUNDS =
                 bindEach(NO_SMALLER_THAN, CONTAINER, Question::holdsElements,
                         "a container the result is no smaller than");
-        private static final Map<ValueName, ArgumentRef> FORMS =
-                bind(ANSWERS_ITS_ARGUMENT, Function.identity(), null, Question::isANumber,
-                        "the argument whose number the result is");
+        /** What the declarations came to, held to the library. The list is walked whole, so a fact
+         *  nothing here looks up is one this has held all the same. */
+        private static final List<souther.compiler.semantics.OperationFacts.Declared> SEMANTICS =
+                OperationFactBinder.bindAll();
+
+        /**
+         * What the language declares an operation answers.
+         *
+         * <p>Here rather than at the call site so that asking runs the binding above, which is what
+         * the rest of this holder does for the tables beside it. The answer itself is the
+         * declaration's; what asking through here adds is that it has been held to the library
+         * first.
+         */
+        private static ArgumentRef answersItsArgument(ValueName operation) {
+            return souther.compiler.semantics.OperationFacts.answersItsArgument(operation);
+        }
+
+        /** The operations declared to answer one of their arguments, for the checks that hold each
+         *  of them to firing. */
+        private static Set<ValueName> answersItsArgument() {
+            return souther.compiler.semantics.OperationFacts.answersItsArgument();
+        }
         private static final Map<ValueName, List<ResultBound>> BOUNDS =
                 bindBounds(BOUNDS_ON_THE_RESULT);
         private static final Map<ValueName, Choices> CHOICES = bindChoices(CHOOSES);
@@ -1421,39 +1424,44 @@ final class DischargeRules {
      */
     static <T> Map<ValueName, T> bind(Map<ValueName, T> rules, Function<T, ArgumentRef> reads,
                                       ArgumentRef derived, Predicate<Type> required, String what) {
-        rules.forEach((operation, rule) -> {
-            // Every row here is about an operation the library declares, so the key says which
-            // library and which operation rather than a spelling this would have to take apart.
-            if (!(operation instanceof ValueName.Stdlib library)) {
-                throw new IllegalStateException("a rule about " + what + " is written for "
-                        + operation + ", which is not a library operation");
-            }
-            Prelude.PreludeEntry entry = Prelude.entry(library.qualified());
-            if (entry == null) {
-                throw new IllegalStateException("a rule about " + what + " is written for "
-                        + library.qualified() + ", which the library does not declare");
-            }
-            List<Type> params = entry.signature().params();
-            ArgumentRef at = reads.apply(rule);
-            int position = CallArguments.positionIn(at, operation);
-            if (position < 0 || position >= params.size()) {
-                throw new IllegalStateException(library.qualified() + " takes " + params.size()
-                        + " argument(s), and the rule about " + what + " reads argument "
-                        + (position + 1));
-            }
-            if (!required.test(params.get(position))) {
-                throw new IllegalStateException("argument " + (position + 1) + " of "
-                        + library.qualified() + " is not " + what);
-            }
-            if (at instanceof ArgumentRef.At && derived != null && Combinators.of(operation) != null
-                    && CallArguments.positionIn(derived, operation) == position) {
-                throw new IllegalStateException("the rule about " + what + " for "
-                        + library.qualified()
-                        + " writes the argument its signature already answers — say which part it is"
-                        + " rather than where, so the two cannot come apart");
-            }
-        });
+        rules.forEach((operation, rule) ->
+                holdToTheDeclaration(operation, reads.apply(rule), derived, required, what));
         return rules;
+    }
+
+    /** The same, for one rule. Asked per rule so that whatever holds a whole declaration source can
+     *  walk it and hold each of them, rather than reaching for a table of its own. */
+    static void holdToTheDeclaration(ValueName operation, ArgumentRef at, ArgumentRef derived,
+                                     Predicate<Type> required, String what) {
+        // Every row here is about an operation the library declares, so the key says which
+        // library and which operation rather than a spelling this would have to take apart.
+        if (!(operation instanceof ValueName.Stdlib library)) {
+            throw new IllegalStateException("a rule about " + what + " is written for "
+                    + operation + ", which is not a library operation");
+        }
+        Prelude.PreludeEntry entry = Prelude.entry(library.qualified());
+        if (entry == null) {
+            throw new IllegalStateException("a rule about " + what + " is written for "
+                    + library.qualified() + ", which the library does not declare");
+        }
+        List<Type> params = entry.signature().params();
+        int position = CallArguments.positionIn(at, operation);
+        if (position < 0 || position >= params.size()) {
+            throw new IllegalStateException(library.qualified() + " takes " + params.size()
+                    + " argument(s), and the rule about " + what + " reads argument "
+                    + (position + 1));
+        }
+        if (!required.test(params.get(position))) {
+            throw new IllegalStateException("argument " + (position + 1) + " of "
+                    + library.qualified() + " is not " + what);
+        }
+        if (at instanceof ArgumentRef.At && derived != null && Combinators.of(operation) != null
+                && CallArguments.positionIn(derived, operation) == position) {
+            throw new IllegalStateException("the rule about " + what + " for "
+                    + library.qualified()
+                    + " writes the argument its signature already answers — say which part it is"
+                    + " rather than where, so the two cannot come apart");
+        }
     }
 
     /** What {@link ElementLineage#derivesItsElementsFrom} answers with, read off the table here. */
