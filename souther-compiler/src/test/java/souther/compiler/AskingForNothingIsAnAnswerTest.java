@@ -117,9 +117,9 @@ class AskingForNothingIsAnAnswerTest {
      * <p>What this is against is a value that survives because one writer wrote it without asking
      * its measurement — and the writer that does that is the one nobody thought to check. Read over
      * the signature, the positions and the space of combinations, which are the measures whose
-     * numbers a reader could take for a count. What {@code branch} and a border's points still write
-     * beside an unavailable status is #997 and is not this level's doing: a {@code witness} run
-     * writes the same fields today.
+     * numbers a reader could take for a count. What {@code branch} and a border's points write
+     * beside an unavailable status is not what this level decides: they write the same fields at
+     * every level, so a report measured in full is where that question is asked.
      */
     @Test
     void theDocumentHoldsWhatTheModelSaysAndNoCount() {
