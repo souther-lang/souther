@@ -225,7 +225,7 @@ public final class Interactions {
                             heldTo(reaches, List.of(went.holds())), found);
                 }
             }
-            case Core.Binary binary when ValueArrivals.shortCircuits(binary.op()) -> {
+            case Core.Binary binary when binary.op().stopsWhenItsAnswerIsSettled() -> {
                 walk(binary.left(), naming, absorbed, reaches, found);
                 // The right runs only where the left did not settle the answer, and which of the
                 // left's paths those are is which value each of them comes to. Where the reading
@@ -235,7 +235,7 @@ public final class Interactions {
                 // Over the bound the walk does not go in either. There is no arm here to fall back
                 // on — what leads to the right of one of these is the left having come out a way,
                 // and nothing records a value coming out a way.
-                if (reading.waysTo(binary.left(), binary.op() == BinOp.AND)
+                if (reading.waysTo(binary.left(), binary.op().rightRunsWhenLeftIs())
                         instanceof Ways.Known<Outcome> through) {
                     List<List<Decision>> ways = heldTo(reaches, holdsOf(through.paths()));
                     if (ways.size() <= MOST_WAYS_IN) {
@@ -437,7 +437,7 @@ public final class Interactions {
      */
     private static List<Core> meetingAt(Core node, Set<Core> absorbed) {
         return switch (node) {
-            case Core.Binary binary when ValueArrivals.shortCircuits(binary.op()) -> null;
+            case Core.Binary binary when binary.op().stopsWhenItsAnswerIsSettled() -> null;
             case Core.Binary binary -> {
                 List<Core> operands = new ArrayList<>();
                 List<Core> inner = new ArrayList<>();

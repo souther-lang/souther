@@ -126,24 +126,15 @@ class ADivideRoundedToAScaleIsReadTest {
     }
 
     /**
-     * A scale no {@code int} holds is no scale here, and the range is not stated.
+     * A scale wider than a reading will lay a grid out for is no scale here.
      *
-     * <p>The backend narrows the scale to a Java {@code int} before it divides (#976), so a place
-     * count outside that is a division at a scale nothing proved here was about — a proof over the
-     * number as written would be a proof about a different division. The same model at two places
-     * discharges, which is what says this is the scale being refused and not the shape of the
-     * behavior.
-     */
-    @Test
-    void aScaleTheRunTimeCannotDivideAtIsNoScale() {
-        assertEquals(List.of("E2011"), atScale("4294967298"));
-        assertEquals(List.of(), atScale("2"));
-    }
-
-    /**
-     * A scale wider than a reading will lay a grid out for is no scale here either.
+     * <p>Three questions and not one, and the third is not here. A scale outside the ones the run
+     * time takes is a division that answers nothing at all, which is
+     * {@link AConstructionAfterAnEvaluationThatAnswersNothingIsNotJudgedTest#
+     * aDivideAtAScaleTheRunTimeCannotTakeLeavesTheArmUnentered} and reads as silence; these are
+     * scales the run time does take, so what is left is what a reading can afford, and it reports.
      *
-     * <p>Two questions and not one. What the run time divides at is settled by the backend; what a
+     * <p>What the run time divides at is settled by the backend; what a
      * reading can afford to lay out is the compilation's
      * ({@link souther.compiler.check.ReadingPolicy}). A million places is a number a megabyte wide
      * at every corner of one divide, and the far ends of the whole-number range are scales
@@ -156,6 +147,10 @@ class ADivideRoundedToAScaleIsReadTest {
         assertEquals(List.of("E2011"), atScale("0 - 1000000"));
         assertEquals(List.of("E2011"), atScale("0 - 2147483648"));
         assertEquals(List.of("E2011"), atScale("2147483647"));
+        // The control, and the reason the four above are read as the reading declining rather than
+        // as the rule not running: the same model at a scale this reading does lay a grid out for
+        // discharges the clause.
+        assertEquals(List.of(), atScale("2"));
     }
 
     /** The model of {@link #aScaleAGuardSettlesIsAScale}, with the scale written at the call. */

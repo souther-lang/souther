@@ -655,7 +655,27 @@ final class Terms {
         // Read where it is going to be an answer, and not before: what a value is called is a walk
         // of the whole expression, and a value of a type the domain carries nothing of takes no atom
         // however it was written.
-        return carriesANumber(e) ? atomOfIdentity(subjectOf(e, at), e, at) : null;
+        return carriesANumber(e) ? atomOfIdentity(subjectOf(e, at), e.type(), e, at) : null;
+    }
+
+    /**
+     * The atom of the number {@code e} answers, where it answers it as the case carrying
+     * {@code carried} rather than as its own value.
+     *
+     * <p>Same identity, different type. An operation answering {@code Int | DivisionByZero} carries
+     * no number itself, so {@link #atomOf} names none for it — the number is what one of its cases
+     * holds, and the arm that opens that case names it. Which is right, and it leaves a caller
+     * standing at the call with no way to ask about the number the call would answer: the arm is
+     * further on than the question is.
+     *
+     * <p>So the atom is asked for here at the type the case carries. It is the atom the arm names
+     * and not one beside it — an arm's binding is an alias for what the operation answered, so both
+     * are the operation's own identity held to that type's spacing, and whichever asks first is
+     * where it is recorded.
+     */
+    FactSubject atomOfTheCaseCarrying(Core e, Type carried, Denotations at) {
+        return affineScalarBase(carried) == null ? null
+                : atomOfIdentity(subjectOf(e, at), carried, e, at);
     }
 
     /**
@@ -676,7 +696,7 @@ final class Terms {
         if (size != null) {
             return new Position(key, size);
         }
-        return new Position(key, carriesANumber(e) ? atomOfIdentity(key, e, at) : null);
+        return new Position(key, carriesANumber(e) ? atomOfIdentity(key, e.type(), e, at) : null);
     }
 
     /** What a position is called, and the atom it is — either may be absent. */
@@ -689,13 +709,15 @@ final class Terms {
         return affineScalarBase(e.type()) != null;
     }
 
-    /** {@code identity} as the atom of the value at {@code e}: held to how that type's values are
-     * spaced, and recorded against the arithmetic it was built by. */
-    private FactSubject atomOfIdentity(FactSubject identity, Core e, Denotations at) {
-        FactSubject atom = named(identity, granularityOf(e.type()));
+    /** {@code identity} as the atom of a value of {@code type} computed at {@code e}: held to how
+     * that type's values are spaced, and recorded against the arithmetic it was built by. The type
+     * is a parameter because it is not always {@code e}'s own — an operation answering a union
+     * computes a number one of its cases carries. */
+    private FactSubject atomOfIdentity(FactSubject identity, Type type, Core e, Denotations at) {
+        FactSubject atom = named(identity, granularityOf(type));
         if (atom != null) {
-            atomExtents.putIfAbsent(atom, extentOf(affineScalarBase(e.type())));
-            recording(atom, e, at);
+            atomExtents.putIfAbsent(atom, extentOf(affineScalarBase(type)));
+            recording(atom, e, type, at);
             // What the value carries is filed where the value is named, so that a reader holding the
             // atom and no tree has it. Asked of the operation the value came from, whichever surface
             // it was written on — the same normalisation the recipe is read through.
@@ -733,12 +755,12 @@ final class Terms {
      * between depends on what the path assumed, and the path is not something the naming of an
      * expression knows — which is why the walk that reads the operands is not handed one.
      */
-    private void recording(FactSubject atom, Core e, Denotations at) {
+    private void recording(FactSubject atom, Core e, Type answered, Denotations at) {
         // What was computed first, and the representation only where nothing was. Asked the other
         // way round, a value the table states arithmetic for reached the walk reader because the
         // reading had kept its call standing — so which of the two answered turned on how the tree
         // was written, which is what a meaning read once exists to stop deciding.
-        NumericMeaning meaning = numericMeaningOf(e, at);
+        NumericMeaning meaning = numericMeaningOf(e, answered, at);
         Derivation made;
         if (meaning != null) {
             made = recipeFor(meaning, at);
@@ -1508,6 +1530,20 @@ final class Terms {
      * this reads it rather than working the match out again from here.
      */
     NumericMeaning numericMeaningOf(Core e, Denotations at) {
+        return numericMeaningOf(e, e.type(), at);
+    }
+
+    /**
+     * The same, where the value being asked about is not {@code e}'s own but the one a case of it
+     * carries.
+     *
+     * <p>{@code answered} is which of the two: an operation stating its arithmetic answers it
+     * directly or as one case of a union ({@link DischargeRules.Answered}), and reading the row only
+     * at the first left a divide unreadable at the call and readable at the arm that opens it. Which
+     * is right for what an arm binds and wrong for a reader standing where the call is — the same
+     * arithmetic, asked before there is an arm.
+     */
+    NumericMeaning numericMeaningOf(Core e, Type answered, Denotations at) {
         if (e instanceof Core.Read read) {
             return at.numericOf(read.binding());
         }
@@ -1518,13 +1554,21 @@ final class Terms {
         // names the value; what it computes is answered here.
         DischargeRules.NumericResult result =
                 DischargeRules.numericResult(operationOf(e));
-        if (result != null && result.at() instanceof DischargeRules.Answered.Directly) {
-            return computedBy(result, argsOf(e), e.type());
+        if (result != null && answersIn(result, answered)) {
+            return computedBy(result, argsOf(e), answered);
         }
         if (e instanceof Core.Binary b && isArith(b.op())) {
             return theOneOf(new NumericMeaning.Operator(b.op(), b.left(), b.right()), b.type());
         }
         return null;
+    }
+
+    /** Whether {@code result} says the operation answers a value of {@code answered}: its own, or
+     * the one the case carrying that type holds. */
+    private static boolean answersIn(DischargeRules.NumericResult result, Type answered) {
+        return result.at() instanceof DischargeRules.Answered.Directly
+                || result.at() instanceof DischargeRules.Answered.InTheCaseCarrying(Type carried)
+                        && carried.equals(answered);
     }
 
     /**

@@ -296,7 +296,7 @@ class WhatAValueCarriesBelongsToTheAtomTest {
         Terms terms = terms();
         BindingId xs = binding(0);
         FactSubject atom = terms.atomOf(length(list(xs)), holding(xs));
-        List<List<FactSubject>> watching = new ArrayList<>();
+        List<DerivedNumericFacts.Reading> watching = new ArrayList<>();
         DerivedNumericFacts.WATCHING = watching;
         try {
             DerivedNumericFacts.refine(nothingKnown(), terms, Set.of(atom));
@@ -304,9 +304,19 @@ class WhatAValueCarriesBelongsToTheAtomTest {
             DerivedNumericFacts.WATCHING = null;
         }
 
-        assertFalse(watching.stream().anyMatch(one -> one.contains(atom)),
+        assertFalse(watching.stream().anyMatch(one -> one.evaluated().contains(atom)),
                 "it was taken into the reading, which is not a recipe being put through one");
     }
+
+    /**
+     * The ways in: the methods that make a reading out of a domain, rather than being handed one.
+     *
+     * <p>Named, and the naming is the point. Every other method is handed a reading and cannot be
+     * handed anything else, so what has to be looked at is this set — and a method added to it is a
+     * method somebody decided may see a raw domain, which is a decision and not a spelling.
+     */
+    private static final Set<String> WHERE_A_READING_IS_MADE =
+            Set.of("refine", "readingOf", "saysOf");
 
     /**
      * Nothing evaluates a recipe against a domain that has not been made a reading.
@@ -323,8 +333,8 @@ class WhatAValueCarriesBelongsToTheAtomTest {
         List<String> takingARawDomain = new ArrayList<>();
         for (Method method : DerivedNumericFacts.class.getDeclaredMethods()) {
             for (Class<?> parameter : method.getParameterTypes()) {
-                if (parameter.equals(NumericDomain.class) && !method.getName().equals("refine")
-                        && !method.getName().equals("readingOf")) {
+                if (parameter.equals(NumericDomain.class)
+                        && !WHERE_A_READING_IS_MADE.contains(method.getName())) {
                     takingARawDomain.add(method.getName());
                 }
             }
