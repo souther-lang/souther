@@ -177,8 +177,24 @@ class ASpecificationCitationNamesASectionRatherThanItsNumberTest {
         assertTrue(found > 400, "the walk found only " + found + " citations — it missed the tree");
     }
 
-    /** Every text file in the repository, keyed by its path from the root. */
+    /**
+     * Every text file in the repository, keyed by its path from the root, read once for the class.
+     *
+     * <p>Every text file the repository holds outside {@code target} and {@code .git}, which is
+     * what a citation could be written in. Nobody writes one while the class runs, and each of the
+     * four checks below was reading all of it again to ask its own question of the same text.
+     */
+    private static Map<String, String> read;
+
     private static Map<String, String> sources() {
+        if (read == null) {
+            read = walk();
+        }
+        return read;
+    }
+
+    /** The walk itself, taken the once. */
+    private static Map<String, String> walk() {
         Path repo = repositoryRoot();
         Map<String, String> files = new LinkedHashMap<>();
         try (Stream<Path> walk = Files.walk(repo)) {

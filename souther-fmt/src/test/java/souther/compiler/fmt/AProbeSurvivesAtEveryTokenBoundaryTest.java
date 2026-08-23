@@ -191,11 +191,12 @@ class AProbeSurvivesAtEveryTokenBoundaryTest {
         int checked = 0;
         java.util.Map<Integer, Integer> contributed = new java.util.LinkedHashMap<>();
         for (String fixture : List.of(WHOLE_MODULE, THE_OTHER_FORMS)) {
-            List<String> expected = commentsOf(fixture);
+            List<String> expected = commentsOf(tokens(CstParser.parse(fixture).root()));
             List<Boolean> mustStay = mustStay(fixture, onItsOwnLine);
             int before = checked;
             for (String variant : variants(fixture, onItsOwnLine)) {
-                if (!CstParser.parse(variant).errors().isEmpty()) {
+                CstParser.Result read = CstParser.parse(variant);
+                if (!read.errors().isEmpty()) {
                     continue;   // the probe made this one unparseable; nothing to ask of it
                 }
                 checked++;
@@ -209,27 +210,29 @@ class AProbeSurvivesAtEveryTokenBoundaryTest {
                     refused.add(context(variant) + "  " + e.getMessage());
                     continue;
                 }
-                if (!CstParser.parse(formatted).errors().isEmpty()) {
-                    rewritten.add(context(variant) + "  did not parse: "
-                            + CstParser.parse(formatted).errors());
+                CstParser.Result reread = CstParser.parse(formatted);
+                if (!reread.errors().isEmpty()) {
+                    rewritten.add(context(variant) + "  did not parse: " + reread.errors());
                     continue;
                 }
                 if (!formatted.equals(Formatter.format(formatted))) {
                     unstable.add(context(variant));
                     continue;
                 }
-                int was = neighbour(variant, onItsOwnLine);
-                int now = neighbour(formatted, onItsOwnLine);
+                List<SyntaxToken> wrote = tokens(read.root());
+                List<SyntaxToken> came = tokens(reread.root());
+                int was = neighbour(wrote, onItsOwnLine);
+                int now = neighbour(came, onItsOwnLine);
                 if (was != now && was >= 0 && was < mustStay.size() && mustStay.get(was)) {
                     moved.add(context(variant) + "  left token " + was + " for " + now);
                 }
-                List<String> got = commentsOf(formatted);
+                List<String> got = commentsOf(came);
                 got.sort(null);
                 if (!want.equals(got)) {
                     lost.add(context(variant) + "  gave " + got);
                 }
-                if (!code(variant).equals(code(formatted))) {
-                    rewritten.add(context(variant) + "  gave " + code(formatted));
+                if (!code(wrote).equals(code(came))) {
+                    rewritten.add(context(variant) + "  gave " + code(came));
                 }
             }
             contributed.put(contributed.size(), checked - before);
@@ -320,11 +323,11 @@ class AProbeSurvivesAtEveryTokenBoundaryTest {
      * before and after — which makes it an answer to what the comment is next to that needs no
      * oracle and no classifier.
      */
-    private static int neighbour(String source, boolean onItsOwnLine) {
+    private static int neighbour(List<SyntaxToken> read, boolean onItsOwnLine) {
         int code = 0;
         int before = -1;
         boolean seen = false;
-        for (SyntaxToken t : tokens(CstParser.parse(source).root())) {
+        for (SyntaxToken t : read) {
             if (t.kind() == SyntaxKind.LINE_COMMENT && t.text().stripTrailing().equals(PROBE)) {
                 if (!onItsOwnLine) {
                     return before;
@@ -346,9 +349,9 @@ class AProbeSurvivesAtEveryTokenBoundaryTest {
      * else, so this is the same before and after — and a comment that swallowed the code after it
      * shows up here rather than in the comments, which come back one for one either way.
      */
-    private static List<String> code(String source) {
+    private static List<String> code(List<SyntaxToken> read) {
         List<String> out = new ArrayList<>();
-        for (SyntaxToken t : tokens(CstParser.parse(source).root())) {
+        for (SyntaxToken t : read) {
             if (!t.isTrivia()) {
                 out.add(t.kind() + " " + t.text());
             }
@@ -357,9 +360,9 @@ class AProbeSurvivesAtEveryTokenBoundaryTest {
     }
 
     /** The comments {@code source} holds, read back as comments rather than as text. */
-    private static List<String> commentsOf(String source) {
+    private static List<String> commentsOf(List<SyntaxToken> read) {
         List<String> out = new ArrayList<>();
-        for (SyntaxToken t : tokens(CstParser.parse(source).root())) {
+        for (SyntaxToken t : read) {
             if (t.kind() == SyntaxKind.LINE_COMMENT) {
                 out.add(t.text().stripTrailing());
             }

@@ -560,7 +560,25 @@ public class EveryShippedMessageCatalogIsCompleteAndValidTest {
      */
     private static final List<Class<?>> LEAVES = new ArrayList<>();
 
+    /**
+     * The walk's answer, taken once for the class.
+     *
+     * <p>The hierarchy is sealed and every leaf of it is loaded to be asked what it permits, so the
+     * walk is the class-loading of every message this compiler declares. It answers the same each
+     * time it is asked — and it was being asked from inside the loop over every key of every
+     * catalog, which is that loading once per key rather than once.
+     */
+    private static List<Class<? extends Message>> declared;
+
     private static List<Class<? extends Message>> messages() {
+        if (declared == null) {
+            declared = walk();
+        }
+        return declared;
+    }
+
+    /** Down the sealed hierarchy to the leaves, filling {@link #LEAVES} with all of them. */
+    private static List<Class<? extends Message>> walk() {
         List<Class<? extends Message>> found = new ArrayList<>();
         List<Class<?>> leaves = new ArrayList<>();
         Deque<Class<?>> pending = new ArrayDeque<>(List.of(Message.class));
@@ -764,12 +782,18 @@ public class EveryShippedMessageCatalogIsCompleteAndValidTest {
         assertEquals(List.of(), dangling, "a message sends a reader to a section that is not there");
     }
 
+    private static Set<String> owned;
+
+    /** The entries a message fills by name, taken once: two checks ask this of every key they read. */
     private static Set<String> ownedByAMessage() {
-        Set<String> keys = new TreeSet<>();
-        for (Class<? extends Message> message : messages()) {
-            keys.add(MessageKeys.of(message));
+        if (owned == null) {
+            Set<String> keys = new TreeSet<>();
+            for (Class<? extends Message> message : messages()) {
+                keys.add(MessageKeys.of(message));
+            }
+            owned = keys;
         }
-        return keys;
+        return owned;
     }
 
     /**
