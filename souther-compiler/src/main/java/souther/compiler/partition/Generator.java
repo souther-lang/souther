@@ -620,9 +620,15 @@ public final class Generator {
         List<ClassAttempt> attempts = new ArrayList<>();
         List<UnresolvedCombination> unresolved = new ArrayList<>();
         List<GenerationReason> reasons = new ArrayList<>(undecided);
+        // What the author wrote, and only that. Settled here for the same reason the classes
+        // above are: a row this run offers is a question, and a combination it happens to reach is
+        // not evidence that the combination is covered. Added to as candidates arrived, the answer
+        // for one combination depended on which of the others had been reached first — so a
+        // combination went unoffered because an earlier candidate had been seen in it, and the
+        // author was handed a row named for something else and told nothing about this one.
         List<Placement> written = new ArrayList<>();
         for (ObservedRow row : existing) {
-            written.add(new Placement.Written(whereIn(row.at(), axes), row.watched()));
+            written.add(new Placement(whereIn(row.at(), axes), row.watched()));
         }
         // Built here and not handed in: a cell is one class per position of the axes this
         // generation kept, and the caller's list is neither ordered the same nor filtered the same.
@@ -665,14 +671,9 @@ public final class Generator {
                 switch (witnessFor(subject, axes, selection, check, trial)) {
                     case Witness.None none -> unresolved.add(new UnresolvedCombination(
                             none.classes(), none.reason(), none.detail(), none.said()));
-                    case Witness.Certified found -> {
-                        rows.add(found.row());
-                        written.add(new Placement.Composed(found.by().where(),
-                                new Watched.Ran(found.by().seen())));
-                    }
+                    case Witness.Certified found -> rows.add(found.row());
                     case Witness.Unconfirmed offer -> {
                         rows.add(offer.row());
-                        written.add(new Placement.Composed(offer.where(), new Watched.NoAccount()));
                         // Nothing watched it, so what it is offered for is what the reading says
                         // and not what anything saw. Said once for the behavior: it is one fact
                         // about this generation.
@@ -1122,28 +1123,20 @@ public final class Generator {
     }
 
     /**
-     * A row this generation counts the combinations against: where it sits, what came of running
-     * it, and whose row it is.
+    /**
+     * A row this generation counts the combinations against: where it sits, and what came of
+     * running it.
      *
-     * <p>Whose it is, because being unable to say where a row went costs different things for the
-     * two. A row the author wrote is in the file whatever this can establish about it, so passing
-     * over a combination it may fill risks nothing worse than a combination left owed — while
-     * offering one risks handing them work they have already done. A row this search composed is in
-     * nobody's file, so counting one it cannot judge is reading a reading back as evidence for
-     * itself.
+     * <p>A row the author wrote, and nothing else. This used to hold rows this search composed as
+     * well, and the answer for one combination then depended on which of the others had been
+     * reached first — a combination went unoffered because a candidate composed for something else
+     * had been seen in it, which is a reading read back as evidence for itself.
+     *
+     * <p>What a candidate reaches is worth knowing and is not this. It is what the row would show
+     * once somebody answers it and it is in the file; until then the row is a question, and a
+     * question does not cover anything.
      */
-    private sealed interface Placement {
-
-        int[] where();
-
-        Watched watched();
-
-        /** A row that is in the author's file. */
-        record Written(int[] where, Watched watched) implements Placement {}
-
-        /** A row this search composed on this pass. */
-        record Composed(int[] where, Watched watched) implements Placement {}
-    }
+    private record Placement(int[] where, Watched watched) {}
 
     /**
      * Where one combination stands before anything is composed for it.
@@ -1193,7 +1186,10 @@ public final class Generator {
                 if (found.isPresent()) {
                     return new CombinationStanding.Filled(found.get());
                 }
-            } else if (row instanceof Placement.Written && selection.cell().holds(row.where())) {
+            } else if (selection.cell().holds(row.where())) {
+                // A row in the file sits where one filling this would, and nothing could say
+                // whether it does. Not evidence, and not silence either: offering a row here risks
+                // handing an author work they have already done.
                 maybe = true;
             }
         }
