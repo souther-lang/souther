@@ -1552,16 +1552,23 @@ public final class InvariantChecker {
      * under denotations the continuation is outside of, and what is stated there names a place a
      * caller cannot see; what survives such a way is that something did, and no more.
      *
+     * <p>Which is what {@link Entered} is taken for and not a {@code Known} beside a
+     * {@code Denotations}. Those are the two halves of one answer — a state and where it is stated —
+     * and handed over as two parameters they can be got from two places: a state settled inside a
+     * binder, paired with the denotations outside it, reads as a state that holds out there. Taken
+     * as the pair, that is not a thing a caller can write.
+     *
      * <p>Where more than one is left, what stood before the fork. Two states have no join here —
      * making one is a different thing to build — and what stood before them is what they still
      * agree on.
      */
-    private static Known carriedOnFrom(Known before, Denotations at, List<Entered> ways) {
+    private static Known carriedOnFrom(Entered before, List<Entered> ways) {
         List<Entered> left = ways.stream().filter(w -> !w.known().reachesNothing()).toList();
         if (left.isEmpty()) {
-            return before.reachingNothing();
+            return before.known().reachingNothing();
         }
-        return left.size() == 1 && left.getFirst().at() == at ? left.getFirst().known() : before;
+        return left.size() == 1 && left.getFirst().at() == before.at()
+                ? left.getFirst().known() : before.known();
     }
 
     /**
@@ -1605,7 +1612,7 @@ public final class InvariantChecker {
             // The rebuilt tree is the whole of this expression, so it is the one way on. What it
             // settles is inside the binder the expansion introduced and does not come back out;
             // that no run leaves it is about this expression and does.
-            return carriedOnFrom(held, at, List.of(new Entered(
+            return carriedOnFrom(new Entered(held, at), List.of(new Entered(
                     entering(without(e, Set.of(standing), standing.body()), in.known(), in.at(),
                             copies),
                     in.at())));
@@ -1650,7 +1657,13 @@ public final class InvariantChecker {
             // The readings are the ways this expression is left, one per arm, and they are two
             // answers rather than one: what each found is said once ({@link #say}), and whether any
             // of them leaves anything at all is what a continuation after the split is reached by.
-            return carriedOnFrom(within, at, ways);
+            // What the split asks was read inside every binder on the way down to it, so what it
+            // settled is stated where the continuation is not. Taking it back out is the same rule
+            // again — the binders are a region and the asking is its one way — and it is asked
+            // before the arms are folded, so that what the arms are held against is a state the
+            // caller can read.
+            Known prefix = carriedOnFrom(new Entered(k, at), List.of(new Entered(within, there)));
+            return carriedOnFrom(new Entered(prefix, at), ways);
         }
         Known evaluated = switch (e) {
             case Core.Construct made -> {
@@ -1675,7 +1688,7 @@ public final class InvariantChecker {
                         predicates.assumeCond(iff.cond(), out, at, true).known(), at, copies);
                 Known otherwise = entering(iff.els(),
                         predicates.assumeCond(iff.cond(), out, at, false).known(), at, copies);
-                yield carriedOnFrom(out, at,
+                yield carriedOnFrom(new Entered(out, at),
                         List.of(new Entered(held, at), new Entered(otherwise, at)));
             }
             case Core.IfConstructed ic -> {
@@ -1705,7 +1718,7 @@ public final class InvariantChecker {
                 Known departing = out;
                 ic.els().forEach(arm ->
                         ways.add(new Entered(entering(arm.body(), departing, at, copies), at)));
-                yield carriedOnFrom(out, at, ways);
+                yield carriedOnFrom(new Entered(out, at), ways);
             }
             case Core.LetIn li -> {
                 // A closure is read where it is applied: what its parameter holds is decided there,
@@ -1715,7 +1728,7 @@ public final class InvariantChecker {
                 Entered in = bindLet(li, out, at);
                 // The body is the one way on: what a `let` answers is what its body answers, so a
                 // body no run leaves is a `let` no run leaves.
-                yield carriedOnFrom(out, at, List.of(new Entered(
+                yield carriedOnFrom(new Entered(out, at), List.of(new Entered(
                         entering(li.body(), in.known(), in.at(), copies), in.at())));
             }
             case Core.Match m -> {
@@ -1732,7 +1745,7 @@ public final class InvariantChecker {
                     Entered in = engine.enteringArm(c, m.scrutinee(), out, at);
                     ways.add(new Entered(entering(c.body(), in.known(), in.at(), copies), in.at()));
                 }
-                yield carriedOnFrom(out, at, ways);
+                yield carriedOnFrom(new Entered(out, at), ways);
             }
             case Core.PreservedCall call -> walkCall(call, k, at, copies);
             // A closure the reading stopped at, reached as a value like any other. What its body
@@ -1795,7 +1808,7 @@ public final class InvariantChecker {
                     Known taken = entering(each,
                             predicates.assumeCond(asked, out, at, comesOut).known(), at, copies);
                     Known skipped = predicates.assumeCond(asked, out, at, !comesOut).known();
-                    out = carriedOnFrom(out, at,
+                    out = carriedOnFrom(new Entered(out, at),
                             List.of(new Entered(taken, at), new Entered(skipped, at)));
                 }
             }
