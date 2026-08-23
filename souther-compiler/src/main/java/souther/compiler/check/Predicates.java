@@ -1,7 +1,6 @@
 package souther.compiler.check;
 
 import souther.compiler.types.BinOp;
-import souther.compiler.types.CoverageOrigin;
 import souther.compiler.check.Combinators.Handed;
 import souther.compiler.check.DischargeRules.Cardinality;
 import souther.compiler.check.DischargeRules.Carrying;
@@ -14,7 +13,6 @@ import souther.compiler.numeric.NumericDomain.LinearForm;
 import souther.compiler.numeric.NumericDomain.Rel;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
-import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;

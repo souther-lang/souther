@@ -2,7 +2,6 @@ package souther.compiler.check;
 
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.NumericDomain.LinearForm;
-import souther.compiler.numeric.NumericDomain.Rel;
 
 import java.util.List;
 
@@ -53,20 +52,33 @@ sealed interface Derivation {
     NumericDomain.Bounds divisorExtent();
 
     /**
-     * The relations this recipe states, in the order it states them, or an empty list where it
-     * states none.
+     * Whether {@code other} is this recipe.
      *
-     * <p>Beside {@link #formsRead} and {@link #divisorExtent} for the reason those are answered by
-     * the recipe: whether two readings computed a value the same way is a question about every
-     * recipe there is, and a part of one that no reader can ask about is a part two readings may
-     * differ in while being taken for one. A choice records what choosing each arm states
-     * ({@link Chosen.Arm#settles}), and the relation in one of those is not a form, so without this
-     * two conditions over the same values and opposite comparisons would be one recipe.
+     * <p>A different question from {@link #formsRead}, and the two were one reader until a recipe
+     * held something that {@link #formsRead} flattens. What a recipe is read from is a set of forms
+     * to be reached, and order and grouping do not matter to reaching them; what makes two recipes
+     * one is their whole structure, and a choice's grouping is part of it — {@code x < 0} beside one
+     * arm and beside another are different recipes over the same forms, and read as a flat list they
+     * are the same one. Filed under one atom, the second would be taken for the first and what the
+     * atom means would turn on which reading named it.
      *
-     * <p>The forms those relations are written over are {@link #formsRead}'s to answer, which is a
-     * different question: what the reading reaches, rather than what tells two recipes apart.
+     * <p>Answered by the recipe, so a recipe added later answers for its own shape rather than being
+     * compared by a case somebody remembered to write.
+     *
+     * <p>{@code same} carries how numbers are compared, which is the reading's and not this one's:
+     * a coefficient of {@code 0.10} and one of {@code 0.1} are one number, and a record's own
+     * equality says they are two.
      */
-    List<Rel> relationsRead();
+    boolean sameAs(Derivation other, Same same);
+
+    /** How the parts of a recipe that are numbers are compared. */
+    interface Same {
+
+        boolean forms(LinearForm<FactSubject> a, LinearForm<FactSubject> b);
+
+        boolean extents(NumericDomain.Bounds a, NumericDomain.Bounds b);
+    }
+
 
     record Product(LinearForm<FactSubject> left, LinearForm<FactSubject> right) implements Derivation {
 
@@ -75,11 +87,12 @@ sealed interface Derivation {
             return List.of(left, right);
         }
 
-        /** It states no relation: what it is, is arithmetic over its forms. */
         @Override
-        public List<Rel> relationsRead() {
-            return List.of();
+        public boolean sameAs(Derivation other, Same same) {
+            return other instanceof Product it
+                    && same.forms(left, it.left()) && same.forms(right, it.right());
         }
+
 
         @Override
         public NumericDomain.Bounds divisorExtent() {
@@ -170,24 +183,38 @@ sealed interface Derivation {
             return List.copyOf(out);
         }
 
+        /** Arm by arm and in order, and what each arm states beside what it answers. An arm answers
+         * where the condition beside it does, so a choice reordered is a different recipe; and a
+         * relation states what it states of the arm it stands beside, so the same relations moved
+         * between arms are a different recipe over the same forms. */
+        @Override
+        public boolean sameAs(Derivation other, Same same) {
+            if (!(other instanceof Chosen it) || arms.size() != it.arms().size()) {
+                return false;
+            }
+            for (int i = 0; i < arms.size(); i++) {
+                Arm mine = arms.get(i);
+                Arm theirs = it.arms().get(i);
+                if (!same.forms(mine.answer(), theirs.answer())
+                        || mine.settles().size() != theirs.settles().size()) {
+                    return false;
+                }
+                for (int j = 0; j < mine.settles().size(); j++) {
+                    NumericConstraint a = mine.settles().get(j);
+                    NumericConstraint b = theirs.settles().get(j);
+                    if (a.rel() != b.rel() || !same.forms(a.form(), b.form())) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+
         @Override
         public NumericDomain.Bounds divisorExtent() {
             return null;
         }
 
-        /** The relations the arms state, arm by arm and in order. Without this two choices whose
-         * arms are written over the same values and compared the opposite way round answer the same
-         * forms, and a reader comparing recipes would take them for one. */
-        @Override
-        public List<Rel> relationsRead() {
-            List<Rel> out = new java.util.ArrayList<>();
-            for (Arm arm : arms) {
-                for (NumericConstraint settled : arm.settles()) {
-                    out.add(settled.rel());
-                }
-            }
-            return List.copyOf(out);
-        }
     }
 
     /**
@@ -213,11 +240,13 @@ sealed interface Derivation {
             return List.of(numerator, divisor);
         }
 
-        /** It states no relation: what it is, is arithmetic over its forms. */
         @Override
-        public List<Rel> relationsRead() {
-            return List.of();
+        public boolean sameAs(Derivation other, Same same) {
+            return other instanceof TruncatingQuotient it
+                    && same.forms(numerator, it.numerator()) && same.forms(divisor, it.divisor())
+                    && same.extents(divisorExtent, it.divisorExtent());
         }
+
     }
 
     /**
@@ -239,11 +268,13 @@ sealed interface Derivation {
             return List.of(numerator, divisor);
         }
 
-        /** It states no relation: what it is, is arithmetic over its forms. */
         @Override
-        public List<Rel> relationsRead() {
-            return List.of();
+        public boolean sameAs(Derivation other, Same same) {
+            return other instanceof TruncatingRemainder it
+                    && same.forms(numerator, it.numerator()) && same.forms(divisor, it.divisor())
+                    && same.extents(divisorExtent, it.divisorExtent());
         }
+
     }
 
     /**
@@ -270,10 +301,13 @@ sealed interface Derivation {
             return List.of(numerator, divisor, scale);
         }
 
-        /** It states no relation: what it is, is arithmetic over its forms. */
         @Override
-        public List<Rel> relationsRead() {
-            return List.of();
+        public boolean sameAs(Derivation other, Same same) {
+            return other instanceof RoundedQuotient it
+                    && same.forms(numerator, it.numerator()) && same.forms(divisor, it.divisor())
+                    && same.forms(scale, it.scale())
+                    && same.extents(divisorExtent, it.divisorExtent());
         }
+
     }
 }

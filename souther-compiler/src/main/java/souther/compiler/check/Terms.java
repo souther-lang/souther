@@ -951,33 +951,32 @@ final class Terms {
      * of {@code 0.1} are one number, and a record's own equality says they are two. What this is for
      * is catching the check naming two values alike, and a difference in scale is not that.
      *
-     * <p>Asked of the recipe and not of its kind. Every part of a recipe is one of the forms it is
-     * read from, one of the relations it states, or the extent of its divisor, so a recipe added
-     * later is compared by what it answers rather than by a case somebody remembered to write — and
-     * a case nobody wrote would take two readings for one, which is the disagreement this exists to
-     * catch going the wrong way.
-     *
-     * <p>In order, which matters for the one recipe whose forms are not interchangeable: an arm
-     * answers where the condition beside it does, so a choice reordered is a different recipe and
-     * not this one read twice.
+     * <p>Asked of the recipe ({@link Derivation#sameAs}) and not worked out here from what it is
+     * read from. Those are two questions: what a recipe is read from is a set of forms to reach, and
+     * a reader comparing recipes by that list takes two recipes with the same forms grouped
+     * differently for one. A choice is where the grouping carries meaning — a relation states what
+     * it states of the arm it stands beside — so a recipe added later answers for its own shape
+     * rather than being compared by a case somebody remembered to write.
      */
     private static boolean sameDerivation(Derivation a, Derivation b) {
-        if (a.getClass() != b.getClass() || a.formsRead().size() != b.formsRead().size()) {
-            return false;
-        }
-        for (int i = 0; i < a.formsRead().size(); i++) {
-            if (!sameForm(a.formsRead().get(i), b.formsRead().get(i))) {
-                return false;
-            }
-        }
-        if (!a.relationsRead().equals(b.relationsRead())) {
-            return false;
-        }
-        if (a.divisorExtent() == null || b.divisorExtent() == null) {
-            return a.divisorExtent() == b.divisorExtent();
-        }
-        return sameExtent(a.divisorExtent(), b.divisorExtent());
+        return a.sameAs(b, SAME_NUMBERS);
     }
+
+    /** How the numbers in a recipe are compared, which is this reading's answer and not the
+     * recipe's: what is being caught is the check naming two values alike, and a difference in
+     * scale is not that. */
+    private static final Derivation.Same SAME_NUMBERS = new Derivation.Same() {
+
+        @Override
+        public boolean forms(LinearForm<FactSubject> a, LinearForm<FactSubject> b) {
+            return sameForm(a, b);
+        }
+
+        @Override
+        public boolean extents(NumericDomain.Bounds a, NumericDomain.Bounds b) {
+            return a == null || b == null ? a == b : sameExtent(a, b);
+        }
+    };
 
     /** Whether two extents run between the same places. Asked on the order and not of the record's
      * own equality, for the reason the numbers are: {@code 0.00} and {@code 0} are one place, and

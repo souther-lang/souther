@@ -5,7 +5,6 @@ import souther.compiler.check.BehaviorContract.Guard;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.CaseSelector;
-import souther.compiler.types.Refinement;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;

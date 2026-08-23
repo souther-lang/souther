@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -115,6 +116,63 @@ class WhatARecipeIsReadFromIsWhatAReadingReachesTest {
         assertEquals(Set.of(named), terms.reached(LinearForm.atom(named)),
                 "nothing is filed against it, so there is nothing under it to reach");
     }
+
+    /**
+     * Two recipes reading the same forms and stating the same relations are not the same recipe
+     * where the relations stand beside different arms.
+     *
+     * <p>What a recipe is read from and what makes two of them one are different questions, and the
+     * first flattens what the second turns on. A choice whose first arm is held below nought and
+     * whose second is not reads the same forms as one where the second is held and the first is
+     * not, and states the same relation; read as two flat lists they are one recipe. Filed under one
+     * atom the second would be passed over as the first already recorded, and what that atom lies
+     * between would turn on which reading named it first.
+     *
+     * <p>Held against {@link Terms#recording}'s own answer rather than against a comparison written
+     * here: what it does with two recipes it takes for one is pass the second over, and what it does
+     * with two it can tell apart is refuse them both ({@link Terms.OneTermTwoDerivations}).
+     */
+    @Test
+    void twoChoicesDifferingOnlyInWhichArmStatesTheRelationAreNotOneRecipe() {
+        Terms terms = new Terms(Symbols.none(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        FactSubject answered = marker();
+        FactSubject other = marker();
+        FactSubject atom = marker();
+        Derivation stated = new Derivation.Chosen(List.of(
+                new Derivation.Chosen.Arm(LinearForm.atom(answered),
+                        List.of(new NumericConstraint(LinearForm.atom(other), Rel.LT))),
+                new Derivation.Chosen.Arm(LinearForm.atom(other), List.of())));
+        Derivation moved = new Derivation.Chosen(List.of(
+                new Derivation.Chosen.Arm(LinearForm.atom(answered), List.of()),
+                new Derivation.Chosen.Arm(LinearForm.atom(other),
+                        List.of(new NumericConstraint(LinearForm.atom(other), Rel.LT)))));
+
+        Set<FactSubject> readFrom = new LinkedHashSet<>();
+        stated.formsRead().forEach(f -> readFrom.addAll(f.coefs().keySet()));
+        Set<FactSubject> alsoReadFrom = new LinkedHashSet<>();
+        moved.formsRead().forEach(f -> alsoReadFrom.addAll(f.coefs().keySet()));
+        assertEquals(readFrom, alsoReadFrom,
+                "the two are read from the same places, which is why the flat list cannot tell"
+                        + " them apart");
+
+        assertFalse(stated.sameAs(moved, SAME_NUMBERS),
+                "the relation holds where a different arm is the answer, so they are two recipes");
+        assertTrue(stated.sameAs(stated, SAME_NUMBERS), "and a recipe is itself");
+    }
+
+    /** Numbers compared as {@link Terms} compares them, so this asks the question the check asks. */
+    private static final Derivation.Same SAME_NUMBERS = new Derivation.Same() {
+
+        @Override
+        public boolean forms(LinearForm<FactSubject> a, LinearForm<FactSubject> b) {
+            return a.equals(b);
+        }
+
+        @Override
+        public boolean extents(Bounds a, Bounds b) {
+            return a == b;
+        }
+    };
 
     /**
      * And what a recipe says it is read from is every form it holds.
