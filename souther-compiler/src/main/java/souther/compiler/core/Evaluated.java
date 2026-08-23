@@ -1,6 +1,4 @@
-package souther.compiler.claims;
-
-import souther.compiler.core.Core;
+package souther.compiler.core;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -21,10 +19,10 @@ import java.util.List;
  * value: evaluating that position makes the function, and its body runs when a call applies it, on
  * arguments this position does not have.
  */
-final class Evaluated {
+public final class Evaluated {
 
     /** The strict sub-expressions of {@code e}, in the order they run. */
-    static List<Core> inOrder(Core e) {
+    public static List<Core> inOrder(Core e) {
         if (e instanceof Core.Construct construct) {
             return construct.values().stream().map(Core.FieldValue::value).toList();
         }
