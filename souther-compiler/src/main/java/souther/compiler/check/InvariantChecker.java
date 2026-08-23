@@ -1519,6 +1519,12 @@ public final class InvariantChecker {
      * whether anything leaves at all, and the rest only where it can say that this region is the
      * whole of the way on ({@link #carriedOnFrom}).
      *
+     * <p>Which is the whole of why this answers at all. It answered nothing while the walk did, and
+     * kept on answering nothing after the walk began carrying what a step leaves into the next — so
+     * every region boundary was a place the two halves came apart again: the facts were dropped,
+     * rightly, and the one thing a caller is owed went with them. There is one rule and it is
+     * applied at every boundary, rather than at the boundary a defect was found at.
+     *
      * <p>Nothing reaches what this was handed, so there is nothing under it to be about. Asked here
      * and again in the walk, because the walk is itself where the conditions can come to contradict.
      */
@@ -1596,10 +1602,13 @@ public final class InvariantChecker {
             Known held = standing.value() instanceof Core.Block ? k
                     : walk(standing.value(), k, at, copies);
             Entered in = bindLet(standing, held, at);
-            entering(without(e, Set.of(standing), standing.body()), in.known(), in.at(), copies);
-            // The rebuilt tree is a region of its own and what it settles is inside the binder it
-            // introduced, so nothing comes back out to a continuation standing beside this.
-            return k;
+            // The rebuilt tree is the whole of this expression, so it is the one way on. What it
+            // settles is inside the binder the expansion introduced and does not come back out;
+            // that no run leaves it is about this expression and does.
+            return carriedOnFrom(held, at, List.of(new Entered(
+                    entering(without(e, Set.of(standing), standing.body()), in.known(), in.at(),
+                            copies),
+                    in.at())));
         }
         SplitSite site = splitValueIn(e);
         Split split = site == null ? null : splitOf(site.split());
@@ -1629,15 +1638,19 @@ public final class InvariantChecker {
             // given still holds those binders and walks into them again, which is why entering one
             // already entered is nothing: a second transition would forget what the arm settled.
             List<Map<Occurrence, Reported>> readings = new ArrayList<>();
+            List<Entered> ways = new ArrayList<>();
             for (Arm arm : split.arms()) {
                 Entered under = arm.under().entering(within, there);
-                readings.add(reading(without(e, alike, arm.body()), under.known(), under.at(),
-                        inAnArm));
+                Read read = reading(without(e, alike, arm.body()), under.known(), under.at(),
+                        inAnArm);
+                readings.add(read.found());
+                ways.add(new Entered(read.left(), under.at()));
             }
             say(readings);
-            // What each arm settles is that arm's, and which arm is taken is not decided here, so
-            // nothing an arm left is true of a continuation standing after the split.
-            return k;
+            // The readings are the ways this expression is left, one per arm, and they are two
+            // answers rather than one: what each found is said once ({@link #say}), and whether any
+            // of them leaves anything at all is what a continuation after the split is reached by.
+            return carriedOnFrom(within, at, ways);
         }
         Known evaluated = switch (e) {
             case Core.Construct made -> {
@@ -1700,8 +1713,10 @@ public final class InvariantChecker {
                 Known out = li.value() instanceof Core.Block ? k
                         : walk(li.value(), k, at, copies);
                 Entered in = bindLet(li, out, at);
-                entering(li.body(), in.known(), in.at(), copies);
-                yield out;
+                // The body is the one way on: what a `let` answers is what its body answers, so a
+                // body no run leaves is a `let` no run leaves.
+                yield carriedOnFrom(out, at, List.of(new Entered(
+                        entering(li.body(), in.known(), in.at(), copies), in.at())));
             }
             case Core.Match m -> {
                 Known out = walk(m.scrutinee(), k, at, copies);
@@ -2426,20 +2441,33 @@ public final class InvariantChecker {
         }
     }
 
-    /** What reading {@code e} finds. A branch nothing reaches finds nothing, which is the walk's
-     * answer ({@link Known#reachesNothing}) and not a second one taken here: this collects what the
-     * reading found and decides nothing about whether there was anything to find. */
-    private Map<Occurrence, Reported> reading(Core e, Known k, Denotations at,
-                                              ContextMultiplicity copies) {
+    /**
+     * One reading of an expression: what it found, and what it left.
+     *
+     * <p>Two answers and not one. What was found is said once over all the readings, since one
+     * construction read on each arm is one construction ({@link #say}); what was left is per
+     * reading, since it is that arm's run that either carries on or does not. Answered together
+     * because they come of one walk, and a reader that had only the first would have to decide from
+     * an empty list of findings whether the arm found nothing or was never entered — which are
+     * different things and neither is the other's evidence.
+     */
+    private record Read(Map<Occurrence, Reported> found, Known left) {}
+
+    /** What reading {@code e} finds, and what it leaves. A branch nothing reaches finds nothing,
+     * which is the walk's answer ({@link Known#reachesNothing}) and not a second one taken here:
+     * this collects what the reading found and decides nothing about whether there was anything to
+     * find. */
+    private Read reading(Core e, Known k, Denotations at, ContextMultiplicity copies) {
         Capture outer = capturing;
         Capture mine = Capture.empty();
         capturing = mine;
+        Known left;
         try {
-            entering(e, k, at, copies);
+            left = entering(e, k, at, copies);
         } finally {
             capturing = outer;
         }
-        return mine.found();
+        return new Read(mine.found(), left);
     }
 
     /**
