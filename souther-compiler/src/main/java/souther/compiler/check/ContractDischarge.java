@@ -95,24 +95,32 @@ public record ContractDischarge(List<RuleDischarge> rules,
     }
 
     /**
-     * The cases of the answer no rule names.
+     * What the answer can be that no rule reaches.
      *
-     * <p>Nothing is stated about them, which is what the declaration says and not a mistake in it:
-     * there is no wildcard arm, so a case left unnamed is a case the behavior promises nothing of.
-     * Answered here rather than reported, because a correct model may say nothing about most of what
-     * it answers, and a reader wanting to know asks.
+     * <p>Reaches and not names. A rule written about a case that has cases of its own states
+     * something about every one of them, so counting by the name each rule spells would report a
+     * leaf as unstated while a rule about the case above it stands (#966).
+     *
+     * <p>Nothing is stated about what is left, which is what the declaration says and not a mistake
+     * in it: a rule holds where its guard does and there is nothing that holds everywhere, so an
+     * answer no rule reaches is one the behavior promises nothing of. Answered here rather than
+     * reported, because a correct model may say nothing about most of what it answers, and a reader
+     * wanting to know asks.
      */
     private static List<TypeSymbol> unstatedCases(StatedContract contract, Symbols symbols) {
+        // Over what the answer can be and not over what it declared. A rule may be written about a
+        // case that has cases of its own, and it states something about each of them; counted by
+        // name, every leaf under it would come back as unstated (#966).
         Set<TypeSymbol> stated = new LinkedHashSet<>();
         for (StatedContract.StatedRule rule : contract.rules()) {
             if (rule.guard() instanceof Guard.Case(ResolvedCase selected)) {
-                stated.add(selected.name());
+                stated.addAll(selected.atoms());
             }
         }
         List<TypeSymbol> unstated = new ArrayList<>();
-        for (ResolvedCase selected : CaseSpace.of(contract.output(), symbols).selectors()) {
-            if (!stated.contains(selected.name())) {
-                unstated.add(selected.name());
+        for (TypeSymbol atom : AtomSpace.subjectAtoms(contract.output(), symbols)) {
+            if (!stated.contains(atom)) {
+                unstated.add(atom);
             }
         }
         return unstated;

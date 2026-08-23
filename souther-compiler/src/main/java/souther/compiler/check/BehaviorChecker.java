@@ -157,7 +157,7 @@ public final class BehaviorChecker {
                 int ordinal = armOrdinal++;
                 int clauseIndex = c;
                 collect(found, () -> rules.addAll(
-                        read(behavior, arm, answer, owner, params.size(), clauseIndex, ordinal)));
+                        read(behavior, arm, answer, symbols, owner, params.size(), clauseIndex, ordinal)));
             }
             clauses.add(new Clause(written.name(), rules, written.pos(), written.region()));
         }
@@ -174,7 +174,8 @@ public final class BehaviorChecker {
      * answer does not have.
      */
     private static List<Rule> read(Hir.SpecBehavior behavior, Hir.EnsuresArm arm, CaseSpace answer,
-                                   BindingOwner owner, int paramCount, int clause, int ordinal) {
+                                   Symbols symbols, BindingOwner owner, int paramCount, int clause,
+                                   int ordinal) {
         boolean hasCases = !(answer instanceof CaseSpace.Plain);
         ValueName.Behavior named = ((BindingOwner.OfSignature) owner).behavior();
         BindingId value = new BindingId(owner, paramCount + ordinal);
@@ -205,7 +206,7 @@ public final class BehaviorChecker {
                 // the reading is abandoned instead, as a `match` arm's is.
                 throw new Unanswerable(armCase.pos());
             }
-            ResolvedCase selected = answer.selector(armCase.answered().type());
+            ResolvedCase selected = answer.selector(armCase.answered().type(), symbols);
             if (selected == null) {
                 throw CompileException.of(Diagnostic.at(armCase.pos())
                         .say(new BehaviorMessage.AnEnsuresArmIsNotAnOutputCase(

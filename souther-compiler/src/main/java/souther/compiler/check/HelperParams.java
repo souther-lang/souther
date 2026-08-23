@@ -881,7 +881,7 @@ final class HelperParams {
             TypeSymbol arm = c.caseTypes().get(0).answered().type();
             // What the case refines the value to, asked of the subject's cases rather than worked
             // out from the subject's shape a second time.
-            ResolvedCase selected = CaseSpace.of(scrutinee, symbols).selector(arm);
+            ResolvedCase selected = CaseSpace.of(scrutinee, symbols).selector(arm, symbols);
             Type bound = selected == null ? null : selected.bound();
             return bound == null ? env : MatchElaborator.bound(env, c.binding(), bound);
         }

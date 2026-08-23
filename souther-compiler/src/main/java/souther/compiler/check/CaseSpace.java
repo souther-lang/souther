@@ -89,6 +89,35 @@ sealed interface CaseSpace {
         public Cases {
             selectors = List.copyOf(selectors);
         }
+
+        /**
+         * Whatever covers part of what the subject covers, which is what makes a nested sum
+         * transparent.
+         *
+         * <p>Inclusion of what the two cover and not descent of what the subject declared. A value
+         * of the subject is one of its atoms, so a type whose own atoms are among them is a type
+         * some values of the subject are and others are not — which is what an arm is. Answering by
+         * walking down from the declaration instead would admit the same names in every case anyone
+         * has written and a different set where two declarations reach one group of leaves without
+         * either naming the other; there is no value that tells those apart, so nothing here should.
+         * It is the reading {@link TypeOps#assignable} already takes, where a data-like type widens
+         * to the leaves it can be.
+         *
+         * <p>Covering nothing is not covering part: a name that denotes no type answers for no value
+         * of the subject, and admitting it would be an arm no run can take.
+         */
+        @Override
+        public ResolvedCase covering(TypeSymbol name, Symbols symbols) {
+            if (TypeSymbol.SOME.equals(name) || TypeSymbol.NONE.equals(name)) {
+                return null;   // an optional's carriers, which no subject with cases has
+            }
+            ResolvedCase candidate = ResolvedCase.resolve(CaseSelector.direct(name), symbols);
+            return !candidate.atoms().isEmpty()
+                    && new LinkedHashSet<>(AtomSpace.subjectAtoms(subject, symbols))
+                            .containsAll(candidate.atoms())
+                    ? candidate
+                    : null;
+        }
     }
 
     /**
@@ -104,7 +133,8 @@ sealed interface CaseSpace {
             // element's own atoms are not what an arm over an optional answers for: `Some` is the
             // case, whatever it wraps.
             return new Optional(subject, List.of(
-                    ResolvedCase.optionPresent(option.element()), ResolvedCase.optionAbsent()));
+                    ResolvedCase.resolve(CaseSelector.optionPresent(option.element()), symbols),
+                    ResolvedCase.resolve(CaseSelector.optionAbsent(), symbols)));
         }
         if (subject instanceof Type.Union union) {
             return new Cases(subject, "union `" + Type.show(union) + "`",
@@ -118,18 +148,36 @@ sealed interface CaseSpace {
         return new Plain(subject);
     }
 
-    /** Whether {@code name} is one of these cases. */
-    default boolean holds(TypeSymbol name) {
-        return selector(name) != null;
+    /** Whether {@code name} selects part of what this subject can be. */
+    default boolean holds(TypeSymbol name, Symbols symbols) {
+        return selector(name, symbols) != null;
     }
 
-    /** The case {@code name} selects, or null where it selects none of these. */
-    default ResolvedCase selector(TypeSymbol name) {
+    /**
+     * The case {@code name} selects, or null where it selects none of what this subject can be.
+     *
+     * <p>What the subject states, first and by name, so a case it declared keeps the identity and
+     * the place it was resolved at. A name it did not state is then asked of {@link #covering}:
+     * a sum whose case is a sum is transparent as a value (spec §sum-data), so a name standing for
+     * part of what the subject can be selects that part whether or not the subject listed it.
+     */
+    default ResolvedCase selector(TypeSymbol name, Symbols symbols) {
         for (ResolvedCase selected : selectors()) {
             if (selected.name().equals(name)) {
                 return selected;
             }
         }
+        return covering(name, symbols);
+    }
+
+    /**
+     * A name the subject did not state that stands for part of what it can be, or null.
+     *
+     * <p>None, for a subject whose cases are all it has. An optional has two carriers and no others:
+     * {@code Some} and {@code None} are not declarations, and a name that happened to cover one of
+     * them would be selecting a carrier it is not.
+     */
+    default ResolvedCase covering(TypeSymbol name, Symbols symbols) {
         return null;
     }
 
@@ -146,7 +194,7 @@ sealed interface CaseSpace {
      * Cases whose carrier is the value itself, de-duplicated the way the subject states them: a
      * member written twice is one case, and the first spelling is the one the order keeps.
      *
-     * <p>What each covers is {@link ResolvedCase#direct}'s to work out. This says which cases there
+     * <p>What each covers is {@link ResolvedCase#resolve}'s to work out. This says which cases there
      * are and in what order; what one of them reaches is not restated here.
      */
     private static List<ResolvedCase> direct(Iterable<TypeSymbol> members, Symbols symbols) {
@@ -156,7 +204,7 @@ sealed interface CaseSpace {
         }
         List<ResolvedCase> out = new ArrayList<>();
         for (TypeSymbol member : seen) {
-            out.add(ResolvedCase.direct(member, symbols));
+            out.add(ResolvedCase.resolve(CaseSelector.direct(member), symbols));
         }
         return out;
     }

@@ -14,6 +14,7 @@ import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -95,26 +96,43 @@ public final class MatchElaborator {
                                         Scope env, CheckContext ctx, Type expected) {
         Set<TypeSymbol> cases = new HashSet<>(space.names());
         String what = space.described();
-        Set<TypeSymbol> covered = new HashSet<>();
+        // Divided over what a value can be and not over what the subject listed: a case that is
+        // itself a sum is transparent as a value (spec §sum-data), so an arm naming it answers for
+        // the leaves under it and an arm naming one of those leaves answers for that one. The two
+        // are the same kind of arm, and what tells a match apart from what it left out is which
+        // atoms nobody took (#966).
+        CasePartition partition = CasePartition.of(AtomSpace.subjectAtoms(scrutinee, ctx.symbols()));
         List<Core.Case> arms = new ArrayList<>();
         Type branchType = null;
         for (Hir.Case c : m.cases()) {
             List<CaseSelector> selected = new ArrayList<>();
+            List<TypeSymbol> answersFor = new ArrayList<>();
+            Set<TypeSymbol> named = new LinkedHashSet<>();
             for (Hir.Name written : c.caseTypes()) {
                 TypeSymbol caseName = names(written);
-                ResolvedCase resolved = space.selector(caseName);
+                ResolvedCase resolved = space.selector(caseName, ctx.symbols());
                 if (resolved == null) {
                     throw notCase(written, what, c, m, cases, ctx.symbols());
                 }
-                if (!covered.add(caseName)) {
+                // One arm naming one case twice is the same name written twice, which is a mistake
+                // in the arm rather than two arms disagreeing. Held by name because that is what was
+                // written; what the arm answers for is the union either way.
+                if (!named.add(caseName)) {
                     throw CompileException.of(Diagnostic.at(c.pos())
                             .say(new MatchMessage.MatchedByMoreThanOneCase(written.written()))
                             .build());
                 }
+                answersFor.addAll(resolved.atoms());
                 // What goes into the arm is the selector. An arm is emitted from what it tests
                 // and reads, which is all of a case that survives into `Core`; what it covers is
                 // this pass's to hold and is not carried past it.
                 selected.add(resolved.selector());
+            }
+            List<TypeSymbol> taken = partition.take(answersFor);
+            if (!taken.isEmpty()) {
+                throw CompileException.of(Diagnostic.at(c.pos())
+                        .say(new MatchMessage.MatchedByMoreThanOneCase(
+                                taken.get(0).name())).build());
             }
             Core.ResolvedPattern pattern = selected.size() == 1
                     ? new Core.ResolvedPattern.Single(selected.get(0))
@@ -133,13 +151,12 @@ public final class MatchElaborator {
             branchType = mergeBranch(m, branchType, body.type(), c, expected);
         }
         List<String> missing = new ArrayList<>();
-        for (TypeSymbol caseName : space.names()) {
-            if (!covered.contains(caseName)) {
-                missing.add(caseName.name());
-            }
+        for (TypeSymbol atom : partition.unanswered()) {
+            missing.add(atom.name());
         }
         if (!missing.isEmpty()) {
-            missing.sort(null);
+            // Left in the order the subject states them, which is the order the model declares
+            // them in. Sorted, a report of a nesting would read in an order nothing wrote.
             throw nonExhaustive(m.pos(), what, missing);
         }
         if (branchType == null) {
@@ -163,7 +180,7 @@ public final class MatchElaborator {
             Hir.Name arm = c.caseTypes().get(0);
             String caseType = arm.written();
             TypeSymbol armName = names(arm);
-            ResolvedCase resolved = space.selector(armName);
+            ResolvedCase resolved = space.selector(armName, ctx.symbols());
             if (resolved == null) {
                 throw CompileException.of(Diagnostic.at(c.pos()).say(new MatchMessage.NotACaseOfAnOptional(caseType)).build());
             }

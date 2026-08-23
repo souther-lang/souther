@@ -25,11 +25,11 @@ import java.util.List;
  * the declarations.
  *
  * <p>Made in this package and read anywhere. There is no way to say what a case covers: the
- * constructor is private and every way in takes the causes only — a name and the symbols to resolve
- * it against, or the element an optional holds — so the atoms are worked out and never supplied. A
+ * constructor is private and the one way in — {@link #resolve} — takes the causes only, a selector
+ * and the symbols to resolve it against, so the atoms are worked out and never supplied. A
  * constructor taking them would have moved the half-decided state rather than removed it, since a
  * caller here could hand {@code Station}'s selector the leaves of {@code Hospital} and nothing
- * could tell. The factories are package-private on top of that, so the backend reads one and mints
+ * could tell. {@code resolve} is package-private on top of that, so the backend reads one and mints
  * none; but a tripwire over the mint sites is the lesser guard, and the value is already
  * unrepresentable without it.
  *
@@ -47,39 +47,44 @@ public final class ResolvedCase {
     }
 
     /**
-     * A case whose carrier is the value: a union member, or a case of a named sum.
+     * {@code selector} resolved against the declarations {@code symbols} holds.
      *
-     * <p>Resolved against {@code symbols} here rather than handed the answer. What it covers is read
-     * from what it holds and not from its name: the {@code Int} of {@code Int | DivisionByZero}
-     * holds a primitive, which {@link CaseSelector#heldBy} has already worked out, and a case that
-     * is a sum holds that sum and covers the leaves under it.
+     * <p>The one way in, and it takes the causes only: a selector, which is self-validating and says
+     * what it tests and reads, and the symbols to work out what it covers. There is no way to state
+     * the atoms, so a case covering leaves it does not reach is not a value that can be written.
      *
-     * <p>A name that denotes no type holds nothing to descend — {@code Raw}, which a stage may be
-     * unioned with and which no declaration takes apart — and covers no atom. The same answer
-     * {@link AtomSpace} gives a type that names no case, said here because the type to ask it about
-     * is the one that is missing.
+     * <p>Also where a selector that came back from {@code Core} is made whole again. A pass reading
+     * an elaborated arm has the selector and not what it covers — {@code Core} carries nothing about
+     * the program around it — and asking here is that pass crossing back into this one, not a second
+     * reading: what a case covers is worked out in this method and nowhere else.
      */
-    static ResolvedCase direct(TypeSymbol name, Symbols symbols) {
-        CaseSelector selector = CaseSelector.direct(name);
-        Type held = selector.bound();
-        return new ResolvedCase(selector,
-                held == null ? List.of() : AtomSpace.subjectAtoms(held, symbols));
+    static ResolvedCase resolve(CaseSelector selector, Symbols symbols) {
+        return new ResolvedCase(selector, covers(selector, symbols));
     }
 
     /**
-     * The carrier an optional holding {@code element} is.
+     * What selecting {@code selector} covers.
      *
-     * <p>No symbols, because there is nothing to resolve: what {@code Some} covers is {@code Some}.
-     * Taking the element's atoms would make an optional over a sum cover that sum's leaves, and the
-     * two arms of a {@code match} over it would be held against cases no optional has.
+     * <p>Read from the refinement and not from the name, because the two carriers that are not a
+     * case of a declaration are told apart by nothing else. An optional's carrier covers itself:
+     * what {@code Some} covers is {@code Some}, and taking the element's atoms would make an
+     * optional over a sum cover that sum's leaves, so the two arms of a {@code match} over it would
+     * be held against cases no optional has.
+     *
+     * <p>A case whose carrier is the value covers what it holds — one atom for a leaf, and the
+     * leaves under it for a case that is itself a sum. A name that denotes no type holds nothing to
+     * descend ({@code Raw}, which a stage may be unioned with and which no declaration takes apart)
+     * and covers no atom: the answer {@link AtomSpace} gives a type that names no case, said here
+     * because the type to ask it about is the one that is missing.
      */
-    static ResolvedCase optionPresent(Type element) {
-        return new ResolvedCase(CaseSelector.optionPresent(element), List.of(TypeSymbol.SOME));
-    }
-
-    /** The carrier an optional holding nothing is, which covers itself as the present one does. */
-    static ResolvedCase optionAbsent() {
-        return new ResolvedCase(CaseSelector.optionAbsent(), List.of(TypeSymbol.NONE));
+    private static List<TypeSymbol> covers(CaseSelector selector, Symbols symbols) {
+        return switch (selector.refinement()) {
+            case Refinement.OptionPresent _ -> List.of(TypeSymbol.SOME);
+            case Refinement.OptionAbsent _ -> List.of(TypeSymbol.NONE);
+            case Refinement.Direct direct -> direct.bound() == null
+                    ? List.of()
+                    : AtomSpace.subjectAtoms(direct.bound(), symbols);
+        };
     }
 
     /** What tests and reads the value — what {@code Core} carries and the backend emits. */
@@ -90,8 +95,7 @@ public final class ResolvedCase {
     /**
      * The atoms a value selected by this can be, in first-reach declaration order.
      *
-     * <p>Worked out by whichever factory made this and never supplied to one. See {@link #direct}
-     * for a case whose carrier is the value and {@link #optionPresent} for an optional's.
+     * <p>Worked out by {@link #resolve} and never supplied to it.
      */
     public List<TypeSymbol> atoms() {
         return atoms;
