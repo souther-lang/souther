@@ -2148,8 +2148,12 @@ public final class Adequacy {
          * counted for in full then read as undecided because an input had a row nobody could
          * classify, and a build stopped refusing a gap it had established (spec §e1913).
          *
-         * <p>Asked for the measurement, a caller has to hand over the one it is looking at, which is
-         * the one that found this. There is no argument left to pass the wrong thing in.
+         * <p>Asked for the measurement, a caller hands over the one it is looking at rather than a
+         * set worked out somewhere above. That is not a type saying which measurement goes with
+         * which subject — the two are still separate arguments and a caller can still pair them
+         * wrongly. What it removes is the argument that invited a set from anywhere at all, and what
+         * holds the rest is a regression run through this producer with two leaves that went without
+         * different things.
          */
         public static Finding by(String behavior, Measurement<?> found, Citation at, About about) {
             return new Finding(behavior, found.weakening(), at, about);
@@ -2289,7 +2293,7 @@ public final class Adequacy {
             Map<String, List<Finding>> out = new LinkedHashMap<>();
             for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
                 List<Finding> found = new ArrayList<>();
-                signatureFindings(behavior,
+                signatureFindings(behavior.name(), Citation.of(behavior.pos()),
                         signatures == null ? null : signatures.get(behavior.name()), found);
                 partitionFindings(behavior,
                         partitions == null ? null : partitions.get(behavior.name()), found);
@@ -2302,18 +2306,29 @@ public final class Adequacy {
             return Answer.of(Ordered.map(out));
         }
 
-        /** What the rows say about the cases of the signature. Carried at the measurement's own status:
-         *  a case nothing here claims is, where some row could not be read, a case nothing *seen*
-         *  claims — which is why these are said at {@code PARTIAL} rather than withheld until every
-         *  row could be read. Which of them are said at all is each measure's own question below. */
-        private static void signatureFindings(Hir.BehaviorDef behavior, SignatureEvidence signature,
-                                              List<Finding> out) {
+        /**
+         * What the rows left undone about the cases of one signature.
+         *
+         * <p>Each finding is carried at its own measure's account: a case nothing claims is, where
+         * that measure could not read every row, a case nothing <em>seen</em> claims — which is why
+         * it is said as undecided rather than withheld. Which of them are said at all is each
+         * measure's own question below.
+         *
+         * <p>Takes the name and the place rather than the whole declaration, because those are what
+         * it uses — and because a producer that needs a compiled behavior to run can only be held to
+         * what some source happens to produce. What decides a build's answer here is which
+         * measurement each finding is given, and the states that tell a right answer from a wrong
+         * one are states a fixture may or may not reach; handed the evidence, this can be shown the
+         * state itself.
+         */
+        static void signatureFindings(String behavior, Citation at, SignatureEvidence signature,
+                                      List<Finding> out) {
             if (signature == null || signature.counted().made().isEmpty()) {
                 return;
             }
             OutputCaseEvidence output = signature.output();
             for (TypeSymbol missing : output.unspecified()) {
-                out.add(Finding.by(behavior.name(), output.cases(), Citation.of(behavior.pos()),
+                out.add(Finding.by(behavior, output.cases(), at,
                         new About.ACaseNoRowExpects(missing)));
             }
             // Where the behavior answered for no row, every case is unverified and naming each of
@@ -2331,8 +2346,8 @@ public final class Adequacy {
             if (output.cases().made().map(OutputCaseEvidence.Cases::answeredRows).orElse(0) > 0) {
                 for (TypeSymbol missing : output.unverified()) {
                     if (!output.unspecified().contains(missing)) {
-                        out.add(Finding.by(behavior.name(), output.cases(),
-                                Citation.of(behavior.pos()),
+                        out.add(Finding.by(behavior, output.cases(),
+                                at,
                                 new About.ACaseNothingWasSeenToProduce(missing)));
                     }
                 }
@@ -2344,7 +2359,7 @@ public final class Adequacy {
                     // This input's own measurement. One position whose rows could not be classified
                     // says nothing about the position beside it, and a finding handed the signature's
                     // union would report both as undecided over one of them.
-                    out.add(Finding.by(behavior.name(), input.cases(), Citation.of(behavior.pos()),
+                    out.add(Finding.by(behavior, input.cases(), at,
                             new About.ACaseNoRowAppliesItTo(input, missing)));
                 }
             }

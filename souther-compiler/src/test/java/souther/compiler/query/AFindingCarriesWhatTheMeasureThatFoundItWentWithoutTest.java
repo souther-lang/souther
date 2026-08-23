@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.types.TypeSymbol;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
@@ -29,12 +30,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AFindingCarriesWhatTheMeasureThatFoundItWentWithoutTest {
 
     /**
-     * One input whose case cannot be read, one that can, and an output measured to the end with a
-     * case no row expects.
+     * A model that compiles and runs, with a sum at an input and a sum at an output.
      *
-     * <p>{@code Blob} is a sum, so the position is one this measure counts; the row writes a value
-     * this compiler cannot read a case out of, which is what leaves that one input measured in part
-     * while everything beside it was read.
+     * <p>What it is for is the walk below, which holds every finding against the leaf it is about.
+     * It does not reach a signature whose leaves went without different things — no source in reach
+     * does — so the state that tells a right answer from a wrong one is built rather than compiled,
+     * and handed to the same producer.
      */
     private static final String MODEL = """
             module demo
@@ -146,26 +147,53 @@ class AFindingCarriesWhatTheMeasureThatFoundItWentWithoutTest {
         assertFalse(signature.weakening().isEmpty(),
                 "so the signature above them went without something");
 
-        Adequacy.Finding gap = Adequacy.Finding.by("sort", output.cases(), somewhere(),
-                new About.ACaseNoRowExpects(dropped));
+        // Handed to the producer itself. Written against the rule instead, this would say what a
+        // finding means and nothing about the one line that decides which measurement each finding
+        // is given — which is the line that was wrong.
+        List<Adequacy.Finding> found = new ArrayList<>();
+        Adequacy.Findings.signatureFindings("sort", somewhere(), signature, found);
+        assertFalse(found.isEmpty(), "the producer says something about these cases");
+
+        Adequacy.Criterion criterion = Adequacy.Criterion.SIMPLIFIED_DOMAIN;
         assertEquals(Adequacy.Finding.Disposition.REFUSED,
-                gap.disposition(Adequacy.Criterion.SIMPLIFIED_DOMAIN),
+                disposition(found, criterion, About.ACaseNoRowExpects.class, dropped),
                 () -> "a gap the output's own measure established, read through the signature's: "
-                        + gap);
-
-        // And the input that was read is not made undecided by the one beside it either.
-        Adequacy.Finding beside = Adequacy.Finding.by("sort", read.cases(), somewhere(),
-                new About.ACaseNoRowAppliesItTo(read, large));
+                        + found);
         assertEquals(Adequacy.Finding.Disposition.REFUSED,
-                beside.disposition(Adequacy.Criterion.SIMPLIFIED_DOMAIN),
-                () -> "one position's unreadable row deciding another position's gap: " + beside);
-
-        // While the one that was not read stays undecided, which is what its own measure says.
-        Adequacy.Finding itsOwn = Adequacy.Finding.by("sort", unreadable.cases(), somewhere(),
-                new About.ACaseNoRowAppliesItTo(unreadable, large));
+                inputGap(found, criterion, 1, large),
+                () -> "one position's unreadable row deciding another position's gap: " + found);
         assertEquals(Adequacy.Finding.Disposition.UNDECIDED,
-                itsOwn.disposition(Adequacy.Criterion.SIMPLIFIED_DOMAIN),
-                () -> "a gap from a measure that went without something: " + itsOwn);
+                inputGap(found, criterion, 0, large),
+                () -> "a gap from a measure that went without something: " + found);
+    }
+
+    /** What a build does about the one finding of {@code kind} about {@code missing}. */
+    private static Adequacy.Finding.Disposition disposition(
+            List<Adequacy.Finding> found, Adequacy.Criterion criterion, Class<?> kind,
+            TypeSymbol missing) {
+        for (Adequacy.Finding each : found) {
+            if (kind.isInstance(each.about())
+                    && each.about() instanceof About.ACaseNoRowExpects(var what)
+                    && what.equals(missing)) {
+                return each.disposition(criterion);
+            }
+        }
+        throw new AssertionError("no finding of " + kind.getSimpleName() + " about " + missing
+                + " among " + found);
+    }
+
+    /** And of the one about the case {@code missing} at input {@code at}. */
+    private static Adequacy.Finding.Disposition inputGap(
+            List<Adequacy.Finding> found, Adequacy.Criterion criterion, int at,
+            TypeSymbol missing) {
+        for (Adequacy.Finding each : found) {
+            if (each.about() instanceof About.ACaseNoRowAppliesItTo(var input, var what)
+                    && input.at() == at && what.equals(missing)) {
+                return each.disposition(criterion);
+            }
+        }
+        throw new AssertionError("no finding about " + missing + " at input " + at
+                + " among " + found);
     }
 
     /** A case, named. What it is a case of is nothing this rule turns on. */
