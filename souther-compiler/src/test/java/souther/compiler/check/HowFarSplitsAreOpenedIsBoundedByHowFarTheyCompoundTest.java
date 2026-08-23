@@ -11,16 +11,21 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * How far the case splits down one path are opened, bounded by what re-reading a body costs.
+ * How far the case splits down one path are opened, bounded by how far they compound.
  *
- * <p>The bound is a number of readings and not of splits. An {@code if} has two arms and a
- * {@code match} has one per case, so a bound written as a count of splits names one cost for the
- * first and quite another for the second — and what it is protecting against is the readings.
+ * <p>That this walk really asks {@link ContextMultiplicity} and really stops where it answers no.
+ * The arithmetic itself is stated where it lives
+ * ({@link WhatSplitsCopyAReadingToIsBoundedWhereTheyCompoundTest}); what is held here is the walk's
+ * end of it, in the readings of a body that a split of this walk's copies.
  *
- * <p>Both ends of it are held here: a path that stays inside the bound is opened all the way, and
+ * <p>The limit is a number of copies and not of splits. An {@code if} has two arms and a
+ * {@code match} has one per case, so a limit written as a count of splits names one cost for the
+ * first and quite another for the second — and what it is protecting against is the multiplying.
+ *
+ * <p>Both ends of it are held here: a path that stays inside the limit is opened all the way, and
  * one that would go past it is not, and the two differ in the width of a split and not in what is
- * written after it. What is asked of a split is what opening it <em>would</em> cost, which is what
- * keeps a path already fifteen readings long from admitting a split of any width there is.
+ * written after it. What is asked of a split is what opening it <em>would</em> come to, which is
+ * what keeps a path already copied fifteen times from admitting a split of any width there is.
  *
  * <p>Read off {@link InvariantChecker#OPENING} and not off a warning. A split left unopened leaves a
  * value the reading bounds some other way — the arms of a choice, taken together
@@ -28,7 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * opened, and a test reading the warning was reading the two together. It said nothing about this
  * bound from the day the second route existed.
  */
-class HowFarSplitsAreOpenedIsBoundedByWhatARereadingCostsTest {
+class HowFarSplitsAreOpenedIsBoundedByHowFarTheyCompoundTest {
 
     private static String sum(String name, int cases, String prefix) {
         StringBuilder s = new StringBuilder();
@@ -61,9 +66,16 @@ class HowFarSplitsAreOpenedIsBoundedByWhatARereadingCostsTest {
 
             """
             + sum("Two", 2, "T") + sum("Eight", 8, "E") + sum("Nine", 9, "N")
+            + sum("Twenty", 20, "W")
             + pick("two", "Two", 2, "T")
             + pick("eight", "Eight", 8, "E")
-            + pick("nine", "Nine", 9, "N");
+            + pick("nine", "Nine", 9, "N")
+            + pick("twenty", "Twenty", 20, "W")
+            + """
+            let both (k: Two): Int =
+                match k with
+                    | T1 | T2 -> 0
+            """;
 
     /** Every split the check decided about while reading {@code body}. */
     private static List<InvariantChecker.Opening> openings(String body) {
@@ -154,6 +166,34 @@ class HowFarSplitsAreOpenedIsBoundedByWhatARereadingCostsTest {
                     constructs Big
                 let use (k, a) = Big(1000 + two(k) + (if a > 0 then 0 else 0))
                 """, 2), "two readings times two is four, and four is inside sixteen");
+    }
+
+    /** A split one arm wide copies a reading once, which is the reading itself, so it is opened
+     * wherever it stands — here past a first split wide enough that anything which multiplied would
+     * be refused. An or-pattern naming every case of a sum is such a split: it says the cases are
+     * treated the same, so the match has one arm. */
+    @Test
+    void aSplitOneArmWideIsOpenedWhereNothingThatMultipliedWouldBe() {
+        List<InvariantChecker.Opening> decided = openings("""
+                behavior use : (k: Twenty, t: Two) -> Big
+                    constructs Big
+                let use (k, t) = Big(1000 + twenty(k) + both(t))
+                """);
+        assertTrue(decided.stream().anyMatch(o -> o.width() == 20 && o.opened()),
+                "twenty is the first split on the path, so it is opened however wide it is");
+        assertTrue(decided.stream().anyMatch(o -> o.width() == 1 && o.opened()),
+                "one arm multiplies nothing, and twenty copies is already past the limit");
+    }
+
+    /** And a split two arms wide in that same place is refused, so what opened the one above was
+     * its width and not the place it stood in. */
+    @Test
+    void aSplitTwoArmsWideInThatSamePlaceIsRefused() {
+        assertTrue(refusedASplitOf("""
+                behavior use : (k: Twenty, a: Int) -> Big
+                    constructs Big
+                let use (k, a) = Big(1000 + twenty(k) + (if a > 0 then 0 else 0))
+                """, 2), "twenty copies times two is forty, and forty is past sixteen");
     }
 
     /** The watcher is reading something: a body with no split in it decides about none. Without
