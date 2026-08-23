@@ -28,70 +28,6 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 class AMeasureIsShortOfWhateverItsReadingDidNotReachTest {
 
     /**
-     * Thirteen positions, one past {@link Partitions#MAX_AXES}, with a bound either side of the
-     * limit.
-     *
-     * <p>The fields are in declaration order and the axes are drawn in it, so the thirteenth is the
-     * one dropped. Two of them are {@code Amount}s on purpose: the twelfth's line survives and the
-     * thirteenth's goes with the axis, which is what leaves the measure with a line to show and
-     * short of one it cannot ask about. With only the dropped one bounded, the measure has nothing
-     * to show and answers that it found no line rather than that it found some — a different
-     * sentence, and one this model would not be about.
-     */
-    private static final String PAST_THE_LIMIT = """
-            module example.limit
-
-            data A
-            data B
-            data Flag = A | B
-            data Amount = Int
-                invariant value >= 0 && value <= 100
-            data Wide = { f1: Flag, f2: Flag, f3: Flag, f4: Flag, f5: Flag, f6: Flag,
-                          f7: Flag, f8: Flag, f9: Flag, f10: Flag, f11: Flag,
-                          cost: Amount, extra: Amount }
-            data Res = { n: Int }
-
-            behavior wide : (w: Wide) -> Res
-                constructs Res
-            let wide (w) = Res { n = 1 }
-
-            example wide
-                | "one" : (Wide { f1 = A, f2 = A, f3 = A, f4 = A, f5 = A, f6 = A, f7 = A, f8 = A,
-                                  f9 = A, f10 = A, f11 = A, cost = 1, extra = 1 })
-                        -> Res { n = 1 }
-            """;
-
-    /**
-     * The same twelve positions and no thirteenth, so nothing is dropped.
-     *
-     * <p>The control the model above needs. Without it, a border measure short of something would
-     * be as good an account of a model this cannot read at all, and neither the limit nor the axis
-     * past it would be what the first model shows.
-     */
-    private static final String WITHIN_THE_LIMIT = """
-            module example.within
-
-            data A
-            data B
-            data Flag = A | B
-            data Amount = Int
-                invariant value >= 0 && value <= 100
-            data Narrow = { f1: Flag, f2: Flag, f3: Flag, f4: Flag, f5: Flag,
-                            f6: Flag, f7: Flag, f8: Flag, f9: Flag, f10: Flag, f11: Flag,
-                            cost: Amount }
-            data Res = { n: Int }
-
-            behavior narrow : (w: Narrow) -> Res
-                constructs Res
-            let narrow (w) = Res { n = 1 }
-
-            example narrow
-                | "one" : (Narrow { f1 = A, f2 = A, f3 = A, f4 = A, f5 = A, f6 = A, f7 = A, f8 = A,
-                                    f9 = A, f10 = A, f11 = A, cost = 1 }) -> Res { n = 1 }
-            """;
-
-
-    /**
      * A position the walk could not reach into, which is a fact no question carries.
      *
      * <p>Nothing was read there and so nothing was found wanting: an {@code Option} holds its value
@@ -137,33 +73,6 @@ class AMeasureIsShortOfWhateverItsReadingDidNotReachTest {
             example f
                 | "one" : (Span { startsAt = 1, endsAt = 2 }) -> Res { n = 1 }
             """;
-
-    /**
-     * An axis dropped past the limit leaves both measures short of what it was carrying.
-     *
-     * <p>Not a report working out afterwards what the omission cost. What was carried is known where
-     * the axis is dropped and nowhere else — neither a dropped classifier nor a dropped bound leaves
-     * anything behind, so a reader counting entries afterwards sees a measure that was made and
-     * found what there was.
-     */
-    @Test
-    void anAxisDroppedPastTheLimitLeavesBothMeasuresShort() {
-        PartitionEvidence wide = evidenceFor(PAST_THE_LIMIT, "wide");
-
-        assertInstanceOf(Measurement.Partial.class, wide.bounded());
-        assertInstanceOf(Measurement.Partial.class, wide.partitioned());
-    }
-
-    /** And within the limit both are made in full, which is what says the answers above are the
-     *  limit's and not the model's. */
-    @Test
-    void andWithinTheLimitBothAreMadeInFull() {
-        PartitionEvidence narrow = evidenceFor(WITHIN_THE_LIMIT, "narrow");
-
-        assertInstanceOf(Measurement.Complete.class, narrow.bounded());
-        assertInstanceOf(Measurement.Complete.class, narrow.partitioned());
-    }
-
 
     /**
      * A position whose rules the walk never reached leaves both measures short.

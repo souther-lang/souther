@@ -4,10 +4,8 @@ package souther.cli;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceNameResolver;
-import souther.compiler.partition.Partitions;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
-import souther.compiler.partition.AxisId;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.report.AdequacyReport;
@@ -496,41 +494,28 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
     }
 
     /**
-     * What a dropped axis cost decides whether the verdict stays open.
+     * A border measure short of something holds the verdict open, and one made in full does not.
      *
-     * <p>Neither kind leaves a boundary behind, which is also what a position the rows cover looks
-     * like. An axis that was carrying a line some rule drew took boundaries nothing can ask about now,
-     * so the rows there are unmeasured rather than adequate. An axis that was only classifying took a
-     * measure no build refuses over, and holding the verdict open for it would report a doubt nobody
-     * can act on.
+     * <p>The rows either side of a line nothing could ask about are unmeasured rather than adequate,
+     * and a measure that answered everything it answers for has nothing left to hold a verdict for.
+     * Both borders here are met, so what separates the two answers is the measure's own status and
+     * nothing about the entries beside it.
      *
-     * <p>What a verdict does with the answer, and not what a dropped axis does to the answer. The
-     * second is settled where the reading is and reaches a verdict only as the measure's own status
-     * — so this hands the verdict each status in turn, and that a dropped axis carrying a line
-     * produces the second of them is held against a source in souther-compiler
-     * ({@code AMeasureIsShortOfWhateverItsReadingDidNotReachTest}). Written the other way round,
-     * this fixture would name a status of its own choosing and call the naming a test.
+     * <p>Which is the whole of what a verdict reads. Written the other way round — a verdict working
+     * out for itself what some entry beside the measure cost — it would be a second reading of a
+     * question the measure has already answered, free to disagree with it.
      */
     @Test
-    void anAxisDroppedPastTheLimitHoldsTheVerdictOpenOnlyWhereItCarriedAnObligation() {
+    void aBorderMeasureShortOfSomethingHoldsTheVerdictOpen() {
         BorderAssessment met = AReportOfOneBorder.assessed(
                 AReportOfOneBorder.aBorderAtTheEdgeOfItsDomain(), AReportOfOneBorder::hit);
 
         assertEquals(AdequacyReport.AdequacyStatus.SATISFIED,
                 verdictOf(partition(AReportOfOneBorder.measured(met))),
                 "a border measure made in full");
-        // The same border, from a reading that was short of something. Which is what a dropped axis
-        // carrying a line leaves the measure with, and the verdict reads the measure's answer and
-        // never the list of what was dropped: a report working out for itself what an omission cost
-        // is a second reading of a question the measure has already answered.
         assertEquals(AdequacyReport.AdequacyStatus.UNDETERMINED,
-                verdictOf(partition(AReportOfOneBorder.shortOfSomething(met),
-                        dropped("weigh", "w.m", true))),
+                verdictOf(partition(AReportOfOneBorder.shortOfSomething(met))),
                 "a border measure that was not made in full");
-        assertEquals(AdequacyReport.AdequacyStatus.SATISFIED,
-                verdictOf(partition(AReportOfOneBorder.measured(met),
-                        dropped("weigh", "w.flag", false))),
-                "a dropped axis the border measure was not measuring");
     }
 
     /**
@@ -561,16 +546,10 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
                 "and a bar that asks nothing of the classes reads only the lines");
     }
 
-    private static Partitions.OmittedAxis dropped(String behavior, String path,
-                                                  boolean carriedAnObligation) {
-        return new Partitions.OmittedAxis(new AxisId(behavior, path), carriedAnObligation);
-    }
-
     /** This one asks nothing about the criterion, so it is held to the one a build asks for by
      *  default; {@link AReportOfOneBorder} is where the report itself is built. */
-    private static PartitionEvidence partition(souther.compiler.query.Measurement<List<BorderAssessment>> border,
-                                               Partitions.OmittedAxis... omitted) {
-        return AReportOfOneBorder.partition(border, omitted);
+    private static PartitionEvidence partition(souther.compiler.query.Measurement<List<BorderAssessment>> border) {
+        return AReportOfOneBorder.partition(border);
     }
 
     private static AdequacyReport.AdequacyStatus verdictOf(PartitionEvidence partition) {

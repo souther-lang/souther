@@ -300,8 +300,20 @@ class PartitionsTest {
         assertEquals(List.of("Remote", "NotRemote"), classIds(axis(shipping, "region")));
     }
 
+    /**
+     * Every position the model divides is an axis, however many of them there are.
+     *
+     * <p>How many positions a behavior takes is not a measure of what measuring them costs. Fifteen
+     * {@code Bool}s and two are the same work per position, and what the pair space and the row
+     * search cost is bounded where each of them is walked — so a count of positions taken as a
+     * budget bounds the evidence and not the work (see this package's documentation).
+     *
+     * <p>Fifteen rather than thirteen so the number is not the one a limit was written at. A test
+     * written at the old ceiling plus one passes again the moment somebody sets a new ceiling one
+     * higher, which is the reintroduction it exists to catch.
+     */
     @Test
-    void pastTheAxisLimitTheRestAreDroppedAndNamedRatherThanMerged() {
+    void everyPositionTheModelDividesIsAnAxisHoweverManyThereAre() {
         StringBuilder fields = new StringBuilder();
         for (int i = 0; i < 15; i++) {
             fields.append("f").append(i).append(": Bool, ");
@@ -320,14 +332,11 @@ class PartitionsTest {
 
         Partitions.Partitioning partitioning = partitioningOf(wide, "run");
 
-        assertEquals(Partitions.MAX_AXES, partitioning.derivable().size());
-        assertEquals(3, partitioning.omitted().size());
-        assertTrue(partitioning.omitted().get(0).axis().toString().contains("run/wide.f12"),
-                partitioning.omitted().get(0).axis().toString());
-        // A `Bool` is classified and never cut, so dropping one loses a measure nothing refuses a
-        // build over. What a dropped axis was carrying is decided here because it cannot be read back:
-        // a position nobody measured leaves the same absence as one the rows cover.
-        assertTrue(partitioning.omitted().stream()
-                .noneMatch(Partitions.OmittedAxis::carriedAnObligation));
+        assertEquals(15, partitioning.derivable().size(),
+                () -> "every field is divided: " + partitioning.derivable().stream()
+                        .map(each -> each.id().toString()).toList());
+        assertEquals("run/wide.f14",
+                partitioning.derivable().get(14).id().toString(),
+                "including the last, which no ordering may quietly leave out");
     }
 }
