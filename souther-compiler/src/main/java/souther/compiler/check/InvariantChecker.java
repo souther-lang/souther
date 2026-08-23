@@ -136,9 +136,9 @@ public final class InvariantChecker {
      */
     static List<Said> WATCHING;
 
-    /** One case split this walk decided about: what a reading of the body had already cost where the
-     * split stood, how many arms it has, and whether it was opened. */
-    record Opening(int cost, int width, boolean opened) {}
+    /** One case split this walk decided about: how many times a reading of the body had already been
+     * copied where the split stood, how many arms it has, and whether it was opened. */
+    record Opening(int factor, int width, boolean opened) {}
 
     /**
      * Where a test in this package reads how far the splits down a path were opened, and null
@@ -175,29 +175,15 @@ public final class InvariantChecker {
     }
 
     /**
-     * How many readings of a body one path down its case splits may cost, before the rest is left to
-     * the run-time check.
+     * How far the splits down one path are opened, which this walk holds itself to and does not own.
      *
-     * <p>Counted in readings and not in splits opened. The two were one number for as long as every
-     * split had two arms: three nested {@code if}s are eight readings, which is what this bound used
-     * to be written as. A {@code match} has an arm per case, so the same three of them over a sum of
-     * twelve is one thousand seven hundred and twenty-eight — the same bound naming a cost two orders
-     * of magnitude apart, which is a bound that stopped saying what it was for.
-     *
-     * <p>What is asked of a split is what opening it would bring the path to, and not what the path
-     * has come to already ({@link #opens}). Read the second way a path fifteen readings long admits
-     * a split of any width at all, and the bound bounds the path before the widest split on it
-     * rather than the path.
-     *
-     * <p>Sixteen, which is what a sum of eight cases costs with one conditional inside an arm.
-     * Below that, opening a {@code match} spends enough of the bound that a conditional written in a
-     * value position inside one of its arms is refused — and that conditional was opened before this
-     * check read {@code match}es at all, by lifting it out of the arm. A bound that turns a
-     * construction which discharged into one that is owed is the reading getting worse at a shape it
-     * was not asked about. It also lets a fourth conditional be opened where three were opened
-     * before, which is the same bound spent on the shape it was written for.
+     * <p>{@link ContextMultiplicity} owns it, because the walk over a region is not the only reader
+     * that copies a reading by opening a split, and a limit belonging to one of them would say
+     * nothing to the other. What this walk copies is a reading of the body; what the reading of a
+     * derived value copies is an evaluation of the recipes. Different work, one way of multiplying
+     * it, and it is the multiplying that is bounded.
      */
-    private static final int READINGS_A_PATH_MAY_COST = 16;
+    private static final ContextMultiplicity ONE_READING = ContextMultiplicity.ofOneReading();
 
 
     /** The rules this check reads a program by: entering a binding, taking a condition as holding,
@@ -1463,7 +1449,7 @@ public final class InvariantChecker {
                 in = c.enter(new Core.Read(p.getValue().name(), p.getKey(), p.getValue().type(),
                         body.pos()), in.known(), in.at());
             }
-            c.entering(body, in.known(), in.at(), 1);
+            c.entering(body, in.known(), in.at(), ONE_READING);
         } catch (RuntimeException why) {
             // fail-open: the run-time invariant check remains the backstop
             gaveUp("analyze", why);
@@ -1518,8 +1504,8 @@ public final class InvariantChecker {
      * and again of the reading, because the reading is itself a place the conditions can come to
      * contradict.
      */
-    private void entering(Core e, Known given, Denotations at, int cost) {
-        entering(e, e, given, at, cost);
+    private void entering(Core e, Known given, Denotations at, ContextMultiplicity copies) {
+        entering(e, e, given, at, copies);
     }
 
     /**
@@ -1543,11 +1529,11 @@ public final class InvariantChecker {
      * boundary; a branch put in beyond one is read by the region that owns it, when the walk arrives
      * there. Which of the two a split is, is what {@link SplitSite#read} answers.
      */
-    private void entering(Core e, Core unread, Known given, Denotations at, int cost) {
+    private void entering(Core e, Core unread, Known given, Denotations at, ContextMultiplicity copies) {
         if (given.reachesNothing()) {
             return;
         }
-        walk(e, unread == null ? given : engine.answering(unread, given, at), at, cost);
+        walk(e, unread == null ? given : engine.answering(unread, given, at), at, copies);
     }
 
     /**
@@ -1563,7 +1549,7 @@ public final class InvariantChecker {
      * may: a reading that covers this step covers a child exactly as far. So a step that reaches
      * nothing stands in a region that reached nothing, and that was settled where it was entered.
      */
-    private void walk(Core e, Known k, Denotations at, int cost) {
+    private void walk(Core e, Known k, Denotations at, ContextMultiplicity copies) {
         if (k.reachesNothing()) {
             return;
         }
@@ -1578,16 +1564,19 @@ public final class InvariantChecker {
             // already reads — so a construction moved into a helper reads the terms its caller's
             // guards settled, which is what the expansion is for.
             if (!(standing.value() instanceof Core.Block)) {
-                walk(standing.value(), k, at, cost);
+                walk(standing.value(), k, at, copies);
             }
             Entered in = bindLet(standing, k, at);
             entering(without(e, Set.of(standing), standing.body()), standing.body(), in.known(),
-                    in.at(), cost);
+                    in.at(), copies);
             return;
         }
         SplitSite site = splitValueIn(e);
         Split split = site == null ? null : splitOf(site.split());
-        if (split != null && opens(cost, split.arms().size())) {
+        // What the arms' readings are copied to, which is the same for every arm of the split: a
+        // split is opened for all of them or for none, so nothing here spends against a sibling.
+        ContextMultiplicity inAnArm = split == null ? null : opens(copies, split.arms().size());
+        if (inAnArm != null) {
             // A case split in a value position is one of its arms, and which one is decided by what
             // it asks — an `if` by its condition, a `match` by which case the scrutinee is. So this
             // is read once with each arm standing there, under what choosing that arm settles, and
@@ -1605,9 +1594,9 @@ public final class InvariantChecker {
             // What the split asks is read here only where the reading stopped short of it. Reached
             // from where the region was entered, it stands in `within` already.
             if (site.read()) {
-                walk(split.asked(), within, there, cost);
+                walk(split.asked(), within, there, copies);
             } else {
-                entering(split.asked(), within, there, cost);
+                entering(split.asked(), within, there, copies);
             }
             Set<Core> alike = sameSplit(e, value, there);
             // The readings start from where the split stood, not from outside it. The tree each is
@@ -1623,7 +1612,7 @@ public final class InvariantChecker {
                 Entered under = arm.under().entering(within, there);
                 readings.add(reading(without(e, alike, arm.body()),
                         site.read() ? arm.body() : null,
-                        under.known(), under.at(), cost * split.arms().size()));
+                        under.known(), under.at(), inAnArm));
             }
             say(readings);
             return;
@@ -1631,14 +1620,14 @@ public final class InvariantChecker {
         switch (e) {
             case Core.Construct made -> {
                 judge(made, k, at, false);
-                Core.forEachChild(made, child -> walk(child, k, at, cost));
+                Core.forEachChild(made, child -> walk(child, k, at, copies));
             }
             case Core.If iff -> {
-                walk(iff.cond(), k, at, cost);
+                walk(iff.cond(), k, at, copies);
                 entering(iff.then(), predicates.assumeCond(iff.cond(), k, at, true).known(), at,
-                        cost);
+                        copies);
                 entering(iff.els(), predicates.assumeCond(iff.cond(), k, at, false).known(), at,
-                        cost);
+                        copies);
             }
             case Core.IfConstructed ic -> {
                 // The attempt's own construction cannot abort — a failing invariant is the else
@@ -1646,7 +1635,7 @@ public final class InvariantChecker {
                 // possible one. Its field values are walked on their own so a construction nested
                 // inside an argument is still an ordinary, aborting one.
                 judge(ic.construct(), k, at, true);
-                Core.forEachChild(ic.construct(), child -> walk(child, k, at, cost));
+                Core.forEachChild(ic.construct(), child -> walk(child, k, at, copies));
                 // Reaching `then` is the construction having held, so the binding carries the type's
                 // invariant exactly as an input of that type does — which is a location, and not the
                 // construction read again. What the construction denotes is what the check could say
@@ -1654,22 +1643,22 @@ public final class InvariantChecker {
                 // expression it cannot name denotes nothing, and inheriting that would drop the one
                 // thing reaching this branch established.
                 Entered in = engine.enteringBuilt(ic, k, at);
-                entering(ic.then(), in.known(), in.at(), cost);
+                entering(ic.then(), in.known(), in.at(), copies);
                 // Each departure stands where the invariant did not hold, and nothing was built
                 // there, so none of them is seeded with anything the attempt would have guaranteed.
-                ic.els().forEach(arm -> entering(arm.body(), k, at, cost));
+                ic.els().forEach(arm -> entering(arm.body(), k, at, copies));
             }
             case Core.LetIn li -> {
                 // A closure is read where it is applied: what its parameter holds is decided there,
                 // and reading it here would read every construction in it with the element unknown.
                 if (!(li.value() instanceof Core.Block)) {
-                    walk(li.value(), k, at, cost);
+                    walk(li.value(), k, at, copies);
                 }
                 Entered in = bindLet(li, k, at);
-                entering(li.body(), in.known(), in.at(), cost);
+                entering(li.body(), in.known(), in.at(), copies);
             }
             case Core.Match m -> {
-                walk(m.scrutinee(), k, at, cost);
+                walk(m.scrutinee(), k, at, copies);
                 for (Core.Case c : m.cases()) {
                     // A sum has no fields of its own, so the scrutinee is not a location any clause
                     // could have named — the case's value names only itself. What the arm binds is a
@@ -1679,15 +1668,15 @@ public final class InvariantChecker {
                     // decided by which behavior answered and which case this arm opened, and the
                     // first of those is a question about what is being matched.
                     Entered in = engine.enteringArm(c, m.scrutinee(), k, at);
-                    entering(c.body(), in.known(), in.at(), cost);
+                    entering(c.body(), in.known(), in.at(), copies);
                 }
             }
-            case Core.PreservedCall call -> walkCall(call, k, at, cost);
+            case Core.PreservedCall call -> walkCall(call, k, at, copies);
             // A closure the reading stopped at, reached as a value like any other. What its body
             // answers is decided where the closure is applied, so nothing out here read it, and it
             // is a region of its own however it was arrived at.
-            case Core.Block block -> Core.forEachChild(block, b -> entering(b, k, at, cost));
-            default -> Core.forEachChild(e, child -> walk(child, k, at, cost));
+            case Core.Block block -> Core.forEachChild(block, b -> entering(b, k, at, copies));
+            default -> Core.forEachChild(e, child -> walk(child, k, at, copies));
         }
     }
 
@@ -1696,13 +1685,13 @@ public final class InvariantChecker {
      * every other at what the closure was typed with — so a construction inside the closure is
      * analyzed rather than left opaque. A closure is where its parameters are values, which is here
      * and not where the block is written. */
-    private void walkCall(Core.PreservedCall call, Known k, Denotations at, int cost) {
+    private void walkCall(Core.PreservedCall call, Known k, Denotations at, ContextMultiplicity copies) {
         Handed handed = Combinators.handedTo(call, at);
         for (Core arg : call.args()) {
             // The closure is asked by identity: a call may write one expression twice, and only the
             // argument the operation applies is the one an element arrives in.
             if (handed == null || arg != handed.closure()) {
-                walk(arg, k, at, cost);
+                walk(arg, k, at, copies);
                 continue;
             }
             Core container = handed.container();
@@ -1722,7 +1711,7 @@ public final class InvariantChecker {
             for (Quantified q : relations) {
                 k2 = predicates.instantiate(q, element, k2, in.at());
             }
-            entering(handed.step().body(), k2, in.at(), cost);
+            entering(handed.step().body(), k2, in.at(), copies);
         }
     }
 
@@ -2298,12 +2287,12 @@ public final class InvariantChecker {
      * answer ({@link Known#reachesNothing}) and not a second one taken here: this collects what the
      * reading found and decides nothing about whether there was anything to find. */
     private Map<Occurrence, Reported> reading(Core e, Core unread, Known k, Denotations at,
-                                              int cost) {
+                                              ContextMultiplicity copies) {
         Capture outer = capturing;
         Capture mine = Capture.empty();
         capturing = mine;
         try {
-            entering(e, unread, k, at, cost);
+            entering(e, unread, k, at, copies);
         } finally {
             capturing = outer;
         }
@@ -2394,22 +2383,17 @@ public final class InvariantChecker {
      */
     private record Split(Core asked, List<Arm> arms) {}
 
-    /** Whether a split of {@code width} arms is opened where the path has already cost {@code cost}
-     * readings of the body.
+    /** What the readings of the arms of a split {@code width} arms wide are copied to, where the
+     * body has already been copied {@code copies} times, or null where opening it would compound
+     * past the limit.
      *
-     * <p>Asked before the arms are entered, and about what opening it <em>would</em> cost: a bound
-     * read after the fact bounds the path before the widest split on it and not the path.
-     *
-     * <p>The first split on a path is opened however wide it is. What it costs is its width and
-     * nothing multiplies it, and refusing it would leave a {@code match} over a sum of more cases
-     * than the bound read nowhere at all — which is the reading this bound is bounding rather than
-     * something it is protecting against. So the bound is on the multiplying, and a path costs at
-     * most the widest split on it or this bound, whichever is the larger. */
-    private static boolean opens(int cost, int width) {
-        boolean opened = cost == 1 || (long) cost * width <= READINGS_A_PATH_MAY_COST;
+     * <p>{@link ContextMultiplicity#opening} decides it and this reports the decision, so what the
+     * walk does and what a test in this package reads cannot come apart. */
+    private static ContextMultiplicity opens(ContextMultiplicity copies, int width) {
+        ContextMultiplicity opened = copies.opening(width);
         List<Opening> watching = OPENING;
         if (watching != null) {
-            watching.add(new Opening(cost, width, opened));
+            watching.add(new Opening(copies.factor(), width, opened != null));
         }
         return opened;
     }

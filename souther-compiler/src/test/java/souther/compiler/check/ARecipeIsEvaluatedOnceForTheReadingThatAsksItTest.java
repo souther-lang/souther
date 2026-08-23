@@ -31,13 +31,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * could see.
  *
  * <p>Nothing here is a bound on how many readings there are, and there is no such bound to lean on.
- * How far splits are opened is a different question in a different unit — it counts re-readings of a
- * body, and an arm read is a question put to a domain — and its own policy lets the first split on a
- * path be opened however wide it is
- * ({@link HowFarSplitsAreOpenedIsBoundedByWhatARereadingCostsTest}). Measured, a match of eighty
+ * How far splits are opened bounds the same multiplying by the same arithmetic
+ * ({@link ContextMultiplicity}), but the region walk is the only reader spending it today, and it
+ * spends it in re-readings of a body while an arm read is a question put to a domain. Its policy
+ * lets the first split on a path be opened however wide it is
+ * ({@link HowFarSplitsAreOpenedIsBoundedByHowFarTheyCompoundTest}). Measured, a match of eighty
  * cases is opened and the body is read a hundred and sixty times. So this states nothing about what
  * a whole compilation costs. What it states is that <em>this</em> adds no factor: within one reading
- * the recipes do not multiply through nested choices, whatever produced the reading.
+ * the recipes do not multiply through nested choices, whatever produced the reading. Which is what
+ * #973 will have to say again in its own terms, since an arm read under what chose it is an arm
+ * read against a domain of its own.
  */
 class ARecipeIsEvaluatedOnceForTheReadingThatAsksItTest {
 
