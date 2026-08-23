@@ -106,6 +106,12 @@ final class PathEngine {
         return symbols;
     }
 
+    /** The one reading of what a declaration guarantees, for a reader that wants the answer without
+     * the walk. */
+    TypeGuarantees guarantees() {
+        return guarantees;
+    }
+
     Clauses clauses() {
         return clauses;
     }
