@@ -134,6 +134,22 @@ class WhatStoppedAComparisonIsReadOffWhatItIsTest {
     }
 
     /**
+     * What the rule cuts is what it is about, and how it was spelled does not overrule that.
+     *
+     * <p>{@code a - a > b - b} names a position on each side and cuts nothing at all. Asked of the
+     * sides first, one position on each was enough to call it a relation between two of them — a
+     * class about two positions this compiler is waiting to be able to state, for a rule that
+     * states nothing about either. The single-position cancellation beside it does not catch this:
+     * there is only one position there for the sides to find.
+     */
+    @Test
+    void whatARuleCutsOverrulesWhatItsSidesMention() {
+        assertEquals(List.of(UndividedPosition.Reason.RULE_CUTS_NOTHING),
+                whyAt(guard("a: Int, b: Int",
+                        "Int.subtract(a, a) > Int.subtract(b, b)"), "a"));
+    }
+
+    /**
      * A helper is a binding round the expression it became, and what the expression is made of is
      * its body. An argument the body never reads is no part of the value.
      *

@@ -83,8 +83,7 @@ public final class UnreadComparison {
          * it could not read beside it, and would go on being blamed as more operations became
          * readable.
          *
-         * @param stoppedAt what the expression with no rule here is made of, never absent: where
-         *                  nothing in particular stopped the reading it is the comparison itself
+         * @param stoppedAt what the expression with no rule here is made of
          */
         record NotRead<K>(ValueOrigin<K> stoppedAt) implements Quantity<K> {
 
@@ -137,41 +136,48 @@ public final class UnreadComparison {
         // sit on one side, as of `a < b`. Counted off the sides instead, the first came
         // back as a form nobody could read; counted off how many positions the comparison
         // names, `a * b > 5` came back as a relation when what stops it is the product.
-        if (quantity instanceof Quantity.Over<K> over && over.positions().size() > 1) {
-            return new BlockReason.ComparisonBetweenPositions();
-        }
+        return switch (quantity) {
+            // Read to the end and there is no quantity. Nothing about how it was written adds to
+            // that: no reading fell short, so no question about what could not be read arises.
+            case Quantity.CutsNothing<K> _ -> new BlockReason.ComparisonCuttingNothing();
+            // Over one position, that one is what the rule divides however many the spelling
+            // mentions: `a + b > b` cuts `a`, and counted off the sides it was a relation the model
+            // does not state.
+            case Quantity.Over<K> over -> over.positions().size() > 1
+                    ? new BlockReason.ComparisonBetweenPositions()
+                    : whatThisSideSays(speakingSide(left, right), ordered);
+            // No quantity was read, so what the sides name is the only account there is.
+            case Quantity.NotRead<K> notRead -> whatTheSidesSay(left, right, notRead, ordered);
+        };
+    }
+
+    /**
+     * What a comparison whose arithmetic went unread comes to, off what its sides name.
+     *
+     * <p>Only here. Where the canonical form was read it has already said what the rule cuts, and a
+     * spelling saying otherwise is the spelling being wrong about the rule.
+     */
+    private static <K> BlockReason.AboutARule whatTheSidesSay(ValueOrigin<K> left,
+                                                              ValueOrigin<K> right,
+                                                              Quantity.NotRead<K> notRead,
+                                                              Predicate<K> ordered) {
         Set<K> named = new LinkedHashSet<>(left.positions());
         named.addAll(right.positions());
         if (!left.positions().isEmpty() && !right.positions().isEmpty() && named.size() > 1) {
             return new BlockReason.ComparisonBetweenPositions();
         }
-        // A rule read to the end whose quantity is empty. Said before anything about the sides or
-        // the carrier: nothing was left unread, so no question about what could not be read arises.
-        if (quantity instanceof Quantity.CutsNothing<K>) {
-            return new BlockReason.ComparisonCuttingNothing();
-        }
-        // The carrier, asked before anything about the reading. Whether a line can be drawn on what
-        // a position holds is settled by the position, and no reader of any form would change it —
-        // so `s < Won` over a type with one value says that, wherever the arithmetic stopped.
+        // The carrier, asked of the position and before the reading. Whether a line can be drawn on
+        // what a position holds is settled by the position, and no reader of any form would change
+        // it — so `s < Won` over a type with one value says that, wherever the reading stopped.
         ValueOrigin<K> side = speakingSide(left, right);
         if (side instanceof ValueOrigin.IsAPosition<K> one && !ordered.test(one.at())) {
             return new BlockReason.UnreadComparisonDomain();
         }
-        // And then what the quantity itself came to, answered case by case with no default: a fourth
-        // answer would otherwise arrive as whichever of these it happened to resemble, which is the
-        // arrangement this whole reading is against.
-        return switch (quantity) {
-            // What the reading stopped at, where it stopped. Which expression that was is the
-            // walk's answer and not something recovered from the sides: `String.length(s) > n * n`
-            // stops at the product, and read off the sides it came back as a rule about the
-            // length — an operation this reads, named for the one it does not.
-            case Quantity.NotRead<K> notRead -> whatThisSideSays(notRead.stoppedAt(), ordered);
-            // A form was read and still divides no position. What is left to say is about the side
-            // the threshold would have been read off.
-            case Quantity.Over<K> _ -> whatThisSideSays(side, ordered);
-            // Answered above, and here so that the switch stays total.
-            case Quantity.CutsNothing<K> _ -> new BlockReason.ComparisonCuttingNothing();
-        };
+        // And what the reading stopped at, where it stopped. Which expression that was is the
+        // walk's answer and not something recovered from the sides: `String.length(s) > n * n`
+        // stops at the product, and read off the sides it came back as a rule about the length —
+        // an operation this reads, named for the one it does not.
+        return whatThisSideSays(notRead.stoppedAt(), ordered);
     }
 
     /**
@@ -197,15 +203,6 @@ public final class UnreadComparison {
     /** What one side leaves to say. */
     private static <K> BlockReason.AboutARule whatThisSideSays(ValueOrigin<K> side,
                                                                Predicate<K> ordered) {
-        // A value an operation made of what stands at a position, and a rule written about that
-        // value. Where it came from is known; what the rule says about the values there is not, and
-        // working it out means following the rule back through the operation. Said before the cases
-        // below because it is true of an operation over a position and of one over an element
-        // alike, and telling those two apart here would be this deciding that a rule about a
-        // sequence's elements is a different kind of thing from a rule about a number.
-        if (side.appliedOperation() != null || side.madeFrom() != null) {
-            return new BlockReason.RuleAboutADerivedValue();
-        }
         return switch (side) {
             // The position itself against something no end came out of. The carrier, asked of the
             // carrier: `at < DateTime(...)` stops because nothing draws a line on a date-time,
@@ -214,17 +211,25 @@ public final class UnreadComparison {
             case ValueOrigin.IsAPosition<K> one -> ordered.test(one.at())
                     ? new BlockReason.UnreadComparisonForm()
                     : new BlockReason.UnreadComparisonDomain();
-            // Arithmetic the terms do not take apart, and a side that names nothing at all. Both
-            // leave a reader the same work: a wider reading of the form. Where the side names no
-            // position either, nothing is filed under this — a reason is said at the positions the
-            // comparison names, and it names none — so what is answered is only that no capability
-            // is owed on its account.
-            case ValueOrigin.Composed<K> _, ValueOrigin.Written<K> _, ValueOrigin.Unnameable<K> _ ->
-                    new BlockReason.UnreadComparisonForm();
-            // Answered above, and here so that a case added to the origin has to be answered for
-            // rather than falling to the nearest word that already existed.
+            // A value an operation made of what stands at a position, and a rule written about that
+            // value. Where it came from is known; what the rule says about the values there is not,
+            // and working it out means following the rule back through the operation. One answer
+            // for an operation over a position and for an element an operation handed out alike: a
+            // rule about a sequence's elements is not a different kind of thing from a rule about a
+            // number.
             case ValueOrigin.Applied<K> _, ValueOrigin.MadeFromAPosition<K> _ ->
                     new BlockReason.RuleAboutADerivedValue();
+            // Arithmetic the terms do not take apart — unless what is under it came from a
+            // position, which is the same rule about a value made from one with a layer of
+            // arithmetic over it.
+            case ValueOrigin.Composed<K> composed -> composed.madeFrom() != null
+                    ? new BlockReason.RuleAboutADerivedValue()
+                    : new BlockReason.UnreadComparisonForm();
+            // A side that names nothing at all. Nothing is filed under this — a reason is said at
+            // the positions the comparison names, and it names none — so what is answered is only
+            // that no capability is owed on its account.
+            case ValueOrigin.Written<K> _, ValueOrigin.Unnameable<K> _ ->
+                    new BlockReason.UnreadComparisonForm();
         };
     }
 
