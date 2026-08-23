@@ -1,6 +1,13 @@
 # ADR-0053: Standard-library implementation-location policy — one core declaration seam
 
-Status: Accepted.
+Status: Accepted. Two of the exceptions it closes the compiler-integrated set to are
+superseded. The primitive-headed-union functions are ordinary declared kernels: a primitive
+is a union member a declaration may name (ADR-0081), and `Decimal.divide` was moved out by
+ADR-0112 — `Int.divide` / `Int.truncatingRemainder` stay written out in the backend, but for
+the branch they emit rather than for anything a declaration cannot say. The rounding-mode
+exception recorded under Consequences is superseded by ADR-0087, which declares
+`data RoundingMode` in a core module, so those signatures are written where every other
+kernel's is.
 
 ## Context
 

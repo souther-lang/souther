@@ -5,17 +5,19 @@ import java.math.BigDecimal;
 /**
  * The scales a Decimal operation runs at, as this compiler holds them.
  *
- * <p>A scale is an {@code Int}, which is signed 64-bit, and what the run time divides at is held to
- * fewer bits than that. A scale outside those cannot be handed over as the number it is, and the
- * language answers nothing at one rather than at a scale it was narrowed to (spec
- * §a-scale-is-used-as-the-number-written). So a reading has no quotient to state a range about
+ * <p>A scale is an {@code Int}, which is signed 64-bit, and the scales a Decimal operation runs at
+ * are the signed 32-bit numbers — the specification writes the two ends out (spec
+ * §a-scale-is-used-as-the-number-written). A scale outside them answers nothing rather than
+ * answering at a scale it was narrowed to, so a reading has no quotient to state a range about
  * there, for the same reason it has none where the divisor is zero.
  *
  * <p>Written here rather than read out of the run time. The specification states the range, and the
  * compiler and the run time are two implementations of that sentence: a reading that called into
  * {@code souther.runtime} would be a reading whose soundness depended on which backend was linked,
- * and what the analysis is about is the language. The two are held together by a test over the ends
- * (ADR-0112).
+ * and what the analysis is about is the language. That is only worth saying because the range is in
+ * the specification — read off the run time it would be an implementation's number, and this would
+ * be a copy of it rather than a second reading of one rule. The two are held together by a test
+ * over the ends (ADR-0112).
  *
  * <p>This is not the reading's budget. How far from the point a reading will lay out a grid is
  * {@link ReadingPolicy#laysOutAGridAt}, which is what a compilation is prepared to spend and not a

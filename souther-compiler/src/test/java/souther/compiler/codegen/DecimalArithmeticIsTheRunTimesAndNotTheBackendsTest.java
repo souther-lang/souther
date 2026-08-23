@@ -38,12 +38,25 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class DecimalArithmeticIsTheRunTimesAndNotTheBackendsTest {
 
-    /** The methods that are Souther Decimal operations, whoever is asked to run them. A name here is
-     *  one the run time owns; a call to it on {@code java.math.BigDecimal} is the backend deciding
-     *  what an operation means. {@code signum}, {@code compareTo} and the constructors are not
-     *  listed: they build no Decimal and answer on every value. */
-    private static final Set<String> ARITHMETIC =
-            Set.of("add", "subtract", "multiply", "divide", "setScale", "negate", "round");
+    /**
+     * What generated code may invoke on a {@code java.math.BigDecimal}, and nothing else.
+     *
+     * <p>An allowlist and not a list of forbidden operations. A list of the ones to refuse can only
+     * refuse the ones whoever wrote it thought of, and what #976 was is nobody thinking of one:
+     * {@code add}, {@code subtract} and {@code multiply} sat under a comment saying Decimal does not
+     * overflow. Written that way this test would pass a later kernel backed by
+     * {@code BigDecimal.sqrt}, which is partial, because {@code sqrt} is not a name anyone listed.
+     * Written this way that kernel stops the build and is considered.
+     *
+     * <p>What is on it is building a value and asking a question of one, which is the backend
+     * knowing the representation. Everything that answers a {@code Decimal} is an operation the
+     * language has, and those are {@code DecimalMath}'s.
+     */
+    private static final Set<String> REPRESENTATION = Set.of(
+            "<init>",       // a literal
+            "signum",       // the zero test the `/` operator branches on
+            "compareTo",    // the comparison operators, and a Map/Set key
+            "equals", "hashCode", "toString");
 
     /** Every operator and every Decimal kernel a model can write, in one module. */
     private static final String MODULE = """
@@ -67,6 +80,15 @@ class DecimalArithmeticIsTheRunTimesAndNotTheBackendsTest {
             behavior lit : (i: In) -> Out constructs Out
             let lit (i) = Out { value = 1.5m + 0.0m - i.a, m = 0 }
 
+            // Unary minus, and the comparison and equality a Decimal reaches BigDecimal for. The
+            // negation is here because the list above named it and no fixture ran it, so a call
+            // this test declared it refused went on being emitted and the test stayed green.
+            behavior unary : (i: In) -> Out constructs Out
+            let unary (i) = Out {
+                value = -i.a + Decimal.abs(i.b) + Decimal.min(i.a, i.b) + Decimal.clamp(i.a, i.b, i.a),
+                m = if i.a < i.b then 1 else if i.a == i.b then 2 else 3
+            }
+
             behavior divv : (i: In) -> Out constructs Out
             let divv (i) =
                 match Decimal.divide(i.a, i.b, i.s, HALF_UP) with
@@ -85,7 +107,7 @@ class DecimalArithmeticIsTheRunTimesAndNotTheBackendsTest {
                 for (CodeElement element : body) {
                     if (element instanceof InvokeInstruction call
                             && "java/math/BigDecimal".equals(call.owner().asInternalName())
-                            && ARITHMETIC.contains(call.name().stringValue())) {
+                            && !REPRESENTATION.contains(call.name().stringValue())) {
                         byTheBackend.add(emitted.getKey() + "." + method.methodName().stringValue()
                                 + " calls BigDecimal." + call.name().stringValue());
                     }
@@ -94,8 +116,10 @@ class DecimalArithmeticIsTheRunTimesAndNotTheBackendsTest {
         }
 
         assertEquals(Set.of(), byTheBackend,
-                "the backend runs a Decimal operation itself — route it through DecimalMath, which"
-                        + " owns what the operation means and how it fails (ADR-0112)");
+                "the backend invokes something on BigDecimal that is not building a value or asking"
+                        + " a question of one — if it is a Decimal operation, route it through"
+                        + " DecimalMath, which owns what it means and how it fails; if it is"
+                        + " representation, add it above and say why (ADR-0112)");
     }
 
     /**

@@ -53,6 +53,12 @@ it may not do is implement a Souther operation with a `BigDecimal` method: `+` e
 
 Applied to Decimal, this settles four things.
 
+- The range is written into the specification (`[#a-scale-is-used-as-the-number-written]`), not left
+  to whoever performs the arithmetic. Having decided the analysis reads the language rather than the
+  linked backend, a range only the two implementations knew would have been a rule read off an
+  implementation with the other free not to hold to it. A `Decimal` is a `java.math.BigDecimal` by
+  `[#primitives]`, so the number was already settled; leaving it unwritten made it unreadable, not
+  abstract.
 - Every `decimal.*` kernel is one emitter, `DeclaredStatic` reading the declaration, owned by
   `DecimalMath`. `divide` was written out by hand in `BodyGen`; `add`/`subtract`/`multiply` went
   straight to `BigDecimal`; `compare`/`fromInt` derived a descriptor from the call. One shape now,
@@ -68,6 +74,21 @@ Applied to Decimal, this settles four things.
 
 `JdkVirtual.l2iArgs` is deleted. It had no entries and what it offered was the raw narrowing, in the
 one place a later kernel taking a host `int` would have reached for it.
+
+**No `BigDecimal` operation is emitted at all**, including the total ones. The rule above would
+permit `BigDecimal.negate`: it answers on every value and keeps the operand's scale. What decides
+against it is that `BigDecimal` does not say which of its operations are total. None of them declares
+a checked exception, so the question is answered by reading the JDK, once per operation, by whoever
+adds the next one — and it was already answered wrong for the sum, the difference and the product,
+in a comment saying Decimal does not overflow. So the backend keeps only what builds a value and
+what asks a question of one, and the question is not asked again. This is a property of
+`BigDecimal`, not a second general rule: `String`'s methods say what they do, and the ones on
+`JdkVirtual` stay there.
+
+The test that holds this is an allowlist of what may be invoked on a `BigDecimal`, not a list of the
+operations to refuse. A list of the ones to refuse can only refuse what its author thought of, and
+what this issue is is nobody thinking of one; written that way it would pass a later kernel backed by
+`BigDecimal.sqrt`, which is partial, because nobody listed `sqrt`.
 
 ## Consequences
 
@@ -91,6 +112,10 @@ one place a later kernel taking a host `int` would have reached for it.
 - `String.trim`/`lowercase`/`uppercase`/`contains`/`startsWith`/`endsWith`/`append` and
   `DateTime.toDate`/`toTime`/`fromDateAndTime` stay on `JdkVirtual`: the values go over unchanged
   and the operations answer on all of them.
+- A test that refuses a shape has to be run against that shape. The first version of this one named
+  `negate` among the operations it refused and had no model writing `-d`, so it passed while the call
+  it named went on being emitted. A structural test states an invariant, and an invariant nothing
+  exercises is a sentence.
 - The rule reaches past this issue by construction — a code point against a UTF-16 offset, a
   temporal range, a size or a count narrowed to a host `int`. Each is the same meeting, and the
   answer at each is the operation's to state.

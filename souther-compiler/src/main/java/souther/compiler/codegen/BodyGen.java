@@ -713,9 +713,14 @@ final class BodyGen {
                 // helper names that module's unit, which this module need not declare at all — and,
                 // if it declares one spelled the same, is not the same unit.
                 case Core.UnitValue u -> loadSharedInstance(code, cd(u.data()));
+                // Negating a Decimal goes to the runtime that owns Decimal arithmetic, as the
+                // binary operators do (ADR-0112). This one is total, so calling BigDecimal here
+                // would be sound — what it would cost is the next reader having to work out which
+                // of these are (BodyGen.java:1725).
                 case Core.Neg n -> {
                     if (genExpr(n.operand()) == Type.DECIMAL) {
-                        code.invokevirtual(CD_BigDecimal, "negate", MethodTypeDesc.of(CD_BigDecimal));
+                        code.invokestatic(CD_DecimalMath, "negate",
+                                MethodTypeDesc.of(CD_BigDecimal, CD_BigDecimal));
                     } else {
                         code.lneg();               // Int is carried as a long
                     }

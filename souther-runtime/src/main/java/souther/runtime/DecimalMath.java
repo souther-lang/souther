@@ -165,6 +165,24 @@ public final class DecimalMath {
                         + " at scale " + scale);
     }
 
+    /**
+     * The unary {@code -} on Decimal. Total — the scale is the operand's and only the sign moves, so
+     * there is no scale for a result to leave the range at.
+     *
+     * <p>Here anyway. The backend may call a host method that answers on every value it is handed
+     * (ADR-0112), and this is one, so nothing would be unsound about emitting
+     * {@code BigDecimal.negate} where it stands. What decides it is that whoever writes the next
+     * Decimal operation would have to answer the same question again, and {@code BigDecimal} does
+     * not answer it in its signatures: every one of these throws an unchecked
+     * {@code ArithmeticException} or none of them does, and which is which is found by reading the
+     * JDK. It was already answered wrong for the sum, the difference and the product, in a comment
+     * that said Decimal does not overflow. So the backend keeps none of them and the question is
+     * not asked again.
+     */
+    public static BigDecimal negate(BigDecimal d) {
+        return d.negate();
+    }
+
     /** {@code Decimal.compare(a, b)}: -1, 0, or 1 by numeric value, ignoring scale. Total: comparing
      *  builds no value, so there is no scale for a result to leave the range at. */
     public static long compare(BigDecimal a, BigDecimal b) {
