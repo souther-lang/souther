@@ -91,10 +91,16 @@ final class Conditions {
      * The relations the arguments of a library definition's case stand in, as constraints.
      *
      * <p>Already relations when they arrive ({@link Choice.ArgumentRelation}), so what is left is
-     * reading each side as a form. A side no form is read of states nothing and is left out, which
-     * is this method under-answering in the direction the class doc gives: a relation dropped from
-     * an arm leaves the arm reachable where it is not and its answer in the span where it need not
-     * be, which costs precision, while one invented would be unsound.
+     * reading each side as a form. A side no form is read of — an argument that is the answer of
+     * something nothing names — states nothing and is left out.
+     *
+     * <p>Which is one answer for both readers of these arms, and it has to be. Dropping a relation
+     * leaves the arm reachable where it is not: a recipe then spans an answer it need not have
+     * ({@link DerivedNumericFacts}), and a clause read case by case is then asked to hold in a case
+     * the values cannot reach ({@link Predicates.Piecewise}). Both directions cost precision and
+     * neither states anything the values fail, which is the rule the class doc gives — and it is why
+     * this is decided here rather than by each reader, where the two could come to degrade
+     * differently and nothing would say which of them was reading the same choice.
      */
     private static void standing(Terms terms, List<Choice.ArgumentRelation> relations,
                                  Denotations at, List<NumericConstraint> out) {

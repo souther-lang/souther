@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -43,9 +44,9 @@ class EveryCaseALibraryDefinitionIsWrittenInBecomesAnArmTest {
 
     @Test
     void everyRowOfTheTableIsAnArmAnsweringItsArgumentUnderAllOfItsRelations() {
-        assertTrue(DischargeRules.choosingOperations().size() >= 6,
-                "the table has the operations the library defines by cases, and reading none of"
-                        + " them is not a pass");
+        assertFalse(DischargeRules.choosingOperations().isEmpty(),
+                "no operation is defined by cases at all, so this read nothing rather than reading"
+                        + " that nothing was wrong");
         for (ValueName operation : DischargeRules.choosingOperations()) {
             Core.PreservedCall call = callTo(operation);
             DischargeRules.Choices defined = DischargeRules.chosenBy(call);

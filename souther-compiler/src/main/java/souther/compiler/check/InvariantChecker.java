@@ -2420,8 +2420,13 @@ public final class InvariantChecker {
         Core asked = null;
         List<Arm> arms = new ArrayList<>(choice.arms().size());
         for (Choice.Arm arm : choice.arms()) {
-            Opened opened = opening(arm.decidedBy());
-            if (asked != null && !asked.equals(opened.asked())) {
+            Opened opened = opening(arm.decidedBy(), split);
+            // The same node and not an equal one. Every arm of a split is decided by the one node
+            // the choice was read off, so this is the node arriving as many times as there are arms;
+            // a producer handing each arm its own has made something this reads by asking one thing
+            // and there is no one thing to ask. Compared by identity because that is what is being
+            // claimed, and because what stands in a scrutinee is a tree of any size.
+            if (asked != null && asked != opened.asked()) {
                 throw new IllegalStateException("the arms of a split at " + split.pos()
                         + " are decided by more than one node, and a split is read by asking one");
             }
@@ -2453,27 +2458,30 @@ public final class InvariantChecker {
      * binding entered — so reaching this with one is the two disagreeing rather than a case to
      * handle.
      */
-    private Opened opening(Choice.Decides decides) {
+    private Opened opening(Choice.Decides decides, Core split) {
         return switch (decides) {
             case Choice.Decides.ACondition c -> new Opened(c.cond(), (within, there) -> new Entered(
                     predicates.assumeCond(c.cond(), within, there, c.holding()).known(), there));
             case Choice.Decides.ACase c -> new Opened(c.scrutinee(), (within, there) ->
                     engine.enteringArm(c.arm(), c.scrutinee(), within, there));
-            case Choice.Decides.ItWasBuilt b -> throw notOpened(b.attempt().pos(),
+            case Choice.Decides.ItWasBuilt ignored -> throw notOpened(split,
                     "an attempted construction", "it is read where it stands with what it built"
                             + " bound");
-            case Choice.Decides.ItDeparted d -> throw notOpened(d.attempt().pos(),
+            case Choice.Decides.ItDeparted ignored -> throw notOpened(split,
                     "an attempted construction", "it is read where it stands with what it built"
                             + " bound");
-            case Choice.Decides.ByArgumentRelations ignored -> throw notOpened(null,
+            case Choice.Decides.ByArgumentRelations ignored -> throw notOpened(split,
                     "an operation the library defines by cases", "there is no node to ask — what"
                             + " decides it is how its arguments stand, and the value is bounded by"
                             + " what its cases answer");
         };
     }
 
-    private static IllegalStateException notOpened(SourcePos at, String what, String instead) {
-        return new IllegalStateException(what + (at == null ? "" : " at " + at)
+    /** Where the node being opened is, asked of the node and not of the way of deciding. A way of
+     * deciding an arm need carry no node at all, and a message that read one off it had a position
+     * for some of them and nothing for the rest. */
+    private static IllegalStateException notOpened(Core split, String what, String instead) {
+        return new IllegalStateException(what + " at " + split.pos()
                 + " was opened as a case split, which this walk does not do — " + instead);
     }
 
