@@ -137,15 +137,32 @@ class AMeasureWithNoNumberSaysWhyTest {
         assertTrue(judge.contains("signature   not measured (no row names this behavior)"), judge);
     }
 
+    /**
+     * {@link #MODEL} measured, once for the class.
+     *
+     * <p>Six checks below read this one and nothing writes to it: a compilation's database answers
+     * questions and keeps the answers, which is the same arrangement whether one check asks or six
+     * do. Rendered once for the same reason — the sentences are a function of the report.
+     */
+    private static Compilation measured;
+
+    private static String rendered;
+
     private static Compilation compiled() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        if (measured == null) {
+            Compilation compilation = Compilation.ofSource(MODEL, "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            compilation.answerEverything();
+            measured = compilation;
+        }
+        return measured;
     }
 
     private static String human() {
-        return AdequacyReport.of(compiled()).human(SourceNameResolver.identity());
+        if (rendered == null) {
+            rendered = AdequacyReport.of(compiled()).human(SourceNameResolver.identity());
+        }
+        return rendered;
     }
 
     /**

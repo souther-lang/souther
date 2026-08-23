@@ -277,8 +277,21 @@ class TheFaceReadsWhatAModelIsWrittenAsTest {
                 .bind(implementation());
     }
 
+    /**
+     * The one implementation the checks below bind to, built once.
+     *
+     * <p>Building it runs the system Java compiler over a source written into a temporary
+     * directory, and eight of the calls here wanted the same class out of it. The class is what is
+     * kept; each caller still gets an instance of its own, so nothing one check does to it is
+     * something another can see.
+     */
+    private static Class<?> built;
+
     private static Object implementation() throws Exception {
-        return builtElsewhere(null, "example.app", IMPL, "FindTodoImpl");
+        if (built == null) {
+            built = builtElsewhere(null, "example.app", IMPL, "FindTodoImpl").getClass();
+        }
+        return built.getConstructor().newInstance();
     }
 
     private static Object builtElsewhere(String only, String pkg, String impl, String named)

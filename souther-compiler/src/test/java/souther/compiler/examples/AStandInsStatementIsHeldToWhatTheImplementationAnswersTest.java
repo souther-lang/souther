@@ -211,7 +211,25 @@ class AStandInsStatementIsHeldToWhatTheImplementationAnswersTest {
                 .bind(builtElsewhere(MODEL, "example.faked", IMPL));
     }
 
+    /**
+     * The implementations built here, one per package, kept across the checks that ask for them.
+     *
+     * <p>Building one runs the system Java compiler, and seven calls here wanted the same class out
+     * of it. An instance each is what the checks need rather than a class each: two of them take
+     * two bindings to show that what one does is not something the other sees.
+     */
+    private static final java.util.Map<String, Class<?>> BUILT = new java.util.HashMap<>();
+
     private static Object builtElsewhere(String model, String pkg, String impl) throws Exception {
+        Class<?> already = BUILT.get(pkg);
+        if (already == null) {
+            already = compileIt(model, pkg, impl);
+            BUILT.put(pkg, already);
+        }
+        return already.getConstructor().newInstance();
+    }
+
+    private static Class<?> compileIt(String model, String pkg, String impl) throws Exception {
         Path classes = Files.createTempDirectory("souther-faked");
         for (var e : souther.compiler.Compiler.compileModules(List.of(model)).entrySet()) {
             Path at = classes.resolve(e.getKey().replace('.', '/') + ".class");
@@ -227,6 +245,6 @@ class AStandInsStatementIsHeldToWhatTheImplementationAnswersTest {
         assertEquals(0, rc, "the implementation compiles against the module's classes");
         URLClassLoader loader = new URLClassLoader(new URL[] {classes.toUri().toURL()},
                 SoutherExamples.class.getClassLoader());
-        return loader.loadClass(pkg + ".FindTodoImpl").getConstructor().newInstance();
+        return loader.loadClass(pkg + ".FindTodoImpl");
     }
 }

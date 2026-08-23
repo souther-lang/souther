@@ -142,8 +142,25 @@ class TheLoopOverBoundRowsBelongsToWhoeverOwnsTheWorldTest {
         return SoutherExamples.ofSource(MODEL).bind(builtElsewhere());
     }
 
-    /** The implementation, compiled against the module's classes and loaded from its own loader. */
+    /**
+     * The implementation, compiled against the module's classes and loaded from its own loader —
+     * built once and instantiated per caller.
+     *
+     * <p>Building it runs the system Java compiler, and six calls here wanted the same class out of
+     * it. An instance each is what the checks need rather than a class each: two of them take two
+     * bindings to show that what one does is not something the other sees, and two instances of one
+     * class is exactly that.
+     */
+    private static Class<?> built;
+
     private static Object builtElsewhere() throws Exception {
+        if (built == null) {
+            built = compileIt();
+        }
+        return built.getConstructor().newInstance();
+    }
+
+    private static Class<?> compileIt() throws Exception {
         Path classes = Files.createTempDirectory("souther-world");
         for (var e : souther.compiler.Compiler.compileModules(List.of(MODEL)).entrySet()) {
             Path at = classes.resolve(e.getKey().replace('.', '/') + ".class");
@@ -159,6 +176,6 @@ class TheLoopOverBoundRowsBelongsToWhoeverOwnsTheWorldTest {
         assertEquals(0, rc, "the implementation compiles against the module's classes");
         URLClassLoader loader = new URLClassLoader(new URL[] {classes.toUri().toURL()},
                 SoutherExamples.class.getClassLoader());
-        return loader.loadClass("example.stored.FindTodoImpl").getConstructor().newInstance();
+        return loader.loadClass("example.stored.FindTodoImpl");
     }
 }
