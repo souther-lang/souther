@@ -41,7 +41,6 @@ import java.lang.constant.ClassDesc;
 import java.lang.constant.ConstantDescs;
 import java.lang.constant.MethodTypeDesc;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -1050,16 +1049,8 @@ public final class Backend {
             // How a union's answer is written is settled once here and handed to the interface, the
             // encoder and the bridge cases, so none of them is in a position to work the form or a
             // tag out again.
-            Boundary.Alternatives settled = Boundary.of(sig.outputType(), symbols);
-            // Compatibility only: keep the generated order this compiler had before the alternatives
-            // were settled in one place. `AtomSpace` states the order, and this is the one place that
-            // overrides it — a union whose member is itself a sum comes out of the descent in the
-            // order the cases are declared in, and sorting by name moves it. The ordering follow-up
-            // removes these two lines and passes `settled` through.
-            List<TypeSymbol> ordered = new ArrayList<>(settled.atoms());
-            Collections.sort(ordered);
             results.put(new GeneratedClass.BehaviorResult(module.name(), bd.name()),
-                    new Boundary.Alternatives(ordered, settled.representation()));
+                    Boundary.of(sig.outputType(), symbols));
         }
         return results;
     }
