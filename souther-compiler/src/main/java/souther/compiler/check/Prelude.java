@@ -45,10 +45,6 @@ import java.util.Set;
  */
 public final class Prelude {
 
-    /** Every qualifier a call may carry — the language's constant ({@link Reserved}), read from
-     *  there so nothing has to initialize this class to know it. */
-    private static final Set<String> QUALIFIERS = Reserved.QUALIFIERS;
-
     /** A declaration's resolved signature: its parameter types, and the success type of its declared
      *  return — or null where the declaration writes no return type and leaves its result to its
      *  body, which a Souther-bodied helper with parameters may and a kernel never does. A
@@ -122,18 +118,6 @@ public final class Prelude {
     }
 
     private Prelude() {
-    }
-
-    /** Whether {@code qualifier} names a standard-library namespace a call/import may use:
-     *  {@code List}/{@code String}/{@code Map}/{@code Bool}/{@code Int}/{@code Decimal} (spec §stdlib). */
-    public static boolean isQualifier(String qualifier) {
-        return QUALIFIERS.contains(qualifier);
-    }
-
-    /** Every standard-library qualifier ({@code List} / {@code Map} / … / {@code Option}). The
-     *  syntax highlighter derives its qualifier list from this so the two never drift apart. */
-    public static Set<String> qualifiers() {
-        return QUALIFIERS;
     }
 
     /** What a sugared name is sugar for: the call it becomes, and the arguments the rewrite supplies
@@ -264,7 +248,7 @@ public final class Prelude {
         }
         names.addAll(SUGARED.keySet());
         Set<String> byModule = new LinkedHashSet<>();
-        for (String qualifier : QUALIFIERS) {
+        for (String qualifier : Reserved.QUALIFIERS) {
             for (String name : names) {
                 if (OPERATIONS.get(name).alias().equals(qualifier)) {
                     byModule.add(name);

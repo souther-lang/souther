@@ -1,6 +1,7 @@
 package souther.compiler.doc;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.Reserved;
 import souther.compiler.check.Prelude;
 import souther.compiler.types.Type;
 
@@ -380,7 +381,7 @@ class NoStandardLibraryCallTheSpecificationWritesContradictsItsSignatureTest {
         List<Call> calls = new ArrayList<>();
         Matcher m = CALL.matcher(adoc);
         while (m.find()) {
-            if (!Prelude.isQualifier(m.group(1))) {
+            if (!Reserved.isQualifier(m.group(1))) {
                 continue;
             }
             int open = m.end() - 1;

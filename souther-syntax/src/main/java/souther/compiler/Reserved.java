@@ -98,6 +98,15 @@ public final class Reserved {
                 : java.text.Normalizer.normalize(spelling, java.text.Normalizer.Form.NFC);
     }
 
+    /** Whether {@code qualifier} names a standard-library namespace a call or an import may write:
+     *  {@code List} / {@code String} / {@code Map} / … (spec §stdlib). Asked here rather than of the
+     *  loaded library, because which qualifiers there are is settled by {@link #MODULES} and reading
+     *  it off the library made a reader that only wanted the names load and resolve every one of the
+     *  modules behind them. */
+    public static boolean isQualifier(String qualifier) {
+        return QUALIFIERS.contains(qualifier);
+    }
+
     /** Whether {@code moduleName} is the reserved namespace or a module inside it. The core
      *  privileges — declaring an {@code intrinsic}, declaring a {@code private let} — are the ones
      *  this answers for. */

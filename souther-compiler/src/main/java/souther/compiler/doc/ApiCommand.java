@@ -1,5 +1,6 @@
 package souther.compiler.doc;
 
+import souther.compiler.Reserved;
 import souther.compiler.check.Prelude;
 import souther.compiler.ast.Hir;
 import souther.compiler.types.Type;
@@ -81,9 +82,9 @@ public final class ApiCommand {
             err.println(caller.stdlibSource(asked.substring(0, asked.indexOf('.'))));
             return 0;
         }
-        if (!Prelude.isQualifier(asked)) {
+        if (!Reserved.isQualifier(asked)) {
             err.println("no stdlib module `" + asked + "`");
-            err.println("modules: " + String.join(", ", Prelude.qualifiers().stream().sorted().toList()));
+            err.println("modules: " + String.join(", ", Reserved.QUALIFIERS.stream().sorted().toList()));
             return 2;
         }
         listPublished(out, asked + ".");
@@ -174,9 +175,9 @@ public final class ApiCommand {
     }
 
     private static int printSource(String alias, PrintStream out, PrintStream err) {
-        if (!Prelude.isQualifier(alias)) {
+        if (!Reserved.isQualifier(alias)) {
             err.println("no stdlib module `" + alias + "`");
-            err.println("modules: " + String.join(", ", Prelude.qualifiers().stream().sorted().toList()));
+            err.println("modules: " + String.join(", ", Reserved.QUALIFIERS.stream().sorted().toList()));
             return 2;
         }
         String resource = "/souther/" + alias.toLowerCase() + ".sou";

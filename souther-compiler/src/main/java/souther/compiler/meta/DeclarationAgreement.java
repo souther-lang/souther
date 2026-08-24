@@ -1,10 +1,10 @@
 package souther.compiler.meta;
 
+import souther.compiler.Reserved;
 import souther.compiler.ast.DefinitionRole;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.RowPosition;
 import souther.compiler.ast.WrittenName;
-import souther.compiler.check.Prelude;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
@@ -216,7 +216,7 @@ public final class DeclarationAgreement {
          */
         private void reach(Reached what) {
             String module = what.module();
-            if (module == null || module.isEmpty() || Prelude.isQualifier(module)) {
+            if (module == null || module.isEmpty() || Reserved.isQualifier(module)) {
                 return;
             }
             if (reached.add(what)) {

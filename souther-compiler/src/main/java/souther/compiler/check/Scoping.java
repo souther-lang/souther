@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.Reserved;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.SourcePos;
@@ -523,7 +524,7 @@ public final class Scoping {
         if (universe.module(alias).isThere()) {
             return alias;
         }
-        return Prelude.isQualifier(alias) ? "souther" : null;
+        return Reserved.isQualifier(alias) ? "souther" : null;
     }
 
     /**
@@ -648,7 +649,7 @@ public final class Scoping {
             // A standard-library qualifier is the only spelling that reaches the library, so a data
             // of that name hides it — from every module, since the qualifier is not this module's
             // to shadow. Refused where it is declared, as a reserved module name is.
-            if (Prelude.isQualifier(def.name())) {
+            if (Reserved.isQualifier(def.name())) {
                 refused.add(new Refusal.TakesTheLibraryQualifier(def));
             }
         }
