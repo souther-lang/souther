@@ -1,5 +1,7 @@
 package souther.compiler.check;
 
+import souther.compiler.semantics.OperationFacts;
+import souther.compiler.semantics.OperationSubject;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
@@ -50,8 +52,7 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return souther.compiler.semantics.OperationFacts.saysNothingOf(
-                    souther.compiler.semantics.OperationSubject.COMBINATOR);
+            return OperationFacts.saysNothingOf(OperationSubject.COMBINATOR);
         }
     },
 
@@ -167,8 +168,7 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return souther.compiler.semantics.OperationFacts.saysNothingOf(
-                    souther.compiler.semantics.OperationSubject.BUILT);
+            return OperationFacts.saysNothingOf(OperationSubject.BUILT);
         }
     },
 
@@ -194,8 +194,7 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return souther.compiler.semantics.OperationFacts.saysNothingOf(
-                    souther.compiler.semantics.OperationSubject.PREDICATE_CARRY);
+            return OperationFacts.saysNothingOf(OperationSubject.PREDICATE_CARRY);
         }
     },
 
@@ -221,8 +220,7 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return souther.compiler.semantics.OperationFacts.saysNothingOf(
-                    souther.compiler.semantics.OperationSubject.EMPTINESS);
+            return OperationFacts.saysNothingOf(OperationSubject.EMPTINESS);
         }
     },
 
@@ -250,8 +248,7 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return souther.compiler.semantics.OperationFacts.saysNothingOf(
-                    souther.compiler.semantics.OperationSubject.QUANTIFICATION);
+            return OperationFacts.saysNothingOf(OperationSubject.QUANTIFICATION);
         }
     },
 
@@ -280,8 +277,7 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return souther.compiler.semantics.OperationFacts.saysNothingOf(
-                    souther.compiler.semantics.OperationSubject.PROJECTION);
+            return OperationFacts.saysNothingOf(OperationSubject.PROJECTION);
         }
     },
 
@@ -305,8 +301,7 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return souther.compiler.semantics.OperationFacts.saysNothingOf(
-                    souther.compiler.semantics.OperationSubject.SIZE);
+            return OperationFacts.saysNothingOf(OperationSubject.SIZE);
         }
     },
 
@@ -335,8 +330,7 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return souther.compiler.semantics.OperationFacts.saysNothingOf(
-                    souther.compiler.semantics.OperationSubject.ORDER);
+            return OperationFacts.saysNothingOf(OperationSubject.ORDER);
         }
     },
 
@@ -364,8 +358,7 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return souther.compiler.semantics.OperationFacts.saysNothingOf(
-                    souther.compiler.semantics.OperationSubject.BOUNDS);
+            return OperationFacts.saysNothingOf(OperationSubject.BOUNDS);
         }
     },
 
@@ -395,8 +388,7 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return souther.compiler.semantics.OperationFacts.saysNothingOf(
-                    souther.compiler.semantics.OperationSubject.MEASURE);
+            return OperationFacts.saysNothingOf(OperationSubject.MEASURE);
         }
     },
 
@@ -424,8 +416,7 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return souther.compiler.semantics.OperationFacts.saysNothingOf(
-                    souther.compiler.semantics.OperationSubject.CHOICE);
+            return OperationFacts.saysNothingOf(OperationSubject.CHOICE);
         }
     },
 
@@ -453,8 +444,7 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return souther.compiler.semantics.OperationFacts.saysNothingOf(
-                    souther.compiler.semantics.OperationSubject.FORM);
+            return OperationFacts.saysNothingOf(OperationSubject.FORM);
         }
     },
 
@@ -491,8 +481,7 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return souther.compiler.semantics.OperationFacts.saysNothingOf(
-                    souther.compiler.semantics.OperationSubject.NUMERIC_RESULT);
+            return OperationFacts.saysNothingOf(OperationSubject.NUMERIC_RESULT);
         }
     };
 

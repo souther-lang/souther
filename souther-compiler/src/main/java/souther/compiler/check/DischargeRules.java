@@ -1,11 +1,15 @@
 package souther.compiler.check;
 
+import souther.compiler.semantics.ArgumentRef;
 import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.Cardinality;
 import souther.compiler.semantics.ElementLineage;
 import souther.compiler.semantics.ElementShape;
-
-import souther.compiler.semantics.ArgumentRef;
+import souther.compiler.semantics.NumericResult;
+import souther.compiler.semantics.OperationFact;
+import souther.compiler.semantics.OperationFacts;
+import souther.compiler.semantics.PositiveOrder;
+import souther.compiler.semantics.ResultBound;
 
 import souther.compiler.types.BinOp;
 import souther.compiler.core.Core;
@@ -29,20 +33,16 @@ import java.util.function.Predicate;
  * (spec §invariant-discharge-preservation), and what each guarantees of what it answers
  * (spec §invariant-discharge-guarantees).
  *
- * <p>These are the tables that decide how much of a model the language tracks rather than leaves to a
- * run-time check, and each is stated per operation because that is the level an author writes at. It
- * is data and lookups and nothing else: what a rule is <em>used for</em> — carrying a predicate to
- * the container something was built from, naming a size — is the walk's, and lives with the walk.
+ * <p>What the operations are is not here. That is declared where nothing reads it
+ * ({@link OperationFacts}); what is here is this check's reading of it — the shape a rule is read
+ * at a call, and what the check concludes from one. A fact about an operation held in a procedure
+ * that reads it is a fact its second reader has to be given by that procedure, which is the
+ * arrangement the declarations were moved out of.
  *
- * <p>Every rule is keyed by the operation a call reaches, not by how it was written: a module that
- * imported an operation writes it bare and one that did not writes it qualified, and they are the
- * same operation. What the operations do to the closure they are handed is not here but in
- * {@link Combinators}, which the totality check reads as well and neither of the two states.
- *
- * <p>A rule answers a call, not a position in one. Which argument it reads is written as {@link ArgumentRef}
- * and settled here, so no reader turns a number back into an argument and none has to ask whether the
- * number was one this call has. What makes that safe is the binding below: every row is held to the
- * declaration it was written for before any of them is read.
+ * <p>What each declaration is held to is here too, since holding one reads the library's own
+ * signatures and asks what this check makes of a type. Every declaration is walked before any call
+ * is read ({@link OperationFactBinder}), so a fact nothing here looks up is one this has held all
+ * the same.
  */
 final class DischargeRules {
 
@@ -69,9 +69,7 @@ final class DischargeRules {
     /** The container {@code call} built its result from, and what the building kept of it. */
     record Source(Core container, ElementShape shape, Cardinality size) {}
 
-    // Declared with the rest (OperationFact.ResultIsNoSmallerThan), one fact per container.
 
-    // Declared with the rest (OperationFact.ReadsItsContainer).
 
     /** Where a predicate reads its container at a call, and how far its statement travels. */
     record Carrying(Core.PreservedCall stated, ArgumentRef at, Set<ElementShape> through) {
@@ -90,7 +88,6 @@ final class DischargeRules {
         }
     }
 
-    // Declared with the rest (OperationFact.IsStatedOverAProjection).
 
     /** The projection a predicate at a call is stated over, as the block it answers with. */
     record Projection(Core.PreservedCall stated, ArgumentRef at, Core.Block projection) {
@@ -101,9 +98,7 @@ final class DischargeRules {
         }
     }
 
-    // Declared with the rest (OperationFact.StatesItsPredicateOfEveryElement).
 
-    // Declared with the rest (OperationFact.MeansTheSameAsASizeOfNought).
 
     /** Denial, which the analysis representation keeps as the call it is. */
     static final ValueName NOT = op("Bool", "not");
@@ -444,69 +439,66 @@ final class DischargeRules {
      * row names, would leave the operation with a meaning no program reaches and no diagnostic
      * anywhere. Held here, before any call is read.
      */
-    static void holdNumericResult(ValueName operation,
-                                  souther.compiler.semantics.NumericResult rule) {
-        {
-            Prelude.PreludeEntry entry = Prelude.entry(((ValueName.Stdlib) operation).qualified());
-            if (entry == null) {
-                throw new IllegalStateException("a rule about what number it computes is written for "
-                        + operation + ", which the library does not declare");
+    static void holdNumericResult(ValueName operation, NumericResult rule) {
+        Prelude.PreludeEntry entry = Prelude.entry(((ValueName.Stdlib) operation).qualified());
+        if (entry == null) {
+            throw new IllegalStateException("a rule about what number it computes is written for "
+                    + operation + ", which the library does not declare");
+        }
+        Prelude.Signature signature = entry.signature();
+        Type answers = Question.numberAnsweredBy(signature.result());
+        List<souther.compiler.semantics.Arithmetic.Reads> reads = rule.computes().reads();
+        if (signature.params().size() != reads.size()) {
+            throw new IllegalStateException(operation + " takes " + signature.params().size()
+                    + " argument(s), and the arithmetic written for it reads " + reads.size());
+        }
+        for (int i = 0; i < reads.size(); i++) {
+            if (!reads.get(i).heldBy(signature.params().get(i), answers)) {
+                throw new IllegalStateException("argument " + (i + 1) + " of " + operation
+                        + " is " + Type.show(signature.params().get(i))
+                        + ", which the arithmetic written for it reads as " + reads.get(i));
             }
-            Prelude.Signature signature = entry.signature();
-            Type answers = Question.numberAnsweredBy(signature.result());
-            List<souther.compiler.semantics.Arithmetic.Reads> reads = rule.computes().reads();
-            if (signature.params().size() != reads.size()) {
-                throw new IllegalStateException(operation + " takes " + signature.params().size()
-                        + " argument(s), and the arithmetic written for it reads " + reads.size());
-            }
-            for (int i = 0; i < reads.size(); i++) {
-                if (!reads.get(i).heldBy(signature.params().get(i), answers)) {
-                    throw new IllegalStateException("argument " + (i + 1) + " of " + operation
-                            + " is " + Type.show(signature.params().get(i))
-                            + ", which the arithmetic written for it reads as " + reads.get(i));
+        }
+        switch (rule.at()) {
+            case souther.compiler.semantics.NumericResult.Answered.Directly ignored -> {
+                if (!Question.isANumber(signature.result())) {
+                    throw new IllegalStateException(operation + " answers "
+                            + Type.show(signature.result())
+                            + ", so the number it computes is not its result");
                 }
             }
-            switch (rule.at()) {
-                case souther.compiler.semantics.NumericResult.Answered.Directly ignored -> {
-                    if (!Question.isANumber(signature.result())) {
-                        throw new IllegalStateException(operation + " answers "
-                                + Type.show(signature.result())
-                                + ", so the number it computes is not its result");
-                    }
+            case souther.compiler.semantics.NumericResult.Answered.InTheCaseCarrying(Type carried) -> {
+                if (!(signature.result() instanceof Type.Union(Set<TypeSymbol> members))) {
+                    throw new IllegalStateException(operation + " answers "
+                            + Type.show(signature.result())
+                            + ", which has no case for the number it computes to arrive in");
                 }
-                case souther.compiler.semantics.NumericResult.Answered.InTheCaseCarrying(Type carried) -> {
-                    if (!(signature.result() instanceof Type.Union(Set<TypeSymbol> members))) {
-                        throw new IllegalStateException(operation + " answers "
-                                + Type.show(signature.result())
-                                + ", which has no case for the number it computes to arrive in");
-                    }
-                    if (!carried.equals(answers)) {
-                        throw new IllegalStateException(operation + " answers no case carrying "
-                                + Type.show(carried));
-                    }
-                    if (rule.unless() == null) {
-                        throw new IllegalStateException(operation + " answers its number as one case"
-                                + " of a union, so when the other case comes back is what that case"
-                                + " means and is not written down");
-                    }
-                    // The condition names no case, so it says what every case that is not the
-                    // number's says — which is one statement only where there is one such case. A
-                    // union that gained a third would have an arm establishing a condition it was
-                    // not taken under, which is a wrong fact rather than a missing one, and nothing
-                    // downstream could tell: an arm is read the same way whichever case it names.
-                    // Where a second failure is wanted, the condition is what has to name its case.
-                    if (members.size() != 2) {
-                        throw new IllegalStateException(operation + " answers "
-                                + members.size() + " cases, and when it answers no number is"
-                                + " written as one condition — which says what one other case"
-                                + " means and cannot say what several do");
-                    }
+                if (!carried.equals(answers)) {
+                    throw new IllegalStateException(operation + " answers no case carrying "
+                            + Type.show(carried));
+                }
+                if (rule.unless() == null) {
+                    throw new IllegalStateException(operation + " answers its number as one case"
+                            + " of a union, so when the other case comes back is what that case"
+                            + " means and is not written down");
+                }
+                // The condition names no case, so it says what every case that is not the
+                // number's says — which is one statement only where there is one such case. A
+                // union that gained a third would have an arm establishing a condition it was
+                // not taken under, which is a wrong fact rather than a missing one, and nothing
+                // downstream could tell: an arm is read the same way whichever case it names.
+                // Where a second failure is wanted, the condition is what has to name its case.
+                if (members.size() != 2) {
+                    throw new IllegalStateException(operation + " answers "
+                            + members.size() + " cases, and when it answers no number is"
+                            + " written as one condition — which says what one other case"
+                            + " means and cannot say what several do");
                 }
             }
-            if (rule.unless() != null) {
-                holdToTheDeclaration(operation, rule.unless().argument(), null,
-                        Question::isANumber, "the argument a failure is decided by");
-            }
+        }
+        if (rule.unless() != null) {
+            holdToTheDeclaration(operation, rule.unless().argument(), null,
+                    Question::isANumber, "the argument a failure is decided by");
         }
     }
 
