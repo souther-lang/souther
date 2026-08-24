@@ -1,5 +1,5 @@
 {
-  "schemaVersion" : 6,
+  "schemaVersion" : 7,
   "compilerVersion" : "<version>",
   "status" : "partial",
   "weakening" : [ "rule_unread", "rules_not_reached" ],

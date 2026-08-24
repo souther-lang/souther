@@ -50,22 +50,30 @@ public sealed interface Weakening {
     /** The same at one of a behavior's inputs, counted from zero. */
     record InputCasesUnreadable(String behavior, int at) implements Weakening {}
 
-    /**
-     * A row was observed and stopped before it finished, so what it would have gone through went
-     * with it.
-     *
-     * <p>Named by the row, which is what tells one from another. A measure weakened by this counted
-     * over rows that are all there and one of which is not all there — which is not the same as a
-     * measure over rows nothing saw, and reads identically without this.
-     */
-    record RowDidNotFinish(souther.compiler.observe.RowIdentity row) implements Weakening {}
-
     /** A row's value at one border could not be read, so what is not found at that border is
      *  undecided rather than absent. */
     record BorderValueUnreadable(souther.compiler.partition.Border border) implements Weakening {}
 
     /** The reading of the model that a measure depends on did not run out. */
     record ModelReadingIncomplete(ClosureGap cause) implements Weakening {}
+
+    /**
+     * The elaborated bodies a measure counts inside were not made, so what they hold was not read.
+     *
+     * <p>Not a reading of the model that stopped and not an observation that went missing: the
+     * declarations are here and say a body is written, and what did not come back is the checked
+     * body. The measure that needed it has no number, and what it needed to get one is this.
+     *
+     * <p>Named by the module, because that is what the answer is of: one compile that did not get
+     * that far is one fact however many behaviors went looking for it, and naming the behavior
+     * would make it as many facts as the module has.
+     *
+     * <p>It had no arm, and what it cost is what #996 was found through. A behavior whose body was
+     * not elaborated was answered as a behavior with no body — which is a claim about the model, is
+     * false, and is contradicted by the {@code implemented} on the line above it in the same
+     * report.
+     */
+    record BodiesNotElaborated(String module) implements Weakening {}
 
     /**
      * The space of two-class combinations was too large to walk, so the counts describe part of it.

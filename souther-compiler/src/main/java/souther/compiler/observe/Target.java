@@ -166,6 +166,48 @@ public sealed interface Target {
         }
     }
 
+    /**
+     * One row of one behavior, and so what that row would have decided.
+     *
+     * <p>The row and not the behavior it is written for. A behavior may have more than one row that
+     * did not come back, and they are more than one thing to go and look at — carried as the
+     * behavior, they were one identity and the second was dropped wherever these are kept one per
+     * identity (issue #996).
+     */
+    record OfRow(RowRef row) implements Target {
+
+        @Override
+        public String subject() {
+            return row.behavior() + "/" + row.source().value() + "/" + row.identity().shown();
+        }
+
+        @Override
+        public String shown(SourceNameResolver names) {
+            // The row decides which of its parts a reader needs; the caller decides what its file
+            // is called. Written the other way round, a renderer would be choosing how much of an
+            // identity to show, which is the row's to say.
+            return row.shown(names.nameOf(row.source()));
+        }
+
+        @Override
+        public java.util.Optional<SourceId> sourceIdentity() {
+            // The source the row is written in, which is not what this is about. A reason about a
+            // source is a source that was not read at all; this one was read, and naming its file
+            // here would put it among the reasons about whole files.
+            return java.util.Optional.empty();
+        }
+
+        @Override
+        public Incompleteness.Scope scope() {
+            return Incompleteness.Scope.ROW;
+        }
+
+        @Override
+        public java.util.Optional<String> onlyBehavior() {
+            return java.util.Optional.of(row.behavior());
+        }
+    }
+
     /** A position inside one behavior's input — a path through a value, and the behavior it is in. */
     record AtPosition(String behavior, String path) implements Target {
 
@@ -213,6 +255,8 @@ public sealed interface Target {
                     "a source is identified, not spelled: " + subject);
             case POSITION -> throw new IllegalArgumentException(
                     "a position needs the behavior it is in: " + subject);
+            case ROW -> throw new IllegalArgumentException(
+                    "a row is identified by its behavior, its source and its own name: " + subject);
         };
     }
 }

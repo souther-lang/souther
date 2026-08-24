@@ -65,17 +65,17 @@ public final class BoundaryDerivation {
     }
 
     /** What a behavior measured at its stages rather than at itself comes to. */
-    public static Measurement<List<BorderAssessment>> noSubject() {
-        return new Measurement.NotApplicable<>(NoSubject.NO_SUBJECT);
+    public static Measure<List<BorderAssessment>> noSubject() {
+        return new Measure.NotApplicable<>(NoSubject.NO_SUBJECT);
     }
 
     /** What the measure came to, from what it found and whether its reading ran out. The one place
      *  the states are chosen between. */
-    public static Measurement<List<BorderAssessment>> of(List<BorderAssessment> at,
+    public static Measure<List<BorderAssessment>> of(List<BorderAssessment> at,
                                                          MeasureClosure.OfTheBorder closure) {
         if (closure instanceof MeasureClosure.OfTheBorder.Closed closed) {
             return at.isEmpty()
-                    ? new Measurement.NotApplicable<>(new NoRuleDrawsALine(closed))
+                    ? new Measure.NotApplicable<>(new NoRuleDrawsALine(closed))
                     : new Measurement.Complete<>(List.copyOf(at));
         }
         WeakeningSet by =
@@ -87,7 +87,7 @@ public final class BoundaryDerivation {
     }
 
     /** The lines this behavior is measured at, empty where the measure has none to show. */
-    public static List<BorderAssessment> at(Measurement<List<BorderAssessment>> measurement) {
+    public static List<BorderAssessment> at(Measure<List<BorderAssessment>> measurement) {
         return measurement.made().orElseGet(List::of);
     }
 }

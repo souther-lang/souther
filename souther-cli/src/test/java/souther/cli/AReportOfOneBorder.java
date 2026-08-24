@@ -89,8 +89,14 @@ final class AReportOfOneBorder {
      *  absent. What weakened it is a row that never finished. */
     static Measurement<ItemAssessment.Coverage> undecided() {
         return new Measurement.Partial<>(new ItemAssessment.Coverage.NoHit(),
-                WeakeningSet.of(new Weakening.RowDidNotFinish(
-                        new souther.compiler.observe.RowIdentity.Unnamed(1))));
+                WeakeningSet.of(new Weakening.ObservationIncomplete(
+                        new souther.compiler.observe.Incompleteness(
+                                souther.compiler.observe.Incompleteness.Code.ROW_UNDECIDED,
+                                new souther.compiler.observe.Target.OfRow(
+                                        new souther.compiler.observe.RowRef("take",
+                                                new souther.compiler.source.SourceId("0"),
+                                                new souther.compiler.observe.RowIdentity.Unnamed(1))),
+                                java.util.Optional.empty()))));
     }
 
     /**
@@ -164,13 +170,13 @@ final class AReportOfOneBorder {
                                                    Adequacy.AdequacyBar held) {
         AdequacyReport.BehaviorReport behavior = new AdequacyReport.BehaviorReport(
                 "weigh", souther.compiler.check.BehaviorImplementation.IMPLEMENTED,
-                1, 0, WeakeningSet.none(), null, partition,
-                souther.compiler.query.ClaimAnnotations.NONE, null, List.of());
+                new souther.compiler.query.BehaviorEvidence(
+                        Adequacy.RowReading.NONE, null, partition, null),
+                souther.compiler.query.ClaimAnnotations.NONE, List.of());
         return new AdequacyReport(AdequacyReport.SCHEMA_VERSION, "test",
                 held, WeakeningSet.none(),
                 List.of(new AdequacyReport.ModuleReport("example.wide",
-                        new SourceId("wide.sou"), WeakeningSet.none(),
-                        List.of(), List.of(behavior))))
+                        new SourceId("wide.sou"), List.of(behavior))))
                 .adequacy();
     }
 }

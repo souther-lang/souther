@@ -383,9 +383,10 @@ class CompilePartialAdequacyTest {
         AdequacyReport whole = AdequacyReport.of(compilation);
 
         assertEquals(MeasurementStatus.PARTIAL, whole.status(), "`cancel` did not finish");
-        // Both of them `cancel`'s: the row that did not finish, and the position of its guard whose
-        // value that row was the only one to write.
-        assertEquals(List.of("cancel", "cancel/request.n"),
+        // Both of them `cancel`'s: the row that did not finish — said as which row, since a
+        // behavior may have more than one that did not — and the position of its guard whose value
+        // that row was the only one to write.
+        assertEquals(List.of("cancel/0/#1", "cancel/request.n"),
                 whole.modules().get(0).incompleteness().stream()
                         .map(souther.compiler.observe.Incompleteness::subject).toList());
 

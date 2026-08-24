@@ -67,7 +67,7 @@ class ABehaviorNobodyHasWrittenYetIsNotAnInjectionTargetTest {
                 .modules().get(0).behaviors().stream()
                 .filter(b -> b.name().equals("outer")).findFirst().orElseThrow();
 
-        assertEquals(1, outer.pending(), "the row waits for the `let`");
+        assertEquals(java.util.OptionalInt.of(1), outer.pending(), "the row waits for the `let`");
     }
 
     /**

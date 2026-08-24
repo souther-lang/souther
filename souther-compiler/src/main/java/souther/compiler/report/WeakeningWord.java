@@ -11,6 +11,12 @@ package souther.compiler.report;
  * observation gone missing writes the {@code Incompleteness} code's own word, because that
  * vocabulary already exists and a second spelling of it would be a second thing to keep in step.
  * What is here is everything else — the facts no observation code covers.
+ *
+ * <p>{@code ROW_DID_NOT_FINISH} was here and is not. A row that stopped is an observation gone
+ * missing like any other, and saying so in this vocabulary as well was the second spelling this
+ * class exists to avoid — it also named the row without saying which source it is in, so two rows
+ * were one. It writes {@code row_undecided} now, which is the code the row's own reason carries.
+ * The word stays in the schema: a version says what its documents may carry (issue #996).
  */
 public enum WeakeningWord {
 
@@ -19,9 +25,6 @@ public enum WeakeningWord {
 
     /** The same at one of the inputs. */
     INPUT_CASES_UNREADABLE,
-
-    /** A row stopped before it finished, so what it went through went with it. */
-    ROW_DID_NOT_FINISH,
 
     /** A row's value at one border could not be read. */
     BORDER_VALUE_UNREADABLE,
@@ -37,6 +40,9 @@ public enum WeakeningWord {
 
     /** A position whose rules nothing enumerated. */
     RULES_NOT_REACHED,
+
+    /** The bodies of the module were not elaborated, so what is inside them was not read. */
+    BODIES_NOT_ELABORATED,
 
 
     /** The space of combinations was too large to walk to the end of. */

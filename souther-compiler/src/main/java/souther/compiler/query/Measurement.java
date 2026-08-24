@@ -1,7 +1,6 @@
 package souther.compiler.query;
 
 import souther.compiler.observe.FailureReason;
-import souther.compiler.observe.NotApplicableReason;
 import souther.compiler.observe.NotMeasuredReason;
 
 import java.util.Optional;
@@ -15,7 +14,13 @@ import java.util.Optional;
  * go of, and every parent worked the word out again from the fields beside its children. The fact
  * itself never had a home (issue #953).
  *
- * <p><b>Five states, and the space is closed.</b> Two questions decide them — whether there is a
+ * <p><b>This is how far asking got, and never whether there was anything to ask.</b> That question
+ * is {@link Measure}'s, and a measure whose question does not exist is {@link Measure.NotApplicable}
+ * rather than an arm here. So a measure that cannot fail to have a subject — the reading of a
+ * behavior's rows, which has rows even where there are none — is typed as a {@code Measurement} and
+ * has no applicable-or-not to answer (issue #996).
+ *
+ * <p><b>Four states, and the space is closed.</b> Two questions decide them — whether there is a
  * value, and whether this weakens whatever is assembled from it:
  *
  * <table>
@@ -24,11 +29,8 @@ import java.util.Optional;
  *   <tr><td>yes</td><td>no</td><td>{@link Complete}</td></tr>
  *   <tr><td>yes</td><td>yes</td><td>{@link Partial}</td></tr>
  *   <tr><td>no</td><td>yes</td><td>{@link FailedToMeasure}</td></tr>
- *   <tr><td>no</td><td>no</td><td>{@link NotApplicable} and {@link NotMeasured}</td></tr>
+ *   <tr><td>no</td><td>no</td><td>{@link NotMeasured}</td></tr>
  * </table>
- *
- * <p>The last row splits on a third question, which is the only one a reader of a document acts on:
- * whether anything is being asked of an author. Nothing else divides, so there is no sixth.
  *
  * <p><b>{@link FailedToMeasure} is the state that had no word.</b> A measure whose rules this
  * compiler could not read and one nobody wrote a row for were both {@code NOT_MEASURED}, and the
@@ -44,37 +46,32 @@ import java.util.Optional;
  * <p>What every measure has in common is {@link #weakening()}, and it is the only thing anything
  * does with a measurement it did not make. There is no {@code and}: whether a parent has a value
  * when its parts do not is that parent's own question, and a single operation that answered it for
- * everybody is how the availability of a value, the completeness of a measurement and the
- * applicability of a measure came to be one lattice.
+ * everybody is how the availability of a value and the completeness of a measurement came to be one
+ * lattice.
  *
  * @param <T> what this measure produces where it produces anything. Only the measurement is in
  *            here — what the model says, which is true whether or not anybody measured it, stays
  *            outside beside this
  */
-public sealed interface Measurement<T> {
+public sealed interface Measurement<T> extends Measure<T> {
 
     /**
      * What this measurement went without.
      *
-     * <p>Empty for the three that weaken nothing. A parent's own weakening is the union of these
+     * <p>Empty for the two that weaken nothing. A parent's own weakening is the union of these
      * over its parts, and nothing else it reads.
      */
+    @Override
     WeakeningSet weakening();
 
     /** What this measure made, where it made anything. */
+    @Override
     Optional<T> made();
 
-    /**
-     * Why there is no number, or null where there is one.
-     *
-     * <p>Which of the three kinds of no-number it is, is the reason's own type. This is not a status
-     * in disguise: it answers what a measure could not do and never how far a document should say it
-     * got, which is {@code souther.compiler.report}'s and is made there once.
-     */
+    @Override
     default souther.compiler.observe.MeasureReason why() {
         return switch (this) {
             case Complete<T> _, Partial<T> _ -> null;
-            case NotApplicable<T> it -> it.why();
             case NotMeasured<T> it -> it.why();
             case FailedToMeasure<T> it -> it.why();
         };
@@ -124,24 +121,6 @@ public sealed interface Measurement<T> {
         @Override
         public Optional<T> made() {
             return Optional.of(value);
-        }
-    }
-
-    /** There is nothing here for the measure to be about, and no row would change that. */
-    record NotApplicable<T>(NotApplicableReason why) implements Measurement<T> {
-
-        public NotApplicable {
-            java.util.Objects.requireNonNull(why, "a measure with no number says why");
-        }
-
-        @Override
-        public WeakeningSet weakening() {
-            return WeakeningSet.none();
-        }
-
-        @Override
-        public Optional<T> made() {
-            return Optional.empty();
         }
     }
 

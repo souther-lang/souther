@@ -180,10 +180,8 @@ public final class ExampleVerifier {
         // so what a measure sees and what stopped it can never disagree.
         for (RowOutcome outcome : rows) {
             if (outcome.disposition() == Disposition.INCOMPLETE) {
-                incompleteness.add(new Incompleteness(leftUndecidedBy(outcome.failurePhase()),
-                        new souther.compiler.observe.Target.OfBehavior(outcome.target()),
-                        java.util.Optional.of(
-                                souther.compiler.diag.Citation.of(outcome.at()))));
+                incompleteness.add(
+                        Incompleteness.ofRow(leftUndecidedBy(outcome.failurePhase()), outcome));
             }
         }
         return new Observations(failures, rows, incompleteness);

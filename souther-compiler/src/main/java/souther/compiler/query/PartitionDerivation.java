@@ -80,8 +80,8 @@ public final class PartitionDerivation {
     }
 
     /** What a behavior measured at its stages rather than at itself comes to. */
-    public static Measurement<List<PartitionEvidence.AxisCoverage>> noSubject() {
-        return new Measurement.NotApplicable<>(NoSubject.NO_SUBJECT);
+    public static Measure<List<PartitionEvidence.AxisCoverage>> noSubject() {
+        return new Measure.NotApplicable<>(NoSubject.NO_SUBJECT);
     }
 
     /**
@@ -92,11 +92,11 @@ public final class PartitionDerivation {
      * answer is an absence or a reading that stopped depending on the closure, and a full one is
      * complete or partial by the same fact.
      */
-    public static Measurement<List<PartitionEvidence.AxisCoverage>> of(
+    public static Measure<List<PartitionEvidence.AxisCoverage>> of(
             List<PartitionEvidence.AxisCoverage> at, MeasureClosure.OfThePartition closure) {
         if (closure instanceof MeasureClosure.OfThePartition.Closed closed) {
             return at.isEmpty()
-                    ? new Measurement.NotApplicable<>(new NothingIsDivided(closed))
+                    ? new Measure.NotApplicable<>(new NothingIsDivided(closed))
                     : new Measurement.Complete<>(List.copyOf(at));
         }
         WeakeningSet by = weakening(((MeasureClosure.OfThePartition.Open) closure).by());
@@ -118,7 +118,7 @@ public final class PartitionDerivation {
 
     /** The positions this behavior is measured at, empty where the measure has none to show. */
     public static List<PartitionEvidence.AxisCoverage> at(
-            Measurement<List<PartitionEvidence.AxisCoverage>> measurement) {
+            Measure<List<PartitionEvidence.AxisCoverage>> measurement) {
         return measurement.made().orElseGet(List::of);
     }
 }

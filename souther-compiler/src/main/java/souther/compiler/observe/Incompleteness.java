@@ -38,7 +38,9 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at) {
         /** The module, and so everything in it. */
         MODULE,
         /** A position inside a value — an axis path, a field chain — and so inside one behavior. */
-        POSITION
+        POSITION,
+        /** One row of one behavior, which is what the running of that row would have decided. */
+        ROW
     }
 
     /**
@@ -166,6 +168,20 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at) {
     public static Incompleteness at(Code code, Scope scope, String subject, SourcePos where) {
         return new Incompleteness(code, Target.of(scope, subject),
                 Optional.ofNullable(where).map(Citation::of));
+    }
+
+    /**
+     * What one row that did not come back leaves unmeasured, read off the row.
+     *
+     * <p>The one place a row's outcome becomes a reason a measure could not read everything. What
+     * stopped the row is a fact about the row and is written where it stopped; what a measure can
+     * no longer answer is a fact about the measure. Taking the row here means the two vocabularies
+     * are joined once, and means the identity and the place a reader is sent to come from the same
+     * row rather than from two arguments a caller could pair wrongly.
+     */
+    public static Incompleteness ofRow(Code code, RowOutcome row) {
+        return new Incompleteness(code, new Target.OfRow(RowRef.of(row)),
+                Optional.of(souther.compiler.diag.Citation.of(row.at())));
     }
 
     /** A position, which takes the behavior it sits in as well as the path. Both, because whose

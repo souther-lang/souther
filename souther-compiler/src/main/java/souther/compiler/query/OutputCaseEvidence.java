@@ -17,7 +17,7 @@ import java.util.Set;
  * @param declared the cases the output type has. Empty where the output is one data rather than a
  *                 sum, which is what leaves this measure nothing to be about
  */
-public record OutputCaseEvidence(Set<TypeSymbol> declared, Measurement<Cases> cases) {
+public record OutputCaseEvidence(Set<TypeSymbol> declared, Measure<Cases> cases) {
 
     /**
      * What the rows reached, where anybody counted.
@@ -75,7 +75,7 @@ public record OutputCaseEvidence(Set<TypeSymbol> declared, Measurement<Cases> ca
     }
 
     public static OutputCaseEvidence none() {
-        return new OutputCaseEvidence(Set.of(), new Measurement.NotApplicable<>(NotASum.NOT_A_SUM));
+        return new OutputCaseEvidence(Set.of(), new Measure.NotApplicable<>(NotASum.NOT_A_SUM));
     }
 
 

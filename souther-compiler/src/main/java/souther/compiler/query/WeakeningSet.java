@@ -3,6 +3,7 @@ package souther.compiler.query;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -67,6 +68,30 @@ public record WeakeningSet(Set<Weakening> causes) {
 
     public boolean isEmpty() {
         return causes.isEmpty();
+    }
+
+    /**
+     * The reasons among these that are an observation gone missing, in the order they were found.
+     *
+     * <p>Taking an arm of the sum out, and nothing more: what is here is what
+     * {@link Weakening.ObservationIncomplete} was built with, unchanged and unread. So it is not a
+     * second interpretation of a weakening — it decides nothing about what any of these meant — and
+     * a reader that wants the reasons has one way to get them.
+     *
+     * <p>Which matters because two readers want them for different things. A measure asks which of
+     * these bear on it, by whatever rule is its own; a document prints them as the lines under a
+     * behavior. Written out at each, the two would be two walks over one set, and a report's list
+     * could hold a reason no measure carried — which is how a module came to say {@code complete}
+     * beside a line saying a row of it did not come back (issue #996).
+     */
+    public List<souther.compiler.observe.Incompleteness> observationCauses() {
+        List<souther.compiler.observe.Incompleteness> out = new java.util.ArrayList<>();
+        for (Weakening each : causes) {
+            if (each instanceof Weakening.ObservationIncomplete gap) {
+                out.add(gap.cause());
+            }
+        }
+        return List.copyOf(out);
     }
 
     @Override

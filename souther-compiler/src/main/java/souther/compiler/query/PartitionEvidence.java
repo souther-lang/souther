@@ -3,6 +3,7 @@ package souther.compiler.query;
 import souther.compiler.observe.Incompleteness;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -38,8 +39,8 @@ import java.util.Set;
  *                     reasons: these are what classification observed, and joining them to
  *                     everything else a module could not read happens where that list is built
  */
-public record PartitionEvidence(Measurement<List<AxisCoverage>> partitioned,
-                                Measurement<List<BorderAssessment>> bounded,
+public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
+                                Measure<List<BorderAssessment>> bounded,
                                 PairSpace pairs,
                                 List<souther.compiler.partition.UndividedPosition> notDerivable,
                                 List<souther.compiler.inputs.UnreadRule> unread,
@@ -61,6 +62,43 @@ public record PartitionEvidence(Measurement<List<AxisCoverage>> partitioned,
             PartitionDerivation.noSubject(), BoundaryDerivation.noSubject(),
             PairSpace.NONE, List.of(), List.of(), List.of(), List.of(),
             List.of(), List.of());
+
+    /**
+     * What a coverage that came back says about one behavior.
+     *
+     * <p><b>{@link #NONE} is an answer and not a default.</b> It says the model holds no subject
+     * for either of these measures, which is true of a {@code >->} composition and of nothing else
+     * — so it may be handed out where the declarations say that, and nowhere else. Both readers of
+     * this map used to reach it with {@code getOrDefault}, which says it whenever a key is missing
+     * for any reason at all; one of them said it for the whole map being absent, which is the
+     * coverage query not having answered (issue #996).
+     *
+     * <p>The absence of the map is the caller's to carry and is never a value here: a caller that
+     * cannot say "there is no coverage" has to stop rather than say "there is nothing to cover".
+     *
+     * <p>Missing for anything else is this map's contract broken. The coverage answers for every
+     * behavior it is asked about except compositions, so there is no reading for such a key that is
+     * not a guess — and a guess is what this exists to stop. It is fenced rather than given a
+     * measurement of its own: nothing produces the state today, and inventing what it would mean
+     * would be a consumer settling a producer's business.
+     *
+     * @throws IllegalStateException where {@code answered} omits a behavior that is not a
+     *                               composition
+     */
+    public static PartitionEvidence answeredFor(Map<String, PartitionEvidence> answered,
+                                                souther.compiler.check.Prepared module,
+                                                souther.compiler.ast.Hir.BehaviorDef behavior) {
+        PartitionEvidence found = answered.get(behavior.name());
+        if (found != null) {
+            return found;
+        }
+        if (module.isComposition(behavior)) {
+            return NONE;
+        }
+        throw new IllegalStateException("the coverage of `" + module.name()
+                + "` answered for " + answered.keySet() + " and left out `" + behavior.name()
+                + "`, which is not a composition");
+    }
 
     public PartitionEvidence {
         notDerivable = List.copyOf(notDerivable);

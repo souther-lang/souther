@@ -94,6 +94,45 @@ public final class Requirements {
         return BehaviorImplementation.of(fns.contains(spec.name()), !spec.dependsOn().isEmpty());
     }
 
+    /**
+     * Whether this behavior's body is written here, as a {@code let} of its own name.
+     *
+     * <p>Beside {@link #implementationOf} because it is the same reading one question further in.
+     * That answer merges a {@code let} with a {@code >->}, which is right for whether an
+     * implementation exists and wrong for whether there is a body of this behavior's own to look
+     * inside: a composition is its own implementation and decides nothing — its stages decide, and
+     * what is inside them is measured there.
+     *
+     * <p><b>Read from the declarations, and so an answer whether or not the module was
+     * elaborated.</b> A measure that asked the elaborated bodies instead cannot tell a behavior
+     * that has no body from one whose body did not come back, and answers the first for both. That
+     * is what the arm measure did: a module the compile stopped in reported every implemented
+     * behavior as one with no body, on a report that said {@code implemented} on the line above
+     * (issue #996).
+     */
+    public static boolean writesItsOwnBody(Hir.BehaviorDef bd, Set<String> fns) {
+        return bd instanceof Hir.SpecBehavior spec && fns.contains(spec.name());
+    }
+
+    /**
+     * Whether this behavior is a {@code >->} composition, which is its own implementation.
+     *
+     * <p>The branch {@link #implementationOf} takes first, named. A composition has no positions,
+     * no lines and no arms of its own — its stages have them and are measured there — so it is the
+     * one thing a measure of a behavior may answer inapplicable about without reading any further.
+     * That makes it a claim about what is written, and a claim about what is written is read from
+     * the declarations: a measure that took a behavior's absence from an answer for it would be
+     * making the claim out of a derivation that did not come back (issue #996).
+     */
+    public static boolean isComposition(Hir.BehaviorDef bd) {
+        return !(bd instanceof Hir.SpecBehavior);
+    }
+
+    /** The same, for a caller holding the module rather than the names it defines. */
+    public static boolean writesItsOwnBody(Hir.Module module, Hir.BehaviorDef bd) {
+        return writesItsOwnBody(bd, definedNames(module));
+    }
+
     /** The names the module's definitions are written under. */
     private static Set<String> definedNames(Hir.Module module) {
         Set<String> fns = new LinkedHashSet<>();

@@ -9,6 +9,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.ItemAssessment;
+import souther.compiler.query.Measure;
 import souther.compiler.query.Measurement;
 import souther.compiler.query.Weakening;
 import souther.compiler.query.WeakeningSet;
@@ -443,7 +444,10 @@ class AMeasureWithNoNumberSaysWhyTest {
         AdequacyReport.BehaviorReport reported = AdequacyReport.of(compilation)
                 .modules().get(0).behaviors().stream()
                 .filter(b -> b.name().equals("elsewhere")).findFirst().orElseThrow();
-        assertEquals(0, reported.rows(), "nothing was read");
+        // And the count says so rather than saying zero. `0` is a behavior whose rows were read and
+        // numbered none of them, which is the other half of the pair this test is about: written
+        // as a number, "nothing was read" and "nothing was written" were the same byte.
+        assertEquals(java.util.OptionalInt.empty(), reported.rows(), "nothing was read");
         assertTrue(AdequacyReport.of(compilation).modules().get(0).incompleteness().stream()
                         .anyMatch(gap -> gap.code() == Incompleteness.Code.OBSERVATION_ABSENT),
                 "and there may well have been something to read");
@@ -481,20 +485,26 @@ class AMeasureWithNoNumberSaysWhyTest {
      * A measure answers with a number, or with why it has none — and either way with what it went
      * without.
      *
-     * <p>Five states and no way to build a sixth. It used to be a status and a reason held beside
-     * each other, checked where the value was built because either could be written without the
-     * other; the arms carry what they need and there is nothing left to check. What this holds is
-     * that the arms mean what they say, over every measure the model produces rather than over the
-     * ones a test remembered.
+     * <p>Five arms across two types and no way to build a sixth: whether there is a question here
+     * is {@code Measure}'s and how far asking it got is {@code Measurement}'s. It used to be a
+     * status and a reason held beside each other, checked where the value was built because either
+     * could be written without the other; the arms carry what they need and there is nothing left
+     * to check. What this holds is that the arms mean what they say, over every measure the model
+     * produces rather than over the ones a test remembered.
      */
     @Test
     void everyMeasureAnswersWithANumberOrWithWhyItHasNone() {
         List<Object[]> measures = allMeasures();
         assertTrue(measures.size() > 20, "the model produces every kind: " + measures.size());
         for (Object[] measure : measures) {
-            Measurement<?> made = (Measurement<?>) measure[1];
+            Measure<?> made = (Measure<?>) measure[1];
             String what = (String) measure[0];
             switch (made) {
+                case Measure.NotApplicable<?> it -> {
+                    assertNotNull(it.why(), what + " has no number and does not say why");
+                    assertTrue(it.weakening().isEmpty(),
+                            what + " has nothing to be about and went without something");
+                }
                 case Measurement.Complete<?> it -> {
                     assertNull(it.why(), what + " has a number and says why it has none");
                     assertTrue(it.weakening().isEmpty(),
@@ -504,11 +514,6 @@ class AMeasureWithNoNumberSaysWhyTest {
                     assertNull(it.why(), what + " has a number and says why it has none");
                     assertFalse(it.weakening().isEmpty(),
                             what + " was made in part and does not say what by");
-                }
-                case Measurement.NotApplicable<?> it -> {
-                    assertNotNull(it.why(), what + " has no number and does not say why");
-                    assertTrue(it.weakening().isEmpty(),
-                            what + " has nothing to be about and went without something");
                 }
                 case Measurement.NotMeasured<?> it -> {
                     assertNotNull(it.why(), what + " has no number and does not say why");
@@ -556,6 +561,12 @@ class AMeasureWithNoNumberSaysWhyTest {
     /** Every measure the model produces, as (what it is, what it came to). */
     private static List<Object[]> allMeasures() {
         List<Object[]> measures = new ArrayList<>();
+        // The reading of each behavior's rows, which is a measure like the ones counted over them.
+        // This is a list somebody has to remember to add to, and leaving the newest measure out of
+        // it is the shape of the defect that made it a measure at all (issue #996).
+        for (Map.Entry<String, Adequacy.RowReading> each : readings().entrySet()) {
+            measures.add(new Object[] {"rows " + each.getKey(), each.getValue().measured()});
+        }
         for (Map.Entry<String, Adequacy.BranchEvidence> each : branches().entrySet()) {
             measures.add(new Object[] {"branch " + each.getKey(),
                     each.getValue().measured()});
@@ -665,6 +676,12 @@ class AMeasureWithNoNumberSaysWhyTest {
         }
         assertFalse(kept.isEmpty(), behavior + " is in the report");
         return String.join("\n", kept);
+    }
+
+    private static Map<String, Adequacy.RowReading> readings() {
+        Compilation compilation = compiled();
+        return compilation.db()
+                .ask(new Adequacy.Rows(compilation.modules().get(0))).value();
     }
 
     private static Map<String, Adequacy.BranchEvidence> branches() {

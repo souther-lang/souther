@@ -104,8 +104,20 @@ class WhatAWholeWentWithoutIsWhatItsPartsWentWithoutTest {
         for (AdequacyReport.ModuleReport module : report.modules()) {
             WeakeningSet acrossBehaviors = WeakeningSet.none();
             for (AdequacyReport.BehaviorReport behavior : module.behaviors()) {
-                WeakeningSet parts = WeakeningSet.none();
+                // The reading of the rows is one of the parts. Left out, this passes as long as
+                // some measure counted over those rows carries the same facts — which is a set
+                // holding one value twice and not a rule being kept. A behavior every measure of
+                // which has nothing to be about carries them nowhere else, and that is the case the
+                // rule is for (issue #996).
+                WeakeningSet parts = behavior.reading().measured().weakening();
                 List<WeakeningSet> apart = new ArrayList<>();
+                // Not among the parts counted below. Whether a part is load-bearing asks whether it
+                // carries something the rest do not, and the reading holds every gap the measures
+                // counted over those rows took from it — so counting it makes each of them
+                // redundant and the count says nothing. That the reading is load-bearing is held
+                // where it can be shown on its own: a behavior every measure of which has nothing
+                // to be about carries its run's shortfall nowhere else
+                // (`AModuleEveryMeasureOfWhichDoesNotApplyStillSaysWhatItWentWithout`).
 
                 if (behavior.signature() != null) {
                     Adequacy.SignatureEvidence signature = behavior.signature();
@@ -148,13 +160,17 @@ class WhatAWholeWentWithoutIsWhatItsPartsWentWithoutTest {
         }
         holds(lost, "the report", report.weakenedBy(), acrossModules);
 
-        // And the run reached each way a fact arrives, so the rule above was held over every path
-        // rather than over whichever one this model happened to take.
+        // And the run reached more than one way a fact arrives, so the rule above was held over
+        // more than one path rather than over whichever one this model happened to take.
+        //
+        // Pinned rather than counted. A threshold is met by whatever happens to be produced, and
+        // the arms are not fixed: `RowDidNotFinish` was one of these and is now an observation like
+        // any other, said in the reasons' own vocabulary (issue #996). What the fixture reaches is
+        // written down, so a path that stops arriving fails here instead of being made up for.
         Set<String> kinds = new LinkedHashSet<>();
         everything.forEach(each -> kinds.add(each.getClass().getSimpleName()));
-        assertTrue(kinds.contains("ObservationIncomplete") && kinds.contains("ModelReadingIncomplete")
-                        && kinds.size() >= 3,
-                () -> "the model reaches every way a measure goes without something: " + kinds);
+        assertEquals(Set.of("ObservationIncomplete", "ModelReadingIncomplete"), kinds,
+                () -> "the ways this model goes without something: " + kinds);
 
         // And at least one part carries a fact no other part of its behavior does, so the rule
         // above is not one a whole satisfies whatever it drops. A union is a set: a part left out
@@ -182,6 +198,29 @@ class WhatAWholeWentWithoutIsWhatItsPartsWentWithoutTest {
             }
         }
         return carrying;
+    }
+
+    /**
+     * And a module with a reason to give does not call its measurement complete.
+     *
+     * <p>The other side of the union, and the sentence issue #996 is titled with. The word above a
+     * module and the reasons under it are one set read twice — the word is whether it is empty, the
+     * reasons are its observations taken out — so a module cannot say it read everything while
+     * naming something it could not read.
+     *
+     * <p>One direction only. A measurement can be short of something no observation covers — a space
+     * of combinations too large to walk is not a reason a document lists — so {@code partial} with
+     * nothing to name is a state the report is entitled to.
+     */
+    @Test
+    void aModuleWithAReasonToGiveIsNotComplete() {
+        for (AdequacyReport.ModuleReport module : report().modules()) {
+            if (!module.incompleteness().isEmpty()) {
+                assertEquals(souther.compiler.observe.MeasurementStatus.PARTIAL, module.status(),
+                        () -> "`" + module.module() + "` names what it could not read and calls its"
+                                + " measurement complete: " + module.incompleteness());
+            }
+        }
     }
 
     /**
