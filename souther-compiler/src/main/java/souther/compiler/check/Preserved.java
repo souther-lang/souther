@@ -1,5 +1,7 @@
 package souther.compiler.check;
 
+import souther.compiler.DefaultStdlib;
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
@@ -105,13 +107,16 @@ public record Preserved(Map<ValueName, CompleteSignature> operations, SettledVal
      * discharge representation's demand the moment anything asked for no representation at all.
      */
     private static final class TheLanguagesOwn {
-        private static final Preserved OPERATIONS = readTheLibrary();
+        private static final Preserved OPERATIONS = readTheLibrary(DefaultStdlib.get());
     }
 
-    private static Preserved readTheLibrary() {
+    /* A pure function of the library, so the holder above is the only thing here that reaches for
+     * the process's own — {@link souther.compiler.DefaultStdlib} says who may and why the loader
+     * may not. */
+    private static Preserved readTheLibrary(Stdlib stdlib) {
         Map<ValueName, CompleteSignature> operations = new LinkedHashMap<>();
-        Prelude.entries().forEach((qualified, entry) -> {
-            ValueName.Stdlib operation = Prelude.operation(qualified);
+        stdlib.entries().forEach((qualified, entry) -> {
+            ValueName.Stdlib operation = stdlib.operation(qualified);
             operations.put(operation, CompleteSignature.of(
                     operation, entry.signature().params(), entry.signature().result()));
         });

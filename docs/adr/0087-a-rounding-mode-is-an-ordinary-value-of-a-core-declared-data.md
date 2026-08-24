@@ -3,6 +3,10 @@
 Status: Accepted. Supersedes the rounding-mode entry under "what is still refused" in ADR-0086,
 and the "this argument is a rounding mode" side condition it kept in the compiler.
 
+Amended by #994 and #1010. The decision stands; two of the reasons given for it named machinery
+that no longer exists, and are corrected in place below (marked **Amended**). What changed is where
+each fact is answered, not what it is.
+
 ## Context
 
 Issue #270. `RoundingMode` was the last argument in Souther that was not a value. It was written
@@ -32,14 +36,21 @@ data RoundingMode = HALF_UP | HALF_EVEN | HALF_DOWN | UP | DOWN | CEILING | FLOO
   collection every module gets (`Symbols.of`), so a core signature may name a data the module
   declares. `Symbols.none()` remains only for sources with no declarations.
 - **Runtime-backed data.** The declaration is the checker's source of truth; the JVM
-  implementation is provided by hand in souther-runtime rather than generated. The classification
-  is a single registration in `Prelude` — declaration in `decimal.sou`, implementation
-  `souther.runtime.RoundingMode`, generated: no — and everything follows from it: the declared
-  names anchor to the runtime namespace (where `DivisionByZero` and `NotANumber` already live),
-  `Symbols` answers lookups for them from the registration, and, because the declarations belong
-  to no compiled module, they never enter derivation or code generation. No other place in the
-  compiler may branch on the type's name; a name-based conditional appearing outside the
-  registration is this decision failing.
+  implementation is provided by hand in souther-runtime rather than generated. The declared names
+  anchor to the runtime namespace (where `DivisionByZero` and `NotANumber` already live), `Symbols`
+  answers lookups for them from the library, and, because the declarations belong to no compiled
+  module, they never enter derivation or code generation. No other place in the compiler may branch
+  on the type's name; a name-based conditional appearing outside is this decision failing.
+
+  **Amended (#1010).** "Runtime-backed" is one backend's answer, not a fact about the declaration.
+  What the library says is that `RoundingMode` is a declaration the language itself gives
+  (`Stdlib.languageDeclarations`); that the JVM provides a class for it by hand rather than
+  generating one is registered in `jvm.SoutherJvmAbi.providedByTheRuntime`, where a second backend
+  would give its own answer. The registration used to be in `check.Prelude` and to be refused at
+  load; it is now held by a test, which fails the build the same way.
+
+  One name-based conditional does stand outside: `semantics.Arithmetic` asks whether an argument is
+  a `RoundingMode` by its name. That is this decision failing and is recorded as its own debt.
 - **The implementation mirrors the generated shape.** Registering the declaration makes
   `RoundingMode` the first runtime-backed enumeration (`isUnitOnlySum` is true), so the emitter
   calls `__tag` / `__order` / `__ordering` on it and reads `INSTANCE` off its cases exactly as it
@@ -54,14 +65,22 @@ data RoundingMode = HALF_UP | HALF_EVEN | HALF_DOWN | UP | DOWN | CEILING | FLOO
   missing-codec diagnostic, and tests pin both surfaces so the type never quietly gains an
   external representation.
 
-  The absence follows from where the declaration lives, and it is worth being exact about why,
-  because the obvious reading is wrong: an ordinary enumeration receives a default codec *through
-  derivation even when it writes no `decoder`/`encoder` clause* — `Deriver.deriveSum` supplies one
-  — so writing no clause would not keep a codec away. What keeps it away is that a runtime-backed
-  declaration belongs to no compiled module and therefore never enters derivation at all. The
-  consequence is that "no codec" cannot be arranged by omitting a clause from a module's own data,
-  and that routing a runtime-backed declaration through derivation would both produce a codec and
-  emit calls to codec factories on handwritten classes that have none.
+  **Amended (#994, #1010).** The reason given here was that an ordinary enumeration receives a
+  default codec through derivation, that `Deriver.deriveSum` supplies one, and that what keeps a
+  codec away from `RoundingMode` is its belonging to no compiled module and so never reaching
+  derivation. `Deriver.deriveSum` no longer exists: #994 removed sum derivation entirely and moved
+  how a sum's alternatives cross to `check.Boundary`, worked out where it is read.
+
+  What decides it now is whose vocabulary the name is. A boundary carries the model's own
+  (`E1325`, `a-boundary-carries-the-models-own-vocabulary`), and whether a name is the model's is
+  `Declarations.declaredByCompilation` — read at a data's field, at a behavior's parameters and
+  output, and at an example fixture. `RoundingMode` is refused there because the language declares
+  it and no module of the compilation does.
+
+  This is the stronger statement and the one that holds across backends: the earlier reason ran
+  through the shape of one pipeline, so a backend that generated `RoundingMode` would have routed it
+  into derivation and given it a codec, and the same model would have been accepted on one backend
+  and refused on the other. Ownership does not move when the backend does.
 - **Shadowing follows the unit-data rules.** Rounding-mode cases are ordinary unit data; a binding
   may take a case's name and the local takes precedence. Shadowed cases have no qualified escape
   syntax — the same is true of every unit data, and this change does not add one.
@@ -78,8 +97,8 @@ it any more. The three operations type against their declared signatures like ev
 function; a wrong argument is an ordinary type mismatch, and an applied case (`HALF_UP(x)`) is the
 ordinary answer for a type written where a call goes.
 
-The two kernels' JVM descriptors derive from the declaration (`Prelude.kernelSignature`, the
-boundary form of each declared type), so the signature exists once. Deriving a descriptor from
+The two kernels' JVM descriptors derive from the declaration (`Stdlib.intrinsic(key).signature()`,
+the boundary form of each declared type), so the signature exists once. Deriving a descriptor from
 the observed argument types only ever agreed with the declaration while every parameter type was
 invariant; a sum-typed parameter ends that — an argument's type may be the case it happens to be
 while the declaration names the sum — so the descriptor comes from the callee.
@@ -111,6 +130,8 @@ The reserved namespace's qualifier list moved to a dependency-free constant (`Re
 frontend read it off `Prelude`, whose loading parses prelude sources back through the frontend;
 that cycle was latent while no prelude source declared data, and the first `data` in one closed
 it. A fact of the language now sits where both sides read it without initializing each other.
+(#1010 finished that move: `Prelude` is `check.StdlibLoader`, which builds a `stdlib.Stdlib` and
+holds nothing, and asking which qualifiers there are no longer loads the library at all.)
 
 A mode is evaluated at the call like any argument: bound to a name, chosen by an `if`, computed by
 a helper, or fixed by the function value `Decimal.toInt` evaluates to — each pinned by a test
@@ -123,6 +144,6 @@ to revisit, not to re-decide.
 
 ## References
 
-- Issue #270; ADR-0086 (a function name is a value — this removes its last exception),
+- Issues #270, #994, #1010; ADR-0086 (a function name is a value — this removes its last exception),
   ADR-0053 (the declaration is the single source of truth for a signature)
 - Specification: `[#stdlib-decimal]`, `[#stdlib]`, `[#unit-data]`, `[#intrinsics]`

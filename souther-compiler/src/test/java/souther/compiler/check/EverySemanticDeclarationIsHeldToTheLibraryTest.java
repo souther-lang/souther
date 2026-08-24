@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.semantics.ArgumentRef;
 import souther.compiler.semantics.OperationFact;
 import souther.compiler.semantics.OperationFacts;
@@ -39,7 +40,7 @@ class EverySemanticDeclarationIsHeldToTheLibraryTest {
     @Test
     void theBindingIsOverTheDeclarations() {
         assertEquals(OperationFacts.declarations(),
-                OperationFactBinder.bindAll(OperationFacts.declarations()),
+                OperationFactBinder.bindAll(DefaultStdlib.get(), OperationFacts.declarations()),
                 "what the binding visited is what is declared");
         assertTrue(!OperationFacts.declarations().isEmpty(),
                 "and there is something declared for that to mean anything");
@@ -64,7 +65,7 @@ class EverySemanticDeclarationIsHeldToTheLibraryTest {
                                 new ArgumentRef.At(7)))));
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
-                () -> OperationFactBinder.bindAll(gained));
+                () -> OperationFactBinder.bindAll(DefaultStdlib.get(), gained));
 
         assertTrue(refused.getMessage().contains("Decimal.fromInt"), refused.getMessage());
         assertTrue(refused.getMessage().contains("argument 8"),
@@ -94,7 +95,7 @@ class EverySemanticDeclarationIsHeldToTheLibraryTest {
                                 new ArgumentRef.At(0)))));
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
-                () -> OperationFactBinder.bindAll(gained),
+                () -> OperationFactBinder.bindAll(DefaultStdlib.get(), gained),
                 "a form is an equation between what an operation answers and what it was given, so"
                         + " a result with no count is a result the equation is not about");
 
@@ -122,7 +123,7 @@ class EverySemanticDeclarationIsHeldToTheLibraryTest {
                         Rel.GE, new ResultBound.Provided.Always()))));
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
-                () -> OperationFactBinder.bindAll(gained),
+                () -> OperationFactBinder.bindAll(DefaultStdlib.get(), gained),
                 "a bound is stated of the number an operation answers, and List.get answers no"
                         + " number");
 
@@ -151,7 +152,7 @@ class EverySemanticDeclarationIsHeldToTheLibraryTest {
                 new OperationFact.CountsWhatItIsGiven()));
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
-                () -> OperationFactBinder.bindAll(gained),
+                () -> OperationFactBinder.bindAll(DefaultStdlib.get(), gained),
                 "a fact is bound because it is declared, and not because its kind names an"
                         + " argument that happens to be read against a signature");
 
@@ -177,7 +178,7 @@ class EverySemanticDeclarationIsHeldToTheLibraryTest {
                                 new ArgumentRef.At(0)))));
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
-                () -> OperationFactBinder.bindAll(gained));
+                () -> OperationFactBinder.bindAll(DefaultStdlib.get(), gained));
 
         assertTrue(refused.getMessage().contains("the library does not declare"),
                 refused.getMessage());

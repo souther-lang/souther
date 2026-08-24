@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.frontend.CstFrontend;
@@ -68,6 +69,6 @@ class WhatTheLanguageDeclaresIsNotWhatTheCompilationDeclaresTest {
 
     private static Declarations<Hir.Def> declarations() {
         Ast.Module parsed = CstFrontend.parse(APP);
-        return Symbols.of(Resolve.module(parsed, SyntaxSymbols.of(parsed))).declarations();
+        return Symbols.of(Resolve.module(parsed, SyntaxSymbols.of(parsed, DefaultStdlib.get())), DefaultStdlib.get()).declarations();
     }
 }

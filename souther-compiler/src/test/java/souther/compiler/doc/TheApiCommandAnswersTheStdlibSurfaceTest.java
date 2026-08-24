@@ -1,7 +1,7 @@
 package souther.compiler.doc;
 
+import souther.compiler.DefaultStdlib;
 import org.junit.jupiter.api.Test;
-import souther.compiler.check.Prelude;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
@@ -58,7 +58,7 @@ class TheApiCommandAnswersTheStdlibSurfaceTest {
                 .map(TheApiCommandAnswersTheStdlibSurfaceTest::nameIn)
                 .toList();
 
-        assertEquals(List.copyOf(Prelude.published()), listed,
+        assertEquals(List.copyOf(DefaultStdlib.get().published()), listed,
                 "the listing is one module's vocabulary at a time, and the library is what says"
                         + " which module a name reads as:\n" + answer.out());
         assertTrue(listed.indexOf("List.fold") < listed.indexOf("Set.empty"),

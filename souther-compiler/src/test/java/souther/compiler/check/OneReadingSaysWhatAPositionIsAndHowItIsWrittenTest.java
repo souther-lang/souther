@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.frontend.CstFrontend;
@@ -45,11 +46,11 @@ class OneReadingSaysWhatAPositionIsAndHowItIsWrittenTest {
             data SlotN = Slot
             """;
 
-    private final Symbols symbols = Symbols.of(resolved());
+    private final Symbols symbols = Symbols.of(resolved(), DefaultStdlib.get());
 
     private static Hir.Module resolved() {
         Ast.Module parsed = CstFrontend.parse(MODULE);
-        return Resolve.module(parsed, SyntaxSymbols.of(parsed));
+        return Resolve.module(parsed, SyntaxSymbols.of(parsed, DefaultStdlib.get()));
     }
 
     private TypeView view(String name) {

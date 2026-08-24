@@ -1,5 +1,7 @@
 package souther.compiler.check;
 
+import souther.compiler.DefaultStdlib;
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.semantics.Combinator;
 import souther.compiler.core.Core;
 import souther.compiler.types.Type;
@@ -108,7 +110,8 @@ final class Reductions {
 
     /** Read once. The library is the same library for every module compiled. */
     private static final class Derived {
-        private static final Map<ValueName, Reduction> RULES = read();
+        private static final Map<ValueName, Reduction> RULES =
+                read(DefaultStdlib.get());
     }
 
     /**
@@ -117,17 +120,20 @@ final class Reductions {
      * <p>A sugar has no declaration, so what is true of the call it becomes is what is true of it,
      * over the arguments the rewrite keeps in place — the same reading {@link Combinators} makes.
      */
-    private static Map<ValueName, Reduction> read() {
+    /* A pure function of the library, so the holder above is the only thing here that reaches for
+     * the process's own — {@link souther.compiler.DefaultStdlib} says who may and why the loader
+     * may not. */
+    private static Map<ValueName, Reduction> read(Stdlib stdlib) {
         Map<ValueName, Reduction> rules = new LinkedHashMap<>();
         for (ValueName operation : REDUCES) {
-            Prelude.PreludeEntry entry = Prelude.entry(operation.toString());
+            Stdlib.Entry entry = stdlib.entry(operation.toString());
             if (entry == null) {
                 throw new IllegalStateException(operation + " is named a reduction and the library"
                         + " declares no such operation");
             }
             rules.put(operation, shapeOf(operation, entry.signature()));
         }
-        Prelude.rewrites().forEach((sugar, rewrite) -> {
+        stdlib.rewrites().forEach((sugar, rewrite) -> {
             Reduction target = rules.get(rewrite.target());
             if (target == null) {
                 return;   // what it becomes reduces nothing, so neither does it
@@ -137,7 +143,7 @@ final class Reductions {
                         + ", whose seed is not among the arguments the rewrite keeps in place —"
                         + " what it reduces from cannot be said of the sugar");
             }
-            rules.put(Prelude.operation(sugar), target);
+            rules.put(stdlib.operation(sugar), target);
         });
         return Map.copyOf(rules);
     }
@@ -156,7 +162,7 @@ final class Reductions {
      * element and accumulator are one type — {@code ((A, A) -> A, A, List<A>) -> A} — would, and the
      * day one is declared it is written down here rather than guessed at.
      */
-    private static Reduction shapeOf(ValueName operation, Prelude.Signature signature) {
+    private static Reduction shapeOf(ValueName operation, Stdlib.Signature signature) {
         Combinator handed = Combinators.of(operation);
         if (handed == null) {
             throw new IllegalStateException(operation + " is named a reduction and its signature does"

@@ -1,5 +1,6 @@
 package souther.compiler.codegen;
 
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.check.AtomSpace;
 import souther.compiler.check.ReqSig;
 import souther.compiler.check.EnsuresEnforcement;
@@ -35,6 +36,13 @@ final class CodegenContext {
 
     final String pkg;
     final Symbols symbols;
+
+    /** The standard library this compile emits against — the same one its names were resolved
+     *  against, taken from the symbol table rather than fetched, so a kernel is emitted from the
+     *  declaration the checker read. */
+    Stdlib library() {
+        return symbols.library();
+    }
     final Map<String, List<GeneratedClass>> caseToSums;
     final Map<String, String> typePackage;
     /** True when the module has no {@code exposing} clause: everything stays public. */

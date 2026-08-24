@@ -55,7 +55,7 @@ public final class ClauseHelpers {
     static Expansion<Hir.Module> withSettledInvariants(Hir.Module m, Symbols symbols,
                                                        Map<String, Hir.FnDef> published) {
         Hir.Module settled = settled(m, symbols);
-        HelperInliner inliner = HelperInliner.forModule(settled, published);
+        HelperInliner inliner = HelperInliner.forModule(settled, published, symbols.library());
         // What these expansions could not remove comes back with what they produced. A clause is the
         // one place a module writes an expression that is not a definition, so a recursion reached
         // from one is reached from nowhere a reader of the module's declarations would look.
@@ -78,7 +78,7 @@ public final class ClauseHelpers {
         Hir.Module m = expandable.module();
         Hir.Module settled = settled(m, symbols);
         HelperInliner inliner = HelperInliner.forHelpers(m.name(), HelperInliner.helpersOf(settled),
-                published, InliningPolicy.DISCHARGE);
+                published, InliningPolicy.DISCHARGE, symbols.library());
         Map<TypeSymbol, List<Hir.InvariantClause>> out = new LinkedHashMap<>();
         for (Hir.Def def : settled.defs()) {
             if (def instanceof Hir.Data d && !d.invariants().isEmpty()) {

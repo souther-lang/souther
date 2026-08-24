@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.BinOp;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.CompileException;
@@ -60,7 +61,7 @@ final class HelperParams {
         if (!hasOpenParam(m)) {
             return m;   // nothing to settle: don't build the inliner (it scans the whole prelude)
         }
-        HelperInliner inliner = HelperInliner.forModule(m);
+        HelperInliner inliner = HelperInliner.forModule(m, symbols.library());
         Set<String> recursive = inliner.recursiveHelpers();
         Map<String, Type> recursiveHelperFns;
         try {
@@ -1075,7 +1076,7 @@ final class HelperParams {
             }
             // Only a kernel's signature: a Souther-bodied library callee here is a recursive
             // helper, and those are answered above with the types their call site instantiated.
-            Prelude.PreludeEntry entry = Prelude.entry(fn);
+            Stdlib.Entry entry = symbols.library().entry(fn);
             if (entry == null || !(entry.declaration().body() instanceof Hir.FnBody.Intrinsic)) {
                 return null;
             }

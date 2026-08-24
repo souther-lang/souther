@@ -82,10 +82,14 @@ class EverythingAnAnswerHoldsIsAValueTest {
     /**
      * The objects under an answer that compare by identity, as this compiler stands.
      *
-     * <p>Named rather than tolerated. Each is a reader or a whole database held where a value
-     * belongs, which is the same defect this test is about and is not a new one — they have an
-     * issue of their own, and the set is written out so that fixing one is this test failing rather
-     * than a name nobody removes. A violation not in this set is the change in front of you.
+     * <p>Named rather than tolerated, and of two kinds. Three are a reader or a whole database held
+     * where a value belongs, which is the same defect this test is about and is not a new one —
+     * they have an issue of their own. The fourth is a value that defines no {@code equals}, and is
+     * here because writing one would cost more than it settles; that reason is given with it and is
+     * not the reason the other three are here.
+     *
+     * <p>The set is written out either way, so that fixing one is this test failing rather than a
+     * name nobody removes. A violation not in this set is the change in front of you.
      */
     private static final Set<String> KNOWN = Set.of(
             // A `ModulePath` holds the function it resolves a module with, and a function never
@@ -94,7 +98,13 @@ class EverythingAnAnswerHoldsIsAValueTest {
             // The reading of a behavior's input, held under an answer rather than asked for again.
             "souther.compiler.inputs.InputDomain",
             // And a database, which is a way of reading and not a value (`Db`'s own header).
-            "souther.compiler.query.Db");
+            "souther.compiler.query.Db",
+            // The standard library, which is a value and is here for a different reason from the
+            // three above: one is built per process and every answer of a compilation holds that
+            // one, so identity is the answer structural equality would give. Writing that equality
+            // out would walk every declaration the library has on every comparison, and writing
+            // "any library equals any other" would be true only while there is one of them.
+            "souther.compiler.stdlib.Stdlib");
 
     @Test
     void nothingUnderAnAnswerComparesByIdentity() {

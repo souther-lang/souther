@@ -123,7 +123,8 @@ public final class Shapes {
             Answer<Map<String, Hir.FnDef>> imported = db.ask(new Bodies.ImportedDefinitions(name));
             try {
                 return Answer.of(souther.compiler.check.Expandable.check(resolved.value(),
-                        imported.present() ? imported.value() : Map.of()));
+                        imported.present() ? imported.value() : Map.of(),
+                        db.ask(new Front.Library()).value()));
             } catch (CompileException e) {
                 return Answer.absent(e);
             }

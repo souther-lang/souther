@@ -1,5 +1,7 @@
 package souther.compiler.check;
 
+import souther.compiler.DefaultStdlib;
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
@@ -27,8 +29,8 @@ class AnAccumulationIsWrittenForWhatItMeansAndNotForWhatCanReadItTest {
     @Test
     void everyOperationAnsweringWhatItsContainerHoldsIsAsked() {
         List<String> inRange = new ArrayList<>();
-        for (Map.Entry<String, Prelude.PreludeEntry> e : Prelude.entries().entrySet()) {
-            if (Question.askedOf(e.getValue().signature()).contains(Question.ACCUMULATION)) {
+        for (Map.Entry<String, Stdlib.Entry> e : DefaultStdlib.get().entries().entrySet()) {
+            if (Question.askedOf(DefaultStdlib.get(), e.getValue().signature()).contains(Question.ACCUMULATION)) {
                 inRange.add(e.getKey());
             }
         }
@@ -79,9 +81,9 @@ class AnAccumulationIsWrittenForWhatItMeansAndNotForWhatCanReadItTest {
      */
     @Test
     void anOperationTheLibraryDoesNotHaveYetIsInRangeByItsShape() {
-        Prelude.Signature setSummed = new Prelude.Signature(
+        Stdlib.Signature setSummed = new Stdlib.Signature(
                 List.of(new Type.SetOf(Type.Prim.INT)), Type.Prim.INT);
-        assertEquals(true, Question.askedOf(setSummed).contains(Question.ACCUMULATION));
+        assertEquals(true, Question.askedOf(DefaultStdlib.get(), setSummed).contains(Question.ACCUMULATION));
     }
 
     private static ValueName op(String alias, String name) {

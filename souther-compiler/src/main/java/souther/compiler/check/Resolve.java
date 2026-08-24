@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.BinOp;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
@@ -527,8 +528,8 @@ public final class Resolve {
 
     /** {@code m} with every name it writes resolved against its own definitions — a module compiled
      * with nothing else in sight. */
-    public static Hir.Module module(Ast.Module m) {
-        return module(m, SyntaxSymbols.of(m));
+    public static Hir.Module module(Ast.Module m, Stdlib stdlib) {
+        return module(m, SyntaxSymbols.of(m, stdlib));
     }
 
     /** {@code m} with every name it writes resolved against {@code symbols}. */
@@ -1396,15 +1397,16 @@ public final class Resolve {
         // asking here would tie the answer to how much of the library has been loaded, and the
         // library resolves its own sources while it loads.
         //
-        // A `private` declaration is the exception, and asking about it here is safe for the same
-        // reason: the only modules that may name one are the library's own, and they are told yes
-        // without the entry being looked up at all.
+        // A `private` declaration is the exception, and the names it covers arrived with the symbol
+        // table rather than being asked of a library this may be in the middle of reading: while the
+        // library's own sources are resolved that set is empty, which is what is true of them.
         // Split off what the author wrote, which is where a library name enters the compiler as two
         // values: the qualifier they typed and the operation they asked of it. Nothing downstream
         // splits it again — from here it is carried as the pair.
         int dot = written.lastIndexOf('.');
         if (Reserved.isQualifier(dot < 0 ? written : written.substring(0, dot))) {
-            if (Reserved.isNamespace(reachable.module()) || !Prelude.isPrivateMember(written)) {
+            if (Reserved.isNamespace(reachable.module())
+                    || !symbols.library().privateOperations().contains(written)) {
                 return new Reach.Reaches(dot < 0 ? ValueName.Stdlib.namespace(written)
                         : new ValueName.Stdlib(written.substring(0, dot),
                                 written.substring(dot + 1)));
@@ -1694,8 +1696,8 @@ public final class Resolve {
         // Asked here as well as of a call, because what the library publishes is not only functions:
         // `Map.empty` is a value, and a function's own name is a value where it is handed over. A
         // nearby binding is the wrong answer for any of them — the name exists and is reached.
-        CompileException bareLibraryName = StdlibNames.writtenBare(written.quoted(), name,
-                written.region());
+        CompileException bareLibraryName = StdlibNames.writtenBare(symbols.library(),
+                written.quoted(), name, written.region());
         if (bareLibraryName != null) {
             return bareLibraryName;
         }

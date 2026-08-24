@@ -6,7 +6,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.NameMessage;
-import souther.compiler.check.Prelude;
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.CheckContext;
 import souther.compiler.check.Elaborator;
@@ -58,6 +58,11 @@ final class BodyGen {
     /** Aliases of {@link CodegenContext#pkg}/{@link CodegenContext#symbols}, read as bare names. */
     private final String pkg;
     private final Symbols symbols;
+
+    /** The standard library this body is emitted against. */
+    Stdlib library() {
+        return ctx.library();
+    }
 
     private ClassDesc cd(TypeSymbol typeName) {
         return ctx.cd(typeName);
@@ -1191,7 +1196,7 @@ final class BodyGen {
                 }
                 default -> { }
             }
-            Prelude.PreludeEntry entry = Prelude.entry(call.name());
+            Stdlib.Entry entry = ctx.library().entry(call.name());
             if (entry != null && entry.declaration().body() instanceof Hir.FnBody.Intrinsic kernel) {
                 Intrinsics.emit(this, kernel.key(), call);
                 return;

@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
@@ -47,8 +48,9 @@ public final class ValueCycles {
      * <p>Building the edges it needs rather than taking an expansion table: what it reads is the
      * module's own definitions and what each of them calls, which is settled by nothing.
      */
-    public static void rejectIn(Hir.Module m, Map<String, Hir.FnDef> published) {
-        HelperTable table = HelperTable.of(m, published, InliningPolicy.FULL);
+    public static void rejectIn(Hir.Module m, Map<String, Hir.FnDef> published,
+                                Stdlib stdlib) {
+        HelperTable table = HelperTable.of(m, published, InliningPolicy.FULL, stdlib);
         // What the module declared, which is what a value cycle is about: a value written in terms of
         // itself is a defect in what the author wrote, and a helper the module only took on to emit
         // was written by somebody else and answered for there.
@@ -56,7 +58,8 @@ public final class ValueCycles {
         Map<String, Set<String>> callsOf = new LinkedHashMap<>();
         for (Map.Entry<String, Hir.FnDef> e : declared.entrySet()) {
             Set<String> called = new LinkedHashSet<>();
-            HelperInliner.helperCallsIn(e.getValue().writtenBody(), table.reachable(), called);
+            HelperInliner.helperCallsIn(table.library(), e.getValue().writtenBody(),
+                    table.reachable(), called);
             callsOf.put(e.getKey(), called);
         }
         reject(declared, callsOf);

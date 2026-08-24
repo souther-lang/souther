@@ -1,5 +1,6 @@
 package souther.compiler.meta;
 
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.Reserved;
 import souther.compiler.ast.DefinitionRole;
 import souther.compiler.ast.Hir;
@@ -72,8 +73,8 @@ public final class DeclarationAgreement {
      * @param theirs   where the declarations the answer reads values by are read from
      */
     public static Agreement of(String module, String behavior, PublishedClasses ours,
-                               PublishedClasses theirs) {
-        return new Crossing(PublishedUniverse.of(ours), PublishedUniverse.of(theirs))
+                               PublishedClasses theirs, Stdlib stdlib) {
+        return new Crossing(PublishedUniverse.of(ours, stdlib), PublishedUniverse.of(theirs, stdlib))
                 .heldFrom(new ValueName.Behavior(module, behavior));
     }
 

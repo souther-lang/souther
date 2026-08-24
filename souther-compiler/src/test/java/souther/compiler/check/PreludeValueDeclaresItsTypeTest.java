@@ -1,5 +1,7 @@
 package souther.compiler.check;
 
+import souther.compiler.DefaultStdlib;
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.diag.SourcePos;
@@ -27,13 +29,13 @@ class PreludeValueDeclaresItsTypeTest {
                 List.of(), null, new Hir.FnBody.Written(new Hir.IntLit(0, at, null)), at);
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
-                () -> Prelude.signatureOf(value, "List.someValue"));
+                () -> souther.compiler.check.StdlibLoader.signatureOf(value, "List.someValue"));
         assertTrue(refused.getMessage().contains("List.someValue"));
     }
 
     @Test
     void everyShippedValueStatesItsType() {
-        for (Prelude.PreludeEntry entry : Prelude.entries().values()) {
+        for (Stdlib.Entry entry : DefaultStdlib.get().entries().values()) {
             if (entry.declaration().params().isEmpty()) {
                 assertNotNull(entry.signature().result(),
                         "`" + entry.declaration().name() + "` is a value with no stated type");
