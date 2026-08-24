@@ -14,7 +14,7 @@ import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.Observation;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.interaction.Interaction;
-import souther.compiler.interaction.Interactions;
+import souther.compiler.interaction.CoverageRead;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -229,9 +229,9 @@ class ACandidateThatMissedIsNotOfferedTest {
                             souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
                     Partitions.of(spec.name(), inputs, symbols,
                             souther.compiler.query.ReadAs.THE_COMPILATION_DOES).axes(), HeldCounts.of(inputs, symbols)),
-                    Interactions.of(body, CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
+                    CoverageRead.of(body, CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
                 checked.supplied()), inputs,
-                            symbols));
+                            symbols).interactions());
         }
     }
 }

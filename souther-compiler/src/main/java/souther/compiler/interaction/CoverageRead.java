@@ -1,33 +1,32 @@
 package souther.compiler.interaction;
 
-import souther.compiler.types.BinOp;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
-import souther.compiler.flow.Arrival;
 import souther.compiler.flow.ValueArrivals;
 import souther.compiler.flow.Ways;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
 
 import java.util.ArrayList;
-import java.util.IdentityHashMap;
 import java.util.List;
-import java.util.Set;
 
 /**
- * Which decisions of a behavior's body determine one value together.
+ * One reading of a body's decisions: where a run can get to, and what holds on the way.
  *
- * <p>Nothing else reads this. Every measure over a body reads control flow — which arms were
- * entered — and passing through all four arms of {@code if A { if B { X } else { Y } } else { Z }}
- * says nothing about whether the interactions between A and B were tried. This reads what a value
- * owes itself to instead, which is the question a combination is about.
+ * <p>What a black-box measure has to assume about every pair of inputs, read instead. Every measure
+ * over a body reads control flow — which arms were entered — and passing through all four arms of
+ * {@code if A { if B { X } else { Y } } else { Z }} says nothing about whether the interactions
+ * between A and B were tried. This reads what a value owes itself to, and what it takes to arrive
+ * anywhere in the body.
  *
- * <p>A node with several children is not a meeting. Under
- * {@code Order { price = if A then 100 else 200, message = if B then "x" else "y" }} the two
- * decisions arrive at a constructor and interact in nothing, because no observation is a function
- * of both. A group forms only where two values each settled by a decision are consumed into one:
- * an operand of an operator, or an argument of a call that answers one value.
+ * <p>One walk and several facts, which is why the walk is here rather than inside any of them. What
+ * holds on the way to a place is one thing about the body, and the readings that want it want it for
+ * different work: {@link Meetings} asks it of the places where decisions determine one value
+ * together. A reading given its own walk would be a second reading of the same body, free to
+ * disagree with this one the day either of them moves — which is how a fact came to be spelled twice
+ * before. So what is shared here is where the walk goes and what holds there; what is found is each
+ * collector's own, and so is the state finding it needs.
  *
  * <p>Which position a decision is about is {@link InputReads}'s answer and not this one's. A name is
  * not a position — a helper spliced into a body binds the call's argument to the helper's own
@@ -49,8 +48,7 @@ import java.util.Set;
  * can be settled more ways than the reading will tell apart is answered as settled one way, and a
  * position reached more ways than it will read at once is read the one way it used to be.
  */
-
-public final class Interactions {
+public final class CoverageRead {
 
     /**
      * How many path contexts one position of the body will be read under.
@@ -85,43 +83,52 @@ public final class Interactions {
      */
     private static final int MOST_WAYS_IN = 16;
 
-    private final CoverageSites.Plan plan;
-
     /** What the body was read to arrive at, and by which ways. Read once, before the walk starts. */
     private final ValueArrivals<Outcome> reading;
 
-    private Interactions(CoverageSites.Plan plan, ValueArrivals<Outcome> reading) {
-        this.plan = plan;
+    /** The meetings this walk is read for. One of the collectors the walk feeds, and the owner of
+     *  everything finding a meeting takes. */
+    private final Meetings meetings;
+
+    private CoverageRead(ValueArrivals<Outcome> reading, Meetings meetings) {
         this.reading = reading;
+        this.meetings = meetings;
     }
 
     /**
-     * The groups of {@code body}, in the order the walk meets them.
+     * What one walk over {@code body} came to.
      *
-     * <p>By the meeting first and by the way in second. A meeting reached several ways is one place
-     * in the body and as many groups, and they are written down together because that is when the
-     * walk is there. A generation spending a row budget over these takes them in this order, so
-     * which of them a budget that runs out reaches is said by where the meeting is written and not
-     * by which way round a fork above it a row goes.
+     * <p>Several facts and one reading. What each of them is about is its own accessor's business;
+     * that they were read together is what this value says.
+     *
+     * @param interactions the groups, in the order the walk met them. A generation spending a row
+     *                     budget over these takes them in this order, so which of them a budget that
+     *                     runs out reaches is said by where the meeting is written and not by which
+     *                     way round a fork above it a row goes
      */
-    public static List<Interaction> of(Core body, CoverageSites.Plan plan, InputDomain inputs,
-                                       Symbols symbols) {
-        List<Interaction> found = new ArrayList<>();
-        CoverageNaming naming = new CoverageNaming(plan, symbols, InputReads.of(inputs));
-        new Interactions(plan, ValueArrivals.ofBody(body, naming))
-                .walk(body, naming, java.util.Collections.newSetFromMap(new IdentityHashMap<>()),
-                        List.of(List.of()), found);
-        return List.copyOf(found);
+    public record Read(List<Interaction> interactions) {
+
+        public Read {
+            interactions = List.copyOf(interactions);
+        }
     }
 
+    /** What the walk over {@code body} reads. */
+    public static Read of(Core body, CoverageSites.Plan plan, InputDomain inputs,
+                          Symbols symbols) {
+        CoverageNaming naming = new CoverageNaming(plan, symbols, InputReads.of(inputs));
+        ValueArrivals<Outcome> reading = ValueArrivals.ofBody(body, naming);
+        Meetings meetings = new Meetings(plan, reading);
+        new CoverageRead(reading, meetings).walk(body, naming, List.of(List.of()));
+        return new Read(meetings.found());
+    }
 
     /**
      * @param reaches every way in this position is reached by, together rather than one at a time,
      *                because how many there are is what {@link #MOST_WAYS_IN} bounds and no one of
      *                them can say. Empty where nothing reaches here, and never longer than the bound
      */
-    private void walk(Core node, CoverageNaming naming, Set<Core> absorbed,
-                      List<List<Decision>> reaches, List<Interaction> found) {
+    private void walk(Core node, CoverageNaming naming, List<List<Decision>> reaches) {
         if (reaches.isEmpty()) {
             // Every way that would have led here settles a decision one of the ways above it
             // settled the other way, so no run arrives and there is nothing in here to offer.
@@ -140,93 +147,59 @@ public final class Interactions {
             // A name given to a decision is still that decision, and a name given to a position is
             // still that position. Both environments widen here and neither answers the other's
             // question. Nothing about getting here changes: a binding is not a fork.
-            walk(let.value(), naming, absorbed, reaches, found);
-            walk(let.body(), naming.under(let.binder(), let.value()), absorbed, reaches, found);
+            walk(let.value(), naming, reaches);
+            walk(let.body(), naming.under(let.binder(), let.value()), reaches);
             return;
         }
-        List<Core> meeting = absorbed.contains(node) ? null : meetingAt(node, absorbed);
-        if (meeting != null) {
-            List<Factor> factors = new ArrayList<>();
-            for (Core operand : meeting) {
-                List<Outcome> outcomes = outcomesOf(operand);
-                // One outcome is no decision: the operand answers the same way however the row is
-                // written, so nothing about it can be varied against the other operand.
-                if (outcomes.size() > 1) {
-                    factors.add(new Factor(outcomes));
-                }
-            }
-            // A group says that these decisions were settled these ways and met here, which is a
-            // statement about one passing. What can be established about a run is what its recording
-            // holds, and that is which places it passed rather than how many times it passed each —
-            // so where a run may come back to this meeting, the two factors coming out the named
-            // ways is not something any reading of such a recording can tell from their coming out
-            // those ways on different times round. The group would be one nothing could ever show a
-            // row to sit in, so it is not offered.
-            //
-            // Asked at the meeting and nowhere else, which is enough because a place a run may come
-            // back to has everything inside it in the same position: a meeting this is false of
-            // names a way in and factors that are all false of it too.
-            //
-            // What varies here is read once and the ways in are as many as they are: an operand is
-            // settled the same ways whichever way round the forks above a row went, so the factors
-            // are no part of what a way in decides and are not read again per way.
-            if (factors.size() > 1 && !plan.mayRepeat(node)) {
-                for (List<Decision> reach : reaches) {
-                    found.add(new Interaction(reach, factors));
-                }
-            }
-        }
-        descend(node, naming, absorbed, reaches, found);
+        meetings.at(node, reaches);
+        descend(node, naming, reaches);
     }
-
 
     /**
      * Into each part that runs when this is evaluated, under what holds on the way into it.
      *
-     * <p>Not the parts a node is built out of, which is {@link #childrenOf}'s answer and a
-     * different question. What it takes to get to a part differs per shape — an arm is reached by
-     * the fork coming out its way, a scrutinee whenever the fork is, the right of an operator that
-     * stops early only where the left did not settle the answer — and a part is not always reached
-     * at all: evaluating a block makes a function rather than running its body.
+     * <p>Not the parts a node is built out of, which is a different question. What it takes to get
+     * to a part differs per shape — an arm is reached by the fork coming out its way, a scrutinee
+     * whenever the fork is, the right of an operator that stops early only where the left did not
+     * settle the answer — and a part is not always reached at all: evaluating a block makes a
+     * function rather than running its body.
      *
      * <p>Exhaustive and with no fallback. A node kind added to the IR has to be decided about here
      * rather than fall in with the ones every part of which is evaluated under the same conditions,
      * because that is the assumption this walk was making about all of them and it was wrong for
      * two.
      */
-    private void descend(Core node, CoverageNaming naming, Set<Core> absorbed,
-                         List<List<Decision>> reaches, List<Interaction> found) {
+    private void descend(Core node, CoverageNaming naming, List<List<Decision>> reaches) {
         switch (node) {
             // A way in nobody can name stops the walk into that arm, whether what could not be named
             // is the position the decision is about or the place a run that took it would be seen at.
             // A group found in there would be under a condition nothing can steer a row into or hold
             // a run to, and offering it asks for a row that may never arrive.
             case Core.If iff -> {
-                walk(iff.cond(), naming, absorbed, reaches, found);
+                walk(iff.cond(), naming, reaches);
                 Core[] arms = {iff.then(), iff.els()};
                 for (int part = 0; part < arms.length; part++) {
                     // As many ways in as the condition has of coming out that way, held to every
                     // context the fork itself is reached under: a row that failed the first
                     // comparison and one that held it and failed the second both arrive here, and
                     // they arrive by different paths.
-                    walk(arms[part], naming, absorbed,
-                            waysInTo(iff, part, naming, reaches), found);
+                    walk(arms[part], naming, waysInTo(iff, part, naming, reaches));
                 }
             }
             case Core.Match match -> {
-                walk(match.scrutinee(), naming, absorbed, reaches, found);
+                walk(match.scrutinee(), naming, reaches);
                 for (int part = 0; part < match.cases().size(); part++) {
                     Outcome went = naming.matchCase(match, part);
                     if (went == null) {
                         continue;
                     }
                     // One way in and never more, so nothing here can go over the bound.
-                    walk(match.cases().get(part).body(), naming, absorbed,
-                            heldTo(reaches, List.of(went.holds())), found);
+                    walk(match.cases().get(part).body(), naming,
+                            heldTo(reaches, List.of(went.holds())));
                 }
             }
             case Core.Binary binary when binary.op().stopsWhenItsAnswerIsSettled() -> {
-                walk(binary.left(), naming, absorbed, reaches, found);
+                walk(binary.left(), naming, reaches);
                 // The right runs only where the left did not settle the answer, and which of the
                 // left's paths those are is which value each of them comes to. Where the reading
                 // cannot enumerate them the walk does not go in: a way in it could name only some
@@ -239,7 +212,7 @@ public final class Interactions {
                         instanceof Ways.Known<Outcome> through) {
                     List<List<Decision>> ways = heldTo(reaches, holdsOf(through.paths()));
                     if (ways.size() <= MOST_WAYS_IN) {
-                        walk(binary.right(), naming, absorbed, ways, found);
+                        walk(binary.right(), naming, ways);
                     }
                 }
             }
@@ -249,7 +222,7 @@ public final class Interactions {
                 // is not walked: a row cannot be steered to either of them, and one offered for a
                 // group in there would be offered for a combination it may not sit in.
                 for (Core.FieldValue given : constructed.construct().values()) {
-                    walk(given.value(), naming, absorbed, reaches, found);
+                    walk(given.value(), naming, reaches);
                 }
             }
             case Core.Block ignored -> {
@@ -258,8 +231,8 @@ public final class Interactions {
                 // behavior, so a group in there has no way in this can name.
             }
             case Core.LetIn let -> {
-                walk(let.value(), naming, absorbed, reaches, found);
-                walk(let.body(), naming.under(let.binder(), let.value()), absorbed, reaches, found);
+                walk(let.value(), naming, reaches);
+                walk(let.body(), naming.under(let.binder(), let.value()), reaches);
             }
             case Core.Int ignored -> { }
             case Core.Decimal ignored -> { }
@@ -271,36 +244,26 @@ public final class Interactions {
             case Core.OptionNone ignored -> { }
             case Core.Unreachable ignored -> { }
             // Everything the node is made of is evaluated, and under what the node itself was.
-            case Core.Neg neg ->
-                    walkAll(some(neg.operand()), naming, absorbed, reaches, found);
-            case Core.FieldAccess access ->
-                    walkAll(some(access.target()), naming, absorbed, reaches, found);
-            case Core.TupleGet get ->
-                    walkAll(some(get.tuple()), naming, absorbed, reaches, found);
-            case Core.OptionSome option ->
-                    walkAll(some(option.value()), naming, absorbed, reaches, found);
-            case Core.Binary binary -> walkAll(some(binary.left(), binary.right()), naming, absorbed,
-                    reaches, found);
-            case Core.Call call ->
-                    walkAll(call.args(), naming, absorbed, reaches, found);
-            case Core.PreservedCall call ->
-                    walkAll(call.args(), naming, absorbed, reaches, found);
-            case Core.Apply apply ->
-                    walkAll(apply.args(), naming, absorbed, reaches, found);
-            case Core.ListLit list ->
-                    walkAll(list.elements(), naming, absorbed, reaches, found);
-            case Core.Tuple tuple ->
-                    walkAll(tuple.elements(), naming, absorbed, reaches, found);
+            case Core.Neg neg -> walkAll(some(neg.operand()), naming, reaches);
+            case Core.FieldAccess access -> walkAll(some(access.target()), naming, reaches);
+            case Core.TupleGet get -> walkAll(some(get.tuple()), naming, reaches);
+            case Core.OptionSome option -> walkAll(some(option.value()), naming, reaches);
+            case Core.Binary binary ->
+                    walkAll(some(binary.left(), binary.right()), naming, reaches);
+            case Core.Call call -> walkAll(call.args(), naming, reaches);
+            case Core.PreservedCall call -> walkAll(call.args(), naming, reaches);
+            case Core.Apply apply -> walkAll(apply.args(), naming, reaches);
+            case Core.ListLit list -> walkAll(list.elements(), naming, reaches);
+            case Core.Tuple tuple -> walkAll(tuple.elements(), naming, reaches);
             case Core.Construct construct -> walkAll(
                     construct.values().stream().map(Core.FieldValue::value).toList(),
-                    naming, absorbed, reaches, found);
+                    naming, reaches);
         }
     }
 
-    private void walkAll(List<Core> parts, CoverageNaming naming, Set<Core> absorbed,
-                         List<List<Decision>> reaches, List<Interaction> found) {
+    private void walkAll(List<Core> parts, CoverageNaming naming, List<List<Decision>> reaches) {
         for (Core each : parts) {
-            walk(each, naming, absorbed, reaches, found);
+            walk(each, naming, reaches);
         }
     }
 
@@ -329,7 +292,6 @@ public final class Interactions {
         return heldTo(reaches, fallbackWayIn(iff, part, naming));
     }
 
-
     /**
      * The ways the condition comes out for arm {@code part}, or the arm itself where it cannot say.
      *
@@ -350,13 +312,11 @@ public final class Interactions {
         return fallbackWayIn(iff, part, naming);
     }
 
-
     /** The arm itself as the one way in, for a condition this reading cannot value. */
     private List<List<Decision>> fallbackWayIn(Core.If iff, int part, CoverageNaming naming) {
         Outcome back = naming.forkArm(iff, part);
         return back == null ? List.of() : List.of(back.holds());
     }
-
 
     /**
      * Each way in held to each context it is reached under, leaving out the ones that contradict.
@@ -385,29 +345,6 @@ public final class Interactions {
     }
 
     /**
-     * The ways {@code e} can be settled that a group can be composed against.
-     *
-     * <p>A projection of the reading and not a second walk. Two ways written down the same are one
-     * way: a value settled twice over by the reading getting there twice is settled once, and a
-     * factor counting the second would report a value varying where it does not.
-     *
-     * <p>A way the naming could not write down whole is not one of these. What a factor offers is a
-     * combination a row is steered into, and the conditions of such a way do not say what would
-     * steer one there — so it is left out, and where that leaves none the value is answered as
-     * varying in no way this can compose against rather than as varying in one nobody can reach.
-     */
-    private List<Outcome> outcomesOf(Core e) {
-        List<Outcome> out = new ArrayList<>();
-        for (Arrival<Outcome> each : reading.waysAt(e).orNone()) {
-            if (each.isComplete() && !out.contains(each.path())) {
-                out.add(each.path());
-            }
-        }
-        return out;
-    }
-
-
-    /**
      * The parts of a node that are there.
      *
      * <p>A body the checker refused a clause of arrives with a hole where the clause was, and a
@@ -424,46 +361,5 @@ public final class Interactions {
             }
         }
         return out;
-    }
-
-    /**
-     * The values consumed into one here, or null where this node consumes none.
-     *
-     * <p>A run of one operator is one meeting. {@code a + b + c} is written as one operator applied
-     * twice and is three values making one, so reading it as two meetings would ask for the product
-     * of the left two against the third and then again for the product of the first two — the
-     * second being a projection of the first, and every row of it a row the first already wanted.
-     * The nodes taken into the run are recorded so the walk does not meet them again.
-     */
-    private static List<Core> meetingAt(Core node, Set<Core> absorbed) {
-        return switch (node) {
-            case Core.Binary binary when binary.op().stopsWhenItsAnswerIsSettled() -> null;
-            case Core.Binary binary -> {
-                List<Core> operands = new ArrayList<>();
-                List<Core> inner = new ArrayList<>();
-                run(binary.left(), binary.op(), operands, inner);
-                run(binary.right(), binary.op(), operands, inner);
-                if (operands.size() < 2) {
-                    yield null;
-                }
-                absorbed.addAll(inner);
-                yield operands;
-            }
-            case Core.Call call -> call.args().size() > 1 ? call.args() : null;
-            case Core.PreservedCall call -> call.args().size() > 1 ? call.args() : null;
-            case Core.Apply apply -> apply.args().size() > 1 ? apply.args() : null;
-            default -> null;
-        };
-    }
-
-    /** The values one run of {@code op} is over, and the nodes the run is written as. */
-    private static void run(Core e, BinOp op, List<Core> operands, List<Core> inner) {
-        if (e instanceof Core.Binary binary && binary.op() == op) {
-            inner.add(binary);
-            run(binary.left(), op, operands, inner);
-            run(binary.right(), op, operands, inner);
-        } else if (e != null) {
-            operands.add(e);
-        }
     }
 }

@@ -10,7 +10,7 @@ import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.interaction.Interaction;
-import souther.compiler.interaction.Interactions;
+import souther.compiler.interaction.CoverageRead;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -95,7 +95,7 @@ class AnAlternativeAssignmentIsAsCompatibleAsTheFirstTest {
                 new BehaviorInputs(spec.params().stream().map(Hir.Param::name).toList(),
                         sig.inputTypes(), symbols, ReadAs.THE_COMPILATION_DOES),
                 axes.axes(), HeldCounts.of(inputs, symbols)),
-                Interactions.of(body, plan, inputs, symbols));
+                CoverageRead.of(body, plan, inputs, symbols).interactions());
     }
 
     /** The positions under two cases are both axes, which is what the assignments have to hold. */

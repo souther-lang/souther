@@ -10,7 +10,7 @@ import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.interaction.Interaction;
-import souther.compiler.interaction.Interactions;
+import souther.compiler.interaction.CoverageRead;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Scopes;
@@ -429,7 +429,7 @@ class AGroupTooWideToWalkSaysSoTest {
                             sigs.get("total").inputTypes(), symbols,
                             souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
                     partitioning.axes(), HeldCounts.of(inputs, symbols)),
-                    Interactions.of(body, plan, inputs, symbols));
+                    CoverageRead.of(body, plan, inputs, symbols).interactions());
         }
     }
 }
