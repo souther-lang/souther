@@ -1,4 +1,4 @@
-package souther.compiler.check;
+package souther.compiler.semantics;
 
 import java.util.List;
 
@@ -11,12 +11,12 @@ import java.util.List;
  * in the answer to the input position it came from. Written for either one, it comes out as that
  * one's projection, and the other is left recovering what the projection dropped.
  *
- * <p>Which is what {@link DischargeRules.Shape} is. It is a good answer to the discharge question
+ * <p>Which is what {@link ElementShape} is. It is a good answer to the discharge question
  * and a lossy one to any other: {@code List.filterMap} and {@code Set.map} are both
  * {@code COLLAPSES}, because for discharge it is enough that neither keeps what was stated and
  * neither grows — and their elements do not come from the same place at all. One is what the closure
  * answered, and the other is inside what the closure answered. So the shape is derived from this
- * ({@link DischargeRules.Built#shape}) and this is not derived from the shape.
+ * ({@link BuiltFrom#shape}) and this is not derived from the shape.
  *
  * <p><b>Provenance and nothing else.</b> Saying an element came from a closure applied to an input
  * element does not say a value can be chosen at the input that puts the result where a rule wants
@@ -25,7 +25,7 @@ import java.util.List;
  * separate question asked of a separate answer, and a reader that took this for one would have
  * "the origin is known, so the value can be built" — which is true of nothing here.
  *
- * <p><b>And no count.</b> How many elements the result has is {@link DischargeRules.Cardinality} and
+ * <p><b>And no count.</b> How many elements the result has is {@link SizeAgainstItsSource} and
  * is stated beside this. They are different algebras and they come apart: {@code List.map} and
  * {@code Set.map} have one lineage — the closure's answer on an element of the source — and
  * different counts, because two elements of a set may map onto one. Folded together, the count would
@@ -48,7 +48,11 @@ public sealed interface ElementLineage {
      * the library says.
      */
     static ArgumentRef holdsTheElementsOf(souther.compiler.types.ValueName operation) {
-        return DischargeRules.holdsTheElementsOf(operation);
+        BuiltFrom built = OperationFacts.buildsItsResultFrom(operation);
+        return built != null && built.outputs().size() == 1
+                && built.lineage() instanceof SameAs same
+                && same.source().elements() == 1
+                ? same.source().argument() : null;
     }
 
     /**
@@ -61,7 +65,13 @@ public sealed interface ElementLineage {
      * the closure that made it, and knowing where it came from does not answer it.
      */
     static ArgumentRef derivesItsElementsFrom(souther.compiler.types.ValueName operation) {
-        return DischargeRules.derivesItsElementsFrom(operation);
+        BuiltFrom built = OperationFacts.buildsItsResultFrom(operation);
+        if (built == null || built.outputs().size() != 1) {
+            return null;
+        }
+        ElementLineage lineage = built.lineage();
+        return (lineage instanceof ClosureResult || lineage instanceof InsideClosureResult)
+                && lineage.source().elements() == 1 ? lineage.source().argument() : null;
     }
 
     /**
@@ -83,7 +93,7 @@ public sealed interface ElementLineage {
         }
 
         /** One step into what an operation answers. */
-        sealed interface Step {
+        public sealed interface Step {
 
             /** Inside the sequence reached so far. */
             record Element() implements Step {
@@ -105,7 +115,7 @@ public sealed interface ElementLineage {
         }
 
         /** The elements of what the operation answers, which is where most of them are. */
-        static ResultPath elements() {
+        public static ResultPath elements() {
             return new ResultPath(List.of(new Step.Element()));
         }
 

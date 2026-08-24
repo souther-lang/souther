@@ -37,10 +37,16 @@ class WhichArgumentAnOperationAnswersIsReadOutOfItsTableOnceTest {
      * reach each other however they are written. */
     private static final String READER = "souther.compiler.check.Choice";
 
-    /** The row types: what a definition's cases are, one case, and one relation a case is reached
-     * under. */
-    private static final Set<String> ROWS = Set.of(RULES + "$Choices", RULES + "$Choice",
-            RULES + "$ArgumentsStand");
+    /** Where the cases are declared, and what holds them to the library. Both reach a row by
+     * declaring one and by holding it to a signature, which is not handing it to a reader. */
+    private static final String FACTS = "souther.compiler.semantics.OperationFact";
+
+    private static final Set<String> DECLARING = Set.of(FACTS,
+            "souther.compiler.semantics.OperationFacts",
+            "souther.compiler.check.OperationFactBinder");
+
+    /** The row types: one case of a definition, and one relation a case is reached under. */
+    private static final Set<String> ROWS = Set.of(FACTS + "$Case", FACTS + "$ArgumentsStand");
 
     @Test
     void nothingButTheChoiceItselfAsksWhatAnOperationChoosesBetween() throws IOException {
@@ -66,7 +72,8 @@ class WhichArgumentAnOperationAnswersIsReadOutOfItsTableOnceTest {
                 continue;
             }
             readAtAll = true;
-            if (!site.from().equals(READER) && !site.from().startsWith(RULES)) {
+            if (!site.from().equals(READER) && !site.from().startsWith(RULES)
+                    && DECLARING.stream().noneMatch(site.from()::startsWith)) {
                 reaching.add(site.at());
             }
         }

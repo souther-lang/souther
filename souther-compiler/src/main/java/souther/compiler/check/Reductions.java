@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.semantics.Combinator;
 import souther.compiler.core.Core;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
@@ -156,7 +157,7 @@ final class Reductions {
      * day one is declared it is written down here rather than guessed at.
      */
     private static Reduction shapeOf(ValueName operation, Prelude.Signature signature) {
-        Combinators.Combinator handed = Combinators.of(operation);
+        Combinator handed = Combinators.of(operation);
         if (handed == null) {
             throw new IllegalStateException(operation + " is named a reduction and its signature does"
                     + " not say what it hands its closure, so where its accumulator arrives cannot"

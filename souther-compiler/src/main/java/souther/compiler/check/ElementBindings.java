@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.semantics.Combinator;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
 
@@ -95,7 +96,7 @@ public record ElementBindings(Map<BindingId, Core> containers, Map<BindingId, Co
         }
         if (e instanceof Core.Call call
                 && call.fn() instanceof Core.Reached reached) {
-            Combinators.Combinator handed = Combinators.of(reached.denotes());
+            Combinator handed = Combinators.of(reached.denotes());
             if (handed != null
                     && handed.closureArg() < call.args().size()
                     && handed.containerArg() < call.args().size()

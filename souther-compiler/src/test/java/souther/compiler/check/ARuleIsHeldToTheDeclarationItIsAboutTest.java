@@ -1,16 +1,15 @@
 package souther.compiler.check;
 
-import souther.compiler.check.DischargeRules.Built;
-import souther.compiler.check.DischargeRules.Cardinality;
-import souther.compiler.check.DischargeRules.Carried;
-import souther.compiler.check.DischargeRules.Shape;
+import souther.compiler.semantics.ArgumentRef;
+import souther.compiler.semantics.BuiltFrom;
+import souther.compiler.semantics.ElementLineage;
+import souther.compiler.semantics.SizeAgainstItsSource;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
-import java.util.Set;
 import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -36,17 +35,16 @@ class ARuleIsHeldToTheDeclarationItIsAboutTest {
     }
 
     private static void bindCarried(String operation, ArgumentRef container) {
-        DischargeRules.bind(
-                Map.of(op(operation), new Carried(container, Set.of(Shape.PERMUTES))),
-                Carried::container, new ArgumentRef.TheContainer(), Question::holdsElements,
+        DischargeRules.holdToTheDeclaration(op(operation), container,
+                new ArgumentRef.TheContainer(), Question::holdsElements,
                 "the container a predicate reads");
     }
 
     private static void bindBuilt(String operation, ArgumentRef from) {
-        DischargeRules.bind(
-                Map.of(op(operation), new Built(new ElementLineage.SameAs(
-                        new ElementLineage.Source(from, 1)), Cardinality.AT_MOST)),
-                Built::from, new ArgumentRef.TheContainer(), Question::holdsElements,
+        DischargeRules.holdToTheDeclaration(op(operation),
+                new BuiltFrom(new ElementLineage.SameAs(new ElementLineage.Source(from, 1)),
+                        SizeAgainstItsSource.AT_MOST).from(),
+                new ArgumentRef.TheContainer(), Question::holdsElements,
                 "the container something is built from");
     }
 

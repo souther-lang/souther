@@ -1,10 +1,15 @@
 package souther.compiler.check;
 
-import org.junit.jupiter.api.Test;
+import souther.compiler.semantics.ArgumentRef;
+import souther.compiler.semantics.BuiltFrom;
+import souther.compiler.semantics.ElementLineage;
+import souther.compiler.semantics.ElementLineage.OutputLineage;
+import souther.compiler.semantics.ElementLineage.ResultPath;
+import souther.compiler.semantics.ElementLineage.Source;
+import souther.compiler.semantics.ElementShape;
+import souther.compiler.semantics.SizeAgainstItsSource;
 
-import souther.compiler.check.ElementLineage.OutputLineage;
-import souther.compiler.check.ElementLineage.ResultPath;
-import souther.compiler.check.ElementLineage.Source;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
@@ -113,7 +118,7 @@ class WhereAnAnswersElementsCameFromCanBeSaidTest {
      *
      * <p>Not an impossible state. {@code OneOf} is a lineage like the others and says something true
      * of {@code List.append}; what it is outside is the domain of the projection to
-     * {@link DischargeRules.Shape}, whose four words are each about one source. So this is the
+     * {@link ElementShape}, whose four words are each about one source. So this is the
      * projection declining an input it has no word for, and the day {@code append} is declared the
      * thing to change is what the projection answers with — not the lineage, and not the table.
      *
@@ -122,11 +127,11 @@ class WhereAnAnswersElementsCameFromCanBeSaidTest {
      */
     @Test
     void andNoShapeIsReadOffElementsFromMoreThanOnePlace() {
-        DischargeRules.Built built = new DischargeRules.Built(
+        BuiltFrom built = new BuiltFrom(
                 new ElementLineage.OneOf(List.of(
                         new ElementLineage.SameAs(new Source(FIRST, 1)),
                         new ElementLineage.SameAs(new Source(SECOND, 1)))),
-                DischargeRules.Cardinality.AT_MOST);
+                SizeAgainstItsSource.AT_MOST);
 
         assertThrows(IllegalStateException.class, built::shape);
     }
@@ -159,13 +164,13 @@ class WhereAnAnswersElementsCameFromCanBeSaidTest {
      */
     @Test
     void aRunHoldingSomeOfEachIsProjectedToTheWordThatLicensesNothing() {
-        DischargeRules.Built updated = new DischargeRules.Built(
+        BuiltFrom updated = new BuiltFrom(
                 new ElementLineage.OneOf(List.of(
                         new ElementLineage.SameAs(new Source(CONTAINER, 1)),
                         new ElementLineage.ClosureResult(new Source(CONTAINER, 1)))),
-                DischargeRules.Cardinality.SAME);
+                SizeAgainstItsSource.SAME);
 
-        assertEquals(DischargeRules.Shape.COLLAPSES, updated.shape());
+        assertEquals(ElementShape.COLLAPSES, updated.shape());
     }
 
     /**
@@ -180,12 +185,12 @@ class WhereAnAnswersElementsCameFromCanBeSaidTest {
      */
     @Test
     void aShapeIsCoarserThanTheLineageItIsReadOff() {
-        DischargeRules.Built collapsingMap = new DischargeRules.Built(
+        BuiltFrom collapsingMap = new BuiltFrom(
                 new ElementLineage.ClosureResult(new Source(CONTAINER, 1)),
-                DischargeRules.Cardinality.AT_MOST);
-        DischargeRules.Built collapsingInside = new DischargeRules.Built(
+                SizeAgainstItsSource.AT_MOST);
+        BuiltFrom collapsingInside = new BuiltFrom(
                 new ElementLineage.InsideClosureResult(new Source(CONTAINER, 1)),
-                DischargeRules.Cardinality.AT_MOST);
+                SizeAgainstItsSource.AT_MOST);
 
         assertEquals(collapsingMap.shape(), collapsingInside.shape(),
                 "one word for the two, which is what the discharge question needs");

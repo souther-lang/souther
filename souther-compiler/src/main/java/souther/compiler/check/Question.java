@@ -1,5 +1,7 @@
 package souther.compiler.check;
 
+import souther.compiler.semantics.OperationFacts;
+import souther.compiler.semantics.OperationSubject;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
@@ -50,7 +52,7 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return Combinators.HANDS_ITS_CLOSURE_NOTHING;
+            return OperationFacts.saysNothingOf(OperationSubject.COMBINATOR);
         }
     },
 
@@ -166,7 +168,7 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return DischargeRules.NOTHING_KEPT;
+            return OperationFacts.saysNothingOf(OperationSubject.BUILT);
         }
     },
 
@@ -192,7 +194,7 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return DischargeRules.NOTHING_CARRIED;
+            return OperationFacts.saysNothingOf(OperationSubject.PREDICATE_CARRY);
         }
     },
 
@@ -218,7 +220,7 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return DischargeRules.NOT_AN_EMPTINESS_CHECK;
+            return OperationFacts.saysNothingOf(OperationSubject.EMPTINESS);
         }
     },
 
@@ -246,7 +248,7 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return DischargeRules.NOT_A_QUANTIFIER;
+            return OperationFacts.saysNothingOf(OperationSubject.QUANTIFICATION);
         }
     },
 
@@ -275,7 +277,7 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return DischargeRules.NOT_STATED_OVER_A_PROJECTION;
+            return OperationFacts.saysNothingOf(OperationSubject.PROJECTION);
         }
     },
 
@@ -299,7 +301,7 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return DischargeRules.NOT_A_SIZE;
+            return OperationFacts.saysNothingOf(OperationSubject.SIZE);
         }
     },
 
@@ -328,7 +330,7 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return DischargeRules.DECIDES_NO_ORDER;
+            return OperationFacts.saysNothingOf(OperationSubject.ORDER);
         }
     },
 
@@ -356,7 +358,7 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return DischargeRules.BOUNDS_NOTHING;
+            return OperationFacts.saysNothingOf(OperationSubject.BOUNDS);
         }
     },
 
@@ -386,7 +388,7 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return DischargeRules.SHIFTS_BY_NOTHING_MEASURABLE;
+            return OperationFacts.saysNothingOf(OperationSubject.MEASURE);
         }
     },
 
@@ -414,7 +416,7 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return DischargeRules.CHOOSES_NOTHING;
+            return OperationFacts.saysNothingOf(OperationSubject.CHOICE);
         }
     },
 
@@ -442,7 +444,7 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return DischargeRules.ANSWERS_NO_ARGUMENT_OF_ITS_OWN;
+            return OperationFacts.saysNothingOf(OperationSubject.FORM);
         }
     },
 
@@ -479,7 +481,7 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return DischargeRules.COMPUTES_NO_ARITHMETIC_OF_ITS_OWN;
+            return OperationFacts.saysNothingOf(OperationSubject.NUMERIC_RESULT);
         }
     };
 

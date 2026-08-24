@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.semantics.OperationFact;
 import souther.compiler.core.Core;
 import souther.compiler.numeric.NumericDomain.Rel;
 
@@ -177,18 +178,19 @@ record Choice(Kind kind, List<Arm> arms) {
      * question about the library, and it is answered by the time an arm exists.
      */
     private static Choice defined(Core.PreservedCall call) {
-        DischargeRules.Choices defined = DischargeRules.chosenBy(call);
-        if (defined == null) {
+        List<OperationFact.Case> defined =
+                DischargeRules.chosenBy(call);
+        if (defined.isEmpty()) {
             return null;
         }
-        List<Arm> arms = new ArrayList<>(defined.cases().size());
-        for (DischargeRules.Choice one : defined.cases()) {
+        List<Arm> arms = new ArrayList<>(defined.size());
+        for (OperationFact.Case one : defined) {
             List<ArgumentRelation> relations = new ArrayList<>(one.given().size());
-            for (DischargeRules.ArgumentsStand stands : one.given()) {
-                relations.add(new ArgumentRelation(stands.left().of(call), stands.rel(),
-                        stands.right().of(call)));
+            for (OperationFact.ArgumentsStand stands : one.given()) {
+                relations.add(new ArgumentRelation(CallArguments.of(stands.left(), call), stands.rel(),
+                        CallArguments.of(stands.right(), call)));
             }
-            arms.add(new Arm(one.answers().of(call), new Decides.ByArgumentRelations(relations)));
+            arms.add(new Arm(CallArguments.of(one.answers(), call), new Decides.ByArgumentRelations(relations)));
         }
         return new Choice(Kind.THE_ARGUMENTS, arms);
     }

@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.semantics.OperationFacts;
 import souther.compiler.core.Core;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
@@ -11,13 +12,13 @@ import java.util.Set;
 /**
  * The standard-library operations whose result is a number taken of a location.
  *
- * <p>One list, because a reader that answers "does this rule bound a number" has to give the same
- * answer wherever it is asked. The discharge procedure keys an atom on one of them over its
- * argument's path and a partition draws a boundary on one — and where those two disagreed, a rule
- * discharged in one place was reported in the other as a rule the model does not state, which is
- * what #510 was.
+ * <p>Which they are is declared with the rest of what is true of the language's operations
+ * ({@link OperationFacts}) and read from there. This once held the list
+ * itself, which is what made it the first fact promoted out of a check when a second reader wanted
+ * it — two lists of the same operations disagreed, and a rule discharged in one place was reported
+ * in the other as a rule the model does not state.
  *
- * <p>Which measure a value has is here as well, beside the list. A partition reading an invariant
+ * <p>What is here is what reading one takes: a type in a compilation's symbols, and a call. A partition reading an invariant
  * asks what counts the value in front of it, and a partition reading a guard asks whether the call
  * written there is one of these; answered from two places, adding a measure would be read by one of
  * them and not the other — the same drift one size down.
@@ -34,20 +35,14 @@ import java.util.Set;
  */
 public final class NumericMeasures {
 
-    private static final Set<ValueName> CALLS = Set.of(
-            ValueName.Stdlib.operation("List", "length"),
-            ValueName.Stdlib.operation("String", "length"),
-            ValueName.Stdlib.operation("Set", "size"),
-            ValueName.Stdlib.operation("Map", "size"));
-
     /** Every such operation. */
     public static Set<ValueName> calls() {
-        return CALLS;
+        return OperationFacts.countsWhatItIsGiven();
     }
 
     /** Whether {@code operation} is one of them. */
     public static boolean isMeasure(ValueName operation) {
-        return CALLS.contains(operation);
+        return calls().contains(operation);
     }
 
     /** One of these applied to something: which measure, and what it is taken of. */
@@ -99,7 +94,8 @@ public final class NumericMeasures {
      * not a proof, and a row at that edge is settled by a value rather than by an argument.
      */
     public static boolean everyCountHasAValue(ValueName operation) {
-        return operation.equals(ValueName.Stdlib.operation("String", "length"));
+        return OperationFacts
+                .everyCountItGivesIsACountSomeValueHas(operation);
     }
 
     /**

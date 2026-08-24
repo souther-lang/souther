@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.semantics.PositiveOrder;
 import souther.compiler.core.Core;
 import souther.compiler.numeric.NumericDomain.LinearForm;
 import souther.compiler.numeric.NumericDomain.Rel;
@@ -189,7 +190,8 @@ final class Conditions {
                 || !isZero(zero)) {
             return e;
         }
-        DischargeRules.PositiveOrder positive = DischargeRules.orderStatedBy(call.operation());
+        PositiveOrder positive =
+                DischargeRules.orderStatedBy(call.operation());
         if (positive == null
                 || terms.bodyKey(call.args().get(0), at) == null
                 || terms.bodyKey(call.args().get(1), at) == null) {
@@ -198,7 +200,8 @@ final class Conditions {
         // The relation the source wrote, read from the sign's side of the zero, and between the
         // arguments in the order this operation counts them.
         BinOp written = callFirst ? b.op() : mirrored(b.op());
-        return comparison(written, positive.greaterOf(call), positive.lesserOf(call), b);
+        return comparison(written, CallArguments.of(positive.greater(), call),
+                CallArguments.of(positive.lesser(), call), b);
     }
 
     /** Whether {@code e} is the number zero as written. */

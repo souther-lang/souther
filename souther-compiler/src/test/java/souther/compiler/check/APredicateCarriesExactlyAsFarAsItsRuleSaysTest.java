@@ -1,7 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.Compiler;
-import souther.compiler.check.DischargeRules.Shape;
+import souther.compiler.semantics.ElementShape;
 import souther.compiler.diag.Severity;
 import souther.compiler.types.ValueName;
 
@@ -52,12 +52,12 @@ class APredicateCarriesExactlyAsFarAsItsRuleSaysTest {
     }
 
     /** A predicate of the carrying table: the container kind it reads, and how it is written. */
-    private record Predicate(String kind, String of, String stated, Map<Shape, Travels> travels) {}
+    private record Predicate(String kind, String of, String stated, Map<ElementShape, Travels> travels) {}
 
-    private static Map<Shape, Travels> travels(Travels permutes, Travels subset, Travels maps,
+    private static Map<ElementShape, Travels> travels(Travels permutes, Travels subset, Travels maps,
                                                Travels collapses) {
-        return Map.of(Shape.PERMUTES, permutes, Shape.SUBSET, subset, Shape.MAPS, maps,
-                Shape.COLLAPSES, collapses);
+        return Map.of(ElementShape.PERMUTES, permutes, ElementShape.SUBSET, subset, ElementShape.MAPS, maps,
+                ElementShape.COLLAPSES, collapses);
     }
 
     /**
@@ -94,7 +94,7 @@ class APredicateCarriesExactlyAsFarAsItsRuleSaysTest {
 
     /** How a container of each kind is built from another of the same kind, by shape, or null where
      * the library has no such construction. */
-    private static String built(String kind, Shape shape) {
+    private static String built(String kind, ElementShape shape) {
         return switch (kind + "." + shape) {
             case "List.PERMUTES" -> "List.reverse(c)";
             case "List.SUBSET" -> "List.filter(n -> n >= 5, c)";
@@ -114,7 +114,7 @@ class APredicateCarriesExactlyAsFarAsItsRuleSaysTest {
      * states it, from a container built off the guarded one. It discharges exactly when the rule
      * carries the predicate through that construction, and is reported otherwise.
      */
-    private static String module(Predicate p, Shape shape) {
+    private static String module(Predicate p, ElementShape shape) {
         return """
                 module demo
                 data Bad
@@ -154,10 +154,10 @@ class APredicateCarriesExactlyAsFarAsItsRuleSaysTest {
 
     /** A shape that carries discharges the clause, and one that does not leaves it reported. */
     @Test
-    void eachShapeCarriesWhatItIsSaidTo() {
+    void eachElementShapeCarriesWhatItIsSaidTo() {
         Map<String, String> wrong = new LinkedHashMap<>();
         for (Predicate p : PREDICATES) {
-            for (Shape shape : Shape.values()) {
+            for (ElementShape shape : ElementShape.values()) {
                 Travels travels = p.travels().get(shape);
                 if (travels == Travels.NO_SUCH_CONSTRUCTION) {
                     continue;
@@ -183,10 +183,10 @@ class APredicateCarriesExactlyAsFarAsItsRuleSaysTest {
      * being one that can be skipped, and someone has to say what the predicate does through it.
      */
     @Test
-    void aShapeSaidToHaveNoConstructionIsOneTheLibraryDoesNotBuild() {
+    void aElementShapeSaidToHaveNoConstructionIsOneTheLibraryDoesNotBuild() {
         List<String> wrong = new ArrayList<>();
         for (Predicate p : PREDICATES) {
-            for (Shape shape : Shape.values()) {
+            for (ElementShape shape : ElementShape.values()) {
                 boolean builds = DischargeRules.constructionKinds().contains(p.kind() + "." + shape);
                 if (builds != (p.travels().get(shape) != Travels.NO_SUCH_CONSTRUCTION)) {
                     wrong.add(operationOf(p) + " through " + shape
@@ -209,7 +209,7 @@ class APredicateCarriesExactlyAsFarAsItsRuleSaysTest {
     void whichRulesAnyProgramCanReach() {
         List<String> reaching = new ArrayList<>();
         for (Predicate p : PREDICATES) {
-            for (Shape shape : Shape.values()) {
+            for (ElementShape shape : ElementShape.values()) {
                 if (p.travels().get(shape) == Travels.CARRIES) {
                     reaching.add(operationOf(p));
                     break;

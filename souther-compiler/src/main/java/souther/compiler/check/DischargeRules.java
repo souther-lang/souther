@@ -1,9 +1,18 @@
 package souther.compiler.check;
 
+import souther.compiler.semantics.ArgumentRef;
+import souther.compiler.semantics.Arithmetic;
+import souther.compiler.semantics.BuiltFrom;
+import souther.compiler.semantics.ElementLineage;
+import souther.compiler.semantics.ElementShape;
+import souther.compiler.semantics.NumericResult;
+import souther.compiler.semantics.OperationFact;
+import souther.compiler.semantics.OperationFacts;
+import souther.compiler.semantics.PositiveOrder;
+import souther.compiler.semantics.ResultBound;
+import souther.compiler.semantics.SizeAgainstItsSource;
 import souther.compiler.types.BinOp;
 import souther.compiler.core.Core;
-import souther.compiler.numeric.NumericDomain;
-import souther.compiler.numeric.NumericDomain.Rel;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
@@ -22,20 +31,16 @@ import java.util.function.Predicate;
  * (spec §invariant-discharge-preservation), and what each guarantees of what it answers
  * (spec §invariant-discharge-guarantees).
  *
- * <p>These are the tables that decide how much of a model the language tracks rather than leaves to a
- * run-time check, and each is stated per operation because that is the level an author writes at. It
- * is data and lookups and nothing else: what a rule is <em>used for</em> — carrying a predicate to
- * the container something was built from, naming a size — is the walk's, and lives with the walk.
+ * <p>What the operations are is not here. That is declared where nothing reads it
+ * ({@link OperationFacts}); what is here is this check's reading of it — the shape a rule is read
+ * at a call, and what the check concludes from one. A fact about an operation held in a procedure
+ * that reads it is a fact its second reader has to be given by that procedure, which is the
+ * arrangement the declarations were moved out of.
  *
- * <p>Every rule is keyed by the operation a call reaches, not by how it was written: a module that
- * imported an operation writes it bare and one that did not writes it qualified, and they are the
- * same operation. What the operations do to the closure they are handed is not here but in
- * {@link Combinators}, which the totality check reads as well and neither of the two states.
- *
- * <p>A rule answers a call, not a position in one. Which argument it reads is written as {@link ArgumentRef}
- * and settled here, so no reader turns a number back into an argument and none has to ask whether the
- * number was one this call has. What makes that safe is the binding below: every row is held to the
- * declaration it was written for before any of them is read.
+ * <p>What each declaration is held to is here too, since holding one reads the library's own
+ * signatures and asks what this check makes of a type. Every declaration is walked before any call
+ * is read ({@link OperationFactBinder}), so a fact nothing here looks up is one this has held all
+ * the same.
  */
 final class DischargeRules {
 
@@ -44,53 +49,6 @@ final class DischargeRules {
      * is about without a reader splitting a spelling to find out. */
     private static ValueName op(String alias, String name) {
         return new ValueName.Stdlib(alias, name);
-    }
-
-    /** The pure, total stdlib calls whose result is a number the domain can name: the size of a
-     * container or a string. Each becomes an atom keyed by the call written over its argument's path
-     * — {@code List.length(b.items)} — so an invariant clause and a guard naming the same container
-     * name the same atom, and the guard discharges the clause. The argument must be a nameable path:
-     * {@code List.length(List.map(f, xs))} is not this atom, and nothing relates the two.
-     *
-     * <p>Shared with the partition, which draws a boundary on the same calls ({@link
-     * NumericMeasures}). Two lists would let a rule be discharged here and reported as one the model
-     * does not state there. */
-    private static final Set<ValueName> SIZE_CALLS = NumericMeasures.calls();
-
-    /**
-     * What a construction of a container keeps of the elements of the container it was built from.
-     *
-     * <ul>
-     * <li>{@code PERMUTES} — the same elements in another order. Everything survives.
-     * <li>{@code SUBSET} — some of the same elements. Nothing new is there, so a property of every
-     *     element survives.
-     * <li>{@code MAPS} — one new element for each. Nothing is known of what they are.
-     * <li>{@code COLLAPSES} — at most one new element for each. Neither the elements nor what a
-     *     closure that answers about them said.
-     * </ul>
-     *
-     * <p>How many there are is {@link Cardinality} and is stated beside this, not read off it. The
-     * two agree for every construction here — the same elements in another order is as many, some of
-     * them is no more — and that agreement is what made one enum look like enough. It ends at a
-     * construction given two containers: {@code List.append(a, b)} holds neither {@code a}'s elements
-     * alone nor {@code b}'s, and its size is still no less than either. A statement about the count
-     * that has to be spelled as a statement about the elements cannot be made there.
-     */
-    enum Shape {
-        PERMUTES, SUBSET, MAPS, COLLAPSES
-    }
-
-    /**
-     * How the size of a construction's result relates to the size of the container it was built from.
-     *
-     * <ul>
-     * <li>{@code SAME} — exactly as many. Not stated as a fact: both are one atom, since
-     *     {@link #sizeSource} answers the size of the result with the size of its source.
-     * <li>{@code AT_MOST} — no more, and possibly fewer.
-     * </ul>
-     */
-    enum Cardinality {
-        SAME, AT_MOST
     }
 
     /** The argument the signature already says the elements come from, where the operation takes a
@@ -106,229 +64,16 @@ final class DischargeRules {
         return new ArgumentRef.At(position);
     }
 
-    /**
-     * Where a container's elements came from, and how many of them the result has.
-     *
-     * <p>The lineage is what is declared; {@link #shape} is read off it. The two are not the same
-     * statement and the shape is the coarser — {@code List.filterMap} and {@code Set.map} are one
-     * shape and two lineages — so declaring the shape and deriving the lineage would be deriving
-     * what was thrown away. Written this way round, a reader that wants where an element came from
-     * asks {@link ElementLineage} and a reader that wants whether a property survives asks here,
-     * and neither is recovering the other's answer.
-     */
-    record Built(List<ElementLineage.OutputLineage> outputs, Cardinality size) {
-
-        Built {
-            outputs = List.copyOf(outputs);
-            if (outputs.isEmpty()) {
-                throw new IllegalArgumentException("a construction answers somewhere");
-            }
-        }
-
-        /** The one place its elements stand, for a rule about an operation that answers one run of
-         *  them. */
-        Built(ElementLineage lineage, Cardinality size) {
-            this(List.of(new ElementLineage.OutputLineage(
-                    ElementLineage.ResultPath.elements(), lineage)), size);
-        }
-
-        /** Where its elements came from, where they all came from one place. */
-        ElementLineage lineage() {
-            if (outputs.size() != 1) {
-                throw new IllegalStateException(
-                        "a construction answering more than one run of elements was asked for one"
-                                + " lineage: " + outputs);
-            }
-            return outputs.get(0).origin();
-        }
-
-        /** Which argument it was built from, where one argument is what it was built from. */
-        ArgumentRef from() {
-            ElementLineage.Source source = lineage().source();
-            if (source == null) {
-                throw new IllegalStateException(
-                        "a construction whose elements come from more than one place was asked which"
-                                + " one: " + outputs);
-            }
-            return source.argument();
-        }
-
-        /**
-         * What the building keeps of the elements it was built from, in the words the discharge
-         * check is written in.
-         *
-         * <p>A projection and the one place it happens. What survives a construction is decided by
-         * whether the elements are the source's own and by whether there are as many of them, and
-         * both of those are stated above — so the four words are a reading of the pair rather than
-         * a fifth thing to keep in step with it.
-         */
-        Shape shape() {
-            return wordFor(lineage(), size == Cardinality.SAME);
-        }
-
-        /**
-         * The word for one lineage, given whether the result has as many elements as its source.
-         *
-         * <p>Elements that are each one of several things are each of them read, and the word is the
-         * one they all read where they read one — otherwise the word for elements nothing was kept
-         * of, which licenses nothing and so is true of a run holding some of each.
-         * {@code Map.updateIfPresent} is that: every value is the argument's own or what the closure
-         * made of it, so neither {@code PERMUTES} nor {@code MAPS} is true of the run, and what a
-         * reader of the four words may assume of it is nothing.
-         */
-        private Shape wordFor(ElementLineage lineage, boolean asMany) {
-            return switch (lineage) {
-                case ElementLineage.SameAs _ -> asMany ? Shape.PERMUTES : Shape.SUBSET;
-                case ElementLineage.ClosureResult _ -> asMany ? Shape.MAPS : Shape.COLLAPSES;
-                // What the closure answered holds it, so what was stated of the source says nothing
-                // of it, and there may be any number of them. No word of the four is about that,
-                // and the nearest is the one for elements nothing was kept of.
-                case ElementLineage.InsideClosureResult _ -> Shape.COLLAPSES;
-                case ElementLineage.OneOf one -> {
-                    if (one.source() == null) {
-                        throw new IllegalStateException(
-                                "a construction whose elements come from more than one place has no"
-                                        + " single source for a shape to be about: " + outputs);
-                    }
-                    Shape word = null;
-                    for (ElementLineage alternative : one.alternatives()) {
-                        Shape read = wordFor(alternative, asMany);
-                        word = word == null || word == read ? read : Shape.COLLAPSES;
-                    }
-                    yield word;
-                }
-            };
-        }
-    }
-
     /** The container {@code call} built its result from, and what the building kept of it. */
-    record Source(Core container, Shape shape, Cardinality size) {}
+    record Source(Core container, ElementShape shape, SizeAgainstItsSource size) {}
 
-    private static final Map<ValueName, Built> BUILT_FROM = Map.ofEntries(
-            Map.entry(op("List", "reverse"), new Built(new ElementLineage.SameAs(
-                    new ElementLineage.Source(at(0), 1)), Cardinality.SAME)),
-            Map.entry(op("List", "sort"), new Built(new ElementLineage.SameAs(
-                    new ElementLineage.Source(at(0), 1)), Cardinality.SAME)),
-            Map.entry(op("List", "sortBy"), new Built(new ElementLineage.SameAs(
-                    new ElementLineage.Source(CONTAINER, 1)), Cardinality.SAME)),
-            Map.entry(op("List", "map"), new Built(new ElementLineage.ClosureResult(
-                    new ElementLineage.Source(CONTAINER, 1)), Cardinality.SAME)),
-            Map.entry(op("List", "mapIndexed"), new Built(new ElementLineage.ClosureResult(
-                    new ElementLineage.Source(CONTAINER, 1)), Cardinality.SAME)),
-            Map.entry(op("Map", "mapValues"), new Built(new ElementLineage.ClosureResult(
-                    new ElementLineage.Source(CONTAINER, 1)), Cardinality.SAME)),
-            Map.entry(op("List", "filter"), new Built(new ElementLineage.SameAs(
-                    new ElementLineage.Source(CONTAINER, 1)), Cardinality.AT_MOST)),
-            Map.entry(op("List", "distinct"), new Built(new ElementLineage.SameAs(
-                    new ElementLineage.Source(at(0), 1)), Cardinality.AT_MOST)),
-            Map.entry(op("List", "take"), new Built(new ElementLineage.SameAs(
-                    new ElementLineage.Source(at(1), 1)), Cardinality.AT_MOST)),
-            Map.entry(op("List", "drop"), new Built(new ElementLineage.SameAs(
-                    new ElementLineage.Source(at(1), 1)), Cardinality.AT_MOST)),
-            Map.entry(op("Set", "filter"), new Built(new ElementLineage.SameAs(
-                    new ElementLineage.Source(CONTAINER, 1)), Cardinality.AT_MOST)),
-            Map.entry(op("Map", "filterEntries"),
-                    new Built(new ElementLineage.SameAs(
-                            new ElementLineage.Source(CONTAINER, 1)), Cardinality.AT_MOST)),
-            Map.entry(op("List", "distinctBy"), new Built(new ElementLineage.SameAs(
-                    new ElementLineage.Source(CONTAINER, 1)), Cardinality.AT_MOST)),
-            Map.entry(op("Map", "remove"), new Built(new ElementLineage.SameAs(
-                    new ElementLineage.Source(at(1), 1)), Cardinality.AT_MOST)),
-            Map.entry(op("Set", "remove"), new Built(new ElementLineage.SameAs(
-                    new ElementLineage.Source(at(1), 1)), Cardinality.AT_MOST)),
-            Map.entry(op("Map", "intersection"), new Built(new ElementLineage.SameAs(
-                    new ElementLineage.Source(at(0), 1)), Cardinality.AT_MOST)),
-            Map.entry(op("Map", "difference"), new Built(new ElementLineage.SameAs(
-                    new ElementLineage.Source(at(0), 1)), Cardinality.AT_MOST)),
-            Map.entry(op("Set", "intersection"), new Built(new ElementLineage.SameAs(
-                    new ElementLineage.Source(at(0), 1)), Cardinality.AT_MOST)),
-            Map.entry(op("Set", "difference"), new Built(new ElementLineage.SameAs(
-                    new ElementLineage.Source(at(0), 1)), Cardinality.AT_MOST)),
-            // Every value in the answer came from the map it was given: the one under the key is
-            // what the closure made of it, and every other is the value that was there. Read as a
-            // closure result alone, what is true of one value would be said of all of them.
-            Map.entry(op("Map", "updateIfPresent"), new Built(new ElementLineage.OneOf(List.of(
-                    new ElementLineage.SameAs(new ElementLineage.Source(CONTAINER, 1)),
-                    new ElementLineage.ClosureResult(new ElementLineage.Source(CONTAINER, 1)))),
-                    Cardinality.SAME)),
-            // Inside what the closure answered, which is an optional here and a list in a
-            // `flatMap`. One lineage for the two, told apart by what the closure's own signature
-            // says it answers with.
-            Map.entry(op("List", "filterMap"),
-                    new Built(new ElementLineage.InsideClosureResult(
-                            new ElementLineage.Source(CONTAINER, 1)), Cardinality.AT_MOST)),
-            Map.entry(op("Set", "map"), new Built(new ElementLineage.ClosureResult(
-                    new ElementLineage.Source(CONTAINER, 1)), Cardinality.AT_MOST)));
 
-    /**
-     * The containers a construction's result is never smaller than.
-     *
-     * <p>Written on its own and not as a {@link Shape}, because none of these establishes an element
-     * relation to a single source that a shape states. It is not that they keep nothing:
-     * {@code List.append(a, b)} keeps every element of both, and holds neither {@code a}'s alone nor
-     * {@code b}'s, so neither of the two is what it was built from; an insert puts in an element or
-     * an entry the container it read did not hold. The cardinality is a separate fact and survives
-     * either way — which is why these sat among the constructions nothing is known of, their bound
-     * discarded with an element rule that was never the same statement.
-     *
-     * <p>No more than the bound. A union answers one of what both sides hold and an insert of
-     * something already there adds nothing, so neither answers the sum of what it read; appending
-     * does, and stating it for that one alone would be a second rule for one operation. The bound is
-     * what they share, and it is what a lower-bound invariant asks for.
-     */
-    private static final Map<ValueName, List<ArgumentRef>> NO_SMALLER_THAN = Map.of(
-            op("List", "append"), List.of(at(0), at(1)),
-            op("Set", "union"), List.of(at(0), at(1)),
-            op("Map", "union"), List.of(at(0), at(1)),
-            op("Set", "insert"), List.of(at(1)),
-            op("Map", "insert"), List.of(at(2)));
-
-    /**
-     * The constructions this says nothing of, in three groups. Each reason is about what a shape can
-     * say, not about the operation being uninteresting.
-     *
-     * <p>What they answer holds something other than what they read. A map's keys and its entry
-     * pairs are not its values, {@code fromList} takes the values out of pairs, {@code groupBy}
-     * answers lists of the elements rather than the elements, {@code concat} reads the lists inside
-     * its argument, {@code zipShortest} pairs two lists, and {@code flatMap} makes any number of
-     * elements from each — which is neither the elements nor a count.
-     *
-     * <p>They put in what the container they read did not hold. Nothing that held of every element
-     * still does, which is what a shape would have had to say. How many there are is said instead by
-     * {@link #NO_SMALLER_THAN}, which those of them whose result is never smaller than a source it
-     * names are in.
-     *
-     * <p>They answer the same elements in a container of another kind. That is true and unsayable:
-     * every statement the check makes names the kind it is about — {@code List.length} and
-     * {@code List.all}, or {@code Set.size} and {@code Set.contains} — so nothing said of the one is
-     * a statement about the other, and a rule between them would carry nothing. A statement that
-     * spans kinds is what would have to exist first.
-     */
-    static final Set<ValueName> NOTHING_KEPT = Set.of(
-            op("Map", "keys"), op("Map", "toList"), op("Map", "fromList"), op("List", "groupBy"),
-            op("List", "concat"), op("List", "zipShortest"), op("List", "flatMap"),
-            op("Map", "insert"), op("Set", "insert"), op("Map", "union"), op("Set", "union"),
-            op("List", "append"), op("Map", "updateOrInsert"),
-            op("Map", "values"), op("Set", "toList"), op("Set", "fromList"), op("List", "indexBy"));
-
-    /** Where a predicate reads its container, and which shapes of construction carry it there.
-     * {@code List.all} holds of any sublist of a list it holds of; {@code List.contains} does not, and
-     * neither survives a mapping — what a mapped element is, the mapping alone does not say. */
-    record Carried(ArgumentRef container, Set<Shape> through) {}
-
-    private static final Map<ValueName, Carried> CARRIED = Map.of(
-            op("List", "all"), new Carried(CONTAINER, Set.of(Shape.PERMUTES, Shape.SUBSET)),
-            op("List", "allDistinctBy"), new Carried(CONTAINER, Set.of(Shape.PERMUTES, Shape.SUBSET)),
-            op("List", "any"), new Carried(CONTAINER, Set.of(Shape.PERMUTES)),
-            op("List", "contains"), new Carried(at(1), Set.of(Shape.PERMUTES)),
-            op("Set", "contains"), new Carried(at(1), Set.of(Shape.PERMUTES)),
-            op("Map", "containsKey"), new Carried(at(1), Set.of(Shape.PERMUTES)));
 
     /** Where a predicate reads its container at a call, and how far its statement travels. */
-    record Carrying(Core.PreservedCall stated, ArgumentRef at, Set<Shape> through) {
+    record Carrying(Core.PreservedCall stated, ArgumentRef at, Set<ElementShape> through) {
 
         Core container() {
-            return at.of(stated);
+            return CallArguments.of(at, stated);
         }
 
         /** {@code call} — a call to the same operation — with the container it reads replaced. */
@@ -337,694 +82,21 @@ final class DischargeRules {
                 throw new IllegalStateException("a rule read for " + stated.operation()
                         + " was asked to rewrite a call to " + call.operation());
             }
-            return at.replacedIn(call, container);
+            return CallArguments.replacedIn(at, call, container);
         }
     }
 
-    /** Where a predicate reads the projection it is stated over. A mapping keeps a projection when
-     * the closure copies that field from the element unchanged, so the predicate holds of the mapped
-     * list exactly when it holds of what was mapped, over the field it came from. */
-    private static final Map<ValueName, ArgumentRef> PROJECTION_OF =
-            Map.of(op("List", "allDistinctBy"), CLOSURE);
 
     /** The projection a predicate at a call is stated over, as the block it answers with. */
     record Projection(Core.PreservedCall stated, ArgumentRef at, Core.Block projection) {
 
         /** The call this was read for, stated over {@code value} instead. */
         Core.PreservedCall over(Core value) {
-            return at.replacedIn(stated, value);
+            return CallArguments.replacedIn(at, stated, value);
         }
     }
 
-    /** The calls that state their predicate of <em>every</em> element, so what they say of a
-     * container is what holds of each element a closure is handed. Which argument is the predicate
-     * and which the container is what {@link Combinators} already answers of any combinator, and how
-     * far the statement travels is what {@link #carried} already answers of any predicate — so a
-     * quantifier is the name and nothing else. {@code List.all} is the only one the library has. */
-    private static final Set<ValueName> QUANTIFIERS = Set.of(op("List", "all"));
 
-    /** Emptiness, by the size call it means. This is not a rule about what an operation does to a
-     * property but about what a predicate <em>says</em>: {@code List.isEmpty(xs)} and
-     * {@code List.length(xs) == 0} are one statement, so a guard writing either discharges a clause
-     * writing the other. Without it the two would be unrelated, which is an accident of which one the
-     * author reached for. */
-    private static final Map<ValueName, ValueName> EMPTINESS = Map.of(
-            op("List", "isEmpty"), op("List", "length"),
-            op("Set", "isEmpty"), op("Set", "size"),
-            op("Map", "isEmpty"), op("Map", "size"),
-            op("String", "isEmpty"), op("String", "length"));
-
-    /** The predicates whose statement this carries nowhere. A predicate over a string states
-     * something of the characters it holds in the order it holds them, and what would carry such a
-     * statement is a construction of a container from a container — which a string is not one of,
-     * its length being all this names of it. An emptiness check states a size, which travels as a
-     * size does ({@link #EMPTINESS}) and not as a property of elements. */
-    static final Set<ValueName> NOTHING_CARRIED = Set.of(
-            op("String", "contains"), op("String", "startsWith"), op("String", "endsWith"),
-            op("String", "matches"),
-            op("List", "isEmpty"), op("Set", "isEmpty"), op("Map", "isEmpty"), op("String", "isEmpty"));
-
-    /** The predicates of a single container that are not emptiness checks. The library has none:
-     * every one-argument predicate it declares over a container or a string is one, and one that was
-     * not would be named here with what it says instead. */
-    static final Set<ValueName> NOT_AN_EMPTINESS_CHECK = Set.of();
-
-    /** The predicates that apply a predicate to what a container holds without stating it of every
-     * element. {@code List.any} states it of some, so what it says of the container says nothing
-     * about the element a closure is handed. */
-    static final Set<ValueName> NOT_A_QUANTIFIER = Set.of(op("List", "any"));
-
-    /** The predicates that compute something other than a truth value from each element and are not
-     * stated over it. The library has none: {@code allDistinctBy} is the only such predicate and its
-     * projection is its closure's answer. */
-    static final Set<ValueName> NOT_STATED_OVER_A_PROJECTION = Set.of();
-
-    /** The numbers answered about a container that are not one of its sizes. The library has none:
-     * every {@code Int} it answers about a container is how many it holds. */
-    static final Set<ValueName> NOT_A_SIZE = Set.of();
-
-    /**
-     * What has to hold of the arguments before a bound on the result does.
-     *
-     * <p>Of the arguments and of nothing else. A condition the path establishes is what the arguments
-     * are known to be at one call, and a rule resting on one would hold where a guard was written and
-     * not where the operation was — which is a statement about the program rather than about the
-     * operation.
-     */
-    sealed interface Provided {
-
-        /** Whether {@code call} is one this rule holds at. */
-        boolean holdsAt(Core.PreservedCall call, java.util.function.Function<Core, BigDecimal> folded);
-
-        /** Nothing: the bound is what the operation does, whatever it is given. */
-        record Always() implements Provided {
-            @Override
-            public boolean holdsAt(Core.PreservedCall call,
-                                   java.util.function.Function<Core, BigDecimal> folded) {
-                return true;
-            }
-        }
-
-        /**
-         * An argument that reads as a constant above zero.
-         *
-         * <p>Constant, and not written as one. What a name was given is what the name is, here as
-         * everywhere else the check reads a value ({@link Terms#affineOf}), so {@code floorMod(x, k)}
-         * under {@code let k = 100} is the same call as {@code floorMod(x, 100)} — one spelling of a
-         * value the check has already read. Requiring the digits at the call would make a rule the
-         * author cannot predict from what the value is, only from where it was written.
-         */
-        record ConstantAboveZero(ArgumentRef argument) implements Provided {
-            @Override
-            public boolean holdsAt(Core.PreservedCall call,
-                                   java.util.function.Function<Core, BigDecimal> folded) {
-                BigDecimal at = folded.apply(argument.of(call));
-                return at != null && at.signum() > 0;
-            }
-        }
-    }
-
-    /**
-     * One bound an operation's result has, as the domain holds bounds: the result against a constant,
-     * or the result against one argument and a constant.
-     *
-     * <p>The shape is the domain's ({@link NumericDomain}) and is what a row may say. A rule of
-     * another shape — a result between two arguments, a result no greater than a sum — is one the
-     * domain would take in and derive nothing from, so it is not writable here rather than written
-     * and silently dropped.
-     *
-     * @param against  the argument the result is bounded against, or null where the bound is a
-     *                 constant one
-     * @param offset   added to that argument, or the constant itself where there is no argument
-     * @param rel      how the result stands to it
-     * @param provided what has to hold of the arguments for this to be the operation's answer
-     */
-    record ResultBound(ArgumentRef against, BigDecimal offset, Rel rel, Provided provided) {}
-
-    /** {@code result rel n}. */
-    private static ResultBound resultIs(Rel rel, long n) {
-        return new ResultBound(null, BigDecimal.valueOf(n), rel, new Provided.Always());
-    }
-
-    /** The same, where the operation answers that only under a condition on its arguments. */
-    private static ResultBound resultIs(Rel rel, long n, Provided provided) {
-        return new ResultBound(null, BigDecimal.valueOf(n), rel, provided);
-    }
-
-    /** {@code result rel argument + offset}. */
-    private static ResultBound resultIs(Rel rel, ArgumentRef argument, long offset, Provided provided) {
-        return new ResultBound(argument, BigDecimal.valueOf(offset), rel, provided);
-    }
-
-    /**
-     * What holds of an operation's result wherever the call is written.
-     *
-     * <p>Each row is a fact about the operation, so it is stated at every call and not only where
-     * something was guarded: {@code Int.abs(x)} is not negative whatever {@code x} is. That is the
-     * same kind of statement {@link Predicates#sizeFacts} already makes of every size call it walks
-     * past, and it is read the same way — asserted into the domain where a clause is read and where a
-     * condition is assumed alike.
-     *
-     * <p>{@code Int.floorMod} states both its ends only where the divisor reads as a constant above
-     * zero, and neither of them otherwise. The result takes the sign of the divisor — {@code
-     * floorMod(1, -3)} is {@code -2} — so a divisor that could be negative puts it the other side of
-     * zero, and the lower end is as much the divisor's to decide as the upper one. A divisor the
-     * check cannot read bounds it nowhere. Its {@code 0} is not a case at all: the operation aborts.
-     *
-     * <p>{@code Decimal.toInt} is within one of what it rounds, whichever mode it is handed. What a
-     * single mode does more narrowly — {@code HALF_UP} rounds to within a half — is a second rule and
-     * is not stated here, since the mode is an argument this reads nothing of.
-     */
-    private static final Map<ValueName, List<ResultBound>> BOUNDS_ON_THE_RESULT = Map.of(
-            op("Int", "abs"), List.of(resultIs(Rel.GE, 0)),
-            op("Decimal", "abs"), List.of(resultIs(Rel.GE, 0)),
-            op("Int", "floorMod"), List.of(
-                    resultIs(Rel.GE, 0, new Provided.ConstantAboveZero(at(1))),
-                    resultIs(Rel.LT, at(1), 0, new Provided.ConstantAboveZero(at(1)))),
-            op("Decimal", "toInt"), List.of(
-                    resultIs(Rel.GT, at(1), -1, new Provided.Always()),
-                    resultIs(Rel.LT, at(1), 1, new Provided.Always())));
-
-    /**
-     * The operations answering a number this bounds nothing of, in two groups.
-     *
-     * <p>Their result is not bounded by their arguments at all. The arithmetic and its function forms
-     * answer a number that may be anywhere, and what relates it to the operands is that it <em>is</em>
-     * the operands' arithmetic, which a term already reads ({@link #NUMERIC_RESULTS}). A comparison
-     * answers a sign, and what that sign says is the order it decides ({@link #ORDERS}) rather than a
-     * range it lies in.
-     *
-     * <p>Their result is one of the arguments, decided by the arguments. A bound on such a result is
-     * what {@link #CHOOSES} derives from the case it is in — stating it here as well would be one
-     * operation answering to two tables, and the two would come apart the day the library changes
-     * which argument it answers.
-     *
-     * <p>{@code Decimal.round} answers a value at another scale, which is a bound of a shape a row
-     * cannot state: how far it moved depends on the scale it was handed. {@code Decimal.fromInt}
-     * answers the number it was given, which {@link #ANSWERS_ITS_ARGUMENT} states as the stronger
-     * thing it is — the two values are one, not one within reach of the other.
-     */
-    static final Set<ValueName> BOUNDS_NOTHING = Set.of(
-            op("Int", "add"), op("Int", "subtract"), op("Int", "multiply"),
-            op("Decimal", "add"), op("Decimal", "subtract"), op("Decimal", "multiply"),
-            op("Int", "compare"), op("Decimal", "compare"),
-            op("Int", "min"), op("Int", "max"), op("Int", "clamp"),
-            op("Decimal", "min"), op("Decimal", "max"), op("Decimal", "clamp"),
-            op("Decimal", "fromInt"), op("Decimal", "round"));
-
-    /**
-     * How far an operation moved the value it was given, stated through the measure that counts two
-     * such values apart: {@code measure(of, result) == per · amount}.
-     *
-     * <p>The statement a shift makes is not a bound on what it answers — a date is not a number — so
-     * it is written in the one language the check has about such values, which is the number a
-     * measure answers of two of them. That number is what an invariant over a pair of dates is
-     * written in as well, so the rule and the clause meet without either being rewritten.
-     *
-     * @param measure the library's operation counting the two apart, in the order {@code (of, result)}
-     * @param of      the argument the result was shifted from
-     * @param amount  the argument saying by how much
-     * @param per     how many of what the measure counts one of {@code amount} is
-     */
-    record Shift(ValueName.Stdlib measure, ArgumentRef of, ArgumentRef amount, BigDecimal per) {}
-
-    private static Shift shifts(String module, String measure, ArgumentRef of, ArgumentRef amount, long per) {
-        return new Shift(new ValueName.Stdlib(module, measure), of, amount,
-                BigDecimal.valueOf(per));
-    }
-
-    /**
-     * The operations that move a value by an amount, each with what it did stated through a measure.
-     *
-     * <p>Every one of them works on a local value, where a day is a day and an hour is sixty
-     * minutes ({@code Temporals}), so what each states is exact rather than usually true.
-     *
-     * <p>{@code Date.addMonths} and {@code Date.addYears} are not here and are not oversights: months
-     * and years hold different numbers of days, so neither states a count of the one measure a pair
-     * of dates has. What a path knows of such a shift — that a later month is not earlier — is
-     * something else, and follows from what is known of the arguments rather than from the operation.
-     */
-    private static final Map<ValueName, Shift> SHIFTS = Map.of(
-            op("Date", "addDays"), shifts("Date", "daysBetween", at(1), at(0), 1),
-            op("DateTime", "addMinutes"), shifts("DateTime", "minutesBetween", at(1), at(0), 1),
-            op("DateTime", "addHours"), shifts("DateTime", "minutesBetween", at(1), at(0), 60),
-            op("DateTime", "addDays"), shifts("DateTime", "minutesBetween", at(1), at(0), 1440));
-
-    /** The operations that move a value by an amount the measures this has cannot count. A month and
-     * a year are not a fixed number of days, so a date shifted by either stands at a distance no rule
-     * here can write. */
-    static final Set<ValueName> SHIFTS_BY_NOTHING_MEASURABLE = Set.of(
-            op("Date", "addMonths"), op("Date", "addYears"));
-
-    /** A relation between two arguments: {@code left rel right}. What a case of a piecewise
-     * definition is reached under, written in the arguments the operation was given and in nothing
-     * else. */
-    record ArgumentsStand(ArgumentRef left, Rel rel, ArgumentRef right) {}
-
-    private static ArgumentsStand where(ArgumentRef left, Rel rel, ArgumentRef right) {
-        return new ArgumentsStand(left, rel, right);
-    }
-
-    /** One case of an operation's definition: the argument it answers there, and what holds of the
-     * arguments where it does. */
-    record Choice(ArgumentRef answers, List<ArgumentsStand> given) {}
-
-    private static Choice answers(ArgumentRef argument, ArgumentsStand... given) {
-        return new Choice(argument, List.of(given));
-    }
-
-    /**
-     * An operation's definition, as the cases it is written in.
-     *
-     * <p>The list is exhaustive: the conditions of its cases cover everything the operation can be
-     * given, so what holds in every case holds of the result. That is the whole of what makes a
-     * reading of these sound, and it is a claim about the list rather than about any row in it — a
-     * case left out does not make the others wrong, it makes a clause provable that the values can
-     * fail. So the cases are written as the library writes them, in the order it writes them, and
-     * each is held to a program that reaches it.
-     */
-    record Choices(List<Choice> cases) {}
-
-    private static Choices choices(Choice... cases) {
-        return new Choices(List.of(cases));
-    }
-
-    /**
-     * The operations that answer one of the values they were given, as the cases they are defined in.
-     *
-     * <p>Each is the library's own definition read back: {@code min(a, b)} is {@code a} where
-     * {@code a < b} and {@code b} otherwise, and {@code clamp(lo, hi, n)} is written as a chain of
-     * two conditions, so the second and third cases carry the denial of what stands before them.
-     * Carrying it is not tidiness — {@code clamp} does not ask that {@code lo} be below {@code hi},
-     * and where it is not, the case that answers {@code hi} is reached with {@code n} above
-     * {@code lo}. A rule that said the result is between the two would prove a clause the values
-     * fail.
-     *
-     * <p>Stated here rather than as bounds on the result ({@link #BOUNDS_ON_THE_RESULT}) because
-     * what these answer depends on the arguments, and a bound that does not may not be written for
-     * them. The bounds a case gives — a smaller of two is no greater than either — follow from the
-     * case and are derived where the cases are read, so they are not a second table to keep in step
-     * with this one.
-     *
-     * <p>Read through {@link #chosenBy} in one place ({@link Choice}), which turns a case into an arm
-     * written in the values a call was given. A reader wanting the cases asks there and is never
-     * handed a row: what a row names is an argument of an operation, and a second reading of that is
-     * a second answer to keep in step.
-     */
-    private static final Map<ValueName, Choices> CHOOSES = Map.of(
-            op("Int", "min"), choices(
-                    answers(at(0), where(at(0), Rel.LT, at(1))),
-                    answers(at(1), where(at(0), Rel.GE, at(1)))),
-            op("Decimal", "min"), choices(
-                    answers(at(0), where(at(0), Rel.LT, at(1))),
-                    answers(at(1), where(at(0), Rel.GE, at(1)))),
-            op("Int", "max"), choices(
-                    answers(at(0), where(at(0), Rel.GT, at(1))),
-                    answers(at(1), where(at(0), Rel.LE, at(1)))),
-            op("Decimal", "max"), choices(
-                    answers(at(0), where(at(0), Rel.GT, at(1))),
-                    answers(at(1), where(at(0), Rel.LE, at(1)))),
-            op("Int", "clamp"), choices(
-                    answers(at(0), where(at(2), Rel.LT, at(0))),
-                    answers(at(1), where(at(2), Rel.GE, at(0)), where(at(2), Rel.GT, at(1))),
-                    answers(at(2), where(at(2), Rel.GE, at(0)), where(at(2), Rel.LE, at(1)))),
-            op("Decimal", "clamp"), choices(
-                    answers(at(0), where(at(2), Rel.LT, at(0))),
-                    answers(at(1), where(at(2), Rel.GE, at(0)), where(at(2), Rel.GT, at(1))),
-                    answers(at(2), where(at(2), Rel.GE, at(0)), where(at(2), Rel.LE, at(1)))));
-
-    /**
-     * The operations answering a number that answer none of their arguments back, in three groups.
-     *
-     * <p>They compute a new number. The arithmetic and its function forms are this: what
-     * {@code a + b} answers is neither {@code a} nor {@code b}, whatever they are.
-     *
-     * <p>They answer something about the arguments. {@code compare} answers a sign, {@code floorMod}
-     * a remainder, {@code abs} a distance, {@code toInt} the whole number a value rounds to, and
-     * {@code round} a value at another scale — none of which is one of the values handed in, though
-     * each of the last four is one where the argument already had that shape. That the answer
-     * <em>can</em> be an argument is not what this asks: a case is one the operation is defined by,
-     * and reading a coincidence as a case would state a condition the definition does not have.
-     *
-     * <p>{@code Decimal.fromInt} answers the number it was given in another type, which
-     * {@link #ANSWERS_ITS_ARGUMENT} states unconditionally. A case would put a condition on a
-     * statement that has none.
-     */
-    static final Set<ValueName> CHOOSES_NOTHING = Set.of(
-            op("Int", "add"), op("Int", "subtract"), op("Int", "multiply"),
-            op("Decimal", "add"), op("Decimal", "subtract"), op("Decimal", "multiply"),
-            op("Int", "compare"), op("Decimal", "compare"), op("Int", "floorMod"),
-            op("Int", "abs"), op("Decimal", "abs"), op("Decimal", "toInt"), op("Decimal", "round"),
-            op("Decimal", "fromInt"));
-
-    /**
-     * The operations whose result is the number an argument already is, and which argument that is.
-     *
-     * <p>Such a call is read into the form its argument has rather than given an atom of its own, so
-     * a guard about the argument settles a clause about the call. {@code Decimal.fromInt(n)} is the
-     * one the library has: every {@code Int} is a {@code Decimal} exactly, and the widening states
-     * nothing of its own.
-     *
-     * <p>Not a choice among arguments ({@link #CHOOSES}). What a choice answers is one of two values,
-     * decided by the arguments, and which one it is has to be reasoned about case by case; this
-     * answers one value unconditionally, in another type. Reading the second as a choice with one
-     * candidate would put every value-preserving conversion under a table about selection, and the
-     * two stop being one question the moment the library gains a conversion that is not a widening.
-     */
-    private static final Map<ValueName, ArgumentRef> ANSWERS_ITS_ARGUMENT =
-            Map.of(op("Decimal", "fromInt"), at(0));
-
-    /**
-     * The operations answering a number from a number that answer none of them back, in three groups.
-     *
-     * <p>They compute a new number from their operands. The arithmetic and its function forms are
-     * this, and what they answer is already read as arithmetic over the operands themselves
-     * ({@link #NUMERIC_RESULTS}) rather than as one of them.
-     *
-     * <p>They answer something about the arguments rather than one of them: {@code compare} a sign,
-     * {@code floorMod} a remainder, {@code abs} a distance with the sign dropped, {@code toInt} the
-     * whole number a value rounds to, {@code round} a value at another scale. What such a result is
-     * bounded by is {@link #BOUNDS_ON_THE_RESULT}, which is a different statement from being a value
-     * that was already there.
-     *
-     * <p>They answer one of their arguments, and which one depends on the arguments. That is
-     * {@link #CHOOSES}, and a rule that dropped the condition would say {@code Int.min(a, b)} is
-     * {@code a}.
-     */
-    static final Set<ValueName> ANSWERS_NO_ARGUMENT_OF_ITS_OWN = Set.of(
-            op("Int", "add"), op("Int", "subtract"), op("Int", "multiply"),
-            op("Decimal", "add"), op("Decimal", "subtract"), op("Decimal", "multiply"),
-            op("Int", "compare"), op("Decimal", "compare"), op("Int", "floorMod"),
-            op("Int", "abs"), op("Decimal", "abs"), op("Decimal", "toInt"), op("Decimal", "round"),
-            op("Int", "min"), op("Int", "max"), op("Int", "clamp"),
-            op("Decimal", "min"), op("Decimal", "max"), op("Decimal", "clamp"));
-
-    /** Where an operation answers a number: as its result, or as one case of the union its result
-     * is. Two positions and not two tables — what an operation computes is one question, and the
-     * surface a value arrives on is what {@link NumericMeaning} exists to stop deciding rules. */
-    sealed interface Answered {
-
-        /** The result itself is the number. */
-        record Directly() implements Answered {}
-
-        /**
-         * One case of the union carries it, told apart by what that case carries.
-         *
-         * <p>By the type and not by the name of the case. What a primitive-headed case binds is the
-         * primitive itself (spec §primitive-arm), so the type is what the arm's pattern already
-         * settled and a name would be a second spelling of it.
-         */
-        record InTheCaseCarrying(Type carried) implements Answered {}
-    }
-
-    /**
-     * What number an operation computes, given its arguments.
-     *
-     * <p>A method rather than an enum the reader switches on: what a row says is which arithmetic
-     * this is, and the arithmetic is a {@link NumericMeaning}, so a row answers with one. A reader
-     * that turned a tag back into a meaning would be a second place deciding which arguments go
-     * where.
-     */
-    sealed interface Computes {
-
-        /** The number a call handing over {@code args} computes. */
-        NumericMeaning of(List<Core> args);
-
-        /**
-         * What each argument has to be for this row to be about the operation, in the order the
-         * operation takes them.
-         *
-         * <p>The row reads arguments by position — the second one is what it divides by — so the
-         * positions are what a declaration can drift out from under. A count alone does not catch
-         * it: an operation whose scale and mode swapped places still takes four arguments, and what
-         * would change is only which of them this reads as the scale. Written here and held to the
-         * declaration before any call is read ({@link #bindNumericResults}).
-         */
-        List<Reads> reads();
-
-        /** Arithmetic the language also writes as an operator. The two reach one kernel in one
-         * argument order — {@code Int.add} is {@code IntMath.addExact}, which is what {@code +}
-         * emits — so they compute one value and are read as one term. */
-        record TheOperator(BinOp op) implements Computes {
-            @Override
-            public NumericMeaning of(List<Core> args) {
-                return new NumericMeaning.Operator(op, args.get(0), args.get(1));
-            }
-
-            @Override
-            public List<Reads> reads() {
-                return TWO_OF_ITS_OWN;
-            }
-        }
-
-        /** A division of whole numbers truncated toward zero — the quotient {@code /} answers,
-         * reached where the divisor is one the model admits as zero. */
-        record ATruncatingQuotient() implements Computes {
-            @Override
-            public NumericMeaning of(List<Core> args) {
-                return new NumericMeaning.TruncatingQuotient(args.get(0), args.get(1));
-            }
-
-            @Override
-            public List<Reads> reads() {
-                return TWO_OF_ITS_OWN;
-            }
-        }
-
-        /** What that division leaves. The language writes no operator for it. */
-        record ATruncatingRemainder() implements Computes {
-            @Override
-            public NumericMeaning of(List<Core> args) {
-                return new NumericMeaning.TruncatingRemainder(args.get(0), args.get(1));
-            }
-
-            @Override
-            public List<Reads> reads() {
-                return TWO_OF_ITS_OWN;
-            }
-        }
-
-        /** A division of decimals rounded where the call says to round it. Not {@code /} over
-         * {@code Decimal}, which rounds at a significant-digit precision the run time sets. */
-        record AQuotientRoundedToAScale() implements Computes {
-            @Override
-            public NumericMeaning of(List<Core> args) {
-                return new NumericMeaning.RoundedQuotient(
-                        args.get(0), args.get(1), args.get(2), args.get(3));
-            }
-
-            @Override
-            public List<Reads> reads() {
-                return List.of(Reads.THE_NUMBER_IT_ANSWERS, Reads.THE_NUMBER_IT_ANSWERS,
-                        Reads.A_SCALE, Reads.A_ROUNDING_MODE);
-            }
-        }
-    }
-
-    /** Two numbers of the kind the operation answers, which is what all the arithmetic over a pair
-     * of them takes. */
-    private static final List<Reads> TWO_OF_ITS_OWN =
-            List.of(Reads.THE_NUMBER_IT_ANSWERS, Reads.THE_NUMBER_IT_ANSWERS);
-
-    /**
-     * What one argument of a numeric operation is, as far as a row about it needs to know.
-     *
-     * <p>Not a type. What the row needs held is the argument's <em>part</em> in the arithmetic, and
-     * two of the three answer differently for different operations — the number an operation
-     * answers is {@code Int} for one and {@code Decimal} for another, and a row saying "a number"
-     * would be held to neither.
-     */
-    enum Reads {
-
-        /** A number of the kind the operation answers. */
-        THE_NUMBER_IT_ANSWERS,
-
-        /** How many places the answer is rounded to, which is a count and so an {@code Int}. */
-        A_SCALE,
-
-        /** Which way it rounds there. */
-        A_ROUNDING_MODE;
-
-        /** Whether an argument declared {@code at} is this, for an operation answering
-         * {@code answered}. */
-        boolean heldBy(Type at, Type answered) {
-            return switch (this) {
-                case THE_NUMBER_IT_ANSWERS -> at.equals(answered);
-                case A_SCALE -> at == Type.Prim.INT;
-                case A_ROUNDING_MODE -> at instanceof Type.Ref(souther.compiler.types.TypeSymbol name)
-                        && name.module().equals(souther.compiler.types.TypeSymbol.RUNTIME)
-                        && name.name().equals("RoundingMode");
-            };
-        }
-    }
-
-    /**
-     * Which case of the union came back, as a condition on what the operation was given.
-     *
-     * <p>What a union-answering operation's other case <em>means</em>. {@code Int.divide} comes back
-     * as {@code DivisionByZero} exactly where the divisor is zero, and that is one fact with two
-     * readings: an arm taking that case has established the condition, and an arm taking the number
-     * has established its denial. Written once as the condition rather than twice as two rules, so
-     * the two cannot come apart.
-     *
-     * <p>About which case came back and not about whether a number was answered, which are two
-     * things. {@code Int.divide} answers no number for the one pair whose quotient no {@code Int}
-     * holds either — it aborts (spec §stdlib-int), and an abort comes back as no case at all, so no
-     * arm is reached and there is nothing for a condition to say. A row that named the overflow here
-     * would put it on the {@code DivisionByZero} arm, which is a fact that arm has not established.
-     * What is written down is the case selection, and it is exactly right for that.
-     *
-     * <p>Declared whatever the numeric domain can hold of it. That a divisor is not zero is a
-     * disequality, which a domain reasoning in ranges reads little from — and what an operation
-     * guarantees is not decided by what a reader does with it. Written down where it is true, it is
-     * read by whatever can read it and by whatever comes to be able to.
-     *
-     * @param argument which argument the condition is about
-     * @param op       how it stands to {@code than}
-     * @param than     the number it stands against
-     */
-    record TheOtherCaseWhen(ArgumentRef argument, BinOp op, long than) {}
-
-    /**
-     * What an operation computes, where it answers it, and when it answers nothing.
-     *
-     * @param unless the condition under which the union comes back as a case other than the
-     *               number's, or null for an operation whose result is the number itself
-     */
-    record NumericResult(Answered at, Computes computes, TheOtherCaseWhen unless) {}
-
-    /**
-     * The number each operation computes, and the result it answers it at.
-     *
-     * <p>What the table answers is which arithmetic an operation is, and not which operator it is
-     * the function form of. The narrower question left every operation answering {@code Int |
-     * DivisionByZero} out of the table for the shape of its result, and the arithmetic it computed
-     * unreadable through the only surface an author has when the divisor is not a literal they can
-     * argue about (#959). The result position is a column here rather than a second table, because
-     * an operation computing a quotient computes one whether the zero divisor is an abort or a case.
-     *
-     * <p>{@code Decimal.divide} states its scale and its mode, so the number it computes is not the
-     * one {@code /} over {@code Decimal} computes: that operator rounds to a significant-digit
-     * precision the run time sets (spec §stdlib-decimal). The two are different arithmetic and are
-     * two rows' worth of meaning, not one — and the operator's is a row nothing writes, since it is
-     * the operator and reaches {@link NumericMeaning.Operator} where it stands.
-     */
-    private static final Map<ValueName, NumericResult> NUMERIC_RESULTS = Map.of(
-            op("Int", "add"), directly(new Computes.TheOperator(BinOp.ADD)),
-            op("Int", "subtract"), directly(new Computes.TheOperator(BinOp.SUB)),
-            op("Int", "multiply"), directly(new Computes.TheOperator(BinOp.MUL)),
-            op("Decimal", "add"), directly(new Computes.TheOperator(BinOp.ADD)),
-            op("Decimal", "subtract"), directly(new Computes.TheOperator(BinOp.SUB)),
-            op("Decimal", "multiply"), directly(new Computes.TheOperator(BinOp.MUL)),
-            op("Int", "divide"),
-                    inTheCaseCarrying(Type.INT, new Computes.ATruncatingQuotient(), byZero()),
-            op("Int", "truncatingRemainder"),
-                    inTheCaseCarrying(Type.INT, new Computes.ATruncatingRemainder(), byZero()),
-            op("Decimal", "divide"),
-                    inTheCaseCarrying(Type.DECIMAL, new Computes.AQuotientRoundedToAScale(),
-                            byZero()));
-
-    private static NumericResult directly(Computes computes) {
-        return new NumericResult(new Answered.Directly(), computes, null);
-    }
-
-    private static NumericResult inTheCaseCarrying(Type carried, Computes computes,
-                                                   TheOtherCaseWhen unless) {
-        return new NumericResult(new Answered.InTheCaseCarrying(carried), computes, unless);
-    }
-
-    /** The condition every division comes back as {@code DivisionByZero} under. */
-    private static TheOtherCaseWhen byZero() {
-        return new TheOtherCaseWhen(at(1), BinOp.EQ, 0);
-    }
-
-    /**
-     * The operations answering a number that compute no arithmetic of their own, in three groups.
-     *
-     * <p>They answer one of the values they were given. {@code min}, {@code max} and {@code clamp}
-     * are this, and which one they answer is {@link #CHOOSES}. Stating it here as well would be one
-     * operation answering to two tables.
-     *
-     * <p>They answer something about the arguments that is not arithmetic over them: {@code compare}
-     * answers a sign, which is the order it decides ({@link #ORDERS}). {@code Decimal.compare} is
-     * not here: it answers an {@code Int} from two {@code Decimal}s, so the number it answers is not
-     * the kind its arguments are and this is not asked of it.
-     *
-     * <p>{@code floorMod} answers a remainder and is here all the same. It is the remainder of a
-     * <em>floored</em> division, and the language writes no floored divide for its quotient to be
-     * read as — so what is known of it is the bound {@link #BOUNDS_ON_THE_RESULT} states, and
-     * relating it to its dividend is a rule nothing here has. Its truncating counterpart is
-     * {@code truncatingRemainder}, which is in the table above.
-     */
-    static final Set<ValueName> COMPUTES_NO_ARITHMETIC_OF_ITS_OWN = Set.of(
-            op("Int", "min"), op("Int", "max"), op("Int", "clamp"),
-            op("Int", "floorMod"), op("Int", "compare"),
-            op("Decimal", "min"), op("Decimal", "max"), op("Decimal", "clamp"));
-
-    /**
-     * Which of the two arguments a positive answer names as the greater. That is the whole of what a
-     * row of {@link #ORDERS} says, and it is two cases, so it is written as a type with two — not as
-     * one of the language's operators, which would say the same thing in a type where most of the
-     * values say nothing and the ones that do have to be agreed on somewhere else.
-     *
-     * <p>Each case carries the two positions itself, since which argument is the lesser is settled by
-     * which is the greater and there is no reading where the two are chosen apart.
-     */
-    enum PositiveOrder {
-        FIRST_ARGUMENT_GREATER(0, 1),
-        SECOND_ARGUMENT_GREATER(1, 0);
-
-        private final int greater;
-        private final int lesser;
-
-        PositiveOrder(int greater, int lesser) {
-            this.greater = greater;
-            this.lesser = lesser;
-        }
-
-        /** The argument of {@code call} a positive answer names as the greater. */
-        Core greaterOf(Core.PreservedCall call) {
-            return call.args().get(greater);
-        }
-
-        /** The other one. */
-        Core lesserOf(Core.PreservedCall call) {
-            return call.args().get(lesser);
-        }
-    }
-
-    /**
-     * The operations answering the order of their two arguments as the sign of a number, and which
-     * argument a positive answer names as the greater. Zero states the equality, and a negative
-     * answer the relation the other way, so one row is the whole of what such an operation says.
-     *
-     * <p>Which relation a guard writing one states then follows from where the sign stands against
-     * zero and from nothing else, so the six relations and the two operand orders are one account
-     * rather than twelve rows ({@link Predicates#asOrderComparison}). The direction is not the same
-     * for all of them: {@code compare(a, b)} is positive where {@code a} is the greater, and
-     * {@code daysBetween(from, to)} counts forward from its first argument, so it is positive where
-     * the second one is.
-     */
-    private static final Map<ValueName, PositiveOrder> ORDERS = Map.of(
-            op("Int", "compare"), PositiveOrder.FIRST_ARGUMENT_GREATER,
-            op("Decimal", "compare"), PositiveOrder.FIRST_ARGUMENT_GREATER,
-            op("Date", "daysBetween"), PositiveOrder.SECOND_ARGUMENT_GREATER);
-
-    /**
-     * The operations answering a number from two values of one type whose sign is not their order.
-     *
-     * <p>Arithmetic and a choice between two values are not orders at all: what {@code Int.subtract}
-     * answers has the sign of one and says how far apart they are as well, which is what a term
-     * already reads it as, and {@code min} answers one of the two rather than anything about the
-     * pair. {@code DateTime.minutesBetween} is the one that has to be told apart: it counts whole
-     * minutes, so a zero says the two are less than a minute apart rather than that they are equal,
-     * and a non-negative count does not say the second is not the earlier. Its strict signs do state
-     * the order, and a rule that holds for four of the six relations is not this one.
-     */
-    static final Set<ValueName> DECIDES_NO_ORDER = Set.of(
-            op("Int", "add"), op("Int", "subtract"), op("Int", "multiply"),
-            op("Int", "min"), op("Int", "max"), op("Int", "floorMod"),
-            op("DateTime", "minutesBetween"));
 
     /** Denial, which the analysis representation keeps as the call it is. */
     static final ValueName NOT = op("Bool", "not");
@@ -1032,11 +104,11 @@ final class DischargeRules {
     /** The operations each table has a rule for. What is asked of them is {@link Question}'s to
      * settle; these are so it can hold a rule to being one an operation is asked for. */
     static Set<ValueName> builtOperations() {
-        return Bound.BUILDINGS.keySet();
+        return Bound.buildsItsResultFrom();
     }
 
     static Set<ValueName> carryingOperations() {
-        return Bound.CARRIERS.keySet();
+        return OperationFacts.readsItsContainer();
     }
 
     /**
@@ -1051,7 +123,8 @@ final class DischargeRules {
      */
     static Set<String> constructionKinds() {
         Set<String> kinds = new LinkedHashSet<>();
-        Bound.BUILDINGS.forEach((operation, built) -> {
+        Bound.buildsItsResultFrom().forEach(operation -> {
+            BuiltFrom built = Bound.buildsItsResultFrom(operation);
             Prelude.PreludeEntry entry = operation instanceof ValueName.Stdlib library
                     ? Prelude.entry(library.qualified()) : null;
             String kind = entry == null ? null : kindOf(entry.signature().result());
@@ -1074,31 +147,31 @@ final class DischargeRules {
     }
 
     static Set<ValueName> emptinessChecks() {
-        return EMPTINESS.keySet();
+        return Bound.meansTheSameAsASizeOfNought();
     }
 
     static Set<ValueName> quantifiers() {
-        return QUANTIFIERS;
+        return Bound.statesItsPredicateOfEveryElement();
     }
 
     static Set<ValueName> projections() {
-        return Bound.PROJECTIONS.keySet();
+        return Bound.isStatedOverAProjection();
     }
 
     static Set<ValueName> sizeCalls() {
-        return SIZE_CALLS;
+        return NumericMeasures.calls();
     }
 
     static Set<ValueName> numericResultOperations() {
-        return NUMERIC_RESULTS.keySet();
+        return Bound.computesANumber();
     }
 
     static Set<ValueName> orderings() {
-        return ORDERS.keySet();
+        return Bound.statesTheOrder();
     }
 
     static Set<ValueName> formOperations() {
-        return Bound.FORMS.keySet();
+        return Bound.answersItsArgument();
     }
 
     /** Those of them the read-through table has, by name, for the test that holds each to a
@@ -1110,11 +183,11 @@ final class DischargeRules {
     }
 
     static Set<ValueName> boundedOperations() {
-        return Bound.BOUNDS.keySet();
+        return Bound.boundsOnTheResult();
     }
 
     static Set<ValueName> choosingOperations() {
-        return Bound.CHOICES.keySet();
+        return Bound.isDefinedByCases();
     }
 
     /** Those of them the choosing table has, by name, for the test that holds each case to a
@@ -1126,7 +199,7 @@ final class DischargeRules {
     }
 
     static Set<ValueName> shiftingOperations() {
-        return Bound.MEASURED.keySet();
+        return Bound.shiftsBy();
     }
 
     /** Those of them the shifting table has, by name, for the test that holds each to a construction
@@ -1139,21 +212,22 @@ final class DischargeRules {
 
     /** What {@code e} states through a measure, or null where it is not a shift this has a rule
      * about. */
-    static Shift shiftBy(Core e) {
-        return e instanceof Core.PreservedCall call ? Bound.MEASURED.get(call.operation()) : null;
+    static OperationFact.ShiftsBy shiftBy(Core e) {
+        return e instanceof Core.PreservedCall call ? Bound.shiftsBy(call.operation()) : null;
     }
 
     /** Whether {@code operation} counts what two values stand apart by — the other side of the row a
      * shift is written in, read off that row rather than listed again. A measure named in a second
      * place is a measure the day somebody adds a shift and updates one of them. */
     static boolean isAMeasure(ValueName operation) {
-        return Bound.MEASURES.contains(operation);
+        return Bound.measures().contains(operation);
     }
 
     /** The cases {@code e} is defined in, or null where it is not a call to an operation that
      * answers one of the values it was given. */
-    static Choices chosenBy(Core e) {
-        return e instanceof Core.PreservedCall call ? Bound.CHOICES.get(call.operation()) : null;
+    static List<OperationFact.Case> chosenBy(Core e) {
+        return e instanceof Core.PreservedCall call ? Bound.isDefinedByCases(call.operation())
+                : List.of();
     }
 
     /**
@@ -1166,8 +240,9 @@ final class DischargeRules {
      */
     static List<String> boundedRows() {
         List<String> rows = new ArrayList<>();
-        Bound.BOUNDS.forEach((operation, bounds) ->
-                bounds.forEach(bound -> rows.add(operation.toString())));
+        for (ValueName operation : Bound.boundsOnTheResult()) {
+            Bound.boundsOnTheResult(operation).forEach(bound -> rows.add(operation.toString()));
+        }
         return rows;
     }
 
@@ -1181,13 +256,11 @@ final class DischargeRules {
      */
     static List<ResultBound> boundsOn(Core.PreservedCall call,
                                       Function<Core, BigDecimal> constant) {
-        List<ResultBound> rows = Bound.BOUNDS.get(call.operation());
-        if (rows == null) {
-            return List.of();
-        }
+        List<ResultBound> rows =
+                Bound.boundsOnTheResult(call.operation());
         List<ResultBound> holding = new ArrayList<>(rows.size());
         for (ResultBound row : rows) {
-            if (row.provided().holdsAt(call, constant)) {
+            if (CallArguments.holds(row.provided(), call, constant)) {
                 holding.add(row);
             }
         }
@@ -1201,8 +274,8 @@ final class DischargeRules {
         if (!(e instanceof Core.PreservedCall call)) {
             return null;
         }
-        ArgumentRef reads = Bound.FORMS.get(call.operation());
-        return reads == null ? null : reads.of(call);
+        ArgumentRef reads = Bound.answersItsArgument(call.operation());
+        return reads == null ? null : CallArguments.of(reads, call);
     }
 
     /** Those of them the building table has, by name, for the test that holds each to a construction
@@ -1235,29 +308,123 @@ final class DischargeRules {
      */
     private static final class Bound {
 
-        private static final Map<ValueName, Built> BUILDINGS =
-                bind(BUILT_FROM, Built::from, CONTAINER, Question::holdsElements,
-                        "the container something is built from");
-        private static final Map<ValueName, Carried> CARRIERS =
-                bind(CARRIED, Carried::container, CONTAINER, Question::holdsElements,
-                        "the container a predicate reads");
-        private static final Map<ValueName, ArgumentRef> PROJECTIONS =
-                bind(PROJECTION_OF, Function.identity(), CLOSURE, t -> t instanceof Type.FnOf,
-                        "the projection a predicate is stated over");
-        private static final Map<ValueName, List<ArgumentRef>> LOWER_BOUNDS =
-                bindEach(NO_SMALLER_THAN, CONTAINER, Question::holdsElements,
-                        "a container the result is no smaller than");
-        private static final Map<ValueName, ArgumentRef> FORMS =
-                bind(ANSWERS_ITS_ARGUMENT, Function.identity(), null, Question::isANumber,
-                        "the argument whose number the result is");
-        private static final Map<ValueName, List<ResultBound>> BOUNDS =
-                bindBounds(BOUNDS_ON_THE_RESULT);
-        private static final Map<ValueName, Choices> CHOICES = bindChoices(CHOOSES);
-        private static final Map<ValueName, Shift> MEASURED = bindShifts(SHIFTS);
-        private static final Set<ValueName> MEASURES = SHIFTS.values().stream()
-                .map(Shift::measure).collect(java.util.stream.Collectors.toUnmodifiableSet());
-        private static final Map<ValueName, NumericResult> ARITHMETIC =
-                bindNumericResults(NUMERIC_RESULTS);
+        private static Set<ValueName> buildsItsResultFrom() {
+            return OperationFacts.buildsItsResultFrom();
+        }
+
+        private static BuiltFrom buildsItsResultFrom(ValueName operation) {
+            return OperationFacts.buildsItsResultFrom(operation);
+        }
+        private static OperationFact.ReadsItsContainer readsItsContainer(
+                ValueName operation) {
+            return OperationFacts.readsItsContainer(operation);
+        }
+
+        private static ArgumentRef isStatedOverAProjection(ValueName operation) {
+            return OperationFacts.isStatedOverAProjection(operation);
+        }
+
+        private static Set<ValueName> isStatedOverAProjection() {
+            return OperationFacts.isStatedOverAProjection();
+        }
+
+        private static List<ArgumentRef> resultIsNoSmallerThan(ValueName operation) {
+            return OperationFacts.resultIsNoSmallerThan(operation);
+        }
+
+        private static boolean statesItsPredicateOfEveryElement(ValueName operation) {
+            return OperationFacts
+                    .statesItsPredicateOfEveryElement(operation);
+        }
+
+        private static Set<ValueName> statesItsPredicateOfEveryElement() {
+            return OperationFacts.statesItsPredicateOfEveryElement();
+        }
+
+        private static ValueName meansTheSameAsASizeOfNought(ValueName operation) {
+            return OperationFacts
+                    .meansTheSameAsASizeOfNought(operation);
+        }
+
+        private static Set<ValueName> meansTheSameAsASizeOfNought() {
+            return OperationFacts.meansTheSameAsASizeOfNought();
+        }
+        /** What the declarations came to, held to the library. The list is walked whole, so a fact
+         *  nothing here looks up is one this has held all the same. */
+        private static final List<OperationFacts.Declared> SEMANTICS =
+                OperationFactBinder.bindAll();
+
+        /**
+         * What the language declares an operation answers.
+         *
+         * <p>Here rather than at the call site so that asking runs the binding above, which is what
+         * the rest of this holder does for the tables beside it. The answer itself is the
+         * declaration's; what asking through here adds is that it has been held to the library
+         * first.
+         */
+        private static ArgumentRef answersItsArgument(ValueName operation) {
+            return OperationFacts.answersItsArgument(operation);
+        }
+
+        /** The operations declared to answer one of their arguments, for the checks that hold each
+         *  of them to firing. */
+        private static Set<ValueName> answersItsArgument() {
+            return OperationFacts.answersItsArgument();
+        }
+
+        private static Set<ValueName> statesTheOrder() {
+            return OperationFacts.statesTheOrderOfItsArguments();
+        }
+
+        private static PositiveOrder statesTheOrder(
+                ValueName operation) {
+            return OperationFacts
+                    .statesTheOrderOfItsArguments(operation);
+        }
+
+        private static Set<ValueName> shiftsBy() {
+            return OperationFacts.shiftsBy();
+        }
+
+        private static OperationFact.ShiftsBy shiftsBy(
+                ValueName operation) {
+            return OperationFacts.shiftsBy(operation);
+        }
+
+        /** The measures the shifts are stated through, read off those rather than listed again. A
+         *  measure named in a second place is a measure the day somebody adds a shift and updates
+         *  one of them. */
+        private static Set<ValueName> measures() {
+            Set<ValueName> out = new LinkedHashSet<>();
+            shiftsBy().forEach(operation -> out.add(shiftsBy(operation).measure()));
+            return out;
+        }
+
+        private static Set<ValueName> boundsOnTheResult() {
+            return OperationFacts.boundsOnTheResult();
+        }
+
+        private static List<ResultBound> boundsOnTheResult(
+                ValueName operation) {
+            return OperationFacts.boundsOnTheResult(operation);
+        }
+        private static Set<ValueName> isDefinedByCases() {
+            return OperationFacts.isDefinedByCases();
+        }
+
+        private static List<OperationFact.Case> isDefinedByCases(
+                ValueName operation) {
+            return OperationFacts.isDefinedByCases(operation);
+        }
+
+        private static Set<ValueName> computesANumber() {
+            return OperationFacts.computesANumber();
+        }
+
+        private static NumericResult computesANumber(
+                ValueName operation) {
+            return OperationFacts.computesANumber(operation);
+        }
     }
 
     /**
@@ -1270,71 +437,67 @@ final class DischargeRules {
      * row names, would leave the operation with a meaning no program reaches and no diagnostic
      * anywhere. Held here, before any call is read.
      */
-    private static Map<ValueName, NumericResult> bindNumericResults(
-            Map<ValueName, NumericResult> rules) {
-        rules.forEach((operation, rule) -> {
-            Prelude.PreludeEntry entry = Prelude.entry(((ValueName.Stdlib) operation).qualified());
-            if (entry == null) {
-                throw new IllegalStateException("a rule about what number it computes is written for "
-                        + operation + ", which the library does not declare");
+    static void holdNumericResult(ValueName operation, NumericResult rule) {
+        Prelude.PreludeEntry entry = Prelude.entry(((ValueName.Stdlib) operation).qualified());
+        if (entry == null) {
+            throw new IllegalStateException("a rule about what number it computes is written for "
+                    + operation + ", which the library does not declare");
+        }
+        Prelude.Signature signature = entry.signature();
+        Type answers = Question.numberAnsweredBy(signature.result());
+        List<Arithmetic.Reads> reads = rule.computes().reads();
+        if (signature.params().size() != reads.size()) {
+            throw new IllegalStateException(operation + " takes " + signature.params().size()
+                    + " argument(s), and the arithmetic written for it reads " + reads.size());
+        }
+        for (int i = 0; i < reads.size(); i++) {
+            if (!reads.get(i).heldBy(signature.params().get(i), answers)) {
+                throw new IllegalStateException("argument " + (i + 1) + " of " + operation
+                        + " is " + Type.show(signature.params().get(i))
+                        + ", which the arithmetic written for it reads as " + reads.get(i));
             }
-            Prelude.Signature signature = entry.signature();
-            Type answers = Question.numberAnsweredBy(signature.result());
-            List<Reads> reads = rule.computes().reads();
-            if (signature.params().size() != reads.size()) {
-                throw new IllegalStateException(operation + " takes " + signature.params().size()
-                        + " argument(s), and the arithmetic written for it reads " + reads.size());
-            }
-            for (int i = 0; i < reads.size(); i++) {
-                if (!reads.get(i).heldBy(signature.params().get(i), answers)) {
-                    throw new IllegalStateException("argument " + (i + 1) + " of " + operation
-                            + " is " + Type.show(signature.params().get(i))
-                            + ", which the arithmetic written for it reads as " + reads.get(i));
+        }
+        switch (rule.at()) {
+            case NumericResult.Answered.Directly ignored -> {
+                if (!Question.isANumber(signature.result())) {
+                    throw new IllegalStateException(operation + " answers "
+                            + Type.show(signature.result())
+                            + ", so the number it computes is not its result");
                 }
             }
-            switch (rule.at()) {
-                case Answered.Directly ignored -> {
-                    if (!Question.isANumber(signature.result())) {
-                        throw new IllegalStateException(operation + " answers "
-                                + Type.show(signature.result())
-                                + ", so the number it computes is not its result");
-                    }
+            case NumericResult.Answered.InTheCaseCarrying(Type carried) -> {
+                if (!(signature.result() instanceof Type.Union(Set<TypeSymbol> members))) {
+                    throw new IllegalStateException(operation + " answers "
+                            + Type.show(signature.result())
+                            + ", which has no case for the number it computes to arrive in");
                 }
-                case Answered.InTheCaseCarrying(Type carried) -> {
-                    if (!(signature.result() instanceof Type.Union(Set<TypeSymbol> members))) {
-                        throw new IllegalStateException(operation + " answers "
-                                + Type.show(signature.result())
-                                + ", which has no case for the number it computes to arrive in");
-                    }
-                    if (!carried.equals(answers)) {
-                        throw new IllegalStateException(operation + " answers no case carrying "
-                                + Type.show(carried));
-                    }
-                    if (rule.unless() == null) {
-                        throw new IllegalStateException(operation + " answers its number as one case"
-                                + " of a union, so when the other case comes back is what that case"
-                                + " means and is not written down");
-                    }
-                    // The condition names no case, so it says what every case that is not the
-                    // number's says — which is one statement only where there is one such case. A
-                    // union that gained a third would have an arm establishing a condition it was
-                    // not taken under, which is a wrong fact rather than a missing one, and nothing
-                    // downstream could tell: an arm is read the same way whichever case it names.
-                    // Where a second failure is wanted, the condition is what has to name its case.
-                    if (members.size() != 2) {
-                        throw new IllegalStateException(operation + " answers "
-                                + members.size() + " cases, and when it answers no number is"
-                                + " written as one condition — which says what one other case"
-                                + " means and cannot say what several do");
-                    }
+                if (!carried.equals(answers)) {
+                    throw new IllegalStateException(operation + " answers no case carrying "
+                            + Type.show(carried));
+                }
+                if (rule.unless() == null) {
+                    throw new IllegalStateException(operation + " answers its number as one case"
+                            + " of a union, so when the other case comes back is what that case"
+                            + " means and is not written down");
+                }
+                // The condition names no case, so it says what every case that is not the
+                // number's says — which is one statement only where there is one such case. A
+                // union that gained a third would have an arm establishing a condition it was
+                // not taken under, which is a wrong fact rather than a missing one, and nothing
+                // downstream could tell: an arm is read the same way whichever case it names.
+                // Where a second failure is wanted, the condition is what has to name its case.
+                if (members.size() != 2) {
+                    throw new IllegalStateException(operation + " answers "
+                            + members.size() + " cases, and when it answers no number is"
+                            + " written as one condition — which says what one other case"
+                            + " means and cannot say what several do");
                 }
             }
-            if (rule.unless() != null) {
-                bind(Map.of(operation, rule.unless().argument()), Function.identity(), null,
-                        Question::isANumber, "the argument a failure is decided by");
-            }
-        });
-        return rules;
+        }
+        if (rule.unless() != null) {
+            holdToTheDeclaration(operation, rule.unless().argument(), null,
+                    Question::isANumber, "the argument a failure is decided by");
+        }
     }
 
     /**
@@ -1343,62 +506,54 @@ final class DischargeRules {
      * operation answers. A rule pairing an operation with a measure of something else would state a
      * relation between two values that have none.
      */
-    private static Map<ValueName, Shift> bindShifts(Map<ValueName, Shift> rules) {
-        rules.forEach((operation, shift) -> {
-            bind(Map.of(operation, shift.amount()), Function.identity(), null, Question::isANumber,
-                    "the amount a shift moves by");
-            Prelude.PreludeEntry counts = Prelude.entry(shift.measure().qualified());
-            if (counts == null) {
-                throw new IllegalStateException("the rule about " + operation + " counts through "
-                        + shift.measure().qualified() + ", which the library does not declare");
-            }
-            Prelude.PreludeEntry shifted = Prelude.entry(((ValueName.Stdlib) operation).qualified());
-            List<Type> counted = counts.signature().params();
-            if (counted.size() != 2 || !Question.isANumber(counts.signature().result())
-                    || !counted.get(0).equals(shifted.signature().result())
-                    || !counted.get(1).equals(shifted.signature().result())) {
-                throw new IllegalStateException(shift.measure().qualified()
-                        + " does not count two of what " + operation + " answers apart as a number");
-            }
-            bind(Map.of(operation, shift.of()), Function.identity(), null,
-                    t -> t.equals(shifted.signature().result()),
-                    "the value a shift moves from");
-        });
-        return rules;
+    static void holdShift(ValueName operation, OperationFact.ShiftsBy
+            shift) {
+        holdToTheDeclaration(operation, shift.amount(), null, Question::isANumber,
+                "the amount a shift moves by");
+        Prelude.PreludeEntry counts = Prelude.entry(shift.measure().qualified());
+        if (counts == null) {
+            throw new IllegalStateException("the rule about " + operation + " counts through "
+                    + shift.measure().qualified() + ", which the library does not declare");
+        }
+        Prelude.PreludeEntry shifted = Prelude.entry(((ValueName.Stdlib) operation).qualified());
+        List<Type> counted = counts.signature().params();
+        if (counted.size() != 2 || !Question.isANumber(counts.signature().result())
+                || !counted.get(0).equals(shifted.signature().result())
+                || !counted.get(1).equals(shifted.signature().result())) {
+            throw new IllegalStateException(shift.measure().qualified()
+                    + " does not count two of what " + operation + " answers apart as a number");
+        }
+        holdToTheDeclaration(operation, shift.of(), null,
+                t -> t.equals(shifted.signature().result()), "the value a shift moves from");
     }
 
     /** As {@link #bind}, for the arguments a case names: the one it answers, and the two sides of
      * each condition it is reached under. */
-    private static Map<ValueName, Choices> bindChoices(Map<ValueName, Choices> rules) {
-        rules.forEach((operation, choices) -> choices.cases().forEach(choice -> {
-            List<ArgumentRef> named = new ArrayList<>();
-            named.add(choice.answers());
-            choice.given().forEach(stands -> {
-                named.add(stands.left());
-                named.add(stands.right());
-            });
-            named.forEach(one -> bind(Map.of(operation, one), Function.identity(), null,
-                    Question::isANumber, "an argument a case of the definition names"));
-        }));
-        return rules;
+    static void holdCase(ValueName operation, OperationFact.Case one) {
+        List<ArgumentRef> named = new ArrayList<>();
+        named.add(one.answers());
+        one.given().forEach(stands -> {
+            named.add(stands.left());
+            named.add(stands.right());
+        });
+        named.forEach(each -> holdToTheDeclaration(operation, each, null, Question::isANumber,
+                "an argument a case of the definition names"));
     }
 
     /** As {@link #bind}, for the arguments a bound names: the one the result is bounded against, and
      * the one a condition on the rule reads. Each is a separate claim about a separate argument. */
-    private static Map<ValueName, List<ResultBound>> bindBounds(
-            Map<ValueName, List<ResultBound>> rules) {
-        rules.forEach((operation, bounds) -> bounds.forEach(bound -> {
-            List<ArgumentRef> named = new ArrayList<>();
-            if (bound.against() != null) {
-                named.add(bound.against());
-            }
-            if (bound.provided() instanceof Provided.ConstantAboveZero constant) {
-                named.add(constant.argument());
-            }
-            named.forEach(one -> bind(Map.of(operation, one), Function.identity(), null,
-                    Question::isANumber, "an argument a bound on the result names"));
-        }));
-        return rules;
+    static void holdBound(ValueName operation, ResultBound bound) {
+        List<ArgumentRef> named = new ArrayList<>();
+        if (bound.against() != null) {
+            named.add(bound.against());
+        }
+        if (bound.provided()
+                instanceof ResultBound.Provided.ConstantAboveZero
+                constant) {
+            named.add(constant.argument());
+        }
+        named.forEach(one -> holdToTheDeclaration(operation, one, null, Question::isANumber,
+                "an argument a bound on the result names"));
     }
 
     /** As {@link #bind}, for a rule that names more than one argument: each is held to the
@@ -1419,60 +574,63 @@ final class DischargeRules {
      */
     static <T> Map<ValueName, T> bind(Map<ValueName, T> rules, Function<T, ArgumentRef> reads,
                                       ArgumentRef derived, Predicate<Type> required, String what) {
-        rules.forEach((operation, rule) -> {
-            // Every row here is about an operation the library declares, so the key says which
-            // library and which operation rather than a spelling this would have to take apart.
-            if (!(operation instanceof ValueName.Stdlib library)) {
-                throw new IllegalStateException("a rule about " + what + " is written for "
-                        + operation + ", which is not a library operation");
-            }
-            Prelude.PreludeEntry entry = Prelude.entry(library.qualified());
-            if (entry == null) {
-                throw new IllegalStateException("a rule about " + what + " is written for "
-                        + library.qualified() + ", which the library does not declare");
-            }
-            List<Type> params = entry.signature().params();
-            ArgumentRef at = reads.apply(rule);
-            int position = at.positionIn(operation);
-            if (position < 0 || position >= params.size()) {
-                throw new IllegalStateException(library.qualified() + " takes " + params.size()
-                        + " argument(s), and the rule about " + what + " reads argument "
-                        + (position + 1));
-            }
-            if (!required.test(params.get(position))) {
-                throw new IllegalStateException("argument " + (position + 1) + " of "
-                        + library.qualified() + " is not " + what);
-            }
-            if (at instanceof ArgumentRef.At && derived != null && Combinators.of(operation) != null
-                    && derived.positionIn(operation) == position) {
-                throw new IllegalStateException("the rule about " + what + " for "
-                        + library.qualified()
-                        + " writes the argument its signature already answers — say which part it is"
-                        + " rather than where, so the two cannot come apart");
-            }
-        });
+        rules.forEach((operation, rule) ->
+                holdToTheDeclaration(operation, reads.apply(rule), derived, required, what));
         return rules;
     }
 
-    /** What {@link ElementLineage#derivesItsElementsFrom} answers with, read off the table here. */
-    static ArgumentRef derivesItsElementsFrom(ValueName operation) {
-        Built built = Bound.BUILDINGS.get(operation);
-        if (built == null || built.outputs().size() != 1) {
-            return null;
+    /**
+     * The library's declaration of {@code operation}, or a build that does not start.
+     *
+     * <p>What every fact owes, whatever else it says. A fact is a proposition about an operation,
+     * so an operation the library does not have is a fact about nothing — and that is true of a
+     * fact naming no argument as much as of one that names three.
+     *
+     * <p>Its own step rather than the first half of {@link #holdToTheDeclaration}, because there it
+     * was reached only by a fact that had an argument to check. A fact naming none went through an
+     * arm with nothing in it and was never held to anything, so which declarations were bound
+     * depended on which kinds of fact happened to name an argument. A kind added later would have
+     * lost the same way, silently, on the day its arm was written empty.
+     */
+    static Prelude.PreludeEntry holdTheOperationToTheLibrary(ValueName operation) {
+        // Every fact is about an operation the library declares, so the operation says which
+        // library and which name rather than a spelling this would have to take apart.
+        if (!(operation instanceof ValueName.Stdlib library)) {
+            throw new IllegalStateException("a fact is declared of " + operation
+                    + ", which is not a library operation");
         }
-        ElementLineage lineage = built.lineage();
-        return (lineage instanceof ElementLineage.ClosureResult
-                || lineage instanceof ElementLineage.InsideClosureResult)
-                && lineage.source().elements() == 1 ? lineage.source().argument() : null;
+        Prelude.PreludeEntry entry = Prelude.entry(library.qualified());
+        if (entry == null) {
+            throw new IllegalStateException("a fact is declared of " + library.qualified()
+                    + ", which the library does not declare");
+        }
+        return entry;
     }
 
-    /** What {@link ElementLineage#holdsTheElementsOf} answers with, read off the table here. */
-    static ArgumentRef holdsTheElementsOf(ValueName operation) {
-        Built built = Bound.BUILDINGS.get(operation);
-        return built != null && built.outputs().size() == 1
-                && built.lineage() instanceof ElementLineage.SameAs same
-                && same.source().elements() == 1
-                ? same.source().argument() : null;
+    /** The same, for one rule. Asked per rule so that whatever holds a whole declaration source can
+     *  walk it and hold each of them, rather than reaching for a table of its own. */
+    static void holdToTheDeclaration(ValueName operation, ArgumentRef at, ArgumentRef derived,
+                                     Predicate<Type> required, String what) {
+        Prelude.PreludeEntry entry = holdTheOperationToTheLibrary(operation);
+        ValueName.Stdlib library = (ValueName.Stdlib) operation;
+        List<Type> params = entry.signature().params();
+        int position = CallArguments.positionIn(at, operation);
+        if (position < 0 || position >= params.size()) {
+            throw new IllegalStateException(library.qualified() + " takes " + params.size()
+                    + " argument(s), and the rule about " + what + " reads argument "
+                    + (position + 1));
+        }
+        if (!required.test(params.get(position))) {
+            throw new IllegalStateException("argument " + (position + 1) + " of "
+                    + library.qualified() + " is not " + what);
+        }
+        if (at instanceof ArgumentRef.At && derived != null && Combinators.of(operation) != null
+                && CallArguments.positionIn(derived, operation) == position) {
+            throw new IllegalStateException("the rule about " + what + " for "
+                    + library.qualified()
+                    + " writes the argument its signature already answers — say which part it is"
+                    + " rather than where, so the two cannot come apart");
+        }
     }
 
     /**
@@ -1486,11 +644,11 @@ final class DischargeRules {
      * there: without one container there is nothing to ask the question of.
      */
     static Kept keptFrom(Core.PreservedCall call) {
-        Built built = Bound.BUILDINGS.get(call.operation());
+        BuiltFrom built = Bound.buildsItsResultFrom(call.operation());
         if (built == null || built.outputs().size() != 1 || built.lineage().source() == null) {
             return null;
         }
-        return new Kept(built.from().of(call), built.lineage());
+        return new Kept(CallArguments.of(built.from(), call), built.lineage());
     }
 
     /** A construction's source container and the lineage of the elements it answers. */
@@ -1499,9 +657,9 @@ final class DischargeRules {
     /** The container {@code call} built its result from, or null where the check has no rule about
      * what the operation keeps. */
     static Source builtFrom(Core.PreservedCall call) {
-        Built built = Bound.BUILDINGS.get(call.operation());
+        BuiltFrom built = Bound.buildsItsResultFrom(call.operation());
         return built == null ? null
-                : new Source(built.from().of(call), built.shape(), built.size());
+                : new Source(CallArguments.of(built.from(), call), built.shape(), built.size());
     }
 
     /**
@@ -1520,13 +678,13 @@ final class DischargeRules {
         if (!(e instanceof Core.PreservedCall call)) {
             return List.of();
         }
-        List<ArgumentRef> reads = Bound.LOWER_BOUNDS.get(call.operation());
+        List<ArgumentRef> reads = Bound.resultIsNoSmallerThan(call.operation());
         if (reads == null) {
             return List.of();
         }
         List<Core> containers = new ArrayList<>(reads.size());
         for (ArgumentRef one : reads) {
-            containers.add(one.of(call));
+            containers.add(CallArguments.of(one, call));
         }
         return containers;
     }
@@ -1534,32 +692,33 @@ final class DischargeRules {
     /** Where {@code call} reads the container it states its predicate of, or null where it is not a
      * predicate this carries anywhere. */
     static Carrying carried(Core.PreservedCall call) {
-        Carried carried = Bound.CARRIERS.get(call.operation());
+        OperationFact.ReadsItsContainer carried =
+                Bound.readsItsContainer(call.operation());
         return carried == null ? null : new Carrying(call, carried.container(), carried.through());
     }
 
     /** The projection {@code call}'s predicate is stated over, or null where it is stated over the
      * element itself — or where what stands in that argument is not a block this can read. */
     static Projection projectionOf(Core.PreservedCall call, Denotations at) {
-        ArgumentRef reads = Bound.PROJECTIONS.get(call.operation());
+        ArgumentRef reads = Bound.isStatedOverAProjection(call.operation());
         if (reads == null) {
             return null;
         }
-        Core.Block projection = Terms.blockOf(reads.of(call), at);
+        Core.Block projection = Terms.blockOf(CallArguments.of(reads, call), at);
         return projection == null ? null : new Projection(call, reads, projection);
     }
 
     static boolean isSize(ValueName operation) {
-        return SIZE_CALLS.contains(operation);
+        return NumericMeasures.isMeasure(operation);
     }
 
     static boolean isQuantifier(ValueName operation) {
-        return QUANTIFIERS.contains(operation);
+        return Bound.statesItsPredicateOfEveryElement(operation);
     }
 
     /** The size call an emptiness check means, or null where {@code operation} is not one. */
     static ValueName sizeMeantBy(ValueName operation) {
-        return EMPTINESS.get(operation);
+        return Bound.meansTheSameAsASizeOfNought(operation);
     }
 
     /** What {@code operation} computes and where it answers it, or null where the table says
@@ -1568,27 +727,29 @@ final class DischargeRules {
         // An expression that calls nothing is asked this, and answering it is what says so. The
         // tables are immutable maps, which refuse a null key rather than answering for it, and a
         // reader that guarded the call itself would be one guard per reader.
-        return operation == null ? null : Bound.ARITHMETIC.get(operation);
+        return Bound.computesANumber(operation);
     }
 
     /** The operator {@code operation} is, where it answers one directly and the language writes it
      * as an operator too — else null. What a call to it is read as where it stands. */
     static BinOp operator(ValueName operation) {
         NumericResult result = numericResult(operation);
-        return result != null && result.at() instanceof Answered.Directly
-                && result.computes() instanceof Computes.TheOperator written
+        return result != null
+                && result.at() instanceof NumericResult.Answered.Directly
+                && result.computes()
+                        instanceof Arithmetic.TheOperator written
                 ? written.op() : null;
     }
 
     /** Which argument a positive answer from {@code operation} names as the greater, or null where
      * its sign is not an order. */
     static PositiveOrder orderStatedBy(ValueName operation) {
-        return ORDERS.get(operation);
+        return Bound.statesTheOrder(operation);
     }
 
     /** Whether {@code operation} answers the order of its two arguments as a sign. */
     static boolean decidesOrder(ValueName operation) {
-        return ORDERS.containsKey(operation);
+        return orderStatedBy(operation) != null;
     }
 
     /** Whether the check has a rule about what a call answers, rather than only about how to render
@@ -1613,7 +774,7 @@ final class DischargeRules {
     static Core sizeSource(Core e) {
         if (e instanceof Core.PreservedCall call) {
             Source built = builtFrom(call);
-            if (built != null && built.size() == Cardinality.SAME) {
+            if (built != null && built.size() == SizeAgainstItsSource.SAME) {
                 return sizeSource(built.container());
             }
         }

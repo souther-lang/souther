@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.semantics.OperationFact;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
@@ -49,21 +50,21 @@ class EveryCaseALibraryDefinitionIsWrittenInBecomesAnArmTest {
                         + " that nothing was wrong");
         for (ValueName operation : DischargeRules.choosingOperations()) {
             Core.PreservedCall call = callTo(operation);
-            DischargeRules.Choices defined = DischargeRules.chosenBy(call);
+            java.util.List<OperationFact.Case> defined = DischargeRules.chosenBy(call);
             Choice choice = Choice.of(call);
 
             assertNotNull(choice, operation + " is defined in cases and answers no choice");
             assertEquals(Choice.Kind.THE_ARGUMENTS, choice.kind(),
                     operation + " is decided by how its arguments stand");
-            assertEquals(defined.cases().size(), choice.arms().size(),
+            assertEquals(defined.size(), choice.arms().size(),
                     operation + " has an arm per case it is defined in");
 
-            for (int i = 0; i < defined.cases().size(); i++) {
-                DischargeRules.Choice row = defined.cases().get(i);
+            for (int i = 0; i < defined.size(); i++) {
+                OperationFact.Case row = defined.get(i);
                 Choice.Arm arm = choice.arms().get(i);
                 String where = operation + " case " + (i + 1);
 
-                assertSame(row.answers().of(call), arm.answers(),
+                assertSame(CallArguments.of(row.answers(), call), arm.answers(),
                         where + " answers the argument the case answers, as the value itself");
                 assertTrue(arm.decidedBy() instanceof Choice.Decides.ByArgumentRelations,
                         where + " is decided by how the arguments stand");
@@ -87,12 +88,12 @@ class EveryCaseALibraryDefinitionIsWrittenInBecomesAnArmTest {
     }
 
     /** The relations the row names, written in the values this call was given. */
-    private static List<Choice.ArgumentRelation> expected(DischargeRules.Choice row,
+    private static List<Choice.ArgumentRelation> expected(OperationFact.Case row,
                                                           Core.PreservedCall call) {
         List<Choice.ArgumentRelation> out = new ArrayList<>(row.given().size());
-        for (DischargeRules.ArgumentsStand stands : row.given()) {
-            out.add(new Choice.ArgumentRelation(stands.left().of(call), stands.rel(),
-                    stands.right().of(call)));
+        for (OperationFact.ArgumentsStand stands : row.given()) {
+            out.add(new Choice.ArgumentRelation(CallArguments.of(stands.left(), call), stands.rel(),
+                    CallArguments.of(stands.right(), call)));
         }
         return out;
     }

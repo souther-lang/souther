@@ -1,5 +1,7 @@
 package souther.compiler.check;
 
+import souther.compiler.semantics.ElementLineage;
+import souther.compiler.semantics.SizeAgainstItsSource;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
@@ -180,7 +182,7 @@ record UniversalElementFacts(Map<String, Bounds> byPath) {
      * <p>An answer for each of the four lineages, because a case that fell through to the one beside
      * it is how a reading comes to say of an element something no element satisfies. The same
      * elements keep what was true of every one of them, however many of them there are — how many is
-     * {@link DischargeRules.Cardinality} and is a different algebra, so {@code Set.map} carries what
+     * {@link SizeAgainstItsSource} and is a different algebra, so {@code Set.map} carries what
      * its closure answered exactly as {@code List.map} does. An element inside what a closure
      * answered is not what the closure answered, and nothing here reads into a list or an optional,
      * so that one keeps nothing. One of several is what holds of every one of them, which is the
