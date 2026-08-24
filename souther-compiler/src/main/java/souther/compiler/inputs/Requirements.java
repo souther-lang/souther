@@ -40,10 +40,13 @@ public record Requirements(Map<TermPath, Refinement> refinements) {
      * by no value, and would have a row reported impossible with nothing having decided that.
      */
     public Requirements and(TermPath at, Refinement refinement) {
-        if (refinement == null || refinement.equals(refinements.get(at))) {
+        if (refinement == null) {
             return this;
         }
         Refinement had = refinements.get(at);
+        if (refinement.equals(had)) {
+            return this;
+        }
         if (had != null) {
             throw new IllegalArgumentException(
                     "`" + at + "` is required to be " + had.spelled() + " and asked to be "

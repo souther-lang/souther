@@ -141,13 +141,14 @@ public record TermPath(String head, List<Step> steps) {
     }
 
     /**
-     * Whether the position this names was reached by narrowing it.
+     * Whether this path's last step narrows the position it reaches.
      *
      * <p>The last step and not any of them: what is asked is whether <em>this</em> position is a
-     * narrowing of the one above it, which is what says the caller asked for something here. A field
-     * of a case is not — the narrowing is at the case, which is a position of its own.
+     * narrowing of the one above it, which is what says a caller asked something of it. A field of a
+     * case is not one — the narrowing is at the case, which is a position of its own, and a caller
+     * wanting to know whether this stands under one asks {@link #requirements}.
      */
-    public boolean isNarrowed() {
+    public boolean narrowsWhatItReaches() {
         return !steps.isEmpty() && steps.get(steps.size() - 1) instanceof Step.Refine;
     }
 

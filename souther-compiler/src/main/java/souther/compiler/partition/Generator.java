@@ -1388,7 +1388,8 @@ public final class Generator {
         // What the row is about first, and the origin's own classes kept wherever they can be kept
         // beside it. Cloned outright, a row about a class under one case of a sum would carry the
         // classes of the positions under another, which is a row that has to be two things at once.
-        walkSupporting(axes, standing(axes, from, at, cls), supporting, 0, out);
+        walkSupporting(axes, standing(axes, wanting(axes, from, at, cls), new int[] {at}),
+                supporting, 0, out);
         return out;
     }
 
@@ -1452,7 +1453,7 @@ public final class Generator {
 
     /** Where every position stands when a row is composed from the classes alone. */
     private static int[] composes(List<Axis> axes) {
-        return standing(axes, null, NOT_HERE, NOT_HERE);
+        return standing(axes, null, new int[0]);
     }
 
     private static void walkSupporting(List<Axis> axes, int[] where, int[] supporting, int filled,
@@ -1621,7 +1622,7 @@ public final class Generator {
      * merely the first thing this can name. What the row is about does not change with it.
      */
     private static int[] movingOnly(List<Axis> axes, int at, int cls) {
-        return standing(axes, null, at, cls);
+        return standing(axes, wanting(axes, null, at, cls), new int[] {at});
     }
 
     /**
@@ -1915,6 +1916,25 @@ public final class Generator {
         return standing(axes, wanted, narrowedBy(axes, cell), cell::admits);
     }
 
+    /** The classes the cell admits at each position, or null where it admits none somewhere — which
+     *  is a position with nothing in it and so not a combination. */
+    private static List<List<Integer>> admittedBy(List<Axis> axes, InteractionCells.Cell cell) {
+        List<List<Integer>> admitted = new ArrayList<>();
+        for (int i = 0; i < axes.size(); i++) {
+            List<Integer> here = new ArrayList<>();
+            for (int c = 0; c < axes.get(i).classes().size(); c++) {
+                if (cell.admits(i, c)) {
+                    here.add(c);
+                }
+            }
+            if (here.isEmpty()) {
+                return null;
+            }
+            admitted.add(here);
+        }
+        return admitted;
+    }
+
     /**
      * Which positions a cell is about, which are the ones it narrows.
      *
@@ -2012,16 +2032,18 @@ public final class Generator {
         Attempt last = null;
         int[] where = null;
         boolean missed = false;
-        // The cell naming positions no value has together, which is the one thing that leaves the
-        // first assignment with nothing rather than with something already tried. Said as what it
-        // is: a combination the model does not have is not one this search failed at.
-        if (assignment(axes, cell, 0, List.of()) == null) {
+        // The first assignment, worked out once. A cell whose own positions cannot be in one value
+        // leaves none at all, and that is the one thing told apart from a search that has tried
+        // everything the cell leaves: a combination the model does not have is not one this failed
+        // at.
+        int[] first = firstAdmitted(axes, cell);
+        if (first == null) {
             return new Witness.None(List.of(),
                     UnresolvedCombination.Reason.ONE_POSITION_CANNOT_BE_BOTH, null,
                     Optional.of("the positions this combination names are not in one value"));
         }
         for (int candidate = 0; candidate < MOST_CANDIDATES; candidate++) {
-            int[] at = assignment(axes, cell, candidate, tried);
+            int[] at = candidate == 0 ? first : alternative(axes, cell, candidate, tried);
             if (at == null) {
                 break;   // the combination leaves nothing this has not already tried
             }
@@ -2073,35 +2095,22 @@ public final class Generator {
     }
 
     /**
-     * The {@code candidate}th assignment to try for {@code cell}, or null where it leaves none this
-     * has not tried.
+     * An assignment for {@code cell} beside the first, or null where it leaves none this has not
+     * tried.
      *
-     * <p>The first leaves every position the combination does not settle at the first class the
-     * cell admits there, which is as much of the row as this is about. The rest are the assignments
-     * the combination admits, counted off in order — a fixed order, so the same model offers the
-     * same rows twice.
+     * <p>The first is {@link #firstAdmitted}: every position the combination does not settle at the
+     * first class the cell admits there, which is as much of the row as this is about. These are the
+     * others, counted off in order — a fixed order, so the same model offers the same rows twice.
      *
      * <p>Bounded by how many have been tried rather than by a walk over the space: at most
      * {@link #MOST_CANDIDATES} assignments are ever tried, so one of the first that many is one
      * that has not been.
      */
-    private static int[] assignment(List<Axis> axes,
-                                    InteractionCells.Cell cell, int candidate, List<int[]> tried) {
-        if (candidate == 0) {
-            return firstAdmitted(axes, cell);
-        }
-        List<List<Integer>> admitted = new ArrayList<>();
-        for (int i = 0; i < axes.size(); i++) {
-            List<Integer> here = new ArrayList<>();
-            for (int c = 0; c < axes.get(i).classes().size(); c++) {
-                if (cell.admits(i, c)) {
-                    here.add(c);
-                }
-            }
-            if (here.isEmpty()) {
-                return null;   // a position with nothing in it is not a combination
-            }
-            admitted.add(here);
+    private static int[] alternative(List<Axis> axes,
+                                     InteractionCells.Cell cell, int candidate, List<int[]> tried) {
+        List<List<Integer>> admitted = admittedBy(axes, cell);
+        if (admitted == null) {
+            return null;   // a position with nothing in it is not a combination
         }
         int[] anchors = narrowedBy(axes, cell);
         for (int index = 0; index < MOST_CANDIDATES; index++) {
@@ -2697,15 +2706,24 @@ public final class Generator {
      *
      * @param at  which axis the row is about, or {@link #NOT_HERE} where it is about none
      */
-    private static int[] standing(List<Axis> axes, int[] from, int at, int cls) {
-        int[] anchored = from == null ? new int[axes.size()] : from.clone();
-        if (from == null) {
-            java.util.Arrays.fill(anchored, NOT_HERE);
+    private static int[] standing(List<Axis> axes, int[] from, int[] anchors) {
+        return standing(axes, from, anchors, (_, _) -> true);
+    }
+
+    /**
+     * The same preference, with {@code cls} put at {@code at}.
+     *
+     * <p>What a row about one class starts from: the class it is for, and whatever an origin put at
+     * the positions beside it.
+     */
+    private static int[] wanting(List<Axis> axes, int[] from, int at, int cls) {
+        int[] wanted = new int[axes.size()];
+        java.util.Arrays.fill(wanted, NOT_HERE);
+        if (from != null) {
+            System.arraycopy(from, 0, wanted, 0, Math.min(from.length, wanted.length));
         }
-        if (at >= 0) {
-            anchored[at] = cls;
-        }
-        return standing(axes, anchored, at < 0 ? new int[0] : new int[] {at}, (_, _) -> true);
+        wanted[at] = cls;
+        return wanted;
     }
 
     /** Which classes of a position something outside the requirements will have. */
@@ -2939,16 +2957,28 @@ public final class Generator {
         if (value == null || worn.isEmpty()) {
             return value;
         }
+        List<TypeReachName.Written> names = written(worn, symbols);
+        return names == null ? null : RepresentativeSource.under(names, value);
+    }
+
+    /**
+     * The names a position wears as this module writes them, or null where one of them is a name it
+     * cannot write.
+     *
+     * <p>Null takes the whole value with it: the name goes on the value as it is written, and a
+     * value composed without one is of a type the parameter does not declare. Asked in one place
+     * because every value this composes needs the same answer, and three copies of the loop are
+     * three chances to differ about what a name this module cannot reach comes to.
+     */
+    private static List<TypeReachName.Written> written(List<TypeOps.Layer> worn, Symbols symbols) {
         List<TypeReachName.Written> names = new ArrayList<>();
         for (TypeOps.Layer layer : worn) {
-            if (!(symbols.scope().reach(layer.named()) instanceof TypeReachName.Written written)) {
+            if (!(symbols.scope().reach(layer.named()) instanceof TypeReachName.Written name)) {
                 return null;
             }
-            names.add(written);
+            names.add(name);
         }
-        return RepresentativeSource.under(names, RepresentativeSource.of(value))
-                .evaluate() instanceof RepresentativeSource.Evaluation.Values values
-                ? values.written().get(0) : null;
+        return names;
     }
 
     /**
@@ -2978,14 +3008,9 @@ public final class Generator {
         if (collection == null) {
             return null;
         }
-        List<TypeReachName.Written> worn = new ArrayList<>();
-        for (TypeOps.Layer layer : plan.worn()) {
-            if (!(symbols.scope().reach(layer.named()) instanceof TypeReachName.Written written)) {
-                return null;   // a name this module cannot write leaves no value to write
-            }
-            worn.add(written);
-        }
-        return RepresentativeSource.under(worn, collection);
+        // A name this module cannot write leaves no value to write.
+        List<TypeReachName.Written> worn = written(plan.worn(), symbols);
+        return worn == null ? null : RepresentativeSource.under(worn, collection);
     }
 
     /** One record of the plan, out of what the assignment put at the positions under it. */
@@ -3003,14 +3028,10 @@ public final class Generator {
         // Under the names the position is written with, which the descent that found the fields took
         // off to find them. A row at a `data SlotN = Slot` carries `SlotN(Slot { ... })`, and a value
         // composed without them is of a type the parameter does not declare.
-        List<TypeReachName.Written> worn = new ArrayList<>();
-        for (TypeOps.Layer layer : built.worn()) {
-            if (!(symbols.scope().reach(layer.named()) instanceof TypeReachName.Written written)) {
-                return null;   // a name this module cannot write leaves no value to write
-            }
-            worn.add(written);
-        }
-        if (!(symbols.scope().reach(built.of()) instanceof TypeReachName.Written written)) {
+        // A name this module cannot write leaves no value to write.
+        List<TypeReachName.Written> worn = written(built.worn(), symbols);
+        if (worn == null
+                || !(symbols.scope().reach(built.of()) instanceof TypeReachName.Written written)) {
             return null;
         }
         // Under every name the position wears, which where a refinement narrowed it are the names

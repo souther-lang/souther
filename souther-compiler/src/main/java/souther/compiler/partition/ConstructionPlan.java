@@ -54,21 +54,32 @@ record ConstructionPlan(Node root) {
         /** Where it is. */
         TermPath at();
 
-        /** What is built there — the declared type, unless a recipe named the case to build it
-         *  through, or the caller settled the position before this was worked out. */
+        /** What is built there — the declared type, unless a requirement narrowed the position, or
+         *  the caller settled it before this was worked out. */
         Type type();
+
+        /**
+         * The newtype names still to put on what this node produces, outermost first.
+         *
+         * <p>One question of every node and three answers, because what produces the value differs.
+         * A record and a collection are composed bare, so every name the position wears is still to
+         * go on; a value chosen at a slot arrives already wearing whatever names its own type wears,
+         * so what is left is the names the position wore before a requirement narrowed it — and
+         * nothing at all where none did.
+         *
+         * <p>A row at a {@code data SlotN = Slot} carries {@code SlotN(Slot { ... })}, and a
+         * {@code data DecisionN = Decision} narrowed to a case that wraps a number carries
+         * {@code DecisionN(Special(5))}. A value composed without them is of a type the parameter
+         * does not declare.
+         */
+        List<TypeOps.Layer> worn();
     }
 
     /**
      * A position the search chooses a value for.
      *
-     * @param worn  the names the position wore before a refinement narrowed it, outermost first,
-     *              and empty where none did. Only the outer half, unlike {@link Built#worn}: what
-     *              is chosen here is a value of {@link #type}, already written under whatever names
-     *              that type wears, and what is missing is the names the position wore before the
-     *              narrowing — a {@code data DecisionN = Decision} narrowed to a case that wraps a
-     *              number is written {@code DecisionN(Special(5))}, and the inner half is on the
-     *              value already
+     * @param worn  {@link Node#worn}: the names the position wore before a requirement narrowed
+     *              it, since what is chosen here already wears whatever names {@link #type} wears
      * @param fixed whether the caller had already fixed a value here, which is what says a class is
      *              being placed under whatever holds it
      */
@@ -92,7 +103,8 @@ record ConstructionPlan(Node root) {
      * decide it for every rule at once. A list of one holds an element in the class and nothing
      * else, which is the least a row can be and still meet what was asked.
      *
-     * @param worn  the newtype names the position is written under, outermost first
+     * @param worn  {@link Node#worn}: every name the position wears, since what is composed here
+     *              is bare
      * @param under the element's own position
      * @param least how many the rules say the list holds at the fewest, which is one where they say
      *              nothing. The element being placed is one of them and the rest are values of the
@@ -115,12 +127,10 @@ record ConstructionPlan(Node root) {
      * A position composed out of the ones under it.
      *
      * @param of    what the record is called, which is what the composed value is written as
-     * @param worn  the newtype names the position is written under, outermost first. A row at a
-     *              {@code data SlotN = Slot} carries {@code SlotN(Slot { ... })}, and a value
-     *              composed without them is of a type the parameter does not declare. Where a
-     *              refinement narrowed the position, these are the names the position wore before
-     *              it and the ones the narrowed value wears after it, in that order — one list,
-     *              because putting them back on is one thing done once
+     * @param worn  {@link Node#worn}: every name the position wears, since what is composed here is
+     *              bare. Where a requirement narrowed the position, the names it wore before the
+     *              narrowing come first and the narrowed value's own after them — one list, because
+     *              putting them back on is one thing done once
      * @param under the positions of its fields, in the order the declaration writes them
      */
     record Built(TermPath at, Type type, TypeSymbol of, List<TypeOps.Layer> worn,
@@ -253,7 +263,7 @@ record ConstructionPlan(Node root) {
         // value at: a class placing a case inside a list is a class placed under the list. Read off
         // the fixed values alone, a list holding a case of a sum was chosen whole and every element
         // of it came back as whatever stands for the element's type.
-        if (inside.at().isNarrowed()) {
+        if (inside.at().narrowsWhatItReaches()) {
             return true;
         }
         return switch (inside) {
