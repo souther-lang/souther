@@ -86,7 +86,8 @@ class ACallIsAValueOnlyWhenItIsTheConstructionTest {
             assertEquals(1, guards.unread().size(),
                     each[0] + ": and the position says a rule about it went unread");
             UnreadRule said = guards.unread().getFirst();
-            assertEquals(TermPath.of("t"), said.at(), each[0] + ": at the position");
+            assertEquals(UnreadRule.Coordinate.at(TermPath.of("t")), said.at(),
+                    each[0] + ": at the position's own values, which is what the rule bounds");
             assertInstanceOf(BlockReason.UnreadComparisonForm.class, said.why(),
                     each[0] + ": for the form it is written in");
         }

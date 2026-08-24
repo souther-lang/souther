@@ -269,24 +269,29 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
     }
 
     /**
-     * A relation stays a relation when one side is written with something added to it.
+     * A relation the arithmetic stopped on is a rule this compiler did not read, and it is named
+     * for the form rather than for the carrier.
      *
-     * <p>What `+p.x < p.y * p.y+` needs is a class about two positions, exactly as
-     * `+p.x < p.y+` does. Read off how far the derivation got, the second side stops being a
-     * position at all and the answer becomes the carrier — which is a different piece of work and
-     * not the one that is owed.
+     * <p>Both positions are named, which is what `+p.x < p.y * p.y+` has in common with
+     * `+p.x < p.y+`. What it does not have in common is that anything was read: whether the rule
+     * divides `+p.x+` or relates the pair is the part the product stopped, and a reason saying it
+     * relates two positions would say the model is short of nothing while nobody knows what the
+     * rule states.
      *
-     * <p>`+p.x < p.y + 1+` is not this case any more. It is `+p.x - p.y < 1+`, a line where the two
-     * stand one apart, and it is drawn — so what is left here is a relation the arithmetic reads
-     * nothing out of at all.
+     * <p>The form and not the carrier. Both sides are ordered and a line on either against a number
+     * would be read; what is missing is a reader for the product, which is what an author would
+     * change.
+     *
+     * <p>`+p.x < p.y + 1+` is not this case at all. It is `+p.x - p.y < 1+`, a line where the two
+     * stand one apart, and it is drawn.
      */
     @Test
-    void aRelationWithArithmeticOnOneSideIsStillARelation() {
+    void aRelationTheArithmeticStoppedOnIsNamedForTheForm() {
         assertEquals(List.of(
                         new Said(TermPath.of("p").then("x"),
-                                new BlockReason.ComparisonBetweenPositions()),
+                                new BlockReason.UnreadComparisonForm()),
                         new Said(TermPath.of("p").then("y"),
-                                new BlockReason.ComparisonBetweenPositions())),
+                                new BlockReason.UnreadComparisonForm())),
                 said(read("p: Pair", "p.x < Int.multiply(p.y, p.y)").unread()));
     }
 
