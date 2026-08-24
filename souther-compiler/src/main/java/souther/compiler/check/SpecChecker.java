@@ -494,18 +494,22 @@ public final class SpecChecker {
             if (sig == null || !(sig.outputType() instanceof Type.Union)) {
                 continue;
             }
-            TypeSymbol carrying = TypeOps.memberCarryingField(sig.outputType(), DISCRIMINATOR, symbols);
+            // The key is the settled representation's, the same one a named sum's cases are held to
+            // (`DataChecker`). Written here as a constant of its own, this checker and the codec that
+            // writes the key were two places the language's own spelling was kept.
+            if (!(Boundary.of(sig.outputType(), symbols).representation()
+                    instanceof Boundary.Representation.Discriminated(String key))) {
+                continue;
+            }
+            TypeSymbol carrying = TypeOps.memberCarryingField(sig.outputType(), key, symbols);
             if (carrying == null) {
                 continue;
             }
             throw CompileException.of(Diagnostic
                             .at(b.pos())
-                            .hint(new DataMessage.TheTagAndTheFieldWantOneKey(DISCRIMINATOR)).say(new DataMessage.AMemberDeclaresTheDiscriminatorField(carrying.name(), DISCRIMINATOR, b.name())).build());
+                            .hint(new DataMessage.TheTagAndTheFieldWantOneKey(key)).say(new DataMessage.AMemberDeclaresTheDiscriminatorField(carrying.name(), key, b.name())).build());
         }
     }
-
-    /** The key a derived codec writes the case name under (spec §encoder-derivation). */
-    private static final String DISCRIMINATOR = "type";
 
 
     /** Whether a name resolves to a unit data of this compilation or of a module it reads. */

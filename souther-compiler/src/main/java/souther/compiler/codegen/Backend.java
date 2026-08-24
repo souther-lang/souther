@@ -3,6 +3,7 @@ package souther.compiler.codegen;
 import souther.compiler.query.Bodies;
 
 import souther.compiler.check.AtomSpace;
+import souther.compiler.check.Boundary;
 import souther.compiler.check.Symbols;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
@@ -269,7 +270,7 @@ public final class Backend {
         // <behavior名>Result that its cases implement (spec §jvm-anonymous-union). Register those case->interface links
         // in caseToSums before the data classes are generated, so each case class picks the interface
         // up in withInterfaceSymbols. The interface classes themselves are emitted below.
-        Map<GeneratedClass.BehaviorResult, List<TypeSymbol>> behaviorResults =
+        Map<GeneratedClass.BehaviorResult, Boundary.Alternatives> behaviorResults =
                 b.behaviorResultInterfaces(module, sigs);
         b.rejectResultUnionCollisions(module, behaviorResults, localTypes, behaviorClassOwner);
         // A case class carries the result unions it belongs to as interfaces it implements, and that
@@ -279,8 +280,8 @@ public final class Backend {
         // bytecode depend on which modules import it — the mirror of what ADR-0024 refuses. Such a
         // member reaches the union through a bridge case this module emits instead (ADR-0057).
         Map<TypeSymbol, List<GeneratedClass.BehaviorResult>> bridgeCases = new LinkedHashMap<>();
-        behaviorResults.forEach((union, members) -> {
-            for (TypeSymbol member : members) {
+        behaviorResults.forEach((union, alternatives) -> {
+            for (TypeSymbol member : alternatives.atoms()) {
                 if (b.ctx.isLocalMember(member)) {
                     caseToSums.computeIfAbsent(member.name(), k -> new ArrayList<>()).add(union);
                 } else {
@@ -290,14 +291,14 @@ public final class Backend {
         });
         b.rejectBridgeCaseCollisions(module, bridgeCases, localTypes, behaviorClassOwner);
         Emissions out = new Emissions(module.name());
-        behaviorResults.forEach((union, members) -> {
+        behaviorResults.forEach((union, alternatives) -> {
             // the union and its encoder belong to the behavior whose output they are, not to the
             // module, though the behavior did not write them
             Hir.BehaviorDef owner = b.behaviorNamed(module, union.behavior());
             emitting(owner.written(), () -> {
-                out.put(union, b.generateBehaviorResult(union, members));
+                out.put(union, b.generateBehaviorResult(union, alternatives));
                 out.put(new GeneratedClass.Encoder(union),
-                        b.codec.generateResultUnionEncoder(union, members));
+                        b.codec.generateResultUnionEncoder(union, alternatives));
             });
         });
         // A bridge case is shared by every union that reaches its member, so no one behavior owns it;
@@ -1002,7 +1003,7 @@ public final class Backend {
      * having already been rejected for capitalizing into one class.
      */
     private void rejectResultUnionCollisions(Hir.Module module,
-                                             Map<GeneratedClass.BehaviorResult, List<TypeSymbol>> behaviorResults,
+                                             Map<GeneratedClass.BehaviorResult, Boundary.Alternatives> behaviorResults,
                                              Map<JvmClassName, Hir.Def> localTypes,
                                              Map<JvmClassName, String> behaviorClassOwner) {
         for (GeneratedClass.BehaviorResult union : behaviorResults.keySet()) {
@@ -1039,17 +1040,27 @@ public final class Backend {
     /** The result union of each behavior that has one, keyed by the behavior — which is what a result
      *  union is identified by. Keying by what the union is called would mean reading the behavior back
      *  out of the spelling to find whose it is. */
-    private Map<GeneratedClass.BehaviorResult, List<TypeSymbol>> behaviorResultInterfaces(Hir.Module module,
+    private Map<GeneratedClass.BehaviorResult, Boundary.Alternatives> behaviorResultInterfaces(Hir.Module module,
                                                                  Map<ValueName.Behavior, Sig> sigs) {
-        Map<GeneratedClass.BehaviorResult, List<TypeSymbol>> results = new LinkedHashMap<>();
+        Map<GeneratedClass.BehaviorResult, Boundary.Alternatives> results = new LinkedHashMap<>();
         for (Hir.BehaviorDef bd : module.behaviors()) {
             Sig sig = sigs.get(new ValueName.Behavior(module.name(), bd.name()));
             if (sig == null || !(sig.outputType() instanceof Type.Union)) {
                 continue;
             }
-            List<TypeSymbol> members = new ArrayList<>(AtomSpace.subjectAtoms(sig.outputType(), symbols));
-            Collections.sort(members);
-            results.put(new GeneratedClass.BehaviorResult(module.name(), bd.name()), members);
+            // How a union's answer is written is settled once here and handed to the interface, the
+            // encoder and the bridge cases, so none of them is in a position to work the form or a
+            // tag out again.
+            Boundary.Alternatives settled = Boundary.of(sig.outputType(), symbols);
+            // Compatibility only: keep the generated order this compiler had before the alternatives
+            // were settled in one place. `AtomSpace` states the order, and this is the one place that
+            // overrides it — a union whose member is itself a sum comes out of the descent in the
+            // order the cases are declared in, and sorting by name moves it. The ordering follow-up
+            // removes these two lines and passes `settled` through.
+            List<TypeSymbol> ordered = new ArrayList<>(settled.atoms());
+            Collections.sort(ordered);
+            results.put(new GeneratedClass.BehaviorResult(module.name(), bd.name()),
+                    new Boundary.Alternatives(ordered, settled.representation()));
         }
         return results;
     }
@@ -1061,16 +1072,17 @@ public final class Backend {
      * and uses that case's own codec, and one that wants the answer as it crosses a boundary asks
      * the union, which writes the discriminator no member writes on itself.
      */
-    private byte[] generateBehaviorResult(GeneratedClass.BehaviorResult union, List<TypeSymbol> members) {
+    private byte[] generateBehaviorResult(GeneratedClass.BehaviorResult union,
+                                          Boundary.Alternatives alternatives) {
         ClassDesc cdR = ctx.cd(union);
         List<ClassDesc> caseCds = new ArrayList<>();
-        for (TypeSymbol member : members) {
+        for (TypeSymbol member : alternatives.atoms()) {
             caseCds.add(ctx.resultMemberClass(member));
         }
         return build(cdR, cb -> {
             cb.withFlags(ClassFile.ACC_PUBLIC | ClassFile.ACC_INTERFACE | ClassFile.ACC_ABSTRACT);
             cb.with(PermittedSubclassesAttribute.ofSymbols(caseCds));
-            codec.emitResultUnionEncoderFactory(cb, union, members);
+            codec.emitResultUnionEncoderFactory(cb, union, alternatives);
         });
     }
 

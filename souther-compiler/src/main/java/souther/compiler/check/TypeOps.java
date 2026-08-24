@@ -1304,7 +1304,11 @@ public final class TypeOps {
         if (!(key instanceof Type.Ref r) || !unwrapping.add(r.name())) {
             return null;   // a newtype reaching itself; DataChecker reports it, this must terminate
         }
-        if (isUnitOnlySum(key, symbols)) {
+        // Whether a key renders as a bare name is the boundary's question and is asked of it. Asked
+        // as `isUnitOnlySum`, this read the language's notion of an enumeration for an answer about
+        // how a value is written, and the two would part the day either moved.
+        if (Boundary.of(key, symbols).representation()
+                instanceof Boundary.Representation.Enumeration) {
             return new MapKeyRepresentation.NamedKey(r.name());
         }
         Type base = newtypeInner(r.name(), symbols);

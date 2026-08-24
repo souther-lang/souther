@@ -1,6 +1,7 @@
 package souther.compiler.codegen;
 
 import souther.compiler.check.AtomSpace;
+import souther.compiler.check.Boundary;
 import souther.compiler.check.Symbols;
 import souther.compiler.ast.Hir;
 import souther.compiler.types.BindingId;
@@ -193,8 +194,11 @@ final class ValueClassGen {
             // false as soon as it reports a name denoting nothing.
             caseCds.add(cd(Backend.names(caseName)));
         }
-        boolean enumeration = TypeOps.isUnitOnlySum(sum, symbols);
-        List<TypeSymbol> cases = AtomSpace.subjectAtoms(Type.ref(sum.declares()), symbols);
+        // How this sum's alternatives are written is settled once, here, and handed to everything
+        // that generates from it. Each of them holding the type and the symbols instead would be
+        // each of them able to work the form and the tag out again, which is what five of them did.
+        Boundary.Alternatives alternatives = Boundary.of(Type.ref(sum.declares()), symbols);
+        boolean enumeration = alternatives.representation() instanceof Boundary.Representation.Enumeration;
         out.put(valueOf(sum), build(cdX, cb -> {
             cb.withFlags(pub(sum.name()) | ClassFile.ACC_INTERFACE | ClassFile.ACC_ABSTRACT);
             // A sum may itself be a case of another sum (spec §sum-data), and then it carries that sum's
@@ -215,33 +219,29 @@ final class ValueClassGen {
             // An enumeration travels as its case's name (issue #161): one place says which name that
             // is, and the codecs on both sides read it from here.
             if (enumeration) {
-                emitTagMethod(cb, cases);
-                emitOrderMethods(cb, cdX, cases);
+                emitTagMethod(cb, alternatives.wireCases());
+                emitOrderMethods(cb, cdX, alternatives.atoms());
             }
-            sum.decoder().ifPresent(disc -> {
-                codec.emitCodecFactory(cb, "decoder", CD_RDecoder, cd(new GeneratedClass.Decoder(valueOf(sum), DecoderKind.VALUE)),
-                        CodecGen.decoderSig(cdX, !enumeration));
-                codec.emitSourceFactory(cb, sum, CodecGen.Src.JSON, !enumeration);
-                if (codec.recordCompatible(sum)) codec.emitSourceFactory(cb, sum, CodecGen.Src.JOOQ, true);
-            });
-            sum.encoder().ifPresent(enc ->
-                    codec.emitCodecFactory(cb, "encoder", CD_REncoder, cd(new GeneratedClass.Encoder(valueOf(sum))),
-                            CodecGen.encoderSig(cdX, enumeration ? CD_String : CD_Map)));
+            codec.emitCodecFactory(cb, "decoder", CD_RDecoder, cd(new GeneratedClass.Decoder(valueOf(sum), DecoderKind.VALUE)),
+                    CodecGen.decoderSig(cdX, !enumeration));
+            codec.emitSourceFactory(cb, sum, CodecGen.Src.JSON, !enumeration);
+            if (codec.recordCompatible(sum)) codec.emitSourceFactory(cb, sum, CodecGen.Src.JOOQ, true);
+            codec.emitCodecFactory(cb, "encoder", CD_REncoder, cd(new GeneratedClass.Encoder(valueOf(sum))),
+                    CodecGen.encoderSig(cdX, enumeration ? CD_String : CD_Map));
         }));
-        sum.decoder().ifPresent(disc -> {
-            out.put(new GeneratedClass.Decoder(valueOf(sum), DecoderKind.VALUE), enumeration
-                    ? codec.generateEnumSumDecoder(sum, CodecGen.Src.NEUTRAL)
-                    : codec.generateSumDecoder(sum, disc, CodecGen.Src.NEUTRAL));
-            out.put(new GeneratedClass.Decoder(valueOf(sum), DecoderKind.JSON), enumeration
-                    ? codec.generateEnumSumDecoder(sum, CodecGen.Src.JSON)
-                    : codec.generateSumDecoder(sum, disc, CodecGen.Src.JSON));
-            if (codec.recordCompatible(sum)) {
-                out.put(new GeneratedClass.Decoder(valueOf(sum), DecoderKind.RECORD), codec.generateSumDecoder(sum, disc, CodecGen.Src.JOOQ));
-            }
-        });
-        sum.encoder().ifPresent(enc -> out.put(new GeneratedClass.Encoder(valueOf(sum)), enumeration
+        out.put(new GeneratedClass.Decoder(valueOf(sum), DecoderKind.VALUE), enumeration
+                ? codec.generateEnumSumDecoder(sum, alternatives, CodecGen.Src.NEUTRAL)
+                : codec.generateSumDecoder(sum, alternatives, CodecGen.Src.NEUTRAL));
+        out.put(new GeneratedClass.Decoder(valueOf(sum), DecoderKind.JSON), enumeration
+                ? codec.generateEnumSumDecoder(sum, alternatives, CodecGen.Src.JSON)
+                : codec.generateSumDecoder(sum, alternatives, CodecGen.Src.JSON));
+        if (codec.recordCompatible(sum)) {
+            out.put(new GeneratedClass.Decoder(valueOf(sum), DecoderKind.RECORD),
+                    codec.generateSumDecoder(sum, alternatives, CodecGen.Src.JOOQ));
+        }
+        out.put(new GeneratedClass.Encoder(valueOf(sum)), enumeration
                 ? codec.generateEnumSumEncoder(sum)
-                : codec.generateSumEncoder(sum, enc)));
+                : codec.generateSumEncoder(sum, alternatives));
     }
 
     /**
@@ -285,15 +285,15 @@ final class ValueClassGen {
     }
 
     /** Emits {@code static String __tag(Object)}: which case a value of this enumeration is. */
-    private void emitTagMethod(ClassBuilder cb, List<TypeSymbol> cases) {
+    private void emitTagMethod(ClassBuilder cb, List<Boundary.WireCase> cases) {
         cb.withMethod(TAG_METHOD, MTD_tag, ClassFile.ACC_PUBLIC | ClassFile.ACC_STATIC
                 | ClassFile.ACC_SYNTHETIC, mb -> mb.withCode(code -> {
-            for (TypeSymbol c : cases) {
+            for (Boundary.WireCase c : cases) {
                 code.aload(0);
-                code.instanceOf(cd(c));
+                code.instanceOf(cd(c.atom()));
                 Label next = code.newLabel();
                 code.ifeq(next);
-                code.loadConstant(c.name());
+                code.loadConstant(c.tag());
                 code.areturn();
                 code.labelBinding(next);
             }

@@ -3,6 +3,7 @@ package souther.compiler.examples;
 import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.AtomSpace;
+import souther.compiler.check.Boundary;
 import souther.compiler.check.FixtureEvidence;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
@@ -198,15 +199,19 @@ final class NeutralForm {
         // as a behavior's own answer and has no decoder — and a place nothing reads.
         if (!(position.opened() instanceof Position.At(Type type))
                 || !(type instanceof Type.Ref ref)
-                || !(symbols.declarations().declaration(ref.name().key()) instanceof Hir.SumData sum)
-                || sum.decoder().isEmpty()) {
+                || !(symbols.declarations().declaration(ref.name().key()) instanceof Hir.SumData)) {
             return;
         }
-        Hir.Discriminate reads = sum.decoder().get();
-        for (Hir.Variant variant : reads.variants()) {
-            if (variant.caseType().answered() instanceof Hir.Name.Denoting names
-                    && caseName.equals(names.type())) {
-                map.putIfAbsent(reads.key(), variant.tag());
+        // What the sum's own decoder reads, read from where that is settled rather than from a copy
+        // of it kept on the declaration. A fixture that wrote a tag of its own would be a value the
+        // generated decoder cannot read.
+        Boundary.Alternatives alternatives = Boundary.of(type, symbols);
+        if (!(alternatives.representation() instanceof Boundary.Representation.Discriminated(String key))) {
+            return;
+        }
+        for (Boundary.WireCase wire : alternatives.wireCases()) {
+            if (caseName.equals(wire.atom())) {
+                map.putIfAbsent(key, wire.tag());
                 return;
             }
         }
@@ -392,7 +397,8 @@ final class NeutralForm {
      */
     boolean readsABareName(Position position) {
         return position.opened() instanceof Position.At(Type type)
-                && TypeOps.isUnitOnlySum(type, symbols);
+                && Boundary.of(type, symbols).representation()
+                        instanceof Boundary.Representation.Enumeration;
     }
 
     /** A data's fields by name, following the `...includes` it composes in (spec §data). */
