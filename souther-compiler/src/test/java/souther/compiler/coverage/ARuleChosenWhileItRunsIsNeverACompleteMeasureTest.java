@@ -56,6 +56,6 @@ class ARuleChosenWhileItRunsIsNeverACompleteMeasureTest {
 
         assertNotEquals(MeasurementStatus.COMPLETE, AdequacyReport.statusOf(tally.measured()),
                 () -> "one call site, and a rule chosen while it runs: " + AdequacyReport.statusOf(tally.measured())
-                        + " over " + tally.all().size() + " arm(s)");
+                        + " over " + tally.arms().all().size() + " arm(s)");
     }
 }

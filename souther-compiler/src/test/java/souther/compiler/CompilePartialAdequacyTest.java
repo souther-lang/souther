@@ -1,6 +1,5 @@
 package souther.compiler;
 
-import souther.compiler.query.ItemAssessment;
 import souther.compiler.source.SourceId;
 
 import souther.compiler.examples.Deadline;
@@ -29,6 +28,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -197,9 +197,9 @@ class CompilePartialAdequacyTest {
         Adequacy.BranchEvidence branch = compilation.db()
                 .ask(new Adequacy.BranchCoverage(compilation.modules().get(0))).value().get("go");
 
-        assertEquals(2, branch.all().size(), "the arms are there");
+        assertEquals(2, branch.arms().all().size(), "the arms are there");
         assertEquals(MeasurementStatus.PARTIAL, AdequacyReport.statusOf(branch.measured()));
-        assertEquals(List.of(), branch.covered().stream().sorted().toList());
+        assertEquals(List.of(), branch.arms().covered().stream().sorted().toList());
     }
 
     /** And nothing is warned about from it. */
@@ -225,7 +225,7 @@ class CompilePartialAdequacyTest {
                 .filter(p -> "0".equals(p.against())).toList();
         assertEquals(1, at.size());
         assertEquals(MeasurementStatus.PARTIAL, AdequacyReport.statusOf(at.get(0).item().weakeningSource()));
-        assertFalse(ItemAssessment.Coverage.hit(at.get(0).owed().coverage()),
+        assertFalse(at.get(0).owed().hasRowWitness(),
                 "nothing was read, so nothing was met either");
     }
 
@@ -462,7 +462,7 @@ class CompilePartialAdequacyTest {
         assertEquals(2, pointsAgainstTheLine(partition).size());
         for (BorderAssessment.Point boundary : pointsAgainstTheLine(partition)) {
             assertEquals(MeasurementStatus.PARTIAL, AdequacyReport.statusOf(boundary.item().weakeningSource()), boundary.against());
-            assertFalse(ItemAssessment.Coverage.hit(boundary.owed().coverage()));
+            assertFalse(boundary.owed().hasRowWitness());
         }
     }
 
@@ -560,6 +560,12 @@ class CompilePartialAdequacyTest {
      *
      * <p>A field named `unreached` holding an arm nothing watched says something that is not so, and
      * reading `status` beside it does not undo the name.
+     *
+     * <p>Absent rather than empty, which is the second of the two things this document says with a
+     * missing key. The counts are there — the measurement has a value — and the negative claim over
+     * them is not, because a row that did not come back may have gone through any of the arms this
+     * would otherwise name. Written as `[]` the key said "no arm goes unreached", which is a finding
+     * nobody made (issue #997).
      */
     @Test
     void theJsonNamesNoUnreachedArmUnderPartial() throws Exception {
@@ -570,7 +576,8 @@ class CompilePartialAdequacyTest {
 
         assertEquals("partial", branch.get("status").asString());
         assertEquals(2, branch.get("arms").asInt());
-        assertEquals(0, branch.get("unreached").size());
+        assertNull(branch.get("unreached"),
+                () -> "the counts stand and the negative claim over them does not: " + branch);
     }
 
     /**
@@ -690,7 +697,7 @@ class CompilePartialAdequacyTest {
 
         BorderAssessment.Point line = pointsAgainstTheLine(partition).stream()
                 .filter(p -> "100".equals(p.against())).findFirst().orElseThrow();
-        assertTrue(ItemAssessment.Coverage.hit(line.owed().coverage()),
+        assertTrue(line.owed().hasRowWitness(),
                 "a row wrote 100 and went through the comparison");
         assertEquals(MeasurementStatus.COMPLETE, AdequacyReport.statusOf(line.item().weakeningSource()));
 

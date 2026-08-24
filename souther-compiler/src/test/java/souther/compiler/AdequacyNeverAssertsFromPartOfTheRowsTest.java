@@ -1,7 +1,6 @@
 package souther.compiler;
 
 import souther.compiler.query.Measurement;
-import souther.compiler.query.ItemAssessment;
 import souther.compiler.examples.Deadline;
 import org.junit.jupiter.api.Test;
 
@@ -222,7 +221,7 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
                     : BorderAssessment.pointsOf(partition.boundaries())) {
                 if (point.owed() != null
                         && point.item().weakeningSource() instanceof Measurement.Complete<?>
-                        && !ItemAssessment.Coverage.hit(point.owed().coverage())) {
+                        && !point.owed().hasRowWitness()) {
                     wrong.add("boundary " + point.border().axis() + " " + point.asked());
                 }
             }
@@ -233,8 +232,8 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
 
             Adequacy.BranchEvidence branch = compilation.db()
                     .ask(new Adequacy.BranchCoverage(module)).value().get("take");
-            if (branch.measured() instanceof Measurement.Complete<?> && !branch.unreached().isEmpty()) {
-                wrong.add("branch: " + branch.unreached().size() + " unreached");
+            if (branch.measured() instanceof Measurement.Complete<?> && !branch.arms().unreached().isEmpty()) {
+                wrong.add("branch: " + branch.arms().unreached().size() + " unreached");
             }
 
             assertEquals(List.of(), wrong, module + " asserted a gap over rows it did not read");
@@ -317,11 +316,11 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
         assertTrue(partition.axes().stream().anyMatch(a -> !a.uncovered().isEmpty()),
                 "a class nothing is in");
         assertTrue(BorderAssessment.pointsOf(partition.boundaries()).stream()
-                        .anyMatch(p -> p.owed() != null && !ItemAssessment.Coverage.hit(p.owed().coverage())),
+                        .anyMatch(p -> p.owed() != null && !p.owed().hasRowWitness()),
                 "a boundary nothing is at");
         assertTrue(partition.pairs().counts().unknown() > 0, "a combination nothing reaches");
         assertFalse(compilation.db().ask(new Adequacy.BranchCoverage(module)).value()
-                .get("take").unreached().isEmpty(), "an arm nothing goes through");
+                .get("take").arms().unreached().isEmpty(), "an arm nothing goes through");
         assertFalse(GeneratedRows.of(module,
                 Adequacy.generatedOf(compilation.db(), module), Map.of(), true,
                 SourceNameResolver.identity()).text().isEmpty(),

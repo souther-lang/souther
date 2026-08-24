@@ -244,7 +244,7 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
                         .findFirst().orElseThrow(() -> new AssertionError(
                                 "the row was offered for " + point + ", which this line has no"
                                         + " point of: " + after.keySet()));
-                assertTrue(ItemAssessment.Coverage.hit(line.owedAt(role).coverage()),
+                assertTrue(line.owedAt(role).hasRowWitness(),
                         () -> "a row offered for `" + point + "` of `guard a " + op + " b` does not"
                                 + " cover it: " + offered.getValue());
             }
@@ -282,7 +282,7 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
         assertNotNull(line, bordersOf(model).keySet().toString());
         return java.util.stream.Stream.of(PointRole.values())
                 .filter(role -> line.owedAt(role) != null)
-                .filter(role -> !ItemAssessment.Coverage.hit(line.owedAt(role).coverage()))
+                .filter(role -> !line.owedAt(role).hasRowWitness())
                 .map(line::label)
                 .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
     }
@@ -353,8 +353,8 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
         // Well under and well over, which is what the two points away from the border ask for. A
         // row one step under the line is the ON point rather than the IN point, and a test written
         // with one would be asserting about the point beside the one it names.
-        assertTrue(ItemAssessment.Coverage.hit(line.owedAt(PointRole.IN).coverage()), "a row is well under the line");
-        assertTrue(ItemAssessment.Coverage.hit(line.owedAt(PointRole.OUT).coverage()), "and one is well over it");
+        assertTrue(line.owedAt(PointRole.IN).hasRowWitness(), "a row is well under the line");
+        assertTrue(line.owedAt(PointRole.OUT).hasRowWitness(), "and one is well over it");
         for (PointRole role : List.of(PointRole.IN, PointRole.OUT)) {
             assertFalse(line.owedAt(role).worthSearching(), role.toString());
             assertNull(line.owedAt(role).attempt(), role.toString());

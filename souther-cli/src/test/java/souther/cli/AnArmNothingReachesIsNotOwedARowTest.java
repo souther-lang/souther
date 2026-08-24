@@ -364,10 +364,10 @@ class AnArmNothingReachesIsNotOwedARowTest {
                 proving().asRunWith(Set.of(TAKEN)), WeakeningSet.none());
 
         assertEquals(List.of(TAKEN),
-                measured.all().stream().map(CoverageSites.Site::index).toList());
-        assertEquals(Set.of(TAKEN), measured.covered());
+                measured.arms().all().stream().map(CoverageSites.Site::index).toList());
+        assertEquals(Set.of(TAKEN), measured.arms().covered());
         assertTrue(measured.contradicted().isEmpty());
-        assertTrue(measured.unreached().isEmpty());
+        assertTrue(measured.arms().unreached().isEmpty());
     }
 
     /**
@@ -389,9 +389,9 @@ class AnArmNothingReachesIsNotOwedARowTest {
         assertEquals(Set.of(UNREACHED), measured.contradicted(),
                 "the arm nothing reaches was proven unreachable and a row went through it");
         assertEquals(List.of(UNREACHED, TAKEN),
-                measured.all().stream().map(CoverageSites.Site::index).toList(),
+                measured.arms().all().stream().map(CoverageSites.Site::index).toList(),
                 "so it is still an arm this behavior has");
-        assertEquals(Set.of(UNREACHED, TAKEN), measured.covered());
+        assertEquals(Set.of(UNREACHED, TAKEN), measured.arms().covered());
         assertEquals(MeasurementStatus.PARTIAL,
                 AdequacyReport.statusOf(measured.measured()),
                 "and no number here is given as though nothing had happened");

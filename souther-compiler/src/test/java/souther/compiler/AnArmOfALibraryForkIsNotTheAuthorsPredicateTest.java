@@ -68,8 +68,8 @@ class AnArmOfALibraryForkIsNotTheAuthorsPredicateTest {
     @Test
     void twoCallsOfOneCombinatorDoNotShareTheirArms() {
         Adequacy.BranchEvidence twice = armsOfTwice();
-        assertEquals(4, twice.all().size(), "each call is emitted and probed on its own");
-        assertEquals(4, twice.obligations(),
+        assertEquals(4, twice.arms().all().size(), "each call is emitted and probed on its own");
+        assertEquals(4, twice.arms().obligations(),
                 "and each is a thing to cover, since each decides a different predicate");
     }
 
@@ -77,10 +77,10 @@ class AnArmOfALibraryForkIsNotTheAuthorsPredicateTest {
     @Test
     void aPredicateNothingRanIsNamed() {
         Adequacy.BranchEvidence twice = armsOfTwice();
-        assertEquals(2, twice.coveredObligations(),
+        assertEquals(2, twice.arms().coveredObligations(),
                 "the row reached the first call's two arms and no others");
-        assertEquals(2, twice.unreached().size(),
-                () -> "and the second call's are named: " + twice.unreached());
+        assertEquals(2, twice.arms().unreached().size(),
+                () -> "and the second call's are named: " + twice.arms().unreached());
     }
 
     /**
@@ -116,8 +116,8 @@ class AnArmOfALibraryForkIsNotTheAuthorsPredicateTest {
                 .ask(new Adequacy.BranchCoverage(MODULE)).value().get("both");
         assertNotNull(both, "the model under test compiles");
 
-        assertTrue(both.all().size() > both.obligations(),
+        assertTrue(both.arms().all().size() > both.arms().obligations(),
                 () -> "the helper is spliced in twice and its arms are one: "
-                        + both.all().size() + " occurrences, " + both.obligations() + " keys");
+                        + both.arms().all().size() + " occurrences, " + both.arms().obligations() + " keys");
     }
 }
