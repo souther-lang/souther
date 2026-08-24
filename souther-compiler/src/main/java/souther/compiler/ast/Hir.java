@@ -908,26 +908,24 @@ public interface Hir {
         }
     }
 
-    /** A sum data definition {@code data X = A | B | ...} with optional discriminate decoder/encoder. */
+    /**
+     * A sum data definition {@code data X = A | B | ...}.
+     *
+     * <p>Holds no boundary representation. What the cases are called as they cross, whether they
+     * cross as a bare tag or under a key, and which key that is, are derived from the declaration
+     * and are answered by {@code check.Boundary} wherever they are wanted (ADR-0004). Held here they
+     * were a second answer beside the one a reader works out, and a behavior's output union — which
+     * has no declaration to hold a field — could not be given one at all, which is what made it a
+     * separate path (#994).
+     */
     record SumData(WrittenName written,
                    TypeSymbol declares,
                    List<Name> cases,
-                   Optional<Discriminate> decoder,
-                   Optional<SumEncoder> encoder,
                    SourcePos pos) implements Def {}
-
-    /** {@code encoder discriminate on "key" { Case -> "tag" ... }} — the inverse of discriminate. */
-    record SumEncoder(String key, List<EncVariant> variants, SourcePos pos) implements Hir {}
-
-    record EncVariant(Name caseType, String tag, SourcePos pos) implements Hir {}
 
     /** A unit data definition {@code data U} with no fields. */
     record UnitData(WrittenName written, TypeSymbol declares, SourcePos pos) implements Def {}
 
-    /** {@code decoder from Object discriminate on "key" { "tag" -> Case.decoder ... }} */
-    record Discriminate(String key, List<Variant> variants, SourcePos pos) implements Hir {}
-
-    record Variant(String tag, Name caseType, SourcePos pos) implements Hir {}
 
     /** A field: a role name and its type. */
     record Field(WrittenName written, TypeTerm type) implements Hir {

@@ -63,6 +63,11 @@ public final class Emitted {
         return name(new GeneratedClass.Value(TypeSymbols.declared(new TypeKey(module, type))));
     }
 
+    /** The encoder of a behavior's anonymous output union. */
+    public static String resultEncoder(String module, String behavior) {
+        return name(new GeneratedClass.Encoder(new GeneratedClass.BehaviorResult(module, behavior)));
+    }
+
     public static String encoder(String module, String type) {
         return name(new GeneratedClass.Encoder(valueOf(module, type)));
     }

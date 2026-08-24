@@ -365,8 +365,7 @@ public final class AstBuilder {
             for (SyntaxToken t : identTokens(sum.get())) {
                 cases.add(Ast.Name.written(nameOf(t)));
             }
-            return new Ast.SumData(declared, moduleName, cases, Optional.empty(), Optional.empty(),
-                    pos);
+            return new Ast.SumData(declared, moduleName, cases, pos);
         }
         Optional<SyntaxNode> newtype = n.child(SyntaxKind.NEWTYPE_BODY);
         if (newtype.isPresent()) {
