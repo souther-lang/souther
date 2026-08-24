@@ -88,12 +88,8 @@ final class TermRealizations {
             case NumericTerm.ValueOf _ ->
                     oneValue(FixtureTemplate.on(orders.answered(), answer, symbols.scope()::reach),
                             sourceType, symbols);
-            // On the order the value is written on, which for a term that is what an operation
-            // answered is not the order the number is measured on. Written on the answer's, the
-            // thirteenth hour would be offered as the thirteenth second — the same mistake reading
-            // makes in the other direction, and the reason both directions take this end (#1027).
             case NumericTerm.TakenOf taken ->
-                    taken(taken.takenAs(), sourceType, orders.observed(), answer, symbols, policy);
+                    taken(taken.takenAs(), sourceType, orders, answer, symbols, policy);
         };
     }
 
@@ -106,14 +102,18 @@ final class TermRealizations {
      * agree, an operation would have gained a boundary nobody could write a row for, and the report
      * would have said only that every value tried was refused.
      */
-    private static Realization taken(TakenAs how, Type sourceType, Carrier observed, Place answer,
+    private static Realization taken(TakenAs how, Type sourceType, TermOrders orders, Place answer,
                                      Symbols symbols, ReadingPolicy policy) {
         return switch (how) {
             // A container has no order of its own and is built out of what it holds, so this arm
-            // takes none. That is the arm's own answer and not a carrier standing in for nothing.
+            // takes none. That is the arm's own answer and not an order standing in for nothing.
             case TakenAs.HowManyItHolds _ -> holding(sourceType, answer, symbols, policy);
+            // And this one writes on the order the value is written on. Written on the order the
+            // answer is measured on, the thirteenth hour would be offered as the thirteenth second —
+            // the same mistake the reading makes in the other direction, which is why the pair
+            // travels this far and the arm takes the end (#1027).
             case TakenAs.PartOfTime taken ->
-                    atThatPart(taken.part(), sourceType, observed, answer, symbols);
+                    atThatPart(taken.part(), sourceType, orders.observed(), answer, symbols);
         };
     }
 
@@ -146,7 +146,7 @@ final class TermRealizations {
      * reads back, not that it enumerates the inverse. Nought below is the plain choice: the hour on
      * the hour.
      *
-     * <p>The order is handed in and not named here. That what this is taken of is a time is the
+ * <p>The order is handed in and not named here. That what this is taken of is a time is the
      * arm's own condition and the library is held to it, but which carrier a time is written on is
      * {@link Carrier}'s one answer — named here, this would be a second place saying what a time
      * counts, and the two would part the day the first one moved.

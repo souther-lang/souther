@@ -50,6 +50,11 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
     private static final ReadingPolicy POLICY = new ReadingPolicy(64, 12);
     private static final TermPath AT = TermPath.of("x");
 
+    /** The two orders an hour of a time stands on: seconds of a day at the position, a count by one
+     *  for what the operation answers. */
+    private static final souther.compiler.inputs.TermOrders AS_AN_HOUR =
+            new souther.compiler.inputs.TermOrders(Carrier.TIME, Carrier.WHOLE);
+
     /**
      * Numbers the operation actually answers, which is where its own bound runs.
      *
@@ -119,7 +124,6 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
                     new NumericTerm.TakenOf((ValueName.Stdlib) operation, AT);
             Type source = sourceOf(operation);
             souther.compiler.inputs.TermOrders orders = term.ordersAt(source, SYMBOLS);
-            Carrier observed = orders.observed();
             assertNotNull(orders.answered(),
                     operation + " answers a number, so there is an order for it");
             for (long each : answerable(term)) {
@@ -133,7 +137,7 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
                 }
                 for (FixtureTemplate value : built.values()) {
                     assertEquals(new NumericTerm.Reading.Number(asked),
-                            term.read(observed(value), observed),
+                            term.read(observed(value), orders),
                             operation + " built " + value.text() + " for " + each
                                     + ", and it does not read back as that");
                     checked++;
@@ -185,15 +189,15 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
     void whatEachAccountAnswersIsWhatTheLibraryAnswers() {
         assertEquals(Count.of(1),
                 number(term("String", "length").read(new ObservedValue.Text("😀"),
-                        Carrier.TEXT)),
+                        new souther.compiler.inputs.TermOrders(Carrier.TEXT, Carrier.WHOLE))),
                 "a string counts in code points, and one emoji is one of them");
         assertEquals(Count.of(13),
                 number(term("Time", "hour").read(
-                        new ObservedValue.Temporal("13:45:12"), Carrier.TIME)),
+                        new ObservedValue.Temporal("13:45:12"), AS_AN_HOUR)),
                 "a quarter to two in the afternoon falls in the thirteenth hour");
         assertEquals(Count.of(0),
                 number(term("Time", "hour").read(
-                        new ObservedValue.Temporal("00:45:12"), Carrier.TIME)),
+                        new ObservedValue.Temporal("00:45:12"), AS_AN_HOUR)),
                 "and three quarters of an hour past midnight falls in the noughth");
     }
 
@@ -231,11 +235,13 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
     void theOrderAValueIsReadOnIsNotTheOrderItsAnswerIsMeasuredOn() {
         NumericTerm hour = term("Time", "hour");
         assertEquals(Count.of(13),
-                number(hour.read(new ObservedValue.Temporal("13:00:00"), Carrier.TIME)));
+                number(hour.read(new ObservedValue.Temporal("13:00:00"), AS_AN_HOUR)));
         assertInstanceOf(NumericTerm.Reading.NotNumber.class,
-                hour.read(new ObservedValue.Temporal("13:00:00"), Carrier.WHOLE),
-                "and handed the order the answer is measured on, the same value reads as no number"
-                        + " at all — the two orders are not one another's stand-in");
+                hour.read(new ObservedValue.Temporal("13:00:00"),
+                        souther.compiler.inputs.TermOrders.itself(Carrier.WHOLE)),
+                "and read on the order the answer is measured on — which is what a caller handing"
+                        + " one carrier used to be able to do — the same value reads as no number at"
+                        + " all");
     }
 
     /**

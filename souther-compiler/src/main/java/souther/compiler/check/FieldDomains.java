@@ -68,7 +68,7 @@ public final class FieldDomains {
             new FieldDomains(Map.of(), Map.of(), Map.of(), Map.of(), Set.of(), List.of(), List.of(), Map.of(),
                     Map.of(), new ReadingEvidence(), Map.of(), Set.of(THE_VALUE), NO_POSITIONS,
                     ConstraintState.<FactSubject>top(), null, null, null, null, Map.of(), Set.of(THE_VALUE),
-                    Map.of(), Map.of(), Map.of(), Map.of(), Map.of());
+                    Map.of(), Map.of(), Map.of(), Map.of());
 
     private final Map<String, NumericDomain.Bounds> byField;
     /** The ends the record's own clauses place, which is a different question from the range they
@@ -130,10 +130,7 @@ public final class FieldDomains {
     /** The atom a range is taken of at each position: the position's own value, and the count of
      *  one where a count is taken. A position with neither has no range to be exact about. */
     private final Map<String, FactSubject> atomAt;
-    private final Map<String, FactSubject> countAt;
-    /** The operation each of those counts is of, so a coordinate names the quantity and not merely
-     *  "not the position's value". */
-    private final Map<String, ValueName> countTakenBy;
+    private final Map<String, Counted> countAt;
     /** What the reading that builds the bounds made of each part of each rule. Per part, because a
      *  rule is represented where every part of it is. */
     private final Map<RuleRef, Map<Core, InvariantChecker.PartRead>> readBy;
@@ -156,8 +153,7 @@ public final class FieldDomains {
                          Hir.Data data, Symbols symbols, ReadingPolicy policy,
                          Map<Coordinate, Count> settled,
                          Set<String> unreadOfEveryValue,
-                         Map<String, FactSubject> atomAt, Map<String, FactSubject> countAt,
-                         Map<String, ValueName> countTakenBy,
+                         Map<String, FactSubject> atomAt, Map<String, Counted> countAt,
                          Map<RuleRef, Map<Core, InvariantChecker.PartRead>> readBy,
                          Map<FactSubject, souther.compiler.numeric.Granularity> spacing) {
         this.byField = byField;
@@ -182,7 +178,6 @@ public final class FieldDomains {
         this.unreadOfEveryValue = unreadOfEveryValue;
         this.atomAt = atomAt;
         this.countAt = countAt;
-        this.countTakenBy = countTakenBy;
         this.readBy = readBy;
         this.spacing = spacing;
     }
@@ -356,7 +351,7 @@ public final class FieldDomains {
         // and means nothing once the reading that named it is gone, so a caller holding one could
         // only ask the domain it came from — which is this one, while it is still here.
         Map<String, NumericDomain.Bounds> holds = new LinkedHashMap<>();
-        seeded.held().forEach((field, atom) -> {
+        seeded.heldAtoms().forEach((field, atom) -> {
             if (field.isEmpty()) {
                 return;
             }
@@ -384,7 +379,7 @@ public final class FieldDomains {
                 seeded.reading().narrowers(),
                 seeded.notGathered(), placeOf,
                 seeded.constraints(), named, data, symbols, policy, settled,
-                seeded.unreadOfEveryValue(), seeded.atoms(), seeded.held(), seeded.heldBy(),
+                seeded.unreadOfEveryValue(), seeded.atoms(), seeded.held(),
                 seeded.readBy(), seeded.spacing());
     }
 
@@ -544,7 +539,7 @@ public final class FieldDomains {
                 taken = ConstraintState.settling(taken, atom, each.getValue(), spaced);
             }
         }
-        return new Settled(taken, positions, atomAt, countAt, countTakenBy);
+        return new Settled(taken, positions, atomAt, countAt);
     }
 
     /**
@@ -560,17 +555,14 @@ public final class FieldDomains {
         private final ConstraintState<FactSubject> constraints;
         private final SequencedMap<FactSubject, String> positions;
         private final Map<String, FactSubject> atomAt;
-        private final Map<String, FactSubject> countAt;
-        private final Map<String, ValueName> countTakenBy;
+        private final Map<String, Counted> countAt;
 
         private Settled(ConstraintState<FactSubject> constraints, SequencedMap<FactSubject, String> positions,
-                        Map<String, FactSubject> atomAt, Map<String, FactSubject> countAt,
-                        Map<String, ValueName> countTakenBy) {
+                        Map<String, FactSubject> atomAt, Map<String, Counted> countAt) {
             this.constraints = constraints;
             this.positions = positions;
             this.atomAt = atomAt;
             this.countAt = countAt;
-            this.countTakenBy = countTakenBy;
         }
 
         /**
@@ -609,8 +601,8 @@ public final class FieldDomains {
                                               java.util.function.Function<Object, B> otherwise) {
             Map<FactSubject, Coordinate> where = new LinkedHashMap<>();
             atomAt.forEach((path, atom) -> at(where, atom, Coordinate.value(path)));
-            countAt.forEach((path, atom) -> at(where, atom,
-                    Coordinate.takenBy(path, countTakenBy.get(path))));
+            countAt.forEach((path, counted) -> at(where, counted.atom(),
+                    Coordinate.takenBy(path, counted.by())));
             InjectiveRenaming<FactSubject, B> naming = InjectiveRenaming.of(atom -> {
                 Coordinate coordinate = where.get(atom);
                 return coordinate == null ? otherwise.apply(atom) : named.apply(coordinate);
@@ -1060,20 +1052,42 @@ public final class FieldDomains {
     }
 
     /**
+     * A count one path has: the atom the clauses name it by, and the operation it is a count of.
+     *
+     * <p>One value and not two maps. The atom is what a rule about the count is recorded against and
+     * the operation is what a coordinate names it by, and they are true of the same count — held
+     * apart, a path could have one and not the other, and the pairing would be whatever the two
+     * fill sites remembered. That is the shape of defect this whole change is about (#1027), and it
+     * arrived here as part of the repair for it.
+     */
+    public record Counted(FactSubject atom, ValueName by) {
+
+        public Counted {
+            java.util.Objects.requireNonNull(atom, "a count is recorded against an atom");
+            java.util.Objects.requireNonNull(by, "and is a count of some operation");
+        }
+    }
+
+    /** The atom of a count this reading may not have, which is what every lookup of one wants. */
+    private static FactSubject atomOf(Counted counted) {
+        return counted == null ? null : counted.atom();
+    }
+
+    /**
      * The subject the clauses of a value write one coordinate of it under, or null where they write
      * none.
      *
      * <p>Null for an operation the clause vocabulary has no word for, which is not a gap. What a
      * clause is written about is a position's value or how much it holds; a guard bounding
-     * {@code Int.abs(x)} names a number the declarations never mention, so what they say about it is
-     * nothing — and nothing is what a lookup finding no subject already means everywhere here.
+     * {@code Time.hour(t)} names a number the declarations never mention, so what they say about it
+     * is nothing — and nothing is what a lookup finding no subject already means everywhere here.
      */
     private FactSubject subjectAt(String path, CoordinateKind kind) {
         return switch (kind) {
             case CoordinateKind.OfItsOwnValue _ -> atomAt.get(path);
             case CoordinateKind.OfWhatAnOperationAnswers taken ->
                     souther.compiler.check.NumericMeasures.isMeasure(taken.operation())
-                            ? countAt.get(path) : null;
+                            ? atomOf(countAt.get(path)) : null;
         };
     }
 
@@ -1154,7 +1168,7 @@ public final class FieldDomains {
 
     private static NumericDomain.Bounds boundsOfForm(ConstraintState<FactSubject> constraints,
                                                      Map<String, FactSubject> atomAt,
-                                                     Map<String, FactSubject> countAt,
+                                                     Map<String, Counted> countAt,
                                                      Map<Coordinate, java.math.BigDecimal> form) {
         if (form.isEmpty()) {
             return null;
@@ -1165,7 +1179,8 @@ public final class FieldDomains {
             FactSubject atom = switch (at.kind()) {
                 case CoordinateKind.OfItsOwnValue _ -> atomAt.get(at.path());
                 case CoordinateKind.OfWhatAnOperationAnswers taken ->
-                        NumericMeasures.isMeasure(taken.operation()) ? countAt.get(at.path()) : null;
+                        NumericMeasures.isMeasure(taken.operation())
+                                ? atomOf(countAt.get(at.path())) : null;
             };
             if (atom == null) {
                 return null;
@@ -1206,7 +1221,7 @@ public final class FieldDomains {
         // narrowed one of these is in the bounds; a rule that narrowed only an atom standing for an
         // arithmetic this cannot carry narrowed nothing anybody reads off them.
         Set<FactSubject> ranged = new LinkedHashSet<>(atomAt.values());
-        ranged.addAll(countAt.values());
+        countAt.values().forEach(counted -> ranged.add(counted.atom()));
         // Asked of every rule the reading was handed, and not of the questions the rules raise. A
         // pattern raises none — which values may stand somewhere and where a line falls are not what
         // it is about — and it is still a way the value can be refused at an edge of the number

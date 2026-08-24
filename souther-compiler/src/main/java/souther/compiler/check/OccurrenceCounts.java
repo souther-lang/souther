@@ -95,7 +95,7 @@ public final class OccurrenceCounts {
         if (seeded == null) {
             return 0;
         }
-        FactSubject counted = seeded.held().get(path);
+        FactSubject counted = seeded.heldAtoms().get(path);
         return counted == null ? 0
                 : CountDomain.leastFrom(seeded.numbers().boundsOf(counted).min());
     }
@@ -104,7 +104,7 @@ public final class OccurrenceCounts {
         if (seeded == null) {
             return true;
         }
-        FactSubject counted = seeded.held().get(path);
+        FactSubject counted = seeded.heldAtoms().get(path);
         if (counted == null) {
             return true;   // nothing counts what is there, so no rule here is about how much it holds
         }

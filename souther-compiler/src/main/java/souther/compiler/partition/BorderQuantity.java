@@ -67,7 +67,7 @@ public sealed interface BorderQuantity {
             // measured on. The two are one carrier for a position's own content and part for a term
             // that is what an operation answered — a time counts the seconds of its day and its hour
             // counts by one, so a reader handed the second decodes the first as nothing (#1027).
-            return switch (term.read(row.at(term.path()), of.observed())) {
+            return switch (term.read(row.at(term.path()), of)) {
                 case NumericTerm.Reading.Missing _ -> Stands.UNREADABLE;
                 case NumericTerm.Reading.NotNumber _ -> Stands.NO;
                 case NumericTerm.Reading.Number number ->
@@ -244,9 +244,9 @@ public sealed interface BorderQuantity {
             // Each on its own order. Read on one order for the pair, a position written back
             // differently from the other was read as a value it does not hold — a date read as a
             // whole number is no number at all, and the row stood at nothing (#1018).
-            NumericTerm.Reading here = on.read(row.at(on.path()), carriers.get(on).observed());
+            NumericTerm.Reading here = on.read(row.at(on.path()), carriers.get(on));
             NumericTerm.Reading there =
-                    against.read(row.at(against.path()), carriers.get(against).observed());
+                    against.read(row.at(against.path()), carriers.get(against));
             if (here instanceof NumericTerm.Reading.Missing
                     || there instanceof NumericTerm.Reading.Missing) {
                 return Stands.UNREADABLE;
@@ -445,7 +445,7 @@ public sealed interface BorderQuantity {
                 // back differently from its neighbour was read as a value it does not hold.
                 NumericTerm.Reading read =
                         each.getKey().read(row.at(each.getKey().path()),
-                                on.get(each.getKey()).observed());
+                                on.get(each.getKey()));
                 if (read instanceof NumericTerm.Reading.Missing) {
                     return Stands.UNREADABLE;
                 }

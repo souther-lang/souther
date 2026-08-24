@@ -18,8 +18,11 @@ import java.util.Set;
  * hold that narrow set: what an emptiness check means, what bounds how many a generated container
  * holds, what a clause of a value has a word for. {@link #takenIn} asks the wider question — is this
  * call a number taken of one location at all — and answers for every operation that declares an
- * account, {@code Time.hour} as much as {@code String.length}. Asked the narrow question where the
- * wide one was meant, a guard on anything but a size drew no line and nothing said so.
+ * account of any kind. Asked the narrow question where the wide one was meant, a guard on anything
+ * but a size drew no line and nothing said so.
+ *
+ * <p>Neither set is enumerated here, and neither was. Both are read off the declarations, which is
+ * what this class was made for the first time it happened.
  *
  * <p>Which they are is declared with the rest of what is true of the language's operations
  * ({@link OperationFacts}) and read from there. This once held the list

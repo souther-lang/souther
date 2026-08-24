@@ -416,12 +416,20 @@ public final class InvariantChecker {
      *                 that is not its own
      */
     record Seeded(ConstraintState<FactSubject> constraints, Map<String, FactSubject> atoms, Map<String, FactSubject> keys,
-                  Map<String, FactSubject> held, Map<String, ValueName> heldBy,
-                  Reading reading, ReadingEvidence took,
+                  Map<String, FieldDomains.Counted> held, Reading reading, ReadingEvidence took,
                   boolean everyClauseRead, Set<String> notGathered,
                   Set<String> unreadOfEveryValue,
                   Map<RuleRef, Map<Core, PartRead>> readBy,
                   Map<FactSubject, souther.compiler.numeric.Granularity> spacing) {
+
+        /** The atom each count is recorded against, for a reader that wants the subject and not
+         *  which operation it is a count of. Projected rather than kept beside {@link #held()}: two
+         *  maps of one thing are what this pair was before (#1027). */
+        Map<String, FactSubject> heldAtoms() {
+            Map<String, FactSubject> out = new LinkedHashMap<>();
+            held.forEach((path, counted) -> out.put(path, counted.atom()));
+            return out;
+        }
 
         public Seeded {
             notGathered = Set.copyOf(notGathered);
@@ -436,7 +444,6 @@ public final class InvariantChecker {
          *  every position, since nothing here knows which of them the rules were about. */
         static Seeded nothingRead() {
             return new Seeded(ConstraintState.<FactSubject>top(), Map.of(), Map.of(), Map.of(),
-                    Map.of(),
                     new Reading(List.of(), List.of(), Map.of(), Map.of(), Map.of()),
                     new ReadingEvidence(),
                     false, Set.of(FieldDomains.THE_VALUE), Set.of(FieldDomains.THE_VALUE),
@@ -611,8 +618,7 @@ public final class InvariantChecker {
             }
             Map<String, FactSubject> atoms = new LinkedHashMap<>();
             Map<String, Type> typeAt = new LinkedHashMap<>();
-            Map<String, FactSubject> held = new LinkedHashMap<>();
-            Map<String, ValueName> heldBy = new LinkedHashMap<>();
+            Map<String, FieldDomains.Counted> held = new LinkedHashMap<>();
             Map<String, FactSubject> keys = new LinkedHashMap<>();
             for (Map.Entry<String, BindingId> field : bindings.entrySet()) {
                 Type type = fields.get(field.getKey());
@@ -622,7 +628,7 @@ public final class InvariantChecker {
                     // record inside a newtype was filed one step deeper than anything asks for.
                     c.name(new Core.Read(field.getKey(), field.getValue(), type, NOWHERE),
                             data.newtype() ? "" : field.getKey(), type, at, symbols, 1,
-                            atoms, typeAt, held, heldBy, keys);
+                            atoms, typeAt, held, keys);
                 }
             }
             // Which values each position is left, off the clauses the walk reached. What reached this
@@ -675,7 +681,7 @@ public final class InvariantChecker {
                             + " alternatives past a counted " + expansion;
             // And which of the clauses place an edge, asked once the positions have names to be
             // recognised by.
-            Reading reading = c.directsIn(written, at, atoms, keys, held, typeAt, took,
+            Reading reading = c.directsIn(written, at, atoms, keys, heldAtomsOf(held), typeAt, took,
                     new PartsRead(readBy, adoptedBy));
             ConstraintState<FactSubject> constraints = k.constraints()
                     .takingValuesRead(stated.values())
@@ -690,8 +696,8 @@ public final class InvariantChecker {
                     spacing.put(atom, c.terms.granularityOf(type));
                 }
             });
-            held.forEach((path, atom) ->
-                    spacing.put(atom, souther.compiler.numeric.Granularity.DISCRETE));
+            held.forEach((path, counted) ->
+                    spacing.put(counted.atom(), souther.compiler.numeric.Granularity.DISCRETE));
             for (Map.Entry<FieldDomains.Coordinate, Count> each : settled.entrySet()) {
                 FieldDomains.Coordinate where = each.getKey();
                 // The number the caller settled, which is the position's own value or the count
@@ -706,7 +712,7 @@ public final class InvariantChecker {
                     // about it is nothing rather than whatever stands in the count's slot (#1027).
                     case FieldDomains.CoordinateKind.OfWhatAnOperationAnswers taken ->
                             NumericMeasures.isMeasure(taken.operation())
-                                    ? held.get(where.path()) : null;
+                                    ? atomOf(held.get(where.path())) : null;
                 };
                 if (atom == null) {
                     continue;
@@ -718,12 +724,24 @@ public final class InvariantChecker {
                 }
                 constraints = ConstraintState.settling(constraints, atom, each.getValue(), spaced);
             }
-            return new Seeded(constraints, atoms, keys, held, Map.copyOf(heldBy), reading, took, read,
+            return new Seeded(constraints, atoms, keys, held, reading, took, read,
                     Set.copyOf(notGathered), unreadOfEveryValue, readBy, Map.copyOf(spacing));
         } catch (RuntimeException why) {
             gaveUp("seedFields " + named.name(), why);
             return Seeded.nothingRead();
         }
+    }
+
+    /** The atom of a count that may not be there, which every lookup of one wants. */
+    private static FactSubject atomOf(FieldDomains.Counted counted) {
+        return counted == null ? null : counted.atom();
+    }
+
+    /** The same over a whole reading, for the readers that take the map. */
+    private static Map<String, FactSubject> heldAtomsOf(Map<String, FieldDomains.Counted> held) {
+        Map<String, FactSubject> out = new LinkedHashMap<>();
+        held.forEach((path, counted) -> out.put(path, counted.atom()));
+        return out;
     }
 
     /** How many alternatives a reading came to, a reading that admits nothing holding none. */
@@ -749,8 +767,7 @@ public final class InvariantChecker {
      */
     private void name(Core value, String path, Type type, Denotations at, Symbols symbols,
                       int depth, Map<String, FactSubject> atoms, Map<String, Type> typeAt,
-                      Map<String, FactSubject> held, Map<String, ValueName> heldBy,
-                      Map<String, FactSubject> keys) {
+                      Map<String, FieldDomains.Counted> held, Map<String, FactSubject> keys) {
         // What the position is called, and the atom it is. Asked together, because where a position
         // is a number the domain carries the two are one identity read once — and this asks it of
         // every level of a chain, so reading it twice costs more than the chain is long.
@@ -772,17 +789,15 @@ public final class InvariantChecker {
         // And what a rule counting this position spoke about, which is not what the position is. A
         // list is no number and has no atom above; the count of it has one, and a reader asking how
         // much the position holds is asking about that one.
-        // The atom and the operation it counts by, filled under one condition. What the clauses of a
-        // value have words for is the position and how much it holds, and the second of those is one
+        // The atom and the operation it counts by, which are one value. What the clauses of a value
+        // have words for is the position and how much it holds, and the second of those is one
         // operation — the one that counts what the position's type holds. A coordinate that recorded
         // only "not the value" brought a count and a number some other operation answers of the same
-        // location to one name (#1027), so the operation is kept; kept in a second `if`, a path could
-        // have an atom and no operation, and the coordinate naming it would fail on the way past.
+        // location to one name (#1027).
         ValueName countsIt = NumericMeasures.takenOf(type, symbols);
         FactSubject counted = countsIt == null ? null : terms.takenAtomOf(value, type, at);
         if (counted != null) {
-            held.put(path, counted);
-            heldBy.put(path, countsIt);
+            held.put(path, new FieldDomains.Counted(counted, countsIt));
         }
         // Through the names, to the value that has the fields. Each is read at the path it is worn
         // under, since wearing a name is not being somewhere else. How far the names reach is
@@ -805,7 +820,7 @@ public final class InvariantChecker {
         for (Map.Entry<String, Type> field : clauses.fieldsOf(data).entrySet()) {
             name(new Core.FieldAccess(inner, field.getKey(), field.getValue(), NOWHERE),
                     GuaranteeWalk.under(path, field.getKey()), field.getValue(), at, symbols, depth + 1,
-                    atoms, typeAt, held, heldBy, keys);
+                    atoms, typeAt, held, keys);
         }
     }
 

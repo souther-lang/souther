@@ -51,8 +51,14 @@ public sealed interface NumericTerm {
     }
 
     /**
-     * A number taken of what a location holds: {@code String.length}, {@code List.length},
-     * {@code Set.size}, {@code Map.size}, {@code Time.hour}.
+     * A number taken of what a location holds: how long a string is, how many a container holds,
+     * which hour of its day a time falls in.
+     *
+     * <p><b>Which operations those are is not written here.</b> They are the ones that declare an
+     * account of what they take ({@code semantics.OperationFacts}), and a list of them on this side
+     * would be a second list — right on the day it was written and wrong the day the declarations
+     * moved, with nothing failing in between. This side names the question; that side is the list.
+     * A description that named the operations went stale inside one change (#1027).
      *
      * <p>Keyed by the operation the call resolved to rather than by how it was written, so a term
      * here and an atom in the discharge procedure are the same term when they are the same operation
@@ -162,17 +168,20 @@ public sealed interface NumericTerm {
      * <p>The one reader. What a class asks of a row, what a boundary asks of it, and what a report
      * prints were three walks down a value that agreed only because they were written the same way.
      *
-     * <p>The order is handed in rather than guessed at from the observation. A written temporal says
-     * nothing about whether the position counts days or seconds — the declared type says it — and a
-     * reader that sniffed the text for a {@code T} answered a question that was already answered,
-     * differently.
+     * <p>The orders are handed in rather than guessed at from the observation. A written temporal
+     * says nothing about whether the position counts days or seconds — the declared type says it —
+     * and a reader that sniffed the text for a {@code T} answered a question that was already
+     * answered, differently.
      *
-     * <p><b>And it is the order the value is on, not the order the answer is measured on.</b> The
-     * two are the same for a term that is a location's content and for an operation over its own
-     * kind of number, and they are not for one that reads a date and answers a count. Handed the
-     * answer's order, such a term would decode the observation on a count it is not written in.
+     * <p><b>Both of them, and this picks.</b> What a value is decoded on and what the number it
+     * answers is measured on are two orders, and the one this wants is the first. Given the carrier
+     * instead of the pair, every caller chose which end to hand over and every one of them had to
+     * choose the same way — five places writing {@code .observed()} and getting it right, which is
+     * the arrangement the whole of #1027 exists to stop, one layer along. The decision is here,
+     * where the arms that need it are.
      */
-    default Reading read(ObservedValue at, Carrier observed) {
+    default Reading read(ObservedValue at, TermOrders on) {
+        Carrier observed = on.observed();
         Membership.Incomplete unread = Membership.unread(at);
         if (unread != null) {
             return new Reading.Missing(unread.code());
@@ -183,7 +192,7 @@ public sealed interface NumericTerm {
         // the value should be, and a walk that only looked at the outside would call that a value
         // this term does not hold.
         if (at instanceof ObservedValue.Constructed c && c.field("value") != null) {
-            return read(c.field("value"), observed);
+            return read(c.field("value"), on);
         }
         return switch (this) {
             case ValueOf _ -> asItStands(at, observed);

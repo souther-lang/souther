@@ -73,7 +73,7 @@ public final class Recognitions {
     private static Membership counted(Recognition.OfACount count, ObservedValue value) {
         // Read on the order the value is written on; asked on the order the count is compared
         // on. One carrier for both was right while the two could not differ (#1027).
-        return switch (count.term().read(value, count.orders().observed())) {
+        return switch (count.term().read(value, count.orders())) {
             case NumericTerm.Reading.Number number -> Membership.of(
                     holds(count.is(), number.value(), count.carrier()));
             case NumericTerm.Reading.Missing missing -> new Membership.Incomplete(missing.code());
