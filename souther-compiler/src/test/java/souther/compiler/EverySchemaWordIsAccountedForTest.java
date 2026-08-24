@@ -83,6 +83,32 @@ class EverySchemaWordIsAccountedForTest {
             this(label, at, List.of(source), null, retired);
         }
 
+        /**
+         * One field whose words are every reason a measure can give, asked of the measure.
+         *
+         * <p>Named by its owner rather than by its reasons. A measure's reasons are enums nested in
+         * it — which kinds of no-number it has is its own business — so listing them here is a copy
+         * of that list, and a reason type added to the measure is one this never hears about. It
+         * happened: {@code BODIES_NOT_ELABORATED} was added to the arm measure and the schema went
+         * on promising the five words it had, so the compiler could write a document the shipped
+         * schema refused, and the check written to catch exactly that saw nothing (issue #996).
+         *
+         * @param owner  the measure, whose nested reason enums are its vocabulary
+         * @param shared reason types it uses that are not its own — a word more than one measure
+         *               gives lives beside them rather than inside any of them
+         */
+        static Vocabulary of(String label, List<String> at, Class<?> owner, Class<?>... shared) {
+            return of(label, at, Set.of(), owner, shared);
+        }
+
+        /** The same, for a field that also carries a word no measure writes any more. */
+        static Vocabulary of(String label, List<String> at, Set<String> retired, Class<?> owner,
+                             Class<?>... shared) {
+            List<Class<?>> source = new ArrayList<>(reasonsOf(owner));
+            source.addAll(List.of(shared));
+            return new Vocabulary(label, at, source, null, retired);
+        }
+
         /** A field whose words are not an enum's own names. {@link #source} is what they are
          * projected from, named so a reader knows where to look, and not what they are spelled by. */
         Vocabulary(String label, List<String> at, Set<String> written) {
@@ -100,6 +126,28 @@ class EverySchemaWordIsAccountedForTest {
             out.addAll(retired);
             return out;
         }
+    }
+
+    /**
+     * Every reason enum nested in {@code owner}, which is what its reasons are.
+     *
+     * <p>Asked of the type rather than listed. Which kinds of no-number a measure has is the
+     * measure's own business, and a list of them written anywhere else is a second copy that the
+     * next one added is missing from.
+     */
+    private static List<Class<?>> reasonsOf(Class<?> owner) {
+        List<Class<?>> out = new ArrayList<>();
+        for (Class<?> each : owner.getDeclaredClasses()) {
+            // Not only the enums. A reason that costs a proof to say carries it as an argument and
+            // is a record, which spells its word in a constant `wordsOf` reads — so which shape a
+            // reason has is not what decides whether the schema is held to it.
+            if (souther.compiler.observe.MeasureReason.class.isAssignableFrom(each)) {
+                out.add(each);
+            }
+        }
+        assertTrue(!out.isEmpty(), owner.getName() + " gives no reason, so this names the wrong"
+                + " type: a measure's reasons are the enums nested in it");
+        return out;
     }
 
     /** The names a branch measure can give an arm, spelled by the writer's own encoder. */
@@ -158,9 +206,8 @@ class EverySchemaWordIsAccountedForTest {
             // inside the compiler is not a change to the contract, and would be one if this read
             // the constants.
             new Vocabulary("status", List.of("$defs", "status"), STATUS_WORDS),
-            new Vocabulary("branch.reason", List.of("$defs", "branch", "properties", "reason"),
-                    Adequacy.BranchEvidence.NoArms.class, Adequacy.BranchEvidence.NotAsked.class,
-                    Adequacy.BranchEvidence.Unreadable.class),
+            Vocabulary.of("branch.reason", List.of("$defs", "branch", "properties", "reason"),
+                    Adequacy.BranchEvidence.class),
             new Vocabulary("findings[].kind",
                     List.of("$defs", "findings", "items", "properties", "kind"),
                     Adequacy.Kind.class),
@@ -190,13 +237,11 @@ class EverySchemaWordIsAccountedForTest {
             // `no_axis_derived` is what `the_reading_did_not_run_out` was called while it also
             // stood for a reading that ran out and found nothing to divide. Retired rather than
             // gone: reports of this version were written carrying it.
-            new Vocabulary("partition.axesMeasure.reason",
+            Vocabulary.of("partition.axesMeasure.reason",
                     List.of("$defs", "partition", "properties", "axesMeasure", "properties",
                             "reason"),
                     Set.of("no_axis_derived"),
-                    souther.compiler.query.PartitionDerivation.NoSubject.class,
-                    souther.compiler.query.PartitionDerivation.TheReadingDidNotRunOut.class,
-                    souther.compiler.query.PartitionDerivation.NothingIsDivided.class),
+                    souther.compiler.query.PartitionDerivation.class),
             // Written once and referred to twice: a position's reading and a rule left unread are
             // the same question asked of two things, and two copies of the words would be two
             // places for one of them to gain a word the other does not have.
@@ -204,17 +249,16 @@ class EverySchemaWordIsAccountedForTest {
                     List.of("$defs", "notReadReason"),
                     souther.compiler.partition.UndividedPosition.Reason.class),
             // And `no_lines_derived` likewise.
-            new Vocabulary("partition.boundariesMeasure.reason",
+            Vocabulary.of("partition.boundariesMeasure.reason",
                     List.of("$defs", "partition", "properties", "boundariesMeasure", "properties",
                             "reason"),
                     Set.of("no_lines_derived"),
-                    souther.compiler.query.BoundaryDerivation.NoSubject.class,
-                    souther.compiler.query.BoundaryDerivation.TheReadingDidNotRunOut.class,
-                    souther.compiler.query.BoundaryDerivation.NoRuleDrawsALine.class),
-            new Vocabulary("partition.axes[].reason",
+                    souther.compiler.query.BoundaryDerivation.class),
+            Vocabulary.of("partition.axes[].reason",
                     List.of("$defs", "partition", "properties", "axes", "items", "properties",
                             "reason"),
-                    PartitionEvidence.AxisCoverage.NoRows.class, souther.compiler.query.NothingWasAsked.class),
+                    PartitionEvidence.AxisCoverage.class,
+                    souther.compiler.query.NothingWasAsked.class),
             new Vocabulary("partition.axes[].unprovenClaims[].why",
                     List.of("$defs", "partition", "properties", "axes", "items", "properties",
                             "unprovenClaims", "items", "properties", "why"),

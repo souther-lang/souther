@@ -263,8 +263,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // The findings `--strict` exits on come from these same rows, so the exit code and what is
         // printed agree. This walked the sources itself and built the second of those two readings
         // (issue #996).
-        Map<String, Adequacy.RowReading> readings =
-                compilation.db().ask(new Adequacy.Rows(name)).value();
+        //
+        // Held to answering, unlike the measures below. A module got this far because its shapes
+        // are prepared, which is the one thing the reading needs to answer for every behavior of
+        // it — so an absence here is this report and that query disagreeing about what a module is,
+        // and there is no reading of it that is not a guess.
+        Map<String, Adequacy.RowReading> readings = java.util.Objects.requireNonNull(
+                compilation.db().ask(new Adequacy.Rows(name)).value(),
+                () -> "the rows of `" + name + "` were not read for or against");
         Map<String, Adequacy.SignatureEvidence> signatures =
                 compilation.db().ask(new Adequacy.Witnesses(name)).value();
         Map<String, PartitionEvidence> partitions =
@@ -281,10 +287,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 compilation.db().ask(new Adequacy.Findings(name)).value();
         List<BehaviorReport> behaviors = new ArrayList<>();
         for (Hir.BehaviorDef behavior : module.behaviors()) {
-            // Null where the compile did not get far enough for the rows to be asked about, which
-            // is not a reading that found none.
-            Adequacy.RowReading reading = readings == null ? Adequacy.RowReading.NOT_ASKED
-                    : readings.getOrDefault(behavior.name(), Adequacy.RowReading.NONE);
+            // Asked of the answer, and not chosen between its states from what the answer did not
+            // say. `NOT_ASKED` and `NONE` are both things the reading says — a build that reads no
+            // rows, and a reading that finished and found none — so picking one from an absent key
+            // is a reader deciding what the producer answered (issue #996).
+            Adequacy.RowReading reading = Adequacy.Rows.readingFor(readings, behavior.name());
             // Anything larger than a behavior holds this one: a source that could not be evaluated is
             Adequacy.SignatureEvidence signature =
                     signatures == null ? null : signatures.get(behavior.name());

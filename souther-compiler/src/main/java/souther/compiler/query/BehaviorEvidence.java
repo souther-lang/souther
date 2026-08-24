@@ -38,24 +38,48 @@ public record BehaviorEvidence(Adequacy.RowReading reading,
     }
 
     /**
+     * The measures this behavior is made of, under the names a reader knows them by.
+     *
+     * <p>The list, held once. Whoever wants the parts of a behavior asks here — the union below,
+     * and the checks that hold a rule over each of them — so a measure added is a field and an entry
+     * beside it rather than an entry in every place that walks them. That is the whole of what
+     * issue #996 was: a list of three written where the document is assembled, and a fourth measure
+     * that reached nobody through it. Its own tests then walked lists of their own and were short of
+     * the same measure, which is the same defect in the place that was supposed to catch it.
+     *
+     * <p>A part is null where the compile did not get far enough to be asked, and is here as one:
+     * what a walker does about that is its own business, and leaving it out would be this deciding
+     * that an absent measure is no part of a behavior.
+     */
+    public java.util.Map<String, Measure<?>> parts() {
+        java.util.Map<String, Measure<?>> parts = new java.util.LinkedHashMap<>();
+        parts.put("reading", reading.measured());
+        parts.put("signature", signature == null ? null : signature.counted());
+        parts.put("partition", partition == null ? null : partition.partitioned());
+        parts.put("border", partition == null ? null : partition.bounded());
+        parts.put("branch", branch == null ? null : branch.measured());
+        return java.util.Collections.unmodifiableMap(parts);
+    }
+
+    /**
      * What this behavior's measures went without, all of them.
      *
      * <p>Asked of the parts, and each of those answers for its own. Nothing here reads the shape of
      * what came back: a measure nobody asked for is not a degradation and neither is one a behavior
      * has nothing to answer, so neither is in this — which is the measurement's own answer rather
      * than a question put to the field's name.
+     *
+     * <p>The pair space and each position's own reading are under {@code partition}, which answers
+     * for them: a whole holds what its parts went without, at every level.
      */
     public WeakeningSet weakening() {
-        WeakeningSet out = reading.measured().weakening();
-        if (signature != null) {
-            out = out.union(signature.weakening());
+        WeakeningSet out = WeakeningSet.none();
+        for (Measure<?> part : parts().values()) {
+            if (part != null) {
+                out = out.union(part.weakening());
+            }
         }
-        if (partition != null) {
-            out = out.union(partition.weakening());
-        }
-        if (branch != null) {
-            out = out.union(branch.measured().weakening());
-        }
-        return out;
+        // The partition answers for the measures under it, which `parts` names two of.
+        return partition == null ? out : out.union(partition.weakening());
     }
 }

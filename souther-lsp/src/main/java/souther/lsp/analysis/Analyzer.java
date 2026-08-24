@@ -538,10 +538,14 @@ public final class Analyzer {
         // evaluated drew the same lens as one nobody has exampled — and drew none (issue #996).
         Map<String, Adequacy.RowReading> readings =
                 compilation.db().ask(new Adequacy.Rows(module)).value();
-        Adequacy.RowReading reading = readings == null ? Adequacy.RowReading.NOT_ASKED
-                : readings.getOrDefault(behavior, Adequacy.RowReading.NONE);
+        if (readings == null) {
+            // The compile did not get as far as the shapes, so there is nothing to draw a lens
+            // from. Not a reading that found no rows, which is what an editor would show as one.
+            return null;
+        }
         List<souther.compiler.observe.RowOutcome> read =
-                reading.measured().made().map(Adequacy.Observed::rows).orElse(null);
+                Adequacy.Rows.readingFor(readings, behavior).measured().made()
+                        .map(Adequacy.Observed::rows).orElse(null);
         if (read == null || read.isEmpty()) {
             // No numbers to show: either nobody has written a row here, or nothing read the ones
             // that are. A lens saying `0 rows` would be this deciding which of those it was.

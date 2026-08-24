@@ -188,8 +188,9 @@
         "status": { "$ref": "#/$defs/status" },
         "weakening": { "$ref": "#/$defs/weakening" },
         "reason": {
-          "description": "Why there is no number, present exactly where `status` is `unavailable`. The first two are a behavior with no arm to measure at all rather than arms nothing measured, and no row would give it one: `no_body` is a `>->` composition or a behavior with no `let`, and `no_arm_obligations` is a body that owes no arm — one that forks nowhere a row can be in or out of, or whose every fork the model's own rules prove nothing arrives at. The rest are a behavior that does owe arms: `not_asked` is a build that did not ask for them; `unreadable` is a run whose instrumentation could not be tied back to the body; `no_rows` is a behavior no row names.",
-          "enum": ["no_body", "no_arm_obligations", "not_asked", "unreadable", "no_rows"]
+          "description": "Why there is no number, present exactly where `status` is `unavailable`. The first two are a behavior with no arm to measure at all rather than arms nothing measured, and no row would give it one: `no_body` is a `>->` composition or a behavior with no `let`, and `no_arm_obligations` is a body that owes no arm — one that forks nowhere a row can be in or out of, or whose every fork the model's own rules prove nothing arrives at. Both are claims about what the model says. The rest are a behavior that does owe arms: `not_asked` is a build that did not ask for them; `unreadable` is a run whose instrumentation could not be tied back to the body; `no_rows` is a behavior no row names; `bodies_not_elaborated` is the model saying a body is written here and nothing having made it, so what the behavior owes was not read — named for the absence rather than for any of the things that stop a module being elaborated, which nothing here can tell apart. It is what `no_body` used to be answered with, and the two are a claim about the model and a claim about this compile.",
+          "enum": ["no_body", "no_arm_obligations", "not_asked", "unreadable", "no_rows",
+                   "bodies_not_elaborated"]
         },
         "arms": { "type": "integer", "minimum": 0 },
         "covered": { "type": "integer", "minimum": 0 },

@@ -72,6 +72,29 @@ class WhatARowCameToIsReadInOnePlaceTest {
     }
 
     /**
+     * One method reads what a module's sources saw, and it is the one the answer is made in.
+     *
+     * <p>{@code rowsOf} gathers the rows and the reasons behind them. Its callers each decided for
+     * themselves what to do where the build reads no rows — the same `level → nothing was asked`
+     * reading, written five times — so what the answer says about a level and what a measure made
+     * of it were two statements of one thing. The answer says it now, and the gathering is reached
+     * only through the answer (issue #996).
+     */
+    @Test
+    void whatTheSourcesSawIsGatheredWhereTheAnswerIsMade() throws IOException {
+        Set<String> gathering = new LinkedHashSet<>();
+        for (Compiled.Site site : Compiled.sites()) {
+            if (site.member().equals("rowsOf")
+                    && !site.at().startsWith("souther.compiler.query.Adequacy$Rows#compute")) {
+                gathering.add(site.at());
+            }
+        }
+        assertEquals(Set.of(), gathering,
+                "a caller reached past `Adequacy.Rows` for the gathering under it, which is where"
+                        + " what a level asked for stops being one answer");
+    }
+
+    /**
      * Nothing outside the query layer gathers the rows out of the sources.
      *
      * <p>{@code Output.Examples} is what one source's evaluation left. Which rows a behavior has is

@@ -125,7 +125,7 @@ final class Coverages {
                                 PathReachability.Answers arrives,
                                 souther.compiler.check.StatedContract stated,
                                 souther.compiler.partition.AdequacyPolicy.OfTheMeasures budget) {
-        List<RowOutcome> rows = observed.rows();
+        List<RowOutcome> rows = observed.rowsSeen();
         List<String> parameters = behavior.params().stream().map(Hir.Param::name).toList();
         // What a row's values are, where they sit and what they are written as, read together:
         // a field under a name is reached by taking the name off, and a walk given the paths
@@ -650,7 +650,7 @@ final class Coverages {
                 case Demand.NotOwed not -> new ItemAssessment.NotOwed(not.reason());
                 case Demand.Owed owed -> {
                     Measurement<ItemAssessment.Coverage> coverage = absent != null ? absent
-                            : verdictOf(shape.met(owed.criterion(), observed.rows()), guard,
+                            : verdictOf(shape.met(owed.criterion(), observed.rowsSeen()), guard,
                                     border, observed);
                     ItemAssessment.Attempt attempt = whereOneIsWorthBuilding(coverage,
                             () -> shape.search(owed.criterion(), border.label(role)));
@@ -1053,7 +1053,7 @@ final class Coverages {
     private static Measurement<ItemAssessment.Coverage> verdictOf(
             Met met, boolean guard, souther.compiler.partition.Border border,
             souther.compiler.query.Adequacy.RowReading observed) {
-        List<RowOutcome> rows = observed.rows();
+        List<RowOutcome> rows = observed.rowsSeen();
         if (met == Met.YES) {
             // Found is found: a row settles this whatever else went unread, so nothing weakens it.
             return new Measurement.Complete<>(new ItemAssessment.Coverage.Hit());
@@ -1191,7 +1191,7 @@ final class Coverages {
         if (nobodyAsked != null) {
             return nobodyAsked;
         }
-        List<RowOutcome> rows = observed.rows();
+        List<RowOutcome> rows = observed.rowsSeen();
         boolean someRowsUnseen = observed.someRowsUnseen();
         // Nothing read is not the same as nothing written. A source that could not be evaluated may
         // hold the row that is at this line, so the question is undecided rather than unasked, and
