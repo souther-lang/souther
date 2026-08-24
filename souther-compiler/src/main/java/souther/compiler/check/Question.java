@@ -50,7 +50,8 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return Combinators.HANDS_ITS_CLOSURE_NOTHING;
+            return souther.compiler.semantics.OperationFacts.saysNothingOf(
+                    souther.compiler.semantics.OperationSubject.COMBINATOR);
         }
     },
 
@@ -166,7 +167,8 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return DischargeRules.NOTHING_KEPT;
+            return souther.compiler.semantics.OperationFacts.saysNothingOf(
+                    souther.compiler.semantics.OperationSubject.BUILT);
         }
     },
 
@@ -192,7 +194,8 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return DischargeRules.NOTHING_CARRIED;
+            return souther.compiler.semantics.OperationFacts.saysNothingOf(
+                    souther.compiler.semantics.OperationSubject.PREDICATE_CARRY);
         }
     },
 
@@ -218,7 +221,8 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return DischargeRules.NOT_AN_EMPTINESS_CHECK;
+            return souther.compiler.semantics.OperationFacts.saysNothingOf(
+                    souther.compiler.semantics.OperationSubject.EMPTINESS);
         }
     },
 
@@ -246,7 +250,8 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return DischargeRules.NOT_A_QUANTIFIER;
+            return souther.compiler.semantics.OperationFacts.saysNothingOf(
+                    souther.compiler.semantics.OperationSubject.QUANTIFICATION);
         }
     },
 
@@ -275,7 +280,8 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return DischargeRules.NOT_STATED_OVER_A_PROJECTION;
+            return souther.compiler.semantics.OperationFacts.saysNothingOf(
+                    souther.compiler.semantics.OperationSubject.PROJECTION);
         }
     },
 
@@ -299,7 +305,8 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return DischargeRules.NOT_A_SIZE;
+            return souther.compiler.semantics.OperationFacts.saysNothingOf(
+                    souther.compiler.semantics.OperationSubject.SIZE);
         }
     },
 
@@ -328,7 +335,8 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return DischargeRules.DECIDES_NO_ORDER;
+            return souther.compiler.semantics.OperationFacts.saysNothingOf(
+                    souther.compiler.semantics.OperationSubject.ORDER);
         }
     },
 
@@ -356,7 +364,8 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return DischargeRules.BOUNDS_NOTHING;
+            return souther.compiler.semantics.OperationFacts.saysNothingOf(
+                    souther.compiler.semantics.OperationSubject.BOUNDS);
         }
     },
 
@@ -386,7 +395,8 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return DischargeRules.SHIFTS_BY_NOTHING_MEASURABLE;
+            return souther.compiler.semantics.OperationFacts.saysNothingOf(
+                    souther.compiler.semantics.OperationSubject.MEASURE);
         }
     },
 
@@ -414,7 +424,8 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return DischargeRules.CHOOSES_NOTHING;
+            return souther.compiler.semantics.OperationFacts.saysNothingOf(
+                    souther.compiler.semantics.OperationSubject.CHOICE);
         }
     },
 
@@ -442,7 +453,8 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return DischargeRules.ANSWERS_NO_ARGUMENT_OF_ITS_OWN;
+            return souther.compiler.semantics.OperationFacts.saysNothingOf(
+                    souther.compiler.semantics.OperationSubject.FORM);
         }
     },
 
@@ -479,7 +491,8 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return DischargeRules.COMPUTES_NO_ARITHMETIC_OF_ITS_OWN;
+            return souther.compiler.semantics.OperationFacts.saysNothingOf(
+                    souther.compiler.semantics.OperationSubject.NUMERIC_RESULT);
         }
     };
 

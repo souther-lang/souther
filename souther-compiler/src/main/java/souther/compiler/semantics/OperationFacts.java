@@ -56,7 +56,10 @@ public final class OperationFacts {
      * beside it would be a kind nothing validates until someone remembers — and the arrangement is
      * meant to make remembering unnecessary.
      */
-    private static final List<Declared> DECLARED = List.of(
+    private static final List<Declared> DECLARED = declared();
+
+    private static List<Declared> declared() {
+        List<Declared> out = new ArrayList<>(List.of(
             about("Decimal", "fromInt", new OperationFact.AnswersItsArgument(at(0))),
 
             // What holds of a result wherever the call is written. Each is a fact about the
@@ -206,7 +209,101 @@ public final class OperationFacts {
             about("Decimal", "clamp", answers(at(1), stands(at(2), Rel.GE, at(0)),
                     stands(at(2), Rel.GT, at(1)))),
             about("Decimal", "clamp", answers(at(2), stands(at(2), Rel.GE, at(0)),
-                    stands(at(2), Rel.LE, at(1)))));
+                    stands(at(2), Rel.LE, at(1))))));
+
+        // What a construction keeps of what it read, where the answer is nothing. Each group is
+            // a reason about what a shape can say, not about the operation being uninteresting.
+            //
+            // They answer something other than what they read. A map's keys and its entry pairs are
+            // not its values, `fromList` takes the values out of pairs, `groupBy` answers lists of
+            // the elements rather than the elements, `concat` reads the lists inside its argument,
+            // `zipShortest` pairs two lists, and `flatMap` makes any number of elements from each.
+            //
+            // They put in what the container they read did not hold. Nothing that held of every
+            // element still does. How many there are is said instead by the bound on the result.
+            //
+            // They answer the same elements in a container of another kind. That is true and
+            // unsayable: every statement names the kind it is about, so nothing said of a list is a
+            // statement about a set, and a rule between them would carry nothing.
+        out.addAll(saysNothing(OperationSubject.BUILT, "Map.keys", "Map.toList", "Map.fromList",
+                    "List.groupBy", "List.concat", "List.zipShortest", "List.flatMap",
+                    "Map.insert", "Set.insert", "Map.union", "Set.union", "List.append",
+                    "Map.updateOrInsert", "Map.values", "Set.toList", "Set.fromList",
+                    "List.indexBy"));
+
+            // A predicate over a string states something of the characters it holds in the order it
+            // holds them, and what would carry such a statement is a construction of a container
+            // from a container, which a string is not one of. An emptiness check is carried by what
+            // its size does and not as a property of elements.
+        out.addAll(saysNothing(OperationSubject.PREDICATE_CARRY, "String.contains", "String.startsWith",
+                    "String.endsWith", "String.matches", "List.isEmpty", "Set.isEmpty",
+                    "Map.isEmpty", "String.isEmpty"));
+
+            // `List.any` states its predicate of some element and not of every one.
+        out.addAll(saysNothing(OperationSubject.QUANTIFICATION, "List.any"));
+
+            // Their result is not bounded by their arguments at all. The arithmetic and its
+            // function forms answer a number that may be anywhere; a comparison answers a sign,
+            // which is what the order it decides says; a choice answers one of two values, and what
+            // that bounds follows from the case it is in.
+        out.addAll(saysNothing(OperationSubject.BOUNDS, "Int.add", "Int.subtract", "Int.multiply",
+                    "Decimal.add", "Decimal.subtract", "Decimal.multiply", "Int.compare",
+                    "Decimal.compare", "Int.min", "Int.max", "Int.clamp", "Decimal.min",
+                    "Decimal.max", "Decimal.clamp", "Decimal.fromInt", "Decimal.round"));
+
+            // Months and years hold different numbers of days, so neither states a count of the one
+            // measure a pair of dates has.
+        out.addAll(saysNothing(OperationSubject.MEASURE, "Date.addMonths", "Date.addYears"));
+
+            // They compute a new number rather than answering one they were given: what `a + b`
+            // answers is neither `a` nor `b`, `compare` answers a sign, `floorMod` a remainder,
+            // `abs` a distance, `toInt` a whole number, `round` a value at another scale.
+            // `Decimal.fromInt` answers the number it was given unconditionally, which is a
+            // statement of its own rather than a case.
+        out.addAll(saysNothing(OperationSubject.CHOICE, "Int.add", "Int.subtract", "Int.multiply",
+                    "Decimal.add", "Decimal.subtract", "Decimal.multiply", "Int.compare",
+                    "Decimal.compare", "Int.floorMod", "Int.abs", "Decimal.abs", "Decimal.toInt",
+                    "Decimal.round", "Decimal.fromInt"));
+
+            // They answer one of the values they were given, which is which case they are in and
+            // not arithmetic of their own.
+        out.addAll(saysNothing(OperationSubject.NUMERIC_RESULT, "Int.min", "Int.max", "Int.clamp",
+                    "Int.floorMod", "Int.compare", "Decimal.min", "Decimal.max", "Decimal.clamp"));
+
+            // Arithmetic and a choice between two values are not orders at all: what
+            // `Int.subtract` answers has the sign of one and says how far apart they are as well,
+            // and `min` answers one of the two rather than anything about the pair.
+            // `DateTime.minutesBetween` counts whole minutes, so a zero says the two are less than
+            // a minute apart rather than that they are equal, and a non-negative count does not say
+            // the second is not the earlier.
+        out.addAll(saysNothing(OperationSubject.ORDER, "Int.add", "Int.subtract", "Int.multiply",
+                    "Int.min", "Int.max", "Int.floorMod", "DateTime.minutesBetween"));
+
+        // They answer no number they were given. Arithmetic computes a new one from its operands;
+        // `compare` answers a sign, `floorMod` a remainder, `abs` a distance with the sign dropped,
+        // `toInt` a whole number, `round` a value at another scale — what such a result is bounded
+        // by is a different statement from its being a value that was already there; and `min`,
+        // `max` and `clamp` answer one of their arguments, which one depending on the arguments,
+        // and that is what their cases say.
+        out.addAll(saysNothing(OperationSubject.FORM, "Int.add", "Int.subtract", "Int.multiply",
+                "Decimal.add", "Decimal.subtract", "Decimal.multiply", "Int.compare",
+                "Decimal.compare", "Int.floorMod", "Int.abs", "Decimal.abs", "Decimal.toInt",
+                "Decimal.round", "Int.min", "Int.max", "Int.clamp", "Decimal.min", "Decimal.max",
+                "Decimal.clamp"));
+        return List.copyOf(out);
+    }
+
+    /** That there is nothing to say of each of {@code operations} under {@code subject}. */
+    private static List<Declared> saysNothing(OperationSubject subject, String... operations) {
+        List<Declared> out = new ArrayList<>(operations.length);
+        for (String qualified : operations) {
+            int dot = qualified.indexOf('.');
+            out.add(new Declared(
+                    new ValueName.Stdlib(qualified.substring(0, dot), qualified.substring(dot + 1)),
+                    new OperationFact.SaysNothingOf(subject)));
+        }
+        return out;
+    }
 
     private static OperationFact computes(Arithmetic arithmetic) {
         return new OperationFact.ComputesANumber(new NumericResult(
@@ -410,6 +507,11 @@ public final class OperationFacts {
         return Index.CASES.keySet();
     }
 
+    /** The operations declared to say nothing under {@code subject}. */
+    public static java.util.Set<ValueName> saysNothingOf(OperationSubject subject) {
+        return Index.SILENCES.getOrDefault(subject, java.util.Set.of());
+    }
+
     /** The indexes, read off the declarations on the first ask. */
     private static final class Index {
 
@@ -443,6 +545,21 @@ public final class OperationFacts {
         private static final java.util.Set<ValueName> QUANTIFIERS = java.util.Set.copyOf(
                 index(OperationFact.StatesItsPredicateOfEveryElement.class,
                         fact -> fact).keySet());
+
+        /** The silences, by what they are about. */
+        private static final Map<OperationSubject, java.util.Set<ValueName>> SILENCES = silences();
+
+        private static Map<OperationSubject, java.util.Set<ValueName>> silences() {
+            Map<OperationSubject, java.util.Set<ValueName>> out = new LinkedHashMap<>();
+            for (Declared each : DECLARED) {
+                if (each.fact() instanceof OperationFact.SaysNothingOf said) {
+                    out.computeIfAbsent(said.subject(), subject -> new java.util.LinkedHashSet<>())
+                            .add(each.operation());
+                }
+            }
+            out.replaceAll((subject, held) -> java.util.Set.copyOf(held));
+            return Map.copyOf(out);
+        }
 
         private static final Map<ValueName, NumericResult> ARITHMETIC =
                 index(OperationFact.ComputesANumber.class, OperationFact.ComputesANumber::result);

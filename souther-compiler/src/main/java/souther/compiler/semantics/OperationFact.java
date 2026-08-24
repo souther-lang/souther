@@ -212,6 +212,26 @@ public sealed interface OperationFact {
         }
     }
 
+    /**
+     * There is nothing to say of this operation under {@code subject}.
+     *
+     * <p>A decision and not a gap. An operation the library declares is in range of whatever its
+     * signature puts it in range of, and a silence there says two things at once — that nothing is
+     * true of it, and that nobody looked. {@code List.distinctBy} was credited by neither check for
+     * exactly that reason, with nothing said about the missing row.
+     *
+     * <p>So the absence is declared beside the presences, and the reason is written where it is
+     * declared. What the reason is about is the operation: a map's keys are not its values, a
+     * whole-minute count between two moments does not state their order, what {@code a + b} answers
+     * may be anywhere.
+     */
+    record SaysNothingOf(OperationSubject subject) implements OperationFact {
+
+        public SaysNothingOf {
+            java.util.Objects.requireNonNull(subject, "a silence is about something");
+        }
+    }
+
     /** A relation between two arguments: {@code left rel right}. What a case is reached under,
      *  written in the arguments the operation was given and in nothing else. */
     record ArgumentsStand(ArgumentRef left, souther.compiler.numeric.NumericDomain.Rel rel,

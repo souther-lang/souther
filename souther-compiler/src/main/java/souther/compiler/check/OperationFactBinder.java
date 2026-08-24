@@ -85,8 +85,13 @@ final class OperationFactBinder {
                 // What holds them to the library is the question they answer for
                 // ({@link Question}), which asks of the declaration whether the operation is one
                 // the question is even about.
+                // Neither names an argument, and a silence names none by definition. What holds
+                // these to the library is the range of the subject they are about
+                // ({@link Question}), which asks of the declaration whether the operation is one
+                // the subject is even about.
                 case OperationFact.StatesItsPredicateOfEveryElement _,
-                     OperationFact.MeansTheSameAsASizeOfNought _ -> { }
+                     OperationFact.MeansTheSameAsASizeOfNought _,
+                     OperationFact.SaysNothingOf _ -> { }
                 case OperationFact.ComputesANumber computes ->
                         DischargeRules.holdNumericResult(each.operation(), computes.result());
                 case OperationFact.IsDefinedByCases defined ->

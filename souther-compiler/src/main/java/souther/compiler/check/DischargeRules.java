@@ -77,39 +77,10 @@ final class DischargeRules {
         return new ArgumentRef.At(position);
     }
 
-
     /** The container {@code call} built its result from, and what the building kept of it. */
     record Source(Core container, ElementShape shape, Cardinality size) {}
 
     // Declared with the rest (OperationFact.ResultIsNoSmallerThan), one fact per container.
-
-    /**
-     * The constructions this says nothing of, in three groups. Each reason is about what a shape can
-     * say, not about the operation being uninteresting.
-     *
-     * <p>What they answer holds something other than what they read. A map's keys and its entry
-     * pairs are not its values, {@code fromList} takes the values out of pairs, {@code groupBy}
-     * answers lists of the elements rather than the elements, {@code concat} reads the lists inside
-     * its argument, {@code zipShortest} pairs two lists, and {@code flatMap} makes any number of
-     * elements from each — which is neither the elements nor a count.
-     *
-     * <p>They put in what the container they read did not hold. Nothing that held of every element
-     * still does, which is what a shape would have had to say. How many there are is said instead by
-     * {@link souther.compiler.semantics.OperationFact.ResultIsNoSmallerThan}, which those of them whose result is never smaller than a source it
-     * names are in.
-     *
-     * <p>They answer the same elements in a container of another kind. That is true and unsayable:
-     * every statement the check makes names the kind it is about — {@code List.length} and
-     * {@code List.all}, or {@code Set.size} and {@code Set.contains} — so nothing said of the one is
-     * a statement about the other, and a rule between them would carry nothing. A statement that
-     * spans kinds is what would have to exist first.
-     */
-    static final Set<ValueName> NOTHING_KEPT = Set.of(
-            op("Map", "keys"), op("Map", "toList"), op("Map", "fromList"), op("List", "groupBy"),
-            op("List", "concat"), op("List", "zipShortest"), op("List", "flatMap"),
-            op("Map", "insert"), op("Set", "insert"), op("Map", "union"), op("Set", "union"),
-            op("List", "append"), op("Map", "updateOrInsert"),
-            op("Map", "values"), op("Set", "toList"), op("Set", "fromList"), op("List", "indexBy"));
 
     // Declared with the rest (OperationFact.ReadsItsContainer).
 
@@ -144,159 +115,6 @@ final class DischargeRules {
     // Declared with the rest (OperationFact.StatesItsPredicateOfEveryElement).
 
     // Declared with the rest (OperationFact.MeansTheSameAsASizeOfNought).
-
-    /** The predicates whose statement this carries nowhere. A predicate over a string states
-     * something of the characters it holds in the order it holds them, and what would carry such a
-     * statement is a construction of a container from a container — which a string is not one of,
-     * its length being all this names of it. An emptiness check states a size, which travels as a
-     * size does ({@link souther.compiler.semantics.OperationFact.MeansTheSameAsASizeOfNought}) and not as a property of elements. */
-    static final Set<ValueName> NOTHING_CARRIED = Set.of(
-            op("String", "contains"), op("String", "startsWith"), op("String", "endsWith"),
-            op("String", "matches"),
-            op("List", "isEmpty"), op("Set", "isEmpty"), op("Map", "isEmpty"), op("String", "isEmpty"));
-
-    /** The predicates of a single container that are not emptiness checks. The library has none:
-     * every one-argument predicate it declares over a container or a string is one, and one that was
-     * not would be named here with what it says instead. */
-    static final Set<ValueName> NOT_AN_EMPTINESS_CHECK = Set.of();
-
-    /** The predicates that apply a predicate to what a container holds without stating it of every
-     * element. {@code List.any} states it of some, so what it says of the container says nothing
-     * about the element a closure is handed. */
-    static final Set<ValueName> NOT_A_QUANTIFIER = Set.of(op("List", "any"));
-
-    /** The predicates that compute something other than a truth value from each element and are not
-     * stated over it. The library has none: {@code allDistinctBy} is the only such predicate and its
-     * projection is its closure's answer. */
-    static final Set<ValueName> NOT_STATED_OVER_A_PROJECTION = Set.of();
-
-    /** The numbers answered about a container that are not one of its sizes. The library has none:
-     * every {@code Int} it answers about a container is how many it holds. */
-    static final Set<ValueName> NOT_A_SIZE = Set.of();
-
-    /**
-     * The operations answering a number this bounds nothing of, in two groups.
-     *
-     * <p>Their result is not bounded by their arguments at all. The arithmetic and its function forms
-     * answer a number that may be anywhere, and what relates it to the operands is that it <em>is</em>
-     * the operands' arithmetic, which a term already reads ({@link #NUMERIC_RESULTS}). A comparison
-     * answers a sign, and what that sign says is the order it decides ({@link #ORDERS}) rather than a
-     * range it lies in.
-     *
-     * <p>Their result is one of the arguments, decided by the arguments. A bound on such a result is
-     * what {@link #CHOOSES} derives from the case it is in — stating it here as well would be one
-     * operation answering to two tables, and the two would come apart the day the library changes
-     * which argument it answers.
-     *
-     * <p>{@code Decimal.round} answers a value at another scale, which is a bound of a shape a row
-     * cannot state: how far it moved depends on the scale it was handed. {@code Decimal.fromInt}
-     * answers the number it was given, which {@link #ANSWERS_ITS_ARGUMENT} states as the stronger
-     * thing it is — the two values are one, not one within reach of the other.
-     */
-    static final Set<ValueName> BOUNDS_NOTHING = Set.of(
-            op("Int", "add"), op("Int", "subtract"), op("Int", "multiply"),
-            op("Decimal", "add"), op("Decimal", "subtract"), op("Decimal", "multiply"),
-            op("Int", "compare"), op("Decimal", "compare"),
-            op("Int", "min"), op("Int", "max"), op("Int", "clamp"),
-            op("Decimal", "min"), op("Decimal", "max"), op("Decimal", "clamp"),
-            op("Decimal", "fromInt"), op("Decimal", "round"));
-
-    /** The operations that move a value by an amount the measures this has cannot count. A month and
-     * a year are not a fixed number of days, so a date shifted by either stands at a distance no rule
-     * here can write. */
-    static final Set<ValueName> SHIFTS_BY_NOTHING_MEASURABLE = Set.of(
-            op("Date", "addMonths"), op("Date", "addYears"));
-
-    /**
-     * The operations answering a number that answer none of their arguments back, in three groups.
-     *
-     * <p>They compute a new number. The arithmetic and its function forms are this: what
-     * {@code a + b} answers is neither {@code a} nor {@code b}, whatever they are.
-     *
-     * <p>They answer something about the arguments. {@code compare} answers a sign, {@code floorMod}
-     * a remainder, {@code abs} a distance, {@code toInt} the whole number a value rounds to, and
-     * {@code round} a value at another scale — none of which is one of the values handed in, though
-     * each of the last four is one where the argument already had that shape. That the answer
-     * <em>can</em> be an argument is not what this asks: a case is one the operation is defined by,
-     * and reading a coincidence as a case would state a condition the definition does not have.
-     *
-     * <p>{@code Decimal.fromInt} answers the number it was given in another type, which
-     * {@link souther.compiler.semantics.OperationFact.AnswersItsArgument} states unconditionally. A
-     * case would put a condition on a statement that has none.
-     */
-    static final Set<ValueName> CHOOSES_NOTHING = Set.of(
-            op("Int", "add"), op("Int", "subtract"), op("Int", "multiply"),
-            op("Decimal", "add"), op("Decimal", "subtract"), op("Decimal", "multiply"),
-            op("Int", "compare"), op("Decimal", "compare"), op("Int", "floorMod"),
-            op("Int", "abs"), op("Decimal", "abs"), op("Decimal", "toInt"), op("Decimal", "round"),
-            op("Decimal", "fromInt"));
-
-
-    /**
-     * The operations answering a number from a number that answer none of them back, in three groups.
-     *
-     * <p>They compute a new number from their operands. The arithmetic and its function forms are
-     * this, and what they answer is already read as arithmetic over the operands themselves
-     * ({@link #NUMERIC_RESULTS}) rather than as one of them.
-     *
-     * <p>They answer something about the arguments rather than one of them: {@code compare} a sign,
-     * {@code floorMod} a remainder, {@code abs} a distance with the sign dropped, {@code toInt} the
-     * whole number a value rounds to, {@code round} a value at another scale. What such a result is
-     * bounded by is {@link #BOUNDS_ON_THE_RESULT}, which is a different statement from being a value
-     * that was already there.
-     *
-     * <p>They answer one of their arguments, and which one depends on the arguments. That is
-     * {@link #CHOOSES}, and a rule that dropped the condition would say {@code Int.min(a, b)} is
-     * {@code a}.
-     */
-    static final Set<ValueName> ANSWERS_NO_ARGUMENT_OF_ITS_OWN = Set.of(
-            op("Int", "add"), op("Int", "subtract"), op("Int", "multiply"),
-            op("Decimal", "add"), op("Decimal", "subtract"), op("Decimal", "multiply"),
-            op("Int", "compare"), op("Decimal", "compare"), op("Int", "floorMod"),
-            op("Int", "abs"), op("Decimal", "abs"), op("Decimal", "toInt"), op("Decimal", "round"),
-            op("Int", "min"), op("Int", "max"), op("Int", "clamp"),
-            op("Decimal", "min"), op("Decimal", "max"), op("Decimal", "clamp"));
-
-
-    /**
-     * The operations answering a number that compute no arithmetic of their own, in three groups.
-     *
-     * <p>They answer one of the values they were given. {@code min}, {@code max} and {@code clamp}
-     * are this, and which one they answer is {@link #CHOOSES}. Stating it here as well would be one
-     * operation answering to two tables.
-     *
-     * <p>They answer something about the arguments that is not arithmetic over them: {@code compare}
-     * answers a sign, which is the order it decides ({@link #ORDERS}). {@code Decimal.compare} is
-     * not here: it answers an {@code Int} from two {@code Decimal}s, so the number it answers is not
-     * the kind its arguments are and this is not asked of it.
-     *
-     * <p>{@code floorMod} answers a remainder and is here all the same. It is the remainder of a
-     * <em>floored</em> division, and the language writes no floored divide for its quotient to be
-     * read as — so what is known of it is the bound {@link #BOUNDS_ON_THE_RESULT} states, and
-     * relating it to its dividend is a rule nothing here has. Its truncating counterpart is
-     * {@code truncatingRemainder}, which is in the table above.
-     */
-    static final Set<ValueName> COMPUTES_NO_ARITHMETIC_OF_ITS_OWN = Set.of(
-            op("Int", "min"), op("Int", "max"), op("Int", "clamp"),
-            op("Int", "floorMod"), op("Int", "compare"),
-            op("Decimal", "min"), op("Decimal", "max"), op("Decimal", "clamp"));
-
-
-    /**
-     * The operations answering a number from two values of one type whose sign is not their order.
-     *
-     * <p>Arithmetic and a choice between two values are not orders at all: what {@code Int.subtract}
-     * answers has the sign of one and says how far apart they are as well, which is what a term
-     * already reads it as, and {@code min} answers one of the two rather than anything about the
-     * pair. {@code DateTime.minutesBetween} is the one that has to be told apart: it counts whole
-     * minutes, so a zero says the two are less than a minute apart rather than that they are equal,
-     * and a non-negative count does not say the second is not the earlier. Its strict signs do state
-     * the order, and a rule that holds for four of the six relations is not this one.
-     */
-    static final Set<ValueName> DECIDES_NO_ORDER = Set.of(
-            op("Int", "add"), op("Int", "subtract"), op("Int", "multiply"),
-            op("Int", "min"), op("Int", "max"), op("Int", "floorMod"),
-            op("DateTime", "minutesBetween"));
 
     /** Denial, which the analysis representation keeps as the call it is. */
     static final ValueName NOT = op("Bool", "not");
@@ -816,7 +634,6 @@ final class DischargeRules {
                     + " rather than where, so the two cannot come apart");
         }
     }
-
 
     /**
      * The container {@code call} built its result from, and where each element of what it answers
