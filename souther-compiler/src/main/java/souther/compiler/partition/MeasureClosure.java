@@ -171,7 +171,7 @@ public final class MeasureClosure {
                 border.add(gap);
                 unreached = true;
             }
-            if (axis.pending() instanceof StructuralInspection.Blocked blocked) {
+            if (axis.pending() instanceof StructuralInspection.Continuation.Blocked blocked) {
                 ClosureGap gap = new ClosureGap.PositionNotReachedInto(axis.id(), blocked.why());
                 partition.add(gap);
                 border.add(gap);

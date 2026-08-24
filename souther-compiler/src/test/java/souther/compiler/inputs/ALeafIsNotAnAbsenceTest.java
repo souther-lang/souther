@@ -22,11 +22,11 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Whether a position is made of positions, and what that answer does not say.
+ * Whether a position stands once what follows it has been read, and what that answer does not say.
  *
- * <p>The reading this protocol exists to stop is a leaf being read as a position the model does not
- * divide. Everything here is written round that: the answer for a {@code Sum} is a leaf, and a
- * {@code Sum} is exactly the position that does divide.
+ * <p>The reading this protocol exists to stop is a position that stands with nothing following it
+ * being read as a position the model does not divide. Everything here is written round that: a sum
+ * stands and continues into its cases, and a sum is exactly the position that does divide.
  */
 class ALeafIsNotAnAbsenceTest {
 
@@ -39,6 +39,9 @@ class ALeafIsNotAnAbsenceTest {
             data StageN = Stage
             data Cyclic = Cyclic
             data Slot = { hour: Int, room: String }
+            data Approved = { id: Int }
+            data Rejected = { why: String }
+            data Decision = Approved | Rejected
             """;
 
     private final Symbols symbols = Symbols.of(resolved());
@@ -49,7 +52,22 @@ class ALeafIsNotAnAbsenceTest {
     }
 
     private StructuralInspection under(Type type) {
-        return StructuralInspection.of(ReadablePosition.of(type, symbols).shape(), true);
+        return under(type, true);
+    }
+
+    private StructuralInspection under(Type type, boolean deeper) {
+        TypeView view = TypeView.of(type, symbols);
+        return StructuralInspection.of(ReadablePosition.of(view).shape(), deeper,
+                Distinctions.ofType(view, symbols));
+    }
+
+    private static StructuralInspection retained(StructuralInspection.Continuation continuation) {
+        return new StructuralInspection.Retained(continuation);
+    }
+
+    private StructuralInspection.Branch unitCase(String name) {
+        return new StructuralInspection.Branch(
+                new Refinement.SumCase(((Type.Ref) named(name)).name()), null);
     }
 
     private Type named(String name) {
@@ -64,40 +82,68 @@ class ALeafIsNotAnAbsenceTest {
      * it" would be wrong about the clearest case there is.
      */
     @Test
-    void aSumIsALeafAndASumIsWhatDivides() {
-        assertInstanceOf(StructuralInspection.Leaf.class, under(named("Stage")));
+    void aSumStandsAndASumIsWhatDivides() {
+        assertEquals(retained(new StructuralInspection.Continuation.Branches(
+                        List.of(unitCase("Prospecting"), unitCase("Won")))),
+                under(named("Stage")));
 
         assertFalse(Distinctions.ofType(TypeView.of(named("Stage"), symbols), symbols).isEmpty(),
-                "the same position divides three ways, which the leaf above did not deny");
+                "the same position divides two ways, which the answer above did not deny");
+    }
+
+    /**
+     * A branch of a sum exists whether or not anything stands under it.
+     *
+     * <p>Both of {@code Stage}'s cases are the whole of a value, so nothing stands under either —
+     * and both are branches all the same. Read as "no continuation, so no branch", the case would
+     * go from what a row is owed at the position.
+     */
+    @Test
+    void aUnitCaseIsABranchWithNothingUnderIt() {
+        StructuralInspection.Continuation.Branches branches =
+                assertInstanceOf(StructuralInspection.Continuation.Branches.class,
+                        assertInstanceOf(StructuralInspection.Retained.class,
+                                under(named("Stage"))).continuation());
+        assertEquals(2, branches.branches().size());
+        branches.branches().forEach(each -> assertEquals(null, each.under(),
+                () -> each.refinement() + " is the whole of a value and holds no position"));
+    }
+
+    /** And a case that carries a record continues into it, at the same position. */
+    @Test
+    void aCaseThatCarriesAValueContinuesIntoIt() {
+        StructuralInspection.Continuation.Branches branches =
+                assertInstanceOf(StructuralInspection.Continuation.Branches.class,
+                        assertInstanceOf(StructuralInspection.Retained.class,
+                                under(named("Decision"))).continuation());
+        assertEquals(List.of(named("Approved"), named("Rejected")),
+                branches.branches().stream().map(StructuralInspection.Branch::under).toList());
     }
 
     @Test
-    void aScalarAndAUnitAreLeavesToo() {
-        assertInstanceOf(StructuralInspection.Leaf.class, under(Type.INT));
-        assertInstanceOf(StructuralInspection.Leaf.class, under(named("Prospecting")));
-    }
-
-    /** A leaf carries nothing, so there is nothing in it for a reader to turn into a conclusion. */
-    @Test
-    void aLeafCarriesNoReason() {
-        assertEquals(new StructuralInspection.Leaf(), under(named("Stage")));
+    void aScalarAndAUnitStandWithNothingAfterThem() {
+        assertEquals(retained(new StructuralInspection.Continuation.None()), under(Type.INT));
+        assertEquals(retained(new StructuralInspection.Continuation.None()),
+                under(named("Prospecting")));
     }
 
     // --- what is made of positions ---------------------------------------------------------------
 
     @Test
     void aRecordIsItsFields() {
-        StructuralInspection.Children children =
-                assertInstanceOf(StructuralInspection.Children.class, under(named("Slot")));
-        assertEquals(java.util.Set.of("hour", "room"), children.under().keySet());
+        StructuralInspection.Decomposed decomposed =
+                assertInstanceOf(StructuralInspection.Decomposed.class, under(named("Slot")));
+        assertEquals(java.util.Set.of("hour", "room"), decomposed.under().keySet());
     }
 
     /** A record the walk may not go into is a reaching declined, not a record with nothing in it. */
     @Test
-    void aRecordTheWalkMayNotEnterIsBlockedRatherThanALeaf() {
-        StructuralInspection stopped = StructuralInspection.of(
-                ReadablePosition.of(named("Slot"), symbols).shape(), false);
-        assertEquals(new StructuralInspection.Blocked(new BlockReason.DepthLimit()), stopped);
+    void aRecordTheWalkMayNotEnterIsBlockedRatherThanEmpty() {
+        assertEquals(blocked(new BlockReason.DepthLimit()), under(named("Slot"), false));
+    }
+
+    private static StructuralInspection blocked(BlockReason.AboutThePosition why) {
+        return retained(new StructuralInspection.Continuation.Blocked(why));
     }
 
     // --- and what stops the derivation -------------------------------------------------------------
@@ -113,8 +159,9 @@ class ALeafIsNotAnAbsenceTest {
     @Test
     void aSequenceHoldsAPositionAndIsStillOne() {
         for (Type carrier : List.of(Type.list(named("Slot")), Type.set(named("Slot")))) {
-            assertEquals(new StructuralInspection.Inside(named("Slot")), under(carrier));
-            assertInstanceOf(StructuralInspection.Pending.class, under(carrier),
+            assertEquals(retained(new StructuralInspection.Continuation.Elements(named("Slot"))),
+                    under(carrier));
+            assertInstanceOf(StructuralInspection.Retained.class, under(carrier),
                     () -> "and is still to be answered for: " + carrier);
         }
     }
@@ -122,27 +169,24 @@ class ALeafIsNotAnAbsenceTest {
     /** And the walk stopping is the walk's own answer, said as the depth it is. */
     @Test
     void aSequenceTheWalkMayNotEnterIsStoppedByTheDepthAndNotByItsShape() {
-        StructuralInspection stopped = StructuralInspection.of(
-                ReadablePosition.of(Type.list(named("Slot")), symbols).shape(), false);
-        assertEquals(new StructuralInspection.Blocked(new BlockReason.DepthLimit()), stopped);
+        assertEquals(blocked(new BlockReason.DepthLimit()), under(Type.list(named("Slot")), false));
     }
 
     /** Each of the three is its own reaching, so implementing one does not read as all three. */
     @Test
     void theOtherTwoReachingsAreToldApartFromIt() {
-        assertEquals(new StructuralInspection.Blocked(new BlockReason.UnsupportedTraversal(
+        assertEquals(blocked(new BlockReason.UnsupportedTraversal(
                         BlockReason.Traversal.OPTIONAL_VALUE)),
                 under(Type.option(Type.INT)));
-        assertEquals(new StructuralInspection.Blocked(new BlockReason.UnsupportedTraversal(
+        assertEquals(blocked(new BlockReason.UnsupportedTraversal(
                         BlockReason.Traversal.MAPPING_CONTENT)),
                 under(Type.map(Type.STRING, Type.INT)));
     }
 
     /** A declaration reachable from itself: interpreted as far as it goes, which is not far enough. */
     @Test
-    void aTypeThisCouldNotInterpretIsBlockedRatherThanALeaf() {
-        assertEquals(new StructuralInspection.Blocked(new BlockReason.TypeUnresolved()),
-                under(named("Cyclic")));
+    void aTypeThisCouldNotInterpretIsBlockedRatherThanEmpty() {
+        assertEquals(blocked(new BlockReason.TypeUnresolved()), under(named("Cyclic")));
     }
 
     /** A name round a position changes neither what is under it nor whether anything is. */

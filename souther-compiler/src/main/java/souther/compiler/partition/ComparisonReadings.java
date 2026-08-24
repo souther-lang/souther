@@ -144,6 +144,17 @@ final class ComparisonReadings {
             // input walk has a position for one of them.
             case Core.Block step -> walk(step.body(), plan, reads, symbols, flow, assumed, live,
                     each && perElement(step, reads, symbols), out);
+            // And each arm under what the arm says the value it matched turned out to be. A name
+            // the arm binds is the scrutinee's position narrowed to that case, so a comparison
+            // written inside an arm draws its line on a position the reading of the input has —
+            // read without it, every rule an author writes inside a `match` was about nothing.
+            case Core.Match match -> {
+                walk(match.scrutinee(), plan, reads, symbols, flow, assumed, live, each, out);
+                for (Core.Case arm : match.cases()) {
+                    walk(arm.body(), plan, reads.insideArm(match, arm, symbols), symbols, flow,
+                            assumed, live, each, out);
+                }
+            }
             default -> Core.forEachChild(e, child ->
                     walk(child, plan, reads, symbols, flow, assumed, live, each, out));
         }

@@ -1,0 +1,164 @@
+package souther.compiler.partition;
+
+import org.junit.jupiter.api.Test;
+
+import souther.compiler.ast.Hir;
+import souther.compiler.check.Prepared;
+import souther.compiler.check.Sig;
+import souther.compiler.check.Symbols;
+import souther.compiler.inputs.Refinement;
+import souther.compiler.inputs.TermPath;
+import souther.compiler.observe.Classification;
+import souther.compiler.observe.ObservedValue;
+import souther.compiler.observe.RowOutcome;
+import souther.compiler.query.Bodies;
+import souther.compiler.query.Compilation;
+import souther.compiler.query.Output;
+import souther.compiler.query.ReadAs;
+import souther.compiler.query.Scopes;
+import souther.compiler.query.Shapes;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
+
+import java.util.List;
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * A row whose value is another case stands nowhere below the case it is not.
+ *
+ * <p>Three answers and not two. A walk that could not be taken is the path and the declaration
+ * disagreeing and says nothing about the row; a walk that arrived and found no value there is a row
+ * that was read and does not reach the position. A refinement gives the second its ordinary case:
+ * the row wrote a {@code FeedQuery}, so {@code query@GlobalQuery.tag} is a position it puts nothing
+ * at — the same answer a row writing the empty list gives at an element, and not the answer a row
+ * nothing could read gives.
+ */
+class ARowAtAnotherCaseStandsNowhereBelowItTest {
+
+    private static final String MODEL = """
+            module example.q
+
+            data Tag = String
+            data Limit = Int
+                invariant value >= 1
+
+            data GlobalQuery = { limit: Limit, tag: Tag? }
+            data FeedQuery = { limit: Limit }
+            data ArticleQuery = GlobalQuery | FeedQuery
+            data Page = { n: Int }
+
+            behavior read : (query: ArticleQuery) -> Page
+                constructs Page
+
+            let read (query) = Page { n = 1 }
+
+            example read
+                | (GlobalQuery { limit = Limit(1), tag = Tag("x") }) -> Page
+                | (FeedQuery { limit = Limit(2) }) -> Page
+            """;
+
+    private record Read(BehaviorInputs inputs, List<Axis> axes, List<RowOutcome> rows) {}
+
+    private static Read read() {
+        Compilation compilation = Compilation.ofSource(MODEL, "Main");
+        compilation.answerEverything();
+        String module = compilation.modules().get(0);
+        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
+        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
+        assertNotNull(compilation.db().ask(new Bodies.Checked(module)).value(),
+                "the model under test compiles");
+        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
+                .filter(b -> b.name().equals("read")).findFirst().orElseThrow();
+        Output.Examples.Of observed = compilation.db()
+                .ask(Output.Examples.asked(compilation.db(), module,
+                        compilation.sourceIds().get(0))).value();
+        assertNotNull(observed);
+        Partitions.Partitioning partitioning = Partitions.of(spec.name(),
+                souther.compiler.inputs.InputDomain.of(spec, sigs.get("read"), symbols,
+                        ReadAs.THE_COMPILATION_DOES),
+                symbols, ReadAs.THE_COMPILATION_DOES);
+        return new Read(new BehaviorInputs(spec.params().stream().map(Hir.Param::name).toList(),
+                sigs.get("read").inputTypes(), symbols, ReadAs.THE_COMPILATION_DOES),
+                partitioning.axes(), observed.rows());
+    }
+
+    private static TermPath under(String module, String leaf, String field) {
+        return TermPath.of("query")
+                .refine(new Refinement.SumCase(TypeSymbols.declared(new TypeKey(module, leaf))))
+                .then(field);
+    }
+
+    /** The row that wrote the case stands at the positions under it. */
+    @Test
+    void aRowAtTheCaseStandsAtItsFields() {
+        Read read = read();
+        List<ObservedValue> values = read.inputs().valuesAt(read.rows().get(0).inputs(),
+                under("example.q", "GlobalQuery", "tag"));
+        assertNotNull(values, "the walk was taken");
+        assertEquals(1, values.size(), values.toString());
+    }
+
+    /**
+     * And the row that wrote the other case stands at none of them.
+     *
+     * <p>Read, and in no class there. Answered as a value nothing could read, every row of every
+     * behavior taking a sum would report the measurement as short of what it plainly settles.
+     */
+    @Test
+    void aRowAtAnotherCaseIsReadAndStandsNowhere() {
+        Read read = read();
+        List<ObservedValue> values = read.inputs().valuesAt(read.rows().get(1).inputs(),
+                under("example.q", "GlobalQuery", "tag"));
+        assertNotNull(values, "the walk was taken: nothing went wrong with the row");
+        assertEquals(List.of(), values, "and the row put nothing at a position it is not at");
+    }
+
+    /** Which is a step taken and not a step refused: the path and the declaration agree. */
+    @Test
+    void thePathAndTheDeclarationAgreeAtBothRows() {
+        Read read = read();
+        for (RowOutcome row : read.rows()) {
+            assertNotNull(read.inputs().occurrencesAt(row.inputs(),
+                            under("example.q", "FeedQuery", "limit")),
+                    () -> "the walk was taken for " + row.inputs());
+        }
+    }
+
+    /**
+     * A class reads the row that is there and says nothing of the row that is not.
+     *
+     * <p>The whole of what the two answers are for. A position under a case is measured by the rows
+     * at that case, and a row at another case is neither evidence for it nor a hole in the
+     * measurement.
+     */
+    @Test
+    void theClassesSeeOnlyTheRowsAtTheCase() {
+        Read read = read();
+        Axis tag = axisAt(read, under("example.q", "GlobalQuery", "tag"));
+
+        Classification atTheCase = InputClassifications
+                .of(read.rows().get(0).inputs(), read.inputs(), List.of(tag)).get(tag.id());
+        assertEquals(List.of("Some"),
+                assertInstanceOf(Classification.Classified.class, atTheCase).classIds());
+
+        Classification elsewhere = InputClassifications
+                .of(read.rows().get(1).inputs(), read.inputs(), List.of(tag)).get(tag.id());
+        assertTrue(elsewhere instanceof Classification.Classified in && in.classIds().isEmpty(),
+                () -> "a row at another case is in no class there: " + elsewhere);
+        assertNull(elsewhere.stopped(),
+                "and stopped nothing, so the measurement is not short of it");
+    }
+
+    private static Axis axisAt(Read read, TermPath path) {
+        return read.axes().stream().filter(each -> each.path().equals(path)).findFirst()
+                .orElseThrow(() -> new AssertionError("no axis at " + path
+                        + "; the reading has " + read.axes().stream().map(Axis::path).toList()));
+    }
+}

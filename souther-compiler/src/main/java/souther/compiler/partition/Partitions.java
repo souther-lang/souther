@@ -152,7 +152,7 @@ public final class Partitions {
             // where an author can act on it.
             if (position.valuesNotSeparated()
                     && !(position.structure()
-                            instanceof souther.compiler.inputs.StructuralInspection.Children)) {
+                            instanceof souther.compiler.inputs.StructuralInspection.Decomposed)) {
                 notSeparated.add(
                         new souther.compiler.inputs.PositionValuesNotSeparated(position.path()));
             }
@@ -748,7 +748,7 @@ public final class Partitions {
         AxisId id = AxisId.of(behavior, term);
         switch (LocalInspection.of(position, symbols, policy)) {
             case LocalPartition.Divided divided -> {
-                if (position.structure() instanceof StructuralInspection.Children) {
+                if (position.structure() instanceof StructuralInspection.Decomposed) {
                     throw new IllegalStateException(
                             "`" + position.path() + "` both divides and is made of positions; the"
                                     + " reading of an input and the axes drawn from it disagree"
@@ -770,15 +770,15 @@ public final class Partitions {
                 switch (position.structure()) {
                     // The one answer that takes the position away: what is under it is what the
                     // classes belong to, and those positions were read on their own.
-                    case StructuralInspection.Children _ -> { }
+                    case StructuralInspection.Decomposed _ -> { }
                     // A leaf and a block are both positions still to be answered for, and each
                     // carries what it is left with if nothing answers — including a rule about this
                     // position that the local reading could not take in, which is what keeps the
                     // position from completing as one the model divides no way.
-                    case StructuralInspection.Pending pending ->
+                    case StructuralInspection.Retained retained ->
                             out.add(Axis.pendingAt(id, term, position.type(),
-                                    position.unansweredQuestions(), position.rulesNotReached(), pending,
-                                    leftUnread(position)));
+                                    position.unansweredQuestions(), position.rulesNotReached(),
+                                    retained.continuation(), leftUnread(position)));
                 }
             }
         }
@@ -892,6 +892,15 @@ public final class Partitions {
         // were wrong about themselves — the answer they carry is the one an author is shown.
         if (!classes.isEmpty()) {
             return List.of();
+        }
+        // A unit data is one value, and naming it writes it. Read through the classes above it has
+        // none — nothing tells its one value from another — so what stands for it is said here, in
+        // the same words a class of a sum says it in. Left out, a position holding one was a
+        // position nothing could write a value at, which is what a case of a sum narrows to.
+        if (type instanceof Type.Ref unit
+                && symbols.declarations().declaration(unit.name().key()) instanceof Hir.UnitData) {
+            return symbols.scope().reach(unit.name()) instanceof TypeReachName.Written written
+                    ? List.of(FixtureTemplate.unitCase(written)) : List.of();
         }
         // A newtype the model only bounds has no classes — everything outside the bound is refused at
         // construction — but it does have values, and the edge of the bound is one that builds.

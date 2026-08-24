@@ -43,7 +43,7 @@ import java.util.Map;
  *                   walk: a call left standing names no location, which is an answer where such a
  *                   tree is what was handed over and a bug in the caller where it is not
  */
-public record InputReads(InputDomain read, Map<BindingId, String> roots,
+public record InputReads(InputDomain read, Map<BindingId, TermPath> roots,
                          Map<BindingId, Core> bound,
                          souther.compiler.check.ElementBindings elements, boolean callsStand) {
 
@@ -65,7 +65,14 @@ public record InputReads(InputDomain read, Map<BindingId, String> roots,
      * position, which is what it did before there was anything to give.
      */
     public static InputReads of(InputDomain read, souther.compiler.check.ElementBindings elements) {
-        return new InputReads(read, read.parameterReads(), Map.of(), elements, false);
+        return new InputReads(read, rooted(read.parameterReads()), Map.of(), elements, false);
+    }
+
+    /** The parameters as positions, which is what a name in a tree stands for. */
+    private static Map<BindingId, TermPath> rooted(Map<BindingId, String> named) {
+        Map<BindingId, TermPath> out = new LinkedHashMap<>();
+        named.forEach((binding, name) -> out.put(binding, TermPath.of(name)));
+        return out;
     }
 
     /**
@@ -76,8 +83,42 @@ public record InputReads(InputDomain read, Map<BindingId, String> roots,
      * implements binds its parameters nowhere a body could, and its clauses still name them.
      */
     public static InputReads ofWhatIsDeclared(InputDomain read, Map<BindingId, String> roots) {
-        return new InputReads(read, roots, Map.of(),
+        return new InputReads(read, rooted(roots), Map.of(),
                 souther.compiler.check.ElementBindings.NONE, true);
+    }
+
+    /**
+     * The same, inside one arm of a {@code match}.
+     *
+     * <p>A name an arm binds stands for the value that was matched, read as the case the arm
+     * selects — which is the position the scrutinee is at, narrowed. Written here and nowhere else:
+     * every walk that goes into an arm meets the same binder, and each working out for itself what
+     * it names is as many spellings of one position as there are walks, of which the axes carry
+     * one.
+     *
+     * <p>Only where the arm selects one case. An arm answering for several narrows to none of them
+     * in particular, and a name that stands for no position is what a reader is given for it —
+     * which is what it was given before there was anything to say.
+     */
+    public InputReads insideArm(Core.Match match, Core.Case arm, Symbols symbols) {
+        if (arm.binder() == null || arm.binder().binding() == null
+                || arm.caseTypes().size() != 1) {
+            return this;
+        }
+        TermPath scrutinee = pathOf(match.scrutinee(), symbols);
+        if (scrutinee == null) {
+            return this;
+        }
+        TermPath narrowed = scrutinee.refine(new Refinement.SumCase(arm.caseTypes().get(0)));
+        // Only where the reading of the input has such a position. A narrowing of something that is
+        // not a sum of the input's, or of a case the rules refuse, is a place no row is read at and
+        // no class is drawn at — and a line drawn there would be owed by nothing.
+        if (read.at(narrowed) == null) {
+            return this;
+        }
+        Map<BindingId, TermPath> wider = new LinkedHashMap<>(roots);
+        wider.put(arm.binder().binding(), narrowed);
+        return new InputReads(read, wider, bound, elements, callsStand);
     }
 
     /** The same, inside what {@code binder} binds. */

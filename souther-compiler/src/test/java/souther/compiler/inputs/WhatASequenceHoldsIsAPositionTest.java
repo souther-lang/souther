@@ -86,9 +86,11 @@ class WhatASequenceHoldsIsAPositionTest {
     }
 
     private static void assertInstanceOfInside(StructuralInspection structure) {
-        assertTrue(structure instanceof StructuralInspection.Inside,
+        assertTrue(structure instanceof StructuralInspection.Retained retained
+                        && retained.continuation()
+                                instanceof StructuralInspection.Continuation.Elements,
                 () -> "a sequence holds a position and stands as one: " + structure);
-        assertTrue(structure instanceof StructuralInspection.Pending,
+        assertTrue(structure instanceof StructuralInspection.Retained,
                 () -> "and is still to be answered for, unlike a record: " + structure);
     }
 

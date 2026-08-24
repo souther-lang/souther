@@ -181,8 +181,13 @@ class WhatStoppedADerivationIsWhatIsReportedTest {
                 """, "run");
 
         assertEquals(List.of("Approved", "Rejected"), evidence.axes().get(0).classes());
-        assertEquals(List.of(), evidence.notDerivable(),
+        assertEquals(List.of(), evidence.notDerivable().stream()
+                        .filter(each -> each.at().toString().equals("x")).toList(),
                 "so there is nothing left to report about the position");
+        // And what the case declares is under the case, at a position of its own. An `Int` nothing
+        // bounds is one the model divides no way, which is a fact about the field and not about
+        // the sum above it.
+        assertTrue(absent(evidence, "x@Approved.id"));
     }
 
     /**

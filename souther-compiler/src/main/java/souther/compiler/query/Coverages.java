@@ -330,10 +330,15 @@ final class Coverages {
         // rules refuse is not a class of its position at all, so the slice of the product it would
         // have taken part in is not here to be counted — which is a different thing from a pair
         // whose two classes each have rows but never together.
+        //
+        // And a pair no value is in is not one either. A position under one case of a sum and a
+        // position under another are not in one value, so their classes make no combination: counted
+        // as the product, the measure of a behavior taking a sum would fall by however many
+        // combinations the model does not have.
         long total = 0;
         for (int i = 0; i < axes.size(); i++) {
             for (int j = i + 1; j < axes.size(); j++) {
-                total += (long) axes.get(i).classes().size() * axes.get(j).classes().size();
+                total += combinationsOf(axes.get(i), axes.get(j));
             }
         }
         if (total == 0) {
@@ -379,6 +384,27 @@ final class Coverages {
         WeakeningSet by = readings.weakening(axes);
         return new PartitionEvidence.PairSpace((int) total, by.isEmpty()
                 ? new Measurement.Complete<>(counts) : new Measurement.Partial<>(counts, by));
+    }
+
+    /**
+     * How many combinations two positions' classes make between them.
+     *
+     * <p>The product where the two are in one value, and less where they are not. What a row at a
+     * class has to be is one merge ({@link souther.compiler.inputs.Requirements}), and the same
+     * merge is what the generator asks before it composes a row — so what is counted here and what
+     * a row is offered for come from one reading rather than from two that agree until a case is
+     * added.
+     */
+    private static long combinationsOf(Axis one, Axis other) {
+        long count = 0;
+        for (PartitionClass here : one.classes()) {
+            for (PartitionClass there : other.classes()) {
+                if (one.requiring(here).compatibleWith(other.requiring(there))) {
+                    count++;
+                }
+            }
+        }
+        return count;
     }
 
     /**

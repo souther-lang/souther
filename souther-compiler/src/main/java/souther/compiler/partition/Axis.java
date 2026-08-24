@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.StructuralInspection;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.types.Type;
@@ -76,7 +77,7 @@ import java.util.List;
 public record Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> classes,
                    List<Cut> cuts, List<Seam> parted, List<RuleAccounting.Unanswered> unanswered,
                    boolean rulesNotReached,
-                   StructuralInspection.Pending pending, BlockReason unread) {
+                   StructuralInspection.Continuation pending, BlockReason unread) {
 
     public Axis {
         classes = List.copyOf(classes);
@@ -104,7 +105,7 @@ public record Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> 
     public static Axis pendingAt(AxisId id, NumericTerm term, Type type,
                                  List<RuleAccounting.Unanswered> unanswered,
                                  boolean rulesNotReached,
-                                 StructuralInspection.Pending found, BlockReason unread) {
+                                 StructuralInspection.Continuation found, BlockReason unread) {
         return new Axis(id, term, type, List.of(), List.of(), List.of(), unanswered,
                 rulesNotReached, found, unread);
     }
@@ -135,6 +136,29 @@ public record Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> 
      * is the one that tells them apart. */
     public TermPath path() {
         return term.path();
+    }
+
+    /**
+     * What a row has to be for this position to exist in it at all.
+     *
+     * <p>Read off the path and kept nowhere else. A position under a narrowing requires it by being
+     * there — {@code query@GlobalQuery.tag} says that {@code query} is a {@code GlobalQuery} and
+     * says it completely — so an account of it beside the path would be two readings of one fact.
+     */
+    public Requirements requirements() {
+        return path().requirements();
+    }
+
+    /**
+     * The same, for a row sitting in {@code cls} here.
+     *
+     * <p>Both halves and neither standing for the other. A class of a sum states a narrowing by
+     * being the class it is, and the position it is a class of may itself be under one — so what a
+     * row at this class has to be is what the position requires and what the class selects,
+     * together.
+     */
+    public Requirements requiring(PartitionClass cls) {
+        return requirements().and(path(), cls == null ? null : cls.selects());
     }
 
     /** Whether the model divides this position into classes to cover. */

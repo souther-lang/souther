@@ -54,13 +54,13 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
                 List.of());
     }
 
-    private static Axis pending(StructuralInspection.Pending found) {
+    private static Axis pending(StructuralInspection.Continuation found) {
         return pending(found, null);
     }
 
     /** The same, with a rule about the position's own values that the local reading could not take
      *  in — which is a second way a position can be left unable to reach an absence. */
-    private static Axis pending(StructuralInspection.Pending found, BlockReason unread) {
+    private static Axis pending(StructuralInspection.Continuation found, BlockReason unread) {
         return Axis.pendingAt(ID, new NumericTerm.ValueOf(AT), Type.BOOL,
                 java.util.List.of(), false, found, unread);
     }
@@ -77,13 +77,13 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
     void aLeafCarryingAnUnreadRuleCompletesAsThatRule() {
         BlockReason unread = new BlockReason.UnreadValueRule();
 
-        UndividedPosition said = PendingPosition.of(pending(new StructuralInspection.Leaf(), unread))
+        UndividedPosition said = PendingPosition.of(pending(new StructuralInspection.Continuation.None(), unread))
                 .complete(new BodyCutInspection.Exhausted());
 
         assertFalse(said.isAbsent(), said.toString());
         // And the verdict says only that: what stopped it is the rule's, said by the reader that
         // read the rule and naming which rule it was.
-        assertNull(PendingPosition.of(pending(new StructuralInspection.Leaf(), unread))
+        assertNull(PendingPosition.of(pending(new StructuralInspection.Continuation.None(), unread))
                         .reportable(),
                 "a rule this read and could not use is not a position nothing was reached at");
     }
@@ -100,7 +100,7 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
      */
     @Test
     void twoRulesLeaveThePositionWithNoAccountOfItsOwn() {
-        PendingPosition pending = PendingPosition.of(pending(new StructuralInspection.Leaf(),
+        PendingPosition pending = PendingPosition.of(pending(new StructuralInspection.Continuation.None(),
                 new BlockReason.UnreadValueRule()));
 
         assertFalse(pending.complete(new BodyCutInspection.Blocked()).isAbsent());
@@ -127,10 +127,10 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
     @Test
     void aPositionWithoutEvidenceIsPendingWhatItsStructureFound() {
         assertEquals(new PendingPosition.Leaf(AT),
-                PendingPosition.of(pending(new StructuralInspection.Leaf())));
+                PendingPosition.of(pending(new StructuralInspection.Continuation.None())));
         assertEquals(new PendingPosition.Blocked(AT, new BlockReason.TypeUnresolved()),
                 PendingPosition.of(pending(
-                        new StructuralInspection.Blocked(new BlockReason.TypeUnresolved()))));
+                        new StructuralInspection.Continuation.Blocked(new BlockReason.TypeUnresolved()))));
     }
 
     // --- and what completing one comes to -------------------------------------------------------
