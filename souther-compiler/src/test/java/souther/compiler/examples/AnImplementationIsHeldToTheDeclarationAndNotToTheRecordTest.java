@@ -247,9 +247,9 @@ class AnImplementationIsHeldToTheDeclarationAndNotToTheRecordTest {
     /** Which behaviors state something, answered from the declaration and without applying one. */
     @Test
     void whichBehaviorsStateSomethingIsAskedOfTheModel() throws Exception {
-        assertEquals(List.of(), boundTo(MODEL, REFUSES).behaviorsStatingContracts(),
+        assertEquals(List.of(), boundTo(MODEL, REFUSES).behaviorsWithContracts(),
                 "nothing is stated, so a suite meaning to hold contracts holds none of these rows");
-        assertEquals(List.of("findTodo"), boundTo(DECLARING, REFUSES).behaviorsStatingContracts());
+        assertEquals(List.of("findTodo"), boundTo(DECLARING, REFUSES).behaviorsWithContracts());
     }
 
     /**

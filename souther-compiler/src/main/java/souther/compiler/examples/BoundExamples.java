@@ -145,7 +145,7 @@ public final class BoundExamples {
      * nothing may be handed to is answered for first: an implementation of another build states
      * nothing that can run, and calling that "the model states nothing" would send its author to
      * write a clause that still would not. To leave a behavior that states nothing out rather than
-     * be told about each of its rows, read {@link #behaviorsStatingContracts()}.
+     * be told about each of its rows, read {@link #behaviorsWithContracts()}.
      */
     public ContractObservation checkContract(RecordedRow row) {
         if (row == null || row.enumeratedBy() != this) {
@@ -155,18 +155,22 @@ public final class BoundExamples {
     }
 
     /**
-     * Which of the bound behaviors state something of what they answer.
+     * Which of the bound behaviors have a contract — an {@code ensures} saying something of what
+     * they answer.
      *
      * <p>What a behavior declares, asked without applying anything — a behavior writing no
      * {@code ensures} is not among the module's contracts at all, so this reads a declaration rather
      * than predicting a run. For a suite that means to hold only the behaviors with a contract to
      * one, and that would otherwise have to write their names down beside the model.
      *
-     * <p>Beside {@link ContractObservation.NothingStated} and not instead of it. This is for an
-     * author who means to leave a behavior out; the arm is for one who did not mean to and would
-     * otherwise have a green suite asserting that a call did not throw.
+     * <p>Beside {@link ContractObservation.NothingStated} and not instead of it. A suite over every
+     * row is the ordinary way to write one — the arm is what tells an author who did not mean to
+     * leave a behavior out — and narrowing by this is the deliberate exception.
+     *
+     * <p>Walks what is bound on each call and answers a fresh list, so a loop that narrows by it
+     * reads it once rather than once per row.
      */
-    public List<String> behaviorsStatingContracts() {
+    public List<String> behaviorsWithContracts() {
         List<String> stating = new ArrayList<>();
         for (String behavior : bound) {
             if (verifier.states(behavior)) {

@@ -143,7 +143,7 @@ public sealed interface ContractObservation {
      * <p>An arm and not a quiet yes. A suite written over a behavior with no {@code ensures} would
      * otherwise be green while asserting only that the call did not throw, and say so to nobody.
      * What the author does about it — write the clause, or leave the behavior out with
-     * {@link BoundExamples#behaviorsStatingContracts()} — is theirs; being told is not.
+     * {@link BoundExamples#behaviorsWithContracts()} — is theirs; being told is not.
      *
      * @param behavior which behavior states nothing, for a suite over several
      */
