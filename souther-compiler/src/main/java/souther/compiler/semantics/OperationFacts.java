@@ -279,25 +279,6 @@ public final class OperationFacts {
         // measure a pair of dates has.
         out.addAll(saysNothing(OperationSubject.MEASURE, op("Date", "addMonths"), op("Date", "addYears")));
 
-        // What the temporal operations answer, counted, where it is not arithmetic over what they
-        // were given.
-        //
-        // Months and years hold different numbers of days, so neither shift moves a date by any
-        // number of them. `DateTime.minutesBetween` counts whole minutes over a carrier counting
-        // seconds and drops the remainder toward zero, so it is not the difference of the two
-        // counts — which is why it is the operation an author of the next such fact would reach
-        // for, and why the refusal is written down beside the ones that are accepted.
-        //
-        // A component is read out of a count by dividing or by taking a remainder, and neither is a
-        // form of it: the year a day falls in, the second within a minute, the day a second falls
-        // in, the second within a day.
-        out.addAll(saysNothing(OperationSubject.FORM, op("Date", "addMonths"), op("Date", "addYears"),
-                op("DateTime", "minutesBetween"), op("Date", "year"), op("Date", "month"),
-                op("Date", "day"), op("Time", "hour"), op("Time", "minute"), op("Time", "second"),
-                op("DateTime", "toDate"), op("DateTime", "toTime")));
-
-        // They answer no number they were given. Arithmetic computes a new one from its operands;
-
         // They compute a new number rather than answering one they were given: what `a + b`
         // answers is neither `a` nor `b`, `compare` answers a sign, `floorMod` a remainder,
         // `abs` a distance, `toInt` a whole number, `round` a value at another scale.
@@ -322,21 +303,34 @@ public final class OperationFacts {
         out.addAll(saysNothing(OperationSubject.ORDER, op("Int", "add"), op("Int", "subtract"), op("Int", "multiply"),
                 op("Int", "min"), op("Int", "max"), op("Int", "floorMod"), op("DateTime", "minutesBetween")));
 
-        // Arithmetic the language composes. `Int.add(a, b)` answers `a + b` and a fact here would be
-        // a second path saying what the grammar already reads: such a call is read as the operator
-        // it stands for before anything asks about the operation.
+        // What they answer is no form of what they were given, for three reasons.
         //
-        // Below them, the operations that answer a number of their own: `compare` answers a sign,
-        // `compare` answers a sign, `floorMod` a remainder, `abs` a distance with the sign dropped,
-        // `toInt` a whole number, `round` a value at another scale — what such a result is bounded
-        // by is a different statement from its being a value that was already there; and `min`,
-        // `max` and `clamp` answer one of their arguments, which one depending on the arguments,
-        // and that is what their cases say.
+        // Arithmetic the language composes: `Int.add(a, b)` answers `a + b`, and a fact here would
+        // be a second path saying what the grammar already reads — such a call is read as the
+        // operator it stands for before anything asks about the operation.
+        //
+        // A number of their own: `compare` answers a sign, `floorMod` a remainder, `abs` a distance
+        // with the sign dropped, `toInt` a whole number, `round` a value at another scale. What such
+        // a result is bounded by is a different statement from its being a value that was already
+        // there; and `min`, `max` and `clamp` answer one of their arguments, which one depending on
+        // the arguments, and that is what their cases say.
+        //
+        // And, among the temporal ones, a count that is not arithmetic over the counts it was
+        // given. Months and years hold different numbers of days, so neither shift moves a date by
+        // any number of them. `DateTime.minutesBetween` counts whole minutes over a carrier
+        // counting seconds and drops the remainder toward zero, so it is not the difference of the
+        // two counts — which is why it is the operation an author of the next such fact would reach
+        // for, and why the refusal is written down beside the ones that are accepted. A component
+        // is read out of a count by dividing or by taking a remainder: the year a day falls in, the
+        // second within a minute, the day a second falls in, the second within a day.
         out.addAll(saysNothing(OperationSubject.FORM, op("Int", "add"), op("Int", "subtract"), op("Int", "multiply"),
                 op("Decimal", "add"), op("Decimal", "subtract"), op("Decimal", "multiply"), op("Int", "compare"),
                 op("Decimal", "compare"), op("Int", "floorMod"), op("Int", "abs"), op("Decimal", "abs"), op("Decimal", "toInt"),
                 op("Decimal", "round"), op("Int", "min"), op("Int", "max"), op("Int", "clamp"), op("Decimal", "min"), op("Decimal", "max"),
-                op("Decimal", "clamp")));
+                op("Decimal", "clamp"), op("Date", "addMonths"), op("Date", "addYears"),
+                op("DateTime", "minutesBetween"), op("Date", "year"), op("Date", "month"),
+                op("Date", "day"), op("Time", "hour"), op("Time", "minute"), op("Time", "second"),
+                op("DateTime", "toDate"), op("DateTime", "toTime")));
         return List.copyOf(out);
     }
 

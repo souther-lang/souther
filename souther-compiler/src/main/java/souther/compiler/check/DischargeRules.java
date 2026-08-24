@@ -194,7 +194,7 @@ final class DischargeRules {
      * a capability, wrong the day the capability changes; asked this way, the operations that arrive
      * are exactly the ones an author could write a discharging program for.
      */
-    static Set<ValueName> formOperationsThisCarries() {
+    private static Set<ValueName> formOperationsThisCarries() {
         Set<ValueName> carried = new LinkedHashSet<>();
         for (ValueName operation : formOperations()) {
             if (everyArgumentIsANumber(operation)) {
@@ -204,13 +204,15 @@ final class DischargeRules {
         return carried;
     }
 
-    /** Whether every argument the declared form names stands at a number this check relates. */
+    /**
+     * Whether every argument the declared form names stands at a number this check relates.
+     *
+     * <p>The library has the operation and the argument is one it takes, both of which
+     * {@link OperationFactBinder} held before any of this was asked. What is left to decide is what
+     * stands there.
+     */
     private static boolean everyArgumentIsANumber(ValueName operation) {
-        Prelude.PreludeEntry entry = operation instanceof ValueName.Stdlib library
-                ? Prelude.entry(library.qualified()) : null;
-        if (entry == null) {
-            return false;
-        }
+        Prelude.PreludeEntry entry = Prelude.entry(((ValueName.Stdlib) operation).qualified());
         List<Type> params = entry.signature().params();
         return answersAFormOf(operation).coefs().keySet().stream().allMatch(argument -> {
             int position = CallArguments.positionIn(argument, operation);

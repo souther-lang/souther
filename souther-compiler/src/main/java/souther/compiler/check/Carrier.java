@@ -147,8 +147,10 @@ public sealed interface Carrier {
      * which sum places a case and what a newtype wraps are answers only the declarations have. So a
      * name comes back unanswered here rather than guessed at.
      *
-     * <p>What asks this way is a reading of the library's own signatures, whose names are its error
-     * unions and its enumerations — neither of them a value whose count anything is written over.
+     * <p>So a question asked this way is not asked of an operation declared over a name, and what
+     * that costs is measurable: the names in the library's own signatures are its error unions and
+     * the sum a rounding mode is, and every operation carrying one carries a primitive beside it
+     * that answers. None of them falls out of range on this account.
      */
     static Carrier ofPrimitive(Type type) {
         return type instanceof Type.Prim ? ofValue(type, null) : null;

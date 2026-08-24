@@ -128,17 +128,29 @@ class ARowOfferedForABorderOverAnOperationStandsAtItTest {
         return rows;
     }
 
-    /** A built row as an example line, answered the way the behavior answers it. */
+    /**
+     * A built row as an example line, answered the way {@link #SPAN}'s guard answers it.
+     *
+     * <p>The answer is worked out here because a row is offered with its result left for an author
+     * to fill in, and the round trip needs it filled. That makes this the fixture's guard written a
+     * second time, and the two have to move together — which is why it is the guard of a model
+     * three lines long rather than of anything a reader would have to think about.
+     *
+     * <p>A row that is not two written dates is refused rather than answered {@code No}. What a row
+     * looks like is the generator's to decide, and guessing at one this does not recognise would
+     * fill every point with the same answer and call the round trip green.
+     */
     private static String written(Generator.GeneratedRow row) {
         List<String> inputs = row.inputs().stream().map(FixtureTemplate::text).toList();
         List<LocalDate> dates = new ArrayList<>();
         for (String each : inputs) {
             Matcher found = WRITTEN_DATE.matcher(each);
-            dates.add(found.find() ? LocalDate.parse(found.group(1)) : null);
+            assertTrue(found.find(), () -> "a row of this behavior is written as two dates: " + each);
+            dates.add(LocalDate.parse(found.group(1)));
         }
-        String answers = dates.size() == 2 && dates.get(0) != null && dates.get(1) != null
-                && ChronoUnit.DAYS.between(dates.get(0), dates.get(1)) > 10 ? "Ok" : "No";
-        return "    | (" + String.join(", ", inputs) + ") -> " + answers;
+        assertEquals(2, dates.size(), () -> "and there are two of them: " + inputs);
+        return "    | (" + String.join(", ", inputs) + ") -> "
+                + (ChronoUnit.DAYS.between(dates.get(0), dates.get(1)) > 10 ? "Ok" : "No");
     }
 
     private static PartitionEvidence measured(String source) {
