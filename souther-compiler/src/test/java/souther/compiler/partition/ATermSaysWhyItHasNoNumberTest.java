@@ -34,18 +34,28 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 class ATermSaysWhyItHasNoNumberTest {
 
     private static final NumericTerm VALUE = new NumericTerm.ValueOf(TermPath.of("x"));
-    private static final NumericTerm LENGTH = new NumericTerm.SizeOf(
-            ValueName.Stdlib.operation("String", "length"), TermPath.of("x"));
+    private static final NumericTerm LENGTH = NumericTerm.TakenOf.of(
+            ValueName.Stdlib.operation("String", "length"), TermPath.of("x"),
+            souther.compiler.types.Type.STRING,
+            souther.compiler.check.Symbols.none(souther.compiler.DefaultStdlib.get()));
     private static final TypeSymbol WRAPPER = TypeSymbols.declared(new TypeKey("example", "Wrapped"));
+
+    /** The two orders a whole-number position stands on, which are one order. */
+    private static final souther.compiler.inputs.TermOrders AS_A_NUMBER =
+            souther.compiler.inputs.TermOrders.itself(Carrier.WHOLE);
+
+    /** And the two a length stands on: the string is read as text, the count as a whole number. */
+    private static final souther.compiler.inputs.TermOrders AS_A_LENGTH =
+            new souther.compiler.inputs.TermOrders(Carrier.TEXT, Carrier.WHOLE);
 
     @Test
     void anObservationThatDidNotArriveIsMissing() {
         assertEquals(Incompleteness.Code.VALUE_TRUNCATED,
-                ((NumericTerm.Reading.Missing) VALUE.read(new ObservedValue.Truncated(), Carrier.WHOLE)).code());
+                ((NumericTerm.Reading.Missing) VALUE.read(new ObservedValue.Truncated(), AS_A_NUMBER)).code());
         assertInstanceOf(NumericTerm.Reading.Missing.class,
-                LENGTH.read(new ObservedValue.Truncated(), Carrier.WHOLE));
+                LENGTH.read(new ObservedValue.Truncated(), AS_A_LENGTH));
         assertInstanceOf(NumericTerm.Reading.Missing.class,
-                VALUE.read(new ObservedValue.Unknown("gone"), Carrier.WHOLE));
+                VALUE.read(new ObservedValue.Unknown("gone"), AS_A_NUMBER));
     }
 
     /** One layer in, which is where a newtype puts it. The construction reads perfectly well and the
@@ -55,31 +65,31 @@ class ATermSaysWhyItHasNoNumberTest {
     void anObservationCutShortInsideANewtypeIsMissingToo() {
         ObservedValue wrapped = new ObservedValue.Constructed(WRAPPER,
                 Map.of("value", new ObservedValue.Truncated()));
-        assertInstanceOf(NumericTerm.Reading.Missing.class, VALUE.read(wrapped, Carrier.WHOLE));
-        assertInstanceOf(NumericTerm.Reading.Missing.class, LENGTH.read(wrapped, Carrier.WHOLE));
+        assertInstanceOf(NumericTerm.Reading.Missing.class, VALUE.read(wrapped, AS_A_NUMBER));
+        assertInstanceOf(NumericTerm.Reading.Missing.class, LENGTH.read(wrapped, AS_A_LENGTH));
     }
 
     /** A value that was read, and that this term is not a number of. Not the same answer. */
     @Test
     void aValueThatWasReadAndIsNotThisTermsNumberIsNotMissing() {
         assertInstanceOf(NumericTerm.Reading.NotNumber.class,
-                VALUE.read(new ObservedValue.Text("abc"), Carrier.WHOLE));
+                VALUE.read(new ObservedValue.Text("abc"), AS_A_NUMBER));
         assertInstanceOf(NumericTerm.Reading.NotNumber.class,
-                LENGTH.read(new ObservedValue.Integer(3), Carrier.WHOLE));
+                LENGTH.read(new ObservedValue.Integer(3), AS_A_LENGTH));
         assertInstanceOf(NumericTerm.Reading.NotNumber.class,
-                LENGTH.read(new ObservedValue.Bool(true), Carrier.WHOLE));
+                LENGTH.read(new ObservedValue.Bool(true), AS_A_LENGTH));
     }
 
     /** And what each term does read, so that none of the above passes by reading nothing at all. */
     @Test
     void eachTermReadsItsOwnNumber() {
         assertEquals(Count.of(3),
-                ((NumericTerm.Reading.Number) VALUE.read(new ObservedValue.Integer(3), Carrier.WHOLE)).value());
+                ((NumericTerm.Reading.Number) VALUE.read(new ObservedValue.Integer(3), AS_A_NUMBER)).value());
         assertEquals(Count.of(3),
-                ((NumericTerm.Reading.Number) LENGTH.read(new ObservedValue.Text("abc"), Carrier.WHOLE)).value());
+                ((NumericTerm.Reading.Number) LENGTH.read(new ObservedValue.Text("abc"), AS_A_LENGTH)).value());
         assertEquals(Count.of(3),
                 ((NumericTerm.Reading.Number) LENGTH.read(new ObservedValue.Constructed(
-                        WRAPPER, Map.of("value", new ObservedValue.Text("abc"))), Carrier.WHOLE)).value());
+                        WRAPPER, Map.of("value", new ObservedValue.Text("abc"))), AS_A_LENGTH)).value());
     }
 
     /** A string counts in code points, as `Strings.length` does. Counted in UTF-16 units this is 2,
@@ -87,7 +97,7 @@ class ATermSaysWhyItHasNoNumberTest {
     @Test
     void aStringIsCountedTheWayTheLanguageCountsIt() {
         assertEquals(Count.of(1),
-                ((NumericTerm.Reading.Number) LENGTH.read(new ObservedValue.Text("😀"), Carrier.WHOLE))
+                ((NumericTerm.Reading.Number) LENGTH.read(new ObservedValue.Text("😀"), AS_A_LENGTH))
                         .value());
     }
 }

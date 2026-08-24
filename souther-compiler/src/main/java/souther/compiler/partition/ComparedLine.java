@@ -32,7 +32,7 @@ import souther.compiler.numeric.Place;
  *                          values either side of it. An equality says nothing about ranges: what it
  *                          distinguishes is the value from every other value
  */
-record ComparedLine(NumericTerm term, Place value, Carrier carrier,
+record ComparedLine(NumericTerm term, Place value, souther.compiler.inputs.TermOrders orders,
                     boolean valueBelongsBelow, boolean holdsAtTheValue, boolean singles) {
 
     /**
@@ -62,7 +62,7 @@ record ComparedLine(NumericTerm term, Place value, Carrier carrier,
             op = mirrored(op);
         }
         NumericTerm term = named == null ? null : named.term();
-        Carrier carrier = named == null ? null : named.order();
+        souther.compiler.inputs.TermOrders orders = named == null ? null : named.orders();
         if (term == null || value == null) {
             // Nothing here is a position against a value the carrier writes. It may still be a
             // statement about one position: `a + 1 <= 10` and `a <= b - b + 9` are both `a <= 9`,
@@ -70,12 +70,12 @@ record ComparedLine(NumericTerm term, Place value, Carrier carrier,
             return fromTheForm(read, reads, symbols);
         }
         return switch (ComparisonClaim.of(op)) {
-            case ComparisonClaim.Cut cut -> new ComparedLine(term, value, carrier,
+            case ComparisonClaim.Cut cut -> new ComparedLine(term, value, orders,
                     cut.valueBelongsBelow(), cut.holdsAtTheValue(), false);
             // A value singled out has no low side of its own — the values either side of it are one
             // class — so the side is written down as one answer and read by nobody.
             case ComparisonClaim.Singled singled ->
-                    new ComparedLine(term, value, carrier, true, singled.holdsAtTheValue(), true);
+                    new ComparedLine(term, value, orders, true, singled.holdsAtTheValue(), true);
             case ComparisonClaim.Nothing _ -> null;
         };
     }
@@ -97,16 +97,18 @@ record ComparedLine(NumericTerm term, Place value, Carrier carrier,
         // The position's own order, not the order of whichever operand it was written beside. The
         // reading two methods up asks the same question of the same place, and `10 >= a + 1` names
         // the position on the right.
-        Carrier carrier = term == null ? null : reads.read().carrierOf(term, symbols);
-        if (carrier == null || !carrier.counts()) {
+        souther.compiler.inputs.TermOrders orders =
+                term == null ? null : reads.read().ordersOf(term, symbols);
+        if (orders == null || orders.answered() == null || !orders.answered().counts()) {
             return null;
         }
+        Carrier carrier = orders.answered();
         Place value = Count.of(read.cut());
         return switch (read.claim()) {
-            case ComparisonClaim.Cut cut -> new ComparedLine(term, value, carrier,
+            case ComparisonClaim.Cut cut -> new ComparedLine(term, value, orders,
                     cut.valueBelongsBelow(), cut.holdsAtTheValue(), false);
             case ComparisonClaim.Singled singled ->
-                    new ComparedLine(term, value, carrier, true, singled.holdsAtTheValue(), true);
+                    new ComparedLine(term, value, orders, true, singled.holdsAtTheValue(), true);
             case ComparisonClaim.Nothing _ -> null;
         };
     }

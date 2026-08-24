@@ -6,6 +6,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
+import souther.compiler.check.FieldDomains;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
@@ -20,6 +21,8 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
@@ -148,10 +151,12 @@ class WhatIsKnownOfOneTermSurvivesWhatIsUnknownBesideItTest {
         Read read = read(DEEPER_THAN_THE_WALK);
         TermPath deep = TermPath.of("p").then("m").then("inner").then("xs");
         assertNull(read.inputs().at(deep), "the walk does not reach this far");
-        NumericTerm buried = new NumericTerm.SizeOf(
-                souther.compiler.check.NumericMeasures.takenOf(
-                        read.inputs().at(TermPath.of("p").then("ys")).type(), read.symbols()),
-                deep);
+        souther.compiler.types.Type there =
+                read.inputs().at(TermPath.of("p").then("ys")).type();
+        NumericTerm buried = NumericTerm.TakenOf.of(
+                souther.compiler.check.NumericMeasures.takenOf(there, read.symbols()),
+                deep, there, read.symbols());
+        assertNotNull(buried, "the term is one the operation may be taken of");
         NumericTerm n = read.inputs().at(TermPath.of("p").then("n")).term();
         Map<NumericTerm, BigDecimal> coefs = new LinkedHashMap<>();
         coefs.put(n, BigDecimal.ONE);
@@ -177,36 +182,54 @@ class WhatIsKnownOfOneTermSurvivesWhatIsUnknownBesideItTest {
             """;
 
     /**
-     * Two spellings of one count weigh it twice.
+     * Two operations taken of one location are two coordinates.
      *
-     * <p>A term carries which measure was written and a number does not, so a form can name one
-     * number twice. What it is weighed by is then the two coefficients together — read as a
-     * renaming, the form would come back weighing that count once, which is a range for a form the
-     * caller did not write.
+     * <p>This held the other way round while a coordinate recorded only that something had been
+     * taken here rather than what. Two terms over one path then came to one name, so what a clause
+     * said about the count of a list was read as saying the same about anything else taken of it
+     * (#1027).
      *
-     * <p>No model reaches this today: which measure is taken of a position is settled by its type,
-     * so a body has one to write. It is held here because the reading turns a finer key into a
-     * coarser one, and a translation that loses a key has to say what it does with the two values
-     * rather than keeping whichever arrived last.
+     * <p>Asked of the identity and not through a term, because no term pairs those two operations
+     * with one location: what an operation may be taken of is held where a term is made, and a
+     * {@code List} is not what a set's size is taken of. An earlier version of this test built the
+     * impossible pair by hand to ask the question, which is a test standing on the invariant being
+     * open — and the invariant is the thing the reading rests on.
      */
     @Test
-    void twoSpellingsOfOneCountWeighItTwice() {
+    void twoOperationsTakenOfOneLocationAreTwoCoordinates() {
+        String path = "p.xs";
+        FieldDomains.Coordinate byLength = FieldDomains.Coordinate.takenBy(path,
+                souther.compiler.types.ValueName.Stdlib.operation("List", "length"));
+        FieldDomains.Coordinate bySize = FieldDomains.Coordinate.takenBy(path,
+                souther.compiler.types.ValueName.Stdlib.operation("Set", "size"));
+
+        assertNotEquals(byLength, bySize,
+                "one path, two operations, two numbers — and the coordinate says which");
+        assertNotEquals(byLength, FieldDomains.Coordinate.value(path),
+                "and neither of them is the value the position holds");
+        assertEquals(byLength, FieldDomains.Coordinate.takenBy(path,
+                        souther.compiler.types.ValueName.Stdlib.operation("List", "length")),
+                "while two namings of one number are one coordinate");
+    }
+
+    /**
+     * One number named twice is weighed twice.
+     *
+     * <p>The half above cannot show, and the one the translation is really about: a form carries a
+     * coefficient per number, and a reading that renamed the keys had to add what two of them
+     * brought rather than keep whichever arrived last.
+     */
+    @Test
+    void oneCountNamedWithACoefficientOfTwoRunsToTwiceWhatItIsBounded() {
         Read read = read(COUNTED);
         NumericTerm one = size(read, "xs");
-        NumericTerm other = new NumericTerm.SizeOf(
-                souther.compiler.types.ValueName.Stdlib.operation("Set", "size"),
-                TermPath.of("p").then("xs"));
-        Map<NumericTerm, BigDecimal> coefs = new LinkedHashMap<>();
-        coefs.put(one, BigDecimal.ONE);
-        coefs.put(other, BigDecimal.ONE);
 
-        NumericDomain.Bounds twice = read.quantities()
-                .runsBetween(new NumericDomain.LinearForm<>(BigDecimal.ZERO, coefs));
+        NumericDomain.Bounds twice = read.quantities().runsBetween(
+                new NumericDomain.LinearForm<>(BigDecimal.ZERO,
+                        Map.of(one, BigDecimal.valueOf(2))));
 
-        assertEquals(Endpoint.inclusive(count(5)), read.quantities().runsBetween(one).max(),
-                "the clause counts it at five");
         assertEquals(Endpoint.inclusive(count(10)), twice.max(),
-                "and a form naming it twice runs to twice that");
+                "a count held at five, taken twice, runs to ten");
     }
 
     /** Two positions the record relates, beside a collection no clause counts. */
@@ -305,10 +328,16 @@ class WhatIsKnownOfOneTermSurvivesWhatIsUnknownBesideItTest {
                 "two of them come to one, and the third is never negative");
     }
 
+    /** The term for the number that counts what stands at {@code field}, built the way the
+     *  compiler builds one: through the factory that holds the operation to what is there. */
     private static NumericTerm size(Read read, String field) {
         TermPath at = TermPath.of("p").then(field);
-        return new NumericTerm.SizeOf(souther.compiler.check.NumericMeasures.takenOf(
-                read.inputs().at(at).type(), read.symbols()), at);
+        souther.compiler.types.Type type = read.inputs().at(at).type();
+        NumericTerm.TakenOf made = NumericTerm.TakenOf.of(
+                souther.compiler.check.NumericMeasures.takenOf(type, read.symbols()),
+                at, type, read.symbols());
+        assertNotNull(made, at + " is counted by what its type is counted by");
+        return made;
     }
 
     private static Count count(int at) {

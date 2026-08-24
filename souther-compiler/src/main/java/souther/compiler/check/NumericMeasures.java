@@ -10,7 +10,19 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * The standard-library operations whose result is a number taken of a location.
+ * The standard-library operations that count what a location holds, and the reading that finds a
+ * number taken of one wherever it is written.
+ *
+ * <p><b>Two questions and two sets, since #1027.</b> Counting what it is given is one account of
+ * what an operation takes of the one value it is given, and {@link #calls()} and {@link #isMeasure}
+ * hold that narrow set: what an emptiness check means, what bounds how many a generated container
+ * holds, what a clause of a value has a word for. {@link #takenIn} asks the wider question — is this
+ * call a number taken of one location at all — and answers for every operation that declares an
+ * account of any kind. Asked the narrow question where the wide one was meant, a guard on anything
+ * but a size drew no line and nothing said so.
+ *
+ * <p>Neither set is enumerated here, and neither was. Both are read off the declarations, which is
+ * what this class was made for the first time it happened.
  *
  * <p>Which they are is declared with the rest of what is true of the language's operations
  * ({@link OperationFacts}) and read from there. This once held the list
@@ -35,21 +47,22 @@ import java.util.Set;
  */
 public final class NumericMeasures {
 
-    /** Every such operation. */
+    /** Every operation that counts what it is given, which is the narrow set. */
     public static Set<ValueName> calls() {
         return OperationFacts.countsWhatItIsGiven();
     }
 
-    /** Whether {@code operation} is one of them. */
+    /** Whether {@code operation} counts what it is given. Not whether it answers a number taken of
+     *  one value, which is {@link #takenIn}'s wider question. */
     public static boolean isMeasure(ValueName operation) {
         return calls().contains(operation);
     }
 
-    /** One of these applied to something: which measure, and what it is taken of. */
+    /** One such call: which operation, and what it is taken of. */
     public record Measured(ValueName.Stdlib operation, Core of) {}
 
     /**
-     * The measure {@code e} takes and what it takes it of, or null where it takes none.
+     * The number {@code e} takes of one value and where it takes it, or null where it takes none.
      *
      * <p>Asked here rather than matched on a call's shape, because the same call arrives in two
      * shapes and which of them is not a detail of the walk. The tree that runs holds a
@@ -61,7 +74,7 @@ public final class NumericMeasures {
      * <p>The argument has to be one thing. A measure of several is not one of these, and what it
      * would be counted at is not a place either.
      */
-    public static Measured measureIn(Core e) {
+    public static Measured takenIn(Core e) {
         ValueName operation = switch (e) {
             case Core.Call call when call.fn() instanceof Core.Reached reached
                     && reached.name() instanceof ReachName.OfLibrary library ->
@@ -74,28 +87,14 @@ public final class NumericMeasures {
             case Core.PreservedCall preserved -> preserved.args();
             case null, default -> List.of();
         };
-        return operation instanceof ValueName.Stdlib measure && isMeasure(measure)
+        // Any operation that answers a number taken of the one value it is given, and not the
+        // measures alone. `Time.hour(t)` names a number of `t` the way `String.length(s)` names one of
+        // `s`, and a reading that asked the narrower question drew a line on the second and none on
+        // the first — with nothing said about the guard it passed over (#1027).
+        return operation instanceof ValueName.Stdlib named
+                && OperationFacts.takenAs(named) != null
                 && args.size() == 1
-                ? new Measured(measure, args.get(0)) : null;
-    }
-
-    /**
-     * Whether every count this operation could give is a count some value of the type has.
-     *
-     * <p>Here with the rest because it is the same question one step on: what a value of this type
-     * is counted by, and whether the number a rule leaves is a number something holds. Only a
-     * string's length is. A string of any length is written by repeating a character and a character
-     * is always to be had, so what the rules leave is what some value has.
-     *
-     * <p>Every other measure counts things that may not be there. A {@code Set<Bool>} is capped at
-     * two by how many booleans there are; a {@code List<T>} of one needs a {@code T}, and a
-     * {@code T} nothing inhabits has none. Whether such a value exists is a question about the
-     * element and not about the count, and the numeric domain has no term for it — so the range is
-     * not a proof, and a row at that edge is settled by a value rather than by an argument.
-     */
-    public static boolean everyCountHasAValue(ValueName operation) {
-        return OperationFacts
-                .everyCountItGivesIsACountSomeValueHas(operation);
+                ? new Measured(named, args.get(0)) : null;
     }
 
     /**

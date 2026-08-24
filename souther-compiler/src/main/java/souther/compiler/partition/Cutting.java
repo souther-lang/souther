@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import souther.compiler.check.Carrier;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
@@ -54,8 +53,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         if (atAPosition != null) {
             return new Cutting(
                     new BorderQuantity.OfACoordinate(AxisId.of(behavior, atAPosition.term()),
-                            atAPosition.term(), atAPosition.carrier()),
-                    new Level.OnACarrier(atAPosition.carrier(), atAPosition.value()),
+                            atAPosition.term(), atAPosition.orders()),
+                    new Level.OnACarrier(atAPosition.orders().answered(), atAPosition.value()),
                     claimOf(atAPosition), null);
         }
         ComparedTerms apart = ComparedTerms.of(comparison, read, reads, symbols);
@@ -87,7 +86,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         if (read == null || !read.orders()) {
             return null;
         }
-        java.util.Map<NumericTerm, Carrier> on = read.carriers(reads, symbols);
+        java.util.Map<NumericTerm, souther.compiler.inputs.TermOrders> on =
+                read.carriers(reads, symbols);
         if (on == null) {
             return null;
         }

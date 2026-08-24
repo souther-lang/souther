@@ -227,10 +227,42 @@ public final class InputDomain {
      * narrowing, and what it holds there is what a row writes; walking the declaration again would
      * answer with what the field was declared as before anything narrowed it.
      */
-    public Carrier carrierOf(NumericTerm term, Symbols symbols) {
-        Position position = at(term.path());
-        return term.carrierAt(
-                position != null ? position.type() : declaredAt(term.path(), symbols), symbols);
+    public Carrier answeredOn(NumericTerm term, Symbols symbols) {
+        return ordersOf(term, symbols).answered();
+    }
+
+    /**
+     * The order a value at {@code term}'s path is read off a row on, or null where nothing orders
+     * it.
+     *
+     * <p>The other end of the same term, and never the one above. What a term answers and what it is
+     * read off are two orders for every term that is what an operation answered and one order for
+     * every term that is not — so a caller handed a single carrier had whichever of the two the
+     * caller before it meant, and the day the two part is the day a row is decoded on a count the
+     * value is not written in (#1027).
+     */
+    public Carrier observedOn(NumericTerm term, Symbols symbols) {
+        return ordersOf(term, symbols).observed();
+    }
+
+    /** Both ends of one term, taken together from the one reading of where it sits. */
+    public TermOrders ordersOf(NumericTerm term, Symbols symbols) {
+        return term.ordersAt(typeAt(term.path(), symbols), symbols);
+    }
+
+    /**
+     * What stands at {@code path} as this reading has it, or null where it reaches nothing there.
+     *
+     * <p>The position first and the declarations only where there is none, which is the one
+     * resolution of where a term sits. A caller that walked the declarations itself would answer
+     * with what a field was declared as before anything narrowed it, and a caller that took the
+     * position alone would have nothing under {@link #MAX_DEPTH}. Both readers of this — what a term
+     * is measured on, and whether an operation may be taken of it — get the same answer because
+     * there is one.
+     */
+    public Type typeAt(TermPath path, Symbols symbols) {
+        Position position = at(path);
+        return position != null ? position.type() : declaredAt(path, symbols);
     }
 
     /**
@@ -528,7 +560,13 @@ public final class InputDomain {
             stated = List.of();
         }
         boolean bySize = measuredHere(ofType, valueOfType, stated, taken);
-        NumericTerm term = bySize ? new NumericTerm.SizeOf(taken, path) : new NumericTerm.ValueOf(path);
+        NumericTerm term = bySize ? NumericTerm.TakenOf.of(taken, path, type, symbols)
+                : new NumericTerm.ValueOf(path);
+        if (term == null) {
+            throw new IllegalStateException(
+                    "this reading decided " + path + " is measured by " + taken
+                            + ", which is not what its type is measured by: " + Type.show(type));
+        }
         DeclaredBounds.Bounds own = bySize
                 ? DeclaredBounds.and(ofType, DeclaredBounds.placed(stated, true, Carrier.WHOLE))
                 : carried == null ? null
@@ -558,7 +596,10 @@ public final class InputDomain {
                 // Where the position actually stops, which the ends as written do not say: a clause
                 // placing one at 0 beside a clause that takes the 0 away leaves a position whose
                 // first value is 1, and a line drawn at the 0 is drawn at no value of it.
-                placed.leftAt(path, bySize),
+                placed.leftAt(path, bySize
+                        ? new souther.compiler.check.FieldDomains.CoordinateKind
+                                .OfWhatAnOperationAnswers(taken)
+                        : new souther.compiler.check.FieldDomains.CoordinateKind.OfItsOwnValue()),
                 placed.narrowedBy(path, true), placed.narrowedBy(path, false), nothingExists,
                 placed.projection(), declared, reading,
                 ObligationDomain.of(reading, declared), admitted.completeness(),

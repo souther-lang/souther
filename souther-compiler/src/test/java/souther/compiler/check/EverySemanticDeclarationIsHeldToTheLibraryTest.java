@@ -149,7 +149,8 @@ class EverySemanticDeclarationIsHeldToTheLibraryTest {
                 new ArrayList<>(OperationFacts.declarations());
         gained.add(new OperationFacts.Declared(
                 new ValueName.Stdlib("List", "howManyThereAreNot"),
-                new OperationFact.CountsWhatItIsGiven()));
+                new OperationFact.AnswersANumberTakenOfTheOneValueItIsGiven(
+                        new souther.compiler.semantics.TakenAs.HowManyItHolds())));
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
                 () -> OperationFactBinder.bindAll(DefaultStdlib.get(), gained),
@@ -159,6 +160,63 @@ class EverySemanticDeclarationIsHeldToTheLibraryTest {
         assertTrue(refused.getMessage().contains("List.howManyThereAreNot"), refused.getMessage());
         assertTrue(refused.getMessage().contains("the library does not declare"),
                 refused.getMessage());
+    }
+
+    /**
+     * An operation the language writes out cannot be given a term of what it answers.
+     *
+     * <p>One call, one representation. {@code Int.abs} is an ordinary {@code let} over {@code <} and
+     * {@code -}, so a body reading takes its body and draws the line the definition draws — at
+     * nought, where {@code n < 0} is. Declared as a term as well, the same call would be a line at
+     * nought to one reader and an opaque number to another, and which of them a report showed would
+     * be whichever reader arrived (#1027).
+     *
+     * <p>Refused where the declaration is written and not by a list of operations to leave out. A
+     * list would be a second account of which operations the language writes out, kept in step by
+     * whoever remembered; the declaration itself already says.
+     */
+    @Test
+    void anOperationWrittenInTheLanguageCannotBeGivenATermOfWhatItAnswers() {
+        List<OperationFacts.Declared> gained =
+                new ArrayList<>(OperationFacts.declarations());
+        gained.add(new OperationFacts.Declared(
+                new ValueName.Stdlib("Int", "abs"),
+                new OperationFact.AnswersANumberTakenOfTheOneValueItIsGiven(
+                        new souther.compiler.semantics.TakenAs.HowManyItHolds())));
+
+        IllegalStateException refused = assertThrows(IllegalStateException.class,
+                () -> OperationFactBinder.bindAll(DefaultStdlib.get(), gained));
+
+        assertTrue(refused.getMessage().contains("Int.abs"), refused.getMessage());
+        assertTrue(refused.getMessage().contains("written in the language"),
+                "and says why, which is that its body is read where it is called: "
+                        + refused.getMessage());
+    }
+
+    /**
+     * Nor can one whose result some other representation already reads.
+     *
+     * <p>The other half of the same invariant, and the one a check on how the operation is written
+     * cannot make. {@code Decimal.fromInt} is an intrinsic and takes one number, so nothing about
+     * how it is declared keeps it out; what keeps it out is that a form already says what it answers
+     * in its argument's own count, which is more than a term standing for it can say. Read as both,
+     * a rule about {@code n} would settle a clause about {@code Decimal.fromInt(n)} for one reader
+     * and not for the other.
+     */
+    @Test
+    void anOperationWhoseResultAFormAlreadyReadsCannotBeGivenOneEither() {
+        List<OperationFacts.Declared> gained =
+                new ArrayList<>(OperationFacts.declarations());
+        gained.add(new OperationFacts.Declared(
+                new ValueName.Stdlib("Decimal", "fromInt"),
+                new OperationFact.AnswersANumberTakenOfTheOneValueItIsGiven(
+                        new souther.compiler.semantics.TakenAs.HowManyItHolds())));
+
+        IllegalStateException refused = assertThrows(IllegalStateException.class,
+                () -> OperationFactBinder.bindAll(DefaultStdlib.get(), gained));
+
+        assertTrue(refused.getMessage().contains("Decimal.fromInt"), refused.getMessage());
+        assertTrue(refused.getMessage().contains("form"), refused.getMessage());
     }
 
     /**

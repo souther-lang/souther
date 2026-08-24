@@ -623,10 +623,14 @@ public final class GuardThresholds {
      * names, and a boundary on it could not be looked for in a row.
      */
     static NumericTerm termOf(Core e, InputReads reads, Symbols symbols) {
-        NumericMeasures.Measured measured = NumericMeasures.measureIn(e);
+        NumericMeasures.Measured measured = NumericMeasures.takenIn(e);
         if (measured != null) {
             TermPath of = reads.pathOf(measured.of(), symbols);
-            return of == null ? null : new NumericTerm.SizeOf(measured.operation(), of);
+            // Null where the call names a location the operation is not taken of, which a guard can
+            // write and the type checker has already refused elsewhere. Answered here as "no term",
+            // which is what every reader of one is ready for.
+            return of == null ? null : NumericTerm.TakenOf.of(measured.operation(), of,
+                    reads.read().typeAt(of, symbols), symbols);
         }
         TermPath path = reads.pathOf(e, symbols);
         return path == null ? null : new NumericTerm.ValueOf(path);
@@ -644,7 +648,13 @@ public final class GuardThresholds {
      * @param term  what the expression names
      * @param order what it is counted on
      */
-    record Named(NumericTerm term, Carrier order) {}
+    record Named(NumericTerm term, souther.compiler.inputs.TermOrders orders) {
+
+        /** What a line on it is measured on, which is what most readers of a pair want. */
+        Carrier order() {
+            return orders.answered();
+        }
+    }
 
     /**
      * The same, or null where the expression names no number this can put an order under.
@@ -666,8 +676,8 @@ public final class GuardThresholds {
         if (term == null) {
             return null;
         }
-        Carrier order = reads.read().carrierOf(term, symbols);
-        return order == null ? null : new Named(term, order);
+        souther.compiler.inputs.TermOrders orders = reads.read().ordersOf(term, symbols);
+        return orders.answered() == null ? null : new Named(term, orders);
     }
 
     private GuardThresholds() {}

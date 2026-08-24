@@ -21,6 +21,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -208,10 +209,7 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
     @Test
     void aCountFixedBelowNoneLeavesNothingThoughNoClauseSaysSo() {
         Read read = read(BAG, "take");
-        NumericTerm size = new NumericTerm.SizeOf(
-                souther.compiler.check.NumericMeasures.takenOf(
-                        read.inputs().at(TermPath.of("b").then("xs")).type(), read.symbols()),
-                TermPath.of("b").then("xs"));
+        NumericTerm size = takenOfWhatIsThere(read, TermPath.of("b").then("xs"));
         Quantities asked = read.inputs().quantities(read.symbols());
 
         assertTrue(asked.given(size, count(-1)).emptiness().isPresent());
@@ -333,15 +331,17 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
             souther.compiler.check.FieldDomains readIn = souther.compiler.check.FieldDomains.of(
                     name, data, read.symbols(), ReadAs.THE_COMPILATION_DOES, settled);
             souther.compiler.check.FieldDomains.Carried<String> taken = whole.given(Map.of(
-                    new souther.compiler.check.FieldDomains.Coordinate("x", false), count(at)))
-                    .constraintsOver(coordinate -> coordinate.measured()
+                    souther.compiler.check.FieldDomains.Coordinate.value("x"), count(at)))
+                    .constraintsOver(coordinate -> coordinate.kind()
+                                    instanceof souther.compiler.check.FieldDomains
+                                            .CoordinateKind.OfWhatAnOperationAnswers
                                     ? "#" + coordinate.path() : coordinate.path(),
                             subject -> "?" + subject);
 
             assertEquals(readIn.holdsNothing().isPresent(),
                     taken.constraints().holdsNothing(taken.positions()).isPresent(),
                     "whether anything is left, with x at " + at);
-            assertEquals(readIn.leftAt("y", false),
+            assertEquals(readIn.leftAt("y", new souther.compiler.check.FieldDomains.CoordinateKind.OfItsOwnValue()),
                     taken.constraints().numbers().boundsOf(
                             NumericDomain.LinearForm.<String>atom("y")),
                     "where y runs, with x at " + at);
@@ -433,9 +433,18 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
     }
 
     private static NumericTerm size(Read read, String field) {
-        TermPath at = TermPath.of("p").then(field);
-        return new NumericTerm.SizeOf(souther.compiler.check.NumericMeasures.takenOf(
-                read.inputs().at(at).type(), read.symbols()), at);
+        return takenOfWhatIsThere(read, TermPath.of("p").then(field));
+    }
+
+    /** The term for the number that counts what stands at {@code at}, built the way the compiler
+     *  builds one: through the factory that holds the operation to what is there. */
+    private static NumericTerm takenOfWhatIsThere(Read read, TermPath at) {
+        souther.compiler.types.Type type = read.inputs().at(at).type();
+        NumericTerm.TakenOf made = NumericTerm.TakenOf.of(
+                souther.compiler.check.NumericMeasures.takenOf(type, read.symbols()),
+                at, type, read.symbols());
+        assertNotNull(made, at + " is counted by what its type is counted by");
+        return made;
     }
 
     /** A collection nothing bounds, so only what a count guarantees of itself is left to refuse

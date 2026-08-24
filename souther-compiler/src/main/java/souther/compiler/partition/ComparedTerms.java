@@ -51,7 +51,8 @@ import java.util.Map;
  *                       as one position against another. A number and not a count of steps: an order
  *                       with no smallest step still holds its values a distance apart
  */
-record ComparedTerms(NumericTerm on, NumericTerm against, Map<NumericTerm, Carrier> carriers,
+record ComparedTerms(NumericTerm on, NumericTerm against,
+                     Map<NumericTerm, souther.compiler.inputs.TermOrders> carriers,
                      boolean holdsAtTheLine, boolean valueBelongsBelow, Count stepsApart) {
 
     /**
@@ -66,9 +67,10 @@ record ComparedTerms(NumericTerm on, NumericTerm against, Map<NumericTerm, Carri
             GuardThresholds.Named on = GuardThresholds.namedBy(comparison.left(), reads, symbols);
             GuardThresholds.Named against =
                     GuardThresholds.namedBy(comparison.right(), reads, symbols);
-            Map<NumericTerm, Carrier> carriers = on == null || against == null ? null
-                    : aDistanceBetween(on.term(), on.order(),
-                            against.term(), against.order());
+            Map<NumericTerm, souther.compiler.inputs.TermOrders> carriers =
+                    on == null || against == null ? null
+                            : aDistanceBetween(on.term(), on.orders(),
+                                    against.term(), against.orders());
             if (carriers != null) {
                 // The subject is the one the author wrote on the left, which the canonical form
                 // keeps too. Which of the two a line is named by is not something to derive where
@@ -100,13 +102,15 @@ record ComparedTerms(NumericTerm on, NumericTerm against, Map<NumericTerm, Carri
      * two positions written back differently — a decimal against a whole number is the pair that
      * exists — is still one distance, and it is only the writing that differs.
      */
-    private static Map<NumericTerm, Carrier> aDistanceBetween(NumericTerm on, Carrier here,
-                                                              NumericTerm against, Carrier there) {
+    private static Map<NumericTerm, souther.compiler.inputs.TermOrders> aDistanceBetween(
+            NumericTerm on, souther.compiler.inputs.TermOrders here,
+            NumericTerm against, souther.compiler.inputs.TermOrders there) {
         if (on == null || against == null || here == null || there == null
-                || on.equals(against) || !here.standsAgainst(there)) {
+                || here.answered() == null || there.answered() == null
+                || on.equals(against) || !here.answered().standsAgainst(there.answered())) {
             return null;
         }
-        Map<NumericTerm, Carrier> both = new LinkedHashMap<>();
+        Map<NumericTerm, souther.compiler.inputs.TermOrders> both = new LinkedHashMap<>();
         both.put(on, here);
         both.put(against, there);
         return both;
@@ -135,8 +139,10 @@ record ComparedTerms(NumericTerm on, NumericTerm against, Map<NumericTerm, Carri
         // The orders come from the reading of the declarations, the way they do above. A term the
         // arithmetic produced has no expression naming it, so there is not even a type here to take
         // one off — which is the whole of what went wrong when one was taken off the comparison.
-        Carrier here = reads.read().carrierOf(two[0], symbols);
-        Carrier there = reads.read().carrierOf(two[1], symbols);
+        souther.compiler.inputs.TermOrders hereOn = reads.read().ordersOf(two[0], symbols);
+        souther.compiler.inputs.TermOrders thereOn = reads.read().ordersOf(two[1], symbols);
+        Carrier here = hereOn.answered();
+        Carrier there = thereOn.answered();
         // And the counts are asked for, which the reading above does not ask. A form holds the two
         // apart by a number it read off the rule, and a number of nothing is not a distance — where
         // the pair meets is the only place such a rule could cut, and that is the line the reading
@@ -144,7 +150,8 @@ record ComparedTerms(NumericTerm on, NumericTerm against, Map<NumericTerm, Carri
         if (here == null || !here.counts()) {
             return null;
         }
-        Map<NumericTerm, Carrier> carriers = aDistanceBetween(two[0], here, two[1], there);
+        Map<NumericTerm, souther.compiler.inputs.TermOrders> carriers =
+                aDistanceBetween(two[0], hereOn, two[1], thereOn);
         if (carriers == null) {
             return null;
         }

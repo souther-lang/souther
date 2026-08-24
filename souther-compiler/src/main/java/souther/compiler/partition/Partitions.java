@@ -8,7 +8,6 @@ import souther.compiler.check.ClauseHelpers;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.FieldDomains;
-import souther.compiler.check.NumericMeasures;
 import souther.compiler.codegen.InvariantConstraints;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.InputDomain;
@@ -118,7 +117,8 @@ public final class Partitions {
          * and asking for a row at it is asking for work nobody may be able to do.
          *
          * <p>And false at a count, unless every count that measure could give is one some value has
-         * ({@link NumericMeasures#everyCountHasAValue}). What the projection settles is which numbers
+         * (the operation's own {@code EveryAnswerItCanGiveHasASourceValue}). What the projection
+         * settles is which numbers
          * the rules leave, and three is a number they leave whether or not three of the thing exist:
          * a `Set<Bool>` is capped at two, and a `List<T>` of one needs a `T` that something inhabits.
          * The domain has no term for either, so such an edge is settled by a value rather than by an
@@ -130,9 +130,17 @@ public final class Partitions {
          * written by repeating a character. Declining the proof there too would take away every
          * `String.length` edge in the corpus over collections that have no values. */
         public boolean edgeIsKnownWritable(NumericTerm term) {
-            return !uncertain.contains(term)
-                    && !(term instanceof NumericTerm.SizeOf size
-                            && !NumericMeasures.everyCountHasAValue(size.measure()));
+            return !uncertain.contains(term) && switch (term) {
+                // What a location holds is what its type holds, so an edge on it is an edge some
+                // value stands at by the type having been declared.
+                case NumericTerm.ValueOf _ -> true;
+                // And what an operation answered is the operation's to say. Asked of the arm it is
+                // taken as instead, every operation sharing an arm would carry one answer: a string
+                // of any length exists and a `Set<Bool>` of three does not, and both are counts.
+                case NumericTerm.TakenOf taken ->
+                        souther.compiler.semantics.OperationFacts
+                                .everyAnswerItCanGiveHasASourceValue(taken.operation());
+            };
         }
 
         /** Only the positions the model actually divides. */
@@ -426,7 +434,7 @@ public final class Partitions {
                 Axis here2 = axis;
                 keep(out, measured, refine(axis,
                         () -> singledClasses(points, at, here2.type(), only, symbols),
-                        mergedPoints(axis.cuts(), points, at.carrierAt(axis.type(), symbols)),
+                        mergedPoints(axis.cuts(), points, at.answeredOn(axis.type(), symbols)),
                         axis.parted()),
                         new BodyCutInspection.Evidence(), rules);
                 continue;
@@ -473,7 +481,7 @@ public final class Partitions {
             // where the type is a newtype carrying one, and a plain `Decimal` has none — read off the
             // bound, every such position would be called an integer and a threshold of `0.5m` would
             // be asked for its exact `long`. A size is a whole number whatever it is a size of.
-            Carrier carrier = term.carrierAt(axis.type(), symbols);
+            Carrier carrier = term.answeredOn(axis.type(), symbols);
             // Through `excluding`, so that a class list replaced by the intervals a threshold cuts
             // keeps only the exclusions it still has classes for.
             //
@@ -578,7 +586,8 @@ public final class Partitions {
     private static List<PartitionClass> singledClasses(List<GuardThresholds.Guards.Singled> points,
                                                        NumericTerm term, Type type,
                                                        NumericDomain.Bounds within, Symbols symbols) {
-        Carrier carrier = term.carrierAt(type, symbols);
+        souther.compiler.inputs.TermOrders orders = term.ordersAt(type, symbols);
+        Carrier carrier = orders.answered();
         List<Place> values = new ArrayList<>();
         for (GuardThresholds.Guards.Singled each : points) {
             if (values.stream().noneMatch(had -> had.sameAs(each.value()))) {
@@ -589,13 +598,13 @@ public final class Partitions {
         for (Place value : values) {
             String written = carrier.written(value);
             classes.add(classAt(term + "/= " + written, "= " + written,
-                    holding(term, carrier, new Recognition.CountIs.At(value)),
+                    holding(term, orders, new Recognition.CountIs.At(value)),
                     standing(type, carrier, value, symbols)));
         }
         Place other = carrier.somethingOtherThan(values, within);
         String label = "/= " + String.join(", ",
                 values.stream().map(carrier::written).toList());
-        Recognition away = holding(term, carrier,
+        Recognition away = holding(term, orders,
                 new Recognition.CountIs.AwayFrom(values));
         classes.add(other == null
                 ? PartitionClass.ungeneratable(term + "/" + label, label, away,
@@ -622,9 +631,9 @@ public final class Partitions {
     }
 
     /** A class that reads the term's count out of a row and answers about it. */
-    private static Recognition holding(NumericTerm term, Carrier carrier,
+    private static Recognition holding(NumericTerm term, souther.compiler.inputs.TermOrders on,
                                           Recognition.CountIs is) {
-        return new Recognition.OfACount(term, carrier, is);
+        return new Recognition.OfACount(term, on, is);
     }
 
     /** The cuts a position has, with the values a body singled out added as lines of their own. */
@@ -749,7 +758,9 @@ public final class Partitions {
         List<Seam> parted = new ArrayList<>(axis.parted());
         for (Cut cut : axis.cuts()) {
             BoundaryTarget where = BoundaryTarget.at(
-                    new BorderQuantity.OfACoordinate(axis.id(), axis.term(), cut.carrier()),
+                    new BorderQuantity.OfACoordinate(axis.id(), axis.term(),
+                            new souther.compiler.inputs.TermOrders(
+                                    axis.term().observedOn(axis.type(), symbols), cut.carrier())),
                     new Level.OnACarrier(cut.carrier(), cut.at()));
             for (OriginRef origin : cut.origins()) {
                 Seam parts = Border.parts(where, origin);
@@ -764,7 +775,9 @@ public final class Partitions {
             // instead, a line drawn on a count taken of a position would be written back as a value
             // of the position.
             BoundaryTarget target = BoundaryTarget.at(
-                    new BorderQuantity.OfACoordinate(axis.id(), axis.term(), cut.carrier()),
+                    new BorderQuantity.OfACoordinate(axis.id(), axis.term(),
+                            new souther.compiler.inputs.TermOrders(
+                                    axis.term().observedOn(axis.type(), symbols), cut.carrier())),
                     new Level.OnACarrier(cut.carrier(), cut.at()));
             for (OriginRef origin : cut.origins()) {
                 // Null where the position does not reach the line at all, which is the line and not

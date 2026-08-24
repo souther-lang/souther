@@ -253,7 +253,8 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
                                          souther.compiler.numeric.Place at) {
         return BoundaryTarget.at(new BorderQuantity.OfACoordinate(axis,
                         new souther.compiler.inputs.NumericTerm.ValueOf(
-                                souther.compiler.inputs.TermPath.of(axis.term())), carrier),
+                                souther.compiler.inputs.TermPath.of(axis.term())),
+                        souther.compiler.inputs.TermOrders.itself(carrier)),
                 new Level.OnACarrier(carrier, at));
     }
 
