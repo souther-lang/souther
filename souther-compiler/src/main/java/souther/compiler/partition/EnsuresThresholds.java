@@ -2,8 +2,6 @@ package souther.compiler.partition;
 
 import souther.compiler.types.BinOp;
 import souther.compiler.check.BehaviorContract;
-import souther.compiler.check.ComparisonClaim;
-import souther.compiler.check.Required;
 import souther.compiler.check.RuleAccounting;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.StatedContract;
@@ -12,7 +10,6 @@ import souther.compiler.core.Core;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
-import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.UnreadRule;
 import souther.compiler.types.BindingId;

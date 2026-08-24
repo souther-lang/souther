@@ -2,7 +2,6 @@ package souther.compiler.partition;
 
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.Carrier;
-import souther.compiler.check.Required;
 import souther.compiler.check.RuleAccounting;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.UnreadComparison;

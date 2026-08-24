@@ -2,7 +2,6 @@ package souther.compiler.partition;
 
 import souther.compiler.check.RuleAccounting;
 import souther.compiler.inputs.BlockReason;
-import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.UnreadRule;
 
 /**
