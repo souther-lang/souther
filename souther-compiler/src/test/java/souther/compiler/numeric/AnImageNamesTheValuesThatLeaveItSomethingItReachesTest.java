@@ -55,7 +55,7 @@ class AnImageNamesTheValuesThatLeaveItSomethingItReachesTest {
 
         AffinePreimage answer = rest.affinePreimage(at(3), at(3), Granularity.DISCRETE);
 
-        assertEquals(new AffinePreimage.Stepping(at(1), at(2)), answer);
+        assertEquals(new AffinePreimage.Stepping(at(1), at(2), Granularity.DISCRETE), answer);
         leavesSomethingReached(rest, at(3), at(3), answer);
     }
 
@@ -75,7 +75,7 @@ class AnImageNamesTheValuesThatLeaveItSomethingItReachesTest {
 
         AffinePreimage answer = rest.affinePreimage(at(-3), at(3), Granularity.DISCRETE);
 
-        assertEquals(new AffinePreimage.Stepping(at(1), at(2)), answer);
+        assertEquals(new AffinePreimage.Stepping(at(1), at(2), Granularity.DISCRETE), answer);
         leavesSomethingReached(rest, at(-3), at(3), answer);
     }
 
@@ -144,8 +144,8 @@ class AnImageNamesTheValuesThatLeaveItSomethingItReachesTest {
         assertEquals(new AffinePreimage.Filling(Rational.ONE, at(3)),
                 new AffinePreimage.Filling(
                         Rational.of(new java.math.BigDecimal("1.3")), at(3)));
-        assertEquals(new AffinePreimage.Stepping(at(1), at(2)),
-                new AffinePreimage.Stepping(at(7), at(2)));
+        assertEquals(new AffinePreimage.Stepping(at(1), at(2), Granularity.DISCRETE),
+                new AffinePreimage.Stepping(at(7), at(2), Granularity.DISCRETE));
     }
 
     /**
@@ -179,7 +179,12 @@ class AnImageNamesTheValuesThatLeaveItSomethingItReachesTest {
     void aProgressionIsWrittenInTheNumbersThePositionHolds() {
         assertThrows(IllegalArgumentException.class,
                 () -> new AffinePreimage.Stepping(new Rational(BigInteger.ONE, BigInteger.TWO),
-                        at(2)));
+                        at(2), Granularity.DISCRETE));
+        // And the same progression is what a position whose values fill is left with, so the
+        // refusal is about the position and not about the halves.
+        assertEquals(new Rational(BigInteger.ONE, BigInteger.TWO),
+                new AffinePreimage.Stepping(new Rational(BigInteger.ONE, BigInteger.TWO),
+                        at(2), Granularity.DENSE).from());
         // And a coset of the decimals: a generator that is no whole number once the units are out of
         // it, and a member that is no decimal a model writes.
         assertThrows(IllegalArgumentException.class,
@@ -188,6 +193,104 @@ class AnImageNamesTheValuesThatLeaveItSomethingItReachesTest {
         assertThrows(IllegalArgumentException.class,
                 () -> new AffinePreimage.Filling(
                         new Rational(BigInteger.ONE, BigInteger.valueOf(3)), at(2)));
+    }
+
+    /**
+     * A position that fills, weighed against a residue that steps, answers in values the position
+     * holds.
+     *
+     * <p>Which decimals {@code x} leave {@code 1 - 3x} a whole multiple of two: one, three, five and
+     * so on. Solved over the rationals that set is {@code 1/3 + (2/3)k}, whose members at every odd
+     * {@code k} are exactly those — and neither of the two numbers it is written with is a decimal
+     * a model writes.
+     *
+     * <p>Handed over that way, the reader that cut it to the run read those two numbers, found
+     * neither writable, and answered that no value of the position is on the coset — which is a
+     * proof of emptiness over a set with witnesses in it, and the one direction a preimage may
+     * never err in.
+     */
+    @Test
+    void aPositionThatFillsIsAnsweredInValuesItHolds() {
+        AdditiveImage rest = new AdditiveImage.OverWholeNumbers(at(2));
+
+        AffinePreimage answer = rest.affinePreimage(at(3), Rational.ONE, Granularity.DENSE);
+
+        assertEquals(new AffinePreimage.Stepping(Rational.ONE, at(2), Granularity.DENSE), answer);
+        leavesSomethingReached(rest, at(3), Rational.ONE, answer);
+    }
+
+    /** And a progression whose members its position does not hold is refused where it is built. */
+    @Test
+    void aProgressionNamesValuesItsPositionHolds() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new AffinePreimage.Stepping(new Rational(BigInteger.ONE, BigInteger.valueOf(3)),
+                        new Rational(BigInteger.TWO, BigInteger.valueOf(3)), Granularity.DENSE));
+    }
+
+    /**
+     * A position that steps, weighed against a residue that fills, and the congruence it is left
+     * with.
+     *
+     * <p>The pairing a form only reaches once its positions are read on their own orders, and the
+     * one the reading used to answer with every whole number the position has. Which whole
+     * {@code x} leave {@code 1 - 7x} a decimal multiple of three: seven is one modulo three, so
+     * {@code x} is one modulo three, and the answer names a congruence rather than everything.
+     *
+     * <p>What sets it is the denominator of the weight over the generator. Read off the numerator,
+     * this asked for the inverse of {@code 7 mod 7} — which is nothing's inverse, and no arithmetic
+     * has one.
+     */
+    @Test
+    void aPositionThatStepsAgainstAResidueThatFillsIsLeftACongruence() {
+        AdditiveImage rest = new AdditiveImage.OverFiniteDecimals(at(3));
+
+        AffinePreimage answer = rest.affinePreimage(at(7), at(1), Granularity.DISCRETE);
+
+        assertEquals(new AffinePreimage.Stepping(at(1), at(3), Granularity.DISCRETE), answer);
+        leavesSomethingReached(rest, at(7), at(1), answer);
+    }
+
+    /** And a weight of one, which the reading answered with every whole number there is. */
+    @Test
+    void aWeightOfOneAgainstAResidueThatFillsIsStillACongruence() {
+        AdditiveImage rest = new AdditiveImage.OverFiniteDecimals(at(3));
+
+        AffinePreimage answer = rest.affinePreimage(Rational.ONE, Rational.ONE,
+                Granularity.DISCRETE);
+
+        assertEquals(new AffinePreimage.Stepping(at(1), at(3), Granularity.DISCRETE), answer);
+        leavesSomethingReached(rest, Rational.ONE, Rational.ONE, answer);
+        // Two of the values it leaves out, which is what "every whole number" got wrong.
+        assertTrue(!rest.contains(Rational.ONE.minus(at(0))));
+        assertTrue(!rest.contains(Rational.ONE.minus(at(2))));
+    }
+
+    /**
+     * Where the weight over the generator is itself a decimal there is no congruence, and what is
+     * left is whether the target is a decimal multiple at all.
+     *
+     * <p>Answered for every whole number or for none. Two is a unit among the decimals, so
+     * {@code 2x} lands in a coset of three wherever anything does — and where the target does not,
+     * no {@code x} moves it in.
+     */
+    @Test
+    void aWeightTheDecimalsSwallowLeavesTheQuestionToTheTargetAlone() {
+        AdditiveImage rest = new AdditiveImage.OverFiniteDecimals(at(3));
+
+        assertEquals(new AffinePreimage.Stepping(Rational.ZERO, Rational.ONE, Granularity.DISCRETE),
+                rest.affinePreimage(at(6), at(3), Granularity.DISCRETE));
+        assertEquals(new AffinePreimage.None(),
+                rest.affinePreimage(at(6), Rational.ONE, Granularity.DISCRETE));
+    }
+
+    /** And a target no value of the position moves into the image leaves nothing. */
+    @Test
+    void aTargetNoWholeNumberReachesIsRefused() {
+        AdditiveImage rest = new AdditiveImage.OverFiniteDecimals(at(3));
+
+        assertEquals(new AffinePreimage.None(),
+                rest.affinePreimage(at(3), new Rational(BigInteger.ONE, BigInteger.valueOf(7)),
+                        Granularity.DISCRETE));
     }
 
     /** And a generator the decimals treat as nothing is nothing: two is a unit among them, so a

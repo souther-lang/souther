@@ -54,9 +54,10 @@ public sealed interface BorderQuantity {
             return LevelSpace.onACarrier(of);
         }
 
+        /** Its one position's, and nothing about any other. */
         @Override
-        public Carrier carrier() {
-            return of;
+        public Carrier carrierOf(NumericTerm asked) {
+            return term.equals(asked) ? of : null;
         }
 
         @Override
@@ -156,9 +157,10 @@ public sealed interface BorderQuantity {
                     ? LevelSpace.steppingBy(java.math.BigDecimal.ONE) : LevelSpace.dense();
         }
 
+        /** Either end's, which is the one order both are ordered by. */
         @Override
-        public Carrier carrier() {
-            return of;
+        public Carrier carrierOf(NumericTerm asked) {
+            return on.equals(asked) || against.equals(asked) ? of : null;
         }
 
         /**
@@ -267,16 +269,37 @@ public sealed interface BorderQuantity {
      * the values {@code 2 * a} takes would be the even numbers under one spelling and the odd ones
      * shifted by nine under another.
      */
-    record OverAForm(String behavior, LinearForm<NumericTerm> form, Carrier of)
+    record OverAForm(String behavior, LinearForm<NumericTerm> form, Map<NumericTerm, Carrier> on)
             implements BorderQuantity {
 
         public OverAForm {
-            if (behavior == null || form == null || of == null || form.coefs().isEmpty()) {
-                throw new IllegalArgumentException("a form quantity names positions and one order");
+            if (behavior == null || form == null || on == null || form.coefs().isEmpty()) {
+                throw new IllegalArgumentException("a form quantity names positions and their orders");
             }
             if (form.constant().signum() != 0) {
                 throw new IllegalArgumentException(
                         "a quantity carries no constant; it belongs to the threshold: " + form);
+            }
+            on = Map.copyOf(on);
+            // An order per position of the form, held here so no reader has to answer for a
+            // position with none. A map beside a form is two structures, and two structures are
+            // what come apart: written this way the pair that disagrees does not exist.
+            if (!on.keySet().equals(form.coefs().keySet())) {
+                throw new IllegalArgumentException("a form is over the positions it names, and each"
+                        + " of them is read on one order: " + form.coefs().keySet() + " against "
+                        + on.keySet());
+            }
+            // And each of those orders has counts under it, which is what a sum adds. Nothing
+            // more: whether these positions add up to anything is settled by whatever produced the
+            // form, and a rule here would be written without the coefficients. `b + a` over two
+            // dates is the same orders in the same numbers as `b - a - n`, and only the second is a
+            // count of days — which is the form issue #949 asks for.
+            for (Carrier each : on.values()) {
+                if (!each.counts()) {
+                    throw new IllegalArgumentException(
+                            "a form adds its positions up, and this order has no number under it: "
+                                    + each);
+                }
             }
         }
 
@@ -297,22 +320,42 @@ public sealed interface BorderQuantity {
         @Override
         public LevelSpace levels() {
             java.math.BigDecimal step = LevelSpace.stepOf(form.coefs().values());
-            return of.spacing() == souther.compiler.numeric.Granularity.DISCRETE
+            return spacing() == souther.compiler.numeric.Granularity.DISCRETE
                     ? LevelSpace.steppingBy(step)
                     : LevelSpace.overFiniteDecimals(LevelSpace.generatorOverFiniteDecimals(step));
         }
 
+        /**
+         * How the sum steps, which is how its positions step together.
+         *
+         * <p>A sum steps only where every one of its terms does: a whole number added to a decimal
+         * lands wherever the decimal does. Read off the one order a form was held to, this was
+         * whatever that order said; a form of whole numbers still answers what it did.
+         */
+        souther.compiler.numeric.Granularity spacing() {
+            for (Carrier each : on.values()) {
+                if (each.spacing() != souther.compiler.numeric.Granularity.DISCRETE) {
+                    return souther.compiler.numeric.Granularity.DENSE;
+                }
+            }
+            return souther.compiler.numeric.Granularity.DISCRETE;
+        }
+
+        /** The order that position is read and written on, and null for a position not in the
+         *  form. */
         @Override
-        public Carrier carrier() {
-            return of;
+        public Carrier carrierOf(NumericTerm asked) {
+            return on.get(asked);
         }
 
         @Override
         public Stands standsAt(Criterion where, Observation row) {
             java.math.BigDecimal at = java.math.BigDecimal.ZERO;
             for (Map.Entry<NumericTerm, java.math.BigDecimal> each : form.coefs().entrySet()) {
+                // Each on its own order. Read on one order for the whole form, a position written
+                // back differently from its neighbour was read as a value it does not hold.
                 NumericTerm.Reading read =
-                        each.getKey().read(row.at(each.getKey().path()), of);
+                        each.getKey().read(row.at(each.getKey().path()), on.get(each.getKey()));
                 if (read instanceof NumericTerm.Reading.Missing) {
                     return Stands.UNREADABLE;
                 }
@@ -327,7 +370,7 @@ public sealed interface BorderQuantity {
 
         @Override
         public Standing standingAt(Criterion where) {
-            return new Standing.OfAForm(form, of, levels(), where);
+            return new Standing.OfAForm(form, on, levels(), where);
         }
 
         @Override
@@ -381,9 +424,20 @@ public sealed interface BorderQuantity {
     /** How this quantity's own values are ordered, and which of them it can take. */
     LevelSpace levels();
 
-    /** The order every position under this quantity is written back on, which is one order: a
-     *  quantity over positions of two carriers is one nothing could write a row for. */
-    Carrier carrier();
+    /**
+     * The order one position under this quantity is read and written back on, or null where the
+     * quantity is not over that position.
+     *
+     * <p>Asked per position rather than once. A quantity used to answer with the one order every
+     * position under it was on, which a coordinate and a line between two positions can do because
+     * they have one — and a form was then held to the same, so a form over positions written back
+     * differently was no quantity at all.
+     *
+     * <p>Nothing is asked of the orders beyond each having counts under it. Which positions a form
+     * weighs, and with what, is settled by the arithmetic or the operation semantics that produced
+     * the form; this layer does not decide that again.
+     */
+    Carrier carrierOf(NumericTerm term);
 
     /** Whether a row stands at one item of a border on this quantity, or whether it could not be
      *  read. */
@@ -413,7 +467,7 @@ public sealed interface BorderQuantity {
             return left();
         }
         if (this instanceof OverAForm form) {
-            return new OverAForm(form.behavior(), form.form().times(times), form.of()).left();
+            return new OverAForm(form.behavior(), form.form().times(times), form.on()).left();
         }
         return times.stripTrailingZeros().toPlainString() + " * " + left();
     }

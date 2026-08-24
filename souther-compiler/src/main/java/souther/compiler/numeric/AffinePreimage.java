@@ -26,12 +26,34 @@ public sealed interface AffinePreimage {
     record None() implements AffinePreimage {}
 
     /**
-     * Every {@code from + by·k} for a whole {@code k}.
+     * Every {@code from + by·k} for a whole {@code k}, and every one of them a value the position
+     * holds.
      *
-     * @param by always positive. One is every whole number, which is what a position under no
-     *           congruence is left with
+     * <p><b>What steps is the set and not always the position.</b> A position whose values fill,
+     * weighed against a residue that steps, reaches a progression through its own values —
+     * {@code d - n} at two and a half is met by {@code d} at two and a half, three and a half, and
+     * no other. So a member need not be whole. What it must be is a value the position takes, and
+     * which values those are is what the spacing says.
+     *
+     * <p><b>Members and not the equation's solutions.</b> The two came apart here. Solving over the
+     * rationals leaves a progression like {@code 1/3 + (2/3)k}, whose members at every odd
+     * {@code k} are one, three, five — all of them values a position that fills holds, none of them
+     * written in the two numbers the progression is written with. Handed over unreduced, a reader
+     * that asked whether the progression was written in decimals answered about the wrong thing and
+     * called a set with witnesses in it empty.
+     *
+     * <p>So the intersection is the producer's, and it is required here rather than described: a
+     * progression that names values its position does not hold is refused where it is built, which
+     * is the only place that knows how to take the intersection. A reader may then take any member
+     * it likes.
+     *
+     * @param by      always positive. One is every value of the position, which is what a position
+     *                under no congruence is left with
+     * @param spacing how the position's own values are spaced. A position that counts takes a
+     *                progression of whole numbers; one whose values fill takes one written in
+     *                decimals a model can write
      */
-    record Stepping(Rational from, Rational by) implements AffinePreimage {
+    record Stepping(Rational from, Rational by, Granularity spacing) implements AffinePreimage {
 
         /**
          * With the member written as the one between none and {@code by}.
@@ -42,13 +64,19 @@ public sealed interface AffinePreimage {
          * answers with nothing to tell a reader they are one.
          */
         public Stepping {
-            if (from == null || by == null || by.signum() <= 0) {
+            if (from == null || by == null || spacing == null || by.signum() <= 0) {
                 throw new IllegalArgumentException("a progression steps by something positive: " + by);
             }
-            if (!from.isWhole() || !by.isWhole()) {
+            if (spacing == Granularity.DISCRETE && (!from.isWhole() || !by.isWhole())) {
                 throw new IllegalArgumentException(
                         "a position whose values step takes whole numbers, so a progression of them"
                                 + " is written in whole numbers: " + from + " by " + by);
+            }
+            if (spacing == Granularity.DENSE
+                    && (from.asWrittenDecimal() == null || by.asWrittenDecimal() == null)) {
+                throw new IllegalArgumentException(
+                        "a progression names values of its position, and a position holds what a"
+                                + " model can write: " + from + " by " + by);
             }
             from = from.minus(by.times(Rational.of(from.dividedBy(by).floor())));
         }

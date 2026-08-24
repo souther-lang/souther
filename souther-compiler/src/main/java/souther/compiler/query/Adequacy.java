@@ -1120,11 +1120,12 @@ public final class Adequacy {
 
                 @Override
                 public Generator.BoundaryAttempt attempt(String label,
-                        souther.compiler.check.Carrier carrier,
+                        java.util.function.Function<souther.compiler.inputs.NumericTerm,
+                                souther.compiler.check.Carrier> on,
                         java.util.Map<souther.compiler.inputs.NumericTerm,
                                 souther.compiler.numeric.Place> fixing) {
                     return built(() ->
-                            Generator.probeFixing(subject, label, carrier, fixing, check));
+                            Generator.probeFixing(subject, label, on, fixing, check));
                 }
 
                 private Generator.BoundaryAttempt built(

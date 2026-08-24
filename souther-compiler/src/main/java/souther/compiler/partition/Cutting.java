@@ -76,10 +76,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * is the case domain testing exists for — a partition defined by a condition over more than one
      * variable — and the four sides of the box its positions sit in are not it.
      *
-     * <p>Only where every position of the form is counted on one order. A form adds its positions
-     * together, and two orders whose counts mean different things have no sum: a day count and a
-     * number are not addable, and a rule that looked addable because both sides type-checked would
-     * put a border at a number nothing stands at.
+     * <p>Each position on the order it is written back on, which the reading answers per position.
+     * Only where every one of them has an order with counts under it: a position with no number is
+     * one a sum has nothing to add.
      */
     private static Cutting overAForm(String behavior, AffineReading read, InputReads reads,
                                      Symbols symbols,
@@ -87,11 +86,11 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         if (read == null || !read.orders()) {
             return null;
         }
-        Carrier carrier = read.carrier(reads, symbols);
-        if (carrier == null || !carrier.counts()) {
+        java.util.Map<NumericTerm, Carrier> on = read.carriers(reads, symbols);
+        if (on == null) {
             return null;
         }
-        return new Cutting(new BorderQuantity.OverAForm(behavior, read.form(), carrier),
+        return new Cutting(new BorderQuantity.OverAForm(behavior, read.form(), on),
                 new Level.ACount(new Count(read.cut())), read.claim(),
                 quantities.runsBetween(read.form()));
     }
@@ -134,7 +133,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         java.math.BigDecimal per = QuantityKey.per(direction);
         return Seam.of(of.levels(), at,
                 valueBelongsBelow() ? Towards.BELOW : Towards.ABOVE,
-                new Seam.Scale(per, direction.coefs().size() == 1 ? of.carrier() : null));
+                new Seam.Scale(per, direction.coefs().size() == 1
+                        ? of.carrierOf(direction.coefs().keySet().iterator().next()) : null));
     }
 
     /**
@@ -190,7 +190,11 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * the line falls is asked of the order it sits on.
      */
     Place singledValue() {
-        return seam().at().asAValueOf(of.carrier());
+        // On the order the position it divides is written on. A quantity used to answer with one
+        // order for everything under it; a form may now be over positions written back differently,
+        // and the value named here is a value of one of them.
+        NumericTerm divides = dividedPosition();
+        return seam().at().asAValueOf(divides == null ? null : of.carrierOf(divides));
     }
 
     /**

@@ -273,25 +273,35 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
     }
 
     /**
-     * The order this form's positions are counted on, or null where they are not all on one.
+     * The order each of this form's positions is read and written back on, or null where some
+     * position has no order with counts under it.
      *
-     * <p>Asked of each position and not of the operand it was written beside. A form adds its
-     * positions together, and two orders whose counts mean different things have no sum — a day
-     * count and a number are not addable, however well both sides type-checked. Read off one
+     * <p>Asked of each position and not of the operand it was written beside. Read off one
      * operand's type, every position of the form answered with that one's order and the check could
      * not fire at all: positions were then read off rows, and written back, on an order that is not
      * theirs.
+     *
+     * <p>An order apiece rather than one for all of them, and no question here about whether the
+     * form adds up to anything. Which positions may be added, and with which weights, is settled
+     * before this: an arithmetic a model wrote type-checked, and one this compiler composed stands
+     * on what the operation states about its result. A rule refusing forms here by comparing what
+     * the orders count would be a reader deciding that again, and deciding it worse — it cannot see
+     * the coefficients. {@code b + a} over two dates leaves an origin in and {@code b - a - n} does
+     * not, and those two are the same orders in the same numbers.
+     *
+     * <p>What is asked is only that each position has an order, and that the order has counts under
+     * it: a position with no number is one a sum has nothing to add.
      */
-    Carrier carrier(InputReads reads, Symbols symbols) {
-        Carrier one = null;
+    java.util.Map<NumericTerm, Carrier> carriers(InputReads reads, Symbols symbols) {
+        java.util.Map<NumericTerm, Carrier> on = new java.util.LinkedHashMap<>();
         for (NumericTerm term : form.coefs().keySet()) {
             Carrier here = carrierOf(term, reads, symbols);
-            if (here == null || (one != null && !one.equals(here))) {
+            if (here == null || !here.counts()) {
                 return null;
             }
-            one = here;
+            on.put(term, here);
         }
-        return one;
+        return on.isEmpty() ? null : on;
     }
 
     /**

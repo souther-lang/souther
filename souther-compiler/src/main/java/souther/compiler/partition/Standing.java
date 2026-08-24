@@ -58,7 +58,22 @@ public sealed interface Standing {
      * quantity's answer, and a search that worked it out again from the coefficients would be the
      * quantity's reading written a second time, free to disagree with it about where the next level
      * is.
+     *
+     * <p>And an order per position beside it. Which order a position is read and written on is a
+     * question about that position, and a form may be over positions that answer it differently —
+     * handed one order for all of them, a search walked every position over the values of whichever
+     * order it was given.
      */
     record OfAForm(souther.compiler.numeric.NumericDomain.LinearForm<NumericTerm> form,
-                   Carrier of, LevelSpace levels, Criterion where) implements Standing {}
+                   java.util.Map<NumericTerm, Carrier> on, LevelSpace levels, Criterion where)
+            implements Standing {
+
+        public OfAForm {
+            on = java.util.Map.copyOf(on);
+            if (!on.keySet().equals(form.coefs().keySet())) {
+                throw new IllegalArgumentException("a form stands over the positions it names, each"
+                        + " on one order: " + form.coefs().keySet() + " against " + on.keySet());
+            }
+        }
+    }
 }

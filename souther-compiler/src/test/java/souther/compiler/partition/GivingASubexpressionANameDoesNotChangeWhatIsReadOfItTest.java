@@ -231,7 +231,7 @@ class GivingASubexpressionANameDoesNotChangeWhatIsReadOfItTest {
     private static String quantityOf(BorderQuantity quantity) {
         return switch (quantity) {
             case BorderQuantity.OfACoordinate one -> one.term() + " on " + one.of();
-            case BorderQuantity.OverAForm form -> form.form() + " on " + form.of();
+            case BorderQuantity.OverAForm form -> form.form() + " on " + form.on();
             case BorderQuantity.Apart apart ->
                     apart.on() + " vs " + apart.against() + " on " + apart.of();
         };
