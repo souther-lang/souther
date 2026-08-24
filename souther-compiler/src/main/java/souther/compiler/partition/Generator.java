@@ -2081,7 +2081,43 @@ public final class Generator {
             }
             fields.put(field.name(), values.written().get(0));
         }
-        return fields.isEmpty() ? null : FixtureTemplate.spreading(type, baseline, fields);
+        if (fields.isEmpty()) {
+            return null;
+        }
+        // Written out rather than spread where the row moves every field the value has. The spread
+        // is what says the row is that value with something changed, and a spread whose moved fields
+        // cover the whole record says it over a value that contributes nothing — the same row in
+        // more words, and a reader comparing it against what the file states finds every field
+        // different.
+        //
+        // The values are the ones this candidate was built and run with. Composing the parameter
+        // again from its classes would be a different row wearing this one's answer: a rule relating
+        // two positions can refuse what the classes name while the model's own value builds, which
+        // is why the value the model states is where this search starts.
+        List<String> declared = fieldsOf(subject, built);
+        if (declared != null && fields.keySet().containsAll(declared)) {
+            Map<String, FixtureTemplate> written = new LinkedHashMap<>();
+            for (String field : declared) {
+                written.put(field, fields.get(field));
+            }
+            return FixtureTemplate.record(type, written);
+        }
+        return FixtureTemplate.spreading(type, baseline, fields);
+    }
+
+    /**
+     * The fields a value of {@code built} has, in the order they are written, or null where it is
+     * not a record.
+     *
+     * <p>Every field it has and not the ones its own declaration lists: a record that includes
+     * another's fields has those too, and a row that wrote over the listed ones and dropped the
+     * spread would drop the included ones with it.
+     */
+    private static List<String> fieldsOf(Subject subject, TypeSymbol built) {
+        return subject.symbols().declarations().declaration(built.key()) instanceof Hir.Data data
+                && !data.newtype()
+                ? List.copyOf(TypeOps.fieldTypes(data, subject.symbols()).keySet())
+                : null;
     }
 
     /**

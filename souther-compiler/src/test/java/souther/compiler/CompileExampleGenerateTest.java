@@ -853,7 +853,8 @@ class CompileExampleGenerateTest {
         assertEquals(List.of(
                         // The target and one supporting field: `hi` at the bottom of its lower
                         // class is under `mid`'s `lo`, which the rule refuses, so `lo` moves too.
-                        "Request { ...mid, hi = Amount(0), lo = Amount(0) }",
+                        // Which is every field `Request` has, so the row is written out.
+                        "Request { lo = Amount(0), hi = Amount(0) }",
                         // `mid` is already in the upper class of `hi`, so the row is `mid`.
                         "mid",
                         "Request { ...mid, lo = Amount(0) }",
@@ -885,6 +886,32 @@ class CompileExampleGenerateTest {
 
         assertEquals(2, rows.stream().filter("mid"::equals).count(),
                 "`mid` is in the upper class of both positions: " + rows);
+    }
+
+    /**
+     * A row that moves every field of a value is written out rather than spread over it.
+     *
+     * <p>The spread is what says the row is a value the reader recognises with something changed.
+     * Where the row changes the whole record, the value it spreads contributes nothing to what is
+     * built — {@code Request &#123;...mid, hi = Amount(0), lo = Amount(0)&#125;} names {@code mid}
+     * and keeps none of it — and a reader comparing the row against the file finds every field
+     * different.
+     *
+     * <p>Written out, and not composed again. The values are the ones the search built and offered
+     * from {@code mid}: a rule relating {@code lo} and {@code hi} refuses the pair the classes name
+     * while the model's own value builds, so composing this parameter a second time would be a
+     * different row wearing this one's answer.
+     */
+    @Test
+    void aRowThatMovesEveryFieldIsWrittenOutRatherThanSpread() {
+        List<String> rows = generated(CORRELATED).get("submit").composed().rows().stream()
+                .map(CompileExampleGenerateTest::inputsOf).toList();
+
+        assertTrue(rows.contains("Request { lo = Amount(0), hi = Amount(0) }"),
+                "the row for the lower class of `hi` moves both fields: " + rows);
+        assertTrue(rows.stream().noneMatch(row -> row.startsWith("Request { ...mid, hi =")
+                        && row.contains("lo =")),
+                "and nothing is spread over a value it writes over entirely: " + rows);
     }
 
     /**
@@ -950,8 +977,14 @@ class CompileExampleGenerateTest {
                         .anyMatch(Generator.Purpose.ForAClass.class::isInstance))
                 .map(CompileExampleGenerateTest::inputsOf).toList();
         assertFalse(rows.isEmpty(), "there are classes the written row is not in");
-        assertTrue(rows.stream().allMatch(row -> row.contains("...near")),
-                "written against the value the author's own row names: " + rows);
+        // Where a row keeps any of the value it was written from, that value is the author's own.
+        // The row that keeps none of it moves every field, and is written out rather than spread
+        // over a value it contributes nothing to — which is a fact about how it reads and not about
+        // which value it came from.
+        assertTrue(rows.stream().anyMatch(row -> row.contains("...near")),
+                "the author's own value is what the rows are written from: " + rows);
+        assertTrue(rows.stream().noneMatch(row -> row.contains("...") && !row.contains("...near")),
+                "and no row is written from any other: " + rows);
     }
 
     /** Each named for the one class it is about, whatever it took to write one. */
