@@ -336,14 +336,25 @@ enum Question {
 
     /**
      * What holds of the number it answers wherever it is called ({@link DischargeRules#boundsOn}).
-     * Asked of an operation answering a number from a number: a bound is stated against the arguments,
-     * so an operation given none has nothing for a row to bound its result against.
+     * Asked of every operation answering a number.
+     *
+     * <p>Of the result and not of the arguments. This once asked only where an argument was a number
+     * too, on the reasoning that a bound is stated against the arguments and an operation given none
+     * has nothing to bound its result against. {@code Int.abs} is the counter-example standing in
+     * the same table: its bound names no argument, and a constant end is as much a bound as one an
+     * argument decides. What the narrower range cost was every operation counting or reading a value
+     * of another kind — a size, the hour of a time — which could then be asked nothing here, so what
+     * was true of one was written wherever a reader happened to want it (#1016).
+     *
+     * <p>A bound that does name an argument is still held to a signature that has one:
+     * {@link DischargeRules#holdBound} reads the argument it names, so an operation given no number
+     * cannot declare one — which is where that requirement belongs, since it is about a fact and a
+     * declaration agreeing rather than about which operations are asked.
      */
     BOUNDS("what bounds the number it answers") {
         @Override
         boolean asksOf(Prelude.Signature signature) {
-            return isANumber(signature.result())
-                    && signature.params().stream().anyMatch(Question::isANumber);
+            return isANumber(signature.result());
         }
 
         @Override

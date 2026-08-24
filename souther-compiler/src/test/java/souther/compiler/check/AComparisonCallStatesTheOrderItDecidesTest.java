@@ -52,6 +52,14 @@ class AComparisonCallStatesTheOrderItDecidesTest {
             """;
 
     private static List<Verdict> verdictsOn(String type, String source) {
+        List<Verdict> on = checked(type, source);
+        assertFalse(on.isEmpty(), "no construction of `" + type + "` was checked at all");
+        return on;
+    }
+
+    /** The verdicts on constructions of {@code type}, which is empty where the program builds none
+     *  the check reaches. */
+    private static List<Verdict> checked(String type, String source) {
         List<Said> said = Collections.synchronizedList(new ArrayList<>());
         InvariantChecker.WATCHING = said;
         try {
@@ -62,10 +70,7 @@ class AComparisonCallStatesTheOrderItDecidesTest {
         } finally {
             InvariantChecker.WATCHING = null;
         }
-        List<Verdict> on = said.stream()
-                .filter(s -> s.type().equals(type)).map(Said::verdict).toList();
-        assertFalse(on.isEmpty(), "no construction of `" + type + "` was checked at all");
-        return on;
+        return said.stream().filter(s -> s.type().equals(type)).map(Said::verdict).toList();
     }
 
     private static void reads(String type, Verdict expected, String source) {
@@ -191,11 +196,37 @@ class AComparisonCallStatesTheOrderItDecidesTest {
                     constructs Held, Span
 
                 let settle (hi, lo) = {
-                    guard Int.compare(hi, lo) >= 2 else TooSmall
+                    guard Int.compare(hi, lo) >= 1 else TooSmall
                     Held { span = Span(hi - lo) }
                 }
                 """;
         reads("Span", Verdict.UNKNOWN, m);
+    }
+
+    /**
+     * And past the sign there is nothing to be unsettled about. A comparison answers one of three
+     * numbers — which is a bound on its result and not the order it decides ({@code OperationFacts},
+     * #1016) — so a guard asking for a second is a guard nothing gets through, and the construction
+     * behind it is not reached at all.
+     *
+     * <p>Beside the test above rather than folded into it: what that one says is that the order is
+     * not stated, and it needs a guard something satisfies to say it. This one says where the
+     * numbers stop, and needs one nothing does.
+     */
+    @Test
+    void nothingReachesWhatIsBehindAGuardAskingForAFourthSign() {
+        String m = INTS + """
+
+                behavior settle : (hi: Int, lo: Int) -> Held | TooSmall
+                    constructs Held, Span
+
+                let settle (hi, lo) = {
+                    guard Int.compare(hi, lo) >= 2 else TooSmall
+                    Held { span = Span(hi - lo) }
+                }
+                """;
+        assertEquals(List.of(), checked("Span", m),
+                "a comparison answers at most one, so nothing stands where two was asked for");
     }
 
     /**
