@@ -3,6 +3,8 @@ package souther.compiler.partition;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
+import souther.compiler.inputs.Refinement;
+import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.StructuralDescent;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.types.Type;
@@ -19,10 +21,15 @@ import java.util.Set;
  *
  * <p><b>Not the positions of an input.</b> What a behavior declares it takes is
  * {@link souther.compiler.inputs.InputDomain}'s, and what a row has to compose is this. The two are
- * spelled with the same {@link TermPath} and are about different things: a class that named a
- * constructor for a sum puts positions under it that the declaration does not have, and a reading of
- * the declaration would not hold them however deep it went. So a path from here is never looked up
- * over there, and the depth this goes to is not the depth a report is about.
+ * written with the same {@link TermPath} and are about different things: this goes on until there is
+ * a value to build, which is further than a report is about. So a path from here is never looked up
+ * over there.
+ *
+ * <p>Where they do meet is how a position is named. A requirement narrowing a position is written
+ * into the path here exactly as the reading writes it, so a class fixed at a position under a
+ * refinement is a position this builds at under the same name. Written flat, the two would name one
+ * location two ways, and a class the caller fixed would be looked for at a path this plan does not
+ * have.
  *
  * <p><b>Worked out once and consumed three ways.</b> What each position may take, the search that
  * chooses one position at a time, and the composing of the chosen values back into a record were
@@ -95,15 +102,16 @@ record ConstructionPlan(Node root) {
     /**
      * A position composed out of the ones under it.
      *
-     * @param of     what the record is called, which is what the composed value is written as
-     * @param worn   the newtype names the position is written under, outermost first. A row at a
-     *               {@code data SlotN = Slot} carries {@code SlotN(Slot { ... })}, and a value
-     *               composed without them is of a type the parameter does not declare
-     * @param recipe how a class asked for this to be built, or null where none did
-     * @param under  the positions of its fields, in the order the declaration writes them
+     * @param of    what the record is called, which is what the composed value is written as
+     * @param worn  the newtype names the position is written under, outermost first. A row at a
+     *              {@code data SlotN = Slot} carries {@code SlotN(Slot { ... })}, and a value
+     *              composed without them is of a type the parameter does not declare. Where a
+     *              refinement narrowed the position, these are the names the position wore before
+     *              it and the ones the narrowed value wears after it, in that order — one list,
+     *              because putting them back on is one thing done once
+     * @param under the positions of its fields, in the order the declaration writes them
      */
     record Built(TermPath at, Type type, TypeSymbol of, List<TypeOps.Layer> worn,
-                 RepresentativeSource.Evaluation.Compose recipe,
                  Map<String, Node> under) implements Node {
 
         Built {
@@ -120,10 +128,10 @@ record ConstructionPlan(Node root) {
      *                about the type: the caller has what goes there, so what the field of a record
      *                three levels inside it would have offered is nothing this row asks
      */
-    static ConstructionPlan of(Type declared, TermPath at, Symbols symbols, Set<String> decided,
-                               Map<String, RepresentativeSource.Evaluation.Compose> recipes,
+    static ConstructionPlan of(Type declared, TermPath at, Symbols symbols, Set<TermPath> decided,
+                               Requirements required,
                                java.util.function.ToIntBiFunction<TermPath, Type> least) {
-        return new ConstructionPlan(node(declared, at, symbols, 0, decided, recipes, least));
+        return new ConstructionPlan(node(declared, at, symbols, 0, decided, required, least));
     }
 
     /** The collections this plan builds out of what stands at their element. */
@@ -160,39 +168,59 @@ record ConstructionPlan(Node root) {
     }
 
     private static Node node(Type declared, TermPath at, Symbols symbols, int depth,
-                             Set<String> decided,
-                             Map<String, RepresentativeSource.Evaluation.Compose> recipes,
+                             Set<TermPath> decided, Requirements required,
                              java.util.function.ToIntBiFunction<TermPath, Type> least) {
-        // Before the recipe, because a position the caller fixed takes the value it was given
+        // Before the narrowing, because a position the caller fixed takes the value it was given
         // whatever a class would have built there.
-        if (decided.contains(at.toString())) {
+        if (decided.contains(at)) {
             return new Slot(at, declared, true);
         }
-        RepresentativeSource.Evaluation.Compose recipe = recipes.get(at.toString());
-        Type building = refined(declared, recipe);
+        Refinement refinement = required.at(at);
+        Type building = refined(declared, refinement, symbols);
         TypeView view = TypeView.of(building, symbols);
+        // The position as the narrowing leaves it, which is where every path below it hangs. A
+        // refinement is not a step into the value and takes no level of the plan; what it changes is
+        // the name of this one position and what may be built at it. Written without it, two cases
+        // spreading one record would put two different positions at one name.
+        TermPath here = refinement == null ? at : at.refine(refinement);
+        if (refinement != null && decided.contains(here)) {
+            return new Slot(here, building, true);
+        }
+        // The names the position wore before it was narrowed, kept: what a row writes is a value of
+        // what the position declares, and a value composed under the narrowed type's names alone is
+        // of a type the parameter does not declare.
+        List<TypeOps.Layer> worn = refinement == null ? view.wrappers()
+                : outside(TypeView.of(declared, symbols).wrappers(), view.wrappers());
         // A sequence with something to be placed inside it. Built out of its element rather than
         // chosen whole, since what is being asked for is a list holding a value in a class and no
         // proposal of a whole list can be asked to hold one.
         if (view.shape() instanceof souther.compiler.check.Shape.Sequence sequence
                 && depth < MAX_DEPTH) {
-            Node inside = node(sequence.element(), at.element(), symbols, depth + 1, decided,
-                    recipes, least);
+            Node inside = node(sequence.element(), here.element(), symbols, depth + 1, decided,
+                    required, least);
             if (holdsAFixedPosition(inside)) {
-                return new Held(at, building, view.wrappers(), inside,
-                        Math.max(1, least.applyAsInt(at, building)));
+                return new Held(here, building, worn, inside,
+                        Math.max(1, least.applyAsInt(here, building)));
             }
         }
         StructuralDescent.Children children = StructuralDescent.of(view.shape());
         // A record with no fields composes nothing out of anything, so it is a value to be chosen
         // like any other and not a position made of positions.
         if (depth >= MAX_DEPTH || children == null || children.under().isEmpty()) {
-            return new Slot(at, building, false);
+            return new Slot(here, building, false);
         }
         Map<String, Node> under = new LinkedHashMap<>();
         children.under().forEach((field, type) -> under.put(field,
-                node(type, at.then(field), symbols, depth + 1, decided, recipes, least)));
-        return new Built(at, building, children.of(), view.wrappers(), recipe, under);
+                node(type, here.then(field), symbols, depth + 1, decided, required, least)));
+        return new Built(here, building, children.of(), worn, under);
+    }
+
+    /** {@code outer} and then {@code inner}, which is the order names are put back on a value. */
+    private static List<TypeOps.Layer> outside(List<TypeOps.Layer> outer,
+                                               List<TypeOps.Layer> inner) {
+        List<TypeOps.Layer> out = new ArrayList<>(outer);
+        out.addAll(inner);
+        return List.copyOf(out);
     }
 
     /**
@@ -215,15 +243,27 @@ record ConstructionPlan(Node root) {
     }
 
     /**
-     * The type a value is built at: the declared one, unless a class named a constructor.
+     * The type a value is built at: the declared one, unless a refinement narrowed the position.
      *
-     * <p>A refinement of the position and not a rereading of the declaration. The position's
-     * declared type is still the sum, and the axis still says so — a class of it saying which case a
-     * witness takes is not the position becoming that case, and reading the two as one would have a
-     * later reader believe the model declares something it does not. What moves is what is being
-     * built, which is why this is here and not where the input is read.
+     * <p>A narrowing of what stands at the position and not a rereading of the declaration. The
+     * position's declared type is still the sum, and the axis still says so — a class of it saying
+     * which case a witness takes is not the position becoming that case, and reading the two as one
+     * would have a later reader believe the model declares something it does not. What moves is what
+     * is being built.
      */
-    private static Type refined(Type declared, RepresentativeSource.Evaluation.Compose recipe) {
-        return recipe == null ? declared : Type.ref(recipe.through());
+    private static Type refined(Type declared, Refinement refinement, Symbols symbols) {
+        return switch (refinement) {
+            case null -> declared;
+            case Refinement.SumCase one -> Type.ref(one.leaf());
+            // Nothing builds through one yet. An optional's classes are values a row writes —
+            // a value of what it holds, or nothing — and neither is composed field by field, so
+            // no requirement of this kind reaches a plan. The day one does, what is built here is
+            // what it holds, and that is a decision to make with the row that asks for it rather
+            // than one to leave standing as a guess.
+            case Refinement.Presence _ -> throw new IllegalStateException(
+                    "a value is asked to be built through the presence of an optional at `" + declared
+                            + "`; nothing states such a requirement, so this is the generator and"
+                            + " the classes disagreeing about what a class asks for");
+        };
     }
 }

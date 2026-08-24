@@ -7,6 +7,7 @@ import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.Case;
 import souther.compiler.inputs.Distinctions;
+import souther.compiler.inputs.Refinement;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -86,7 +87,8 @@ final class PartitionClasses {
         for (PartitionClass each : of(cases,
                 new TypeView(view.declared(), List.of(), view.shape()), symbols, policy)) {
             out.add(PartitionClass.ungeneratable(each.id(), each.label(),
-                    Classifier.under(worn, each.classifier()), why).holding(each.denotes()));
+                    Classifier.under(worn, each.classifier()), why)
+                    .holding(each.denotes()).selecting(each.selects()));
         }
         return List.copyOf(out);
     }
@@ -167,7 +169,11 @@ final class PartitionClasses {
     private static PartitionClass caseClass(Case.SumCase one, List<TypeSymbol> worn,
                                             ReadingPolicy policy,
                                             List<TypeReachName.Written> writes, Symbols symbols) {
-        return holdingWhatItIs(one, writableCase(one.leaf(), worn, policy, writes, symbols));
+        // The narrowing a row in this class meets, carried from the distinction it was made from. A
+        // row whose value here is an `Approved` is a row at every position the `Approved` case
+        // declares, and that is the same fact read from the other end.
+        return holdingWhatItIs(one, writableCase(one.leaf(), worn, policy, writes, symbols))
+                .selecting(new Refinement.SumCase(one.leaf()));
     }
 
     /**

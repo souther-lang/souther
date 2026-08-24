@@ -8,6 +8,8 @@ import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.Position;
+import souther.compiler.inputs.Refinement;
+import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -42,10 +44,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * refused because the reading had no such position. Read as one set, the refusal looks like the model
  * having nothing there.
  *
- * <p>Two ways the sets part, and only one of them is about depth. The reading stops where a report
- * stops being about one input; the search goes on until there is a value to build. And a class that
- * named a constructor puts positions under a sum, where the declaration has none at any depth — a
- * refinement of what is being built, which no reading of the declaration would ever hold.
+ * <p>How the sets part is depth. The reading stops where a report stops being about one input; the
+ * search goes on until there is a value to build.
+ *
+ * <p>How a position is <em>named</em> is the one thing they do not part over. A class that narrows a
+ * sum to one of its cases puts positions under that narrowing, and both write the narrowing into the
+ * path — so a class fixed at such a position is looked for at the path the plan builds it at.
+ * Written flat here, the same location would have two names and the lookup would find nothing.
  *
  * <p>So what is checked here is that a path from one is not looked up in the other, and that the
  * disagreement is the design rather than a defect. The one thing they share is the step, and that is
@@ -73,11 +78,12 @@ class AConstructionPositionIsNotAnInputPositionTest {
         return InputDomain.of(read.spec(), read.sig(), read.symbols(), ReadAs.THE_COMPILATION_DOES);
     }
 
-    /** The plan for the behavior's one parameter, with nothing decided and the given recipes. */
-    private static ConstructionPlan plan(Read read,
-            Map<String, RepresentativeSource.Evaluation.Compose> recipes) {
+    /** The plan for the behavior's one parameter, with nothing decided and the given
+     *  requirements. */
+    private static ConstructionPlan plan(Read read, Requirements required) {
         return ConstructionPlan.of(read.sig().inputTypes().get(0),
-                TermPath.of(read.spec().params().get(0).name()), read.symbols(), Set.of(), recipes, (_, _) -> 0);
+                TermPath.of(read.spec().params().get(0).name()), read.symbols(), Set.of(), required,
+                (_, _) -> 0);
     }
 
     private static List<String> slots(ConstructionPlan plan) {
@@ -124,7 +130,7 @@ class AConstructionPositionIsNotAnInputPositionTest {
     @Test
     void theSearchBuildsAtPositionsTheReadingDoesNotDescribe() {
         Read read = of(NESTED, "place");
-        assertEquals(List.of("o.who.home.zip.code"), slots(plan(read, Map.of())));
+        assertEquals(List.of("o.who.home.zip.code"), slots(plan(read, Requirements.NONE)));
         assertNull(reading(read).at(TermPath.of("o").then("who").then("home").then("zip")),
                 "the reading stops at the second level and does not answer below it");
         assertNull(reading(read).at(
@@ -156,17 +162,17 @@ class AConstructionPositionIsNotAnInputPositionTest {
     @Test
     void aRecipePutsPositionsWhereTheDeclarationHasNone() {
         Read read = of(SUM, "decide");
-        assertEquals(List.of("d"), slots(plan(read, Map.of())),
+        assertEquals(List.of("d"), slots(plan(read, Requirements.NONE)),
                 "with no class choosing a constructor there is one thing to build, the sum itself");
 
-        ConstructionPlan built = plan(read, Map.of("d",
-                new RepresentativeSource.Evaluation.Compose(caseNamed(SUM, "probe"), List.of())));
-        assertEquals(List.of("d.id"), slots(built));
+        ConstructionPlan built = plan(read, throughApproved(read));
+        assertEquals(List.of("d@Approved.id"), slots(built),
+                "a narrowed position is written with the narrowing, as the reading writes it");
 
         InputDomain reading = reading(read);
         assertNotNull(reading.at(TermPath.of("d")), "the sum itself is a position of the input");
         assertNull(reading.at(TermPath.of("d").then("id")),
-                "what a recipe put under the sum is a position of the value being built");
+                "what is built under the sum is not at a name the declaration puts nothing at");
     }
 
     /**
@@ -229,10 +235,17 @@ class AConstructionPositionIsNotAnInputPositionTest {
         return sources;
     }
 
+    /** The requirement a class of {@code d} states by being the {@code Approved} case of it. */
+    private static Requirements throughApproved(Read read) {
+        return Requirements.NONE.and(TermPath.of(read.spec().params().get(0).name()),
+                new Refinement.SumCase(caseNamed(SUM, "probe")));
+    }
+
     /** The name of the case to build through, taken off a behavior that is declared to take one. */
     private static TypeSymbol caseNamed(String source, String behavior) {
         Read read = of(source, behavior);
-        return assertInstanceOf(ConstructionPlan.Built.class, plan(read, Map.of()).root()).of();
+        return assertInstanceOf(ConstructionPlan.Built.class,
+                plan(read, Requirements.NONE).root()).of();
     }
 
     /** And the declared type of the position does not move when a recipe chooses a case for it. */
@@ -242,8 +255,7 @@ class AConstructionPositionIsNotAnInputPositionTest {
         Type declared = read.sig().inputTypes().get(0);
         assertEquals(declared, reading(read).at(TermPath.of("d")).view().declared());
 
-        ConstructionPlan built = plan(read, Map.of("d",
-                new RepresentativeSource.Evaluation.Compose(caseNamed(SUM, "probe"), List.of())));
+        ConstructionPlan built = plan(read, throughApproved(read));
         assertEquals(declared, reading(read).at(TermPath.of("d")).view().declared(),
                 "the position is still declared to hold a Decision");
         assertEquals("Approved", Type.show(built.root().type()),

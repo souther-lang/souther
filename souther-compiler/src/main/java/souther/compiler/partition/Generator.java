@@ -7,6 +7,7 @@ import souther.compiler.check.FieldDomains;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.CountDomain;
@@ -1670,13 +1671,13 @@ public final class Generator {
     public static BoundaryAttempt probeFixing(Subject subject, String label,
                                               java.util.function.Function<NumericTerm, Carrier> on,
                                               Map<NumericTerm, Place> fixing, CandidateCheck check) {
-        Map<String, List<FixtureTemplate>> decided = new LinkedHashMap<>();
+        Map<TermPath, List<FixtureTemplate>> decided = new LinkedHashMap<>();
         // What the rest of the row has to sit beside. A field of a record is not chosen from its own
         // type once another field of that record is fixed: the rule relating them says what is left,
         // and taking the bottom of the type's range instead is how a boundary that can be written
         // came back as one every value tried was refused at.
-        Map<String, Place> settled = new LinkedHashMap<>();
-        Map<String, UnresolvedCombination.Reason> heldBack = new LinkedHashMap<>();
+        Map<TermPath, Place> settled = new LinkedHashMap<>();
+        Map<TermPath, UnresolvedCombination.Reason> heldBack = new LinkedHashMap<>();
         for (Map.Entry<NumericTerm, Place> each : fixing.entrySet()) {
             // The order this position is written back on, which is the position's own. Handed one
             // order for the whole fixing, a form over positions written back differently wrote each
@@ -1691,7 +1692,7 @@ public final class Generator {
                 return new BoundaryAttempt.Unresolved(
                         new UnresolvedCombination(List.of(label), edge.reason()));
             }
-            String at = each.getKey().path().toString();
+            TermPath at = each.getKey().path();
             // Two terms at one path is one location asked for two things at once — a string of a
             // length and the string itself — and what a row writes at a location is one value. The
             // fixing keeps them apart ({@link Realization.Found}) and this cannot, so it says so
@@ -1709,13 +1710,13 @@ public final class Generator {
         List<FixtureTemplate> inputs = new ArrayList<>();
         for (int p = 0; p < subject.parameters().size() && p < subject.types().size(); p++) {
             String head = subject.parameters().get(p);
-            Map<String, List<FixtureTemplate>> here = new LinkedHashMap<>();
+            Map<TermPath, List<FixtureTemplate>> here = new LinkedHashMap<>();
             for (NumericTerm term : fixing.keySet()) {
                 if (term.path().head().equals(head)) {
-                    here.put(term.path().toString(), decided.get(term.path().toString()));
+                    here.put(term.path(), decided.get(term.path()));
                 }
             }
-            Outcome tried = valueAt(subject, p, here, settled, Map.of(), check);
+            Outcome tried = valueAt(subject, p, here, settled, Requirements.NONE, check);
             if (tried.value() == null) {
                 // Where the refusal is of the values one edge offered, what that edge held back
                 // outranks it: values that were never built were not among the ones refused. Only
@@ -2120,18 +2121,32 @@ public final class Generator {
      */
     private static Attempt build(Subject subject, List<Axis> axes, int[] where,
                                  CandidateCheck check, Map<String, FixtureTemplate> given) {
-        Map<String, List<FixtureTemplate>> decided = new LinkedHashMap<>();
-        Map<String, RepresentativeSource.Evaluation.Compose> recipes = new LinkedHashMap<>();
+        Map<TermPath, List<FixtureTemplate>> decided = new LinkedHashMap<>();
+        // What every position of this row has to be for the classes it sits in to exist. Read off
+        // the paths and off the classes together, because both state one: a position under a
+        // refinement requires it by being there at all, and a class of the position above states
+        // the same requirement by being the class it is.
+        Requirements required = Requirements.NONE;
         for (int i = 0; i < axes.size(); i++) {
-            String path = axes.get(i).path().toString();
+            TermPath path = axes.get(i).path();
             String at = label(axes.get(i), where[i]);
+            Requirements.Merge both =
+                    required.merge(requirementsOf(axes.get(i), axes.get(i).classes().get(where[i])));
+            // A row that would have to be two things at one position. Which is not a combination
+            // the model has, so nothing composes one — said here rather than left for the search,
+            // which would report every value it tried as refused.
+            if (!(both instanceof Requirements.Merge.Merged merged)) {
+                return new Attempt(null, UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, at,
+                        Optional.empty());
+            }
+            required = merged.requirements();
             switch (axes.get(i).classes().get(where[i]).representatives().evaluate()) {
                 case RepresentativeSource.Evaluation.Values values ->
                         decided.put(path, values.written());
                 // Not a value but how one is arrived at: the walk below builds one at this position,
-                // field by field, the way it builds every other record, and this writes what was
-                // built under the names the position wears.
-                case RepresentativeSource.Evaluation.Compose compose -> recipes.put(path, compose);
+                // field by field, the way it builds every other record. What it is built through is
+                // already in the requirements, which is where the plan reads it.
+                case RepresentativeSource.Evaluation.Compose _ -> { }
                 // What the class said about itself. A class that recorded why nothing was produced
                 // for it knows something this does not, and the two answers are not the same claim:
                 // one is that nothing was arrived at, and the other is that nothing can be. Read as
@@ -2157,7 +2172,7 @@ public final class Generator {
                 inputs.add(written);
                 continue;
             }
-            Outcome tried = valueFor(subject, p, axes, decided, recipes, check);
+            Outcome tried = valueFor(subject, p, axes, decided, required, check);
             if (tried.value() == null) {
                 return Attempt.no(tried.reason(), tried.detail());
             }
@@ -2181,18 +2196,17 @@ public final class Generator {
      * parameters of eight either-or fields are two searches of 256, not one of 65,536.
      */
     private static Outcome valueFor(Subject subject, int p, List<Axis> axes,
-                                    Map<String, List<FixtureTemplate>> decided,
-                                    Map<String, RepresentativeSource.Evaluation.Compose> recipes,
-                                    CandidateCheck check) {
+                                    Map<TermPath, List<FixtureTemplate>> decided,
+                                    Requirements required, CandidateCheck check) {
         TermPath at = TermPath.of(subject.parameters().get(p));
-        Map<String, List<FixtureTemplate>> here = new LinkedHashMap<>();
+        Map<TermPath, List<FixtureTemplate>> here = new LinkedHashMap<>();
         for (Axis axis : axes) {
             if (axis.path().head().equals(at.head())
-                    && decided.containsKey(axis.path().toString())) {
-                here.put(axis.path().toString(), decided.get(axis.path().toString()));
+                    && decided.containsKey(axis.path())) {
+                here.put(axis.path(), decided.get(axis.path()));
             }
         }
-        return valueAt(subject, p, here, settledIn(here), recipes, check);
+        return valueAt(subject, p, here, settledIn(here), required, check);
     }
 
     /**
@@ -2202,8 +2216,8 @@ public final class Generator {
      * it, and that is the one the row will carry, so the rest of the record can be chosen beside it;
      * a position still holding several is not settled at all and nothing is claimed of it.
      */
-    private static Map<String, Place> settledIn(Map<String, List<FixtureTemplate>> decided) {
-        Map<String, Place> out = new LinkedHashMap<>();
+    private static Map<TermPath, Place> settledIn(Map<TermPath, List<FixtureTemplate>> decided) {
+        Map<TermPath, Place> out = new LinkedHashMap<>();
         decided.forEach((path, candidates) -> {
             if (candidates.size() == 1) {
                 Place number = Counts.writtenIn(candidates.get(0).value());
@@ -2217,10 +2231,9 @@ public final class Generator {
 
     /** One parameter's value, with the positions the caller fixed already decided. */
     private static Outcome valueAt(Subject subject, int p,
-                                   Map<String, List<FixtureTemplate>> decided,
-                                   Map<String, Place> settled,
-                                   Map<String, RepresentativeSource.Evaluation.Compose> recipes,
-                                   CandidateCheck check) {
+                                   Map<TermPath, List<FixtureTemplate>> decided,
+                                   Map<TermPath, Place> settled,
+                                   Requirements required, CandidateCheck check) {
         // Where a value has to be built under this parameter, worked out once. What each position
         // may take, the search that chooses them one at a time, and the composing of what was chosen
         // all read this, so there is no second reading of the declarations for one of them to
@@ -2233,7 +2246,7 @@ public final class Generator {
         FieldDomains under = rulesOf(subject.types().get(p), subject.symbols(),
                 subject.inputs().policy(), under(root, settled));
         ConstructionPlan plan = ConstructionPlan.of(subject.types().get(p), root, subject.symbols(),
-                decided.keySet(), recipes, (at, building) -> leastHeld(under, at, building,
+                decided.keySet(), required, (at, building) -> leastHeld(under, at, building,
                         subject.symbols()));
         Choices choices = choicesOf(subject, p, plan, decided, settled);
         if (choices.missingAt() != null) {
@@ -2319,7 +2332,7 @@ public final class Generator {
      */
     private static UnresolvedCombination.Reason heldBack(Subject subject, int p,
                                                          ConstructionPlan plan,
-                                                         Map<String, Place> settled) {
+                                                         Map<TermPath, Place> settled) {
         TermPath root = TermPath.of(subject.parameters().get(p));
         Type declared = subject.types().get(p);
         FieldDomains rules = rulesOf(declared, subject.symbols(), subject.inputs().policy(),
@@ -2363,17 +2376,17 @@ public final class Generator {
      * first would spend it on every row to change none of them.
      */
     private static Outcome conditioned(Subject subject, int p, ConstructionPlan plan,
-                                       Map<String, List<FixtureTemplate>> decided,
-                                       Map<String, Place> settled,
+                                       Map<TermPath, List<FixtureTemplate>> decided,
+                                       Map<TermPath, Place> settled,
                                        CandidateCheck check) {
         List<ConstructionPlan.Slot> found = plan.slots();
         // What the caller fixed goes first, so that everything chosen after it is chosen beside it.
         // A class stands for one value and a boundary is one value, and neither is worth deciding
         // after the positions whose range it settles.
         List<ConstructionPlan.Slot> positions = new ArrayList<>(
-                found.stream().filter(each -> decided.containsKey(each.at().toString())).toList());
+                found.stream().filter(each -> decided.containsKey(each.at())).toList());
         positions.addAll(
-                found.stream().filter(each -> !decided.containsKey(each.at().toString())).toList());
+                found.stream().filter(each -> !decided.containsKey(each.at())).toList());
         Budget budget = new Budget();
         FixtureTemplate built = descend(subject, p, plan, positions, 0, new LinkedHashMap<>(),
                 new LinkedHashMap<>(settled), decided, check, budget);
@@ -2424,9 +2437,9 @@ public final class Generator {
      */
     private static FixtureTemplate descend(Subject subject, int p, ConstructionPlan plan,
                                            List<ConstructionPlan.Slot> positions, int index,
-                                           Map<String, FixtureTemplate> chosen,
-                                           Map<String, Place> settled,
-                                           Map<String, List<FixtureTemplate>> decided,
+                                           Map<TermPath, FixtureTemplate> chosen,
+                                           Map<TermPath, Place> settled,
+                                           Map<TermPath, List<FixtureTemplate>> decided,
                                            CandidateCheck check, Budget budget) {
         if (index == positions.size()) {
             if (!budget.spend()) {
@@ -2436,7 +2449,7 @@ public final class Generator {
             return whole != null && check.refuse(p, whole).isEmpty() ? whole : null;
         }
         ConstructionPlan.Slot position = positions.get(index);
-        String where = position.at().toString();
+        TermPath where = position.at();
         for (FixtureTemplate candidate : candidatesAt(subject, p, position, settled, decided)) {
             chosen.put(where, candidate);
             Place number = Counts.writtenIn(candidate.value());
@@ -2460,9 +2473,9 @@ public final class Generator {
     /** What one position can take, given what the positions before it took. */
     private static List<FixtureTemplate> candidatesAt(Subject subject, int p,
                                                       ConstructionPlan.Slot position,
-                                                      Map<String, Place> settled,
-                                                      Map<String, List<FixtureTemplate>> decided) {
-        List<FixtureTemplate> fixed = decided.get(position.at().toString());
+                                                      Map<TermPath, Place> settled,
+                                                      Map<TermPath, List<FixtureTemplate>> decided) {
+        List<FixtureTemplate> fixed = decided.get(position.at());
         if (fixed != null) {
             return fixed;
         }
@@ -2491,7 +2504,7 @@ public final class Generator {
      *                  composed back into the shape the positions were taken from rather than into
      *                  one worked out a second time
      */
-    private record Choices(ConstructionPlan plan, List<String> at,
+    private record Choices(ConstructionPlan plan, List<TermPath> at,
                            List<List<FixtureTemplate>> values,
                            List<List<FixtureTemplate>> reserves, String missingAt) {
 
@@ -2527,19 +2540,19 @@ public final class Generator {
      *                to be reached at
      */
     private static Choices choicesOf(Subject subject, int p, ConstructionPlan plan,
-                                     Map<String, List<FixtureTemplate>> decided,
-                                     Map<String, Place> settled) {
+                                     Map<TermPath, List<FixtureTemplate>> decided,
+                                     Map<TermPath, Place> settled) {
         Symbols symbols = subject.symbols();
         ReadingPolicy policy = subject.inputs().policy();
         TermPath at = TermPath.of(subject.parameters().get(p));
-        List<String> paths = new ArrayList<>(decided.keySet());
+        List<TermPath> paths = new ArrayList<>(decided.keySet());
         List<List<FixtureTemplate>> values = new ArrayList<>(decided.values());
         // A position the caller fixed holds nothing back: it was given the value it is to take.
         List<List<FixtureTemplate>> reserves = new ArrayList<>(
                 java.util.Collections.nCopies(paths.size(), List.<FixtureTemplate>of()));
         FieldDomains left = rulesOf(subject.types().get(p), symbols, policy, under(at, settled));
         for (ConstructionPlan.Slot slot : plan.slots()) {
-            if (paths.contains(slot.at().toString())) {
+            if (paths.contains(slot.at())) {
                 continue;   // an axis decides here
             }
             String field = fieldUnder(slot.at());
@@ -2552,11 +2565,24 @@ public final class Generator {
                 // the author looking for a rule relating two inputs that has nothing to do with it.
                 return Choices.missing(plan, slot.at() + ": " + Type.show(slot.type()));
             }
-            paths.add(slot.at().toString());
+            paths.add(slot.at());
             values.add(stands);
             reserves.add(Partitions.inReserve(slot.type(), symbols, policy, here));
         }
         return new Choices(plan, paths, values, reserves, null);
+    }
+
+    /**
+     * What a row has to be for {@code cls} to be the class it sits in at {@code axis}.
+     *
+     * <p>The position's own requirements and the one the class states, together. Both are the same
+     * kind of fact and neither stands for the other: a position under a narrowing requires it by
+     * being there at all, and a class of the position above states the same narrowing by being the
+     * class it is. Read as one, a row asked for a {@code FeedQuery} and for a {@code GlobalQuery}'s
+     * {@code tag} is refused before anything is composed for it.
+     */
+    static Requirements requirementsOf(Axis axis, PartitionClass cls) {
+        return axis.path().requirements().and(axis.path(), cls.selects());
     }
 
     /**
@@ -2587,17 +2613,24 @@ public final class Generator {
 
     /** The settled positions of one parameter, named the way the reading of that parameter names
      * them: from the value itself, with the parameter dropped. */
-    private static Map<String, Count> under(TermPath root, Map<String, Place> settled) {
+    private static Map<String, Count> under(TermPath root, Map<TermPath, Place> settled) {
         if (settled.isEmpty()) {
             return Map.of();
         }
         Map<String, Count> out = new LinkedHashMap<>();
-        String prefix = root + ".";
-        // The numbers among them. A projection relates positions arithmetically, so a position whose
-        // places are not numbers settles nothing there.
+        // The numbers among them, at the positions of this parameter. Asked of the paths and not
+        // of how they are written: a rendering runs the steps together with whatever each wears, so
+        // a test on the text has to name every separator a step can have.
         settled.forEach((path, at) -> {
-            if (path.startsWith(prefix) && at instanceof Count number) {
-                out.put(path.substring(prefix.length()), number);
+            if (!path.isAtOrUnder(root) || !(at instanceof Count number)) {
+                return;
+            }
+            String field = path.relativeTo(root).fieldKey();
+            // Where no clause of the parameter can name the position, nothing of this parameter's
+            // rules is about it and there is nothing to settle. A position inside a sequence is one,
+            // and so is one under a narrowing: the rules that name it are the narrowed value's.
+            if (field != null && !field.isEmpty()) {
+                out.put(field, number);
             }
         });
         return out;
@@ -2636,7 +2669,7 @@ public final class Generator {
 
     /** One pass over one set of choices, from the assignment where every position takes its first
      * value outward. */
-    private static Outcome over(Subject subject, int p, ConstructionPlan plan, List<String> at,
+    private static Outcome over(Subject subject, int p, ConstructionPlan plan, List<TermPath> at,
                                 List<List<FixtureTemplate>> values, CandidateCheck check) {
         int positions = at.size();
         ArrayDeque<int[]> next = new ArrayDeque<>();
@@ -2649,7 +2682,7 @@ public final class Generator {
         while (!next.isEmpty() && tried < MAX_TUPLES) {
             int[] assignment = next.poll();
             tried++;
-            Map<String, FixtureTemplate> chosen = new LinkedHashMap<>();
+            Map<TermPath, FixtureTemplate> chosen = new LinkedHashMap<>();
             for (int i = 0; i < positions; i++) {
                 chosen.put(at.get(i), values.get(i).get(assignment[i]));
             }
@@ -2694,10 +2727,10 @@ public final class Generator {
      * Composed without that, the row carries a value of a type the parameter does not declare.
      */
     private static FixtureTemplate compose(ConstructionPlan.Node node,
-                                           Map<String, FixtureTemplate> chosen, Symbols symbols,
+                                           Map<TermPath, FixtureTemplate> chosen, Symbols symbols,
                                            ReadingPolicy policy) {
         return switch (node) {
-            case ConstructionPlan.Slot slot -> chosen.get(slot.at().toString());
+            case ConstructionPlan.Slot slot -> chosen.get(slot.at());
             case ConstructionPlan.Built built -> composed(built, chosen, symbols, policy);
             case ConstructionPlan.Held held -> held(held, chosen, symbols, policy);
         };
@@ -2711,7 +2744,7 @@ public final class Generator {
      * them is of a type the parameter does not declare.
      */
     private static FixtureTemplate held(ConstructionPlan.Held plan,
-                                        Map<String, FixtureTemplate> chosen, Symbols symbols,
+                                        Map<TermPath, FixtureTemplate> chosen, Symbols symbols,
                                         ReadingPolicy policy) {
         FixtureTemplate element = compose(plan.under(), chosen, symbols, policy);
         if (element == null) {
@@ -2742,7 +2775,7 @@ public final class Generator {
 
     /** One record of the plan, out of what the assignment put at the positions under it. */
     private static FixtureTemplate composed(ConstructionPlan.Built built,
-                                            Map<String, FixtureTemplate> chosen, Symbols symbols,
+                                            Map<TermPath, FixtureTemplate> chosen, Symbols symbols,
                                             ReadingPolicy policy) {
         Map<String, FixtureTemplate> fields = new LinkedHashMap<>();
         for (Map.Entry<String, ConstructionPlan.Node> under : built.under().entrySet()) {
@@ -2765,9 +2798,11 @@ public final class Generator {
         if (!(symbols.scope().reach(built.of()) instanceof TypeReachName.Written written)) {
             return null;
         }
-        FixtureTemplate record = RepresentativeSource.under(worn,
-                FixtureTemplate.record(written, fields));
-        return built.recipe() == null ? record : built.recipe().written(record);
+        // Under every name the position wears, which where a refinement narrowed it are the names
+        // it wore before the narrowing and the ones the narrowed value wears after it. One list and
+        // one putting-back-on: read as two, the outer names had to be recovered from the class that
+        // asked for the narrowing rather than from the position they belong to.
+        return RepresentativeSource.under(worn, FixtureTemplate.record(written, fields));
     }
 
     /**
