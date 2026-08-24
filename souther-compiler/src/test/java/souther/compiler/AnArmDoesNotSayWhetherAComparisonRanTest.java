@@ -54,7 +54,7 @@ class AnArmDoesNotSayWhetherAComparisonRanTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, List<BorderAssessment>> boundaries =
-                compilation.db().ask(new Adequacy.Boundaries(MODULE)).value();
+                Adequacy.boundariesOf(compilation.db(), MODULE);
         assertNotNull(boundaries, "the model under test compiles");
         return boundaries.get("gate");
     }

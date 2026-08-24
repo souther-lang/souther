@@ -400,7 +400,7 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, List<BorderAssessment>> boundaries =
-                compilation.db().ask(new Adequacy.Boundaries("example.owed")).value();
+                Adequacy.boundariesOf(compilation.db(), "example.owed");
         assertNotNull(boundaries, "the model under test compiles");
         Map<String, BorderAssessment> out = new java.util.LinkedHashMap<>();
         boundaries.values().forEach(each -> each.forEach(b -> out.put(b.label(), b)));

@@ -281,7 +281,7 @@ at.coverage().made().orElseThrow());
         compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
         compilation.answerEverything();
         Map<String, List<BorderAssessment>> boundaries =
-                compilation.db().ask(new Adequacy.Boundaries("example.waiting")).value();
+                Adequacy.boundariesOf(compilation.db(), "example.waiting");
 
         List<BorderAssessment.Point> guards =
                 BorderAssessment.pointsOf(boundaries.get("f")).stream()
@@ -374,7 +374,7 @@ at.coverage().made().orElseThrow());
         compilation.measure(Adequacy.Asked.reportOnly(level));
         compilation.answerEverything();
         Map<String, List<BorderAssessment>> boundaries =
-                compilation.db().ask(new Adequacy.Boundaries(module)).value();
+                Adequacy.boundariesOf(compilation.db(), module);
         assertNotNull(boundaries, "the model under test compiles");
         return BorderAssessment.pointsOf(boundaries.get(behavior));
     }

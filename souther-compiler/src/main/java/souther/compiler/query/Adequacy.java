@@ -1007,7 +1007,6 @@ public final class Adequacy {
                     db.ask(new PathReached(name)).value();
             // What every line this module's rules drew came to, asked once and read here. Measuring a
             // line takes building values, which is not this measure's work and not work to do twice.
-            Map<String, List<BorderAssessment>> boundaries = db.ask(new Boundaries(name)).value();
             // What each behavior states about its answer, read into the representation the analysis
             // holds it in. A comparison written there draws a line as a `guard`'s does.
             Map<String, souther.compiler.check.StatedContract> declared =
@@ -1031,10 +1030,11 @@ public final class Adequacy {
                 // Counted with nothing a body claims in scope. What was claimed travels beside the
                 // numbers rather than into them ({@link Claimed}), and the two meet where a report
                 // is written.
+                List<BorderAssessment> edges =
+                        db.ask(new Boundaries(name, spec.name())).value();
                 out.put(spec.name(), Coverages.of(spec, domainOf(readInputs, spec), sig,
                         scope.value(), db.ask(new Front.Reading()).value(), divided, seen,
-                        level, boundaries == null ? List.of()
-                                : boundaries.getOrDefault(spec.name(), List.of()),
+                        level, edges == null ? List.of() : edges,
                         db.ask(new Front.Adequacy()).value().measures()));
             }
             return Answer.of(Ordered.map(out));
@@ -1103,6 +1103,31 @@ public final class Adequacy {
         }
     }
 
+    /**
+     * Every behavior's lines, for a caller whose question is about the module.
+     *
+     * <p>Aggregation and nothing else: it asks the behavior's own question once per behavior and
+     * puts the answers in a map. Nothing is worked out here that is not worked out there, which is
+     * what keeps a caller that wants the module from being a second reading of it.
+     */
+    public static Map<String, List<BorderAssessment>> boundariesOf(Db db, String module) {
+        souther.compiler.check.Prepared prepared = db.ask(new Shapes.Prepared(module)).value();
+        if (prepared == null) {
+            return null;
+        }
+        Map<String, List<BorderAssessment>> out = new LinkedHashMap<>();
+        for (Hir.BehaviorDef behavior : prepared.behaviors()) {
+            if (!(behavior instanceof Hir.SpecBehavior spec)) {
+                continue;   // a composition's inputs are its first stage's, measured there
+            }
+            List<BorderAssessment> lines = db.ask(new Boundaries(module, spec.name())).value();
+            if (lines != null) {
+                out.put(spec.name(), lines);
+            }
+        }
+        return Ordered.map(out);
+    }
+
     /** The behavior of that name that has inputs of its own, or null. A composition's inputs are its
      *  first stage's and are divided there. */
     private static Hir.SpecBehavior specOf(souther.compiler.check.Prepared prepared, String name) {
@@ -1130,7 +1155,8 @@ public final class Adequacy {
      * is a separate request — the first decides what the report may count, so tying it to the second
      * would make one measure's number depend on another flag.
      */
-    public record Boundaries(String name) implements Key<Map<String, List<BorderAssessment>>> {
+    public record Boundaries(String name, String behavior)
+            implements Key<List<BorderAssessment>> {
 
         @Override
         public String module() {
@@ -1138,66 +1164,33 @@ public final class Adequacy {
         }
 
         @Override
-        public Answer<Map<String, List<BorderAssessment>>> compute(Db db) {
+        public Answer<List<BorderAssessment>> compute(Db db) {
             Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
             Answer<Symbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
             if (!prepared.present() || !scope.present() || !sigs.present()) {
                 return Answer.absent();
             }
-            souther.compiler.query.Bodies.Elaborated checked =
-                    db.ask(new Bodies.Checked(name)).value();
-            Map<String, souther.compiler.core.Core> bodies =
-                    checked == null ? Map.of() : checked.behaviorBodies();
-            // What each body's operations handed their closures, read where they were still
-            // operations. The tree beside it has none of them left in it.
-            Map<String, souther.compiler.check.ElementBindings> elementsOf =
-                    checked == null ? Map.of() : checked.elementBindings();
-            souther.compiler.coverage.CoverageSites.Plan plan =
-                    souther.compiler.coverage.CoverageSites.of(bodies,
-                            checked == null
-                                    ? souther.compiler.coverage.DecisionSources.NONE
-                                    : checked.decisions(),
-                            checked == null ? souther.compiler.coverage.SuppliedRules.NONE : checked.supplied());
+            Hir.SpecBehavior spec = specOf(prepared.value(), behavior);
+            Sig sig = sigs.value().get(behavior);
+            souther.compiler.partition.Partitions.Partitioning divided =
+                    db.ask(new Divided(name, behavior)).value();
+            if (spec == null || sig == null || divided == null) {
+                return Answer.absent();
+            }
             // Whether a guard's boundary can be decided at all: meeting it takes the comparison having
             // been evaluated, which only the instrumented classes say. And whether anything was
             // measured against the rows at all, which is what `off` answers.
             Level level = levelOf(db);
-            Map<String, RowReading> byTarget = db.ask(new Rows(name)).value();
-            Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
-            // What the guards above each place leave, asked once for the module and read by
-            // every measure below — the same reason the reading of the input is.
-            Map<String, souther.compiler.check.PathReachability.Answers> arrives =
-                    db.ask(new PathReached(name)).value();
             Symbols symbols = scope.value();
             // Nothing is built where the level does not build: a candidate costs a decoder run for
             // each point it settles, and what a point nothing was built at comes to is the rules'
             // own answer about it.
             FixtureReader.Construction building = level.buildsValues()
                     ? constructing(db, name, prepared.value().forExamples(), symbols) : null;
-            // And what each behavior states about its answer, which draws lines of its own.
-            Map<String, souther.compiler.check.StatedContract> declared =
-                    db.ask(new Bodies.StatedContracts(name)).value();
-
-            Map<String, List<BorderAssessment>> out = new LinkedHashMap<>();
-            for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
-                if (!(behavior instanceof Hir.SpecBehavior spec)) {
-                    continue;   // a composition's inputs are its first stage's, measured there
-                }
-                Sig sig = sigs.value().get(spec.name());
-                if (sig == null) {
-                    continue;
-                }
-                souther.compiler.partition.Partitions.Partitioning divided =
-                        db.ask(new Divided(name, spec.name())).value();
-                if (divided == null) {
-                    continue;
-                }
-                out.put(spec.name(), assess(spec, sig, symbols, db.ask(new Front.Reading()).value(),
-                        divided, Rows.readingFor(byTarget, spec.name()), level, building,
-                        domainOf(readInputs, spec)));
-            }
-            return Answer.of(Ordered.map(out));
+            return Answer.of(assess(spec, sig, symbols, db.ask(new Front.Reading()).value(),
+                    divided, Rows.readingFor(db.ask(new Rows(name)).value(), behavior), level,
+                    building, domainOf(db.ask(new Inputs(name)).value(), spec)));
         }
 
         /** Every line of one behavior, with what the rows and the decoder say about each. */
@@ -2113,8 +2106,6 @@ public final class Adequacy {
                     db.ask(new PathReached(name)).value();
             Symbols symbols = scope.value();
 
-            Map<String, List<BorderAssessment>> boundaries =
-                    db.ask(new Boundaries(name)).value();
             // And what each behavior states about its answer, which draws lines of its own.
             Map<String, souther.compiler.check.StatedContract> declared =
                     db.ask(new Bodies.StatedContracts(name)).value();
@@ -2142,8 +2133,8 @@ public final class Adequacy {
                 if (divided == null) {
                     continue;
                 }
-                List<BorderAssessment> edges = boundaries == null ? List.of()
-                        : boundaries.getOrDefault(spec.name(), List.of());
+                List<BorderAssessment> found = db.ask(new Boundaries(name, spec.name())).value();
+                List<BorderAssessment> edges = found == null ? List.of() : found;
                 Generator.GenerationResult composed;
                 try {
                     composed = rowsFor(spec, sig, symbols, db.ask(new Front.Reading()).value(),
