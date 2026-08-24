@@ -171,6 +171,12 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, Symbols 
      * written, and answering a caller that wants one with the first of them would report what is
      * covered off an element it chose — so such a position answers null here and {@link #valuesAt}
      * is what reads it.
+     *
+     * <p><b>Null runs three answers together, and a caller that has to tell them apart asks
+     * {@link #occurrencesAt}.</b> The walk could not be taken, or it was taken and the row stands
+     * nowhere here — the empty list, an element of nothing or a position under a case the row is
+     * not at — or several values stand and none of them is the one. What is covered and what a
+     * measurement is short of are different answers about a row, and only that one keeps them.
      */
     public ObservedValue valueAt(List<ObservedValue> inputs, TermPath path) {
         List<ObservedValue> values = valuesAt(inputs, path);
