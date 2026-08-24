@@ -195,7 +195,7 @@ public sealed interface StructuralInspection {
             // The sum stands and each of its cases continues on its own. Not made of positions:
             // what a case declares is under the case and not under the sum, which is why this is a
             // continuation rather than a decomposition, and why the sum keeps the classes it has.
-            case Shape.Sum _ -> new Retained(new Continuation.Branches(branchesOf(declared)));
+            case Shape.Sum _ -> new Retained(new Continuation.Branches(branchesOf(shape, declared)));
             // Still held inside something nothing here reaches into. A branch under one is exactly
             // what would lift it — whether the optional holds anything is a narrowing like any
             // other — and it is not taken here.
@@ -223,23 +223,47 @@ public sealed interface StructuralInspection {
      * it ({@link Case.SumCase#oneValue}), so that what a row is owed at the position and what
      * stands under the case are crossed against one reading of the declaration.
      */
-    private static List<Branch> branchesOf(List<Case> declared) {
+    private static List<Branch> branchesOf(Shape.ReadablePositionShape shape, List<Case> declared) {
         List<Branch> out = new ArrayList<>();
         for (Case each : declared) {
             Refinement narrowing = Refinement.of(each);
-            // A distinction that narrows no position is not a branch of one. A sum states its cases
-            // and nothing else, so nothing else reaches here — and where something did, it would be
-            // a distinction that puts nothing under the position rather than one quietly dropped.
+            // A distinction that narrows no position is not a branch of one. Where a shape states
+            // one of those beside its branches, it is a distinction that puts nothing under the
+            // position rather than one quietly dropped.
             if (narrowing == null) {
                 continue;
             }
-            // What the case carries, or nothing where the case is the whole of a value. Read off
-            // the distinction that already answered it, so that what a row is owed at the position
-            // and what stands under the case are crossed against one reading of the declaration.
-            out.add(new Branch(narrowing,
-                    each instanceof Case.SumCase one && !one.oneValue() ? Type.ref(one.leaf())
-                            : null));
+            out.add(new Branch(narrowing, carried(shape, each)));
         }
         return List.copyOf(out);
+    }
+
+    /**
+     * What stands at the position once the branch is taken, or null where the branch is the whole
+     * of a value.
+     *
+     * <p>A question about the shape and not only about the distinction, which is what keeps this
+     * from being a rule about sums wearing a general name. A case names the type it carries, so the
+     * distinction answers on its own; whether an optional holds anything does not, and what a
+     * {@code Some} leaves at the position is what the optional was declared to hold. Read off the
+     * distinction alone, every branch of every shape but a sum would come back as the whole of a
+     * value and put no position anywhere.
+     *
+     * <p>Exhaustive over {@link Case}, with no {@code default}. The two that narrow nothing are
+     * here because the switch is exhaustive and are never asked: {@link Refinement#of} has already
+     * answered that they are not branches.
+     */
+    private static Type carried(Shape.ReadablePositionShape shape, Case one) {
+        return switch (one) {
+            // Naming a unit case builds it, so the case and the value are the same thing and
+            // nothing stands under it.
+            case Case.SumCase sum -> sum.oneValue() ? null : Type.ref(sum.leaf());
+            // What an optional holds is at no name of its own, so `Some` leaves the element at this
+            // same position; absence is the whole of a value and leaves nothing.
+            case Case.Presence presence ->
+                    presence.present() && shape instanceof Shape.Optional held ? held.element()
+                            : null;
+            case Case.Truth _, Case.Named _ -> null;
+        };
     }
 }

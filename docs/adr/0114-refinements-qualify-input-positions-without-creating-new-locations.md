@@ -71,5 +71,10 @@ Names introduced under a refinement may denote the refined position.
   the model does have as one that cannot exist.
 - The rules read at a position under a refinement are the refined declaration's own, since no clause
   is written across a refinement.
+- A descent that costs no level stops only where it returns to a value state already visited without
+  a containment step. What that is keyed on is the state reached and never the narrowing taken: a
+  narrowing is an edge, what has to terminate is a state, and the two agree only where the edge
+  decides the state — a case of a sum names the type it carries and the presence of an optional does
+  not.
 - The optional remains unrefined for now. Nothing about this decision is particular to sums, so
   taking it is supplying a branch rather than a position semantics of its own.

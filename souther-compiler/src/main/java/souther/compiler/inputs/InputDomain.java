@@ -267,7 +267,7 @@ public final class InputDomain {
      */
     private static void walk(TermPath path, Type type, int depth, Symbols symbols,
                              ReadingPolicy policy, PlacedRules placed, List<Position> found,
-                             List<RuleRoot> roots, java.util.Set<Refinement> narrowed) {
+                             List<RuleRoot> roots, java.util.Set<Type> visited) {
         // The proof first, and before anything is read off the position. A shape a reading is not
         // made of is this compiler disagreeing with itself about what may stand at a position, and
         // it is refused here rather than arriving further down as a position nothing divides.
@@ -291,7 +291,7 @@ public final class InputDomain {
             }
             case StructuralInspection.Retained retained ->
                     under(retained.continuation(), here, path, depth, symbols, policy, placed,
-                            found, roots, narrowed);
+                            found, roots, visited);
         }
     }
 
@@ -305,7 +305,7 @@ public final class InputDomain {
     private static void under(StructuralInspection.Continuation continuation, Position here,
                               TermPath path, int depth, Symbols symbols, ReadingPolicy policy,
                               PlacedRules placed, List<Position> found, List<RuleRoot> roots,
-                              java.util.Set<Refinement> narrowed) {
+                              java.util.Set<Type> visited) {
         switch (continuation) {
             case StructuralInspection.Continuation.None _,
                  StructuralInspection.Continuation.Blocked _ -> { }
@@ -315,7 +315,7 @@ public final class InputDomain {
             case StructuralInspection.Continuation.Branches branches -> {
                 for (StructuralInspection.Branch branch : branches.branches()) {
                     walkBranch(branch, here, path, depth, symbols, policy, found, roots,
-                            narrowed);
+                            visited);
                 }
             }
         }
@@ -343,23 +343,27 @@ public final class InputDomain {
     private static void walkBranch(StructuralInspection.Branch branch, Position here, TermPath path,
                                    int depth, Symbols symbols, ReadingPolicy policy,
                                    List<Position> found, List<RuleRoot> roots,
-                                   java.util.Set<Refinement> narrowed) {
+                                   java.util.Set<Type> visited) {
         // Nothing stands under a branch that is the whole of a value. A unit case is one, and a
         // position for it would be a report naming a place with nothing in it once per case.
         if (branch.under() == null || !owed(here, branch.refinement())) {
             return;
         }
-        // A narrowing this chain has already taken, which is a value reached through itself — a
-        // declaration is refused for it (DataChecker) and this only has to come back from one.
-        // Asked of the narrowings and not of their cases, so that the guard is about the recursion
-        // and about nothing else: a test on which kind of narrowing it is would drop a kind it was
-        // never about. Kept per branch of the walk rather than for the reading, since a sum met
-        // under a field is a value of its own and has been taken apart nowhere.
-        if (narrowed.contains(branch.refinement())) {
+        // <b>A descent that costs no level stops only where it returns to a value it has already
+        // been at without a step into one.</b> That is the whole of the rule, and what it is keyed
+        // on is the value reached and never the narrowing taken: a narrowing is an edge and the
+        // thing that has to terminate is a state, and the two agree only where the edge decides the
+        // state. A case of a sum does decide it — the case names the type — and whether an optional
+        // holds anything does not, so an `Option<Option<Int>>` read on the narrowing would be one
+        // `Some` deep for ever after.
+        //
+        // Kept per branch of the walk and dropped at every step into a value, because a value met
+        // under a field is one this walk has been nowhere near.
+        if (visited.contains(branch.under())) {
             return;
         }
-        java.util.Set<Refinement> deeper = new java.util.LinkedHashSet<>(narrowed);
-        deeper.add(branch.refinement());
+        java.util.Set<Type> deeper = new java.util.LinkedHashSet<>(visited);
+        deeper.add(branch.under());
         TermPath at = path.refine(branch.refinement());
         roots.add(new RuleRoot(at, branch.under()));
         walk(at, branch.under(), depth, symbols, policy,

@@ -186,6 +186,36 @@ class APositionUnderACaseIsAPositionTest {
         throw new IllegalStateException("no case named " + name);
     }
 
+    /**
+     * Two narrowings with no step into a value between them are both taken.
+     *
+     * <p>A narrowing costs no level, so the walk under one has to stop somewhere: it stops where it
+     * returns to a value it has already been at without a step into one. What that is keyed on is
+     * the value reached and never the narrowing taken — a narrowing is an edge and what has to
+     * terminate is a state, and the two agree only where the edge decides the state.
+     *
+     * <p>Every case of a sum names the type it carries, so no model written in sums alone tells the
+     * two apart. What this holds is the neighbouring fact: a second narrowing is reached at all.
+     */
+    @Test
+    void twoNarrowingsWithNoStepBetweenThemAreBothTaken() {
+        assertEquals(List.of("x", "x@Wrap", "x@Wrap@A", "x@Wrap@A.n", "x@Wrap@B", "x@Wrap@B.m",
+                        "x@C", "x@C.k"),
+                positionsOf("""
+                        module g
+
+                        data A = { n: Int }
+                        data B = { m: Int }
+                        data Inner = A | B
+                        data Wrap = Inner
+                        data C = { k: Int }
+                        data Outer = Wrap | C
+                        data Page = { n: Int }
+
+                        behavior use : (x: Outer) -> Page
+                        """, "use"));
+    }
+
     /** And a path a recipe would have written flat is not one of these positions. */
     @Test
     void aFieldOfACaseIsNotAtThePathTheSumWouldGiveIt() {
