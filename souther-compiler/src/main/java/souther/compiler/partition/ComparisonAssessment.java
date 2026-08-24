@@ -36,11 +36,11 @@ import java.util.List;
  * geometry and not a coverage question standing against an answer: carried as both, one decision
  * had two representations again, and the second had no reader once it could never go unanswered.
  *
- * <p><b>Five ways a comparison raises nothing, and they are five.</b> Read to the end and cutting
- * nothing, naming no position at all, reading the answer, cutting where the quantity does not run,
- * and not read — each is a different sentence to whoever is told it, and only the last is about a
- * limit of this compiler. Held as one, a tautology was owed a row where the relation changes and a
- * rule this could not read was described as naming no position.
+ * <p><b>Five ways a comparison leaves the positions nothing, and they are five.</b> Read to the end
+ * and cutting nothing, naming no position at all, reading the answer, cutting where the quantity
+ * does not run, and not read — each is a different sentence to whoever is told it, and only the last
+ * is about a limit of this compiler. Held as one, a tautology was owed a row where the relation
+ * changes and a rule this could not read was described as naming no position.
  */
 sealed interface ComparisonAssessment {
 
@@ -205,11 +205,10 @@ sealed interface ComparisonAssessment {
             // Named by the comparison that drew it, which is the one thing about such a place this
             // compiler can always say exactly. It is on no position, and writing it out would be as
             // much of it as a pretty-printer got.
-            return new AcrossPositions(cutting, Citation.of(comparison.pos()),
-                    places(cutting, null));
+            return new AcrossPositions(cutting, Citation.of(comparison.pos()), places(cutting));
         }
         Place value = cutting.singles() ? cutting.singledValue() : cutting.dividedValue();
-        return new AtAPosition(cutting, divided, value, places(cutting, value));
+        return new AtAPosition(cutting, divided, value, places(cutting));
     }
 
     /**
@@ -217,13 +216,47 @@ sealed interface ComparisonAssessment {
      *
      * <p>Not from the operator alone. {@code 2 * a == 8} names four and {@code 2 * a == 9} names no
      * whole number at all, under one operator: whether the value the rule wrote is one the quantity
-     * holds is the quantity's answer, and it is already given by the seam the line was read off.
+     * holds is the quantity's answer, and it is asked of the quantity.
+     *
+     * <p>Asked of whether a value of a <em>position</em> could be written instead, a form over
+     * several positions has none at all — so {@code a + b == 10}, which takes ten, came back naming
+     * no value the quantity holds, alongside {@code 2 * a + 2 * b == 9}, which does not.
      */
-    private static Places places(Cutting cutting, Place value) {
+    private static Places places(Cutting cutting) {
         if (!cutting.singles()) {
             return Places.ACROSS_THE_VALUE;
         }
-        return value == null ? Places.AT_NO_VALUE : Places.AT_THE_VALUE;
+        return cutting.takesTheValueItNames() ? Places.AT_THE_VALUE : Places.AT_NO_VALUE;
+    }
+
+    /**
+     * Where a reader is sent for what this leaves the positions with, or empty where it leaves them
+     * nothing.
+     *
+     * <p><b>Whose answer it is turns on whether the quantity was reached.</b> A rule that was read
+     * is about its quantity, so the positions it is filed at are the quantity's — {@code a + b - b
+     * + c <= 10} is {@code a + c <= 10}, and a note at {@code b} would say the rule relates a
+     * position it does not mention. A reading that stopped has no quantity to be about, so the
+     * positions the walk met are the whole of what can be said, and nothing here may be read as
+     * what the rule is about.
+     *
+     * <p>A quantity that came out empty is the third: there are no coordinates to file at, and the
+     * positions the comparison names are what makes {@code a <= a} worth saying at all — the model
+     * names a position there and cuts nothing.
+     *
+     * <p>Answered here so that no caller chooses. Chosen at the two producers, one of them reached
+     * for the walk's positions because that was the helper in hand, and a rule read from end to end
+     * was filed at a position its arithmetic had cancelled.
+     */
+    default List<UnreadRule.Coordinate> filedAt(Core.Binary comparison, InputReads reads,
+                                                Symbols symbols) {
+        return switch (this) {
+            case AcrossPositions over -> over.cutting().over();
+            case OutsideTheDomain outside -> outside.cutting().over();
+            case Unread unread -> unread.filedAt();
+            case CutsNothing _ -> GuardThresholds.filedAt(comparison, reads, symbols);
+            case AtAPosition _, AnswerDependent _, NoInput _ -> List.of();
+        };
     }
 
     /**

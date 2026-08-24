@@ -355,6 +355,44 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         return side instanceof Level.OnACarrier on ? on.at() : null;
     }
 
+    /**
+     * Whether the quantity takes the level this rule names.
+     *
+     * <p>Asked of the quantity, which is what knows. {@code 2 * a == 8} names four and takes it;
+     * {@code 2 * a == 9} takes the even numbers and nine is not one, so it names no value the
+     * quantity holds; {@code a + b == 10} takes ten and {@code 2 * a + 2 * b == 9} does not. One
+     * question, and the same answer whether the quantity is one position's own values or a form
+     * over several.
+     *
+     * <p>Read off whether a value of a <em>position</em> could be written instead, this was the
+     * wrong question wearing the right answer: a form over several positions has no value of a
+     * position at all, so every rule singling one out on such a quantity came back naming nothing —
+     * which is true of {@code 2 * a + 2 * b == 9} and false of {@code a + b == 10}.
+     */
+    boolean takesTheValueItNames() {
+        return of.levels().attainable(at);
+    }
+
+    /**
+     * The positions the canonical quantity is over, as a reader is sent to them.
+     *
+     * <p>What a rule that was read is filed at. The quantity is what the rule is about, so a
+     * position the arithmetic cancelled is not one it says anything about: {@code a + b - b + c <=
+     * 10} is {@code a + c <= 10}, and a note filed at {@code b} would say the rule relates a
+     * position it does not mention.
+     */
+    java.util.List<souther.compiler.inputs.UnreadRule.Coordinate> over() {
+        // By the position's own name, which is the one thing about a form that does not depend on
+        // how it was written — the same order {@link AffineReading#ordered} puts a form's
+        // coefficients in. Read off the map instead, the entries come back in an order salted once
+        // per run, and a report is a document compared against the one written last time.
+        return AffineReading.ordered(direction(of)).stream()
+                .map(java.util.Map.Entry::getKey)
+                .map(each -> new souther.compiler.inputs.UnreadRule.Coordinate(each.path(),
+                        each instanceof NumericTerm.SizeOf))
+                .distinct().toList();
+    }
+
     /** Whether the rule singles a value out rather than ordering the values around it. */
     boolean singles() {
         return claim instanceof ComparisonClaim.Singled;

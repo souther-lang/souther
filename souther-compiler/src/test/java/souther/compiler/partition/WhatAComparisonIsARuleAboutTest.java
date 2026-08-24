@@ -158,6 +158,25 @@ class WhatAComparisonIsARuleAboutTest {
     }
 
     /**
+     * And whether the quantity holds the value is one question, over every shape of quantity.
+     *
+     * <p>Asked as "could a value of a position be written down", a form over several positions has
+     * none at all: {@code a + b == 10} takes ten and came back naming no value the quantity holds,
+     * alongside {@code 2 * a + 2 * b == 9}, which takes the even numbers and does not take nine.
+     * The two are opposite facts about the model and had one answer.
+     */
+    @Test
+    void whetherTheQuantityHoldsTheValueIsAskedOfTheQuantity() {
+        assertEquals(ComparisonAssessment.Places.AT_THE_VALUE, places(about("a + b == 10")),
+                "a sum of two positions reaches ten");
+        assertEquals(ComparisonAssessment.Places.AT_THE_VALUE, places(about("a == b")),
+                "and the place two positions meet is one the distance between them takes");
+        assertEquals(ComparisonAssessment.Places.AT_NO_VALUE,
+                places(about("2 * a + 2 * b == 9")),
+                "while twice their sum takes the even numbers, and nine is not one");
+    }
+
+    /**
      * The orders a line can be drawn on, which are not the numeric ones alone.
      *
      * <p>Two strings stand no measurable distance apart and one is still above the other, so a rule

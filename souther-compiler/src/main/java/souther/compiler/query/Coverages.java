@@ -167,11 +167,6 @@ final class Coverages {
                 divided.add(axis);
             }
         }
-        // And what a body's and a declaration's comparisons left standing, which no axis carries:
-        // the position a comparison is about need not be one anything divided.
-        //
-        // By the rule and the question, which is what one occurrence of a question is. A comparison
-        // inside a helper is read once per call and is one rule (`RuleRef`), so readings of it are
         // Each measure asked its own closure, and neither told from the length of what came back.
         // What one of them is short of says nothing about the other: a rule whose line nothing
         // could read leaves the border measure short while the classes either side of it were read

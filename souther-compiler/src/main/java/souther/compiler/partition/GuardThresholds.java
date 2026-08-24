@@ -618,11 +618,10 @@ public final class GuardThresholds {
         }
         RuleRef.Comparison rule = new RuleRef.Comparison(behavior, comparison.origin());
         souther.compiler.check.RuleCitation cited = citationOf(comparison, plan.comparisons());
-        // Where the reading was looking, which the assessment carries for the arm that stopped and
-        // is the comparison's own answer for the arm that did not.
-        List<UnreadRule.Coordinate> named =
-                read instanceof ComparisonAssessment.Unread unread ? unread.filedAt()
-                        : filedAt(comparison, reads, symbols);
+        // Whose positions these are is the assessment's answer, not this reader's: a rule that was
+        // read is filed at its quantity's coordinates and one that stopped at the positions the
+        // walk met.
+        List<UnreadRule.Coordinate> named = read.filedAt(comparison, reads, symbols);
         for (UnreadRule.Coordinate at : named) {
             UnreadRule said = new UnreadRule(rule, cited, at, why);
             if (out.stream().noneMatch(had -> had.sameAs(said))) {

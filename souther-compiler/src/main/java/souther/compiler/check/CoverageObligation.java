@@ -45,11 +45,13 @@ public enum CoverageObligation {
     /**
      * A line rows are owed at.
      *
-     * <p>Subject: where the line falls. A rule bounding one position draws it on the number that
-     * position is measured at; a comparison of two things that both move with the row draws it where
-     * they hold one count, which is on neither of them and is named by that comparison. Raised by
-     * every rule that places an end, whether it divides the position, stops it, or holds two of them
-     * against each other.
+     * <p>Subject: where the line falls, which is the number the position is measured at. Raised by a
+     * clause of a declaration that places an end on one of its value's positions.
+     *
+     * <p>Not by a comparison. A body's condition and a clause of an {@code ensures} draw lines too,
+     * and what they owe is owed by having been read — the reading that finds the line is what asks
+     * for the rows either side, so no such demand is ever outstanding. Those live where the
+     * partition's geometry does.
      */
     BOUNDARY;
 

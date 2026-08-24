@@ -172,8 +172,14 @@ public final class EnsuresThresholds {
         // said, because a position left out of every answer is reported as one the model draws no
         // line through — and the model says otherwise in the rule this stopped on.
         if (!(e instanceof Core.Binary comparison) || !comparison.op().compares()) {
-            reportUnread(new RuleRef.Ensures(rule.id(), clause), e, rule.value(), null,
-                    reads, symbols, out.unread());
+            // A statement that is not a comparison was not assessed as one, so what stopped this
+            // is the form it is written in — the one of the reasons that does not turn on what two
+            // sides name — and the positions the walk met are all there is to file it at.
+            reportUnread(new RuleRef.Ensures(rule.id(), clause), e, rule.value(),
+                    new BlockReason.UnreadComparisonForm(),
+                    GuardThresholds.mentionedIn(e, reads, symbols).stream()
+                            .map(UnreadRule.Coordinate::at).toList(),
+                    out.unread());
             return;
         }
         // What the comparison comes to is read the same way wherever a comparison is written, which
@@ -218,8 +224,8 @@ public final class EnsuresThresholds {
                 // The positions are named as ones nothing divides, which is what a rule over a
                 // quantity that is not one position's own values leaves them.
                 reportUnread(new RuleRef.Ensures(rule.id(), clause), comparison, rule.value(),
-                        new BlockReason.ComparisonBetweenPositions(), reads, symbols,
-                        out.unread());
+                        new BlockReason.ComparisonBetweenPositions(),
+                        over.filedAt(comparison, reads, symbols), out.unread());
                 // A value singled out on such a quantity has no sides, so there is nothing for a
                 // border to owe a row away from.
                 if (over.drawsABorder()) {
@@ -233,18 +239,19 @@ public final class EnsuresThresholds {
             // positions, which says no measure is short of anything.
             case ComparisonAssessment.Unread unread -> reportUnread(
                     new RuleRef.Ensures(rule.id(), clause), comparison, rule.value(), unread.why(),
-                    reads, symbols, out.unread());
+                    unread.filedAt(comparison, reads, symbols), out.unread());
             // Read to the end, and the positions are left with no class of their own from this
             // rule. Which of the two it was is worth saying: the quantity was empty, or the line
             // falls where the quantity never runs. Neither leaves a measure short of anything, and
             // both are things the model states at a position a report is asked about.
-            case ComparisonAssessment.CutsNothing _ -> reportUnread(
+            case ComparisonAssessment.CutsNothing nothing -> reportUnread(
                     new RuleRef.Ensures(rule.id(), clause), comparison, rule.value(),
-                    new BlockReason.ComparisonCuttingNothing(), reads, symbols, out.unread());
-            case ComparisonAssessment.OutsideTheDomain _ -> reportUnread(
+                    new BlockReason.ComparisonCuttingNothing(),
+                    nothing.filedAt(comparison, reads, symbols), out.unread());
+            case ComparisonAssessment.OutsideTheDomain outside -> reportUnread(
                     new RuleRef.Ensures(rule.id(), clause), comparison, rule.value(),
-                    new BlockReason.ComparisonCuttingOutsideDomain(), reads, symbols,
-                    out.unread());
+                    new BlockReason.ComparisonCuttingOutsideDomain(),
+                    outside.filedAt(comparison, reads, symbols), out.unread());
             case ComparisonAssessment.AnswerDependent _, ComparisonAssessment.NoInput _ -> { }
         }
     }
@@ -276,18 +283,15 @@ public final class EnsuresThresholds {
      * of the three reasons that does not turn on what two sides name.
      */
     private static void reportUnread(RuleRef.Ensures rule, Core statement, BindingId answer,
-                                     BlockReason.AboutARule said, InputReads reads,
-                                     Symbols symbols, List<UnreadRule> unread) {
+                                     BlockReason.AboutARule why,
+                                     List<UnreadRule.Coordinate> at,
+                                     List<UnreadRule> unread) {
         if (ComparisonAssessment.readsAnswer(statement, answer)) {
             return;
         }
-        // A statement that is not a comparison was not assessed as one, so what stopped this is the
-        // form it is written in — the one of the reasons that does not turn on what two sides name.
-        BlockReason.AboutARule why = said != null ? said
-                : new BlockReason.UnreadComparisonForm();
         souther.compiler.check.RuleCitation cited =
                 souther.compiler.check.RuleCitation.named(rule);
-        for (UnreadRule.Coordinate named : filedAt(statement, reads, symbols)) {
+        for (UnreadRule.Coordinate named : at) {
             UnreadRule here = new UnreadRule(rule, cited, named, why);
             if (unread.stream().noneMatch(had -> had.sameAs(here))) {
                 unread.add(here);
@@ -295,16 +299,6 @@ public final class EnsuresThresholds {
         }
     }
 
-    /** Where a statement was read for, which is a comparison's own answer where it is one and the
-     *  positions the walk met where it is not. */
-    private static List<UnreadRule.Coordinate> filedAt(Core statement, InputReads reads,
-                                                       Symbols symbols) {
-        if (statement instanceof Core.Binary comparison) {
-            return GuardThresholds.filedAt(comparison, reads, symbols);
-        }
-        return GuardThresholds.mentionedIn(statement, reads, symbols).stream()
-                .map(UnreadRule.Coordinate::at).toList();
-    }
 
     /**
      * What a report calls one rule of a clause.
