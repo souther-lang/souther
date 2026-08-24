@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.Compiler;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
@@ -46,8 +47,8 @@ class AParameterHidesTheDeclarationItIsNamedLikeTest {
 
     private static HelperTable tableOf(String source) {
         Ast.Module parsed = CstFrontend.parse(source);
-        Hir.Module resolved = Resolve.module(parsed, SyntaxSymbols.of(parsed));
-        return HelperTable.of(resolved, Map.of(), InliningPolicy.FULL);
+        Hir.Module resolved = Resolve.module(parsed, SyntaxSymbols.of(parsed, DefaultStdlib.get()));
+        return HelperTable.of(resolved, Map.of(), InliningPolicy.FULL, DefaultStdlib.get());
     }
 
     @Test

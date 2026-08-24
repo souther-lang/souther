@@ -2,6 +2,8 @@ package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.diag.CompileException;
+import souther.compiler.stdlib.LibraryNames;
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.Denotation;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
@@ -30,17 +32,16 @@ public final class SyntaxSymbols implements NameSense {
 
     private final TypeScope scope;
     private final Registry<Ast.Def> registry;
+    /** The library's names as this module is resolved against them. */
+    private final LibraryNames library;
     private final Declarations<Ast.Def> declarations;
 
-    private SyntaxSymbols(String module, Registry<Ast.Def> registry, Denoting names) {
-        this.scope = new TypeScope(module, names, registry);
+    private SyntaxSymbols(String module, Registry<Ast.Def> registry, Denoting names,
+                          LibraryNames library) {
+        this.scope = new TypeScope(module, names, registry, library.languageTypes());
+        this.library = library;
         this.registry = registry;
         this.declarations = new Declarations<>(registry, Declarations.Vocabulary.ofNothing());
-    }
-
-    /** No module at all — for signatures written over primitives and type variables only. */
-    public static SyntaxSymbols none() {
-        return new SyntaxSymbols("", Registry.empty(), Denoting.NONE);
     }
 
     /**
@@ -52,7 +53,7 @@ public final class SyntaxSymbols implements NameSense {
      * that refuses: the raise is at the one statement that builds the table, and what comes out
      * answers every later question about what the module declares.
      */
-    public static SyntaxSymbols of(Ast.Module m) {
+    public static SyntaxSymbols of(Ast.Module m, Stdlib stdlib) {
         DeclaredNames.Index<Ast.Def> declared = Registry.indexed(m);
         if (!declared.refusals().isEmpty()) {
             throw CompileException.of(
@@ -66,7 +67,7 @@ public final class SyntaxSymbols implements NameSense {
         return new SyntaxSymbols(m.name(),
                 Registry.ofRead(Map.of(m.name(), new Registry.Declared<>(
                         declared.declarations(), Registry.baseNames(m.exposing())))),
-                Denoting.of(names, Map.of()));
+                Denoting.of(names, Map.of()), stdlib.names());
     }
 
     /** A module resolved against a registry that reads its declarations however it likes — the form
@@ -76,8 +77,22 @@ public final class SyntaxSymbols implements NameSense {
      * one answer — the module, its scope and its aliases — come from. A caller free to pass them
      * separately could pass parts of two different assemblies, and nothing it was holding would
      * have said so. */
-    public static SyntaxSymbols of(String module, Registry<Ast.Def> registry, Denoting names) {
-        return new SyntaxSymbols(module, registry, names);
+    public static SyntaxSymbols of(String module, Registry<Ast.Def> registry, Denoting names,
+                                   Stdlib stdlib) {
+        return new SyntaxSymbols(module, registry, names, stdlib.names());
+    }
+
+    /** The same, for the one reader that has no library to ask: the loader resolving the library's
+     *  own sources, which holds the names it collected from all of them and no {@link Stdlib} yet.
+     *  Every other caller has one and passes it. */
+    static SyntaxSymbols overTheseLibraryNames(String module, Registry<Ast.Def> registry,
+                                               Denoting names, LibraryNames library) {
+        return new SyntaxSymbols(module, registry, names, library);
+    }
+
+    /** The library's names as this module is resolved against them. */
+    public LibraryNames library() {
+        return library;
     }
 
     /** What a name written here means. */

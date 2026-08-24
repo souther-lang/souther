@@ -1,5 +1,6 @@
 package souther.compiler.jvm;
 
+import java.util.Set;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeKey;
 
@@ -20,6 +21,44 @@ import souther.compiler.types.TypeKey;
 public final class SoutherJvmAbi {
 
     private SoutherJvmAbi() {}
+
+    /**
+     * The language declarations souther-runtime ships an implementation for by hand.
+     *
+     * <p>Whose classification this is, said here rather than beside the declarations. That
+     * {@code RoundingMode} is provided rather than generated is a fact about this backend: the
+     * library declares it, and what represents it is the answer a backend gives — another one may
+     * generate it and be no less right (ADR-0087, amended).
+     *
+     * <p>A language declaration missing from here is one nothing would emit classes for, which is a
+     * fault in this compiler and is held by
+     * {@code EveryLanguageDeclarationHasAJvmImplementationTest}.
+     */
+    private static final Set<String> PROVIDED_BY_THE_RUNTIME = Set.of("RoundingMode");
+
+    /** Those, by the bare name the library declares them under. */
+    public static Set<String> providedByTheRuntime() {
+        return PROVIDED_BY_THE_RUNTIME;
+    }
+
+    /**
+     * What a declaration the language itself gives is called on the JVM.
+     *
+     * <p>The other half of {@link #nameOf}, for the declarations no module of a compilation makes
+     * and no emission produces. The mapping happens to be the identity today — the namespace those
+     * declarations are addressed under is the package souther-runtime ships them in — and that is a
+     * coincidence of one backend and not a property of the name. Said here so that a second backend
+     * answers the same question in its own ABI rather than reading a Souther identity as a class.
+     *
+     * @throws IllegalStateException where {@code name} is not one of the language's own
+     */
+    public static JvmClassName nameOfLanguageDeclaration(TypeSymbol name) {
+        if (!TypeSymbol.RUNTIME.equals(name.module())) {
+            throw new IllegalStateException("`" + name.qualified()
+                    + "` is not a declaration the language gives");
+        }
+        return new JvmClassName(name.qualified());
+    }
 
     /** What {@code generated} is called on the JVM. */
     public static JvmClassName nameOf(GeneratedClass generated) {

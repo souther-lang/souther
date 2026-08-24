@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.CompileException;
 
@@ -49,8 +50,9 @@ public final class Expandable {
      * @throws CompileException where a value of the module is defined in terms of itself, which is
      *     the refusal itself and not a report about the answer being absent
      */
-    public static Expandable check(Hir.Module module, Map<String, Hir.FnDef> imported) {
-        ValueCycles.rejectIn(module, imported);
+    public static Expandable check(Hir.Module module, Map<String, Hir.FnDef> imported,
+                                   Stdlib stdlib) {
+        ValueCycles.rejectIn(module, imported, stdlib);
         return new Expandable(module);
     }
 

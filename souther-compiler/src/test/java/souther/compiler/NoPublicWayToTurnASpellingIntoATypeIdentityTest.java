@@ -269,7 +269,7 @@ class NoPublicWayToTurnASpellingIntoATypeIdentityTest {
 
     private static Hir.Module resolved(String source) {
         Ast.Module parsed = CstFrontend.parse(source);
-        return Resolve.module(parsed, SyntaxSymbols.of(parsed));
+        return Resolve.module(parsed, SyntaxSymbols.of(parsed, DefaultStdlib.get()));
     }
 
     private static Hir.Def declarationOf(String source, String name) {

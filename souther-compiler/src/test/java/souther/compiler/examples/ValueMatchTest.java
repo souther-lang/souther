@@ -2,6 +2,7 @@ package souther.compiler.examples;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.check.Symbols;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
@@ -31,7 +32,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 class ValueMatchTest {
 
     private static ValueMatch match() {
-        Symbols symbols = Symbols.none();
+        Symbols symbols = Symbols.none(DefaultStdlib.get());
         NeutralForm neutral = new NeutralForm(symbols);
         return new ValueMatch(neutral, new ValueRendering(neutral));
     }
@@ -242,7 +243,7 @@ class ValueMatchTest {
         for (int i = 0; i < FixtureReader.WHOLE.maxDepth() + 2; i++) {
             deep = List.of(deep);
         }
-        Symbols symbols = Symbols.none();
+        Symbols symbols = Symbols.none(DefaultStdlib.get());
         ObservedValue observed = ObservedValues.of(deep, symbols, new NeutralForm(symbols),
                 FixtureReader.WHOLE);
         ObservedValue at = observed;

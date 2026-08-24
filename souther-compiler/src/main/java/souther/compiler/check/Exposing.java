@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.stdlib.LibraryNames;
 import souther.compiler.Reserved;
 import souther.compiler.ast.Ast;
 import souther.compiler.types.ValueName;
@@ -100,8 +101,8 @@ public final class Exposing {
      * means is one question asked in one place — {@link Scoping}, which settles this line's claims
      * beside every other line's.
      */
-    public static Checked check(Ast.Module module) {
-        Validated validated = validate(module);
+    public static Checked check(Ast.Module module, LibraryNames library) {
+        Validated validated = validate(module, library);
         return new Checked(withoutLibraryImports(module, validated.kept()), validated.claims(),
                 validated.refused());
     }
@@ -121,7 +122,7 @@ public final class Exposing {
      * different thing and still wins over both: it is written inside a body, and what an import
      * says is what a name means where no binding answers it.
      */
-    private static Validated validate(Ast.Module module) {
+    private static Validated validate(Ast.Module module, LibraryNames library) {
         List<Scoping.Claim> claims = new ArrayList<>();
         List<Ast.Import> kept = new ArrayList<>();
         List<Refusal> refused = new ArrayList<>();
@@ -135,7 +136,7 @@ public final class Exposing {
                 // alias, and each name in its list is the operation. What is brought in is that
                 // pair, so nothing downstream has to take a spelling apart to get at either.
                 ValueName.Stdlib operation = new ValueName.Stdlib(imp.module(), name);
-                if (Prelude.isLibraryFunction(operation.qualified())) {
+                if (library.isLibraryFunction(operation.qualified())) {
                     claims.add(new Scoping.Claim.Stands(imp, name, true,
                             new Scoping.Brought.ALibraryOperation(operation)));
                 } else {

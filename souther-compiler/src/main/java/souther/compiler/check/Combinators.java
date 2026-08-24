@@ -1,5 +1,7 @@
 package souther.compiler.check;
 
+import souther.compiler.DefaultStdlib;
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.semantics.Combinator;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
@@ -26,14 +28,14 @@ import java.util.Set;
  *
  * <p>Nothing here is written down. The library's own signature already says which argument takes a
  * function and which parameter of that function has the type of what a container holds, so the rules
- * are read off {@link Prelude}: an operation the library gains is answered for by being declared. A
+ * are read off {@link Stdlib}: an operation the library gains is answered for by being declared. A
  * signature this cannot read off — two function arguments, or two closure parameters that could each
  * be the element — raises rather than answering half, because a combinator nobody registered is a
  * check that quietly stops crediting an element.
  *
  * <p>Each reader asks under the name it holds. The totality check reads the tree an author wrote,
  * where {@code List.fold} still spells itself; the discharge check reads one where the rewrite to
- * {@code List.foldFrom} has happened. So a {@linkplain Prelude#rewrites() sugared} name is answered
+ * {@code List.foldFrom} has happened. So a {@linkplain Stdlib#rewrites() sugared} name is answered
  * with what it rewrites to, over the arguments the rewrite keeps in place — and the discharge side
  * never asks, because {@link Preserved} is built from declarations and a sugar has none.
  */
@@ -134,18 +136,22 @@ final class Combinators {
     /** Read off the library on the first ask. The library is the same library for every module
      * compiled, and reading it is answering the question for all of them at once. */
     private static final class Derived {
-        private static final Map<ValueName, Combinator> RULES = read();
+        private static final Map<ValueName, Combinator> RULES =
+                read(DefaultStdlib.get());
     }
 
-    private static Map<ValueName, Combinator> read() {
+    /* A pure function of the library, so the holder above is the only thing here that reaches for
+     * the process's own — {@link souther.compiler.DefaultStdlib} says who may and why the loader
+     * may not. */
+    private static Map<ValueName, Combinator> read(Stdlib stdlib) {
         Map<ValueName, Combinator> rules = new LinkedHashMap<>();
-        Prelude.entries().forEach((qualified, entry) -> {
+        stdlib.entries().forEach((qualified, entry) -> {
             Combinator rule = ruleFor(qualified, entry.signature().params());
             if (rule != null) {
-                rules.put(Prelude.operation(qualified), rule);
+                rules.put(stdlib.operation(qualified), rule);
             }
         });
-        Prelude.rewrites().forEach((sugar, rewrite) -> {
+        stdlib.rewrites().forEach((sugar, rewrite) -> {
             Combinator target = rules.get(rewrite.target());
             if (target == null) {
                 return;   // what it becomes hands its closure nothing, so neither does it
@@ -155,7 +161,7 @@ final class Combinators {
                         + ", whose closure or container is not among the arguments the rewrite keeps"
                         + " in place — what it hands its closure cannot be said of the sugar");
             }
-            rules.put(Prelude.operation(sugar), target);
+            rules.put(stdlib.operation(sugar), target);
         });
         return Collections.unmodifiableMap(rules);
     }

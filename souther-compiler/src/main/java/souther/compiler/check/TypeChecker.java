@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
@@ -220,7 +221,7 @@ public final class TypeChecker {
         // readings answer the same about a behavior's name: it becomes the function value it names,
         // which a helper may then not apply (E1818). Told nothing, the standalone reading would
         // refuse the name for being a name rather than for being a behavior a helper cannot reach.
-        HelperInliner inliner = HelperInliner.forModule(module, publishedToHere)
+        HelperInliner inliner = HelperInliner.forModule(module, publishedToHere, symbols.library())
                 .namingBehaviors(InjectionSigs.arities(calleeSigs));
         // Which declarations reach a `partial` helper, asked once for the two checks that ask it: the
         // invariant rule just below and the totality rule further down.
@@ -516,8 +517,8 @@ public final class TypeChecker {
     }
 
     /** The symbol table of a module compiled on its own: bare names are its own definitions. */
-    public static Symbols symbols(Hir.Module module) {
-        return Symbols.of(module);
+    public static Symbols symbols(Hir.Module module, Stdlib stdlib) {
+        return Symbols.of(module, stdlib);
     }
 
 }

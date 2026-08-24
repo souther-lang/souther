@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.Reserved;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
@@ -450,13 +451,13 @@ public final class Scoping {
 
         /** What {@code Resolve} reads this module against, over the declarations as they were
          *  written. */
-        public SyntaxSymbols writtenSymbols(Registry<Ast.Def> registry) {
-            return SyntaxSymbols.of(module, registry, denoting());
+        public SyntaxSymbols writtenSymbols(Registry<Ast.Def> registry, Stdlib stdlib) {
+            return SyntaxSymbols.of(module, registry, denoting(), stdlib);
         }
 
         /** The same over a stage of the declarations something has resolved. */
-        public Symbols symbolsOver(Registry<Hir.Def> registry) {
-            return Symbols.of(module, registry, denoting());
+        public Symbols symbolsOver(Registry<Hir.Def> registry, Stdlib stdlib) {
+            return Symbols.of(module, registry, denoting(), stdlib);
         }
 
         /** These meanings as the operations a scope performs on them — what a reader that already

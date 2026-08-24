@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
@@ -70,7 +71,7 @@ public final class BottomInfer {
      * <p>Which library names those are is the library's to say, so this asks what the name denotes
      * and whether its declaration was written with a parameter list — not how it was spelled.
      */
-    static boolean isEmptyCollectionLiteral(Hir.Expr e) {
+    static boolean isEmptyCollectionLiteral(Stdlib stdlib, Hir.Expr e) {
         if (e instanceof Hir.ListLit l) {
             return l.elements().isEmpty();
         }
@@ -78,7 +79,7 @@ public final class BottomInfer {
             return row.elements().isEmpty();
         }
         return e instanceof Hir.Var.Denoting v && v.denotes() instanceof ValueName.Stdlib lib
-                && Prelude.isEmptyCollectionValue(lib.qualified());
+                && stdlib.isEmptyCollectionValue(lib.qualified());
     }
 
     /** Best-effort: bind the type variables of {@code result} from an {@code expected} type the context
@@ -141,7 +142,8 @@ public final class BottomInfer {
      * module reported at its caller, and it says nothing about a seed written where the copy came
      * from. The position says which it is now, so it is read.
      */
-    static int untypedEmptySeed(List<Hir.Expr> args, Type.FnOf fn, Map<String, Type> bind) {
+    static int untypedEmptySeed(Stdlib stdlib, List<Hir.Expr> args, Type.FnOf fn,
+                                Map<String, Type> bind) {
         int seed = 1;
         if (fn.params().size() <= seed || args.size() <= seed) {
             return -1;
@@ -150,7 +152,7 @@ public final class BottomInfer {
                 && !(fn.params().get(seed) instanceof Type.FnOf)
                 && fn.params().get(seed).equals(fn.result());
         if (foldShaped
-                && isEmptyCollectionLiteral(args.get(seed))
+                && isEmptyCollectionLiteral(stdlib, args.get(seed))
                 && !args.get(seed).pos().wasCopiedHere()
                 && Type.mentions(TypeOps.substitute(fn.params().get(seed), bind), BottomInfer::isBottom)) {
             return seed;

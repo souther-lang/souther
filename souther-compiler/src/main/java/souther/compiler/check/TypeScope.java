@@ -46,11 +46,21 @@ public final class TypeScope {
      * not be built without naming every module of the compilation up front. */
     private final Denoting names;
     private final Registry<?> registry;
+    /** The bare names the language itself declares, reachable on the lowest rung of every module's
+     *  scope. A value rather than a table this reaches for: what the language declares is settled
+     *  before any module is resolved against it, and the one reader that resolves the library itself
+     *  is resolving the very declarations this would otherwise be asking it for.
+     *
+     *  <p>Both callers hand over the set the library froze, so the copy below is the no-op
+     *  {@code Set.copyOf} makes of an immutable set. One of them used to pass a map's key view
+     *  instead, and copied it again for every module of every compilation. */
+    private final Set<String> languageNames;
 
-    TypeScope(String module, Denoting names, Registry<?> registry) {
+    TypeScope(String module, Denoting names, Registry<?> registry, Set<String> languageNames) {
         this.module = module;
         this.names = names;
         this.registry = registry;
+        this.languageNames = Set.copyOf(languageNames);
     }
 
     /** The module being compiled. */
@@ -94,10 +104,10 @@ public final class TypeScope {
             if (!(name instanceof Denotation.NotInScope)) {
                 return name;
             }
-            // The prelude's runtime-backed data is nameable everywhere, on the lowest rung: a
-            // module's own declaration or import of the same name is what the name means there.
-            TypeSymbol runtime = Prelude.runtimeBackedType(written);
-            return runtime != null ? new Denotation.Denotes(runtime) : Denotation.NOT_IN_SCOPE;
+            // What the language declares is nameable everywhere, on the lowest rung: a module's own
+            // declaration or import of the same name is what the name means there.
+            return languageNames.contains(written)
+                    ? new Denotation.Denotes(TypeSymbol.runtime(written)) : Denotation.NOT_IN_SCOPE;
         }
         String target = moduleOfQualifier(written.substring(0, dot));
         if (target == null) {

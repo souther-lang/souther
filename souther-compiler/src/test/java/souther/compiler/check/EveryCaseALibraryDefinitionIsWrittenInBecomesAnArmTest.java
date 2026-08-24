@@ -1,5 +1,7 @@
 package souther.compiler.check;
 
+import souther.compiler.DefaultStdlib;
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.semantics.OperationFact;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
@@ -101,7 +103,7 @@ class EveryCaseALibraryDefinitionIsWrittenInBecomesAnArmTest {
     /** A call to {@code operation} whose arguments are told apart by what stands at each position,
      * so that a rule naming the wrong one is a different answer rather than the same one. */
     private static Core.PreservedCall callTo(ValueName operation) {
-        Prelude.PreludeEntry entry = Prelude.entry(((ValueName.Stdlib) operation).qualified());
+        Stdlib.Entry entry = DefaultStdlib.get().entry(((ValueName.Stdlib) operation).qualified());
         assertNotNull(entry, operation + " is not declared by the library");
         List<Type> params = entry.signature().params();
         List<Core> args = new ArrayList<>(params.size());

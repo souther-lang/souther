@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.semantics.ArgumentRef;
 import souther.compiler.semantics.Combinator;
 import souther.compiler.semantics.ElementLineage;
@@ -180,8 +181,8 @@ public final class HelperInliner {
      * prelude helpers join the inlining map under the qualified names they are reached by
      * ({@code Bool.not}), a module's own under the bare names it declared them with — so the two
      * never stand for one key, and how a call came to name one of them was settled before this. */
-    public static HelperInliner forModule(Hir.Module module) {
-        return forModule(module, Map.of());
+    public static HelperInliner forModule(Hir.Module module, Stdlib stdlib) {
+        return forModule(module, Map.of(), stdlib);
     }
 
     /**
@@ -193,8 +194,9 @@ public final class HelperInliner {
      * no part of this — it follows from what expanding this module's trees leaves standing, and is
      * answered where that is collected.
      */
-    public static HelperInliner forModule(Hir.Module module, Map<String, Hir.FnDef> imported) {
-        HelperTable table = HelperTable.of(module, imported, InliningPolicy.FULL);
+    public static HelperInliner forModule(Hir.Module module, Map<String, Hir.FnDef> imported,
+                                          Stdlib stdlib) {
+        HelperTable table = HelperTable.of(module, imported, InliningPolicy.FULL, stdlib);
         return new HelperInliner(table, HelperGraph.of(table));
     }
 
@@ -207,8 +209,9 @@ public final class HelperInliner {
      * it is what its expansions left standing, taken from {@link #leftStanding} by whoever drove
      * them.
      */
-    public static HelperInliner forHelpers(String module, Map<String, Hir.FnDef> own) {
-        return forHelpers(module, own, InliningPolicy.FULL);
+    public static HelperInliner forHelpers(String module, Map<String, Hir.FnDef> own,
+                                           Stdlib stdlib) {
+        return forHelpers(module, own, InliningPolicy.FULL, stdlib);
     }
 
     /**
@@ -219,8 +222,8 @@ public final class HelperInliner {
      * a module's own helper is expanded, and a recursive call is left standing, by the same rules.
      */
     public static HelperInliner forHelpers(String module, Map<String, Hir.FnDef> own,
-                                           InliningPolicy policy) {
-        return forHelpers(module, own, Map.of(), policy);
+                                           InliningPolicy policy, Stdlib stdlib) {
+        return forHelpers(module, own, Map.of(), policy, stdlib);
     }
 
     /**
@@ -230,8 +233,9 @@ public final class HelperInliner {
      * definition is one this module expands and not one it declares.
      */
     public static HelperInliner forHelpers(String module, Map<String, Hir.FnDef> declared,
-                                           Map<String, Hir.FnDef> imported, InliningPolicy policy) {
-        HelperTable table = HelperTable.of(module, declared, Map.of(), imported, policy);
+                                           Map<String, Hir.FnDef> imported, InliningPolicy policy,
+                                           Stdlib stdlib) {
+        HelperTable table = HelperTable.of(module, declared, Map.of(), imported, policy, stdlib);
         return over(table, HelperGraph.of(table));
     }
 
@@ -548,15 +552,15 @@ public final class HelperInliner {
      * them is not that call at all — and a reader that took the rewrite anyway would credit an edge
      * to a declaration this call never reaches.
      *
-     * <p>Which names are sugar is the library's ({@link Prelude#rewriteOf}) and is asked there.
+     * <p>Which names are sugar is the library's ({@link Stdlib#rewriteOf}) and is asked there.
      * Written out here instead, the answer stopped agreeing with the library the day a second sugar
      * was added, and the disagreement is an edge quietly missing from the call graph.
      */
-    private static Prelude.Rewrite rewriteTaken(Hir.Apply call) {
+    private static Stdlib.Rewrite rewriteTaken(Stdlib stdlib, Hir.Apply call) {
         if (call.answered() == null) {
             return null;   // it reaches no library name, so there is no sugar to write out
         }
-        Prelude.Rewrite rewrite = Prelude.rewriteOf(call.answered().reaches());
+        Stdlib.Rewrite rewrite = stdlib.rewriteOf(call.answered().reaches());
         return rewrite != null && call.args().size() == rewrite.keptArgs() ? rewrite : null;
     }
 
@@ -565,22 +569,22 @@ public final class HelperInliner {
      * sugar it takes rewrites to. Null where what is applied is not a name that reaches a
      * declaration: a binding holding a lambda is applied by the expression and reaches nothing.
      */
-    private static String calledHelper(Hir.Apply call) {
+    private static String calledHelper(Stdlib stdlib, Hir.Apply call) {
         if (!(call.answered() instanceof Hir.Var.Denoting callee)
                 || callee.denotes() instanceof ValueName.Local) {
             return null;
         }
-        Prelude.Rewrite rewrite = rewriteTaken(call);
+        Stdlib.Rewrite rewrite = rewriteTaken(stdlib, call);
         return rewrite != null ? rewrite.target().qualified() : callee.reaches();
     }
 
     /** The call a sugared name becomes, written out: what it becomes and what it supplies are the
-     * library's to say ({@link Prelude#rewriteOf}), and this is where it is done. {@code List.fold(step,
+     * library's to say ({@link Stdlib#rewriteOf}), and this is where it is done. {@code List.fold(step,
      * seed, xs)} is {@code List.foldFrom(step, seed, xs, 0)} — the walk from the head. Rewriting here,
      * before inlining, means the step reaches {@code foldFrom} (the one recursive helper) directly
      * rather than through a wrapper that would pass the function on as a value. */
-    private static Hir.Apply desugar(Hir.Apply call) {
-        Prelude.Rewrite rewrite = rewriteTaken(call);
+    private static Hir.Apply desugar(Stdlib stdlib, Hir.Apply call) {
+        Stdlib.Rewrite rewrite = rewriteTaken(stdlib, call);
         if (rewrite == null) {
             return call;
         }
@@ -748,7 +752,7 @@ public final class HelperInliner {
         if (call.answered() == null) {
             return null;   // it reaches no declaration, so none of them declares anything
         }
-        Prelude.Rewrite rewrite = rewriteTaken(call);
+        Stdlib.Rewrite rewrite = rewriteTaken(table.library(), call);
         if (rewrite != null) {
             Hir.FnDef target = table.reached(rewrite.target().qualified());
             return target == null ? null : target.params().subList(0, rewrite.keptArgs());
@@ -1206,7 +1210,7 @@ public final class HelperInliner {
             return rawCall.withArgs(args);
         }
         checkFunctionArgumentPlacement(rawCall);
-        Hir.Apply call = desugarNamedBlock(desugar(rawCall));
+        Hir.Apply call = desugarNamedBlock(desugar(table.library(), rawCall));
         List<Hir.Expr> args = new ArrayList<>();
         for (Hir.Expr a : call.args()) {
             args.add(inline(a));
@@ -1498,7 +1502,7 @@ public final class HelperInliner {
         }
         int arity = switch (v.denotes()) {
             case ValueName.Stdlib lib -> {
-                Prelude.PreludeEntry entry = Prelude.entry(lib.qualified());
+                Stdlib.Entry entry = table.library().entry(lib.qualified());
                 Hir.FnDef declared = entry == null ? null : entry.declaration();
                 yield declared == null ? 0 : declared.params().size();
             }
@@ -2151,20 +2155,21 @@ public final class HelperInliner {
      * inliner exists. One walk either way: an edge of this graph is what it is, and a reader that
      * counted a different set of them would be reading a different graph.
      */
-    static void helperCallsIn(Hir.Expr e, Map<String, Hir.FnDef> table, Set<String> out) {
+    static void helperCallsIn(Stdlib stdlib, Hir.Expr e, Map<String, Hir.FnDef> table,
+                              Set<String> out) {
         // Applying a function-typed parameter, or a binding holding a function, is not a call to
         // whatever else bears that name. The call carries what it resolved to, so it is asked rather
         // than matched against the helper table — a parameter named like a helper was reaching the
         // graph as a call to that helper, which made `let f (g: (Int) -> Int) = g(1)` recursive.
-        if (e instanceof Hir.Apply call && calledHelper(call) != null) {
+        if (e instanceof Hir.Apply call && calledHelper(stdlib, call) != null) {
             // A sugar is written out before inlining, so a body that folds reaches the recursive
             // `foldFrom` — recursion classification and what a module has to emit must see that.
-            String fn = calledHelper(call);
+            String fn = calledHelper(stdlib, call);
             if (table.containsKey(fn)) {
                 out.add(fn);
             }
         }
-        forEachChild(e, c -> helperCallsIn(c, table, out));
+        forEachChild(e, c -> helperCallsIn(stdlib, c, table, out));
     }
 
     /** Applies {@code f} to every direct subexpression of {@code e}; the one exhaustive walk
