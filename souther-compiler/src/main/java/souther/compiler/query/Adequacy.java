@@ -1048,10 +1048,17 @@ public final class Adequacy {
                 List<BorderAssessment> edges = level.composesValues()
                         ? db.ask(new BoundarySearch(name, spec.name())).value()
                         : db.ask(new Boundaries(name, spec.name())).value();
+                if (edges == null) {
+                    // Nothing came back about this behavior's lines, from a question that has
+                    // everything it needs to answer. Read as no lines, a behavior whose measure
+                    // stopped would be counted as one the model draws nothing about.
+                    throw new IllegalStateException("`" + spec.name() + "` has a signature and a"
+                            + " reading of what the model divides it into, and no answer about the"
+                            + " lines that reading drew");
+                }
                 out.put(spec.name(), Coverages.of(spec, domainOf(readInputs, spec), sig,
                         scope.value(), db.ask(new Front.Reading()).value(), divided, seen,
-                        level, edges == null ? List.of() : edges,
-                        db.ask(new Front.Adequacy()).value().measures()));
+                        level, edges, db.ask(new Front.Adequacy()).value().measures()));
             }
             return Answer.of(Ordered.map(out));
         }
@@ -2320,8 +2327,15 @@ public final class Adequacy {
             // Asked whatever the level is. Somebody asking for the rows is what a generation is,
             // and the rows at an edge are what a composed value settles — so this pays for the
             // composing because it is what was asked for, not because a dial was turned up.
-            List<BorderAssessment> found = db.ask(new BoundarySearch(name, behavior)).value();
-            List<BorderAssessment> edges = found == null ? List.of() : found;
+            List<BorderAssessment> edges = db.ask(new BoundarySearch(name, behavior)).value();
+            if (edges == null) {
+                // A search that did not answer leaves this nothing to offer from, which is the
+                // reading the coverage above already gets. Read as no lines, the findings would be
+                // walked against a behavior said to have none — and the first one about a line
+                // would come back as the search and the finding being about different lines, which
+                // is a sentence about neither.
+                return Answer.absent();
+            }
             List<Finding> owed = findings == null ? List.of()
                     : findings.getOrDefault(behavior, List.of());
             Generator.GenerationResult composed;
