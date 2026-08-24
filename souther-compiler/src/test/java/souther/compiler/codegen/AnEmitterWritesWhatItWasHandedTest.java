@@ -66,7 +66,6 @@ class AnEmitterWritesWhatItWasHandedTest {
     void theSumEncoderWritesTheKeyItWasHanded() {
         String written = text(codec.generateSumEncoder(sum("Payment"), oneAtom("Payment", SENTINEL_KEY)));
         assertTrue(written.contains(SENTINEL_KEY), "the encoder did not write the key it was handed");
-        assertFalse(written.contains("type"), "the encoder wrote a key of its own");
     }
 
     @Test

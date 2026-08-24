@@ -15,6 +15,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A named sum the language calls an enumeration is one the boundary writes as a bare tag, and the
@@ -91,6 +92,30 @@ class AnEnumerationIsOneAnswerToTheLanguageAndTheBoundaryTest {
         assertFalse(Boundary.of(Type.ref(named("Draft")), symbols).representation()
                 instanceof Boundary.Representation.Enumeration);
         assertFalse(TypeOps.isUnitOnlySum(Type.ref(named("Draft")), symbols));
+    }
+
+    /**
+     * A union of units is written as a bare tag though it is no named sum.
+     *
+     * <p>{@link TypeOps#isUnitOnlySum} says no, and is right to: it answers about a declaration, and
+     * a union is not one. {@link Boundary} says yes, and is right to: the generated union encoder
+     * writes the member's name and nothing else. The two are not in disagreement — they are the two
+     * questions, and this is where holding them apart earns itself.
+     *
+     * <p>What used to read the boundary's question through the language's one is
+     * {@code NeutralForm.readsABareName}, which decides how a fixture writes a value standing at a
+     * position. Answered by {@code isUnitOnlySum}, a fixture at a union of units wrote
+     * {@code {"type": "Denied"}} for a value the union writes as {@code "Denied"} — the same value
+     * travelling two ways depending on where it sat, which is #994's own subject.
+     */
+    @Test
+    void aUnionOfUnitsIsWrittenAsABareTagAndIsNoNamedSum() {
+        Type union = Type.union(new java.util.LinkedHashSet<>(
+                java.util.List.of(named("Prospecting"), named("Won"))));
+        assertTrue(Boundary.of(union, symbols).representation()
+                instanceof Boundary.Representation.Enumeration);
+        assertFalse(TypeOps.isUnitOnlySum(union, symbols),
+                "a union is not a declaration, so the language's question does not reach it");
     }
 
     private boolean isEnumeration(String sum) {
