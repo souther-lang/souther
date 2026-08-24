@@ -62,10 +62,22 @@ record ConstructionPlan(Node root) {
     /**
      * A position the search chooses a value for.
      *
+     * @param worn  the names the position wore before a refinement narrowed it, outermost first,
+     *              and empty where none did. Only the outer half, unlike {@link Built#worn}: what
+     *              is chosen here is a value of {@link #type}, already written under whatever names
+     *              that type wears, and what is missing is the names the position wore before the
+     *              narrowing — a {@code data DecisionN = Decision} narrowed to a case that wraps a
+     *              number is written {@code DecisionN(Special(5))}, and the inner half is on the
+     *              value already
      * @param fixed whether the caller had already fixed a value here, which is what says a class is
      *              being placed under whatever holds it
      */
-    record Slot(TermPath at, Type type, boolean fixed) implements Node {}
+    record Slot(TermPath at, Type type, List<TypeOps.Layer> worn, boolean fixed) implements Node {
+
+        Slot {
+            worn = List.copyOf(worn);
+        }
+    }
 
     /**
      * A sequence composed out of what stands at its element.
@@ -173,7 +185,7 @@ record ConstructionPlan(Node root) {
         // Before the narrowing, because a position the caller fixed takes the value it was given
         // whatever a class would have built there.
         if (decided.contains(at)) {
-            return new Slot(at, declared, true);
+            return new Slot(at, declared, List.of(), true);
         }
         Refinement refinement = required.at(at);
         Type building = refined(declared, refinement, symbols);
@@ -183,14 +195,17 @@ record ConstructionPlan(Node root) {
         // the name of this one position and what may be built at it. Written without it, two cases
         // spreading one record would put two different positions at one name.
         TermPath here = refinement == null ? at : at.refine(refinement);
-        if (refinement != null && decided.contains(here)) {
-            return new Slot(here, building, true);
-        }
-        // The names the position wore before it was narrowed, kept: what a row writes is a value of
-        // what the position declares, and a value composed under the narrowed type's names alone is
-        // of a type the parameter does not declare.
+        // The names the position wore before the narrowing, which are what a value chosen at it is
+        // still missing; and those with the narrowed type's own after them, which is what a value
+        // composed here bare needs. Both are what the position declares, kept: a value written
+        // under the narrowed type's names alone is of a type the parameter does not declare.
+        List<TypeOps.Layer> outer =
+                refinement == null ? List.of() : TypeView.of(declared, symbols).wrappers();
         List<TypeOps.Layer> worn = refinement == null ? view.wrappers()
-                : outside(TypeView.of(declared, symbols).wrappers(), view.wrappers());
+                : outside(outer, view.wrappers());
+        if (refinement != null && decided.contains(here)) {
+            return new Slot(here, building, outer, true);
+        }
         // A sequence with something to be placed inside it. Built out of its element rather than
         // chosen whole, since what is being asked for is a list holding a value in a class and no
         // proposal of a whole list can be asked to hold one.
@@ -207,7 +222,7 @@ record ConstructionPlan(Node root) {
         // A record with no fields composes nothing out of anything, so it is a value to be chosen
         // like any other and not a position made of positions.
         if (depth >= MAX_DEPTH || children == null || children.under().isEmpty()) {
-            return new Slot(here, building, false);
+            return new Slot(here, building, outer, false);
         }
         Map<String, Node> under = new LinkedHashMap<>();
         children.under().forEach((field, type) -> under.put(field,
@@ -234,6 +249,13 @@ record ConstructionPlan(Node root) {
      * itself.
      */
     private static boolean holdsAFixedPosition(Node inside) {
+        // A position the caller narrowed is one it asked something of, as much as one it fixed a
+        // value at: a class placing a case inside a list is a class placed under the list. Read off
+        // the fixed values alone, a list holding a case of a sum was chosen whole and every element
+        // of it came back as whatever stands for the element's type.
+        if (inside.at().isNarrowed()) {
+            return true;
+        }
         return switch (inside) {
             case Slot slot -> slot.fixed();
             case Built built -> built.under().values().stream()

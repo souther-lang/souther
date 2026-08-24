@@ -63,7 +63,12 @@ Names introduced under a refinement may denote the refined position.
 - A row that does not satisfy a refinement has no occurrence at the positions beneath it. That is a
   row that was read and stands nowhere, and not a row nothing could read.
 - Construction follows the same requirements as coverage, so what a report counts and what a row is
-  written for cannot come apart.
+  written for cannot come apart. A class that narrows a position states the narrowing and does not
+  also fix a value there: the value stands at the narrowed position and is chosen there, so one
+  location is never decided twice under two names.
+- Every assignment a combination is searched at is one a value can be. A search that counted each
+  position's classes off on its own would reach assignments no value has, and report a combination
+  the model does have as one that cannot exist.
 - The rules read at a position under a refinement are the refined declaration's own, since no clause
   is written across a refinement.
 - The optional remains unrefined for now. Nothing about this decision is particular to sums, so

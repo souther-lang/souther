@@ -28,11 +28,27 @@ public record Requirements(Map<TermPath, Refinement> refinements) {
         refinements = java.util.Collections.unmodifiableMap(new LinkedHashMap<>(refinements));
     }
 
-    /** The same, with {@code refinement} required at {@code at} — which is what a class selecting
-     *  one adds to what its position's path already required. */
+    /**
+     * The same, with {@code refinement} required at {@code at} — which is what a class selecting one
+     * adds to what its position's path already required.
+     *
+     * <p><b>A fact already known to hold, and not a question about whether it does.</b> Whether two
+     * requirements can be met at once is {@link #merge}'s to answer and nothing else's, so this
+     * takes what its caller has established: a position's path requires nothing at the position
+     * itself, and a class of it selects there. Asked to put a second narrowing where one already
+     * stands, this refuses rather than keeping either — a requirement that contradicts itself is met
+     * by no value, and would have a row reported impossible with nothing having decided that.
+     */
     public Requirements and(TermPath at, Refinement refinement) {
-        if (refinement == null) {
+        if (refinement == null || refinement.equals(refinements.get(at))) {
             return this;
+        }
+        Refinement had = refinements.get(at);
+        if (had != null) {
+            throw new IllegalArgumentException(
+                    "`" + at + "` is required to be " + had.spelled() + " and asked to be "
+                            + refinement.spelled() + "; whether two requirements hold together is"
+                            + " what merging them answers");
         }
         Map<TermPath, Refinement> wider = new LinkedHashMap<>(refinements);
         wider.put(at, refinement);

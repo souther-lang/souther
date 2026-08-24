@@ -140,14 +140,42 @@ public record TermPath(String head, List<Step> steps) {
         return new Requirements(out);
     }
 
+    /**
+     * Whether the position this names was reached by narrowing it.
+     *
+     * <p>The last step and not any of them: what is asked is whether <em>this</em> position is a
+     * narrowing of the one above it, which is what says the caller asked for something here. A field
+     * of a case is not — the narrowing is at the case, which is a position of its own.
+     */
+    public boolean isNarrowed() {
+        return !steps.isEmpty() && steps.get(steps.size() - 1) instanceof Step.Refine;
+    }
+
     /** Whether any step of this reaches inside a sequence. */
     public boolean insideASequence() {
         for (Step step : steps) {
-            if (step instanceof Step.Element) {
+            if (reachesInsideASequence(step)) {
                 return true;
             }
         }
         return false;
+    }
+
+    /**
+     * Whether {@code step} goes inside a collection.
+     *
+     * <p>Exhaustive over {@link Step}, with no {@code default}, and the one place the question is
+     * decided. Three readers ask it — whether this position is inside one at all, which one a clause
+     * can name, and which ones have to hold a value for it to exist — and a step added later would
+     * have joined whichever side each reader's condition happened to leave it on.
+     */
+    private static boolean reachesInsideASequence(Step step) {
+        return switch (step) {
+            case Step.Element _ -> true;
+            // A field goes into the value and a narrowing stays at it. Neither is a container's
+            // contents, so neither puts the position inside one.
+            case Step.Field _, Step.Refine _ -> false;
+        };
     }
 
     /**
@@ -219,7 +247,7 @@ public record TermPath(String head, List<Step> steps) {
      */
     public TermPath containingSequence() {
         for (int i = 0; i < steps.size(); i++) {
-            if (steps.get(i) instanceof Step.Element) {
+            if (reachesInsideASequence(steps.get(i))) {
                 return new TermPath(head, steps.subList(0, i));
             }
         }
@@ -237,7 +265,7 @@ public record TermPath(String head, List<Step> steps) {
     public List<TermPath> sequencesContainingIt() {
         List<TermPath> out = new ArrayList<>();
         for (int i = 0; i < steps.size(); i++) {
-            if (steps.get(i) instanceof Step.Element) {
+            if (reachesInsideASequence(steps.get(i))) {
                 out.add(new TermPath(head, steps.subList(0, i)));
             }
         }
@@ -253,8 +281,8 @@ public record TermPath(String head, List<Step> steps) {
      * them — {@code items.charge} is a field of what a list holds, and no clause of the record
      * holding the list is written at that name. And a clause is not written across a refinement
      * either: what a {@code GlobalQuery} says about its {@code tag} is written in
-     * {@code GlobalQuery}, not in the sum, so a reader with those rules in hand asks with the path
-     * {@link #relativeTo} the case and not with this one.
+     * {@code GlobalQuery}, not in the sum, so a reader with those rules in hand asks
+     * {@link #fieldKeyUnder} the case rather than this.
      *
      * <p>Joined without those steps the name would be looked up as a field of the value itself,
      * which is either nothing or, on the day such a field exists, another position's rules.
@@ -317,10 +345,7 @@ public record TermPath(String head, List<Step> steps) {
     public String toString() {
         StringBuilder out = new StringBuilder(head);
         for (Step step : steps) {
-            if (step instanceof Step.Field) {
-                out.append('.');
-            }
-            out.append(step);
+            spell(out, step);
         }
         return out.toString();
     }

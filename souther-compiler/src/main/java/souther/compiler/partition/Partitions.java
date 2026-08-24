@@ -893,6 +893,15 @@ public final class Partitions {
         if (!classes.isEmpty()) {
             return List.of();
         }
+        // A unit data is one value, and naming it writes it. Read through the classes above it has
+        // none — nothing tells its one value from another — so what stands for it is said here, in
+        // the same words a class of a sum says it in. Left out, a position holding one was a
+        // position nothing could write a value at, which is what a case of a sum narrows to.
+        if (type instanceof Type.Ref unit
+                && symbols.declarations().declaration(unit.name().key()) instanceof Hir.UnitData) {
+            return symbols.scope().reach(unit.name()) instanceof TypeReachName.Written written
+                    ? List.of(FixtureTemplate.unitCase(written)) : List.of();
+        }
         // A newtype the model only bounds has no classes — everything outside the bound is refused at
         // construction — but it does have values, and the edge of the bound is one that builds.
         if (type instanceof Type.Ref ref && symbols.declarations().declaration(ref.name().key()) instanceof Hir.Data data) {
