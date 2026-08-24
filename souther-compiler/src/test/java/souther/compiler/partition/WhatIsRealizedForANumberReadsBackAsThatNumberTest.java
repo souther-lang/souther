@@ -25,7 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -120,9 +120,10 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
     void everyValueBuiltForANumberReadsBackAsIt() {
         int checked = 0;
         for (ValueName operation : OperationFacts.answersANumberTakenOfItsArgument()) {
-            NumericTerm.TakenOf term =
-                    new NumericTerm.TakenOf((ValueName.Stdlib) operation, AT);
             Type source = sourceOf(operation);
+            NumericTerm.TakenOf term = NumericTerm.TakenOf.of(
+                    (ValueName.Stdlib) operation, AT, source, SYMBOLS);
+            assertNotNull(term, operation + " is taken of what its own signature says it takes");
             souther.compiler.inputs.TermOrders orders = term.ordersAt(source, SYMBOLS);
             assertNotNull(orders.answered(),
                     operation + " answers a number, so there is an order for it");
@@ -164,9 +165,10 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
             if (!OperationFacts.everyAnswerItCanGiveHasASourceValue(operation)) {
                 continue;
             }
-            NumericTerm.TakenOf term =
-                    new NumericTerm.TakenOf((ValueName.Stdlib) operation, AT);
             Type source = sourceOf(operation);
+            NumericTerm.TakenOf term = NumericTerm.TakenOf.of(
+                    (ValueName.Stdlib) operation, AT, source, SYMBOLS);
+            assertNotNull(term, operation + " is taken of what its own signature says it takes");
             souther.compiler.inputs.TermOrders orders = term.ordersAt(source, SYMBOLS);
             for (long each : answerable(term)) {
                 assertInstanceOf(TermRealizations.Realization.Built.class,
@@ -255,9 +257,32 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
     void aTermCannotBeBuiltForAnOperationThatDeclaresNoAccount() {
         assertTrue(OperationFacts.takenAs(ValueName.Stdlib.operation("Date", "year")) == null,
                 "the premise: nothing is declared of it yet");
-        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
-                () -> new NumericTerm.TakenOf(ValueName.Stdlib.operation("Date", "year"), AT));
-        assertTrue(refused.getMessage().contains("Date.year"), refused.getMessage());
+        assertNull(NumericTerm.TakenOf.of(ValueName.Stdlib.operation("Date", "year"), AT,
+                        Type.Prim.DATE, SYMBOLS),
+                "so there is no term for what it answers");
+    }
+
+    /**
+     * And neither is one whose operation is not taken of what stands at the location.
+     *
+     * <p>The half a check on the declaration alone cannot make. {@code String.length} declares an
+     * account and answers a number, so nothing about the operation keeps it from a path holding a
+     * time; what keeps it out is the account itself, which is taken of something that holds things.
+     * Carried as a premise about who builds one — "the operation and the location agree, by
+     * construction" — this was a term whose reading would count whatever happened to be at the path
+     * (#1027).
+     */
+    @Test
+    void aTermCannotBeBuiltWhereTheOperationIsNotTakenOfWhatIsThere() {
+        assertNull(NumericTerm.TakenOf.of(ValueName.Stdlib.operation("String", "length"), AT,
+                        Type.Prim.TIME, SYMBOLS),
+                "a length is taken of what holds things, and a time holds none");
+        assertNull(NumericTerm.TakenOf.of(ValueName.Stdlib.operation("Time", "hour"), AT,
+                        Type.STRING, SYMBOLS),
+                "and an hour is taken of a time");
+        assertNotNull(NumericTerm.TakenOf.of(ValueName.Stdlib.operation("String", "length"), AT,
+                        Type.STRING, SYMBOLS),
+                "while the pair the library declares goes together");
     }
 
     /** What the type of the number an operation answers is, asked in the one place that says. */
@@ -275,8 +300,13 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
                 "a decimal rounded to a whole number answers a whole number");
     }
 
+    /** A term for an operation, taken of what that operation's own signature says it takes. */
     private static NumericTerm term(String module, String name) {
-        return new NumericTerm.TakenOf(ValueName.Stdlib.operation(module, name), AT);
+        ValueName.Stdlib operation = ValueName.Stdlib.operation(module, name);
+        NumericTerm.TakenOf made =
+                NumericTerm.TakenOf.of(operation, AT, sourceOf(operation), SYMBOLS);
+        assertNotNull(made, operation + " is taken of what it takes");
+        return made;
     }
 
     private static Place number(NumericTerm.Reading read) {

@@ -2001,12 +2001,11 @@ public final class Generator {
      */
     private static Edge edgeAt(Subject subject, Carrier carrier, NumericTerm term, Place at,
                                boolean besideAnother) {
-        // A number an operation answered is met by several values and only one of them can be
-        // offered beside a second position being fixed as well. True of every such number and not
-        // of counts alone — an hour is answered by every time within it as much as a count of three
-        // is by every string of three — so it is asked of what the term is rather than of which
-        // operation it names.
-        if (besideAnother && term instanceof NumericTerm.TakenOf) {
+        // A number met by several values can offer only one of them beside a second position being
+        // fixed as well. Whether it is met by several is the realization's question and not the kind
+        // of term's: an operation whose inverse is single-valued would be the same kind of term and
+        // would have been turned away here with nothing saying so (#1027).
+        if (besideAnother && !TermRealizations.onlyOneValueAnswersIt(term)) {
             return Edge.none(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
         for (Axis axis : subject.axes()) {

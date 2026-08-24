@@ -39,7 +39,7 @@ import souther.compiler.types.ValueName;
  * operation. An operation added to the language is read by everything here without a line being
  * written for it.
  */
-public sealed interface NumericTerm {
+public sealed interface NumericTerm permits NumericTerm.ValueOf, NumericTerm.TakenOf {
 
     /** The number a location holds: a numeric parameter, a field of one, a numeric newtype's value. */
     record ValueOf(TermPath path) implements NumericTerm {
@@ -72,34 +72,94 @@ public sealed interface NumericTerm {
      * moved onto a value the term never takes, and for a reading is a row classified against a
      * number the model never named, with nothing about either looking like a failure (#1027).
      *
-     * <p><b>The operation and the location agree, by construction.</b> Both places that make one of
-     * these guarantee it: an invariant's term is the operation that counts the position's own type
-     * ({@code NumericMeasures.takenOf}), and a guard's is a call the type checker has already held
-     * to its argument. So {@link #read} applies the operation to what the observation is without
-     * asking again whether the two match.
+     * <p><b>The operation and the location go together, and {@link #of} is what says so.</b> That
+     * was a premise the two call sites carried between them, which is a claim about who builds one
+     * today rather than a property of the term. Held at the way in, a term whose operation is not
+     * what the location's shape is measured by cannot be made at all.
      *
-     * <p>Not a check that was skipped for being cheap. A {@code List} and a {@code Set} are one
-     * observation — which of the two it was is the declared type's to say, not the value's — so
-     * comparing the operation against the shape would tell a string from a collection and leave the
-     * one pair a reader might actually confuse undistinguished. A check that looks total and is
-     * blind in the middle is worse than a stated premise, so the premise is stated.
+     * <p>Not against the observed value, which would tell a string from a collection and leave the
+     * one pair a reader might confuse undistinguished: a {@code List} and a {@code Set} are one
+     * observation, and which of the two it was is the declared type's to say. So it is the declared
+     * type that is asked, and {@link #read} applies the account to the observation without asking
+     * again.
      */
-    record TakenOf(ValueName.Stdlib operation, TermPath path) implements NumericTerm {
+    final class TakenOf implements NumericTerm {
 
-        public TakenOf {
-            java.util.Objects.requireNonNull(operation, "a taken number is taken by an operation");
-            java.util.Objects.requireNonNull(path, "and taken of somewhere");
-            if (OperationFacts.takenAs(operation) == null) {
-                throw new IllegalArgumentException(operation.qualified()
-                        + " does not declare what number it takes of the one value it is given, so"
-                        + " there is no term for what it answers");
-            }
+        private final ValueName.Stdlib operation;
+        private final TermPath path;
+
+        /**
+         * Built only where the operation and what stands at the location have been put to the one
+         * predicate that says whether they go together.
+         *
+         * <p>Package-private, so {@link #of} is the way in. A record's canonical constructor
+         * promises that any combination of its components is a value, and these two are not: an
+         * account of what is taken is written for a shape, and an operation over a shape the
+         * location does not have is a term whose reading would apply that account to whatever
+         * happened to be there.
+         */
+        TakenOf(ValueName.Stdlib operation, TermPath path) {
+            this.operation = java.util.Objects.requireNonNull(operation,
+                    "a taken number is taken by an operation");
+            this.path = java.util.Objects.requireNonNull(path, "and taken of somewhere");
         }
 
-        /** What this operation takes of the value at {@link #path()}. Never null: a term of this
-         *  kind cannot be built for an operation that declares none. */
+        /**
+         * The term for what {@code operation} answers of what stands at {@code path}, or null where
+         * the two do not go together.
+         *
+         * <p><b>The one way one of these is made.</b> Three things have to hold and each of them is
+         * a proposition somebody already owns: the operation declares an account of what it takes
+         * ({@code semantics.OperationFacts}), it answers a number ({@link NumericAnswers}), and what
+         * stands at the location is what that account is taken of ({@link TakenAs#takenOf}). The
+         * third was a premise the call sites carried — "the operation and the location agree, by
+         * construction" — which is a claim about who happens to build one today and not an invariant
+         * (#1027).
+         *
+         * <p>Null and not a refusal. Whether a call names a number the model has a term for is a
+         * question every reader of an expression asks, and the answer "it does not" is one they all
+         * have somewhere to put: no line is drawn and the rule is reported as one nothing read.
+         *
+         * <p>Asked of what the names wrap, since a name around a list is still a list — the same
+         * reach {@link Carrier#ofValue} takes, and taken here so that no caller takes it itself.
+         */
+        public static TakenOf of(ValueName.Stdlib operation, TermPath path, Type at,
+                                 Symbols symbols) {
+            TakenAs how = OperationFacts.takenAs(operation);
+            Type answers = NumericAnswers.typeOf(operation, symbols);
+            if (how == null || answers == null || at == null) {
+                return null;
+            }
+            return how.takenOf(souther.compiler.check.TypeOps.base(at, symbols), answers)
+                    ? new TakenOf(operation, path) : null;
+        }
+
+        /** The operation whose answer this term is. */
+        public ValueName.Stdlib operation() {
+            return operation;
+        }
+
+        @Override
+        public TermPath path() {
+            return path;
+        }
+
+        /** What this operation takes of the value at {@link #path()}. Never null: one of these
+         *  cannot be built for an operation that declares none. */
         public TakenAs takenAs() {
             return OperationFacts.takenAs(operation);
+        }
+
+        /** By the operation and the location, which is what makes two of these one term. */
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof TakenOf taken
+                    && operation.equals(taken.operation) && path.equals(taken.path);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(operation, path);
         }
 
         @Override

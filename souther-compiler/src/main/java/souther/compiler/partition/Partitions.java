@@ -8,7 +8,6 @@ import souther.compiler.check.ClauseHelpers;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.FieldDomains;
-import souther.compiler.check.NumericMeasures;
 import souther.compiler.codegen.InvariantConstraints;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.InputDomain;

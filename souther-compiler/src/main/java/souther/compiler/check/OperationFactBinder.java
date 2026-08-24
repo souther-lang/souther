@@ -102,8 +102,15 @@ final class OperationFactBinder {
                 // than a gap.
                 case OperationFact.StatesItsPredicateOfEveryElement _,
                      OperationFact.MeansTheSameAsASizeOfNought _,
-                     OperationFact.SaysNothingOf _,
-                     OperationFact.EveryAnswerItCanGiveHasASourceValue _ -> { }
+                     OperationFact.SaysNothingOf _ -> { }
+                // Stated of the number an operation answers, so an operation that answers none is
+                // one the proposition is not about. Waved through, it was a fact anything could
+                // carry — which is what an arm that does nothing promises, and the promise is
+                // wrong here (#1027).
+                case OperationFact.EveryAnswerItCanGiveHasASourceValue _ ->
+                        DischargeRules.holdTheResultToTheDeclaration(stdlib, each.operation(),
+                                Question::isANumber,
+                                "a number for every answer of it to have a value");
                 case OperationFact.AnswersANumberTakenOfTheOneValueItIsGiven taken ->
                         DischargeRules.holdTakenOf(stdlib, each.operation(), taken.how());
                 case OperationFact.ComputesANumber computes ->

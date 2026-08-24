@@ -65,6 +65,30 @@ final class TermRealizations {
     }
 
     /**
+     * Whether one value of the position is the only one that answers a given number.
+     *
+     * <p>Asked here and keyed on the account of what is taken, because that account <em>is</em> the
+     * algorithm and whether its inverse is single-valued is a property of the algorithm. Read off
+     * the kind of term instead, every operation answering a number of a location was many-valued —
+     * which is true of the two there are and is not what being one of them means. An injective
+     * intrinsic would be a term of the same kind and would have been treated as many-valued, with
+     * nothing saying so: the same defect {@code SizeOf} was, at a smaller size (#1027).
+     *
+     * <p>Answered without building anything, because the readers that ask are deciding whether to
+     * try. What a value looks like is {@link #at}'s and costs what it costs.
+     */
+    static boolean onlyOneValueAnswersIt(NumericTerm term) {
+        return switch (term) {
+            // The number is the value, so it is the one value there is.
+            case NumericTerm.ValueOf _ -> true;
+            case NumericTerm.TakenOf taken -> switch (taken.takenAs()) {
+                // Every container of that many answers it, and every time within that hour does.
+                case TakenAs.HowManyItHolds _, TakenAs.PartOfTime _ -> false;
+            };
+        };
+    }
+
+    /**
      * The values that stand at {@code answer} for {@code term}, given what the position holds.
      *
      * <p>Two arms and no default, the way {@link NumericTerm#read} has two. Which of them a term
@@ -128,8 +152,13 @@ final class TermRealizations {
         Type holder = TypeOps.base(sourceType, symbols);
         Witnesses.Sized built = Witnesses.ofSize(holder, many, symbols, policy, Set.of());
         if (built.values().isEmpty()) {
-            return new Realization.BuiltNone(
-                    Witnesses.reasonForSize(holder, many, policy, symbols));
+            // Read off the build that was already done. `Witnesses` keeps what it made and why it
+            // stopped as two halves of one answer for exactly this, and asking it again would be
+            // the same decision taken twice — the two could not disagree today and there is no
+            // reason to leave a second taking of it here.
+            return new Realization.BuiltNone(built.heldBack() == null
+                    ? Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE
+                    : built.heldBack());
         }
         List<FixtureTemplate> out = new ArrayList<>();
         for (FixtureTemplate each : built.values()) {

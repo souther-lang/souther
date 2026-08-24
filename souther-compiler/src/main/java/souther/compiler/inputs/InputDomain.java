@@ -247,9 +247,22 @@ public final class InputDomain {
 
     /** Both ends of one term, taken together from the one reading of where it sits. */
     public TermOrders ordersOf(NumericTerm term, Symbols symbols) {
-        Position position = at(term.path());
-        return term.ordersAt(
-                position != null ? position.type() : declaredAt(term.path(), symbols), symbols);
+        return term.ordersAt(typeAt(term.path(), symbols), symbols);
+    }
+
+    /**
+     * What stands at {@code path} as this reading has it, or null where it reaches nothing there.
+     *
+     * <p>The position first and the declarations only where there is none, which is the one
+     * resolution of where a term sits. A caller that walked the declarations itself would answer
+     * with what a field was declared as before anything narrowed it, and a caller that took the
+     * position alone would have nothing under {@link #MAX_DEPTH}. Both readers of this — what a term
+     * is measured on, and whether an operation may be taken of it — get the same answer because
+     * there is one.
+     */
+    public Type typeAt(TermPath path, Symbols symbols) {
+        Position position = at(path);
+        return position != null ? position.type() : declaredAt(path, symbols);
     }
 
     /**
@@ -547,7 +560,13 @@ public final class InputDomain {
             stated = List.of();
         }
         boolean bySize = measuredHere(ofType, valueOfType, stated, taken);
-        NumericTerm term = bySize ? new NumericTerm.TakenOf(taken, path) : new NumericTerm.ValueOf(path);
+        NumericTerm term = bySize ? NumericTerm.TakenOf.of(taken, path, type, symbols)
+                : new NumericTerm.ValueOf(path);
+        if (term == null) {
+            throw new IllegalStateException(
+                    "this reading decided " + path + " is measured by " + taken
+                            + ", which is not what its type is measured by: " + Type.show(type));
+        }
         DeclaredBounds.Bounds own = bySize
                 ? DeclaredBounds.and(ofType, DeclaredBounds.placed(stated, true, Carrier.WHOLE))
                 : carried == null ? null

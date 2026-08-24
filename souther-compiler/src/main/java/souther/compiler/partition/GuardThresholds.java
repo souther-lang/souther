@@ -626,7 +626,11 @@ public final class GuardThresholds {
         NumericMeasures.Measured measured = NumericMeasures.takenIn(e);
         if (measured != null) {
             TermPath of = reads.pathOf(measured.of(), symbols);
-            return of == null ? null : new NumericTerm.TakenOf(measured.operation(), of);
+            // Null where the call names a location the operation is not taken of, which a guard can
+            // write and the type checker has already refused elsewhere. Answered here as "no term",
+            // which is what every reader of one is ready for.
+            return of == null ? null : NumericTerm.TakenOf.of(measured.operation(), of,
+                    reads.read().typeAt(of, symbols), symbols);
         }
         TermPath path = reads.pathOf(e, symbols);
         return path == null ? null : new NumericTerm.ValueOf(path);

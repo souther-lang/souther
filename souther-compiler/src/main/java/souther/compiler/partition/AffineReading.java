@@ -1,7 +1,6 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.AffineForms;
-import souther.compiler.check.Carrier;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.Location;
 import souther.compiler.check.Symbols;
