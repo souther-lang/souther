@@ -65,7 +65,7 @@ class EveryObjectThisWritesIsShapedTheWayTheSchemaSaysTest {
             "oneOf", "anyOf", "allOf", "if", "then", "else", "not", "dependentRequired",
             // constraints on a value, which say nothing about keys
             "type", "enum", "const", "minimum", "pattern", "minItems", "maxItems",
-            "contains", "minContains", "maxContains",
+            "uniqueItems", "contains", "minContains", "maxContains",
             // prose and plumbing
             "description", "title", "$schema", "$id", "$defs");
 
@@ -95,6 +95,82 @@ class EveryObjectThisWritesIsShapedTheWayTheSchemaSaysTest {
         assertTrue(walk.objects > 20,
                 () -> "the model reaches the objects of the document: " + walk.objects);
         assertEquals(List.of(), walk.wrong, "what the schema shipped beside this refuses");
+    }
+
+    /**
+     * A point owing no row is closed, rather than listing what it may not have.
+     *
+     * <p>The list was the keys of the owed side written a second time, with nothing holding the two
+     * in step, and it fell behind twice: `weakening` was never added to it, and `writableBecause`
+     * was added to the schema and not to it, so the schema took a document naming grounds for a
+     * point nobody is owed a row at. Closed, there is no list to fall behind — a key added to the
+     * item is forbidden here by not having been named.
+     *
+     * <p>Which is what this holds: not that some set of keys is forbidden, but that the branch is
+     * still the kind of thing that forbids by default. Written the other way round, the check would
+     * be the list a second time.
+     */
+    @Test
+    void aPointOwingNoRowIsClosedAndNotAListOfWhatItMayNotHave() {
+        JsonNode item = schema().get("$defs").get("partition").get("properties").get("boundaries")
+                .get("items").get("properties").get("items").get("items");
+        JsonNode notOwed = null;
+        for (JsonNode branch : item.get("oneOf")) {
+            if (branch.has("required") && branch.get("required").get(0).asString().equals("notOwed")) {
+                notOwed = branch;
+            }
+        }
+        assertNotNull(notOwed, "the item has a branch for a point owing no row");
+        assertTrue(notOwed.has("additionalProperties")
+                        && !notOwed.get("additionalProperties").asBoolean(),
+                "the branch forbids what it does not name, rather than naming what it forbids");
+        Set<String> named = new java.util.LinkedHashSet<>();
+        notOwed.get("properties").propertyNames().forEach(named::add);
+        assertEquals(Set.of("point", "notOwed"), named,
+                "and what it names is which point it is and why no row is owed there");
+    }
+
+    /**
+     * A document written before a key was added is still a document of this version.
+     *
+     * <p>Held on the key added last, which is {@code writableBecause}. The preamble says a key added
+     * since does not raise the version, and what that promises is this: the same schema takes a
+     * document with the key and a document without it. So an absent array is a producer that predates
+     * the field and never a point with no grounds — that is written as an empty array, and a reader
+     * that took the two for one answer would read every older document as a corpus nothing shows
+     * anything about.
+     */
+    @Test
+    void aDocumentWrittenBeforeAKeyWasAddedIsStillOfThisVersion() {
+        JsonNode without = document();
+        int taken = strip(without, "writableBecause");
+        assertTrue(taken > 0, "the document carries the key, or this strips nothing");
+
+        Walk walk = new Walk(schema());
+        walk.of(without, "");
+        assertEquals(List.of(), walk.wrong,
+                "the shipped schema refuses a document written before the key existed");
+    }
+
+    /** Every occurrence of {@code key} taken out, and how many there were. */
+    private static int strip(JsonNode node, String key) {
+        int taken = 0;
+        if (node instanceof tools.jackson.databind.node.ObjectNode object) {
+            if (object.has(key)) {
+                object.remove(key);
+                taken++;
+            }
+            List<String> names = new ArrayList<>();
+            object.propertyNames().forEach(names::add);
+            for (String name : names) {
+                taken += strip(object.get(name), key);
+            }
+        } else if (node.isArray()) {
+            for (JsonNode each : node) {
+                taken += strip(each, key);
+            }
+        }
+        return taken;
     }
 
     /**

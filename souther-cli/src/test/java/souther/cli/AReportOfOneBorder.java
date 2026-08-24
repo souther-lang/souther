@@ -119,7 +119,7 @@ final class AReportOfOneBorder {
             // what the coverage beside it says. Written as a verdict, this fixture could claim a row
             // was at the point while handing in a coverage that says none is.
             items.put(role, new ItemAssessment.Owed(border.demand(role).criterion(),
-                    coverage.apply(role), true,
+                    coverage.apply(role), ItemAssessment.WritabilityProjection.PROVEN,
                     null));
         }
         return new BorderAssessment(border, items);

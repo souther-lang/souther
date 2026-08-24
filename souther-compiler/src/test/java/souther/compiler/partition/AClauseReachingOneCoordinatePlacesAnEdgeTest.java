@@ -575,13 +575,13 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
                         "onFlagsR/Set.size(v.s) = 2", "onNumbersR/Set.size(v.s) = 3",
                         "onTextR/String.length(v.s) = 3"),
                 lines.keySet(), "one line each, and the record's is on the count of the field");
-        assertTrue(onPoint(lines, "onFlagsN/Set.size(v) = 2").writability().known(),
+        assertTrue(onPoint(lines, "onFlagsN/Set.size(v) = 2").writabilityEvidence().known(),
                 "two booleans are two booleans");
-        assertTrue(onPoint(lines, "onFlagsR/Set.size(v.s) = 2").writability().known(),
+        assertTrue(onPoint(lines, "onFlagsR/Set.size(v.s) = 2").writabilityEvidence().known(),
                 "and writing the rule on the record does not take one away");
-        assertTrue(onPoint(lines, "onNumbersN/Set.size(v) = 3").writability().known(),
+        assertTrue(onPoint(lines, "onNumbersN/Set.size(v) = 3").writabilityEvidence().known(),
                 "three integers are three integers");
-        assertTrue(onPoint(lines, "onNumbersR/Set.size(v.s) = 3").writability().known(),
+        assertTrue(onPoint(lines, "onNumbersR/Set.size(v.s) = 3").writabilityEvidence().known(),
                 "and a record holding them is a value that can be built");
     }
 
@@ -785,7 +785,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
         souther.compiler.query.ItemAssessment.Owed line =
                 onPoint(linesOf(UNINHABITED, "uninhabited"), "onLoopyR/List.length(v.xs) = 1");
 
-        assertFalse(line.writability().known(),
+        assertFalse(line.writabilityEvidence().known(),
                 "nothing inhabits `Loop`, so nothing holds a list of one");
     }
 

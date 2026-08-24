@@ -119,8 +119,8 @@ class ASearchIsAskedForAndAMeasurementIsNotTest {
                 ItemAssessment.Owed now = (ItemAssessment.Owed) is;
                 assertEquals(owed.criterion(), now.criterion(), "what the point asks of a row");
                 assertEquals(owed.coverage(), now.coverage(), "what the rows came to");
-                assertEquals(owed.provenByProjection(), now.provenByProjection(),
-                        "what the rules prove on their own");
+                assertEquals(owed.projection(), now.projection(),
+                        "what reading the rules established on its own");
                 assertNull(owed.attempt(), "nothing was searched for while measuring");
                 if (owed.worthSearching()) {
                     assertNotNull(now.attempt(), "and a point worth searching was searched");
@@ -128,23 +128,16 @@ class ASearchIsAskedForAndAMeasurementIsNotTest {
                 } else {
                     assertNull(now.attempt(), "a point not worth searching was left alone");
                 }
-                // Nothing a search does is evidence against a point, so a verdict can only be
-                // strengthened by one. Row and construction are both witnesses; a projection is a
-                // proof; unknown is the absence of all three.
-                assertTrue(rank(now.writability()) >= rank(owed.writability()),
-                        "the search took a verdict away at " + before.label());
+                // Nothing a search does is evidence against a point, so the grounds can only be
+                // added to. A superset and not a rank: the grounds are not alternatives, so there is
+                // no order to compare them under — and inventing one, which this did, is how a
+                // search that replaced a proof with a witness read as a search that strengthened it.
+                assertTrue(now.writabilityEvidence().grounds()
+                                .containsAll(owed.writabilityEvidence().grounds()),
+                        "the search took a ground away at " + before.label());
             }
         }
         assertTrue(anySearched, "the model has a point worth searching, or this asserts nothing");
-    }
-
-    private static int rank(ItemAssessment.Writability writability) {
-        return switch (writability) {
-            case ItemAssessment.Writability.Unknown _ -> 0;
-            case ItemAssessment.Writability.ProvenByProjection _ -> 1;
-            case ItemAssessment.Writability.WitnessedByConstruction _ -> 2;
-            case ItemAssessment.Writability.WitnessedByRow _ -> 3;
-        };
     }
 
     /**
