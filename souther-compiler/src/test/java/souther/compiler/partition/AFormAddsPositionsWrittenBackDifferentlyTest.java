@@ -12,7 +12,6 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
-import souther.compiler.numeric.CountingUnit;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -29,19 +28,21 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A form over positions written back differently is read, and one whose counts mean different
- * things is not.
+ * A form reads each of its positions on the order that position is written on, and is over
+ * positions written back differently where the arithmetic puts them together.
  *
- * <p>What a form needs of its positions is that their counts mean one thing, and that is not the
- * same as their being written back the same way. A {@code Decimal} and an {@code Int} are two orders
- * and one of each is one, so their difference is a number; a date counts days, so a date and a
- * number have no sum however well both sides type-checked.
+ * <p>A quantity used to answer with the one order every position under it was on. A coordinate has
+ * one and a line between two positions has one, so nothing forced the two questions apart — which
+ * order a position is read and written on, and which orders a form may be over. A form was held to
+ * the same answer, and one over a {@code Decimal} position and an {@code Int} one was refused
+ * without a word: the reading returned no quantity, and a rule the model states drew no border.
  *
- * <p>One rule stood in for both. A quantity answered with the one order every position under it was
- * on — which a coordinate and a line between two positions have — and a form was held to the same,
- * so every form whose positions merely wrote back differently was refused along with the ones that
- * could not be added at all. Nothing said so: the reading returned no quantity, and a rule the model
- * states drew no border.
+ * <p><b>And no rule here about which orders may be added.</b> Which positions a form weighs, and
+ * with what, is settled before a quantity is built. A refusal written here would be written without
+ * the coefficients, and the coefficients are what decides: {@code b + a} over two dates leaves an
+ * origin in, {@code b - a - n} cancels it and is a count of days against a number, and the two are
+ * the same orders in the same numbers. That second form is what issue #949 asks for, so a rule
+ * refusing it is the thing being repaired rather than a guard on the repair.
  */
 class AFormAddsPositionsWrittenBackDifferentlyTest {
 
@@ -56,7 +57,7 @@ class AFormAddsPositionsWrittenBackDifferentlyTest {
                 invariant value >= 0
                 invariant value <= 10
 
-            data P = { d: Amount, n: Steps, on: Date }
+            data P = { d: Amount, n: Steps, from: Date, to: Date }
 
             data Yes = { v: Int }
 
@@ -75,15 +76,42 @@ class AFormAddsPositionsWrittenBackDifferentlyTest {
                 Map.of(value("d"), BigDecimal.ONE, value("n"), BigDecimal.ONE.negate()));
     }
 
-    /** What a decimal and a whole number are counted in, which is the same thing. */
+    /**
+     * The form issue #949 exists for: two dates and a whole number, over one quantity.
+     *
+     * <p>{@code Date.daysBetween(a, b) > n} is {@code b - a - n > 0}, whose positions are read on
+     * {@code DATE}, {@code DATE} and {@code WHOLE}. Held here, a rule that the orders under a form
+     * must count the same thing refuses it — and it is exactly the form stage four has to build, so
+     * the rule would have taken the acceptance of the issue with it.
+     *
+     * <p>Written as a quantity here rather than read from a source, because nothing composes
+     * {@code daysBetween} into a form yet. What it fixes is that this side is ready for it.
+     */
     @Test
-    void aDecimalAndAWholeNumberCountTheSameThing() {
-        assertEquals(Carrier.WHOLE.counting(), Carrier.DENSE.counting(),
-                "one of each is one, which is what a form adds");
-        assertTrue(!Carrier.DATE.counting().equals(Carrier.WHOLE.counting()),
-                "and a day is not a number, so a date and an Int have no sum");
-        assertTrue(!Carrier.TEXT.counting().counts(),
-                "a string counts nothing, so nothing adds it to anything");
+    void twoDatesAndAWholeNumberAreOneQuantity() {
+        NumericDomain.LinearForm<NumericTerm> daysBetweenLessN =
+                new NumericDomain.LinearForm<>(BigDecimal.ZERO,
+                        Map.of(value("to"), BigDecimal.ONE,
+                                value("from"), BigDecimal.ONE.negate(),
+                                value("n"), BigDecimal.ONE.negate()));
+
+        BorderQuantity.OverAForm over = new BorderQuantity.OverAForm("take", daysBetweenLessN,
+                Map.of(value("to"), Carrier.DATE, value("from"), Carrier.DATE,
+                        value("n"), Carrier.WHOLE));
+
+        assertEquals(Carrier.DATE, over.carrierOf(value("to")));
+        assertEquals(Carrier.WHOLE, over.carrierOf(value("n")));
+        assertEquals(souther.compiler.numeric.Granularity.DISCRETE, over.spacing(),
+                "days step and whole numbers step, so the difference steps");
+    }
+
+    /** And a position with no number under it is one a sum has nothing to add. */
+    @Test
+    void aPositionWithNoCountIsRefused() {
+        assertTrue(assertThrows(IllegalArgumentException.class,
+                () -> new BorderQuantity.OverAForm("take", aDecimalLessAnInt(),
+                        Map.of(value("d"), Carrier.TEXT, value("n"), Carrier.WHOLE)))
+                .getMessage().contains("no number under it"));
     }
 
     /** The form the whole of this is about: two positions, two orders, one unit. */
@@ -97,7 +125,7 @@ class AFormAddsPositionsWrittenBackDifferentlyTest {
                 "the decimal position is read and written as a decimal");
         assertEquals(Carrier.WHOLE, over.carrierOf(value("n")),
                 "and the whole-number position as a whole number");
-        assertEquals(null, over.carrierOf(value("on")),
+        assertEquals(null, over.carrierOf(value("from")),
                 "and a position the form is not over has no order under this quantity");
     }
 
@@ -123,20 +151,6 @@ class AFormAddsPositionsWrittenBackDifferentlyTest {
                 "and a form of whole numbers answers what it always did");
     }
 
-    /** A form adding counts that do not mean the same thing is refused where it is built. */
-    @Test
-    void aFormOverPositionsWhoseCountsMeanDifferentThingsIsRefused() {
-        NumericDomain.LinearForm<NumericTerm> aDateLessAnInt =
-                new NumericDomain.LinearForm<>(BigDecimal.ZERO,
-                        Map.of(value("on"), BigDecimal.ONE, value("n"), BigDecimal.ONE.negate()));
-
-        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
-                () -> new BorderQuantity.OverAForm("take", aDateLessAnInt,
-                        Map.of(value("on"), Carrier.DATE, value("n"), Carrier.WHOLE)));
-        assertTrue(refused.getMessage().contains("do not count the same thing"),
-                refused.getMessage());
-    }
-
     /**
      * An order for a position the form does not name, and a position with no order, are both
      * refused.
@@ -155,7 +169,7 @@ class AFormAddsPositionsWrittenBackDifferentlyTest {
         assertTrue(assertThrows(IllegalArgumentException.class,
                 () -> new BorderQuantity.OverAForm("take", aDecimalLessAnInt(),
                         Map.of(value("d"), Carrier.DENSE, value("n"), Carrier.WHOLE,
-                                value("on"), Carrier.DATE)))
+                                value("from"), Carrier.DATE)))
                 .getMessage().contains("read on one order"));
     }
 
@@ -185,18 +199,6 @@ class AFormAddsPositionsWrittenBackDifferentlyTest {
                 new LevelRealizer().realize(standing, region()),
                 "a difference of two and a half is reached by a decimal and a whole number, and by"
                         + " no two whole numbers");
-    }
-
-    /** What one is, on each of the orders. Read here so a carrier added answers it. */
-    @Test
-    void everyOrderSaysWhatOneOfItsCountsIs() {
-        assertEquals(CountingUnit.A_NUMBER, Carrier.WHOLE.counting());
-        assertEquals(CountingUnit.A_NUMBER, Carrier.DENSE.counting());
-        assertEquals(CountingUnit.DAYS, Carrier.DATE.counting());
-        assertEquals(CountingUnit.SECONDS, Carrier.MOMENT.counting());
-        assertEquals(CountingUnit.SECONDS_OF_A_DAY, Carrier.TIME.counting());
-        assertEquals(CountingUnit.NANOSECONDS, Carrier.INSTANT.counting());
-        assertEquals(CountingUnit.NOT_COUNTED, Carrier.TEXT.counting());
     }
 
     private static SearchRegion region() {

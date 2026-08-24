@@ -233,6 +233,53 @@ public sealed interface AdditiveImage {
         }
 
         /**
+         * The other mixed pairing: a position that steps, weighed against a residue that fills.
+         *
+         * <p>Which whole {@code x} leave {@code (t - c·x)/g} a written decimal. Writing
+         * {@code c/g = p/q} in lowest terms and multiplying through by {@code q}, that is
+         * {@code (q·(t/g) - p·x)/q}, and dividing by the twos and fives of {@code q} changes
+         * nothing — they are units among the decimals. So what is left is one congruence modulo
+         * {@code m}, the rest of {@code q}: the residue class is set by the <em>denominator</em> of
+         * the weight over the generator, not by its numerator.
+         *
+         * <p>Where {@code m} is one the weight is itself a decimal, so {@code c·x} is one for every
+         * whole {@code x} and what remains is whether the target is — which is a question about the
+         * target alone and is answered either for all of them or for none.
+         *
+         * <p>Answered before with every whole number the position has, on the ground that no caller
+         * weighed positions spaced differently. A form over positions read on their own orders has
+         * one wherever the whole-numbered position is chosen before the dense one, which is a fact
+         * about the order the terms are walked in and not about the model.
+         */
+        private AffinePreimage steppingPreimage(Rational coefficient, Rational target) {
+            Rational per = coefficient.dividedBy(generator);
+            Rational owed = target.dividedBy(generator);
+            java.math.BigInteger modulus =
+                    Rational.of(per.denominator()).unitsRemoved().numerator();
+            if (modulus.equals(java.math.BigInteger.ONE)) {
+                return owed.asWrittenDecimal() == null
+                        ? new AffinePreimage.None()
+                        : new AffinePreimage.Stepping(Rational.ZERO, Rational.ONE,
+                                Granularity.DISCRETE);
+            }
+            // `q·(t/g)` has to be a decimal before any `x` can be chosen: `p·x` is whole, so a
+            // residue that is not one leaves nothing whatever `x` is.
+            Rational reached = owed.times(Rational.of(per.denominator()));
+            if (reached.asWrittenDecimal() == null) {
+                return new AffinePreimage.None();
+            }
+            // Both denominators are made of twos and fives and the modulus carries neither, so each
+            // inverts modulo it. The weight's numerator is prime to the modulus because the weight
+            // is in lowest terms and the modulus divides its denominator.
+            java.math.BigInteger at = reached.numerator().mod(modulus)
+                    .multiply(reached.denominator().mod(modulus).modInverse(modulus))
+                    .multiply(per.numerator().mod(modulus).modInverse(modulus))
+                    .mod(modulus);
+            return new AffinePreimage.Stepping(Rational.of(at), Rational.of(modulus),
+                    Granularity.DISCRETE);
+        }
+
+        /**
          * Where the value is reached, the cut is already as tight as it goes; where it is not, there
          * is no greatest value below it to move to and the two ways of writing the cut admit the same
          * values — so what is left to say is that the value itself is out.
@@ -266,33 +313,7 @@ public sealed interface AdditiveImage {
         public AffinePreimage affinePreimage(Rational coefficient, Rational target,
                                              Granularity source) {
             if (source != Granularity.DENSE) {
-                // The other mixed pairing: a position that steps, against a residue that fills.
-                // A whole `x` works out where `(t - c·x)/g` is a written decimal, and multiplying
-                // through by what the position's weight brings in leaves one residue class of the
-                // part of it that is neither two nor five — the same reduction this image makes of
-                // its own generator, since twos and fives are units among the finite decimals.
-                Rational per = coefficient.dividedBy(generator);
-                Rational owed = target.dividedBy(generator);
-                java.math.BigInteger spread =
-                        Rational.of(per.numerator()).unitsRemoved().numerator().abs();
-                if (spread.equals(java.math.BigInteger.ONE)) {
-                    return new AffinePreimage.Stepping(Rational.ZERO, Rational.ONE, source);
-                }
-                java.math.BigDecimal reached =
-                        owed.times(Rational.of(per.denominator())).asWrittenDecimal();
-                if (reached == null) {
-                    return new AffinePreimage.None();
-                }
-                // `x ≡ (t/g)·den(c/g) · inverse(num(c/g)) (mod spread)`, taken over the whole
-                // numbers: the member is a decimal here and the position holds whole numbers, so a
-                // target that is no whole multiple leaves this position nothing.
-                Rational at = Rational.of(reached).times(
-                        Rational.of(Rational.of(per.numerator()).unitsRemoved().numerator()
-                                .mod(spread).modInverse(spread)));
-                if (!at.isWhole()) {
-                    return new AffinePreimage.None();
-                }
-                return new AffinePreimage.Stepping(at, Rational.of(spread), source);
+                return steppingPreimage(coefficient, target);
             }
             Rational per = coefficient.dividedBy(generator);
             Rational owed = target.dividedBy(generator);

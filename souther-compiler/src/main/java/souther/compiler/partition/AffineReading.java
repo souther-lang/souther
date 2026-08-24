@@ -281,26 +281,24 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
      * not fire at all: positions were then read off rows, and written back, on an order that is not
      * theirs.
      *
-     * <p>An order apiece rather than one for all of them. A form adds its positions together, and
-     * what addition needs of them is that their counts mean one thing ({@link Carrier#counting}) —
-     * a decimal and a whole number are written back differently and one of each is one, so their
-     * difference is a number, while a day count and a number have no sum however well both sides
-     * type-checked. Answered with one order for the whole form, the second refusal was the only one
-     * that could be written and it took the first with it.
+     * <p>An order apiece rather than one for all of them, and no question here about whether the
+     * form adds up to anything. Which positions may be added, and with which weights, is settled
+     * before this: an arithmetic a model wrote type-checked, and one this compiler composed stands
+     * on what the operation states about its result. A rule refusing forms here by comparing what
+     * the orders count would be a reader deciding that again, and deciding it worse — it cannot see
+     * the coefficients. {@code b + a} over two dates leaves an origin in and {@code b - a - n} does
+     * not, and those two are the same orders in the same numbers.
+     *
+     * <p>What is asked is only that each position has an order, and that the order has counts under
+     * it: a position with no number is one a sum has nothing to add.
      */
     java.util.Map<NumericTerm, Carrier> carriers(InputReads reads, Symbols symbols) {
         java.util.Map<NumericTerm, Carrier> on = new java.util.LinkedHashMap<>();
-        souther.compiler.numeric.CountingUnit unit = null;
         for (NumericTerm term : form.coefs().keySet()) {
             Carrier here = carrierOf(term, reads, symbols);
-            if (here == null) {
+            if (here == null || !here.counts()) {
                 return null;
             }
-            souther.compiler.numeric.CountingUnit counting = here.counting();
-            if (!counting.counts() || (unit != null && !unit.equals(counting))) {
-                return null;
-            }
-            unit = counting;
             on.put(term, here);
         }
         return on.isEmpty() ? null : on;

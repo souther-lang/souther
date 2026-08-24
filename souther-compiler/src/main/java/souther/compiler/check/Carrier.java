@@ -3,7 +3,6 @@ package souther.compiler.check;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.numeric.Count;
-import souther.compiler.numeric.CountingUnit;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Dates;
@@ -212,32 +211,6 @@ public sealed interface Carrier {
      */
     default boolean counts() {
         return !(this instanceof Text);
-    }
-
-    /**
-     * What one of this order's counts is.
-     *
-     * <p>Not the order itself. Reading a rule and writing a value back are what a carrier is, and two
-     * orders that do both differently may still count the same thing: an {@code Int} and a
-     * {@code Decimal} are written back as different values and one of each is one, so their
-     * difference is a number. A date's one is a day, and no arithmetic brings a day and a number
-     * together however well both sides type-checked.
-     *
-     * <p>Asked where a form adds its positions up, which is the only place counts of two orders meet
-     * — {@link Place} compares within one order and that is unchanged. Before this, what stood in
-     * for it was requiring every position of a form to be on one carrier, which refused a form whose
-     * positions merely wrote back differently.
-     */
-    default CountingUnit counting() {
-        return switch (this) {
-            case Whole _, Dense _ -> CountingUnit.A_NUMBER;
-            case Days _ -> CountingUnit.DAYS;
-            case Seconds _ -> CountingUnit.SECONDS;
-            case SecondsOfDay _ -> CountingUnit.SECONDS_OF_A_DAY;
-            case Nanos _ -> CountingUnit.NANOSECONDS;
-            case Ordinal ordinal -> new CountingUnit.PlacesIn(ordinal.enumeration());
-            case Text _ -> CountingUnit.NOT_COUNTED;
-        };
     }
 
     /** How the counts on this carrier are spaced, which is what decides whether a strict bound has a

@@ -289,20 +289,19 @@ public sealed interface BorderQuantity {
                         + " of them is read on one order: " + form.coefs().keySet() + " against "
                         + on.keySet());
             }
-            // And their counts mean one thing. A decimal and a whole number are written back
-            // differently and one of each is one, so their difference is a number; a day and a
-            // number have no sum, and a form adding them would put a border at a level nothing
-            // stands at. What used to stand in for this was requiring one order throughout, which
-            // refused the first pair along with the second.
-            souther.compiler.numeric.CountingUnit unit = null;
+            // And each of those orders has counts under it, which is what a sum adds. Not that they
+            // count the same thing: which positions may be added, and with which weights, is
+            // settled before a quantity is built — by an arithmetic the model wrote and the types
+            // admitted, or by what an operation states about its result. Asked again here it would
+            // be asked without the coefficients, and `b + a` over two dates is the same orders in
+            // the same numbers as `b - a - n`, which is a day count and is exactly what #949 is
+            // about.
             for (Carrier each : on.values()) {
-                souther.compiler.numeric.CountingUnit counting = each.counting();
-                if (!counting.counts() || (unit != null && !unit.equals(counting))) {
+                if (!each.counts()) {
                     throw new IllegalArgumentException(
-                            "a form adds its positions up, and these do not count the same thing: "
-                                    + on);
+                            "a form adds its positions up, and this order has no number under it: "
+                                    + each);
                 }
-                unit = counting;
             }
         }
 
