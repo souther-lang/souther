@@ -35,7 +35,12 @@ public final class TypeBounds {
      */
     public static NumericDomain.Bounds admissible(DeclaredBounds.Bounds own, NumericDomain.Bounds projected,
                                            NumericTerm term) {
-        NumericDomain.Bounds intrinsic = term == null ? null : term.ownBounds();
+        // A term with nothing to guarantee and no term at all are one answer here. What this returns
+        // is read by callers that take a null for a position they know nothing about, which is not
+        // the same as a range holding every value — kept apart there, and flattened once here rather
+        // than at each of them.
+        NumericDomain.Bounds intrinsic = term == null || term.intrinsicBounds().saysNothing()
+                ? null : term.intrinsicBounds();
         if (own == null) {
             return intrinsic;   // not a number of its own, so only what the term guarantees
         }

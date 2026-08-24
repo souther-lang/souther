@@ -453,8 +453,8 @@ final class ReadQuantities implements Quantities {
             }
         }
         for (Map.Entry<NumericTerm, Fixed> each : inOrder()) {
-            NumericDomain.Bounds own = each.getKey().ownBounds();
-            if (own != null && !own.admits(each.getValue().least())) {
+            NumericDomain.Bounds own = each.getKey().intrinsicBounds();
+            if (!own.admits(each.getValue().least())) {
                 return Optional.of(new EmptyInput.OutsideWhereThePositionRuns(each.getKey(),
                         each.getValue().least()));
             }
@@ -551,11 +551,7 @@ final class ReadQuantities implements Quantities {
      * at {@code "A"} — and the arithmetic that adds terms together has no word for one.
      */
     private NumericDomain.Bounds whereOneTermRuns(NumericTerm term) {
-        NumericDomain.Bounds runs = ownOf(term);
-        NumericDomain.Bounds intrinsic = term.ownBounds();
-        if (intrinsic != null) {
-            runs = meeting(runs, intrinsic);
-        }
+        NumericDomain.Bounds runs = meeting(ownOf(term), term.intrinsicBounds());
         Fixed fixedAt = fixed.get(term);
         // Where two values were fixed there, between them: the rules leave nothing at all, which
         // {@link #emptiness} says, and a range that crossed itself is not something to hand a

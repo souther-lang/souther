@@ -1,5 +1,7 @@
 package souther.compiler.check;
 
+import souther.compiler.semantics.ArgumentRef;
+import souther.compiler.semantics.ConstantArguments;
 import souther.compiler.semantics.OperationFact;
 import souther.compiler.semantics.ResultBound;
 import souther.compiler.semantics.SizeAgainstItsSource;
@@ -61,7 +63,12 @@ final class IntrinsicNumericFacts {
     static List<NumericConstraint> ofSize(ValueName size, Core container, FactSubject atom,
                                           Denotations at, Terms terms) {
         List<NumericConstraint> out = new ArrayList<>();
-        out.add(new NumericConstraint(LinearForm.atom(atom), Rel.GE));   // a size is never negative
+        // What the measure itself states of what it answers, which is that a count is at or above
+        // nought. Read off the operation's rows and not written here: it is the same proposition as
+        // `Int.abs(x) >= 0`, and a copy of it here was the half of it a partition could not reach
+        // (#1016). Nothing answers the arguments, and nothing has to — a measure is given a
+        // container and a row may only name an argument that is a number.
+        bounding(DischargeRules.boundsOn(size, ConstantArguments.NONE), atom, _ -> null, out);
         // A construction's result is no smaller than each source the rule names for it. A rule may
         // name more than one — `a ++ b` is as long as either half — so this is a loop where the
         // building below is one answer.
@@ -110,17 +117,35 @@ final class IntrinsicNumericFacts {
     static List<NumericConstraint> ofCall(Core.PreservedCall call, FactSubject atom, Denotations at,
                                           Terms terms) {
         List<NumericConstraint> out = new ArrayList<>();
-        for (ResultBound bound
-                : DischargeRules.boundsOn(call, arg -> constantOf(arg, at, terms))) {
-            LinearForm<FactSubject> against = bound.against() == null
-                    ? LinearForm.constant(bound.offset())
-                    : addTo(terms.affineOf(CallArguments.of(bound.against(), call), at), bound.offset());
-            if (against != null) {
-                out.add(new NumericConstraint(LinearForm.atom(atom).minus(against), bound.rel()));
-            }
-        }
+        bounding(DischargeRules.boundsOn(call, arg -> constantOf(arg, at, terms)), atom,
+                ref -> terms.affineOf(CallArguments.of(ref, call), at), out);
         shifted(call, atom, at, terms, out);
         return out;
+    }
+
+    /**
+     * The rows as what they say about {@code atom}, keeping the relation to the argument each names.
+     *
+     * <p>The one reader of a {@link ResultBound} that keeps it whole. A range of one number cannot
+     * hold {@code floorMod(x, k) < k}, so the projection onto one ({@link
+     * souther.compiler.semantics.ResultRange}) drops it; here the argument has a name, and what the
+     * row says is what is stated.
+     *
+     * <p>{@code against} answers the argument a row names. A row it cannot answer states nothing,
+     * which is what a bound against a quantity this reader has no name for comes to.
+     */
+    private static void bounding(List<ResultBound> rows, FactSubject atom,
+                                 java.util.function.Function<ArgumentRef,
+                                         LinearForm<FactSubject>> against,
+                                 List<NumericConstraint> out) {
+        for (ResultBound bound : rows) {
+            LinearForm<FactSubject> stands = bound.against() == null
+                    ? LinearForm.constant(bound.offset())
+                    : addTo(against.apply(bound.against()), bound.offset());
+            if (stands != null) {
+                out.add(new NumericConstraint(LinearForm.atom(atom).minus(stands), bound.rel()));
+            }
+        }
     }
 
     /**
