@@ -1014,6 +1014,10 @@ public final class Generator {
         // the offer never opened, and raising the budget does not reach it.
         InteractionCells.Offered offered =
                 InteractionCells.of(read.interactions(), axes, budget);
+        // The combinations worth looking in, built once. A group builds a cell where it is asked
+        // for one, so a walk per arm builds every cell of it again for an answer that does not
+        // depend on which arm is asking.
+        List<WhereToLook>cells = placesFor(armsOwed, offered);
         Set<Integer> notOffered = new LinkedHashSet<>();
         // Which arms each held-back group could have been searched at, kept per group so that the
         // summary at the end can be counted off the entries rather than worked out a second way.
@@ -1033,10 +1037,14 @@ public final class Generator {
                 // says so. Nothing is composed a second time for what a run was seen doing.
                 continue;
             }
-            for (CellSelection selection : whereToLookFor(probe, read, offered, axes)) {
+            for (WhereToLook place : whereToLookFor(probe, read, cells, axes)) {
                 if (rows.size() >= budget.rows()) {
                     cutOff.add(probe);
                     break;
+                }
+                if (place.tried == null) {
+                    place.tried = witnessFor(subject, axes, place.at, check, trial, ran,
+                            List.of(probe));
                 }
                 // Each of the three, one at a time, so that a fourth added later has to be decided
                 // about here rather than fall in with whichever of these a cast happened to take.
@@ -1045,11 +1053,16 @@ public final class Generator {
                 // them on that belief is the reading certifying itself (issue #1009).
                 GeneratedRow row;
                 List<Integer> also;
-                switch (witnessFor(subject, axes, selection, check, trial, ran, List.of(probe))) {
+                switch (place.tried) {
                     case Witness.None none -> {
                         UnresolvedCombination why = new UnresolvedCombination(
                                 none.classes(), none.reason(), none.detail(), none.said());
-                        unresolved.add(why);
+                        // Said once for the cell and kept per arm. What a cell came to is one fact
+                        // about it, and a block printing it once per arm looked for there says the
+                        // same thing as many times as the body has arms.
+                        if (!unresolved.contains(why)) {
+                            unresolved.add(why);
+                        }
                         failed.computeIfAbsent(probe, _ -> new ArrayList<>()).add(why);
                         continue;
                     }
@@ -1066,15 +1079,22 @@ public final class Generator {
                         unconfirmed = true;
                     }
                 }
-                List<Purpose> purposes = new ArrayList<>(row.purposes());
+                // What the row is offered for, said here and not read off what the search happened
+                // to be called with. A cell searched once answers every arm looked for in it, and
+                // the row it composed carries the purpose of whichever arm asked first — so a row
+                // named by that would be offered for one arm and handed to another.
+                List<Purpose> purposes = new ArrayList<>();
+                purposes.add(new Purpose.ForAnArm(probe));
                 also.forEach(each -> purposes.add(new Purpose.ForAnArm(each)));
-                GeneratedRow offering = purposes.size() == row.purposes().size() ? row
-                        : new GeneratedRow(purposes, row.inputs());
+                GeneratedRow offering = new GeneratedRow(purposes, row.inputs());
                 GeneratedRow kept = keep(rows, offering);
-                // An arm answered by the row this merged into is answered by the merged one. The
-                // entries carry the row a reader is shown, and two of them for one set of values
-                // would be the same line under two names.
-                built.replaceAll((_, was) -> was.inputs().equals(kept.inputs()) ? kept : was);
+                if (kept != offering) {
+                    // It merged into a row already offered, so an arm answered by that one is
+                    // answered by the merged one. The entries carry the row a reader is shown, and
+                    // two of them for one set of values would be the same line under two names.
+                    List<String> written = writtenAs(kept);
+                    built.replaceAll((_, was) -> writtenAs(was).equals(written) ? kept : was);
+                }
                 built.put(probe, kept);
                 left.remove(probe);
                 also.forEach(each -> {
@@ -1174,6 +1194,59 @@ public final class Generator {
     }
 
     /**
+     * A combination this run may look in, with the arms it claims read off it once.
+     *
+     * <p>A group builds a cell when it is asked for one, so asking again is building it again —
+     * and what a cell is does not depend on which arm is being looked for in it. The arms it claims
+     * are read here for the same reason.
+     *
+     * @param tried what came of searching it, or null where nothing has yet. One cell is searched
+     *              once however many arms are looked for in it: the candidates it admits and what
+     *              they did are facts about the cell, and composing them again per arm is the same
+     *              work done twice for the same answer
+     */
+    private static final class WhereToLook {
+
+        private final CellSelection at;
+
+        private final List<Integer> claims;
+
+        private Witness tried;
+
+        private WhereToLook(CellSelection at, List<Integer> claims) {
+            this.at = at;
+            this.claims = claims;
+        }
+    }
+
+    /**
+     * The combinations worth looking in, walked once.
+     *
+     * <p>Only the ones claiming an arm this run was asked about. A group's cells are as many as the
+     * budget allows and most of them claim nothing on the list, so keeping all of them would hold a
+     * search space nobody asked about — which is what the cells were before a finding decided what
+     * to look for.
+     */
+    private static List<WhereToLook>placesFor(Set<Integer> armsOwed, InteractionCells.Offered offered) {
+        List<WhereToLook>out = new ArrayList<>();
+        for (InteractionCells.Group group : offered.groups()) {
+            for (int index = 0; index < group.size(); index++) {
+                CellSelection selection = group.at(index);
+                // A choice whose factors leave a position nothing is no combination the body has a
+                // path to, and there is nothing to look in.
+                if (selection == null) {
+                    continue;
+                }
+                List<Integer> claims = claimed(selection);
+                if (claims.stream().anyMatch(armsOwed::contains)) {
+                    out.add(new WhereToLook(selection, claims));
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
      * Where a row through {@code probe} is looked for, in the order they are looked in.
      *
      * <p>Two sources and neither is the other's fallback. A combination the body settles together
@@ -1187,25 +1260,22 @@ public final class Generator {
      * be steered, and how many that is is what the caller reads to tell an arm nothing was tried
      * for from one every attempt failed at.
      */
-    private static List<CellSelection> whereToLookFor(
-            int probe, souther.compiler.reading.CoverageRead.Read read,
-            InteractionCells.Offered offered, List<Axis> axes) {
-        List<CellSelection> out = new ArrayList<>();
-        for (InteractionCells.Group group : offered.groups()) {
-            for (int index = 0; index < group.size(); index++) {
-                CellSelection selection = group.at(index);
-                // A choice whose factors leave a position nothing is no combination the body has a
-                // path to, and there is nothing to look in.
-                if (selection != null && claimed(selection).contains(probe)) {
-                    out.add(selection);
-                }
+    private static List<WhereToLook>whereToLookFor(
+            int probe, souther.compiler.reading.CoverageRead.Read read, List<WhereToLook>cells,
+            List<Axis> axes) {
+        List<WhereToLook>out = new ArrayList<>();
+        for (WhereToLook place : cells) {
+            if (place.claims.contains(probe)) {
+                out.add(place);
             }
         }
         if (read.armAt(probe) instanceof PathAccess.Ways ways) {
             for (souther.compiler.reading.WayIn way : ways.ways()) {
                 CellSelection at = InteractionCells.at(way, axes);
                 if (at != null) {
-                    out.add(at);
+                    // The way into one arm, which is nowhere else's to look in and so is not kept
+                    // beyond this arm's search.
+                    out.add(new WhereToLook(at, List.of(probe)));
                 }
             }
         }
@@ -1240,13 +1310,18 @@ public final class Generator {
      * answers two different things.
      */
     private static GeneratedRow keep(List<GeneratedRow> rows, GeneratedRow row) {
+        List<String> written = writtenAs(row);
         for (int i = 0; i < rows.size(); i++) {
             GeneratedRow already = rows.get(i);
             // Whatever the row beside it was composed for, and not the arms alone. One set of
             // values is one line in the file: a class's row and an arm's row of the same values are
             // one row that fills the class and goes through the arm, and written down twice the
             // second was printed over the first and took its name away with it.
-            if (!already.inputs().equals(row.inputs())) {
+            //
+            // By what the rows are written as, which is what "the same line" means and is a string
+            // to compare. A template also carries the expression it stands for, and holding two
+            // rows to that walks two trees for an answer the text already gave.
+            if (!writtenAs(already).equals(written)) {
                 continue;
             }
             List<Purpose> both = new ArrayList<>(already.purposes());
@@ -1257,6 +1332,11 @@ public final class Generator {
         }
         rows.add(row);
         return row;
+    }
+
+    /** What a row is written as, which is what tells one line of a file from another. */
+    private static List<String> writtenAs(GeneratedRow row) {
+        return row.inputs().stream().map(FixtureTemplate::text).toList();
     }
 
     /** The arms a list of claims names, by the numbers the plan gave them. Shared with the groups
