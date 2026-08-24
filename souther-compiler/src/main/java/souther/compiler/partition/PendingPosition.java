@@ -60,7 +60,8 @@ sealed interface PendingPosition {
             // reason it outranks the body's: where the walk could not reach into what the position
             // holds, a rule about what is inside is a second description of that same stop and the
             // first is the cause (issue #626).
-            case StructuralInspection.Blocked blocked -> new Blocked(axis.path(), blocked.why());
+            case StructuralInspection.Continuation.Blocked blocked ->
+                    new Blocked(axis.path(), blocked.why());
             // And a rule about this position's own values that went unread is said ahead of what a
             // body's comparison came to, where both have something to say. Both are true of such a
             // position and one line is written: the rule on the declaration is the one whose being
@@ -70,15 +71,21 @@ sealed interface PendingPosition {
             //
             // It outranks nothing else. This is not a division, so the position is still pending
             // whatever a body says; it is a rule the model states, so an absence may not follow.
-            case StructuralInspection.Leaf _ -> axis.unread() == null ? new Leaf(axis.path())
-                    : new Blocked(axis.path(), axis.unread());
+            case StructuralInspection.Continuation.None _ ->
+                    axis.unread() == null ? new Leaf(axis.path())
+                            : new Blocked(axis.path(), axis.unread());
             // A sequence, whose elements were reached and are a position of their own. Nothing
             // stopped here, so this is the same state a leaf is in: what the list itself divides
             // into is what its own rules say about how many it holds, and an absence may follow
             // where they say nothing. What is written about what it holds is answered at the
             // element and is not this position's to be short of.
-            case StructuralInspection.Inside _ -> axis.unread() == null ? new Leaf(axis.path())
-                    : new Blocked(axis.path(), axis.unread());
+            case StructuralInspection.Continuation.Elements _,
+            // And a sum, whose cases were reached and stand under it. Nothing stopped here either:
+            // a sum with no evidence is one whose own cases the rules left it none of, which is a
+            // reading that ran to the end.
+                 StructuralInspection.Continuation.Branches _ ->
+                    axis.unread() == null ? new Leaf(axis.path())
+                            : new Blocked(axis.path(), axis.unread());
             // A position with no evidence that was never read. Nothing about a model follows from
             // it — an answer here would be this compiler's state written down as what the model
             // divides, which is the sentence the whole protocol is against.

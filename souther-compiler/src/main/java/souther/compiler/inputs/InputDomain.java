@@ -12,6 +12,7 @@ import souther.compiler.check.TypeView;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 import souther.compiler.values.AdmissibleSet;
 
@@ -40,11 +41,16 @@ import java.util.Map;
  * read where it lands, are this reading's. A reader wanting the step alone
  * takes it from there, and takes none of the meaning here with it.
  *
- * <p><b>Where a value is built is not one of these positions.</b> The generator refines a declared
- * position by the construction recipe a class chose for it and walks what is under <em>that</em> —
- * under a sum the declaration puts nothing, and a recipe naming one of its cases puts the fields of
- * that case there. Those paths are spelled the same way and are about something else, so they are
- * never looked up here, and this reading never grows to hold them.
+ * <p><b>A position may exist only under a narrowing of another.</b> What a case of a sum declares is
+ * declared whether or not anything constructs one, so those fields are positions of the input and are
+ * read here — at a path carrying the narrowing they stand under ({@link Refinement}), which is what
+ * says a row has to be that case for them to be reached at all. Which branches are walked is settled
+ * by what the position came back owing rather than by what its type has: a case the rules refuse has
+ * no positions to cover, exactly as a value whose rules contradict has none.
+ *
+ * <p><b>Where a value is built is still not one of these positions.</b> The generator goes on until
+ * there is a value to build, which is further down than a report is about. Those paths are written the
+ * same way and are about something else, so they are never looked up here.
  *
  * <p>Nothing a body writes reaches this. A {@code guard}'s line, a {@code match} arm and an
  * {@code unreachable} are statements about the same positions and are read against this rather than
@@ -63,8 +69,23 @@ public final class InputDomain {
      * such reader had to work around. */
     public static final int MAX_DEPTH = 2;
 
+    /**
+     * The declaration a position's rules are read of, and where that value stands.
+     *
+     * <p>One reading per value and not one per record met on the way down: a clause on the outer
+     * record relates positions at any depth it can name. What starts a new one is a narrowing —
+     * what a {@code GlobalQuery} says about its {@code tag} is written in {@code GlobalQuery} and
+     * cannot be written in the sum, so the rules under a case are that case's and are read of it.
+     *
+     * <p>Kept as the declarations rather than as a reading of them, for the reason the parameters
+     * are: what is answered with is compared as a value by whatever decides that a compile changed
+     * nothing.
+     */
+    public record RuleRoot(TermPath at, Type type) {}
+
     /** Nothing to read: a behavior whose signature is not in hand. */
-    public static final InputDomain NONE = new InputDomain(List.of(), Map.of(), List.of(), null);
+    public static final InputDomain NONE =
+            new InputDomain(List.of(), Map.of(), List.of(), List.of(), null);
 
     private final List<Position> positions;
     private final Map<TermPath, Position> byPath;
@@ -73,13 +94,18 @@ public final class InputDomain {
      * with is compared as a value by whatever decides an edit changed nothing, and a reading holds a
      * way of reading the declarations rather than a statement about them. */
     private final List<Parameter> parameters;
+    /** Every declaration whose rules reach a position of this input, and where it stands. One per
+     * parameter, and one more wherever a narrowing put a value of another declaration at a
+     * position. */
+    private final List<RuleRoot> roots;
     private final ReadingPolicy policy;
 
     private InputDomain(List<Position> positions, Map<BindingId, String> read,
-                        List<Parameter> parameters, ReadingPolicy policy) {
+                        List<Parameter> parameters, List<RuleRoot> roots, ReadingPolicy policy) {
         this.positions = List.copyOf(positions);
         this.read = Map.copyOf(read);
         this.parameters = List.copyOf(parameters);
+        this.roots = List.copyOf(roots);
         this.policy = policy;
         Map<TermPath, Position> at = new LinkedHashMap<>();
         // The first reading of a path stands. A path is where a rule and a row meet, so two
@@ -109,15 +135,19 @@ public final class InputDomain {
     public static InputDomain of(List<Parameter> parameters, Symbols symbols,
                                  ReadingPolicy policy) {
         List<Position> found = new ArrayList<>();
+        List<RuleRoot> roots = new ArrayList<>();
         Map<BindingId, String> read = new LinkedHashMap<>();
         for (Parameter parameter : parameters) {
             if (parameter.binding() != null) {
                 read.putIfAbsent(parameter.binding(), parameter.name());
             }
-            walk(TermPath.of(parameter.name()), parameter.type(), 0, symbols,
-                    PlacedRules.of(parameter.type(), symbols, policy), found);
+            TermPath at = TermPath.of(parameter.name());
+            roots.add(new RuleRoot(at, parameter.type()));
+            walk(at, parameter.type(), 0, symbols, policy,
+                    PlacedRules.of(at, parameter.type(), symbols, policy), found, roots,
+                    java.util.Set.of());
         }
-        return found.isEmpty() ? NONE : new InputDomain(found, read, parameters, policy);
+        return found.isEmpty() ? NONE : new InputDomain(found, read, parameters, roots, policy);
     }
 
     /**
@@ -191,15 +221,15 @@ public final class InputDomain {
      * comparison written about it. Built at the top of whatever is walking, and handed down.
      */
     public Quantities quantities(Symbols symbols) {
-        Map<String, PlacedRules> byParameter = new LinkedHashMap<>();
-        for (Parameter parameter : parameters) {
-            // The first reading under a name stands, for the same reason the first reading of a path
-            // does: two parameters spelled alike would be one name answering differently depending
-            // on which reader looked it up.
-            byParameter.computeIfAbsent(parameter.name(),
-                    _ -> PlacedRules.of(parameter.type(), symbols, policy));
+        Map<TermPath, PlacedRules> byRoot = new LinkedHashMap<>();
+        for (RuleRoot root : roots) {
+            // The first reading under a path stands, for the same reason the first reading of a
+            // position does: two roots at one path would be one place answering differently
+            // depending on which reader looked it up.
+            byRoot.computeIfAbsent(root.at(),
+                    at -> PlacedRules.of(at, root.type(), symbols, policy));
         }
-        return ReadQuantities.of(byParameter, byParameter.keySet(), byPath, symbols);
+        return ReadQuantities.of(byRoot, byRoot.keySet(), byPath, symbols);
     }
 
     /**
@@ -237,24 +267,113 @@ public final class InputDomain {
      * way.
      */
     private static void walk(TermPath path, Type type, int depth, Symbols symbols,
-                             PlacedRules placed, List<Position> found) {
+                             ReadingPolicy policy, PlacedRules placed, List<Position> found,
+                             List<RuleRoot> roots, java.util.Set<TypeSymbol> narrowed) {
         // The proof first, and before anything is read off the position. A shape a reading is not
         // made of is this compiler disagreeing with itself about what may stand at a position, and
         // it is refused here rather than arriving further down as a position nothing divides.
         ReadablePosition input = ReadablePosition.of(TypeView.of(type, symbols));
+        // What the position's type states, read once and handed to both readings of it. What a sum's
+        // cases are decides which classes the position has and which branches stand under it, and a
+        // second reading of that here would be the two disagreeing about which cases there are.
+        List<Case> declared = Distinctions.ofType(input.view(), symbols);
         StructuralInspection structure =
-                StructuralInspection.of(input.shape(), depth < MAX_DEPTH);
-        found.add(read(input, path, symbols, placed, structure));
-        if (structure instanceof StructuralInspection.Children children) {
-            for (Map.Entry<String, Type> field : children.under().entrySet()) {
-                walk(path.then(field.getKey()), field.getValue(), depth + 1, symbols, placed, found);
+                StructuralInspection.of(input.shape(), depth < MAX_DEPTH, declared);
+        Position here = read(input, path, symbols, placed, structure, declared);
+        found.add(here);
+        switch (structure) {
+            case StructuralInspection.Decomposed decomposed -> {
+                for (Map.Entry<String, Type> field : decomposed.under().entrySet()) {
+                    walk(path.then(field.getKey()), field.getValue(), depth + 1, symbols, policy,
+                            // A field is a value of its own, so a sum met under it is one this walk
+                            // has not taken apart however many were taken apart above.
+                            placed, found, roots, java.util.Set.of());
+                }
+            }
+            case StructuralInspection.Retained retained ->
+                    under(retained.continuation(), here, path, depth, symbols, policy, placed,
+                            found, roots, narrowed);
+        }
+    }
+
+    /**
+     * What follows a position that stands, walked.
+     *
+     * <p>Beside the position and never instead of it: what a list holds is read, and the list is
+     * still a position with a length of its own that this reading has already answered for; a case
+     * puts positions under the sum, and the sum still divides into its cases.
+     */
+    private static void under(StructuralInspection.Continuation continuation, Position here,
+                              TermPath path, int depth, Symbols symbols, ReadingPolicy policy,
+                              PlacedRules placed, List<Position> found, List<RuleRoot> roots,
+                              java.util.Set<TypeSymbol> narrowed) {
+        switch (continuation) {
+            case StructuralInspection.Continuation.None _,
+                 StructuralInspection.Continuation.Blocked _ -> { }
+            case StructuralInspection.Continuation.Elements elements ->
+                    walk(path.element(), elements.element(), depth + 1, symbols, policy, placed,
+                            found, roots, java.util.Set.of());
+            case StructuralInspection.Continuation.Branches branches -> {
+                for (StructuralInspection.Branch branch : branches.branches()) {
+                    walkBranch(branch, here, path, depth, symbols, policy, found, roots,
+                            narrowed);
+                }
             }
         }
-        // Beside the position and not instead of it: what the list holds is read, and the list is
-        // still a position with a length of its own that this reading has already answered for.
-        if (structure instanceof StructuralInspection.Inside inside) {
-            walk(path.element(), inside.element(), depth + 1, symbols, placed, found);
+    }
+
+    /**
+     * One branch of a position, where the reading still owes it and something stands under it.
+     *
+     * <p><b>Owed and not merely declared.</b> A case the rules refuse has no positions to cover —
+     * every field of it is a row nobody can write — and the branches walked are the ones the
+     * position came back owing, so that what a report counts at the position and what it measures
+     * under it come from one reading of it. Which is also why the widening the obligations may have
+     * applied travels with them: where the rules were set aside, they are set aside for the
+     * positions under the case as much as for the case.
+     *
+     * <p><b>A narrowing takes no level.</b> {@code query@GlobalQuery.limit} is the same distance
+     * from the parameter as {@code query.limit} is under a record parameter, because naming which
+     * case a value turned out to be does not move into it. Counted as a level, the same field would
+     * be measured or not according to whether an author wrote a sum around the record it is in.
+     *
+     * <p>And the rules under it are the case's. A clause is not written across a narrowing: what a
+     * {@code GlobalQuery} says about its {@code tag} is written in {@code GlobalQuery}, so a new
+     * root begins here and the reading of the sum's own value has nothing to say below it.
+     */
+    private static void walkBranch(StructuralInspection.Branch branch, Position here, TermPath path,
+                                   int depth, Symbols symbols, ReadingPolicy policy,
+                                   List<Position> found, List<RuleRoot> roots,
+                                   java.util.Set<TypeSymbol> narrowed) {
+        // Nothing stands under a branch that is the whole of a value. A unit case is one, and a
+        // position for it would be a report naming a place with nothing in it once per case.
+        if (branch.under() == null || !owed(here, branch.refinement())) {
+            return;
         }
+        // A sum reached through itself, which a declaration is refused for (DataChecker) and which
+        // this only has to come back from. Kept per branch of the walk rather than for the reading:
+        // a sum met under a field is a value of its own and has been taken apart nowhere.
+        if (!(branch.refinement() instanceof Refinement.SumCase one)
+                || narrowed.contains(one.leaf())) {
+            return;
+        }
+        java.util.Set<TypeSymbol> deeper = new java.util.LinkedHashSet<>(narrowed);
+        deeper.add(one.leaf());
+        TermPath at = path.refine(branch.refinement());
+        roots.add(new RuleRoot(at, branch.under()));
+        walk(at, branch.under(), depth, symbols, policy,
+                PlacedRules.of(at, branch.under(), symbols, policy), found, roots, deeper);
+    }
+
+    /** Whether the reading of {@code position} still owes a row at this branch. */
+    private static boolean owed(Position position, Refinement refinement) {
+        for (Case each : position.obligationCases()) {
+            if (each instanceof Case.SumCase one
+                    && refinement.equals(new Refinement.SumCase(one.leaf()))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -265,7 +384,8 @@ public final class InputDomain {
      * that the length is the number being measured.
      */
     private static Position read(ReadablePosition input, TermPath path, Symbols symbols,
-                                 PlacedRules placed, StructuralInspection structure) {
+                                 PlacedRules placed, StructuralInspection structure,
+                                 List<Case> declared) {
         TypeView view = input.view();
         Type type = view.declared();
         Carrier carried = Carrier.ofValue(type, symbols);
@@ -318,7 +438,6 @@ public final class InputDomain {
                 : TypeBounds.admissible(own, projected, term);
         List<UnreadRule> unread = unreadRulesAt(placed, path, competing);
 
-        List<Case> declared = Distinctions.ofType(view, symbols);
         ReadingResult reading = crossed(declared, view, admissible, admitted, symbols, unread,
                 nothingExists, type);
         return new ReadPosition(path, view, term, admissible, own, projected,

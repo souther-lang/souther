@@ -152,7 +152,7 @@ public final class Partitions {
             // where an author can act on it.
             if (position.valuesNotSeparated()
                     && !(position.structure()
-                            instanceof souther.compiler.inputs.StructuralInspection.Children)) {
+                            instanceof souther.compiler.inputs.StructuralInspection.Decomposed)) {
                 notSeparated.add(
                         new souther.compiler.inputs.PositionValuesNotSeparated(position.path()));
             }
@@ -748,7 +748,7 @@ public final class Partitions {
         AxisId id = AxisId.of(behavior, term);
         switch (LocalInspection.of(position, symbols, policy)) {
             case LocalPartition.Divided divided -> {
-                if (position.structure() instanceof StructuralInspection.Children) {
+                if (position.structure() instanceof StructuralInspection.Decomposed) {
                     throw new IllegalStateException(
                             "`" + position.path() + "` both divides and is made of positions; the"
                                     + " reading of an input and the axes drawn from it disagree"
@@ -770,15 +770,15 @@ public final class Partitions {
                 switch (position.structure()) {
                     // The one answer that takes the position away: what is under it is what the
                     // classes belong to, and those positions were read on their own.
-                    case StructuralInspection.Children _ -> { }
+                    case StructuralInspection.Decomposed _ -> { }
                     // A leaf and a block are both positions still to be answered for, and each
                     // carries what it is left with if nothing answers — including a rule about this
                     // position that the local reading could not take in, which is what keeps the
                     // position from completing as one the model divides no way.
-                    case StructuralInspection.Pending pending ->
+                    case StructuralInspection.Retained retained ->
                             out.add(Axis.pendingAt(id, term, position.type(),
-                                    position.unansweredQuestions(), position.rulesNotReached(), pending,
-                                    leftUnread(position)));
+                                    position.unansweredQuestions(), position.rulesNotReached(),
+                                    retained.continuation(), leftUnread(position)));
                 }
             }
         }

@@ -23,13 +23,13 @@ import java.util.Set;
  */
 final class ReadQuantities implements Quantities {
 
-    private final Map<String, PlacedRules> byParameter;
+    private final Map<TermPath, PlacedRules> byRoot;
     /** What says how the values of a position are spaced, which the arithmetic needs of every
      *  number it is told a bound on. Held rather than asked for per question: the reading of an
      *  input is what a caller has, and where a position's values step is a fact about its type. */
     private final souther.compiler.check.Symbols symbols;
     /** What the behavior takes, which is what a path of this input starts at. */
-    private final Set<String> parameters;
+    private final Set<TermPath> roots;
     /** Every position that was read, by where it sits. What one of them was read to hold is what
      *  its own term runs between, and the reading that relates positions has a name for some of
      *  those terms and not for others. */
@@ -54,12 +54,12 @@ final class ReadQuantities implements Quantities {
     /**
      * The rules read with everything fixed, worked out when something is asked and not before.
      *
-     * <p>One reading per parameter and not one per question. A search asks where a position runs and
+     * <p>One reading per value and not one per question. A search asks where a position runs and
      * whether anything is left of the same refinement, and reading the declarations once per
      * question would read them twice a step. Held here rather than shared, since what it is a
      * reading of is what this refinement fixed.
      */
-    private volatile Map<String, FieldDomains.Carried<InputAtom>> conditioned;
+    private volatile Map<TermPath, FieldDomains.Carried<InputAtom>> conditioned;
     /**
      * Every rule reaching this input, about this input's own subjects, in one place.
      *
@@ -101,7 +101,7 @@ final class ReadQuantities implements Quantities {
         }
     }
 
-    private ReadQuantities(Map<String, PlacedRules> byParameter, Set<String> parameters,
+    private ReadQuantities(Map<TermPath, PlacedRules> byRoot, Set<TermPath> roots,
                            Map<TermPath, Position> byPath, Map<NumericTerm, Fixed> fixed,
                            souther.compiler.check.Symbols symbols, List<Assumed> assumed) {
         this.symbols = symbols;
@@ -109,9 +109,8 @@ final class ReadQuantities implements Quantities {
         // In the order the behavior declares its parameters. A proof of emptiness names one of them
         // and a report is a document compared against the one written last time, so an order read
         // off a hash would move which parameter is named between runs.
-        this.byParameter = java.util.Collections.unmodifiableMap(
-                new LinkedHashMap<>(byParameter));
-        this.parameters = Set.copyOf(parameters);
+        this.byRoot = java.util.Collections.unmodifiableMap(new LinkedHashMap<>(byRoot));
+        this.roots = Set.copyOf(roots);
         this.byPath = Map.copyOf(byPath);
         // Kept in the order the fixings arrived, so that the order they are answered in is chosen
         // here rather than inherited. An immutable copy iterates in an order salted once per JVM
@@ -121,21 +120,40 @@ final class ReadQuantities implements Quantities {
     }
 
     /** Before anything is fixed. */
-    static ReadQuantities of(Map<String, PlacedRules> byParameter, Set<String> parameters,
+    static ReadQuantities of(Map<TermPath, PlacedRules> byRoot, Set<TermPath> roots,
                              Map<TermPath, Position> byPath,
                              souther.compiler.check.Symbols symbols) {
-        return new ReadQuantities(byParameter, parameters, byPath, Map.of(), symbols, List.of());
+        return new ReadQuantities(byRoot, roots, byPath, Map.of(), symbols, List.of());
+    }
+
+    /**
+     * The value {@code path} is a position of, or null where it is a position of nothing this
+     * reading holds.
+     *
+     * <p>The nearest, which is the one whose clauses can name it: a field of a case is under the
+     * parameter as well, and what the parameter's own rules say stops at the narrowing. Read as the
+     * outermost, a clause of the sum would be asked about a position inside one of its cases.
+     */
+    private TermPath rootOf(TermPath path) {
+        TermPath nearest = null;
+        for (TermPath root : roots) {
+            if (path.isAtOrUnder(root)
+                    && (nearest == null || root.isAtOrUnder(nearest))) {
+                nearest = root;
+            }
+        }
+        return nearest;
     }
 
     /** Each parameter's rules read with what is fixed under it, once, under this input's names. */
-    private Map<String, FieldDomains.Carried<InputAtom>> conditioned() {
-        Map<String, FieldDomains.Carried<InputAtom>> read = conditioned;
+    private Map<TermPath, FieldDomains.Carried<InputAtom>> conditioned() {
+        Map<TermPath, FieldDomains.Carried<InputAtom>> read = conditioned;
         if (read == null) {
-            Map<String, FieldDomains.Carried<InputAtom>> made = new LinkedHashMap<>();
-            byParameter.forEach((parameter, rules) -> made.put(parameter,
-                    rules.given(under(parameter)).constraintsOver(
-                            at -> called(parameter, at),
-                            subject -> new InputAtom.Anonymous(parameter, subject))));
+            Map<TermPath, FieldDomains.Carried<InputAtom>> made = new LinkedHashMap<>();
+            byRoot.forEach((root, rules) -> made.put(root,
+                    rules.given(under(root)).constraintsOver(
+                            at -> called(root, at),
+                            subject -> new InputAtom.Anonymous(root.toString(), subject))));
             read = java.util.Collections.unmodifiableMap(made);
             conditioned = read;
         }
@@ -176,7 +194,7 @@ final class ReadQuantities implements Quantities {
         }
         List<Assumed> both = new java.util.ArrayList<>(assumed);
         both.add(taking);
-        return new ReadQuantities(byParameter, parameters, byPath, fixed, symbols, both);
+        return new ReadQuantities(byRoot, roots, byPath, fixed, symbols, both);
     }
 
     /**
@@ -248,25 +266,26 @@ final class ReadQuantities implements Quantities {
             return read;
         }
         java.util.SequencedMap<InputAtom, String> made = new LinkedHashMap<>();
-        conditioned().forEach((parameter, carried) -> carried.positions().forEach(
-                // What a newtype wraps has no path of its own, so the place is the parameter.
+        conditioned().forEach((root, carried) -> carried.positions().forEach(
+                // What a newtype wraps has no path of its own, so the place is the value itself.
                 (atom, path) -> made.put(atom, FieldDomains.THE_VALUE.equals(path)
-                        ? parameter : parameter + "." + path)));
+                        ? root.toString() : root + "." + path)));
         read = java.util.Collections.unmodifiableSequencedMap(made);
         positions = read;
         return read;
     }
 
-    /** What this input calls the number at one of a parameter's coordinates. */
-    private static InputAtom called(String parameter, FieldDomains.Coordinate at) {
-        return new InputAtom.Named(parameter, at.path(), at.measured());
+    /** What this input calls the number at one of a value's coordinates. */
+    private static InputAtom called(TermPath root, FieldDomains.Coordinate at) {
+        return new InputAtom.Named(root.toString(), at.path(), at.measured());
     }
 
     /** The same, of a term this input holds. One number under one name whichever side it arrives
      *  from — the reading of a declaration, or a form a caller wrote. */
-    private static InputAtom.Named called(NumericTerm term) {
-        FieldDomains.Coordinate at = coordinateOf(term);
-        return new InputAtom.Named(term.path().head(), at.path(), at.measured());
+    private InputAtom.Named called(NumericTerm term) {
+        TermPath root = rootOf(term.path());
+        return new InputAtom.Named(root.toString(), coordinateOf(root, term).path(),
+                coordinateOf(root, term).measured());
     }
 
     /**
@@ -376,7 +395,7 @@ final class ReadQuantities implements Quantities {
      * would say they are one number, which nobody said. Reading a caller's form may, because the
      * caller wrote two spellings of a number this input has one of.
      */
-    private static NumericDomain.LinearForm<InputAtom> over(
+    private NumericDomain.LinearForm<InputAtom> over(
             NumericDomain.LinearForm<NumericTerm> form) {
         Map<InputAtom, BigDecimal> coefs = new LinkedHashMap<>();
         form.coefs().forEach((term, coef) -> coefs.merge(called(term), coef, BigDecimal::add));
@@ -406,7 +425,7 @@ final class ReadQuantities implements Quantities {
             both.merge(term, new Fixed(each.getValue(), each.getValue()),
                     (had, one) -> had.and(one.least()));
         }
-        return new ReadQuantities(byParameter, parameters, byPath, both, symbols, assumed);
+        return new ReadQuantities(byRoot, roots, byPath, both, symbols, assumed);
     }
 
     /**
@@ -480,7 +499,7 @@ final class ReadQuantities implements Quantities {
      * nor could check it: a path is a location and the declarations are what say what is at one.
      */
     private NumericTerm held(NumericTerm term) {
-        if (!parameters.contains(term.path().head())) {
+        if (rootOf(term.path()) == null) {
             throw new IllegalArgumentException(
                     "`" + term.path() + "` is under nothing this behavior takes, so there is"
                             + " nothing here to answer about " + term);
@@ -488,8 +507,8 @@ final class ReadQuantities implements Quantities {
         return term;
     }
 
-    /** What is fixed under one parameter, named the way that parameter's own rules name it. */
-    private Map<FieldDomains.Coordinate, Count> under(String parameter) {
+    /** What is fixed under one value, named the way that value's own rules name it. */
+    private Map<FieldDomains.Coordinate, Count> under(TermPath root) {
         Map<FieldDomains.Coordinate, Count> out = new LinkedHashMap<>();
         fixed.forEach((term, at) -> {
             // Which number of the position was settled, and not only which position. A count taken
@@ -498,19 +517,20 @@ final class ReadQuantities implements Quantities {
             // counts were asked about.
             // Only where one value was fixed there. A position fixed at two settles nothing the
             // declarations could be told, and what it contradicts is said here rather than by them.
-            if (term.path().head().equals(parameter) && at.isOne()) {
-                out.put(coordinateOf(term), at.least());
+            if (root.equals(rootOf(term.path())) && at.isOne()) {
+                out.put(coordinateOf(root, term), at.least());
             }
         });
         return out;
     }
 
-    /** The coordinate of one term, in the words the rules of its parameter are read in. */
-    private static FieldDomains.Coordinate coordinateOf(NumericTerm term) {
-        // Spelled with the steps inside a sequence in it, so two positions never come to one name.
+    /** The coordinate of one term, in the words the rules of the value it is a position of are
+     *  read in. */
+    private static FieldDomains.Coordinate coordinateOf(TermPath root, NumericTerm term) {
+        // Written with the steps inside a sequence in it, so two positions never come to one name.
         // No clause is written at such a name, so a lookup finds nothing — which is what a clause
         // of the value says about a position inside a collection.
-        return new FieldDomains.Coordinate(term.path().stepsSpelled(),
+        return new FieldDomains.Coordinate(term.path().relativeTo(root).stepsSpelled(),
                 term instanceof NumericTerm.SizeOf);
     }
 

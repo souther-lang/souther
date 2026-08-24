@@ -26,7 +26,7 @@ import java.util.List;
  * record relates positions at any depth it can name, and rebuilding the reading at each record is
  * how {@code interval.startsAt < cap} stopped reaching {@code interval.startsAt}.
  */
-record PlacedRules(TypeSymbol value, Rules rules) {
+record PlacedRules(TermPath root, TypeSymbol value, Rules rules) {
 
     /**
      * What the rules reaching a value of {@code type} leave and place, read under the name the
@@ -43,9 +43,28 @@ record PlacedRules(TypeSymbol value, Rules rules) {
      * lifted as ends alone, a wrapper relating two of the record's fields narrowed nothing and a
      * wrapper clause nothing could read left every edge under it looking certain.
      */
-    static PlacedRules of(Type type, Symbols symbols, ReadingPolicy policy) {
+    static PlacedRules of(TermPath root, Type type, Symbols symbols, ReadingPolicy policy) {
         TypeSymbol read = readAs(type, symbols);
-        return new PlacedRules(read, Rules.of(read, symbols, policy));
+        return new PlacedRules(root, read, Rules.of(read, symbols, policy));
+    }
+
+    /**
+     * What the clauses of this value call the position at {@code path}, or null where none of them
+     * can name it.
+     *
+     * <p>The one translation between where a position is and what the rules of one value call it.
+     * A {@code GlobalQuery} says {@code tag} and the position is {@code query@GlobalQuery.tag}: the
+     * rules are read of a declaration, and which declaration that is is what {@link #root} says. Put
+     * in the path instead, a location would have to know which value's rules were being read of it,
+     * which is not a fact about where it is.
+     *
+     * <p>Null for a position under no root of this one as readily as for one no clause can name:
+     * a reading of one value has nothing to say about a position in another, and answering with a
+     * name would be this value's rules read at somebody else's position.
+     */
+    private String keyOf(TermPath path) {
+        TermPath under = path.relativeTo(root);
+        return under == null ? null : under.fieldKey();
     }
 
     /** What the rules leave the numbers, ends and narrowings of this value. */
@@ -72,7 +91,7 @@ record PlacedRules(TypeSymbol value, Rules rules) {
      * one of them.
      */
     NumericDomain.Bounds at(TermPath path) {
-        String where = path.fieldKey();
+        String where = keyOf(path);
         return where == null || where.isEmpty() ? null : bounds().at(where);
     }
 
@@ -81,7 +100,7 @@ record PlacedRules(TypeSymbol value, Rules rules) {
      * in, which is not the same as what {@link #at} projects onto it.
      */
     NumericDomain.Bounds leftAt(TermPath path, boolean measured) {
-        String where = path.fieldKey();
+        String where = keyOf(path);
         return where == null ? null : bounds().leftAt(where, measured);
     }
 
@@ -93,7 +112,7 @@ record PlacedRules(TypeSymbol value, Rules rules) {
      * answer where {@link #at} is.
      */
     AdmissibleSet admits(TermPath path) {
-        String where = path.fieldKey();
+        String where = keyOf(path);
         if (where != null) {
             return rules.admits(where);
         }
@@ -119,7 +138,7 @@ record PlacedRules(TypeSymbol value, Rules rules) {
      * for a range.
      */
     List<RuleAccounting.Unanswered> unanswered(TermPath path) {
-        String where = path.fieldKey();
+        String where = keyOf(path);
         if (where == null) {
             return List.of();
         }
@@ -152,7 +171,7 @@ record PlacedRules(TypeSymbol value, Rules rules) {
      * another reason won it.
      */
     boolean everyRuleReachedAt(TermPath path) {
-        String where = path.fieldKey();
+        String where = keyOf(path);
         if (where != null) {
             return rules.everyRuleReachedAt(where);
         }
@@ -172,7 +191,7 @@ record PlacedRules(TypeSymbol value, Rules rules) {
     /** The ends the clauses reaching this value place on the coordinates at {@code path}, which is
      *  a different question from what {@link #at} leaves them. */
     List<FieldDomains.Placed> placedAt(TermPath path) {
-        String where = path.fieldKey();
+        String where = keyOf(path);
         return where == null || where.isEmpty() ? List.of() : bounds().placedAt(where);
     }
 
@@ -184,13 +203,13 @@ record PlacedRules(TypeSymbol value, Rules rules) {
      * not given twice by anybody, and a newtype's own clause is where the question started.
      */
     List<FieldDomains.Unread> unreadAt(TermPath path) {
-        String where = path.fieldKey();
+        String where = keyOf(path);
         return where == null ? List.of() : bounds().unreadAt(where);
     }
 
     /** Which declarations' clauses are holding the end at {@code path}, on the side asked for. */
     List<TypeSymbol> narrowedBy(TermPath path, boolean lower) {
-        String where = path.fieldKey();
+        String where = keyOf(path);
         return where == null || where.isEmpty() ? List.of() : bounds().narrowedBy(where, lower);
     }
 

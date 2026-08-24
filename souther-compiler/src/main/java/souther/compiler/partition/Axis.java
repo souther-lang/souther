@@ -76,7 +76,7 @@ import java.util.List;
 public record Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> classes,
                    List<Cut> cuts, List<Seam> parted, List<RuleAccounting.Unanswered> unanswered,
                    boolean rulesNotReached,
-                   StructuralInspection.Pending pending, BlockReason unread) {
+                   StructuralInspection.Continuation pending, BlockReason unread) {
 
     public Axis {
         classes = List.copyOf(classes);
@@ -104,7 +104,7 @@ public record Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> 
     public static Axis pendingAt(AxisId id, NumericTerm term, Type type,
                                  List<RuleAccounting.Unanswered> unanswered,
                                  boolean rulesNotReached,
-                                 StructuralInspection.Pending found, BlockReason unread) {
+                                 StructuralInspection.Continuation found, BlockReason unread) {
         return new Axis(id, term, type, List.of(), List.of(), List.of(), unanswered,
                 rulesNotReached, found, unread);
     }
