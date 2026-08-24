@@ -62,8 +62,8 @@ public final class TmLanguageGenerator {
     private static final Set<String> BOOLEANS = Set.of("true", "false");
 
     /** The standard-library qualifiers, taken from {@link Reserved#QUALIFIERS} (the single source of
-     *  truth) and sorted for a stable grammar; highlighted before a dot. Adding a module to the
-     *  language's list extends this automatically — no separate list to keep in step. */
+     *  truth) and sorted for a stable grammar; highlighted before a dot. Adding a module to
+     *  {@link Reserved#MODULES} extends this automatically — no separate list to keep in step. */
     private static final List<String> QUALIFIERS =
             Reserved.QUALIFIERS.stream().sorted().toList();
 
