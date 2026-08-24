@@ -139,6 +139,22 @@ public sealed interface Carrier {
     Carrier TEXT = new Text();
 
     /**
+     * The carrier of {@code type} where the type settles it without the declarations, and null where
+     * answering would need them or nothing orders it.
+     *
+     * <p>Beside {@link #ofValue} and not instead of it — the same table, asked where there are no
+     * declarations to hand. A primitive is what it is; a name is a declaration's question, since
+     * which sum places a case and what a newtype wraps are answers only the declarations have. So a
+     * name comes back unanswered here rather than guessed at.
+     *
+     * <p>What asks this way is a reading of the library's own signatures, whose names are its error
+     * unions and its enumerations — neither of them a value whose count anything is written over.
+     */
+    static Carrier ofPrimitive(Type type) {
+        return type instanceof Type.Prim ? ofValue(type, null) : null;
+    }
+
+    /**
      * The carrier a location's own content is counted on, or null where nothing here orders it.
      *
      * <p>Asked of what the names wrap, so a newtype answers as the value it carries — which is what

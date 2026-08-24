@@ -16,23 +16,42 @@ package souther.compiler.semantics;
 public sealed interface OperationFact {
 
     /**
-     * The result is the number an argument already is, and this says which argument.
+     * What the operation answers, counted, is this much of what its arguments are counted as.
      *
-     * <p>Such a call is read into the form its argument has rather than given an atom of its own, so
-     * a rule about the argument settles one about the call. {@code Decimal.fromInt(n)} is the one
-     * the library has: every {@code Int} is a {@code Decimal} exactly, and the widening states
-     * nothing of its own.
+     * <p>Exact and unconditional: {@code count(result) = Σ cᵢ·count(argᵢ) + k} at every call.
+     * {@code Decimal.fromInt(n)} is {@code n}; {@code Date.daysBetween(from, to)} is
+     * {@code -from + to}; {@code Date.addDays(days, date)} is {@code date + days}. Such a call is
+     * read into that form rather than given an atom of its own, so a rule about the arguments
+     * settles one about the call.
+     *
+     * <p><b>Counted, so a date takes part.</b> What a date's count is belongs to its carrier, and
+     * the arithmetic here is over counts and not over values — which is what lets a difference of
+     * two dates be a number of days while neither of them is a number. Written as a relation
+     * between values, the two dates would have had nothing to say and the fact would have been
+     * unstateable for the operations it exists for.
      *
      * <p>Not a choice among arguments. What a choice answers is one of two values, decided by the
      * arguments, and which one it is has to be reasoned about case by case; this answers one value
-     * unconditionally, in another type. Read as a choice with one candidate, every value-preserving
-     * conversion would be filed under selection, and the two stop being one question the moment the
-     * library gains a conversion that is not a widening.
+     * unconditionally. Read as a choice with one candidate, every value-preserving conversion would
+     * be filed under selection, and the two stop being one question the moment the library gains a
+     * conversion that is not a widening.
+     *
+     * <p><b>Not for arithmetic the language composes.</b> {@code Int.add(a, b)} answers
+     * {@code a + b} and is not declared here: {@code Terms.asOperator} reads such a call as the
+     * operator it stands for, so a fact would be a second path saying what the grammar already
+     * says.
      */
-    record AnswersItsArgument(ArgumentRef argument) implements OperationFact {
+    record AnswersAFormOfItsArguments(
+            souther.compiler.numeric.NumericDomain.LinearForm<ArgumentRef> form)
+            implements OperationFact {
 
-        public AnswersItsArgument {
-            java.util.Objects.requireNonNull(argument, "this one names an argument");
+        public AnswersAFormOfItsArguments {
+            java.util.Objects.requireNonNull(form, "this one says what it answers");
+            if (form.coefs().isEmpty()) {
+                throw new IllegalArgumentException(
+                        "a form of its arguments names one: a result that is a constant whatever it"
+                                + " was given is a bound and not this");
+            }
         }
     }
 

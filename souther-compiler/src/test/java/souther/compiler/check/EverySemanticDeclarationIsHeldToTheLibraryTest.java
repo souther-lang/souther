@@ -56,7 +56,9 @@ class EverySemanticDeclarationIsHeldToTheLibraryTest {
                 new ArrayList<>(OperationFacts.declarations());
         gained.add(new OperationFacts.Declared(
                 new ValueName.Stdlib("Decimal", "fromInt"),
-                new OperationFact.AnswersItsArgument(new ArgumentRef.At(7))));
+                new OperationFact.AnswersAFormOfItsArguments(
+                        souther.compiler.numeric.NumericDomain.LinearForm.atom(
+                                new ArgumentRef.At(7)))));
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
                 () -> OperationFactBinder.bindAll(gained));
@@ -110,7 +112,9 @@ class EverySemanticDeclarationIsHeldToTheLibraryTest {
                 new ArrayList<>(OperationFacts.declarations());
         gained.add(new OperationFacts.Declared(
                 new ValueName.Stdlib("Decimal", "fromNothingAtAll"),
-                new OperationFact.AnswersItsArgument(new ArgumentRef.At(0))));
+                new OperationFact.AnswersAFormOfItsArguments(
+                        souther.compiler.numeric.NumericDomain.LinearForm.atom(
+                                new ArgumentRef.At(0)))));
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
                 () -> OperationFactBinder.bindAll(gained));

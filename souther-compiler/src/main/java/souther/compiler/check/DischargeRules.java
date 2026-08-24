@@ -171,14 +171,59 @@ final class DischargeRules {
     }
 
     static Set<ValueName> formOperations() {
-        return Bound.answersItsArgument();
+        return Bound.answersAFormOfItsArguments();
+    }
+
+    /** What {@code operation} answers, counted, in what its arguments are counted as — or null
+     *  where it states no such form. */
+    static souther.compiler.numeric.NumericDomain.LinearForm<ArgumentRef> answersAFormOf(
+            ValueName operation) {
+        return Bound.answersAFormOfItsArguments(operation);
+    }
+
+    /**
+     * Those of them this check can carry, by name.
+     *
+     * <p>Every declaration is about the operation and not about a reader, so the ones here are a
+     * subset of what is declared: what an operation answers is stated over the counts of its
+     * arguments, and this check's arithmetic is over the numbers a model wrote. A date counts days
+     * and is no number, so {@code Date.daysBetween} states a form this reads and cannot carry — the
+     * partition can, since a position's count is what it works in.
+     *
+     * <p>Derived from what this side relates and not written as a list. A list is a second copy of
+     * a capability, wrong the day the capability changes; asked this way, the operations that arrive
+     * are exactly the ones an author could write a discharging program for.
+     */
+    static Set<ValueName> formOperationsThisCarries() {
+        Set<ValueName> carried = new LinkedHashSet<>();
+        for (ValueName operation : formOperations()) {
+            if (everyArgumentIsANumber(operation)) {
+                carried.add(operation);
+            }
+        }
+        return carried;
+    }
+
+    /** Whether every argument the declared form names stands at a number this check relates. */
+    private static boolean everyArgumentIsANumber(ValueName operation) {
+        Prelude.PreludeEntry entry = operation instanceof ValueName.Stdlib library
+                ? Prelude.entry(library.qualified()) : null;
+        if (entry == null) {
+            return false;
+        }
+        List<Type> params = entry.signature().params();
+        return answersAFormOf(operation).coefs().keySet().stream().allMatch(argument -> {
+            int position = CallArguments.positionIn(argument, operation);
+            return position >= 0 && position < params.size()
+                    && Question.isANumber(params.get(position));
+        });
     }
 
     /** Those of them the read-through table has, by name, for the test that holds each to a
      * construction it discharges. */
     static Set<String> formNames() {
         Set<String> names = new LinkedHashSet<>();
-        formOperations().forEach(operation -> names.add(operation.toString()));
+        formOperationsThisCarries().forEach(operation -> names.add(operation.toString()));
         return names;
     }
 
@@ -267,17 +312,6 @@ final class DischargeRules {
         return holding;
     }
 
-    /** The argument whose number {@code e} answers, or null where it is not a call this reads as one
-     * of its arguments. The value itself and not a term for it: what it is read as is the form the
-     * argument already has, which is the caller's to build. */
-    static Core answersItsArgument(Core e) {
-        if (!(e instanceof Core.PreservedCall call)) {
-            return null;
-        }
-        ArgumentRef reads = Bound.answersItsArgument(call.operation());
-        return reads == null ? null : CallArguments.of(reads, call);
-    }
-
     /** Those of them the building table has, by name, for the test that holds each to a construction
      * it discharges. */
     static Set<String> builtNames() {
@@ -362,14 +396,15 @@ final class DischargeRules {
          * declaration's; what asking through here adds is that it has been held to the library
          * first.
          */
-        private static ArgumentRef answersItsArgument(ValueName operation) {
-            return OperationFacts.answersItsArgument(operation);
+        private static souther.compiler.numeric.NumericDomain.LinearForm<ArgumentRef>
+                answersAFormOfItsArguments(ValueName operation) {
+            return OperationFacts.answersAFormOfItsArguments(operation);
         }
 
-        /** The operations declared to answer one of their arguments, for the checks that hold each
-         *  of them to firing. */
-        private static Set<ValueName> answersItsArgument() {
-            return OperationFacts.answersItsArgument();
+        /** The operations declared to answer a form of their arguments, for the checks that hold
+         *  each of them to firing. */
+        private static Set<ValueName> answersAFormOfItsArguments() {
+            return OperationFacts.answersAFormOfItsArguments();
         }
 
         private static Set<ValueName> statesTheOrder() {

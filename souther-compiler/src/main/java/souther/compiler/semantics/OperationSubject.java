@@ -28,7 +28,7 @@ public enum OperationSubject {
     BOUNDS("what bounds the number it answers"),
     MEASURE("what it states through the measure counting the two apart"),
     CHOICE("whether it answers one of its arguments, and in which cases"),
-    FORM("whether the number it answers is one it was given"),
+    FORM("what it answers, counted, in what its arguments are counted as"),
     NUMERIC_RESULT("what number it computes, and where it answers it");
 
     private final String asked;
