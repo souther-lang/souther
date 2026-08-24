@@ -50,7 +50,7 @@ class ACollectionWithNoRoomHasNoPositionInsideItTest {
         assertEquals(List.of(), compilation.diagnostics().values().stream()
                 .flatMap(List::stream).toList(), "the model under test compiles");
         Adequacy.Filling only = compilation.db()
-                .ask(new Adequacy.Generated(MODULE)).value().get("only");
+                .ask(new Adequacy.Generated(MODULE, "only")).value();
         assertNotNull(only, "rows are asked for");
         return only;
     }

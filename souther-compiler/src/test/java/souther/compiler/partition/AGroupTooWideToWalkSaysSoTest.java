@@ -299,8 +299,8 @@ class AGroupTooWideToWalkSaysSoTest {
                         .filter(found -> found.report().isError())
                         .map(found -> found.report().diagnostic().code().toString()).toList(),
                 "the model compiles and its rows run");
-        Map<String, souther.compiler.query.Adequacy.Filling> filling = compilation.db()
-                .ask(new souther.compiler.query.Adequacy.Generated("example.wide")).value();
+        Map<String, souther.compiler.query.Adequacy.Filling> filling =
+                souther.compiler.query.Adequacy.generatedOf(compilation.db(), "example.wide");
         assertNotNull(filling, "the module was asked for rows");
         souther.compiler.query.Adequacy.Filling total = filling.get("total");
         assertNotNull(total, "the behavior was asked for rows");

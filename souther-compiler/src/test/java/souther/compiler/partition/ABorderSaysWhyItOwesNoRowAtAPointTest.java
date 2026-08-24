@@ -292,7 +292,7 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
      *  offered for. */
     private static Map<String, String> offeredFor(String model) {
         Adequacy.Filling filling = compiled(model).db()
-                .ask(new Adequacy.Generated("example.owed")).value().get("cmp");
+                .ask(new Adequacy.Generated("example.owed", "cmp")).value();
         assertNotNull(filling, "the model under test compiles");
         Map<String, String> out = new java.util.LinkedHashMap<>();
         filling.boundaries().rows().forEach(row -> out.put(String.join(" x ", row.labels()),

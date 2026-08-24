@@ -62,7 +62,7 @@ class AGeneratedFixtureSaysWhatItsNamesDenoteTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Adequacy.Filling filling =
-                compilation.db().ask(new Adequacy.Generated("app")).value().get("f");
+                compilation.db().ask(new Adequacy.Generated("app", "f")).value();
 
         List<Hir.Expr> nodes = new ArrayList<>();
         java.util.stream.Stream

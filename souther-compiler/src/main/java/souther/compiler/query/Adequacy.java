@@ -1235,6 +1235,35 @@ public final class Adequacy {
         return byBehavior(db, module, name -> new Boundaries(module, name));
     }
 
+    /**
+     * Every behavior's rows, for a caller printing a block for the module.
+     *
+     * <p>Aggregation, as {@link #boundariesOf} is. What a generation costs is paid per behavior it
+     * is asked about, so a caller wanting one behavior's rows does not have every behavior's
+     * searched to get them — which is what an editor offering to write the rows one behavior does
+     * not cover was paying.
+     *
+     * <p>In the order the module declares them, because the block printed from this is read against
+     * the one before it.
+     */
+    public static Map<String, Filling> generatedOf(Db db, String module) {
+        souther.compiler.check.Prepared prepared = db.ask(new Shapes.Prepared(module)).value();
+        if (prepared == null) {
+            return null;
+        }
+        Map<String, Filling> out = new LinkedHashMap<>();
+        for (Hir.BehaviorDef behavior : prepared.behaviors()) {
+            if (!(behavior instanceof Hir.SpecBehavior spec)) {
+                continue;
+            }
+            Filling filled = db.ask(new Generated(module, spec.name())).value();
+            if (filled != null) {
+                out.put(spec.name(), filled);
+            }
+        }
+        return Ordered.map(out);
+    }
+
     /** The same, with a value composed at every point worth one — which is a request, and costs what
      *  {@link BoundarySearch} costs. */
     public static Map<String, List<BorderAssessment>> searchedBoundariesOf(Db db, String module) {
@@ -2188,7 +2217,7 @@ public final class Adequacy {
      */
     public record GenerationDisposition(Finding finding, GenerationOutcome outcome) {}
 
-    public record Generated(String name) implements Key<Map<String, Filling>> {
+    public record Generated(String name, String behavior) implements Key<Filling> {
 
         @Override
         public String module() {
@@ -2196,7 +2225,7 @@ public final class Adequacy {
         }
 
         @Override
-        public Answer<Map<String, Filling>> compute(Db db) {
+        public Answer<Filling> compute(Db db) {
             Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
             Answer<Symbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
@@ -2237,68 +2266,51 @@ public final class Adequacy {
             Map<String, List<Finding>> findings = db.ask(new Findings(name)).value();
             Map<String, PartitionEvidence> partitions = coverage.value();
 
-            Map<String, Filling> out = new LinkedHashMap<>();
-            FixtureReader.Construction building = constructing(db, name,
-                    prepared.value().forExamples(), symbols);
-            // One for the module, so the classes a candidate is built and applied in are defined
-            // once however many behaviors are searched.
-            souther.compiler.examples.RowTrial.Trials trials = trialling(db, name,
-                    prepared.value().forExamples(), symbols);
-            for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
-                if (!(behavior instanceof Hir.SpecBehavior spec)) {
-                    continue;
-                }
-                Sig sig = sigs.value().get(spec.name());
-                if (sig == null) {
-                    continue;
-                }
-                souther.compiler.partition.Partitions.Partitioning divided =
-                        db.ask(new Divided(name, spec.name())).value();
-                if (divided == null) {
-                    continue;
-                }
-                // Asked whatever the level is. Somebody asking for the rows is what a generation is,
-                // and the rows at an edge are what a composed value settles — so this pays for the
-                // composing because it is what was asked for, not because a dial was turned up.
-                List<BorderAssessment> found =
-                        db.ask(new BoundarySearch(name, spec.name())).value();
-                List<BorderAssessment> edges = found == null ? List.of() : found;
-                Generator.GenerationResult composed;
-                try {
-                    composed = rowsFor(spec, sig, symbols, db.ask(new Front.Reading()).value(),
-                            baselines(name, spec, sig,
-                                    db.ask(new Bodies.ModuleDefinitions(name)).value(),
-                                    prepared.value(), symbols),
-                            findings == null ? List.of()
-                                    : findings.getOrDefault(spec.name(), List.of()),
-                            divided, bodies.get(spec.name()), plan,
-                            Rows.readingFor(byTarget, spec.name()), building,
-                            domainOf(readInputs, spec), runningRowsOf(trials, spec.name(), sig),
-                            PartitionEvidence.answeredFor(partitions, prepared.value(), spec),
-                            levelOf(db).runsInstrumentedRows(),
-                            db.ask(new Front.Adequacy()).value().generation());
-                } catch (LinkageError _) {
-                    // The generated classes would not link, so nothing can be built to find out
-                    // what a model admits. Saying so is not the same as saying the combinations are
-                    // impossible, so none of them is reported as one.
-                    //
-                    // Caught around the search and not around the answer. A finding's answer is
-                    // owed whatever the search did, and a failure that skipped the walk over the
-                    // findings would take them out of a list that is meant to hold every one —
-                    // which is the same defect the list was written against, arriving as control
-                    // flow rather than as a value.
-                    composed = new Generator.GenerationResult(List.of(), List.of(),
-                            List.of(new souther.compiler.partition.GenerationReason
-                                    .LinkageFailed(spec.name())));
-                }
-                out.put(spec.name(), new Filling(composed, offered(spec.name(), edges),
-                        dispositions(findings == null ? List.of()
-                                        : findings.getOrDefault(spec.name(), List.of()),
-                                edges, partitions.get(spec.name()), composed, spec)));
+            Hir.SpecBehavior spec = specOf(prepared.value(), behavior);
+            Sig sig = sigs.value().get(behavior);
+            souther.compiler.partition.Partitions.Partitioning divided =
+                    db.ask(new Divided(name, behavior)).value();
+            if (spec == null || sig == null || divided == null) {
+                return Answer.absent();
             }
-            // In the order the module declares them, because the block printed from this is read
-            // against the one before it.
-            return Answer.of(Ordered.map(out));
+            // Asked whatever the level is. Somebody asking for the rows is what a generation is,
+            // and the rows at an edge are what a composed value settles — so this pays for the
+            // composing because it is what was asked for, not because a dial was turned up.
+            List<BorderAssessment> found = db.ask(new BoundarySearch(name, behavior)).value();
+            List<BorderAssessment> edges = found == null ? List.of() : found;
+            List<Finding> owed = findings == null ? List.of()
+                    : findings.getOrDefault(behavior, List.of());
+            Generator.GenerationResult composed;
+            try {
+                composed = rowsFor(spec, sig, symbols, db.ask(new Front.Reading()).value(),
+                        baselines(name, spec, sig,
+                                db.ask(new Bodies.ModuleDefinitions(name)).value(),
+                                prepared.value(), symbols),
+                        owed, divided, bodies.get(behavior), plan,
+                        Rows.readingFor(byTarget, behavior),
+                        constructing(db, name, prepared.value().forExamples(), symbols),
+                        domainOf(readInputs, spec),
+                        runningRowsOf(trialling(db, name, prepared.value().forExamples(), symbols),
+                                behavior, sig),
+                        PartitionEvidence.answeredFor(partitions, prepared.value(), spec),
+                        levelOf(db).runsInstrumentedRows(),
+                        db.ask(new Front.Adequacy()).value().generation());
+            } catch (LinkageError _) {
+                // The generated classes would not link, so nothing can be built to find out
+                // what a model admits. Saying so is not the same as saying the combinations are
+                // impossible, so none of them is reported as one.
+                //
+                // Caught around the search and not around the answer. A finding's answer is
+                // owed whatever the search did, and a failure that skipped the walk over the
+                // findings would take them out of a list that is meant to hold every one —
+                // which is the same defect the list was written against, arriving as control
+                // flow rather than as a value.
+                composed = new Generator.GenerationResult(List.of(), List.of(),
+                        List.of(new souther.compiler.partition.GenerationReason
+                                .LinkageFailed(behavior)));
+            }
+            return Answer.of(new Filling(composed, offered(behavior, edges),
+                    dispositions(owed, edges, partitions.get(behavior), composed, spec)));
         }
 
         /**

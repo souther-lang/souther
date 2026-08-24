@@ -81,17 +81,19 @@ public final class GeneratedRows {
             if (module != null && !module.equals(name)) {
                 continue;
             }
-            Map<String, Adequacy.Filling> filling =
-                    compilation.db().ask(new Adequacy.Generated(name)).value();
+            Map<String, Adequacy.Filling> filling;
+            if (behavior != null) {
+                // One behavior, asked about on its own. Generating rows searches the pair space and
+                // composes values at the edges, and a caller that named a behavior would otherwise
+                // pay for every other behavior of the module to find out about the one it asked for.
+                Adequacy.Filling only =
+                        compilation.db().ask(new Adequacy.Generated(name, behavior)).value();
+                filling = only == null ? Map.of() : Map.of(behavior, only);
+            } else {
+                filling = Adequacy.generatedOf(compilation.db(), name);
+            }
             if (filling == null) {
                 continue;
-            }
-            if (behavior != null) {
-                Map<String, Adequacy.Filling> only = new LinkedHashMap<>();
-                if (filling.containsKey(behavior)) {
-                    only.put(behavior, filling.get(behavior));
-                }
-                filling = only;
             }
             Block one = of(name, filling, WrittenEnsures.of(compilation.db(), name),
                     boundaries, names);

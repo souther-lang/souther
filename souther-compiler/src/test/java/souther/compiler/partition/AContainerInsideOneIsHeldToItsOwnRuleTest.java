@@ -53,7 +53,7 @@ class AContainerInsideOneIsHeldToItsOwnRuleTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, Adequacy.Filling> generated =
-                compilation.db().ask(new Adequacy.Generated(MODULE)).value();
+                Adequacy.generatedOf(compilation.db(), MODULE);
         assertNotNull(generated, "the model under test compiles");
         return generated.get("deep");
     }

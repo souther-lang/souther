@@ -209,8 +209,7 @@ class ARowOfferedForACombinationIsRunWhereAnythingCanRunItTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.reportOnly(level));
         compilation.answerEverything();
-        Map<String, Adequacy.Filling> filled = compilation.db()
-                .ask(new Adequacy.Generated(compilation.modules().get(0))).value();
+        Map<String, Adequacy.Filling> filled = Adequacy.generatedOf(compilation.db(), compilation.modules().get(0));
         assertNotNull(filled, "the model under test compiles and is measured");
         Adequacy.Filling filling = filled.get(behavior);
         assertNotNull(filling, "the behavior under test was generated for");

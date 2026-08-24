@@ -69,7 +69,7 @@ class APositionInsideASequenceInsideOneIsPlacedTooTest {
     @Test
     void theRowOfferedHoldsAValueInTheClass() {
         Map<String, Adequacy.Filling> generated =
-                measured().db().ask(new Adequacy.Generated(MODULE)).value();
+                Adequacy.generatedOf(measured().db(), MODULE);
         assertNotNull(generated, "rows are offered");
 
         assertEquals(List.of("[[5]]"), generated.get("deep").composed().rows().stream()

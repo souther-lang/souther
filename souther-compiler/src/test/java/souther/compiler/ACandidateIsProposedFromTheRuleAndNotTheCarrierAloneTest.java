@@ -69,8 +69,7 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
         compilation.answerEverything();
         assertEquals(List.of(), compilation.diagnostics().values().stream()
                 .flatMap(List::stream).toList(), "the model under test compiles");
-        Map<String, Adequacy.Filling> all = compilation.db()
-                .ask(new Adequacy.Generated(compilation.modules().get(0))).value();
+        Map<String, Adequacy.Filling> all = Adequacy.generatedOf(compilation.db(), compilation.modules().get(0));
         assertNotNull(all, "the rows come back");
         return all.get("look").composed();
     }
