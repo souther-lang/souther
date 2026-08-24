@@ -209,6 +209,42 @@ public record BorderAssessment(Border border, Map<PointRole, ItemAssessment> ite
         return borders.stream().flatMap(each -> each.points().stream()).toList();
     }
 
+    /**
+     * The same point of the same line, in another reading of one behavior's lines.
+     *
+     * <p>For a reader holding a later assessment than the one it was handed. The lines of a behavior
+     * are measured once and searched afterwards, so a finding made from the measurement names a
+     * point that the search has more to say about, and this is how the second is asked for the first.
+     *
+     * <p>Found by the border itself, which is a value, and by the role. The four fields a finding
+     * used to carry instead — the axis, the value, the rule and the role — did not identify a point:
+     * several rules can draw a line at one value, so a reader matching those answered with whichever
+     * assessment came first. Two lines here that are equal are the same line, and this refuses to
+     * choose between two of them rather than taking one.
+     *
+     * @throws IllegalStateException where no line here is that one, or where more than one is
+     */
+    public static ItemAssessment owedAt(java.util.List<BorderAssessment> lines, Border line,
+                                        PointRole role) {
+        ItemAssessment found = null;
+        for (BorderAssessment each : lines) {
+            if (!each.border().equals(line)) {
+                continue;
+            }
+            if (found != null) {
+                throw new IllegalStateException(
+                        "one behavior's lines hold " + line.label() + " twice, so the "
+                                + role + " point of it is two points");
+            }
+            found = each.at(role);
+        }
+        if (found == null) {
+            throw new IllegalStateException("no line here is " + line.label()
+                    + ", so its " + role + " point is not one of these");
+        }
+        return found;
+    }
+
     /** The roles a row is owed in, which is what a coverage count is over. */
     public java.util.List<PointRole> owed() {
         return EnumSet.allOf(PointRole.class).stream().filter(role -> at(role).owed()).toList();

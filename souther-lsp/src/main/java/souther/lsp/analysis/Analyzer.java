@@ -734,7 +734,8 @@ public final class Analyzer {
             return false;
         }
         return findings.getOrDefault(behavior, List.of()).stream()
-                .anyMatch(each -> each.about().aRowCouldAnswerIt());
+                .anyMatch(each -> souther.compiler.query.Adequacy
+                        .whereNoRowCouldAnswer(each.about()) == null);
     }
 
     /**

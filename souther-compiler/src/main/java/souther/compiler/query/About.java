@@ -32,32 +32,6 @@ import souther.compiler.types.TypeSymbol;
  */
 public sealed interface About {
 
-    /**
-     * Whether writing a row is a thing this finding could be answered with.
-     *
-     * <p>Asked before anything is composed, by a caller deciding whether to offer somebody the work
-     * at all. What generating one actually comes to takes the generation, and this does not
-     * anticipate it: a subject a row could answer is one a search may still fail to reach.
-     *
-     * <p>Exhaustive with no {@code default}, so a subject added later is decided here rather than
-     * inheriting whichever answer sat under a catch-all. What a generation makes of each of these is
-     * {@code Adequacy.Generated}'s to say, and a structural test holds the two lists together.
-     */
-    default boolean aRowCouldAnswerIt() {
-        return switch (this) {
-            case APointOfABorder _, ACaseNoRowAppliesItTo _, AClassNoRowIsIn _,
-                 AnArmNoRowGoesThrough _ -> true;
-            // A case of the output, which nothing here has a way to steer a run towards; what the
-            // rows were seen doing rather than what they owe; what the model itself says, read to
-            // the end; and what this compiler could not read, where a row would answer a question
-            // nothing asked.
-            case ACaseNoRowExpects _, ACaseNothingWasSeenToProduce _, APositionNoLineDivides _,
-                 APositionThisCouldNotRead _, ARuleThisCouldNotRead _,
-                 APositionWhoseRulesWereNotReached _, APositionReadWiderThanItsRules _,
-                 AQuestionNothingAnswered _ -> false;
-        };
-    }
-
     /** A case of the output no row expects. */
     record ACaseNoRowExpects(TypeSymbol missing) implements About {
         public ACaseNoRowExpects {
@@ -91,10 +65,17 @@ public sealed interface About {
     /**
      * A point of a border no row is at.
      *
-     * <p>The assessment's own item, which is what the count, the document, the rows a tool offers
-     * and this are four readings of. Held as the point rather than as the axis, the value, the rule
-     * and the role, which is what those four fields were: a copy of it, made where the finding was
-     * built, that a reader then matched back against the assessments to find the one it came from.
+     * <p>The assessment's own item, which is what the count, the document and this are three
+     * readings of. Held as the point rather than as the axis, the value, the rule and the role,
+     * which is what those four fields were: a copy that did not identify a point, since several
+     * rules can draw a line at one value.
+     *
+     * <p>What is here is what was measured, and a reader wanting more than that says so. A
+     * generation composes values at these lines whatever the build was measuring, so what it can do
+     * about a finding is read out of the search it asked for — the same point of the same line,
+     * found with the line itself ({@link BorderAssessment#owedAt}). This carries the measurement
+     * because that is what a finding is about: a search settles what can be written at the point and
+     * changes nothing about the point being missed.
      */
     record APointOfABorder(BorderAssessment.Point point) implements About {
         public APointOfABorder {

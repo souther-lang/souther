@@ -1028,10 +1028,14 @@ public final class Adequacy {
                 if (sig == null) {
                     continue;
                 }
+                // A behavior with a signature is one the model divides somewhere or nowhere, and
+                // either is an answer. Nothing is a compile that stopped after this loop had already
+                // read the signature, which is the two disagreeing rather than a behavior to skip.
                 souther.compiler.partition.Partitions.Partitioning divided =
                         db.ask(new Divided(name, spec.name())).value();
                 if (divided == null) {
-                    continue;
+                    throw new IllegalStateException("`" + spec.name() + "` has a signature and no"
+                            + " reading of what the model divides it into");
                 }
                 RowReading seen = Rows.readingFor(byTarget, spec.name());
                 // Counted with nothing a body claims in scope. What was claimed travels beside the
@@ -1236,6 +1240,48 @@ public final class Adequacy {
     }
 
     /**
+     * What a generation comes to where writing a row could not answer a finding, or null where one
+     * could.
+     *
+     * <p>The one place that says which findings a row is an answer to. Two readers ask it and they
+     * ask at different times: a generation asks by producing an outcome for every finding, and
+     * somebody deciding whether to offer an author the work asks before anything is composed,
+     * because composing is what costs. Written twice, the two would come apart the day a strategy
+     * was written for a subject that had none — the offer staying quiet about work that was waiting,
+     * or made for work nothing can do.
+     *
+     * <p>Null and not an arm of the outcome. "A row could answer this" is not something a generation
+     * comes to; it is the absence of a reason it could not, and the answer itself takes the
+     * generation.
+     *
+     * <p>Exhaustive with no {@code default}, so a subject added to a finding is decided here rather
+     * than inheriting whichever answer sat under a catch-all.
+     */
+    public static GenerationOutcome whereNoRowCouldAnswer(About about) {
+        return switch (about) {
+            case About.APointOfABorder _, About.ACaseNoRowAppliesItTo _, About.AClassNoRowIsIn _,
+                 About.AnArmNoRowGoesThrough _ -> null;
+            case About.ACaseNoRowExpects _ -> new GenerationOutcome.NotSupported(
+                    GenerationOutcome.NotSupported.Reason.NO_STRATEGY_FOR_AN_OUTPUT_CASE);
+            // What the rows were seen doing rather than what they owe.
+            case About.ACaseNothingWasSeenToProduce _ ->
+                    new GenerationOutcome.NotApplicable(GenerationOutcome.NotApplicable
+                            .Reason.AN_ACCOUNT_OF_WHAT_THE_ROWS_DID);
+            // What the model says, read to the end. A row does not change it.
+            case About.APositionNoLineDivides _ ->
+                    new GenerationOutcome.NotApplicable(GenerationOutcome.NotApplicable
+                            .Reason.A_FACT_ABOUT_THE_MODEL);
+            // What this compiler could not read. A row would answer a question nothing asked, and
+            // offering one would be reporting our own shortfall as the author's work.
+            case About.APositionThisCouldNotRead _, About.ARuleThisCouldNotRead _,
+                 About.APositionWhoseRulesWereNotReached _,
+                 About.APositionReadWiderThanItsRules _, About.AQuestionNothingAnswered _ ->
+                    new GenerationOutcome.NotApplicable(GenerationOutcome.NotApplicable
+                            .Reason.NOTHING_WAS_MEASURED);
+        };
+    }
+
+    /**
      * Every behavior's rows, for a caller printing a block for the module.
      *
      * <p>Aggregation, as {@link #boundariesOf} is. What a generation costs is paid per behavior it
@@ -1302,7 +1348,7 @@ public final class Adequacy {
     }
 
     /**
-     * What is known about every line each behavior's rules drew.
+     * What the rows established about every line one behavior's rules drew.
      *
      * <p>The one authority on a boundary. Whether a row sits at it and whether a row could sit at it
      * were established in two places under two sets of rules — the report read one, the generator read
@@ -1311,11 +1357,13 @@ public final class Adequacy {
      * the projection could not promise was one the generator had already built a value for and thrown
      * the answer away.
      *
-     * <p>Its own key rather than part of the coverage, because it costs what a coverage count does not:
-     * it puts values through this module's own decoders. Not behind the flag that prints rows, though.
-     * Whether a value can be built is evidence, and whether an author is handed the row that proves it
-     * is a separate request — the first decides what the report may count, so tying it to the second
-     * would make one measure's number depend on another flag.
+     * <p>Nothing is composed here. What a value put through this module's decoders settles is
+     * {@link BoundarySearch}'s, which reads this and adds to it — so what everybody pays for is the
+     * reading, and what costs a decoder run for each point it settles is paid by whoever asked for it.
+     *
+     * <p>Its own key rather than part of the coverage, because the coverage is not the only reader:
+     * what a build is refused over, what a report prints and what a generator offers are three
+     * readings of this one answer and not three measurements.
      */
     public record Boundaries(String name, String behavior)
             implements Key<List<BorderAssessment>> {
@@ -2340,32 +2388,24 @@ public final class Adequacy {
                                                       Hir.SpecBehavior spec) {
             List<GenerationDisposition> out = new ArrayList<>();
             for (Finding finding : findings) {
-                out.add(new GenerationDisposition(finding, switch (finding.about()) {
-                    case About.APointOfABorder(var point) -> atEdge(finding, point, edges);
-                    case About.ACaseNoRowAppliesItTo(var input, var missing) ->
-                            atCase(input, missing, partition, composed, spec);
-                    case About.AClassNoRowIsIn(var missing) -> atClass(missing, composed);
-                    case About.AnArmNoRowGoesThrough(var arm) -> atArm(arm, composed);
-                    case About.ACaseNoRowExpects _ -> new GenerationOutcome.NotSupported(
-                            GenerationOutcome.NotSupported.Reason.NO_STRATEGY_FOR_AN_OUTPUT_CASE);
-                    // What the rows were seen doing rather than what they owe.
-                    case About.ACaseNothingWasSeenToProduce _ ->
-                            new GenerationOutcome.NotApplicable(GenerationOutcome.NotApplicable
-                                    .Reason.AN_ACCOUNT_OF_WHAT_THE_ROWS_DID);
-                    // What the model says, read to the end. A row does not change it.
-                    case About.APositionNoLineDivides _ ->
-                            new GenerationOutcome.NotApplicable(GenerationOutcome.NotApplicable
-                                    .Reason.A_FACT_ABOUT_THE_MODEL);
-                    // What this compiler could not read. A row would answer a question nothing
-                    // asked, and offering one would be reporting our own shortfall as the
-                    // author's work.
-                    case About.APositionThisCouldNotRead _, About.ARuleThisCouldNotRead _,
-                            About.APositionWhoseRulesWereNotReached _,
-                            About.APositionReadWiderThanItsRules _,
-                            About.AQuestionNothingAnswered _ ->
-                            new GenerationOutcome.NotApplicable(GenerationOutcome.NotApplicable
-                                    .Reason.NOTHING_WAS_MEASURED);
-                }));
+                GenerationOutcome none = whereNoRowCouldAnswer(finding.about());
+                out.add(new GenerationDisposition(finding, none != null ? none
+                        : switch (finding.about()) {
+                            case About.APointOfABorder(var point) -> atEdge(finding, point, edges);
+                            case About.ACaseNoRowAppliesItTo(var input, var missing) ->
+                                    atCase(input, missing, partition, composed, spec);
+                            case About.AClassNoRowIsIn(var missing) -> atClass(missing, composed);
+                            case About.AnArmNoRowGoesThrough(var arm) -> atArm(arm, composed);
+                            // The eight above, which is what `none` was not null for.
+                            case About.ACaseNoRowExpects _, About.ACaseNothingWasSeenToProduce _,
+                                    About.APositionNoLineDivides _,
+                                    About.APositionThisCouldNotRead _,
+                                    About.ARuleThisCouldNotRead _,
+                                    About.APositionWhoseRulesWereNotReached _,
+                                    About.APositionReadWiderThanItsRules _,
+                                    About.AQuestionNothingAnswered _ ->
+                                    throw new IllegalStateException(finding.about().toString());
+                        }));
             }
             return out;
         }
@@ -2508,15 +2548,15 @@ public final class Adequacy {
          * "provable" with nothing said about the row that never appeared.
          *
          * <p>The point is the finding's own; what a search made of it is taken from the search this
-         * asked for. The two are readings of one behavior's lines and the finding's may be the older
-         * of them — a report at {@code witness} composes nothing, and a generation asks for the
-         * values whatever the report did — so the attempt is read where it exists rather than off a
-         * copy that predates it.
+         * asked for. The two are readings of one behavior's lines and the finding's is the older of
+         * them — a report composes nothing unless the build asked it to, and a generation asks for
+         * the values whatever the report did — so the attempt is read where it exists rather than
+         * off a reading that predates it.
          *
-         * <p>Found by its border and its role, both of which are values. A gap used to carry a copy
-         * of the axis, the value, the rule and the role, and this matched that copy back three
-         * fields deep — several rules can draw a line at one value and one border owes rows at four
-         * points, so anything less answered a gap with whichever assessment came first.
+         * <p>Which point, asked with the line itself ({@link BorderAssessment#owedAt}). A finding
+         * used to carry a copy of the axis, the value, the rule and the role and this matched that
+         * copy back three fields deep, which does not identify a point: several rules can draw a
+         * line at one value. A border is a value, and two lines that are equal are one line.
          */
         private static GenerationOutcome atEdge(Finding gap, BorderAssessment.Point point,
                                                 List<BorderAssessment> searched) {
@@ -2526,19 +2566,13 @@ public final class Adequacy {
             // is a second criterion, and it said the impossible about the two a build held to
             // reliable domain coverage refuses over.
             String subject = point.said();
-            if (!(point.item() instanceof ItemAssessment.Owed _)) {
+            if (!(BorderAssessment.owedAt(searched, point.border().border(), point.role())
+                    instanceof ItemAssessment.Owed owed)) {
                 // A gap was found at a point nobody is owed a row at, which is the finding and
                 // the assessment disagreeing about the same border rather than a row that could
                 // not be generated.
                 throw new IllegalStateException("a gap at a point nothing owes: " + gap);
             }
-            ItemAssessment.Owed owed = searched.stream()
-                    .filter(each -> each.border().equals(point.border().border()))
-                    .map(each -> each.owedAt(point.role()))
-                    .filter(java.util.Objects::nonNull)
-                    .findFirst()
-                    .orElseThrow(() -> new IllegalStateException(
-                            "the search and the finding are about different lines: " + gap));
             return switch (owed.attempt()) {
                 case ItemAssessment.Attempt.Built built ->
                         new GenerationOutcome.Generated(List.of(built.row()));
@@ -2642,7 +2676,16 @@ public final class Adequacy {
                     // row already sits at and of one nothing measured. Neither is news: saying so
                     // per point would put the compiler's own bookkeeping in a list of an author's
                     // work.
-                    case null -> { }
+                    //
+                    // A point the measurement does say is worth searching is a different thing, and
+                    // it is the same thing `atEdge` refuses: this walks what a search answered, so a
+                    // hole in it is the search having skipped a point it was asked about.
+                    case null -> {
+                        if (each.worthSearching()) {
+                            throw new IllegalStateException("nothing was searched for at a point of "
+                                    + border.label() + " that is worth searching");
+                        }
+                    }
                 }
               }
             }
