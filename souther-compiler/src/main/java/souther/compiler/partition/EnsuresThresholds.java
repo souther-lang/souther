@@ -181,7 +181,7 @@ public final class EnsuresThresholds {
         // said, because a position left out of every answer is reported as one the model draws no
         // line through — and the model says otherwise in the rule this stopped on.
         if (!(e instanceof Core.Binary comparison) || !comparison.op().compares()) {
-            reportUnread(new RuleRef.Ensures(rule.id(), clause), e, rule.value(),
+            reportUnread(new RuleRef.Ensures(rule.id(), clause), e, rule.value(), null,
                     reads, symbols, out.unread());
             return;
         }
@@ -227,16 +227,19 @@ public final class EnsuresThresholds {
             case ComparisonAssessment.AcrossPositions over -> {
                 // The positions are named as ones nothing divides, which is what a rule over a
                 // quantity that is not one position's own values leaves them.
-                reportUnread(new RuleRef.Ensures(rule.id(), clause), comparison,
-                        rule.value(), reads, symbols, out.unread());
+                reportUnread(new RuleRef.Ensures(rule.id(), clause), comparison, rule.value(),
+                        new BlockReason.ComparisonBetweenPositions(), reads, symbols,
+                        out.unread());
                 out.between().add(new LineDrawn(over.cutting(),
                         originOf(rule, clause, over.cutting())));
             }
             // Nothing this reader draws. A comparison it could not read leaves the positions it
-            // names standing, and one it read to the end leaves nothing standing at all.
-            case ComparisonAssessment.Unread _ -> reportUnread(
-                    new RuleRef.Ensures(rule.id(), clause), comparison, rule.value(), reads,
-                    symbols, out.unread());
+            // names standing, in the words the reading that stopped came to — worked out again
+            // here, a comparison whose carrier stopped it would come back as one that relates two
+            // positions, which says no measure is short of anything.
+            case ComparisonAssessment.Unread unread -> reportUnread(
+                    new RuleRef.Ensures(rule.id(), clause), comparison, rule.value(), unread.why(),
+                    reads, symbols, out.unread());
             case ComparisonAssessment.AnswerDependent _, ComparisonAssessment.NoInput _,
                  ComparisonAssessment.CutsNothing _,
                  ComparisonAssessment.OutsideTheDomain _ -> { }
@@ -296,12 +299,14 @@ public final class EnsuresThresholds {
      * of the three reasons that does not turn on what two sides name.
      */
     private static void reportUnread(RuleRef.Ensures rule, Core statement, BindingId answer,
-                                     InputReads reads, Symbols symbols, List<UnreadRule> unread) {
+                                     BlockReason.AboutARule said, InputReads reads,
+                                     Symbols symbols, List<UnreadRule> unread) {
         if (ComparisonAssessment.readsAnswer(statement, answer)) {
             return;
         }
-        BlockReason.AboutARule why = statement instanceof Core.Binary comparison
-                ? GuardThresholds.why(comparison, reads, symbols)
+        // A statement that is not a comparison was not assessed as one, so what stopped this is the
+        // form it is written in — the one of the reasons that does not turn on what two sides name.
+        BlockReason.AboutARule why = said != null ? said
                 : new BlockReason.UnreadComparisonForm();
         souther.compiler.check.RuleCitation cited =
                 souther.compiler.check.RuleCitation.named(rule);

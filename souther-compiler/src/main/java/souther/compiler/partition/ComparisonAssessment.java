@@ -130,21 +130,40 @@ sealed interface ComparisonAssessment {
         if (readsAnswer(comparison, answer)) {
             return new AnswerDependent();
         }
-        // A comparison about no position of the input at all, which is neither a rule read to the
-        // end nor a reading that stopped: there is nothing here for either sentence to be about.
-        boolean names = !GuardThresholds.mentionedIn(comparison, reads, symbols).isEmpty();
+        List<UnreadRule.Coordinate> filedAt = GuardThresholds.filedAt(comparison, reads, symbols);
+        if (filedAt.isEmpty()) {
+            return aboutNoPosition(comparison, reads, symbols);
+        }
         return switch (Cutting.read(behavior, comparison, reads, symbols, quantities)) {
             case Cutting.Read.Cuts cuts -> onTheQuantity(comparison, cuts.cutting());
             // Read to the end and cutting nothing, which is a fact about the rule and not a limit
             // of this compiler: `a <= a` holds of every row.
-            case Cutting.Read.CutsNothing _ -> names ? new CutsNothing() : new NoInput();
+            case Cutting.Read.CutsNothing _ -> new CutsNothing();
             // And where the reading stopped, its own answer for having stopped — decided where it
             // stopped rather than worked out again from the comparison afterwards.
-            case Cutting.Read.Stopped stopped -> names
-                    ? new Unread(stopped.why(),
-                            GuardThresholds.filedAt(comparison, reads, symbols))
-                    : new NoInput();
+            case Cutting.Read.Stopped stopped -> new Unread(stopped.why(), filedAt);
         };
+    }
+
+    /**
+     * What a comparison naming no position of the input comes to.
+     *
+     * <p>Two answers and not one. A comparison of constants is about nowhere, and there is nothing
+     * for a sentence about a position to be about. A comparison over values an operation answered
+     * is about somewhere — the position those values came from — and what the rule says about the
+     * values <em>there</em> is what would take inverting whatever the operation did. Held alike,
+     * the second went out as a rule about nothing, and the position it plainly concerns came back
+     * as one the model states nothing about.
+     */
+    private static ComparisonAssessment aboutNoPosition(Core.Binary comparison, InputReads reads,
+                                                        Symbols symbols) {
+        List<souther.compiler.inputs.TermPath> from = new java.util.ArrayList<>();
+        GuardThresholds.cameFrom(comparison, reads, symbols, from);
+        if (from.isEmpty()) {
+            return new NoInput();
+        }
+        return new Unread(new BlockReason.RuleAboutADerivedValue(),
+                from.stream().map(UnreadRule.Coordinate::at).toList());
     }
 
     /** What a line comes to on the input space, from the quantity it is on. */
