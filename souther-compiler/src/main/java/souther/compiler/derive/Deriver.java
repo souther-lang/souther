@@ -1,13 +1,11 @@
 package souther.compiler.derive;
 
-import souther.compiler.check.AtomSpace;
 import souther.compiler.check.Symbols;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.ast.Hir;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeSymbol;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.check.TypeOps;
 
@@ -22,8 +20,10 @@ import java.util.Optional;
  * of the domain data. Decoders/encoders are not part of the domain syntax (they are a
  * boundary concern); this pass fills them in from field names and types so a domain
  * definition needs only {@code data}/{@code invariant}/{@code behavior}. Conventions:
- * JSON key = field name; single-primitive-field data is a newtype (bare primitive);
- * sum discriminator field = "type", tag = case name.
+ * JSON key = field name; single-primitive-field data is a newtype (bare primitive).
+ *
+ * <p>A sum passes through. How its alternatives are written at the boundary is derived too, but it
+ * is derived where it is read ({@code check.Boundary}) rather than filled in on the declaration.
  */
 public final class Deriver {
 
@@ -40,7 +40,10 @@ public final class Deriver {
         for (Hir.Def def : module.defs()) {
             defs.add(switch (def) {
                 case Hir.Data d -> deriveData(d, symbols);
-                case Hir.SumData s -> deriveSum(s, symbols);
+                // A sum keeps nothing derived. What its alternatives are called at the boundary and
+                // the form they travel in are worked out from the declaration wherever they are
+                // wanted (`check.Boundary`), so there is nothing to fill in here (#994).
+                case Hir.SumData s -> s;
                 case Hir.UnitData u -> u;
             });
         }
@@ -250,48 +253,6 @@ public final class Deriver {
             }
         }
         return d.pos();
-    }
-
-    // --- sum derivation ---
-
-    private static Hir.SumData deriveSum(Hir.SumData s, Symbols symbols) {
-        // What a value of the sum can be, with nested sums descended to their leaves —
-        // `費用負担区分 = 自社負担 | 先方負担` where `自社負担 = 立替 | 仮払い | 会社カード` dispatches over
-        // 立替 / 仮払い / 会社カード / 先方負担 (spec §sum-data, §sum-discrimination). The descent is
-        // AtomSpace's and not written again here: an atom is one per TypeSymbol, which is what a
-        // variant is about, and asking it in the written name's terms answered a leaf two of the
-        // cases reach once per case (#990).
-        List<TypeSymbol> atoms = AtomSpace.subjectAtoms(Type.ref(s.declares()), symbols);
-        Optional<Hir.Discriminate> decoder = s.decoder().isPresent()
-                ? s.decoder()
-                : Optional.of(new Hir.Discriminate("type", tagVariants(s, atoms), s.pos()));
-        Optional<Hir.SumEncoder> encoder = s.encoder().isPresent()
-                ? s.encoder()
-                : Optional.of(new Hir.SumEncoder("type", encVariants(s, atoms), s.pos()));
-        return new Hir.SumData(s.written(), s.declares(), s.cases(), decoder, encoder, s.pos());
-    }
-
-    /**
-     * The variant an atom is dispatched to, on either side.
-     *
-     * <p>The tag and the case are read off the one atom, so the two cannot name different types.
-     * The name is written here rather than carried from the declaration: a leaf two of the sum's
-     * cases reach is written twice, and neither occurrence is the one a variant is about.
-     */
-    private static List<Hir.Variant> tagVariants(Hir.SumData s, List<TypeSymbol> atoms) {
-        List<Hir.Variant> variants = new ArrayList<>();
-        for (TypeSymbol atom : atoms) {
-            variants.add(new Hir.Variant(atom.name(), Hir.Name.resolved(atom, s.pos()), s.pos()));
-        }
-        return variants;
-    }
-
-    private static List<Hir.EncVariant> encVariants(Hir.SumData s, List<TypeSymbol> atoms) {
-        List<Hir.EncVariant> variants = new ArrayList<>();
-        for (TypeSymbol atom : atoms) {
-            variants.add(new Hir.EncVariant(Hir.Name.resolved(atom, s.pos()), atom.name(), s.pos()));
-        }
-        return variants;
     }
 
     /**

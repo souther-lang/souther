@@ -3,9 +3,9 @@ package souther.compiler.examples;
 import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.AtomSpace;
+import souther.compiler.check.Boundary;
 import souther.compiler.check.FixtureEvidence;
 import souther.compiler.check.Symbols;
-import souther.compiler.check.TypeOps;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
@@ -170,19 +170,23 @@ final class NeutralForm {
      * sum `依頼` — the same way the domain writes a construction, and the sum it is read through is
      * what puts the tag on a key beside it.
      *
-     * <p>The key and the tag are the sum's own, read off the decoder {@link souther.compiler.derive.Deriver}
-     * derived for it and {@code CodecGen} emits — not decided again here. A derived decoder dispatches
-     * over the leaves of the sums it names (spec §sum-discrimination), so a case reached through a
-     * nested sum is listed by the position's own decoder and there is nothing to walk. Issue #683 was
-     * this being answered by searching every visible sum for one that lists the case, which is a
-     * question about the case rather than about the position it stands at.
+     * <p>The key and the tag are the sum's own, read off {@link souther.compiler.check.Boundary} —
+     * the same answer the sum's generated decoder and encoder are built from, and not decided again
+     * here. What that settles is the leaves of the sums the position names (spec
+     * §sum-discrimination), so a case reached through a nested sum is one of them and there is
+     * nothing to walk. Issue #683 was this being answered by searching every visible sum for one
+     * that lists the case, which is a question about the case rather than about the position it
+     * stands at.
      *
      * <p>{@link Position.Unread} writes nothing, and nothing is worked out for it. A place no type
      * reads asks for nothing beside the case, so what stands there is the case's own form — which is
-     * what a position typed by the case itself writes, and what a union answer writes, since a union
-     * has no decoder to read a discriminator with. Asking the sums that list the case instead is the
-     * same question as above with the position dropped from it, and it makes a value's form move when
-     * a sum nothing here reads it through is declared.
+     * what a position typed by the case itself writes. Asking the sums that list the case instead is
+     * the same question as above with the position dropped from it, and it makes a value's form move
+     * when a sum nothing here reads it through is declared.
+     *
+     * <p>A behavior's answer union does not arrive here. It has no declaration to read a
+     * discriminator off, and where its members are all units it is written as a bare tag before this
+     * is reached ({@link #readsABareName}) — which is what its generated encoder writes.
      *
      * <p>A field the fixture wrote itself is never replaced. A case whose own field is named like its
      * sum's discriminator is already ambiguous at the boundary — the case encoder and the sum encoder
@@ -198,15 +202,19 @@ final class NeutralForm {
         // as a behavior's own answer and has no decoder — and a place nothing reads.
         if (!(position.opened() instanceof Position.At(Type type))
                 || !(type instanceof Type.Ref ref)
-                || !(symbols.declarations().declaration(ref.name().key()) instanceof Hir.SumData sum)
-                || sum.decoder().isEmpty()) {
+                || !(symbols.declarations().declaration(ref.name().key()) instanceof Hir.SumData)) {
             return;
         }
-        Hir.Discriminate reads = sum.decoder().get();
-        for (Hir.Variant variant : reads.variants()) {
-            if (variant.caseType().answered() instanceof Hir.Name.Denoting names
-                    && caseName.equals(names.type())) {
-                map.putIfAbsent(reads.key(), variant.tag());
+        // What the sum's own decoder reads, read from where that is settled rather than from a copy
+        // of it kept on the declaration. A fixture that wrote a tag of its own would be a value the
+        // generated decoder cannot read.
+        Boundary.Alternatives alternatives = Boundary.of(type, symbols);
+        if (!(alternatives.representation() instanceof Boundary.Representation.Discriminated(String key))) {
+            return;
+        }
+        for (Boundary.WireCase wire : alternatives.wireCases()) {
+            if (caseName.equals(wire.atom())) {
+                map.putIfAbsent(key, wire.tag());
                 return;
             }
         }
@@ -392,7 +400,8 @@ final class NeutralForm {
      */
     boolean readsABareName(Position position) {
         return position.opened() instanceof Position.At(Type type)
-                && TypeOps.isUnitOnlySum(type, symbols);
+                && Boundary.of(type, symbols).representation()
+                        instanceof Boundary.Representation.Enumeration;
     }
 
     /** A data's fields by name, following the `...includes` it composes in (spec §data). */
