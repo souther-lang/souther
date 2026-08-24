@@ -176,23 +176,33 @@ class AdequacyLensTest {
     }
 
     /**
-     * And nothing is offered where no value was composed, whatever the notes say.
+     * The rows at an edge are offered whatever the build was measuring.
      *
-     * <p>An offer to write rows has to write rows. At {@code witness} nothing is composed — a
-     * candidate costs a decoder run for each point it settles, which is not what that level
-     * promises — so the block holds the reason and no row, and an editor reading the block for
-     * whether there is work would offer to write rows and put a comment in somebody's source
-     * (issue #955). What there is to write is the generator's answer.
+     * <p>What an author asked for by taking "write the rows this does not cover" is those rows.
+     * Composing a value costs a decoder run for each point it settles, which is not what a build at
+     * {@code witness} promises — so the measurement composes none, and a build is not slowed by
+     * values nobody asked to see. But taking the action is asking, and it is asked once rather than
+     * on every keystroke, so what it costs is paid where somebody wanted it.
+     *
+     * <p>The level does not decide it, because it is not about how much to measure. Read off the
+     * level, the editor offered to write rows at {@code witness} and put a comment in somebody's
+     * source, since the block held the reason nothing was composed and no rows.
+     *
+     * <p>An offer to write rows still has to write rows. What there is to write is the generator's
+     * answer either way, and the block is asked how many rows it holds rather than whether its text
+     * is blank.
      */
     @Test
-    void nothingIsOfferedWhereNoValueWasComposed() {
+    void theRowsAtAnEdgeAreOfferedWhateverTheBuildMeasured() {
         assertEquals(1, measuring(Adequacy.Level.ALL)
                         .codeActions(EDGES, ONLY_EDGES, on(7),
                                 graphOf(Map.of(EDGES, ONLY_EDGES))).size(),
                 "at `all` the two lines are rows to write");
 
-        assertEquals(List.of(), measuring(Adequacy.Level.WITNESS)
-                .codeActions(EDGES, ONLY_EDGES, on(7), graphOf(Map.of(EDGES, ONLY_EDGES))));
+        assertEquals(1, measuring(Adequacy.Level.WITNESS)
+                        .codeActions(EDGES, ONLY_EDGES, on(7),
+                                graphOf(Map.of(EDGES, ONLY_EDGES))).size(),
+                "and at `witness` they are the same rows: taking the action is what asks for them");
     }
 
     /** With one document there is nothing to offer: the values a row writes are built through the

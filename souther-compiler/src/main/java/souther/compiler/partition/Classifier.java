@@ -22,7 +22,7 @@ import java.util.List;
  * which is a value; one of these is made from one of those by {@link Recognitions#reading}, wherever
  * something is about to read a row. Nothing builds one any other way — a class whose meaning existed
  * only inside a function it had been handed could not be compared with another class and could not
- * be kept in an answer (issue #1001).
+ * be kept in an answer.
  */
 @FunctionalInterface
 public interface Classifier {

@@ -222,7 +222,7 @@ class ARunBoundedAtBothEndsIsLookedInsideTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, List<BorderAssessment>> boundaries =
-                Adequacy.boundariesOf(compilation.db(), "example.form");
+                Adequacy.searchedBoundariesOf(compilation.db(), "example.form");
         assertNotNull(boundaries, "the model under test compiles");
         Map<String, BorderAssessment> out = new java.util.LinkedHashMap<>();
         boundaries.values().forEach(each -> each.forEach(b -> out.put(b.label(), b)));

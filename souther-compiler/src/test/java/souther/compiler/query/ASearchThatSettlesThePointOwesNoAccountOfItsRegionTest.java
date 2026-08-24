@@ -112,7 +112,7 @@ class ASearchThatSettlesThePointOwesNoAccountOfItsRegionTest {
                 new Generator.GeneratedRow(
                         new Generator.Purpose.ForAPoint("p.x = 11"), List.of()), region())
                 .unaccountedFor());
-        assertEquals(List.of(), new ItemAssessment.Attempt.NotAttempted(
+        assertEquals(List.of(), new ItemAssessment.Attempt.Unavailable(
                 ItemAssessment.Attempt.Reason.NO_CLASSES).unaccountedFor());
     }
 }

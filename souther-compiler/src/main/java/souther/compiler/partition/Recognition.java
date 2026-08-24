@@ -22,7 +22,7 @@ import java.util.List;
  * edit is absorbed by an answer coming out equal to the one it replaces ({@code Key}). A class
  * carrying a lambda compares by identity, so the partitioning it belongs to could never be an answer
  * — and it was not one: three separate readers worked out the same partitioning for themselves from
- * the declarations, which is one meaning derived in three places (issue #1001).
+ * the declarations, which is one meaning derived in three places.
  *
  * <p>Every arm here was a lambda written at one place in this package. Which arms there are is
  * therefore a closed question about what this compiler distinguishes today, and a distinction added

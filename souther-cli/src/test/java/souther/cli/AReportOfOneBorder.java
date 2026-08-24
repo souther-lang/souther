@@ -120,8 +120,7 @@ final class AReportOfOneBorder {
             // was at the point while handing in a coverage that says none is.
             items.put(role, new ItemAssessment.Owed(border.demand(role).criterion(),
                     coverage.apply(role), true,
-                    new ItemAssessment.Attempt.NotAttempted(
-                            ItemAssessment.Attempt.Reason.A_ROW_IS_ALREADY_THERE)));
+                    null));
         }
         return new BorderAssessment(border, items);
     }

@@ -17,6 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -356,11 +357,8 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
         assertTrue(ItemAssessment.Coverage.hit(line.owedAt(PointRole.IN).coverage()), "a row is well under the line");
         assertTrue(ItemAssessment.Coverage.hit(line.owedAt(PointRole.OUT).coverage()), "and one is well over it");
         for (PointRole role : List.of(PointRole.IN, PointRole.OUT)) {
-            assertEquals(souther.compiler.query.ItemAssessment.Attempt.Reason
-                            .A_ROW_IS_ALREADY_THERE,
-                    assertInstanceOf(souther.compiler.query.ItemAssessment.Attempt.NotAttempted.class,
-                            line.owedAt(role).attempt(), role.toString()).reason(),
-                    role.toString());
+            assertFalse(line.owedAt(role).worthSearching(), role.toString());
+            assertNull(line.owedAt(role).attempt(), role.toString());
         }
 
         // And the block an author reads says nothing about them, because nothing is owed there.

@@ -50,7 +50,7 @@ public final class Partitions {
      * <p><b>What it is, and nothing about who read it.</b> The reading of the declarations is what
      * this is worked out from, and it used to be carried here as well — so the geometry compared by
      * which reading had built it, and could not be an answer this compiler keeps. It is one now, and
-     * the reading is handed to the few places that go on asking it further questions (issue #1001).
+     * the reading is handed to the few places that go on asking it further questions.
      *
      * @param axes the positions this behavior is measured at, in parameter order. Every position
      *             the model divides is one of them: what a behavior is measured at is settled by
