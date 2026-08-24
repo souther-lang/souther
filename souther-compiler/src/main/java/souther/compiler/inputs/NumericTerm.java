@@ -92,13 +92,17 @@ public sealed interface NumericTerm permits NumericTerm.ValueOf, NumericTerm.Tak
          * Built only where the operation and what stands at the location have been put to the one
          * predicate that says whether they go together.
          *
-         * <p>Package-private, so {@link #of} is the way in. A record's canonical constructor
-         * promises that any combination of its components is a value, and these two are not: an
-         * account of what is taken is written for a shape, and an operation over a shape the
-         * location does not have is a term whose reading would apply that account to whatever
-         * happened to be there.
+         * <p>Private, so {@link #of} is the way in and not merely the way in from outside this
+         * package. A record's canonical constructor promises that any combination of its components
+         * is a value, and these two are not: an account of what is taken is written for a shape, and
+         * an operation over a shape the location does not have is a term whose reading would apply
+         * that account to whatever happened to be there.
+         *
+         * <p>Package-private was the same premise a boundary further out — true of whoever writes in
+         * this package rather than of the term — and this package's own tests were already going
+         * round it (#1027).
          */
-        TakenOf(ValueName.Stdlib operation, TermPath path) {
+        private TakenOf(ValueName.Stdlib operation, TermPath path) {
             this.operation = java.util.Objects.requireNonNull(operation,
                     "a taken number is taken by an operation");
             this.path = java.util.Objects.requireNonNull(path, "and taken of somewhere");

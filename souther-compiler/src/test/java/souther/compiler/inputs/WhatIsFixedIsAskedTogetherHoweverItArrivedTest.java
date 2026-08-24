@@ -21,6 +21,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -208,10 +209,7 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
     @Test
     void aCountFixedBelowNoneLeavesNothingThoughNoClauseSaysSo() {
         Read read = read(BAG, "take");
-        NumericTerm size = new NumericTerm.TakenOf(
-                souther.compiler.check.NumericMeasures.takenOf(
-                        read.inputs().at(TermPath.of("b").then("xs")).type(), read.symbols()),
-                TermPath.of("b").then("xs"));
+        NumericTerm size = takenOfWhatIsThere(read, TermPath.of("b").then("xs"));
         Quantities asked = read.inputs().quantities(read.symbols());
 
         assertTrue(asked.given(size, count(-1)).emptiness().isPresent());
@@ -435,9 +433,18 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
     }
 
     private static NumericTerm size(Read read, String field) {
-        TermPath at = TermPath.of("p").then(field);
-        return new NumericTerm.TakenOf(souther.compiler.check.NumericMeasures.takenOf(
-                read.inputs().at(at).type(), read.symbols()), at);
+        return takenOfWhatIsThere(read, TermPath.of("p").then(field));
+    }
+
+    /** The term for the number that counts what stands at {@code at}, built the way the compiler
+     *  builds one: through the factory that holds the operation to what is there. */
+    private static NumericTerm takenOfWhatIsThere(Read read, TermPath at) {
+        souther.compiler.types.Type type = read.inputs().at(at).type();
+        NumericTerm.TakenOf made = NumericTerm.TakenOf.of(
+                souther.compiler.check.NumericMeasures.takenOf(type, read.symbols()),
+                at, type, read.symbols());
+        assertNotNull(made, at + " is counted by what its type is counted by");
+        return made;
     }
 
     /** A collection nothing bounds, so only what a count guarantees of itself is left to refuse
