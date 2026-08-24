@@ -59,14 +59,8 @@ final class OperationFactBinder {
             // No default. A kind of fact added is a kind this has to say how to hold, rather than
             // one that passes through unchecked because nothing here mentions it.
             switch (each.fact()) {
-                // Every argument the form names, and each held to having a count: the form is
-                // arithmetic over what its arguments are counted as, so an argument with no number
-                // under it is one the form could not be about.
                 case OperationFact.AnswersAFormOfItsArguments answers ->
-                        answers.form().coefs().keySet().forEach(argument ->
-                                DischargeRules.holdToTheDeclaration(each.operation(), argument,
-                                        null, Question::countsToANumber,
-                                        "an argument the result is a form of"));
+                        DischargeRules.holdAFormOfItsArguments(each.operation(), answers.form());
                 // Both arguments, because which is the greater and which the lesser are one
                 // statement and a signature could disagree with either half.
                 case OperationFact.StatesTheOrderOfItsArguments states -> {

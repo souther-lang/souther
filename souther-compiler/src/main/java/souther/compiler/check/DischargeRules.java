@@ -519,12 +519,7 @@ final class DischargeRules {
      * anywhere. Held here, before any call is read.
      */
     static void holdNumericResult(ValueName operation, NumericResult rule) {
-        Prelude.PreludeEntry entry = Prelude.entry(((ValueName.Stdlib) operation).qualified());
-        if (entry == null) {
-            throw new IllegalStateException("a rule about what number it computes is written for "
-                    + operation + ", which the library does not declare");
-        }
-        Prelude.Signature signature = entry.signature();
+        Prelude.Signature signature = holdTheOperationToTheLibrary(operation).signature();
         Type answers = Question.numberAnsweredBy(signature.result());
         List<Arithmetic.Reads> reads = rule.computes().reads();
         if (signature.params().size() != reads.size()) {
@@ -539,13 +534,9 @@ final class DischargeRules {
             }
         }
         switch (rule.at()) {
-            case NumericResult.Answered.Directly ignored -> {
-                if (!Question.isANumber(signature.result())) {
-                    throw new IllegalStateException(operation + " answers "
-                            + Type.show(signature.result())
-                            + ", so the number it computes is not its result");
-                }
-            }
+            case NumericResult.Answered.Directly ignored ->
+                    holdTheResultToTheDeclaration(operation, Question::isANumber,
+                            "a number for the arithmetic it computes to be answered at");
             case NumericResult.Answered.InTheCaseCarrying(Type carried) -> {
                 if (!(signature.result() instanceof Type.Union(Set<TypeSymbol> members))) {
                     throw new IllegalStateException(operation + " answers "
@@ -596,7 +587,7 @@ final class DischargeRules {
             throw new IllegalStateException("the rule about " + operation + " counts through "
                     + shift.measure().qualified() + ", which the library does not declare");
         }
-        Prelude.PreludeEntry shifted = Prelude.entry(((ValueName.Stdlib) operation).qualified());
+        Prelude.PreludeEntry shifted = holdTheOperationToTheLibrary(operation);
         List<Type> counted = counts.signature().params();
         if (counted.size() != 2 || !Question.isANumber(counts.signature().result())
                 || !counted.get(0).equals(shifted.signature().result())
@@ -611,6 +602,8 @@ final class DischargeRules {
     /** As {@link #bind}, for the arguments a case names: the one it answers, and the two sides of
      * each condition it is reached under. */
     static void holdCase(ValueName operation, OperationFact.Case one) {
+        holdTheResultToTheDeclaration(operation, Question::isANumber,
+                "a number for a case of the definition to answer");
         List<ArgumentRef> named = new ArrayList<>();
         named.add(one.answers());
         one.given().forEach(stands -> {
@@ -624,6 +617,8 @@ final class DischargeRules {
     /** As {@link #bind}, for the arguments a bound names: the one the result is bounded against, and
      * the one a condition on the rule reads. Each is a separate claim about a separate argument. */
     static void holdBound(ValueName operation, ResultBound bound) {
+        holdTheResultToTheDeclaration(operation, Question::isANumber,
+                "a number for a bound on the result to hold of");
         List<ArgumentRef> named = new ArrayList<>();
         if (bound.against() != null) {
             named.add(bound.against());
@@ -686,6 +681,57 @@ final class DischargeRules {
                     + ", which the library does not declare");
         }
         return entry;
+    }
+
+    /**
+     * The library's declaration of {@code operation}, once what it answers is what a fact about its
+     * result is about.
+     *
+     * <p>Beside {@link #holdToTheDeclaration} and for the half it cannot reach. That one names an
+     * argument, so a fact whose proposition mentions the result had nothing to say it with, and
+     * each kind that needed the result said it its own way or not at all: {@code BoundsItsResult}
+     * and {@code IsDefinedByCases} are stated of a number and were held only of their arguments.
+     * Improvising a check per kind defaults to omitting it, which is how a fact naming no argument
+     * once went through an empty arm ({@link #holdTheOperationToTheLibrary}).
+     *
+     * <p>What is required is the caller's, since what a fact says of the result is the fact's. A
+     * form is about a count and a bound about a number, and the difference between those two is a
+     * difference between the propositions and not between two ways of holding one.
+     */
+    static Prelude.Signature holdTheResultToTheDeclaration(ValueName operation,
+            Predicate<Type> required, String what) {
+        Prelude.Signature signature = holdTheOperationToTheLibrary(operation).signature();
+        Type result = signature.result();
+        if (result == null || !required.test(result)) {
+            throw new IllegalStateException("what " + ((ValueName.Stdlib) operation).qualified()
+                    + " answers is " + (result == null ? "left to its body" : Type.show(result))
+                    + ", which is not " + what);
+        }
+        return signature;
+    }
+
+    /**
+     * Holds a declared form to the library: what it answers counts, and so does every argument it
+     * is written over.
+     *
+     * <p>Both ends, because the fact is an equation between them —
+     * {@code count(result) = Σ cᵢ·count(argᵢ) + k}. Held of the arguments alone it was half a
+     * statement: {@code List.take(n, xs)} declared to answer the number of its first argument
+     * passed, that argument being an {@code Int}, while what it answers is a list and has no count
+     * for the equation to be about.
+     *
+     * <p>Counted rather than a number, because that is what the fact says. A date is no number and
+     * counts days; whether this check can then do anything with such a form is a different question
+     * and belongs to the check ({@link #formOperationsThisCarries}).
+     */
+    static void holdAFormOfItsArguments(ValueName operation,
+            souther.compiler.numeric.NumericDomain.LinearForm<ArgumentRef> form) {
+        holdTheResultToTheDeclaration(operation, Question::countsToANumber,
+                "a value with a count for a form of its arguments to be about");
+        for (ArgumentRef argument : form.coefs().keySet()) {
+            holdToTheDeclaration(operation, argument, null, Question::countsToANumber,
+                    "an argument the result is a form of");
+        }
     }
 
     /** The same, for one rule. Asked per rule so that whatever holds a whole declaration source can
