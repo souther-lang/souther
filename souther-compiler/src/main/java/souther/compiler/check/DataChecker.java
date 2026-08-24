@@ -414,67 +414,23 @@ public final class DataChecker {
             throw CompileException.of(Diagnostic
                             .at(sum.pos()).say(new BehaviorMessage.ASumContainsItself(sum.name(), String.join(" | ", cycle))).build());
         }
-        sum.decoder().ifPresent(disc -> {
-            // a derived codec dispatches over the leaves, so a nested sum's cases count too (§sum-data,
-            // §sum-discrimination)
-            List<TypeSymbol> dispatchable = AtomSpace.subjectAtoms(Type.ref(sum.declares()), symbols);
-            for (Hir.Variant v : disc.variants()) {
-                Hir.Def caseDef = symbols.declarations().declaration(names(v.caseType()).key());
-                if (!dispatchable.contains(names(v.caseType()))) {
-                    throw CompileException.of(Diagnostic.at(v.pos())
-                            .say(new CodecMessage.NotACaseOf(v.caseType().written(), sum.name()))
-                            .build());
-                }
-                // a unit-data case has an implicit (field-less) decoder generated on its class;
-                // a case may itself be a sum (spec §sum-data's nested `自社負担 | 先方負担`)
-                boolean caseDecodes = caseDef instanceof Hir.UnitData
-                        || (caseDef instanceof Hir.Data d && d.decoder().isPresent())
-                        || (caseDef instanceof Hir.SumData s && s.decoder().isPresent());
-                if (!caseDecodes) {
-                    throw CompileException.of(Diagnostic.at(v.pos())
-                            .say(new CodecMessage.CaseNeedsADecoder(v.caseType().written()))
-                            .build());
-                }
-            }
-        });
-        sum.encoder().ifPresent(enc -> {
-            // A case lays its fields flatly beside the discriminator the sum writes, so a case
-            // declaring a field of that name and the tag want one key. Refused here rather than
-            // written over where it is encoded, which would lose the value with nothing said.
-            TypeSymbol carrying = TypeOps.memberCarryingField(
-                    Type.ref(sum.declares()), enc.key(), symbols);
+        // A case lays its fields flatly beside the discriminator the sum writes, so a case declaring
+        // a field of that name and the tag want one key. Refused here rather than written over where
+        // it is encoded, which would lose the value with nothing said.
+        //
+        // The key is read off the settled representation and not written here. A behavior's output
+        // union is under the same rule and reads it from the same place (`SpecChecker`), so the two
+        // cannot come to be checked against different keys — and an enumeration, which writes no key,
+        // is not asked.
+        if (Boundary.of(Type.ref(sum.declares()), symbols).representation()
+                instanceof Boundary.Representation.Discriminated(String key)) {
+            TypeSymbol carrying = TypeOps.memberCarryingField(Type.ref(sum.declares()), key, symbols);
             if (carrying != null) {
                 throw CompileException.of(Diagnostic
                                 .at(sum.pos())
-                                .hint(new DataMessage.TheTagAndTheFieldWantOneKey(enc.key())).say(new DataMessage.ACaseDeclaresTheDiscriminatorField(carrying.name(), enc.key(), sum.name())).build());
+                                .hint(new DataMessage.TheTagAndTheFieldWantOneKey(key)).say(new DataMessage.ACaseDeclaresTheDiscriminatorField(carrying.name(), key, sum.name())).build());
             }
-            Set<TypeSymbol> covered = new HashSet<>();
-            List<TypeSymbol> encodable = AtomSpace.subjectAtoms(Type.ref(sum.declares()), symbols);
-            for (Hir.EncVariant v : enc.variants()) {
-                if (!encodable.contains(names(v.caseType()))) {
-                    throw CompileException.of(Diagnostic.at(v.pos())
-                            .say(new CodecMessage.NotACaseOf(v.caseType().written(), sum.name()))
-                            .build());
-                }
-                Hir.Def caseDef = symbols.declarations().declaration(names(v.caseType()).key());
-                boolean caseEncodes = caseDef instanceof Hir.UnitData
-                        || (caseDef instanceof Hir.Data d && d.encoder().isPresent())
-                        || (caseDef instanceof Hir.SumData s && s.encoder().isPresent());
-                if (!caseEncodes) {
-                    throw CompileException.of(Diagnostic.at(v.pos())
-                            .say(new CodecMessage.CaseNeedsAnEncoder(v.caseType().written()))
-                            .build());
-                }
-                covered.add(names(v.caseType()));
-            }
-            for (TypeSymbol caseName : encodable) {
-                if (!covered.contains(caseName)) {
-                    throw CompileException.of(Diagnostic.at(enc.pos())
-                            .say(new CodecMessage.TheEncoderIsMissingACase(sum.name(), caseName.name()))
-                            .build());
-                }
-            }
-        });
+        }
     }
 
     /**
@@ -729,7 +685,10 @@ public final class DataChecker {
     private static boolean hasDecoder(Hir.Def def) {
         return switch (def) {
             case Hir.Data d -> d.decoder().isPresent();
-            case Hir.SumData s -> s.decoder().isPresent();
+            // A sum is always read: how its alternatives are told apart is derived from the
+            // declaration wherever it is wanted, so there is no state in which it has no decoder —
+            // the same reason a unit data has none to carry and is decoded all the same.
+            case Hir.SumData _ -> true;
             case Hir.UnitData _ -> true;
             case null -> false;
         };
@@ -739,7 +698,7 @@ public final class DataChecker {
     private static boolean hasEncoder(Hir.Def def) {
         return switch (def) {
             case Hir.Data d -> d.encoder().isPresent();
-            case Hir.SumData s -> s.encoder().isPresent();
+            case Hir.SumData _ -> true;
             case Hir.UnitData _ -> true;
             case null -> false;
         };
@@ -1032,7 +991,7 @@ public final class DataChecker {
                 // the element may be a product or a sum: `List<事前承認理由>` holds a sum (spec §encoder-derivation)
                 Hir.Def def = symbols.declarations().declaration(names(d.typeName()).key());
                 boolean hasEncoder = (def instanceof Hir.Data dd && dd.encoder().isPresent())
-                        || (def instanceof Hir.SumData sd && sd.encoder().isPresent());
+                        || def instanceof Hir.SumData;
                 if (!elemType.equals(Type.ref(names(d.typeName()))) || !hasEncoder) {
                     throw elemEncMismatch(d.typeName().written(), elemType, pos);
                 }

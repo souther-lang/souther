@@ -2,25 +2,9 @@ package souther.compiler.diag.msg;
 
 import souther.compiler.diag.DiagnosticCode;
 
-/** What a written codec is told: a case it names that is not one, a shape it does not agree with,
- * and a type it is asked for where there is none. */
+/** What a written codec is told: a shape it does not agree with, and a type it is asked for where
+ * there is none. */
 public sealed interface CodecMessage extends Message {
-
-    /** The codec names a case the sum does not have. */
-    @Code(DiagnosticCode.E2201)
-    record NotACaseOf(String caseName, String sum) implements CodecMessage, Reported {}
-
-    /** A case of a decoded sum has no decoder of its own. */
-    @Code(DiagnosticCode.E2201)
-    record CaseNeedsADecoder(String caseName) implements CodecMessage, Reported {}
-
-    /** A case of an encoded sum has no encoder of its own. */
-    @Code(DiagnosticCode.E2201)
-    record CaseNeedsAnEncoder(String caseName) implements CodecMessage, Reported {}
-
-    /** The encoder leaves one of the sum's cases out. */
-    @Code(DiagnosticCode.E2201)
-    record TheEncoderIsMissingACase(String sum, String caseName) implements CodecMessage, Reported {}
 
     /** An ISO text encoder is given something that is not a temporal value. */
     @Code(DiagnosticCode.E2201)

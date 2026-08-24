@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.check.AtomSpace;
+import souther.compiler.check.Boundary;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
@@ -27,10 +28,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * carried one case twice (#990). Nothing said so: both readers take the first variant whose tag or
  * case answers, so the second was never reached.
  *
- * <p>Held against {@link AtomSpace} rather than against a written-out list, so what a variant is
- * about and what an atom is stay one answer. The decoder and the encoder are held against it
- * separately and against each other: they are two lists today, and two lists agree by coincidence
- * unless something says they do not.
+ * <p>Held against {@link AtomSpace} rather than against a written-out list, so what a wire case is
+ * about and what an atom is stay one answer. The decoder and the encoder used to be two lists on the
+ * declaration, and this held each against the atoms and the two against each other; there is one
+ * list now ({@link Boundary}), so the agreement is by construction and what is left to hold is that
+ * the one list is the atoms.
  */
 class ADerivedSumCodecHasOneVariantPerAtomTest {
 
@@ -55,21 +57,13 @@ class ADerivedSumCodecHasOneVariantPerAtomTest {
 
     @Test
     void theVariantsAreTheAtomsInTheirOrder() {
-        assertEquals(atomsOf("Both"), decoderCases("Both"));
-        assertEquals(atomsOf("Both"), encoderCases("Both"));
+        assertEquals(atomsOf("Both"), wireAtoms("Both"));
     }
 
-    /** The tag names the case it dispatches to, on both sides. */
+    /** The tag names the case it dispatches to. */
     @Test
     void theTagAndTheCaseNameOneType() {
         assertEquals(names(atomsOf("Both")), tagsOf("Both"));
-        assertEquals(names(atomsOf("Both")), encoderTagsOf("Both"));
-    }
-
-    @Test
-    void theDecoderAndTheEncoderDispatchOverTheSameCases() {
-        assertEquals(decoderCases("Both"), encoderCases("Both"));
-        assertEquals(tagsOf("Both"), encoderTagsOf("Both"));
     }
 
     /** A sum no case of which is reached twice is unchanged by any of this. */
@@ -81,22 +75,15 @@ class ADerivedSumCodecHasOneVariantPerAtomTest {
     // --- helpers ---------------------------------------------------------------------------------
 
     private List<String> tagsOf(String sum) {
-        return sumData(sum).decoder().orElseThrow().variants().stream().map(Hir.Variant::tag).toList();
+        return settled(sum).wireCases().stream().map(Boundary.WireCase::tag).toList();
     }
 
-    private List<String> encoderTagsOf(String sum) {
-        return sumData(sum).encoder().orElseThrow().variants().stream()
-                .map(Hir.EncVariant::tag).toList();
+    private List<TypeSymbol> wireAtoms(String sum) {
+        return settled(sum).wireCases().stream().map(Boundary.WireCase::atom).toList();
     }
 
-    private List<TypeSymbol> decoderCases(String sum) {
-        return sumData(sum).decoder().orElseThrow().variants().stream()
-                .map(v -> v.caseType().answered().type()).toList();
-    }
-
-    private List<TypeSymbol> encoderCases(String sum) {
-        return sumData(sum).encoder().orElseThrow().variants().stream()
-                .map(v -> v.caseType().answered().type()).toList();
+    private Boundary.Alternatives settled(String sum) {
+        return Boundary.of(Type.ref(sumData(sum).declares()), TypeChecker.symbols(derived));
     }
 
     private List<TypeSymbol> atomsOf(String sum) {

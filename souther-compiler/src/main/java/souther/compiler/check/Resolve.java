@@ -986,9 +986,7 @@ public final class Resolve {
                         d.decoder().map(this::decoder), d.encoder().map(this::encoder),
                         d.pos());
             }
-            case Ast.SumData s -> new Hir.SumData(s.written(), declared, sumCases(s),
-                    s.decoder().map(this::discriminate),
-                    s.encoder().map(this::sumEncoder), s.pos());
+            case Ast.SumData s -> new Hir.SumData(s.written(), declared, sumCases(s), s.pos());
         };
     }
 
@@ -1049,21 +1047,6 @@ public final class Resolve {
         return bound;
     }
 
-    private Hir.Discriminate discriminate(Ast.Discriminate d) {
-        List<Hir.Variant> variants = new ArrayList<>();
-        for (Ast.Variant v : d.variants()) {
-            variants.add(new Hir.Variant(v.tag(), type(v.caseType()), v.pos()));
-        }
-        return new Hir.Discriminate(d.key(), variants, d.pos());
-    }
-
-    private Hir.SumEncoder sumEncoder(Ast.SumEncoder e) {
-        List<Hir.EncVariant> variants = new ArrayList<>();
-        for (Ast.EncVariant v : e.variants()) {
-            variants.add(new Hir.EncVariant(type(v.caseType()), v.tag(), v.pos()));
-        }
-        return new Hir.SumEncoder(e.key(), variants, e.pos());
-    }
 
     // --- decoders ---
 

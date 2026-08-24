@@ -697,18 +697,12 @@ public interface Ast {
         }
     }
 
-    /** A sum data definition {@code data X = A | B | ...} with optional discriminate decoder/encoder. */
+    /** A sum data definition {@code data X = A | B | ...}. Carries no boundary representation — see
+     *  {@link Hir.SumData}. */
     record SumData(WrittenName written,
                    String declaredIn,
                    List<Name> cases,
-                   Optional<Discriminate> decoder,
-                   Optional<SumEncoder> encoder,
                    SourcePos pos) implements Def {}
-
-    /** {@code encoder discriminate on "key" { Case -> "tag" ... }} — the inverse of discriminate. */
-    record SumEncoder(String key, List<EncVariant> variants, SourcePos pos) implements Ast {}
-
-    record EncVariant(Name caseType, String tag, SourcePos pos) implements Ast {}
 
     /** A unit data definition {@code data U} with no fields. */
     record UnitData(WrittenName written, String declaredIn, SourcePos pos) implements Def {
@@ -720,10 +714,6 @@ public interface Ast {
         }
     }
 
-    /** {@code decoder from Object discriminate on "key" { "tag" -> Case.decoder ... }} */
-    record Discriminate(String key, List<Variant> variants, SourcePos pos) implements Ast {}
-
-    record Variant(String tag, Name caseType, SourcePos pos) implements Ast {}
 
     /** A field: a role name and its type. */
     record Field(WrittenName written, TypeTerm type) implements Ast {

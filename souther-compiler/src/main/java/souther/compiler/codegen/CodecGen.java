@@ -1,6 +1,6 @@
 package souther.compiler.codegen;
 
-import souther.compiler.check.AtomSpace;
+import souther.compiler.check.Boundary;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.ClauseHelpers;
 import souther.compiler.ast.Hir;
@@ -243,7 +243,8 @@ final class CodecGen {
         code.invokestatic(cd(type), method, mtd, symbols.declarations().declaration(type.key()) instanceof Hir.SumData);
     }
 
-    byte[] generateSumEncoder(Hir.SumData sum, Hir.SumEncoder enc) {
+    byte[] generateSumEncoder(Hir.SumData sum, Boundary.Alternatives alternatives) {
+        String key = discriminator(alternatives);
         ClassDesc cdEnc = cd(new GeneratedClass.Encoder(valueOf(sum)));
         return build(cdEnc, cb -> {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
@@ -253,14 +254,14 @@ final class CodecGen {
             // Dispatch on the runtime case type, encode that case as it writes itself, then add what
             // membership in this sum requires of it (spec §encoder-derivation).
             cb.withMethodBody("encode", MTD_Rencode, ClassFile.ACC_PUBLIC, code -> {
-                for (Hir.EncVariant v : enc.variants()) {
-                    TypeSymbol caseName = Backend.names(v.caseType());
+                for (Boundary.WireCase v : alternatives.wireCases()) {
+                    TypeSymbol caseName = v.atom();
                     code.aload(1);
                     code.instanceOf(cd(caseName));
                     Label next = code.newLabel();
                     code.ifeq(next);
-                    emitTagged(code, TypeOps.caseShape(caseName, symbols), enc.key(), v.tag(), () -> {
-                        invokeCodec(code, v.caseType(), "encoder", MTD_Rencoder);
+                    emitTagged(code, TypeOps.caseShape(caseName, symbols), key, v.tag(), () -> {
+                        invokeCodec(code, caseName, "encoder", MTD_Rencoder);
                         code.aload(1);
                         code.invokeinterface(CD_REncoder, "encode", MTD_Rencode);
                     });
@@ -275,7 +276,9 @@ final class CodecGen {
         });
     }
 
-    byte[] generateSumDecoder(Hir.SumData sum, Hir.Discriminate disc, Src src) {
+    byte[] generateSumDecoder(Hir.SumData sum, Boundary.Alternatives alternatives, Src src) {
+        String key = discriminator(alternatives);
+        List<Boundary.WireCase> wireCases = alternatives.wireCases();
         ClassDesc cdDec = cd(decoderOf(sum, src));
         return build(cdDec, cb -> {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
@@ -288,18 +291,18 @@ final class CodecGen {
             cb.withMethodBody("decode", MTD_Rdecode, ClassFile.ACC_PUBLIC, code -> {
                 // this=0, in=1, path=2, so 3 is the first free slot for the guard to hold the node in.
                 emitObjectGuard(code, src, 3);
-                code.loadConstant(disc.key());
-                code.loadConstant(disc.key());
+                code.loadConstant(key);
+                code.loadConstant(key);
                 emitStringLeaf(code, srcLeafOwner(src));
                 code.invokestatic(srcFieldOwner(src), "field", srcFieldMtd(src));
                 // `field` answers a CombinePart, and `discriminate` takes a Decoder — the conversion
                 // is written rather than implicit, which is what keeps a part's field declaration
                 // from being erased by a wrapper.
                 code.invokeinterface(CD_CombinePart, "asDecoder", MTD_asDecoder);
-                pushInt(code, disc.variants().size());
+                pushInt(code, wireCases.size());
                 code.anewarray(CD_RVariant);
                 int i = 0;
-                for (Hir.Variant v : disc.variants()) {
+                for (Boundary.WireCase v : wireCases) {
                     code.dup();
                     pushInt(code, i);
                     code.loadConstant(v.tag());
@@ -307,13 +310,13 @@ final class CodecGen {
                     // what is under `"value"` and reads it as the standalone value it is, while a
                     // product and a unit read the discriminated object they are part of. So a wrapped
                     // case is read from under a key, which is not always this source's own decoder.
-                    if (TypeOps.caseShape(Backend.names(v.caseType()), symbols) == CaseShape.WRAPPED) {
+                    if (TypeOps.caseShape(v.atom(), symbols) == CaseShape.WRAPPED) {
                         code.loadConstant(CaseShape.ENVELOPE_KEY);
-                        emitUnderAKeyDecoder(code, v.caseType(), src);
+                        emitUnderAKeyDecoder(code, v.atom(), src);
                         code.invokestatic(srcFieldOwner(src), "field", srcFieldMtd(src));
                         code.invokeinterface(CD_CombinePart, "asDecoder", MTD_asDecoder);
                     } else {
-                        invokeCodec(code, v.caseType(), srcFactory(src), MTD_Rdecoder);
+                        invokeCodec(code, v.atom(), srcFactory(src), MTD_Rdecoder);
                     }
                     code.invokestatic(CD_RDecoders, "variant", MTD_Rvariant);
                     code.aastore();
@@ -333,9 +336,8 @@ final class CodecGen {
      * bare string and answers that case's singleton (issue #161). A name no case answers to fails at
      * the value's path, the way a newtype's invariant does, rather than being read as some other case.
      */
-    byte[] generateEnumSumDecoder(Hir.SumData sum, Src src) {
+    byte[] generateEnumSumDecoder(Hir.SumData sum, Boundary.Alternatives alternatives, Src src) {
         ClassDesc cdDec = cd(decoderOf(sum, src));
-        List<TypeSymbol> cases = AtomSpace.subjectAtoms(Type.ref(sum.declares()), symbols);
         return build(cdDec, cb -> {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             cb.withInterfaceSymbols(CD_RDecoder);
@@ -350,22 +352,22 @@ final class CodecGen {
                 code.invokeinterface(CD_RDecoder, "decode", MTD_Rdecode);
                 code.areturn();
             });
-            emitFromNameHelper(cb, sum.name(), cases);
+            emitFromNameHelper(cb, sum.name(), alternatives.wireCases());
         });
     }
 
     /** {@code static Result __fromName(String name, Path path)}: the case that name denotes, or the
      *  failure saying it denotes none of them. */
-    private void emitFromNameHelper(ClassBuilder cb, String sumName, List<TypeSymbol> cases) {
+    private void emitFromNameHelper(ClassBuilder cb, String sumName, List<Boundary.WireCase> cases) {
         cb.withMethodBody("__fromName", MTD_fromName,
                 ClassFile.ACC_STATIC | ClassFile.ACC_SYNTHETIC, code -> {
-            for (TypeSymbol c : cases) {
-                code.loadConstant(c.name());
+            for (Boundary.WireCase c : cases) {
+                code.loadConstant(c.tag());
                 code.aload(0);
                 code.invokevirtual(CD_String, "equals", MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object));
                 Label next = code.newLabel();
                 code.ifeq(next);
-                loadSharedInstance(code, cd(c));
+                loadSharedInstance(code, cd(c.atom()));
                 code.invokestatic(CD_RResult, "ok", MTD_Rok, true);
                 code.areturn();
                 code.labelBinding(next);
@@ -373,6 +375,10 @@ final class CodecGen {
             code.aload(1);                                             // path
             code.loadConstant("invalid_format");
             code.loadConstant("not a case of " + sumName);
+            // A detail of the failure and not the sum's discriminator, which an enumeration does not
+            // have — this says which type the name was read against. The two are spelled alike and
+            // are not the same key: reading this one off `Boundary` would tie what a failure reports
+            // to how a value is written, and an enumeration has no key to read.
             code.loadConstant("type");
             code.loadConstant(sumName);
             code.invokestatic(CD_Map, "of", MethodTypeDesc.of(CD_Map, CD_Object, CD_Object), true);
@@ -529,7 +535,7 @@ final class CodecGen {
      * nested object, list, map, or sum. */
     boolean recordCompatible(Hir.Def def) {
         if (def instanceof Hir.SumData sum) {
-            if (TypeOps.isUnitOnlySum(sum, symbols)) {
+            if (readsABareTag(sum)) {
                 return false;   // an enumeration is a bare column, not a whole row (issue #161)
             }
             for (Hir.Name written : sum.cases()) {
@@ -848,13 +854,30 @@ final class CodecGen {
     }
 
     boolean isMapInput(Hir.Name typeName) {
-        return isMapInputOf(symbols.declarations().declaration(Backend.names(typeName).key()));
+        return isMapInput(Backend.names(typeName));
+    }
+
+    boolean isMapInput(TypeSymbol type) {
+        return isMapInputOf(symbols.declarations().declaration(type.key()));
+    }
+
+    /**
+     * Whether a value of {@code sum} crosses as a bare tag rather than as an object.
+     *
+     * <p>Asked of {@link Boundary} and not worked out from the cases here. These two readers are
+     * codecs asking what shape arrives and what shape a row is, which is the same question the sum's
+     * own decoder and encoder are generated from — answered in a second place, it is a second answer
+     * whatever it says today.
+     */
+    private boolean readsABareTag(Hir.SumData sum) {
+        return Boundary.of(Type.ref(sum.declares()), symbols)
+                .representation() instanceof Boundary.Representation.Enumeration;
     }
 
     private boolean isMapInputOf(Hir.Def def) {
         if (def instanceof Hir.SumData sum) {
             // an enumeration arrives as its case's name, a bare string (issue #161)
-            return !TypeOps.isUnitOnlySum(sum, symbols);
+            return !readsABareTag(sum);
         }
         if (def instanceof Hir.Data data) {
             Hir.DecoderDef d = data.decoder().orElse(null);
@@ -1232,6 +1255,10 @@ final class CodecGen {
      * holding it, so that source alone carries through.
      */
     private void emitUnderAKeyDecoder(CodeBuilder code, Hir.Name typeName, Src src) {
+        emitUnderAKeyDecoder(code, Backend.names(typeName), src);
+    }
+
+    private void emitUnderAKeyDecoder(CodeBuilder code, TypeSymbol typeName, Src src) {
         switch (src) {
             case NEUTRAL -> {
                 invokeCodec(code, typeName, "decoder", MTD_Rdecoder);
@@ -1892,24 +1919,27 @@ final class CodecGen {
      * codec of its own — belonging to a union does not change a member's external representation,
      * only what wraps it here.
      */
-    byte[] generateResultUnionEncoder(GeneratedClass.BehaviorResult union, List<TypeSymbol> members) {
+    byte[] generateResultUnionEncoder(GeneratedClass.BehaviorResult union,
+                                     Boundary.Alternatives alternatives) {
         ClassDesc cdEnc = cd(new GeneratedClass.Encoder(union));
-        boolean enumeration = isEnumeration(members);
+        boolean enumeration =
+                alternatives.representation() instanceof Boundary.Representation.Enumeration;
+        String key = enumeration ? null : discriminator(alternatives);
         return build(cdEnc, cb -> {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             cb.withInterfaceSymbols(CD_REncoder);
             emitDefaultCtor(cb);
             emitSharedInstance(cb, cdEnc);
             cb.withMethodBody("encode", MTD_Rencode, ClassFile.ACC_PUBLIC, code -> {
-                for (TypeSymbol member : members) {
+                for (Boundary.WireCase member : alternatives.wireCases()) {
                     Label next = code.newLabel();
                     code.aload(1);
-                    code.instanceOf(ctx.resultMemberClass(member));
+                    code.instanceOf(ctx.resultMemberClass(member.atom()));
                     code.ifeq(next);
                     if (enumeration) {
-                        code.loadConstant(member.name());
+                        code.loadConstant(member.tag());
                     } else {
-                        emitMemberEncode(code, member);
+                        emitMemberEncode(code, member, key);
                     }
                     code.areturn();
                     code.labelBinding(next);
@@ -1923,10 +1953,10 @@ final class CodecGen {
     }
 
     /** Leaves the member on the stack encoded and tagged, the value in slot 1. */
-    private void emitMemberEncode(CodeBuilder code, TypeSymbol member) {
-        emitTagged(code, TypeOps.caseShape(member, symbols), "type", member.name(), () -> {
-            pushMemberEncoder(code, member);
-            pushMemberValue(code, member);
+    private void emitMemberEncode(CodeBuilder code, Boundary.WireCase member, String key) {
+        emitTagged(code, TypeOps.caseShape(member.atom(), symbols), key, member.tag(), () -> {
+            pushMemberEncoder(code, member.atom());
+            pushMemberValue(code, member.atom());
             code.invokeinterface(CD_REncoder, "encode", MTD_Rencode);
         });
     }
@@ -1998,22 +2028,28 @@ final class CodecGen {
         JvmTypes.box(code, held);
     }
 
-    /** Whether every member is a unit, so the union carries nothing but which member it is and
-     * travels as that member's name — the form a named sum of units has (spec §encoder-derivation). */
-    private boolean isEnumeration(List<TypeSymbol> members) {
-        for (TypeSymbol member : members) {
-            if (!(symbols.declarations().declaration(member.key()) instanceof Hir.UnitData)) {
-                return false;
-            }
-        }
-        return true;
-    }
-
     /** The static {@code encoder()} factory on the union's sealed interface. */
     void emitResultUnionEncoderFactory(ClassBuilder cb, GeneratedClass.BehaviorResult union,
-                                       List<TypeSymbol> members) {
+                                       Boundary.Alternatives alternatives) {
+        boolean enumeration =
+                alternatives.representation() instanceof Boundary.Representation.Enumeration;
         emitCodecFactory(cb, "encoder", CD_REncoder, cd(new GeneratedClass.Encoder(union)),
-                encoderSig(cd(union), isEnumeration(members) ? CD_String : CD_Map));
+                encoderSig(cd(union), enumeration ? CD_String : CD_Map));
+    }
+
+    /**
+     * The key an alternative's tag stands under.
+     *
+     * <p>Asked of the settled representation rather than written here. An enumeration has none — the
+     * value is the tag — so a caller reaching this for one is asking about a form it does not have,
+     * and that is a mistake in the caller rather than a key to invent.
+     */
+    private static String discriminator(Boundary.Alternatives alternatives) {
+        return switch (alternatives.representation()) {
+            case Boundary.Representation.Discriminated d -> d.key();
+            case Boundary.Representation.Enumeration _ -> throw new IllegalStateException(
+                    "an enumeration travels as its tag and writes it under no key");
+        };
     }
 
     /**

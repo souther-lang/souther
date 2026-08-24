@@ -484,9 +484,10 @@ public final class SpecChecker {
     }
 
     /**
-     * A member of an output union lays its fields flatly beside the `"type"` discriminator the union
-     * writes (spec §jvm-anonymous-union), so a member declaring a field of that name and the tag want one key. The
-     * same rule a sum's cases are under, asked of the signature so a composition is subject to it too.
+     * A member of an output union lays its fields flatly beside the discriminator the union writes
+     * (spec §jvm-anonymous-union), so a member declaring a field of that name and the tag want one
+     * key. The same rule a sum's cases are under, asked of the signature so a composition is subject
+     * to it too. Which key that is, is {@code Boundary}'s and is not named again here.
      */
     static void checkUnionMemberFields(Hir.Module module, Map<String, Sig> sigs, Symbols symbols) {
         for (Hir.BehaviorDef b : module.behaviors()) {
@@ -494,18 +495,22 @@ public final class SpecChecker {
             if (sig == null || !(sig.outputType() instanceof Type.Union)) {
                 continue;
             }
-            TypeSymbol carrying = TypeOps.memberCarryingField(sig.outputType(), DISCRIMINATOR, symbols);
+            // The key is the settled representation's, the same one a named sum's cases are held to
+            // (`DataChecker`). Written here as a constant of its own, this checker and the codec that
+            // writes the key were two places the language's own spelling was kept.
+            if (!(Boundary.of(sig.outputType(), symbols).representation()
+                    instanceof Boundary.Representation.Discriminated(String key))) {
+                continue;
+            }
+            TypeSymbol carrying = TypeOps.memberCarryingField(sig.outputType(), key, symbols);
             if (carrying == null) {
                 continue;
             }
             throw CompileException.of(Diagnostic
                             .at(b.pos())
-                            .hint(new DataMessage.TheTagAndTheFieldWantOneKey(DISCRIMINATOR)).say(new DataMessage.AMemberDeclaresTheDiscriminatorField(carrying.name(), DISCRIMINATOR, b.name())).build());
+                            .hint(new DataMessage.TheTagAndTheFieldWantOneKey(key)).say(new DataMessage.AMemberDeclaresTheDiscriminatorField(carrying.name(), key, b.name())).build());
         }
     }
-
-    /** The key a derived codec writes the case name under (spec §encoder-derivation). */
-    private static final String DISCRIMINATOR = "type";
 
 
     /** Whether a name resolves to a unit data of this compilation or of a module it reads. */
