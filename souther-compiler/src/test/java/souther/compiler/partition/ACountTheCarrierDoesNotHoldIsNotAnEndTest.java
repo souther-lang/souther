@@ -210,11 +210,14 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().get(0);
         assertNotNull(sigs.get(spec.name()), "the model under test compiles");
+        InputDomain domain = InputDomain.of(spec, sigs.get(spec.name()), symbols,
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        souther.compiler.inputs.Quantities reading = domain.quantities(symbols);
         Partitions.Partitioning p =
-                Partitions.of(spec.name(), InputDomain.of(spec, sigs.get(spec.name()), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+                Partitions.of(spec.name(), domain, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         return p.axes().stream()
                 .flatMap(axis -> Partitions.bordersOf(axis, symbols,
-                        p.quantities().runsBetween(axis.term())).stream())
+                        reading.runsBetween(axis.term())).stream())
                 .flatMap(border -> java.util.stream.Stream.of(PointRole.ON, PointRole.OFF)
                         .filter(role -> border.demand(role).criterion() != null)
                         .map(role -> role + " "

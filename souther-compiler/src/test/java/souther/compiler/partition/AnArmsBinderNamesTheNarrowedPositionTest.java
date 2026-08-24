@@ -73,11 +73,12 @@ class AnArmsBinderNamesTheNarrowedPositionTest {
         GuardThresholds.Guards guards = GuardThresholds.of("read", body,
                 CoverageSites.of(checked.behaviorBodies(), checked.decisions(), checked.supplied()),
                 inputs, symbols);
-        Partitions.Partitioning base = Partitions.of(spec.name(),
-                InputDomain.of(spec, sigs.get("read"), symbols, ReadAs.THE_COMPILATION_DOES),
-                symbols, ReadAs.THE_COMPILATION_DOES);
-        return Partitions.withThresholds(base, guards.thresholds(), symbols,
-                ReadAs.THE_COMPILATION_DOES, guards.unread(), guards.singled(),
+        InputDomain read = InputDomain.of(spec, sigs.get("read"), symbols,
+                ReadAs.THE_COMPILATION_DOES);
+        Partitions.Partitioning base = Partitions.of(spec.name(), read, symbols,
+                ReadAs.THE_COMPILATION_DOES);
+        return Partitions.withThresholds(base, read.quantities(symbols), guards.thresholds(),
+                symbols, ReadAs.THE_COMPILATION_DOES, guards.unread(), guards.singled(),
                 guards.between()).axes();
     }
 

@@ -98,8 +98,8 @@ class AClassThatNarrowsStatesTheNarrowingAndNotAValueTest {
                     CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
                             checked.supplied()),
                     compilation.db().ask(new Adequacy.Inputs(module)).value().get("use"), symbols);
-            axes = Partitions.withThresholds(axes, guards.thresholds(), symbols,
-                    ReadAs.THE_COMPILATION_DOES, guards.unread(), guards.singled(),
+            axes = Partitions.withThresholds(axes, domain.quantities(symbols), guards.thresholds(),
+                    symbols, ReadAs.THE_COMPILATION_DOES, guards.unread(), guards.singled(),
                     guards.between());
         }
         Generator.GenerationResult filled = Generator.fill(

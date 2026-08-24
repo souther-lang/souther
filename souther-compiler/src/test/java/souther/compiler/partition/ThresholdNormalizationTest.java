@@ -39,7 +39,8 @@ class ThresholdNormalizationTest {
     /** The symbols are carried because the reading needs them: which carrier a position's values
      *  are on is read off its declared type, so asking with symbols that cannot resolve it is
      *  asking a different question from the one the compiler asks. */
-    private record Read(Partitions.Partitioning partitioning, List<Threshold> thresholds,
+    private record Read(Partitions.Partitioning partitioning,
+                        souther.compiler.inputs.Quantities reading, List<Threshold> thresholds,
                         Symbols symbols) {}
 
     private static Read read(String source, String behavior) {
@@ -61,8 +62,11 @@ class ThresholdNormalizationTest {
         GuardThresholds.Guards guards = GuardThresholds.of(behavior, body, plan,
                 compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get(behavior), symbols);
         List<Threshold> thresholds = guards.thresholds();
-        Partitions.Partitioning base = Partitions.of(spec.name(), InputDomain.of(spec, sigs.get(behavior), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
-        return new Read(Partitions.withThresholds(base, thresholds, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES), thresholds, symbols);
+        InputDomain domain = InputDomain.of(spec, sigs.get(behavior), symbols,
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        souther.compiler.inputs.Quantities reading = domain.quantities(symbols);
+        Partitions.Partitioning base = Partitions.of(spec.name(), domain, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        return new Read(Partitions.withThresholds(base, reading, thresholds, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES), reading, thresholds, symbols);
     }
 
     private static Axis axis(Partitions.Partitioning partitioning, String path) {
@@ -223,7 +227,7 @@ class ThresholdNormalizationTest {
         Read read = read(CEILING, "submit");
         Axis cost = axis(read.partitioning(), "request.cost");
 
-        NumericDomain.Bounds within = read.partitioning().quantities().runsBetween(cost.term());
+        NumericDomain.Bounds within = read.reading().runsBetween(cost.term());
         assertNotNull(within, "the invariant's domain is what this asks the obligations about");
         List<String> described = pointsAgainstTheLines(cost, read.symbols(), within);
 
@@ -271,7 +275,7 @@ class ThresholdNormalizationTest {
                 "the cut is the coarser partition, so the classes stay the cases");
 
         List<String> described = pointsAgainstTheLines(stage, read.symbols(),
-                read.partitioning().quantities().runsBetween(stage.term()));
+                read.reading().runsBetween(stage.term()));
         assertEquals(List.of("ON Prospecting", "OFF Qualified"), described);
     }
 
@@ -300,7 +304,7 @@ class ThresholdNormalizationTest {
         Axis amount = axis(read.partitioning(), "amount");
         assertEquals(List.of("0 <= x < 3000", "3000 <= x"), labels(amount));
 
-        NumericDomain.Bounds within = read.partitioning().quantities().runsBetween(amount.term());
+        NumericDomain.Bounds within = read.reading().runsBetween(amount.term());
         assertNotNull(within, "the invariant's domain is what this asks the obligations about");
         List<String> described = pointsAgainstTheLines(amount, read.symbols(), within);
         assertTrue(described.contains("OFF 3000"), described.toString());

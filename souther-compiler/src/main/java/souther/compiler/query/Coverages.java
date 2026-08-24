@@ -47,27 +47,44 @@ import java.util.Set;
 final class Coverages {
 
     /**
+     * What the model divides one behavior into, and the reading of its declarations that produced
+     * it.
+     *
+     * <p>Two things and not one, because only the first is what the model says. The reading holds a
+     * way of asking the declarations reaching an input a further question, so it belongs to whoever
+     * is doing the asking and compares by which of them built it — kept inside the geometry, it made
+     * the geometry a thing no answer could hold (issue #1001).
+     *
+     * <p>Handed over together because they are produced together and reading is what costs: every
+     * rule of every parameter is read to arrive at either, and a caller that wanted both and asked
+     * twice would read them twice.
+     */
+    record Partitioned(Partitions.Partitioning geometry,
+                       souther.compiler.inputs.Quantities reading) {}
+
+    /**
      * The positions one behavior is measured at, with what its own comparisons divide them into.
      *
      * <p>Asked here rather than worked out again wherever it is needed. What a report says is not
      * covered and what a generator writes a row for have to be the same positions and the same classes,
      * and two derivations of them would be two chances to disagree.
      */
-    static Partitions.Partitioning partitioningOf(Hir.SpecBehavior behavior, InputDomain inputs,
-                                                  Sig sig, Symbols symbols, ReadingPolicy policy,
-                                                  Core body,
-                                                  souther.compiler.check.ElementBindings elements,
-                                                  CoverageSites.Plan plan,
-                                                  PathReachability.Answers arrives,
-                                                  souther.compiler.check.StatedContract stated) {
+    static Partitioned partitioningOf(Hir.SpecBehavior behavior, InputDomain inputs,
+                                      Sig sig, Symbols symbols, ReadingPolicy policy,
+                                      Core body,
+                                      souther.compiler.check.ElementBindings elements,
+                                      CoverageSites.Plan plan,
+                                      PathReachability.Answers arrives,
+                                      souther.compiler.check.StatedContract stated) {
         List<String> parameters = behavior.params().stream().map(Hir.Param::name).toList();
         // What a row's values are, where they sit and what they are written as, read together:
         // a field under a name is reached by taking the name off, and a walk given the paths
         // alone reaches nothing where the derivation reaches a field.
         BehaviorInputs where = new BehaviorInputs(parameters, sig.inputTypes(), symbols, policy);
-        // Read once for the three below. What it holds is a way of asking the declarations reaching
-        // this input a further question, and each of them asking for its own would read every rule
-        // of every parameter three times over to arrive at the same answers.
+        // Read once for the three below, and handed back beside what they produce. What it holds is
+        // a way of asking the declarations reaching this input a further question, and each of them
+        // asking for its own would read every rule of every parameter three times over to arrive at
+        // the same answers.
         souther.compiler.inputs.Quantities quantities = inputs.quantities(symbols);
         Partitions.Partitioning partitioning =
                 Partitions.of(behavior.name(), inputs, quantities, symbols, policy);
@@ -83,7 +100,7 @@ final class Coverages {
         // rules at one value are one cut and stay separate obligations, which is what the merge
         // below does — applied one producer at a time, a clause and a guard naming one number would
         // divide the position twice.
-        return Partitions.withThresholds(partitioning,
+        return new Partitioned(Partitions.withThresholds(partitioning, quantities,
                 both(clauses.thresholds(), guards.thresholds()), symbols, policy,
                 both(clauses.unread(), guards.unread()),
                 both(clauses.singled(), guards.singled()),
@@ -96,7 +113,7 @@ final class Coverages {
                 // What a row had to satisfy to arrive at each comparison, from the walk that
                 // assumed it. A clause of a declaration is not written at a place in a body and has
                 // nothing on the way to it, so only the guards have any of this.
-                guards.reaching());
+                guards.reaching()), quantities);
     }
 
     /** The two producers' lines, in one list. */
@@ -133,7 +150,7 @@ final class Coverages {
         BehaviorInputs where = new BehaviorInputs(parameters, sig.inputTypes(), symbols, policy);
         Partitions.Partitioning partitioning =
                 partitioningOf(behavior, inputs, sig, symbols, policy, body, elements, plan,
-                        arrives, stated);
+                        arrives, stated).geometry();
 
         List<PartitionEvidence.AxisCoverage> axes = new ArrayList<>();
 
@@ -1028,7 +1045,8 @@ final class Coverages {
      * either range.
      */
     static List<BorderAssessment> assessBetween(
-            Partitions.Partitioning partitioning, BehaviorInputs where,
+            Partitions.Partitioning partitioning, souther.compiler.inputs.Quantities reading,
+            BehaviorInputs where,
             souther.compiler.query.Adequacy.RowReading observed,
             souther.compiler.query.Adequacy.Level level, Probe probe) {
         // Keyed by the line the author drew, the way a line at a place is. A guard inside a
@@ -1041,7 +1059,7 @@ final class Coverages {
             out.merge(BoundaryLine.of(each),
                     assessed(each, shapeOf(each, where, false, probe, whenThereIsNoProbe(level),
                                     realizer,
-                                    regionFor(each, partitioning.quantities(),
+                                    regionFor(each, reading,
                                             partitioning.reaching())), observed,
                             level),
                     Coverages::whicheverSawMore);

@@ -85,7 +85,8 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
                 checked.supplied()), inputs, read.symbols());
         Partitions.Partitioning base =
                 Partitions.of(read.spec().name(), inputs, read.symbols(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
-        return classesOf(Partitions.withThresholds(base, guards.thresholds(), read.symbols(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES,
+        return classesOf(Partitions.withThresholds(base, inputs.quantities(read.symbols()),
+                guards.thresholds(), read.symbols(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES,
                 guards.unread(), guards.singled(), guards.between()));
     }
 
@@ -410,7 +411,10 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
                         .ask(new souther.compiler.query.Adequacy.Inputs(read.module())).value()
                         .get(read.spec().name()),
                 read.symbols());
-        return Partitions.withThresholds(base, guards.thresholds(), read.symbols(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES,
+        return Partitions.withThresholds(base,
+                InputDomain.of(read.spec(), read.sig(), read.symbols(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES)
+                        .quantities(read.symbols()),
+                guards.thresholds(), read.symbols(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES,
                 guards.unread(), guards.singled(), guards.between());
     }
 

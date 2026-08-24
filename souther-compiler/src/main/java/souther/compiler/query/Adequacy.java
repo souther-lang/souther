@@ -1137,9 +1137,11 @@ public final class Adequacy {
             souther.compiler.partition.BehaviorInputs inputs =
                     new souther.compiler.partition.BehaviorInputs(parameters, sig.inputTypes(),
                             symbols, policy);
-            souther.compiler.partition.Partitions.Partitioning partitioning =
+            Coverages.Partitioned partitioned =
                     Coverages.partitioningOf(spec, domain, sig, symbols, policy, body, elements,
                             plan, arrives, stated);
+            souther.compiler.partition.Partitions.Partitioning partitioning = partitioned.geometry();
+            souther.compiler.inputs.Quantities reading = partitioned.reading();
             Coverages.Probe probe =
                     probing(partitioning, sig, symbols, policy, parameters, building, domain);
             // Two sources and not one. A line drawn at a count of a position comes off that position's
@@ -1153,10 +1155,11 @@ public final class Adequacy {
                 }
                 out.addAll(Coverages.assess(axis, inputs, observed, level,
                         partitioning.edgeIsKnownWritable(axis.term()), probe,
-                        partitioning.quantities(), partitioning.reaching(),
-                        partitioning.quantities().runsBetween(axis.term())));
+                        reading, partitioning.reaching(),
+                        reading.runsBetween(axis.term())));
             }
-            out.addAll(Coverages.assessBetween(partitioning, inputs, observed, level, probe));
+            out.addAll(Coverages.assessBetween(partitioning, reading, inputs, observed, level,
+                    probe));
             return List.copyOf(out);
         }
 
@@ -2623,7 +2626,7 @@ public final class Adequacy {
                             symbols, policy);
             souther.compiler.partition.Partitions.Partitioning partitioning =
                     Coverages.partitioningOf(spec, domain, sig, symbols, policy, body, elements,
-                            plan, arrives, stated);
+                            plan, arrives, stated).geometry();
             Generator.Subject subject =
                     new Generator.Subject(inputs, partitioning.axes(), souther.compiler.partition.HeldCounts.of(domain, symbols));
             Generator.CandidateCheck check = building == null ? Generator.CandidateCheck.ANY

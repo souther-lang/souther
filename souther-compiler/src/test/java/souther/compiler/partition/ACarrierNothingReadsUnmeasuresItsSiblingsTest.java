@@ -105,7 +105,7 @@ class ACarrierNothingReadsUnmeasuresItsSiblingsTest {
         String standing = read.partitioning().edgeIsKnownWritable(axis.term())
                 ? " writable" : " not known to be writable";
         return Partitions.bordersOf(axis, read.symbols(),
-                        read.partitioning().quantities().runsBetween(axis.term())).stream()
+                        read.reading().runsBetween(axis.term())).stream()
                 .flatMap(border -> java.util.stream.Stream.of(PointRole.ON, PointRole.OFF)
                         .filter(role -> border.demand(role).criterion() != null)
                         .map(role -> role + " "
@@ -113,7 +113,8 @@ class ACarrierNothingReadsUnmeasuresItsSiblingsTest {
                 .sorted().toList();
     }
 
-    private record Read(Partitions.Partitioning partitioning, Symbols symbols) {}
+    private record Read(Partitions.Partitioning partitioning,
+                        souther.compiler.inputs.Quantities reading, Symbols symbols) {}
 
     private static Read read(String source, String behavior) {
         Compilation compilation = Compilation.ofSource(source, "Main");
@@ -125,6 +126,9 @@ class ACarrierNothingReadsUnmeasuresItsSiblingsTest {
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();
         assertNotNull(sigs.get(behavior), "the model under test compiles");
-        return new Read(Partitions.of(spec.name(), InputDomain.of(spec, sigs.get(behavior), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES), symbols);
+        InputDomain domain = InputDomain.of(spec, sigs.get(behavior), symbols,
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        return new Read(Partitions.of(spec.name(), domain, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                domain.quantities(symbols), symbols);
     }
 }

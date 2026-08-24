@@ -44,13 +44,20 @@ import java.util.Map;
 public final class Partitions {
 
     /**
+     * What the model divides one behavior into: every position, every line, and what the reading
+     * that produced them could not settle.
+     *
+     * <p><b>What it is, and nothing about who read it.</b> The reading of the declarations is what
+     * this is worked out from, and it used to be carried here as well — so the geometry compared by
+     * which reading had built it, and could not be an answer this compiler keeps. It is one now, and
+     * the reading is handed to the few places that go on asking it further questions (issue #1001).
+     *
      * @param axes the positions this behavior is measured at, in parameter order. Every position
      *             the model divides is one of them: what a behavior is measured at is settled by
      *             what its types say and by what its body compares, and a count of positions is
      *             not a measure of what any of that costs (see this package's documentation)
      */
     public record Partitioning(List<Axis> axes,
-                               souther.compiler.inputs.Quantities quantities,
                                java.util.Set<NumericTerm> uncertain,
                                List<UndividedPosition> undivided,
                                List<UnreadRule> unread,
@@ -172,7 +179,7 @@ public final class Partitions {
             keep(new ArrayList<>(), measured, axis, null, unread);
         }
         MeasureClosure.Both closed = MeasureClosure.of(kept, List.of(), unread);
-        return new Partitioning(kept, quantities, uncertain, undividedIn(measured),
+        return new Partitioning(kept, uncertain, undividedIn(measured),
                 List.copyOf(unread), blockedIn(measured), List.copyOf(notSeparated),
                 List.of(), List.of(), ReachingCuts.NONE, closed.partition(), closed.border());
     }
@@ -260,9 +267,11 @@ public final class Partitions {
      * that line hold values a row can write. The cuts merge into one partition and the origins stay
      * apart, so reaching the line through one rule still leaves the others unmet.
      */
-    public static Partitioning withThresholds(Partitioning base, List<Threshold> thresholds,
+    public static Partitioning withThresholds(Partitioning base,
+                                              souther.compiler.inputs.Quantities reading,
+                                              List<Threshold> thresholds,
                                               Symbols symbols, ReadingPolicy policy) {
-        return withThresholds(base, thresholds, symbols, policy, List.of());
+        return withThresholds(base, reading, thresholds, symbols, policy, List.of());
     }
 
     /**
@@ -273,10 +282,12 @@ public final class Partitions {
      * written in is one no reader here takes apart. Carried rather than re-derived, because the only
      * place that knows is the reader that gave up.
      */
-    public static Partitioning withThresholds(Partitioning base, List<Threshold> thresholds,
+    public static Partitioning withThresholds(Partitioning base,
+                                              souther.compiler.inputs.Quantities reading,
+                                              List<Threshold> thresholds,
                                               Symbols symbols, ReadingPolicy policy,
                                               List<UnreadRule> unread) {
-        return withThresholds(base, thresholds, symbols, policy, unread, List.of());
+        return withThresholds(base, reading, thresholds, symbols, policy, unread, List.of());
     }
 
     /**
@@ -288,11 +299,13 @@ public final class Partitions {
      * divides the position as well, the model has drawn the further distinction itself and the value
      * is one more line among the ranges.
      */
-    public static Partitioning withThresholds(Partitioning base, List<Threshold> thresholds,
+    public static Partitioning withThresholds(Partitioning base,
+                                              souther.compiler.inputs.Quantities reading,
+                                              List<Threshold> thresholds,
                                               Symbols symbols, ReadingPolicy policy,
                                               List<UnreadRule> unread,
                                               List<GuardThresholds.Guards.Singled> singled) {
-        return withThresholds(base, thresholds, symbols, policy, unread, singled, List.of());
+        return withThresholds(base, reading, thresholds, symbols, policy, unread, singled, List.of());
     }
 
     /**
@@ -303,12 +316,14 @@ public final class Partitions {
      * beside the partition, which is what keeps a position the classes could say nothing about from
      * losing the line its body draws about it.
      */
-    public static Partitioning withThresholds(Partitioning base, List<Threshold> thresholds,
+    public static Partitioning withThresholds(Partitioning base,
+                                              souther.compiler.inputs.Quantities reading,
+                                              List<Threshold> thresholds,
                                               Symbols symbols, ReadingPolicy policy,
                                               List<UnreadRule> unread,
                                               List<GuardThresholds.Guards.Singled> singled,
                                               List<LineDrawn> between) {
-        return withThresholds(base, thresholds, symbols, policy, unread, singled, between,
+        return withThresholds(base, reading, thresholds, symbols, policy, unread, singled, between,
                 souther.compiler.check.PathReachability.Answers.NONE, List.of());
     }
 
@@ -326,7 +341,9 @@ public final class Partitions {
      * of anything. Both are needed and neither is the other — a line well inside a position's values
      * can still be one nothing on the way to it can be either side of.
      */
-    public static Partitioning withThresholds(Partitioning base, List<Threshold> thresholds,
+    public static Partitioning withThresholds(Partitioning base,
+                                              souther.compiler.inputs.Quantities reading,
+                                              List<Threshold> thresholds,
                                               Symbols symbols, ReadingPolicy policy,
                                               List<UnreadRule> unread,
                                               List<GuardThresholds.Guards.Singled> singled,
@@ -334,7 +351,7 @@ public final class Partitions {
                                               souther.compiler.check.PathReachability.Answers
                                                       arrives,
                                               List<GuardThresholds.Guards.AtAPosition> compared) {
-        return withThresholds(base, thresholds, symbols, policy, unread, singled, between, arrives,
+        return withThresholds(base, reading, thresholds, symbols, policy, unread, singled, between, arrives,
                 compared, ReachingCuts.NONE);
     }
 
@@ -346,7 +363,9 @@ public final class Partitions {
      * that recovered it from where a comparison sits would be free to name a condition nothing here
      * could read.
      */
-    public static Partitioning withThresholds(Partitioning base, List<Threshold> thresholds,
+    public static Partitioning withThresholds(Partitioning base,
+                                              souther.compiler.inputs.Quantities reading,
+                                              List<Threshold> thresholds,
                                               Symbols symbols, ReadingPolicy policy,
                                               List<UnreadRule> unread,
                                               List<GuardThresholds.Guards.Singled> singled,
@@ -377,7 +396,7 @@ public final class Partitions {
                 // Nothing orders this position, so its classes are the values singled out and
                 // everything else. Ranges here would ask the rows for a distinction between the two
                 // sides of a value the behavior treats alike.
-                NumericDomain.Bounds only = domainOf(base, term);
+                NumericDomain.Bounds only = domainOf(reading, term);
                 NumericTerm at = term;
                 Axis here2 = axis;
                 keep(out, measured, refine(axis,
@@ -404,7 +423,7 @@ public final class Partitions {
             // What this term's values can be, which is the type's bound already narrowed by whatever
             // the record it sits in says about it. Reading the type again here would put a threshold
             // back inside a range the record has no values in.
-            NumericDomain.Bounds domain = domainOf(base, term);
+            NumericDomain.Bounds domain = domainOf(reading, term);
             // Filtered once, and both answers read the filtered list. A line outside what the
             // position holds divides nothing, and it is not a boundary either: leaving it in the
             // cuts while the intervals dropped it asks for a row at a value the record refuses,
@@ -452,7 +471,7 @@ public final class Partitions {
                     reachable.isEmpty() ? null : new BodyCutInspection.Evidence(), rules);
         }
         MeasureClosure.Both closed = MeasureClosure.of(out, compared, rules);
-        return new Partitioning(out, base.quantities(), base.uncertain(),
+        return new Partitioning(out, base.uncertain(),
                 undividedIn(measured), List.copyOf(rules), blockedIn(measured),
                 // Carried across: what a reading could not hold together is a fact about the
                 // declarations, and a body drawing a line on a position does not make the product
@@ -604,8 +623,9 @@ public final class Partitions {
      * and what such a term guarantees of its own values is what bounds it. Asked of the reading
      * rather than kept per term beside it, which is where the two came to disagree.
      */
-    private static NumericDomain.Bounds domainOf(Partitioning base, NumericTerm term) {
-        return base.quantities().runsBetween(term);
+    private static NumericDomain.Bounds domainOf(souther.compiler.inputs.Quantities reading,
+                                                 NumericTerm term) {
+        return reading.runsBetween(term);
     }
 
     /**
