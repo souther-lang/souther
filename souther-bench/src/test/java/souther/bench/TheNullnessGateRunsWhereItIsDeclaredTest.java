@@ -64,16 +64,15 @@ class TheNullnessGateRunsWhereItIsDeclaredTest {
 
     @Test
     void theGateIsConfiguredForEveryModuleThatDeclaresItAndNoOther() {
-        List<String> modules = Reactor.modules();
         Set<String> declared = new LinkedHashSet<>();
         Set<String> configured = new LinkedHashSet<>();
         boolean rootGates = gateIsInTheBuildOf(Reactor.root().resolve("pom.xml"));
-        for (String module : modules) {
+        for (Path module : Reactor.modules()) {
             if (declaresNullMarked(module)) {
-                declared.add(module);
+                declared.add(Reactor.name(module));
             }
-            if (rootGates || gateIsInTheBuildOf(Reactor.root().resolve(module).resolve("pom.xml"))) {
-                configured.add(module);
+            if (rootGates || gateIsInTheBuildOf(module.resolve("pom.xml"))) {
+                configured.add(Reactor.name(module));
             }
         }
 
@@ -96,13 +95,13 @@ class TheNullnessGateRunsWhereItIsDeclaredTest {
     }
 
     /** Whether any class the module built carries the annotation. */
-    private static boolean declaresNullMarked(String module) {
+    private static boolean declaresNullMarked(Path module) {
         if (!Reactor.hasMainSources(module)) {
             return false;   // nothing of its own to annotate
         }
-        Path classes = Reactor.root().resolve(module).resolve("target/classes");
+        Path classes = module.resolve("target/classes");
         assertTrue(Files.isDirectory(classes),
-                module + " has no built classes: this reads what has been built, so a module that has"
+                Reactor.name(module) + " has no built classes: this reads what has been built, so a module that has"
                         + " not been is a hole rather than a pass");
         try (Stream<Path> walk = Files.walk(classes)) {
             return walk.filter(p -> p.toString().endsWith(".class")).anyMatch(TheNullnessGateRunsWhereItIsDeclaredTest::carriesNullMarked);

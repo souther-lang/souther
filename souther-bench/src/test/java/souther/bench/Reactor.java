@@ -34,9 +34,14 @@ final class Reactor {
 
     private static final RepositoryLayout REPOSITORY = RepositoryLayout.ofWorkingDirectory();
 
-    /** The modules the root pom names. */
-    static List<String> modules() {
-        return REPOSITORY.modules().stream().map(module -> module.getFileName().toString()).toList();
+    /** The modules the root pom names, as directories. */
+    static List<Path> modules() {
+        return REPOSITORY.modules();
+    }
+
+    /** What to call one of them in a message. */
+    static String name(Path module) {
+        return module.getFileName().toString();
     }
 
     /**
@@ -47,20 +52,25 @@ final class Reactor {
      * publishes, and stand where that artifact's consumer stands — has nothing here to walk, and
      * finding nothing is the whole answer rather than a gap in one.
      */
-    static boolean hasMainSources(String module) {
-        return Files.isDirectory(root().resolve(module).resolve("src/main/java"));
+    static boolean hasMainSources(Path module) {
+        return Files.isDirectory(module.resolve("src/main/java"));
+    }
+
+    /** Every {@code .java} of every one of them. */
+    static List<Path> mainJavaSources() {
+        return REPOSITORY.mainJavaSources();
     }
 
     /** Every compiled class of every one of them. */
     static List<Path> classes() throws IOException {
         List<Path> found = new ArrayList<>();
-        for (String module : modules()) {
+        for (Path module : modules()) {
             if (!hasMainSources(module)) {
                 continue;
             }
-            Path built = root().resolve(module).resolve("target/classes");
+            Path built = module.resolve("target/classes");
             assertTrue(Files.isDirectory(built),
-                    module + " has no built classes: this check covers what has been built, so a"
+                    name(module) + " has no built classes: this check covers what has been built, so a"
                             + " module that has not been is a hole rather than a pass");
             try (Stream<Path> walk = Files.walk(built)) {
                 walk.filter(each -> each.toString().endsWith(".class")).forEach(found::add);

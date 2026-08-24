@@ -60,6 +60,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AConstructionPositionIsNotAnInputPositionTest {
 
+    /** Read once: what this asks of it does not change between its checks. */
+    private static final RepositoryLayout REPOSITORY = RepositoryLayout.ofWorkingDirectory();
+
     private record Read(Hir.SpecBehavior spec, Sig sig, Symbols symbols) {}
 
     private static Read of(String source, String behavior) {
@@ -217,7 +220,7 @@ class AConstructionPositionIsNotAnInputPositionTest {
     }
 
     private static List<Path> mainSources() throws IOException {
-        return RepositoryLayout.ofWorkingDirectory().mainJavaSources();
+        return REPOSITORY.mainJavaSources();
     }
 
     /** The requirement a class of {@code d} states by being the {@code Approved} case of it. */

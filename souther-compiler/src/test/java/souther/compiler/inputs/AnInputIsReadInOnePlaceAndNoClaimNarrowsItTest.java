@@ -34,6 +34,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AnInputIsReadInOnePlaceAndNoClaimNarrowsItTest {
 
+    /** Read once: what this asks of it does not change between its checks. */
+    private static final RepositoryLayout REPOSITORY = RepositoryLayout.ofWorkingDirectory();
+
     /** Where a behavior's input is read: the query that owns the answer and hands it to every
      *  measure, to the generator, and to the check that refuses a claim the rules contradict. */
     private static final String THE_ONE_PLACE = "query/Adequacy.java";
@@ -115,6 +118,6 @@ class AnInputIsReadInOnePlaceAndNoClaimNarrowsItTest {
     }
 
     private static List<Path> mainSources() throws IOException {
-        return RepositoryLayout.ofWorkingDirectory().mainJavaSources();
+        return REPOSITORY.mainJavaSources();
     }
 }

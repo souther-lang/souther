@@ -30,6 +30,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class WhatACaseMeansIsDecidedInOnePlaceTest {
 
+    /** Read once: what this asks of it does not change between its checks. */
+    private static final RepositoryLayout REPOSITORY = RepositoryLayout.ofWorkingDirectory();
+
     /**
      * Where reading a subject as an optional is part of the answer: where the forms are told apart,
      * which is the point of it, and nowhere else.
@@ -149,6 +152,6 @@ class WhatACaseMeansIsDecidedInOnePlaceTest {
     }
 
     private static List<Path> mainSources() throws IOException {
-        return RepositoryLayout.ofWorkingDirectory().mainJavaSources();
+        return REPOSITORY.mainJavaSources();
     }
 }

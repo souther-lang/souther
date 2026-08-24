@@ -68,6 +68,9 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  */
 public class EveryShippedMessageCatalogIsCompleteAndValidTest {
 
+    /** Read once: what this asks of it does not change between its checks. */
+    private static final RepositoryLayout REPOSITORY = RepositoryLayout.ofWorkingDirectory();
+
     /** Where the bundle {@link Messages} reads lives, as a path under a module's resources. */
     private static final String PACKAGE = "souther/compiler/diag";
     /** The bundle's own name, so the base catalog is {@code messages.properties}. */
@@ -971,7 +974,7 @@ public class EveryShippedMessageCatalogIsCompleteAndValidTest {
     /** Every module's {@code src/main/<kind>}, for the modules that have one. The test runs in its
      *  own module directory, so the repository root is that directory's parent. */
     private static List<Path> moduleDirectories(String kind) throws IOException {
-        return RepositoryLayout.ofWorkingDirectory().mainTrees(kind);
+        return REPOSITORY.mainTrees(kind);
     }
 
     private static Properties load(Path catalog) throws IOException {

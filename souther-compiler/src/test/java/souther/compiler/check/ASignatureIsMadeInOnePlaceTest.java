@@ -30,6 +30,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  */
 class ASignatureIsMadeInOnePlaceTest {
 
+    /** Read once: what this asks of it does not change between its checks. */
+    private static final RepositoryLayout REPOSITORY = RepositoryLayout.ofWorkingDirectory();
+
     /** Where a signature is made: the query that owns the answer, and hands it to the check, the
      *  backend and whoever drives a behavior. */
     private static final String THE_ONE_PLACE = "query/Bodies.java";
@@ -54,6 +57,6 @@ class ASignatureIsMadeInOnePlaceTest {
     }
 
     private static List<Path> mainSources() throws IOException {
-        return RepositoryLayout.ofWorkingDirectory().mainJavaSources();
+        return REPOSITORY.mainJavaSources();
     }
 }

@@ -36,6 +36,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class TheReadingAndThePlanTakeOneStepDownATypeTest {
 
+    /** Read once: what this asks of it does not change between its checks. */
+    private static final RepositoryLayout REPOSITORY = RepositoryLayout.ofWorkingDirectory();
+
     /** Where the fields are taken off a product shape. */
     private static final String THE_ONE_PLACE = "inputs/StructuralDescent.java";
 
@@ -142,6 +145,6 @@ class TheReadingAndThePlanTakeOneStepDownATypeTest {
     }
 
     private static List<Path> mainSources() throws IOException {
-        return RepositoryLayout.ofWorkingDirectory().mainJavaSources();
+        return REPOSITORY.mainJavaSources();
     }
 }

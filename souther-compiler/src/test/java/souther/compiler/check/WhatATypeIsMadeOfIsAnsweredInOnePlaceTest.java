@@ -44,6 +44,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class WhatATypeIsMadeOfIsAnsweredInOnePlaceTest {
 
+    /** Read once: what this asks of it does not change between its checks. */
+    private static final RepositoryLayout REPOSITORY = RepositoryLayout.ofWorkingDirectory();
+
     /** A sum two deep, and a leaf two of its cases reach. */
     private static final String MODULE = """
             module m
@@ -358,7 +361,7 @@ class WhatATypeIsMadeOfIsAnsweredInOnePlaceTest {
     }
 
     private static List<Path> mainSources() throws IOException {
-        return RepositoryLayout.ofWorkingDirectory().mainJavaSources();
+        return REPOSITORY.mainJavaSources();
     }
 
     // --- helpers ---------------------------------------------------------------------------------
