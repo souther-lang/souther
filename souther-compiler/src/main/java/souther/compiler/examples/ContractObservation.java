@@ -63,9 +63,12 @@ public sealed interface ContractObservation {
             return "no clause of the behavior was broken by what was answered";
         }
 
+        /** Its name. The other arms are records and carry what they hold; this one holds nothing
+         *  yet, and the default would be an address. Read off the class rather than written out, so
+         *  a rename does not leave the old word behind. */
         @Override
         public String toString() {
-            return "NoClauseWasBroken";
+            return getClass().getSimpleName();
         }
     }
 
@@ -89,7 +92,7 @@ public sealed interface ContractObservation {
             implements ContractObservation {
 
         public Broken {
-            if (why == null || shownAnswered == null) {
+            if (why == null || answered == null || shownAnswered == null) {
                 throw new IllegalArgumentException("a broken clause said something about a value");
             }
         }

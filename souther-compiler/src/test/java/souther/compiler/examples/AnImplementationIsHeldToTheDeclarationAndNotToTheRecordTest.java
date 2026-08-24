@@ -59,12 +59,7 @@ class AnImplementationIsHeldToTheDeclarationAndNotToTheRecordTest {
             """;
 
     /** The same model, stating a relation between what it is given and what it answers. */
-    private static final String DECLARING = MODEL.replace(
-            "behavior findTodo : (id: TodoId) -> Todo | NotFound\n",
-            """
-            behavior findTodo : (id: TodoId) -> Todo | NotFound
-                ensures Todo -> value.id.value == id.value
-            """);
+    private static final String DECLARING = declaring("value.id.value == id.value");
 
     /** Answers both rows the way the model records them. */
     private static final String ANSWERS = """
@@ -103,6 +98,24 @@ class AnImplementationIsHeldToTheDeclarationAndNotToTheRecordTest {
                     return id.equals(new TodoId(1L))
                             ? new Todo(new TodoId(7L), new Title("write the SQL"), false)
                             : new NotFound(id);
+                }
+            }
+            """;
+
+    /**
+     * Answers within the clause once and outside it after.
+     *
+     * <p>A world that changed between two asks, which is the position every caller of this face is
+     * in: the rows are asked in whatever state the caller arranged, and this is that state written
+     * as the implementation rather than as a database.
+     */
+    private static final String ONCE_THEN_NOT = """
+            package example.todo;
+            public final class FindTodoImpl extends FindTodo {
+                private int asked = 0;
+                public FindTodoResult apply(TodoId id) {
+                    long answer = asked++ == 0 ? id.value() : 7L;
+                    return new Todo(new TodoId(answer), new Title("write the SQL"), false);
                 }
             }
             """;
@@ -208,6 +221,27 @@ class AnImplementationIsHeldToTheDeclarationAndNotToTheRecordTest {
                 assertInstanceOf(ContractObservation.Unobserved.class, seen);
         assertInstanceOf(StandinObservation.Reason.TheImplementationIsOfAnotherBuild.class,
                 unobserved.why());
+    }
+
+    /**
+     * The same row asked twice under two worlds is two observations.
+     *
+     * <p>What this face is for is asking a row where the world is not the one it was recorded in, so
+     * a caller asks the same row again after arranging something else. Nothing may be carried from
+     * the first ask to the second: an observation kept would answer about a world that is gone.
+     *
+     * <p>Measured rather than reasoned from the code that builds a fixture reader per call — that is
+     * why it holds today, and this is what says it still does.
+     */
+    @Test
+    void theSameRowAskedTwiceIsAskedAfreshEachTime() throws Exception {
+        BoundExamples bound = boundTo(DECLARING, ONCE_THEN_NOT);
+        RecordedRow stored = named(bound, "a todo that is stored");
+
+        assertInstanceOf(ContractObservation.NoClauseWasBroken.class, bound.checkContract(stored),
+                "the world as it stood for the first ask");
+        assertInstanceOf(ContractObservation.Broken.class, bound.checkContract(stored),
+                "and as it stood for the second, which is not the first answered again");
     }
 
     /** Which behaviors state something, answered from the declaration and without applying one. */

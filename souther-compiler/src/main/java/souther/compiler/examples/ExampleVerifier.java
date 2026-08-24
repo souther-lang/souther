@@ -522,7 +522,13 @@ public final class ExampleVerifier {
         if (why == null) {
             return new ContractObservation.NoClauseWasBroken();
         }
-        ObservedValue observed = fixtures.observed(answered);
+        // Read off what the check was applied to and not off what came back. The two are one value
+        // — the second is the first through this module's own decoder — but only one of them is what
+        // the clause saw, and a report of a verdict shows what the verdict was about.
+        ObservedValue observed = fixtures.observed(here);
+        // The declared output is the position, which is what tells a set from a list where the
+        // answer is one. A union falls through it to the value itself, there being nothing at a
+        // union for a renderer to read.
         return new ContractObservation.Broken(why, observed,
                 fixtures.shown(observed, sig.outputType()));
     }
