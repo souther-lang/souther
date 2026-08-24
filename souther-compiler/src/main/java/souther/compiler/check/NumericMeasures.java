@@ -10,7 +10,16 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * The standard-library operations whose result is a number taken of a location.
+ * The standard-library operations that count what a location holds, and the reading that finds a
+ * number taken of one wherever it is written.
+ *
+ * <p><b>Two questions and two sets, since #1027.</b> Counting what it is given is one account of
+ * what an operation takes of the one value it is given, and {@link #calls()} and {@link #isMeasure}
+ * hold that narrow set: what an emptiness check means, what bounds how many a generated container
+ * holds, what a clause of a value has a word for. {@link #takenIn} asks the wider question — is this
+ * call a number taken of one location at all — and answers for every operation that declares an
+ * account, {@code Time.hour} as much as {@code String.length}. Asked the narrow question where the
+ * wide one was meant, a guard on anything but a size drew no line and nothing said so.
  *
  * <p>Which they are is declared with the rest of what is true of the language's operations
  * ({@link OperationFacts}) and read from there. This once held the list
@@ -35,12 +44,13 @@ import java.util.Set;
  */
 public final class NumericMeasures {
 
-    /** Every such operation. */
+    /** Every operation that counts what it is given, which is the narrow set. */
     public static Set<ValueName> calls() {
         return OperationFacts.countsWhatItIsGiven();
     }
 
-    /** Whether {@code operation} is one of them. */
+    /** Whether {@code operation} counts what it is given. Not whether it answers a number taken of
+     *  one value, which is {@link #takenIn}'s wider question. */
     public static boolean isMeasure(ValueName operation) {
         return calls().contains(operation);
     }
@@ -75,7 +85,7 @@ public final class NumericMeasures {
             case null, default -> List.of();
         };
         // Any operation that answers a number taken of the one value it is given, and not the
-        // measures alone. `Int.abs(x)` names a number of `x` the way `String.length(s)` names one of
+        // measures alone. `Time.hour(t)` names a number of `t` the way `String.length(s)` names one of
         // `s`, and a reading that asked the narrower question drew a line on the second and none on
         // the first — with nothing said about the guard it passed over (#1027).
         return operation instanceof ValueName.Stdlib named

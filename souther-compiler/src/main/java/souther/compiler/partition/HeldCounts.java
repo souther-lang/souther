@@ -49,7 +49,7 @@ public record HeldCounts(Quantities counts, Map<TermPath, NumericTerm> sizes) {
         for (Position each : domain.positions()) {
             // Counts of containers and nothing else. What this feeds is how many elements to build,
             // so an operation whose number is not how many the value holds has no business bounding
-            // it: `Int.abs(x) <= 5` would otherwise be read as a container of at most five. The one
+            // it: `Time.hour(t) <= 5` would otherwise be read as a container of at most five. The one
             // question here that names an arm, and it names it because it is about that arm.
             if (each.term() instanceof NumericTerm.TakenOf taken
                     && taken.takenAs() instanceof souther.compiler.semantics.TakenAs.HowManyItHolds) {

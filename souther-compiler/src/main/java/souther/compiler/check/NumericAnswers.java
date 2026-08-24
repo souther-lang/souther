@@ -17,10 +17,11 @@ import souther.compiler.types.ValueName;
  *
  * <p>What this is for is the carrier of a term standing for such an answer. What a number is
  * measured by follows from what the number <em>is</em>, and what it is is declared by the operation:
- * {@code String.length} answers an {@code Int} and steps by one, {@code Decimal.abs} answers a
- * {@code Decimal} and does not. Taken from the position the operation was applied at instead, the
- * step of the answer was the step of the argument — the same carrier for {@code Date.year(d)} as
- * for {@code d} — which is a boundary sharpened onto a value the term never takes (#1027).
+ * {@code String.length} and {@code Time.hour} both answer an {@code Int} and step by one, at
+ * positions that step by a character and by a second. Taken from the position the operation was
+ * applied at instead, the step of the answer was the step of the argument — a line at the twelfth
+ * hour drawn at the twelfth second — which is a boundary sharpened onto a value the term never
+ * takes (#1027).
  *
  * <p>Here rather than beside the declarations because reading a signature is the frontend's. A fact
  * is a proposition about an operation and is declared where those are; what the library was written

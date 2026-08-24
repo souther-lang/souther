@@ -5,6 +5,7 @@ import souther.compiler.check.ReadingPolicy;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.TermOrders;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Place;
@@ -19,10 +20,10 @@ import java.util.Set;
  * The values that put a term at a number, which is the other direction of {@link NumericTerm#read}.
  *
  * <p><b>Not its inverse.</b> Reading is not injective and building cannot undo it: many strings are
- * five long, and {@code Int.abs} answers three at three and at minus three. What holds is one way
- * round — every value built here reads back as the number it was built for. Written as an inverse,
- * the second operation to be added would have been the one that broke it, and the way it would have
- * broken is a row offered at an edge it does not stand on.
+ * five long, and every time in an hour falls in that hour. What holds is one way round — every value
+ * built here reads back as the number it was built for. Written as an inverse, the second operation
+ * to be added would have been the one that broke it, and the way it would have broken is a row
+ * offered at an edge it does not stand on.
  *
  * <p>And whether anything exists to build is a third statement, declared of the operation
  * ({@code EveryAnswerItCanGiveHasASourceValue}) and asked where an edge is claimed to be writable.
@@ -72,7 +73,7 @@ final class TermRealizations {
      * of a location is the number written at it, and a number an operation answered is met by
      * whatever answers it.
      */
-    static Realization at(NumericTerm term, Type sourceType, Carrier answered, Place answer,
+    static Realization at(NumericTerm term, Type sourceType, TermOrders orders, Place answer,
                           Symbols symbols, ReadingPolicy policy) {
         if (sourceType == null) {
             return new Realization.BuiltNone(
@@ -85,10 +86,14 @@ final class TermRealizations {
             // row as an `Int`, and the decoder refused it with the report saying only that every
             // value tried had been refused.
             case NumericTerm.ValueOf _ ->
-                    oneValue(FixtureTemplate.on(answered, answer, symbols.scope()::reach),
+                    oneValue(FixtureTemplate.on(orders.answered(), answer, symbols.scope()::reach),
                             sourceType, symbols);
+            // On the order the value is written on, which for a term that is what an operation
+            // answered is not the order the number is measured on. Written on the answer's, the
+            // thirteenth hour would be offered as the thirteenth second — the same mistake reading
+            // makes in the other direction, and the reason both directions take this end (#1027).
             case NumericTerm.TakenOf taken ->
-                    taken(taken.takenAs(), sourceType, answered, answer, symbols, policy);
+                    taken(taken.takenAs(), sourceType, orders.observed(), answer, symbols, policy);
         };
     }
 
@@ -101,11 +106,14 @@ final class TermRealizations {
      * agree, an operation would have gained a boundary nobody could write a row for, and the report
      * would have said only that every value tried was refused.
      */
-    private static Realization taken(TakenAs how, Type sourceType, Carrier answered, Place answer,
+    private static Realization taken(TakenAs how, Type sourceType, Carrier observed, Place answer,
                                      Symbols symbols, ReadingPolicy policy) {
         return switch (how) {
+            // A container has no order of its own and is built out of what it holds, so this arm
+            // takes none. That is the arm's own answer and not a carrier standing in for nothing.
             case TakenAs.HowManyItHolds _ -> holding(sourceType, answer, symbols, policy);
-            case TakenAs.PartOfTime taken -> atThatPart(taken.part(), sourceType, answer, symbols);
+            case TakenAs.PartOfTime taken ->
+                    atThatPart(taken.part(), sourceType, observed, answer, symbols);
         };
     }
 
@@ -138,14 +146,15 @@ final class TermRealizations {
      * reads back, not that it enumerates the inverse. Nought below is the plain choice: the hour on
      * the hour.
      *
-     * <p>Written on the order the value is written on, which is the seconds of its day, and not on
-     * the order the answer is measured on. Written on the answer's, the thirteenth hour would be
-     * offered as the thirteenth second — the same mistake as reading it that way, in the other
-     * direction, and the reason both directions take the source's order.
+     * <p>The order is handed in and not named here. That what this is taken of is a time is the
+     * arm's own condition and the library is held to it, but which carrier a time is written on is
+     * {@link Carrier}'s one answer — named here, this would be a second place saying what a time
+     * counts, and the two would part the day the first one moved.
      */
-    private static Realization atThatPart(TakenAs.TimePart part, Type sourceType, Place answer,
-                                          Symbols symbols) {
-        if (!(answer instanceof Count count) || !count.whole() || count.signum() < 0
+    private static Realization atThatPart(TakenAs.TimePart part, Type sourceType, Carrier observed,
+                                          Place answer, Symbols symbols) {
+        if (observed == null || !(answer instanceof Count count) || !count.whole()
+                || count.signum() < 0
                 || count.at().compareTo(java.math.BigDecimal.valueOf(part.many())) >= 0) {
             // Outside the parts a day has. Not this reader's to report as a refusal: what a part
             // runs between is the operation's declared bound, and a number outside it is a number
@@ -156,7 +165,7 @@ final class TermRealizations {
         Place seconds = Count.of(count.at()
                 .multiply(java.math.BigDecimal.valueOf(part.seconds())));
         FixtureTemplate standing = Witnesses.wrapped(sourceType,
-                FixtureTemplate.on(Carrier.TIME, seconds, symbols.scope()::reach), symbols);
+                FixtureTemplate.on(observed, seconds, symbols.scope()::reach), symbols);
         return standing == null
                 ? new Realization.BuiltNone(
                         Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)

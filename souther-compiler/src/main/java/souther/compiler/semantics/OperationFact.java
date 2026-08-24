@@ -233,7 +233,7 @@ public sealed interface OperationFact {
 
     /**
      * The operation answers a number taken of the one value it is given: how long a string is, how
-     * many a container holds, how far from nought a number stands.
+     * many a container holds, which hour of its day a time falls in.
      *
      * <p>One list, because a reader that answers "does this rule bound a number" has to give the
      * same answer wherever it is asked. The discharge procedure keys an atom on one of these over
@@ -264,11 +264,11 @@ public sealed interface OperationFact {
      * Every number this operation could answer is one some value it could be given answers.
      *
      * <p>Not a property of how the number is taken. A string of any length is written by repeating
-     * a character and a character is always to be had; {@code Int.abs} answers {@code n} at
-     * {@code n} and at {@code -n}; {@code Date.month} answers each of its twelve at some date. Three
-     * different accounts of why, and one proposition — which is why it is asked of the operation
-     * rather than derived from {@link TakenAs}, where the answer would have to be the same for
-     * every operation sharing an arm.
+     * a character and a character is always to be had; every hour of the day is an hour some time
+     * falls in. Two different accounts of why, and one proposition — which is why it is asked of the
+     * operation rather than derived from {@link TakenAs}, where the answer would have to be the same
+     * for every operation sharing an arm: a {@code List.length} and a {@code String.length} share
+     * one and only the second of them has it.
      *
      * <p>What is left out is what a count over an element the language may have none of leaves. A
      * {@code Set<Bool>} is capped at two by how many booleans there are; a {@code List<T>} of one

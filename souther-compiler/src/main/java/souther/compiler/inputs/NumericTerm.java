@@ -20,7 +20,7 @@ import souther.compiler.types.ValueName;
  *
  * <p>Not the position. A boundary is drawn on a number, and the number a rule names is sometimes the
  * content of a location and sometimes something taken of it — the length of a string, the size of a
- * container, how far from nought a number stands. The two were one thing here, so a position holding
+ * container, which hour of its day a time falls in. The two were one thing here, so a position holding
  * a string was a position holding no number, and every rule written about its length came back as a
  * rule the model had not written. The discharge procedure has always kept them apart (spec
  * §invariant-discharge-terms); this is the same separation on the side that measures.
@@ -52,7 +52,7 @@ public sealed interface NumericTerm {
 
     /**
      * A number taken of what a location holds: {@code String.length}, {@code List.length},
-     * {@code Set.size}, {@code Map.size}, {@code Int.abs}, {@code Decimal.abs}.
+     * {@code Set.size}, {@code Map.size}, {@code Time.hour}.
      *
      * <p>Keyed by the operation the call resolved to rather than by how it was written, so a term
      * here and an atom in the discharge procedure are the same term when they are the same operation
@@ -110,10 +110,10 @@ public sealed interface NumericTerm {
      * The order the number this term names is measured on, or null where it has none.
      *
      * <p>What a rule about the length of a string is counted as is an {@code Int} at a position no
-     * line is drawn on, and what a rule about {@code Decimal.abs(x)} is counted as is a decimal
-     * however the position is declared. Both follow from what the operation answers and from nothing
-     * about where it was applied — asked of the position, the step of the answer was the step of the
-     * argument, which is an end sharpened onto a value the term never takes.
+     * line is drawn on, and what a rule about {@code Time.hour(t)} is counted as is a count by one at
+     * a position counting the seconds of its day. Both follow from what the operation answers and
+     * from nothing about where it was applied — asked of the position, the step of the answer was
+     * the step of the argument, and the twelfth hour was a line at the twelfth second.
      *
      * <p>Which is why {@code positionType} may be absent. A caller reading a term under more steps
      * than the walk that finds an input's positions goes down has no position to ask, and what an
@@ -146,10 +146,14 @@ public sealed interface NumericTerm {
     }
 
     /** Both ends together, which is what every reader of a row wants and what neither end alone is
-     *  safe to stand in for. */
+     *  safe to stand in for. A term that is what a location holds has one order twice, and says so
+     *  here rather than by two readings that happen to agree. */
     default TermOrders ordersAt(Type positionType, Symbols symbols) {
-        return new TermOrders(observedOn(positionType, symbols),
-                answeredOn(positionType, symbols));
+        Carrier observed = observedOn(positionType, symbols);
+        return switch (this) {
+            case ValueOf _ -> TermOrders.itself(observed);
+            case TakenOf _ -> new TermOrders(observed, answeredOn(positionType, symbols));
+        };
     }
 
     /**
@@ -259,8 +263,8 @@ public sealed interface NumericTerm {
                 .remainder(java.math.BigDecimal.valueOf(part.many()))));
     }
 
-    /** How the values beside a boundary on this term are found. A count steps like an {@code Int};
-     *  what a decimal-answering operation gives does not. */
+    /** How the values beside a boundary on this term are found, which is what the number it names
+     *  is measured on and never what stands at the position it was taken of. */
     default BoundaryDomain intervals(Type positionType, Symbols symbols) {
         return BoundaryDomain.on(answeredOn(positionType, symbols));
     }

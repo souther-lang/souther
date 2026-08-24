@@ -126,7 +126,7 @@ final class ComparisonSubjects {
     private static Owed.Subject.OfAPosition subjectOf(NumericTerm term) {
         // A term that is what an operation answered says the line is on that answer; a term over the
         // position's own value, or no term at all, leaves it on the position. Which operation it was
-        // makes no difference here — the line under `Int.abs(x) > 10` is no more on `x` than the one
+        // makes no difference here — the line under `Time.hour(t) > 12` is no more on `t` than the one
         // under `String.length(s) > 10` is on `s` — so this is the one question the variant is
         // genuinely what settles.
         return new Owed.Subject.OfAPosition("", term instanceof NumericTerm.TakenOf);

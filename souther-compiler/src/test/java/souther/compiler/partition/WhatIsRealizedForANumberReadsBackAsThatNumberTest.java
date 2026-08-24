@@ -18,7 +18,6 @@ import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -26,6 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -118,13 +118,14 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
             NumericTerm.TakenOf term =
                     new NumericTerm.TakenOf((ValueName.Stdlib) operation, AT);
             Type source = sourceOf(operation);
-            Carrier answered = term.answeredOn(source, SYMBOLS);
-            Carrier observed = term.observedOn(source, SYMBOLS);
-            assertNotNull(answered, operation + " answers a number, so there is an order for it");
+            souther.compiler.inputs.TermOrders orders = term.ordersAt(source, SYMBOLS);
+            Carrier observed = orders.observed();
+            assertNotNull(orders.answered(),
+                    operation + " answers a number, so there is an order for it");
             for (long each : answerable(term)) {
                 Place asked = Count.of(each);
                 TermRealizations.Realization made =
-                        TermRealizations.at(term, source, answered, asked, SYMBOLS, POLICY);
+                        TermRealizations.at(term, source, orders, asked, SYMBOLS, POLICY);
                 // An operation that builds nothing at a number is not a failure of this: whether
                 // anything answers it is `EveryAnswerItCanGiveHasASourceValue`, asked below.
                 if (!(made instanceof TermRealizations.Realization.Built built)) {
@@ -162,10 +163,10 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
             NumericTerm.TakenOf term =
                     new NumericTerm.TakenOf((ValueName.Stdlib) operation, AT);
             Type source = sourceOf(operation);
-            Carrier answered = term.answeredOn(source, SYMBOLS);
+            souther.compiler.inputs.TermOrders orders = term.ordersAt(source, SYMBOLS);
             for (long each : answerable(term)) {
                 assertInstanceOf(TermRealizations.Realization.Built.class,
-                        TermRealizations.at(term, source, answered, Count.of(each), SYMBOLS, POLICY),
+                        TermRealizations.at(term, source, orders, Count.of(each), SYMBOLS, POLICY),
                         operation + " says every number it answers is one some value answers, and"
                                 + " nothing was built for " + each);
             }
@@ -248,8 +249,7 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
     void aTermCannotBeBuiltForAnOperationThatDeclaresNoAccount() {
         assertTrue(OperationFacts.takenAs(ValueName.Stdlib.operation("Date", "year")) == null,
                 "the premise: nothing is declared of it yet");
-        IllegalArgumentException refused = org.junit.jupiter.api.Assertions.assertThrows(
-                IllegalArgumentException.class,
+        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
                 () -> new NumericTerm.TakenOf(ValueName.Stdlib.operation("Date", "year"), AT));
         assertTrue(refused.getMessage().contains("Date.year"), refused.getMessage());
     }

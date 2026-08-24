@@ -772,16 +772,17 @@ public final class InvariantChecker {
         // And what a rule counting this position spoke about, which is not what the position is. A
         // list is no number and has no atom above; the count of it has one, and a reader asking how
         // much the position holds is asking about that one.
-        FactSubject counted = terms.takenAtomOf(value, type, at);
+        // The atom and the operation it counts by, filled under one condition. What the clauses of a
+        // value have words for is the position and how much it holds, and the second of those is one
+        // operation — the one that counts what the position's type holds. A coordinate that recorded
+        // only "not the value" brought a count and a number some other operation answers of the same
+        // location to one name (#1027), so the operation is kept; kept in a second `if`, a path could
+        // have an atom and no operation, and the coordinate naming it would fail on the way past.
+        ValueName countsIt = NumericMeasures.takenOf(type, symbols);
+        FactSubject counted = countsIt == null ? null : terms.takenAtomOf(value, type, at);
         if (counted != null) {
             held.put(path, counted);
-            // And which operation that count is of. What the clauses of a value have words for is
-            // the position and how much it holds, and the second of those is one operation — the one
-            // that counts what the position's type holds. Kept beside the atom rather than left to
-            // be worked out again wherever a coordinate is named: a count and a number some other
-            // operation answers of the same location are two quantities, and a coordinate that
-            // recorded only "not the value" brought them to one name (#1027).
-            heldBy.put(path, NumericMeasures.takenOf(type, symbols));
+            heldBy.put(path, countsIt);
         }
         // Through the names, to the value that has the fields. Each is read at the path it is worn
         // under, since wearing a name is not being somewhere else. How far the names reach is

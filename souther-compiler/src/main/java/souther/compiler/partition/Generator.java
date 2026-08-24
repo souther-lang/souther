@@ -11,7 +11,6 @@ import souther.compiler.reading.PathAccess;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
-import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.observe.Classification;
 import souther.compiler.types.Type;
@@ -2004,8 +2003,9 @@ public final class Generator {
                                boolean besideAnother) {
         // A number an operation answered is met by several values and only one of them can be
         // offered beside a second position being fixed as well. True of every such number and not
-        // of counts alone — three is answered by three and by minus three as much as by three
-        // characters — so it is asked of what the term is rather than of which operation it names.
+        // of counts alone — an hour is answered by every time within it as much as a count of three
+        // is by every string of three — so it is asked of what the term is rather than of which
+        // operation it names.
         if (besideAnother && term instanceof NumericTerm.TakenOf) {
             return Edge.none(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
@@ -2015,15 +2015,21 @@ public final class Generator {
             }
         }
         // No axis at this position, which a behavior whose inputs nothing bounds has none of while
-        // its body still draws lines between them. A number an operation answered is not writable
-        // this way: four is not what goes at the position, it is four characters — or a three and a
-        // minus three — somebody has to choose, and choosing needs the axis's own type.
+        // its body still draws lines between them. What this path writes is the number itself at the
+        // position, and a number an operation answered is not that: four is not what goes there, it
+        // is four characters — or some time within the fourth hour — somebody has to choose.
+        //
+        // Which something could now do, since building such a value is `TermRealizations`' answer
+        // and it needs no axis to give it. Left refused so that moving the building out of here
+        // changed nothing; removing it is its own answer to give, beside the limit above.
         Type declared = term instanceof NumericTerm.TakenOf ? null : declaredAt(subject, term.path());
         if (declared == null) {
             return Edge.none(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
-        return edgeFrom(TermRealizations.at(term, declared, carrier, at, subject.symbols(),
-                subject.inputs().policy()), term, at);
+        return edgeFrom(TermRealizations.at(term, declared,
+                new souther.compiler.inputs.TermOrders(
+                        term.observedOn(declared, subject.symbols()), carrier),
+                at, subject.symbols(), subject.inputs().policy()), term, at);
     }
 
     /** The type declared at a position this subject has no axis for, which is a bare parameter and
@@ -3317,8 +3323,14 @@ public final class Generator {
      */
     private static Edge edgeOf(Axis axis, Carrier carrier, Place at, Symbols symbols,
                                ReadingPolicy policy) {
+        // The order the line was drawn on is the caller's — a cut carries the one the rule was read
+        // on — and the order the value at the position is written on is the position's. Both, so
+        // neither stands in for the other.
         return edgeFrom(
-                TermRealizations.at(axis.term(), axis.type(), carrier, at, symbols, policy),
+                TermRealizations.at(axis.term(), axis.type(),
+                        new souther.compiler.inputs.TermOrders(
+                                axis.term().observedOn(axis.type(), symbols), carrier),
+                        at, symbols, policy),
                 axis.term(), at);
     }
 

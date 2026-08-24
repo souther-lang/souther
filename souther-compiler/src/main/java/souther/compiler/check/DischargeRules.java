@@ -918,11 +918,11 @@ final class DischargeRules {
      * Whether what {@code operation} answers is a number taken of the one value it was given.
      *
      * <p>The wider question, and the one a vocabulary asks. Whether the check has something to say
-     * about a call is not whether the call is a size: {@code Int.abs(x)} answers a number of
-     * {@code x} the same way {@code String.length(s)} answers one of {@code s}, and what is declared
-     * of each is declared under the same proposition. Spelled as "is it a size", the vocabulary was
-     * the size machinery's own predicate read for a second purpose, and the first operation that
-     * answered a number without counting anything would have been left out of it silently (#1027).
+     * about a call is not whether the call is a size: {@code Time.hour(t)} answers a number of
+     * {@code t} the way {@code String.length(s)} answers one of {@code s}, and what is declared of
+     * each is declared under the same proposition. Spelled as "is it a size", the vocabulary was the
+     * size machinery's own predicate read for a second purpose, and the first operation that
+     * answered a number without counting anything was left out of it silently (#1027).
      */
     static boolean answersANumberTakenOfItsArgument(ValueName operation) {
         return OperationFacts.takenAs(operation) != null;
