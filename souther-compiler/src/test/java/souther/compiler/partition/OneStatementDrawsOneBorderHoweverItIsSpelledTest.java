@@ -125,6 +125,22 @@ class OneStatementDrawsOneBorderHoweverItIsSpelledTest {
                 "a rule over a shifted date-time draws a line");
     }
 
+    /**
+     * An exclusion inside the call stops the reading there, which is why the corpus did not move.
+     *
+     * <p>The conformance corpus writes {@code Date.daysBetween(受付日, DateTime.toDate(締切))}, and
+     * its report is the same document as before. That is not because nothing was gained: the one
+     * place it uses the measure has an operation inside it that is declared to state no form, so the
+     * reading reaches the argument and stops. Written without it, the same rule draws a line.
+     */
+    @Test
+    void anExclusionInsideTheCallStopsTheReadingThere() {
+        assertEquals(List.of(), bordersOf("a: Date, d: DateTime",
+                "Date.daysBetween(a, DateTime.toDate(d)) <= 1"));
+        assertEquals(List.of("b - 1"), bordersOf("a: Date, b: Date",
+                "Date.daysBetween(a, b) <= 1"));
+    }
+
     private static PartitionEvidence measured(String parameters, String condition) {
         String model = """
                 module demo
