@@ -189,6 +189,29 @@ class WhatAWholeWentWithoutIsWhatItsPartsWentWithoutTest {
     }
 
     /**
+     * And a module with a reason to give does not call its measurement complete.
+     *
+     * <p>The other side of the union, and the sentence issue #996 is titled with. The word above a
+     * module and the reasons under it are one set read twice — the word is whether it is empty, the
+     * reasons are its observations taken out — so a module cannot say it read everything while
+     * naming something it could not read.
+     *
+     * <p>One direction only. A measurement can be short of something no observation covers — a space
+     * of combinations too large to walk is not a reason a document lists — so {@code partial} with
+     * nothing to name is a state the report is entitled to.
+     */
+    @Test
+    void aModuleWithAReasonToGiveIsNotComplete() {
+        for (AdequacyReport.ModuleReport module : report().modules()) {
+            if (!module.incompleteness().isEmpty()) {
+                assertEquals(souther.compiler.observe.MeasurementStatus.PARTIAL, module.status(),
+                        () -> "`" + module.module() + "` names what it could not read and calls its"
+                                + " measurement complete: " + module.incompleteness());
+            }
+        }
+    }
+
+    /**
      * What {@code whole} carries and what {@code parts} went without, held to being the same.
      *
      * <p>Both ways round, because the rule is a union and nothing else. Short of what its parts went

@@ -533,26 +533,24 @@ public final class Analyzer {
      */
     private static String lensTitle(Compilation compilation, String module, String behavior,
                                     Adequacy.Of adequacy) {
-        int rows = 0;
-        int pending = 0;
-        for (SourceId sourceId : compilation.exampleSourcesOf(module)) {
-            souther.compiler.query.Output.Examples.Of observed = compilation.db()
-                    .ask(souther.compiler.query.Output.Examples.asked(
-                            compilation.db(), module, sourceId)).value();
-            if (observed == null) {
-                continue;
-            }
-            for (souther.compiler.observe.RowOutcome row : observed.rows()) {
-                if (row.target().equals(behavior)) {
-                    rows++;
-                    pending += row.disposition() == souther.compiler.observe.Disposition.PENDING
-                            ? 1 : 0;
-                }
-            }
-        }
-        if (rows == 0) {
+        // Asked for rather than walked. This gathered the rows out of each source itself and read a
+        // source that did not answer as one holding no rows, so a behavior whose file could not be
+        // evaluated drew the same lens as one nobody has exampled — and drew none (issue #996).
+        Map<String, Adequacy.RowReading> readings =
+                compilation.db().ask(new Adequacy.Rows(module)).value();
+        Adequacy.RowReading reading = readings == null ? Adequacy.RowReading.NOT_ASKED
+                : readings.getOrDefault(behavior, Adequacy.RowReading.NONE);
+        List<souther.compiler.observe.RowOutcome> read =
+                reading.measured().made().map(Adequacy.Observed::rows).orElse(null);
+        if (read == null || read.isEmpty()) {
+            // No numbers to show: either nobody has written a row here, or nothing read the ones
+            // that are. A lens saying `0 rows` would be this deciding which of those it was.
             return null;
         }
+        int rows = read.size();
+        int pending = (int) read.stream()
+                .filter(r -> r.disposition() == souther.compiler.observe.Disposition.PENDING)
+                .count();
         List<String> parts = new ArrayList<>();
         parts.add(rows + (rows == 1 ? " row" : " rows"));
         if (pending > 0) {
