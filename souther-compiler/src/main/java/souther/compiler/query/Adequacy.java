@@ -2893,8 +2893,14 @@ public final class Adequacy {
                                                    Symbols symbols) {
         // The classes alone: building a value applies no behavior, so what the compile implemented is
         // not a question this asks.
+        //
+        // And uncounted, said outright rather than taken from what the build happens to be
+        // measuring. Which arms a row goes through is recorded by instrumenting the bodies, and a
+        // value is built by the decoders without one of them running — so asking for the recorded
+        // classes here would make composing a value fail wherever the plan and the bodies do not
+        // line up, which is a fault in a measurement nothing here is making.
         souther.compiler.generated.EvaluationArtifact artifact =
-                db.ask(new Output.EvaluationLinked(module, coverageAsked(db))).value();
+                db.ask(new Output.EvaluationLinked(module, Output.CoverageMode.NONE)).value();
         Map<String, List<BehaviorRequirement>> requirements =
                 db.ask(new Bodies.Requirements(module)).value();
         if (artifact == null || requirements == null) {
