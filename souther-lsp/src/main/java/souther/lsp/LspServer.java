@@ -152,6 +152,7 @@ public final class LspServer {
             case REFERENCES -> { respond(id, references(params)); yield false; }
             case COMPLETION -> { respond(id, completion(params)); yield false; }
             case CODE_ACTION -> { respond(id, codeActions(params)); yield false; }
+            case CODE_ACTION_RESOLVE -> { respond(id, codeActionResolve(params)); yield false; }
             case CODE_LENS -> { respond(id, codeLenses(params)); yield false; }
             case RENAME -> { respond(id, rename(params)); yield false; }
             case FORMATTING -> { respond(id, formatting(params)); yield false; }
@@ -412,13 +413,64 @@ public final class LspServer {
         List<Object> out = new ArrayList<>();
         ModuleGraph graph = workspace.snapshot(documents.openDocuments());
         for (CodeAction a : analyzer.codeActions(p.uri(), text, p.range(), graph)) {
-            Map<String, Object> action = new LinkedHashMap<>();
-            action.put("title", a.title());
-            action.put("kind", "quickfix");
-            action.put("edit", Map.of("changes", Map.of(a.uri(), List.of(textEdit(a.range(), a.newText())))));
-            out.add(action);
+            out.add(written(a));
         }
         return out;
+    }
+
+    /**
+     * One action as the protocol writes it: with its edit, or with what it takes to work one out.
+     *
+     * <p>An action with neither is what a client sees while it is deciding whether to show the
+     * offer, and an action with both would be this server paying for an edit it was about to hand
+     * over unasked.
+     */
+    private static Map<String, Object> written(CodeAction a) {
+        Map<String, Object> action = new LinkedHashMap<>();
+        action.put("title", a.title());
+        action.put("kind", "quickfix");
+        switch (a) {
+            case CodeAction.Applied applied -> action.put("edit", Map.of("changes",
+                    Map.of(applied.uri(),
+                            List.of(textEdit(applied.range(), applied.newText())))));
+            case CodeAction.Deferred deferred -> action.put("data",
+                    Map.of("uri", deferred.uri(), "module", deferred.module(),
+                            "behavior", deferred.behavior()));
+        }
+        return action;
+    }
+
+    /**
+     * The edit for an action somebody took.
+     *
+     * <p>The document is read again here rather than remembered from when the offer was made: an
+     * editor asks what is available on every cursor move and resolves one of them much later, and
+     * an edit composed against the older text would be written into source it was not composed for.
+     *
+     * <p>An action that resolves to nothing comes back as it went in, with no edit. There is nothing
+     * to write, and writing the notes instead would put a comment into somebody's source.
+     */
+    private Object codeActionResolve(JsonNode params) {
+        if (params == null || params.get("data") == null) {
+            return params;   // not one of ours to work out; hand it back untouched
+        }
+        JsonNode data = params.get("data");
+        String uri = text(data, "uri");
+        String module = text(data, "module");
+        String behavior = text(data, "behavior");
+        String title = text(params, "title");
+        if (uri == null || module == null || behavior == null || title == null) {
+            return params;
+        }
+        CodeAction.Applied resolved = analyzer.resolve(
+                new CodeAction.Deferred(title, uri, module, behavior), documents.get(uri),
+                workspace.snapshot(documents.openDocuments()));
+        return resolved == null ? params : written(resolved);
+    }
+
+    private static String text(JsonNode at, String field) {
+        JsonNode found = at.get(field);
+        return found == null || !found.isString() ? null : found.asString();
     }
 
     /** Whether the codeAction request carries any client-side diagnostics for its range. */

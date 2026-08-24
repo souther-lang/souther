@@ -32,6 +32,32 @@ import souther.compiler.types.TypeSymbol;
  */
 public sealed interface About {
 
+    /**
+     * Whether writing a row is a thing this finding could be answered with.
+     *
+     * <p>Asked before anything is composed, by a caller deciding whether to offer somebody the work
+     * at all. What generating one actually comes to takes the generation, and this does not
+     * anticipate it: a subject a row could answer is one a search may still fail to reach.
+     *
+     * <p>Exhaustive with no {@code default}, so a subject added later is decided here rather than
+     * inheriting whichever answer sat under a catch-all. What a generation makes of each of these is
+     * {@code Adequacy.Generated}'s to say, and a structural test holds the two lists together.
+     */
+    default boolean aRowCouldAnswerIt() {
+        return switch (this) {
+            case APointOfABorder _, ACaseNoRowAppliesItTo _, AClassNoRowIsIn _,
+                 AnArmNoRowGoesThrough _ -> true;
+            // A case of the output, which nothing here has a way to steer a run towards; what the
+            // rows were seen doing rather than what they owe; what the model itself says, read to
+            // the end; and what this compiler could not read, where a row would answer a question
+            // nothing asked.
+            case ACaseNoRowExpects _, ACaseNothingWasSeenToProduce _, APositionNoLineDivides _,
+                 APositionThisCouldNotRead _, ARuleThisCouldNotRead _,
+                 APositionWhoseRulesWereNotReached _, APositionReadWiderThanItsRules _,
+                 AQuestionNothingAnswered _ -> false;
+        };
+    }
+
     /** A case of the output no row expects. */
     record ACaseNoRowExpects(TypeSymbol missing) implements About {
         public ACaseNoRowExpects {

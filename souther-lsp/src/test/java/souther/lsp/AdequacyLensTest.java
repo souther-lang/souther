@@ -16,6 +16,8 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -164,15 +166,23 @@ class AdequacyLensTest {
      */
     @Test
     void theRowsABehaviorDoesNotCoverCanBeWrittenIn() {
-        List<CodeAction> actions = measuring(Adequacy.Level.ALL)
-                .codeActions(MODULE, TRIP, on(9), graphOf(Map.of(MODULE, TRIP)));
+        Analyzer analyzer = measuring(Adequacy.Level.ALL);
+        ModuleGraph graph = graphOf(Map.of(MODULE, TRIP));
+        List<CodeAction> actions = analyzer.codeActions(MODULE, TRIP, on(9), graph);
 
         assertEquals(1, actions.size(), actions.toString());
         assertEquals("Write the rows `submit` does not cover", actions.get(0).title());
-        for (String line : actions.get(0).newText().lines().filter(l -> !l.isBlank()).toList()) {
+        // Offered without the rows, which is the point of offering it: what they cost is paid by
+        // somebody taking it.
+        CodeAction.Deferred offered =
+                assertInstanceOf(CodeAction.Deferred.class, actions.get(0));
+
+        CodeAction.Applied taken = analyzer.resolve(offered, TRIP, graph);
+        assertNotNull(taken, "and taking it writes rows");
+        for (String line : taken.newText().lines().filter(l -> !l.isBlank()).toList()) {
             assertTrue(line.startsWith("//"), "every line is a comment: " + line);
         }
-        assertTrue(actions.get(0).newText().contains("-> <?>"), actions.get(0).newText());
+        assertTrue(taken.newText().contains("-> <?>"), taken.newText());
     }
 
     /**

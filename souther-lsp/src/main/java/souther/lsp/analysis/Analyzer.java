@@ -670,7 +670,8 @@ public final class Analyzer {
         }
         Range diagRange = rangeOfRegion(diagnosed);
         if (overlaps(diagRange, requested)) {
-            out.add(new CodeAction("Replace with '" + d.suggestion() + "'", uri, diagRange, d.suggestion()));
+            out.add(new CodeAction.Applied("Replace with '" + d.suggestion() + "'", uri, diagRange,
+                    d.suggestion()));
         }
         return out;
     }
@@ -710,26 +711,74 @@ public final class Analyzer {
                     || !overlaps(pointRange(lines, behavior.pos()), requested)) {
                 continue;
             }
-            // An id stands for itself here: a workspace compilation is keyed on the document URIs
-            // this server was given, so what identifies a source is already what this server calls
-            // it.
-            souther.compiler.report.GeneratedRows.Block block =
-                    souther.compiler.report.GeneratedRows.of(compilation, module,
-                            behavior.name(), true,
-                            souther.compiler.diag.SourceNameResolver.identity());
-            // Whether there is a row to write, asked of the generator. Read off the text, a block
-            // holding only the reason nothing was composed is not blank — so this offered to write
-            // rows for a behavior it had none for, and what it wrote into somebody's source was a
-            // comment (issue #955). A level that composes no value produces exactly that block.
-            if (block.rows() == 0) {
+            // Whether the model owes this behavior anything a row could answer. Asked of the
+            // findings, which the report beside this has already worked out, and not of the
+            // generator: composing a value costs a decoder run for each point it settles, and an
+            // editor asks what is available here every time the cursor moves.
+            if (!anythingARowCouldAnswer(compilation, module, behavior.name())) {
                 continue;
             }
-            Position end = new Position((int) text.lines().count(), 0);
-            return List.of(new CodeAction(
-                    "Write the rows `" + behavior.name() + "` does not cover", uri,
-                    new Range(end, end), System.lineSeparator() + block.text()));
+            return List.of(new CodeAction.Deferred(
+                    "Write the rows `" + behavior.name() + "` does not cover", uri, module,
+                    behavior.name()));
         }
         return List.of();
+    }
+
+    /** Whether anything this behavior is short of is a thing writing a row could answer. */
+    private static boolean anythingARowCouldAnswer(Compilation compilation, String module,
+                                                   String behavior) {
+        Map<String, List<souther.compiler.query.Adequacy.Finding>> findings =
+                compilation.db().ask(new souther.compiler.query.Adequacy.Findings(module)).value();
+        if (findings == null) {
+            return false;
+        }
+        return findings.getOrDefault(behavior, List.of()).stream()
+                .anyMatch(each -> each.about().aRowCouldAnswerIt());
+    }
+
+    /**
+     * The rows themselves, for somebody who has taken the offer.
+     *
+     * <p>Worked out here rather than where the offer was made. This is what costs: the values are
+     * put through the module's own decoders, and an author taking the action is asking for that
+     * once, rather than on every cursor move.
+     *
+     * <p>The behavior is looked up in what the workspace holds now. A document is edited between an
+     * offer being shown and being taken, and rows built against the older text would be written into
+     * source they were not composed for.
+     *
+     * <p>Null where there is nothing to write. An offer to write rows has to write rows: a block
+     * holding only notes is not blank, so a caller reading the text for whether there is work would
+     * put a comment into somebody's source. What there is to write is the generator's answer, and it
+     * is the count that is asked.
+     */
+    public CodeAction.Applied resolve(CodeAction.Deferred offer, String text, ModuleGraph graph) {
+        if (graph == null || text == null) {
+            return null;
+        }
+        Compilation compilation = compileOf(graph);
+        souther.compiler.check.Prepared written =
+                compilation.db().ask(new Shapes.Prepared(offer.module())).value();
+        if (written == null || written.behaviors().stream()
+                .noneMatch(each -> each.name().equals(offer.behavior()))) {
+            return null;   // the behavior the offer was made about is not there any more
+        }
+        // An id stands for itself here: a workspace compilation is keyed on the document URIs this
+        // server was given, so what identifies a source is already what this server calls it.
+        souther.compiler.report.GeneratedRows.Block block =
+                souther.compiler.report.GeneratedRows.of(compilation, offer.module(),
+                        offer.behavior(), true,
+                        souther.compiler.diag.SourceNameResolver.identity());
+        if (block.rows() == 0) {
+            return null;
+        }
+        // Inserted at the end of the document. Where rows belong is the author's choice — this
+        // module's own source or an attached file — and moving a block is easier than finding out
+        // why one landed somewhere surprising.
+        Position end = new Position((int) text.lines().count(), 0);
+        return new CodeAction.Applied(offer.title(), offer.uri(), new Range(end, end),
+                System.lineSeparator() + block.text());
     }
 
     /** The first semantic error a self-contained compile turns up, as the structured compiler
