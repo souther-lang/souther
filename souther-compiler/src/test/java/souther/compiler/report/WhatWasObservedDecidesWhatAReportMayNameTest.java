@@ -79,8 +79,10 @@ class WhatWasObservedDecidesWhatAReportMayNameTest {
                 souther.compiler.query.Adequacy.AdequacyBar.RELIABLE_DOMAIN, WeakeningSet.none(),
                 List.of()).branch(out,
                 new AdequacyReport.BehaviorReport("b", BehaviorImplementation.IMPLEMENTED,
-                        souther.compiler.query.Adequacy.RowReading.NONE,
-                        WeakeningSet.none(), null, null, null, read(), List.of()),
+                        new souther.compiler.query.BehaviorEvidence(
+                                souther.compiler.query.Adequacy.RowReading.NONE,
+                                null, null, read()),
+                        null, List.of()),
                 null, SourceNameResolver.identity());
 
         assertTrue(out.toString().contains("branch      1/4"),

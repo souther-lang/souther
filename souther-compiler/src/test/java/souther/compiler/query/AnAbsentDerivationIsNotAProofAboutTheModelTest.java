@@ -3,6 +3,10 @@ package souther.compiler.query;
 import org.junit.jupiter.api.Test;
 import souther.compiler.report.AdequacyReport;
 
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -30,6 +34,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * the correction is worthless if it turns every settled nothing into a doubt.
  */
 class AnAbsentDerivationIsNotAProofAboutTheModelTest {
+
+    private static final JsonMapper JSON = JsonMapper.builder().build();
 
     private static Compilation measured(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
@@ -92,22 +98,50 @@ class AnAbsentDerivationIsNotAProofAboutTheModelTest {
     }
 
     /**
-     * And the report does not say both things about it.
+     * And the document does not say both things about it.
      *
      * <p>The two halves are a line apart. Read from the declarations the behavior is
      * {@code implemented}; read from the elaborated bodies it had none — and the report printed
      * each of them under the other.
+     *
+     * <p>Asked of the document a build reads rather than of the one a person does. What is held
+     * here is which words are written under which behavior, and a substring of the whole rendering
+     * answers neither: {@code implemented} is inside {@code unimplemented}, a line about one
+     * behavior reads the same as a line about the next, and the exact spacing of a column is not
+     * what this is about.
      */
     @Test
-    void theReportDoesNotCallAnImplementedBehaviorOneWithNoBody() {
-        AdequacyReport report = AdequacyReport.of(measured(STOPPED));
-        String said = report.human(souther.compiler.diag.SourceNameResolver.identity());
+    void theDocumentDoesNotCallAnImplementedBehaviorOneWithNoBody() {
+        JsonNode root = JSON.readTree(AdequacyReport.of(measured(STOPPED))
+                .json(souther.compiler.diag.SourceNameResolver.identity()));
+        JsonNode behavior = root.get("modules").get(0).get("behaviors").get(0);
 
-        assertTrue(said.contains("implemented"), () -> "the declarations say so: " + said);
-        assertFalse(said.contains("this behavior has no body"),
-                () -> "and nothing else in the report may say otherwise: " + said);
-        assertTrue(said.contains("branch      not measured"),
-                () -> "the measure says it has no number rather than saying nothing: " + said);
+        assertEquals("pick", behavior.get("name").asString());
+        assertEquals("implemented", behavior.get("implementation").asString(),
+                "the declarations say a body is written here");
+        assertEquals("bodies_not_elaborated", behavior.get("branch").get("reason").asString(),
+                () -> "and the arm measure says what stopped it rather than saying the model has"
+                        + " no body: " + behavior.get("branch"));
+        assertEquals("unavailable", behavior.get("branch").get("status").asString(),
+                "it has no number");
+        assertEquals(List.of("bodies_not_elaborated"),
+                behavior.get("branch").get("weakening").valueStream()
+                        .map(JsonNode::asString).toList(),
+                "and says what it went without, which is what tells it from a measure nobody asked"
+                        + " for");
+    }
+
+    /** And the count of rows is left out rather than written as zero, for the same reason. */
+    @Test
+    void theDocumentLeavesOutACountItCouldNotMake() {
+        JsonNode root = JSON.readTree(AdequacyReport.of(measured(STOPPED))
+                .json(souther.compiler.diag.SourceNameResolver.identity()));
+        JsonNode behavior = root.get("modules").get(0).get("behaviors").get(0);
+
+        assertFalse(behavior.has("rows"),
+                () -> "no source of this module was evaluated, so nothing counted its rows: "
+                        + behavior);
+        assertFalse(behavior.has("pending"), () -> "and none of them either: " + behavior);
     }
 
     /** A {@code >->} composition still has no body of its own, which is the model's own answer. */

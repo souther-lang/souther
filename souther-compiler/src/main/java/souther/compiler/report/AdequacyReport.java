@@ -26,6 +26,7 @@ import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
+import souther.compiler.query.BehaviorEvidence;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.text.DisplayColumns;
 import souther.compiler.types.TypeSymbol;
@@ -95,17 +96,34 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         UNDETERMINED
     }
 
-    public record ModuleReport(String module, SourceId declaredIn, WeakeningSet weakenedBy,
+    public record ModuleReport(String module, SourceId declaredIn,
                                List<Incompleteness> incompleteness, List<BehaviorReport> behaviors) {
         public ModuleReport {
             incompleteness = List.copyOf(incompleteness);
             behaviors = List.copyOf(behaviors);
         }
 
+        /**
+         * What this module went without: the union of its behaviors, and nothing of its own.
+         *
+         * <p>Derived and not held. What a module could not read reaches it through the measures that
+         * lost by it — a source none of whose rows were seen counts against every behavior the
+         * module has, and the reading of each of them says so. Read a second time from a list of the
+         * module's own, this report was giving a raw fact its meaning as a weakening, which is a
+         * measure's answer and not a renderer's (issue #953).
+         */
+        public WeakeningSet weakenedBy() {
+            WeakeningSet out = WeakeningSet.none();
+            for (BehaviorReport behavior : behaviors) {
+                out = out.union(behavior.weakenedBy());
+            }
+            return out;
+        }
+
         /** How far this module's measurement got. Derived, for the reason
          *  {@link AdequacyReport#status()} gives. */
         public MeasurementStatus status() {
-            return ReportMeasurement.statusOf(weakenedBy);
+            return ReportMeasurement.statusOf(weakenedBy());
         }
     }
 
@@ -122,21 +140,49 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      *                  behavior print and what a build is warned about — one list, read three ways
      */
     public record BehaviorReport(String name, BehaviorImplementation implementation,
-                                 Adequacy.RowReading reading,
-                                 WeakeningSet weakenedBy,
-                                 Adequacy.SignatureEvidence signature,
-                                 PartitionEvidence partition,
+                                 BehaviorEvidence evidence,
                                  ClaimAnnotations claimed,
-                                 Adequacy.BranchEvidence branch,
                                  List<Adequacy.Finding> findings) {
         public BehaviorReport {
             findings = List.copyOf(findings);
         }
 
+        /** How far the reading of this behavior's rows got, and what it read. */
+        public Adequacy.RowReading reading() {
+            return evidence.reading();
+        }
+
+        /** What the rows establish about the cases of its inputs and its output. */
+        public Adequacy.SignatureEvidence signature() {
+            return evidence.signature();
+        }
+
+        /** What they establish about the classes and the lines its rules draw. */
+        public PartitionEvidence partition() {
+            return evidence.partition();
+        }
+
+        /** What they establish about the arms of its body. */
+        public Adequacy.BranchEvidence branch() {
+            return evidence.branch();
+        }
+
+        /**
+         * What this behavior's measures went without.
+         *
+         * <p>Derived and not held. It is the union of what its parts went without, which the
+         * evidence answers; kept here as well it would be a second thing to keep true, and the
+         * report is what used to work it out — over a list of parts written where the document is
+         * assembled, which the reading was missing from (issue #996).
+         */
+        public WeakeningSet weakenedBy() {
+            return evidence.weakening();
+        }
+
         /** How far this behavior's measurement got. Derived, for the reason
          *  {@link AdequacyReport#status()} gives. */
         public MeasurementStatus status() {
-            return ReportMeasurement.statusOf(weakenedBy);
+            return ReportMeasurement.statusOf(weakenedBy());
         }
 
         /**
@@ -147,7 +193,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
          * wrote no row — which sends them to write one that may already be there.
          */
         public java.util.OptionalInt rows() {
-            return reading.measured().made()
+            return reading().measured().made()
                     .map(seen -> java.util.OptionalInt.of(seen.rows().size()))
                     .orElseGet(java.util.OptionalInt::empty);
         }
@@ -155,7 +201,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         /** How many of those are recorded rather than evaluated. Absent for the reason
          *  {@link #rows()} is. */
         public java.util.OptionalInt pending() {
-            return reading.measured().made()
+            return reading().measured().made()
                     .map(seen -> java.util.OptionalInt.of((int) seen.rows().stream()
                             .filter(r -> r.disposition()
                                     == souther.compiler.observe.Disposition.PENDING)
@@ -188,35 +234,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 asked == null ? Adequacy.Asked.NOTHING.held() : asked.held();
         return new AdequacyReport(SCHEMA_VERSION, ModuleMetadata.compilerVersion(),
                 held, overall, List.copyOf(modules));
-    }
-
-    /**
-     * What a behavior's measures went without, all of them.
-     *
-     * <p><b>Asked of the three it has, and each of those answers for its own.</b> This used to name
-     * every measure under them — the two derivations, each position, each point of each border, the
-     * combinations — which is a list somebody has to remember to add to. It is the same shape as the
-     * schema check that named two objects and missed eight, and as issue #953 itself: an answer
-     * assembled by whoever wanted it rather than held by whoever has it.
-     *
-     * <p>A measure nobody asked for is not a degradation, and neither is one a behavior has nothing
-     * to answer. Neither weakens anything, so neither is here — which is the measurement's own
-     * answer rather than a question put to the constant's name.
-     */
-    private static WeakeningSet wentWithout(Adequacy.SignatureEvidence signature,
-                                            PartitionEvidence partition,
-                                            Adequacy.BranchEvidence branch) {
-        WeakeningSet out = WeakeningSet.none();
-        if (signature != null) {
-            out = out.union(signature.weakening());
-        }
-        if (partition != null) {
-            out = out.union(partition.weakening());
-        }
-        if (branch != null) {
-            out = out.union(branch.measured().weakening());
-        }
-        return out;
     }
 
     private static ModuleReport moduleReport(Compilation compilation, String name, Prepared module) {
@@ -289,26 +306,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     branches == null ? null : branches.get(behavior.name());
             behaviors.add(new BehaviorReport(behavior.name(),
                     module.implementationOf(behavior),
-                    reading,
-                    wentWithout(signature, partition, branch),
-                    signature, partition,
+                    new BehaviorEvidence(reading, signature, partition, branch),
                     claims == null ? ClaimAnnotations.NONE
                             : claims.getOrDefault(behavior.name(), ClaimAnnotations.NONE),
-                    branch,
                     findings == null ? List.of()
                             : findings.getOrDefault(behavior.name(), List.of())));
         }
-        // The union of its behaviors, and nothing of its own. What a module could not read reaches
-        // it through the measures that lost by it — a source none of whose rows were seen counts
-        // against every behavior the module has, and every measure counted over those rows says so.
-        // Read a second time from the module's own list, this report was giving a raw fact its
-        // meaning as a weakening, which is a measure's answer and not a renderer's (issue #953).
-        WeakeningSet weakenedBy = WeakeningSet.none();
-        for (BehaviorReport behavior : behaviors) {
-            weakenedBy = weakenedBy.union(behavior.weakenedBy());
-        }
-        return new ModuleReport(name, compilation.sourceIdOf(name), weakenedBy, incompleteness,
-                behaviors);
+        return new ModuleReport(name, compilation.sourceIdOf(name), incompleteness, behaviors);
     }
 
     /** This report with only the modules and behaviors the caller asked about. A name that matches
@@ -334,12 +338,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     : m.incompleteness().stream()
                             .filter(gap -> gap.behavior().map(shown::contains).orElse(true))
                             .toList();
-            WeakeningSet weakenedBy = WeakeningSet.none();
-            for (BehaviorReport shownBehavior : behaviors) {
-                weakenedBy = weakenedBy.union(shownBehavior.weakenedBy());
-            }
-            kept.add(new ModuleReport(m.module(), m.declaredIn(), weakenedBy, gaps, behaviors));
-            overall = overall.union(weakenedBy);
+            ModuleReport one = new ModuleReport(m.module(), m.declaredIn(), gaps, behaviors);
+            kept.add(one);
+            overall = overall.union(one.weakenedBy());
         }
         return new AdequacyReport(schemaVersion, compilerVersion, held, overall,
                 List.copyOf(kept));

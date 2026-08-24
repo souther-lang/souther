@@ -170,13 +170,13 @@ final class AReportOfOneBorder {
                                                    Adequacy.AdequacyBar held) {
         AdequacyReport.BehaviorReport behavior = new AdequacyReport.BehaviorReport(
                 "weigh", souther.compiler.check.BehaviorImplementation.IMPLEMENTED,
-                Adequacy.RowReading.NONE, WeakeningSet.none(), null, partition,
-                souther.compiler.query.ClaimAnnotations.NONE, null, List.of());
+                new souther.compiler.query.BehaviorEvidence(
+                        Adequacy.RowReading.NONE, null, partition, null),
+                souther.compiler.query.ClaimAnnotations.NONE, List.of());
         return new AdequacyReport(AdequacyReport.SCHEMA_VERSION, "test",
                 held, WeakeningSet.none(),
                 List.of(new AdequacyReport.ModuleReport("example.wide",
-                        new SourceId("wide.sou"), WeakeningSet.none(),
-                        List.of(), List.of(behavior))))
+                        new SourceId("wide.sou"), List.of(), List.of(behavior))))
                 .adequacy();
     }
 }
