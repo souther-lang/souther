@@ -2,8 +2,12 @@ package souther.compiler.check;
 
 import souther.compiler.semantics.PositiveOrder;
 import souther.compiler.core.Core;
+import souther.compiler.numeric.Granularity;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.NumericDomain.LinearForm;
 import souther.compiler.numeric.NumericDomain.Rel;
+import souther.compiler.semantics.ConstantArguments;
+import souther.compiler.semantics.ResultRange;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.CoverageOrigin;
 import souther.compiler.types.Type;
@@ -160,17 +164,25 @@ final class Conditions {
     }
 
     /**
-     * A comparison against zero of an operation answering an order, as the comparison of the two
+     * A comparison of what an operation answering an order answered, as the comparison of the two
      * values it orders — or {@code e} unchanged.
      *
-     * <p>What such an operation answers is a sign ({@link DischargeRules#orderStatedBy}), so where
-     * its answer stands against zero the comparison is between the two arguments themselves. One
-     * account: the relation is the one written, taken between the argument a positive answer says is
-     * the greater and the other one, so the six relations and the two sides of the zero are all read
-     * from the row the library's operation has rather than from a case for each.
+     * <p>What such an operation answers is a sign ({@link DischargeRules#orderStatedBy}), so a
+     * condition that settles which side of nought the answer falls on is a condition about the two
+     * arguments. One account: the relation is the one the sign is left standing to nought, taken
+     * between the argument a positive answer says is the greater and the other one, so the six
+     * relations and the two sides of the comparison are all read from the row the library's
+     * operation has rather than from a case for each.
      *
-     * <p>Only against zero. A sign compared with anything else bounds how far the answer is from
-     * zero, which is a statement about the number and not about the order it decides.
+     * <p><b>Which side of nought is worked out and not matched.</b> This read a written zero, on the
+     * reasoning that a sign compared with anything else bounds how far the answer is from nought
+     * rather than saying which way it falls. That stopped being true the day the comparisons were
+     * declared to answer one of three numbers: {@code Int.compare(a, b) >= 1} leaves the answer at
+     * one, and {@code > -1} leaves it at nought or one, and both settle a side. Read by the shape of
+     * what was written, the two canonical facts about one operation — the order it states and where
+     * its answer runs — could not be put together, which is the division this whole change is about
+     * (#1016). So the condition and the declared bounds are composed, and what the composition
+     * leaves is asked which way it stands.
      *
      * <p>And only where both values are ones this check can name. The sign is a number the domain
      * carries whatever it is the order of, so a comparison of two values it cannot name is less than
@@ -185,9 +197,8 @@ final class Conditions {
         }
         boolean callFirst = b.left() instanceof Core.PreservedCall;
         Core side = callFirst ? b.left() : b.right();
-        Core zero = callFirst ? b.right() : b.left();
-        if (!(side instanceof Core.PreservedCall call) || call.args().size() != 2
-                || !isZero(zero)) {
+        Core against = callFirst ? b.right() : b.left();
+        if (!(side instanceof Core.PreservedCall call) || call.args().size() != 2) {
             return e;
         }
         PositiveOrder positive =
@@ -197,17 +208,73 @@ final class Conditions {
                 || terms.bodyKey(call.args().get(1), at) == null) {
             return e;
         }
-        // The relation the source wrote, read from the sign's side of the zero, and between the
-        // arguments in the order this operation counts them.
-        BinOp written = callFirst ? b.op() : mirrored(b.op());
-        return comparison(written, CallArguments.of(positive.greater(), call),
-                CallArguments.of(positive.lesser(), call), b);
+        // The relation the source wrote, read from the sign's side of the comparison: `call rel x`
+        // however the two were written round.
+        Rel written = relOf(callFirst ? b.op() : mirrored(b.op()));
+        Rel stands = standsToNought(terms, call, written, against, at);
+        return stands == null ? e
+                : comparison(opOf(stands), CallArguments.of(positive.greater(), call),
+                        CallArguments.of(positive.lesser(), call), b);
     }
 
-    /** Whether {@code e} is the number zero as written. */
-    private static boolean isZero(Core e) {
-        return e instanceof Core.Int i && i.value() == 0
-                || e instanceof Core.Decimal d && d.value().signum() == 0;
+    /**
+     * Which way {@code call}'s answer stands to nought, given that a condition puts it {@code rel}
+     * what {@code against} reads as — or null where that leaves both sides open.
+     *
+     * <p>Composed in the numeric domain rather than decided here, so that what a step is worth is
+     * the step the domain knows about: over whole numbers {@code > -1} is {@code >= 0}, and this
+     * would either have to say so a second time or answer as though a sign could fall between the
+     * two. The rules taken in are the two there are — what the operation declares of its answer
+     * ({@code semantics}) and what the condition says — and the tightest relation to nought the two
+     * prove together is the answer.
+     *
+     * <p>The number the condition stands against is read and not matched, for the reason every
+     * argument a fact names is: a name given a constant is that constant, so {@code compare(a, b) >
+     * zero} under {@code let zero = 0} is the condition it looks like.
+     *
+     * <p>Nothing where the two leave both sides open, and nothing where they leave nothing at all: a
+     * condition no answer satisfies states no order, and that the arm is never entered is said by
+     * what reads reachability rather than by an order nobody can stand on.
+     */
+    private static Rel standsToNought(Terms terms, Core.PreservedCall call, Rel rel, Core against,
+                                      Denotations at) {
+        LinearForm<FactSubject> read = terms.affineOf(against, at);
+        if (rel == null || read == null || !read.coefs().isEmpty()) {
+            return null;
+        }
+        // One atom, standing for the number this call answered. Nothing else is in this domain: what
+        // is asked is what the operation and the condition prove between them, and a rule about
+        // anything else would be a rule about a value that is not the sign.
+        Object sign = new Object();
+        java.util.Map<Object, Granularity> spacing =
+                java.util.Map.of(sign, terms.granularityOf(call.type()));
+        LinearForm<Object> answered = LinearForm.atom(sign);
+        NumericDomain<Object> known = NumericDomain.<Object>top()
+                .assuming(sign, ResultRange.of(call.operation(), ConstantArguments.NONE), spacing)
+                .assume(answered.minus(LinearForm.constant(read.constant())), rel, spacing);
+        if (known.isBottom()) {
+            return null;
+        }
+        // Tightest first: a sign held at nought is an equality and not two half-statements, and one
+        // held above it says more than one held at or above it.
+        for (Rel each : List.of(Rel.EQ, Rel.GT, Rel.LT, Rel.GE, Rel.LE, Rel.NE)) {
+            if (known.entails(answered, each)) {
+                return each;
+            }
+        }
+        return null;
+    }
+
+    /** The operator a relation is written as, which is {@link #relOf} the other way round. */
+    private static BinOp opOf(Rel rel) {
+        return switch (rel) {
+            case GE -> BinOp.GE;
+            case GT -> BinOp.GT;
+            case LE -> BinOp.LE;
+            case LT -> BinOp.LT;
+            case EQ -> BinOp.EQ;
+            case NE -> BinOp.NE;
+        };
     }
 
     /** {@code op} with its two sides exchanged: what the same fact is called when it is written the
