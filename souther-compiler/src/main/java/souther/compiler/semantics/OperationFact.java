@@ -97,4 +97,82 @@ public sealed interface OperationFact {
             java.util.Objects.requireNonNull(built, "this one says what it was built from");
         }
     }
+
+    /**
+     * The operation's result is never smaller than what {@code container} holds.
+     *
+     * <p>One fact per container it is no smaller than: {@code a ++ b} is as long as either half, and
+     * that is two statements about one operation rather than a list inside one.
+     *
+     * <p>Not a statement about the elements. {@code List.append} keeps every element of both and
+     * holds neither's alone, so neither is what it was built from; an insert puts in something the
+     * container it read did not hold. The count survives either way, which is why these had been
+     * filed among the constructions nothing is known of and their bound discarded with an element
+     * statement that was never the same one.
+     */
+    record ResultIsNoSmallerThan(ArgumentRef container) implements OperationFact {
+
+        public ResultIsNoSmallerThan {
+            java.util.Objects.requireNonNull(container, "this one names a container");
+        }
+    }
+
+    /**
+     * The operation is a predicate over what {@code container} holds, and its statement survives a
+     * construction of the shapes in {@code through}.
+     *
+     * <p>{@code List.all} holds of any sublist of a list it holds of; {@code List.contains} does
+     * not, and neither survives a mapping — what a mapped element is, the mapping alone does not
+     * say.
+     */
+    record ReadsItsContainer(ArgumentRef container, java.util.Set<ElementShape> through)
+            implements OperationFact {
+
+        public ReadsItsContainer {
+            java.util.Objects.requireNonNull(container, "this one names a container");
+            through = java.util.Set.copyOf(through);
+        }
+    }
+
+    /**
+     * The predicate is stated over a projection of each element, and {@code projection} is where it
+     * is written.
+     *
+     * <p>A mapping keeps a projection when the closure copies that field from the element
+     * unchanged, so the predicate holds of the mapped container exactly when it holds of what was
+     * mapped, over the field it came from.
+     */
+    record IsStatedOverAProjection(ArgumentRef projection) implements OperationFact {
+
+        public IsStatedOverAProjection {
+            java.util.Objects.requireNonNull(projection, "this one names where it is written");
+        }
+    }
+
+    /**
+     * The operation states its predicate of <em>every</em> element, so what it says of a container
+     * is what holds of each element a closure is handed.
+     *
+     * <p>The name and nothing else. Which argument is the predicate and which the container the
+     * signature already answers, and how far the statement travels {@link ReadsItsContainer}
+     * already does.
+     */
+    record StatesItsPredicateOfEveryElement() implements OperationFact {}
+
+    /**
+     * The operation asks whether a container is empty, and says the same thing as {@code size}
+     * against nought.
+     *
+     * <p>Not what an operation does to a property but what a predicate <em>says</em>:
+     * {@code List.isEmpty(xs)} and {@code List.length(xs) == 0} are one statement, so a rule writing
+     * either settles a clause writing the other. Without it the two would be unrelated, which is an
+     * accident of which one the author reached for.
+     */
+    record MeansTheSameAsASizeOfNought(souther.compiler.types.ValueName size)
+            implements OperationFact {
+
+        public MeansTheSameAsASizeOfNought {
+            java.util.Objects.requireNonNull(size, "this one names the size it means");
+        }
+    }
 }

@@ -5,7 +5,6 @@ import souther.compiler.semantics.ElementLineage;
 
 import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.Cardinality;
-import souther.compiler.check.DischargeRules.Carried;
 import souther.compiler.semantics.ElementShape;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
@@ -39,9 +38,8 @@ class ARuleIsHeldToTheDeclarationItIsAboutTest {
     }
 
     private static void bindCarried(String operation, ArgumentRef container) {
-        DischargeRules.bind(
-                Map.of(op(operation), new Carried(container, Set.of(ElementShape.PERMUTES))),
-                Carried::container, new ArgumentRef.TheContainer(), Question::holdsElements,
+        DischargeRules.holdToTheDeclaration(op(operation), container,
+                new ArgumentRef.TheContainer(), Question::holdsElements,
                 "the container a predicate reads");
     }
 

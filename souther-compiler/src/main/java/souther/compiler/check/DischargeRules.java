@@ -81,28 +81,7 @@ final class DischargeRules {
     /** The container {@code call} built its result from, and what the building kept of it. */
     record Source(Core container, ElementShape shape, Cardinality size) {}
 
-    /**
-     * The containers a construction's result is never smaller than.
-     *
-     * <p>Written on its own and not as a {@link ElementShape}, because none of these establishes an element
-     * relation to a single source that a shape states. It is not that they keep nothing:
-     * {@code List.append(a, b)} keeps every element of both, and holds neither {@code a}'s alone nor
-     * {@code b}'s, so neither of the two is what it was built from; an insert puts in an element or
-     * an entry the container it read did not hold. The cardinality is a separate fact and survives
-     * either way — which is why these sat among the constructions nothing is known of, their bound
-     * discarded with an element rule that was never the same statement.
-     *
-     * <p>No more than the bound. A union answers one of what both sides hold and an insert of
-     * something already there adds nothing, so neither answers the sum of what it read; appending
-     * does, and stating it for that one alone would be a second rule for one operation. The bound is
-     * what they share, and it is what a lower-bound invariant asks for.
-     */
-    private static final Map<ValueName, List<ArgumentRef>> NO_SMALLER_THAN = Map.of(
-            op("List", "append"), List.of(at(0), at(1)),
-            op("Set", "union"), List.of(at(0), at(1)),
-            op("Map", "union"), List.of(at(0), at(1)),
-            op("Set", "insert"), List.of(at(1)),
-            op("Map", "insert"), List.of(at(2)));
+    // Declared with the rest (OperationFact.ResultIsNoSmallerThan), one fact per container.
 
     /**
      * The constructions this says nothing of, in three groups. Each reason is about what a shape can
@@ -116,7 +95,7 @@ final class DischargeRules {
      *
      * <p>They put in what the container they read did not hold. Nothing that held of every element
      * still does, which is what a shape would have had to say. How many there are is said instead by
-     * {@link #NO_SMALLER_THAN}, which those of them whose result is never smaller than a source it
+     * {@link souther.compiler.semantics.OperationFact.ResultIsNoSmallerThan}, which those of them whose result is never smaller than a source it
      * names are in.
      *
      * <p>They answer the same elements in a container of another kind. That is true and unsayable:
@@ -132,18 +111,7 @@ final class DischargeRules {
             op("List", "append"), op("Map", "updateOrInsert"),
             op("Map", "values"), op("Set", "toList"), op("Set", "fromList"), op("List", "indexBy"));
 
-    /** Where a predicate reads its container, and which shapes of construction carry it there.
-     * {@code List.all} holds of any sublist of a list it holds of; {@code List.contains} does not, and
-     * neither survives a mapping — what a mapped element is, the mapping alone does not say. */
-    record Carried(ArgumentRef container, Set<ElementShape> through) {}
-
-    private static final Map<ValueName, Carried> CARRIED = Map.of(
-            op("List", "all"), new Carried(CONTAINER, Set.of(ElementShape.PERMUTES, ElementShape.SUBSET)),
-            op("List", "allDistinctBy"), new Carried(CONTAINER, Set.of(ElementShape.PERMUTES, ElementShape.SUBSET)),
-            op("List", "any"), new Carried(CONTAINER, Set.of(ElementShape.PERMUTES)),
-            op("List", "contains"), new Carried(at(1), Set.of(ElementShape.PERMUTES)),
-            op("Set", "contains"), new Carried(at(1), Set.of(ElementShape.PERMUTES)),
-            op("Map", "containsKey"), new Carried(at(1), Set.of(ElementShape.PERMUTES)));
+    // Declared with the rest (OperationFact.ReadsItsContainer).
 
     /** Where a predicate reads its container at a call, and how far its statement travels. */
     record Carrying(Core.PreservedCall stated, ArgumentRef at, Set<ElementShape> through) {
@@ -162,11 +130,7 @@ final class DischargeRules {
         }
     }
 
-    /** Where a predicate reads the projection it is stated over. A mapping keeps a projection when
-     * the closure copies that field from the element unchanged, so the predicate holds of the mapped
-     * list exactly when it holds of what was mapped, over the field it came from. */
-    private static final Map<ValueName, ArgumentRef> PROJECTION_OF =
-            Map.of(op("List", "allDistinctBy"), CLOSURE);
+    // Declared with the rest (OperationFact.IsStatedOverAProjection).
 
     /** The projection a predicate at a call is stated over, as the block it answers with. */
     record Projection(Core.PreservedCall stated, ArgumentRef at, Core.Block projection) {
@@ -177,29 +141,15 @@ final class DischargeRules {
         }
     }
 
-    /** The calls that state their predicate of <em>every</em> element, so what they say of a
-     * container is what holds of each element a closure is handed. Which argument is the predicate
-     * and which the container is what {@link Combinators} already answers of any combinator, and how
-     * far the statement travels is what {@link #carried} already answers of any predicate — so a
-     * quantifier is the name and nothing else. {@code List.all} is the only one the library has. */
-    private static final Set<ValueName> QUANTIFIERS = Set.of(op("List", "all"));
+    // Declared with the rest (OperationFact.StatesItsPredicateOfEveryElement).
 
-    /** Emptiness, by the size call it means. This is not a rule about what an operation does to a
-     * property but about what a predicate <em>says</em>: {@code List.isEmpty(xs)} and
-     * {@code List.length(xs) == 0} are one statement, so a guard writing either discharges a clause
-     * writing the other. Without it the two would be unrelated, which is an accident of which one the
-     * author reached for. */
-    private static final Map<ValueName, ValueName> EMPTINESS = Map.of(
-            op("List", "isEmpty"), op("List", "length"),
-            op("Set", "isEmpty"), op("Set", "size"),
-            op("Map", "isEmpty"), op("Map", "size"),
-            op("String", "isEmpty"), op("String", "length"));
+    // Declared with the rest (OperationFact.MeansTheSameAsASizeOfNought).
 
     /** The predicates whose statement this carries nowhere. A predicate over a string states
      * something of the characters it holds in the order it holds them, and what would carry such a
      * statement is a construction of a container from a container — which a string is not one of,
      * its length being all this names of it. An emptiness check states a size, which travels as a
-     * size does ({@link #EMPTINESS}) and not as a property of elements. */
+     * size does ({@link souther.compiler.semantics.OperationFact.MeansTheSameAsASizeOfNought}) and not as a property of elements. */
     static final Set<ValueName> NOTHING_CARRIED = Set.of(
             op("String", "contains"), op("String", "startsWith"), op("String", "endsWith"),
             op("String", "matches"),
@@ -653,7 +603,7 @@ final class DischargeRules {
     }
 
     static Set<ValueName> carryingOperations() {
-        return Bound.CARRIERS.keySet();
+        return souther.compiler.semantics.OperationFacts.readsItsContainer();
     }
 
     /**
@@ -692,15 +642,15 @@ final class DischargeRules {
     }
 
     static Set<ValueName> emptinessChecks() {
-        return EMPTINESS.keySet();
+        return Bound.meansTheSameAsASizeOfNought();
     }
 
     static Set<ValueName> quantifiers() {
-        return QUANTIFIERS;
+        return Bound.statesItsPredicateOfEveryElement();
     }
 
     static Set<ValueName> projections() {
-        return Bound.PROJECTIONS.keySet();
+        return Bound.isStatedOverAProjection();
     }
 
     static Set<ValueName> sizeCalls() {
@@ -859,15 +809,40 @@ final class DischargeRules {
         private static BuiltFrom buildsItsResultFrom(ValueName operation) {
             return souther.compiler.semantics.OperationFacts.buildsItsResultFrom(operation);
         }
-        private static final Map<ValueName, Carried> CARRIERS =
-                bind(CARRIED, Carried::container, CONTAINER, Question::holdsElements,
-                        "the container a predicate reads");
-        private static final Map<ValueName, ArgumentRef> PROJECTIONS =
-                bind(PROJECTION_OF, Function.identity(), CLOSURE, t -> t instanceof Type.FnOf,
-                        "the projection a predicate is stated over");
-        private static final Map<ValueName, List<ArgumentRef>> LOWER_BOUNDS =
-                bindEach(NO_SMALLER_THAN, CONTAINER, Question::holdsElements,
-                        "a container the result is no smaller than");
+        private static souther.compiler.semantics.OperationFact.ReadsItsContainer readsItsContainer(
+                ValueName operation) {
+            return souther.compiler.semantics.OperationFacts.readsItsContainer(operation);
+        }
+
+        private static ArgumentRef isStatedOverAProjection(ValueName operation) {
+            return souther.compiler.semantics.OperationFacts.isStatedOverAProjection(operation);
+        }
+
+        private static Set<ValueName> isStatedOverAProjection() {
+            return souther.compiler.semantics.OperationFacts.isStatedOverAProjection();
+        }
+
+        private static List<ArgumentRef> resultIsNoSmallerThan(ValueName operation) {
+            return souther.compiler.semantics.OperationFacts.resultIsNoSmallerThan(operation);
+        }
+
+        private static boolean statesItsPredicateOfEveryElement(ValueName operation) {
+            return souther.compiler.semantics.OperationFacts
+                    .statesItsPredicateOfEveryElement(operation);
+        }
+
+        private static Set<ValueName> statesItsPredicateOfEveryElement() {
+            return souther.compiler.semantics.OperationFacts.statesItsPredicateOfEveryElement();
+        }
+
+        private static ValueName meansTheSameAsASizeOfNought(ValueName operation) {
+            return souther.compiler.semantics.OperationFacts
+                    .meansTheSameAsASizeOfNought(operation);
+        }
+
+        private static Set<ValueName> meansTheSameAsASizeOfNought() {
+            return souther.compiler.semantics.OperationFacts.meansTheSameAsASizeOfNought();
+        }
         /** What the declarations came to, held to the library. The list is walked whole, so a fact
          *  nothing here looks up is one this has held all the same. */
         private static final List<souther.compiler.semantics.OperationFacts.Declared> SEMANTICS =
@@ -1172,7 +1147,7 @@ final class DischargeRules {
         if (!(e instanceof Core.PreservedCall call)) {
             return List.of();
         }
-        List<ArgumentRef> reads = Bound.LOWER_BOUNDS.get(call.operation());
+        List<ArgumentRef> reads = Bound.resultIsNoSmallerThan(call.operation());
         if (reads == null) {
             return List.of();
         }
@@ -1186,14 +1161,15 @@ final class DischargeRules {
     /** Where {@code call} reads the container it states its predicate of, or null where it is not a
      * predicate this carries anywhere. */
     static Carrying carried(Core.PreservedCall call) {
-        Carried carried = Bound.CARRIERS.get(call.operation());
+        souther.compiler.semantics.OperationFact.ReadsItsContainer carried =
+                Bound.readsItsContainer(call.operation());
         return carried == null ? null : new Carrying(call, carried.container(), carried.through());
     }
 
     /** The projection {@code call}'s predicate is stated over, or null where it is stated over the
      * element itself — or where what stands in that argument is not a block this can read. */
     static Projection projectionOf(Core.PreservedCall call, Denotations at) {
-        ArgumentRef reads = Bound.PROJECTIONS.get(call.operation());
+        ArgumentRef reads = Bound.isStatedOverAProjection(call.operation());
         if (reads == null) {
             return null;
         }
@@ -1206,12 +1182,12 @@ final class DischargeRules {
     }
 
     static boolean isQuantifier(ValueName operation) {
-        return QUANTIFIERS.contains(operation);
+        return Bound.statesItsPredicateOfEveryElement(operation);
     }
 
     /** The size call an emptiness check means, or null where {@code operation} is not one. */
     static ValueName sizeMeantBy(ValueName operation) {
-        return EMPTINESS.get(operation);
+        return Bound.meansTheSameAsASizeOfNought(operation);
     }
 
     /** What {@code operation} computes and where it answers it, or null where the table says

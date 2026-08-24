@@ -66,6 +66,27 @@ final class OperationFactBinder {
                                 new souther.compiler.semantics.ArgumentRef.TheContainer(),
                                 Question::holdsElements,
                                 "the container something is built from");
+                case OperationFact.ResultIsNoSmallerThan bounded ->
+                        DischargeRules.holdToTheDeclaration(each.operation(), bounded.container(),
+                                new souther.compiler.semantics.ArgumentRef.TheContainer(),
+                                Question::holdsElements,
+                                "a container the result is no smaller than");
+                case OperationFact.ReadsItsContainer reads ->
+                        DischargeRules.holdToTheDeclaration(each.operation(), reads.container(),
+                                new souther.compiler.semantics.ArgumentRef.TheContainer(),
+                                Question::holdsElements,
+                                "the container a predicate reads");
+                case OperationFact.IsStatedOverAProjection over ->
+                        DischargeRules.holdToTheDeclaration(each.operation(), over.projection(),
+                                new souther.compiler.semantics.ArgumentRef.TheClosure(),
+                                type -> type instanceof souther.compiler.types.Type.FnOf,
+                                "the projection a predicate is stated over");
+                // Neither names an argument, so there is nothing about one to hold to a signature.
+                // What holds them to the library is the question they answer for
+                // ({@link Question}), which asks of the declaration whether the operation is one
+                // the question is even about.
+                case OperationFact.StatesItsPredicateOfEveryElement _,
+                     OperationFact.MeansTheSameAsASizeOfNought _ -> { }
             }
             visited.add(each);
         }

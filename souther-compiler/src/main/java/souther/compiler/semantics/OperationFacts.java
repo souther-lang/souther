@@ -134,7 +134,51 @@ public final class OperationFacts {
             about("List", "filterMap", new OperationFact.BuildsItsResultFrom(new BuiltFrom(
                     new ElementLineage.InsideClosureResult(
                             new ElementLineage.Source(CONTAINER, 1)), Cardinality.AT_MOST))),
-            about("Set", "map", maps(CONTAINER, Cardinality.AT_MOST)));
+            about("Set", "map", maps(CONTAINER, Cardinality.AT_MOST)),
+
+            // The containers a construction's result is never smaller than. A union answers one of
+            // what both sides hold and an insert of something already there adds nothing, so
+            // neither answers the sum of what it read; appending does, and stating it for that one
+            // alone would be a second statement for one operation. The bound is what they share.
+            about("List", "append", noSmallerThan(at(0))),
+            about("List", "append", noSmallerThan(at(1))),
+            about("Set", "union", noSmallerThan(at(0))),
+            about("Set", "union", noSmallerThan(at(1))),
+            about("Map", "union", noSmallerThan(at(0))),
+            about("Map", "union", noSmallerThan(at(1))),
+            about("Set", "insert", noSmallerThan(at(1))),
+            about("Map", "insert", noSmallerThan(at(2))),
+
+            // Where a predicate reads its container, and which shapes of construction carry its
+            // statement there.
+            about("List", "all", reads(CONTAINER, ElementShape.PERMUTES, ElementShape.SUBSET)),
+            about("List", "allDistinctBy",
+                    reads(CONTAINER, ElementShape.PERMUTES, ElementShape.SUBSET)),
+            about("List", "any", reads(CONTAINER, ElementShape.PERMUTES)),
+            about("List", "contains", reads(at(1), ElementShape.PERMUTES)),
+            about("Set", "contains", reads(at(1), ElementShape.PERMUTES)),
+            about("Map", "containsKey", reads(at(1), ElementShape.PERMUTES)),
+
+            about("List", "allDistinctBy",
+                    new OperationFact.IsStatedOverAProjection(new ArgumentRef.TheClosure())),
+            about("List", "all", new OperationFact.StatesItsPredicateOfEveryElement()),
+
+            about("List", "isEmpty", meansSizeOf("List", "length")),
+            about("Set", "isEmpty", meansSizeOf("Set", "size")),
+            about("Map", "isEmpty", meansSizeOf("Map", "size")),
+            about("String", "isEmpty", meansSizeOf("String", "length")));
+
+    private static OperationFact noSmallerThan(ArgumentRef container) {
+        return new OperationFact.ResultIsNoSmallerThan(container);
+    }
+
+    private static OperationFact reads(ArgumentRef container, ElementShape... through) {
+        return new OperationFact.ReadsItsContainer(container, java.util.Set.of(through));
+    }
+
+    private static OperationFact meansSizeOf(String module, String size) {
+        return new OperationFact.MeansTheSameAsASizeOfNought(new ValueName.Stdlib(module, size));
+    }
 
     /** The answer holds the very elements {@code source} held. */
     private static OperationFact keeps(ArgumentRef source, Cardinality size) {
@@ -233,6 +277,54 @@ public final class OperationFacts {
         return Index.BUILDINGS.keySet();
     }
 
+    /** The containers {@code operation}'s result is never smaller than, in the order they are
+     *  declared. */
+    public static List<ArgumentRef> resultIsNoSmallerThan(ValueName operation) {
+        return Index.NO_SMALLER_THAN.getOrDefault(operation, List.of());
+    }
+
+    /** Where {@code operation} reads the container its predicate is about, or null where it is no
+     *  such predicate. */
+    public static OperationFact.ReadsItsContainer readsItsContainer(ValueName operation) {
+        return Index.READS.get(operation);
+    }
+
+    /** The operations that are predicates over what a container holds. */
+    public static java.util.Set<ValueName> readsItsContainer() {
+        return Index.READS.keySet();
+    }
+
+    /** Where {@code operation}'s predicate is stated over a projection, or null where it is stated
+     *  over the element itself. */
+    public static ArgumentRef isStatedOverAProjection(ValueName operation) {
+        return Index.PROJECTIONS.get(operation);
+    }
+
+    /** The operations whose predicate is stated over a projection. */
+    public static java.util.Set<ValueName> isStatedOverAProjection() {
+        return Index.PROJECTIONS.keySet();
+    }
+
+    /** Whether {@code operation} states its predicate of every element. */
+    public static boolean statesItsPredicateOfEveryElement(ValueName operation) {
+        return Index.QUANTIFIERS.contains(operation);
+    }
+
+    /** The operations that do. */
+    public static java.util.Set<ValueName> statesItsPredicateOfEveryElement() {
+        return Index.QUANTIFIERS;
+    }
+
+    /** The size {@code operation}'s emptiness check means, or null where it is no such check. */
+    public static ValueName meansTheSameAsASizeOfNought(ValueName operation) {
+        return Index.EMPTINESS.get(operation);
+    }
+
+    /** The operations that ask whether a container is empty. */
+    public static java.util.Set<ValueName> meansTheSameAsASizeOfNought() {
+        return Index.EMPTINESS.keySet();
+    }
+
     /** The indexes, read off the declarations on the first ask. */
     private static final class Index {
 
@@ -250,6 +342,38 @@ public final class OperationFacts {
         private static final Map<ValueName, BuiltFrom> BUILDINGS =
                 index(OperationFact.BuildsItsResultFrom.class,
                         OperationFact.BuildsItsResultFrom::built);
+
+        private static final Map<ValueName, OperationFact.ReadsItsContainer> READS =
+                index(OperationFact.ReadsItsContainer.class,
+                        java.util.function.Function.identity());
+
+        private static final Map<ValueName, ArgumentRef> PROJECTIONS =
+                index(OperationFact.IsStatedOverAProjection.class,
+                        OperationFact.IsStatedOverAProjection::projection);
+
+        private static final Map<ValueName, ValueName> EMPTINESS =
+                index(OperationFact.MeansTheSameAsASizeOfNought.class,
+                        OperationFact.MeansTheSameAsASizeOfNought::size);
+
+        private static final java.util.Set<ValueName> QUANTIFIERS = java.util.Set.copyOf(
+                index(OperationFact.StatesItsPredicateOfEveryElement.class,
+                        fact -> fact).keySet());
+
+        /** Gathered rather than indexed one to one: an operation is no smaller than as many
+         *  containers as it names, and each is a fact of its own. */
+        private static final Map<ValueName, List<ArgumentRef>> NO_SMALLER_THAN = noSmallerThan();
+
+        private static Map<ValueName, List<ArgumentRef>> noSmallerThan() {
+            Map<ValueName, List<ArgumentRef>> out = new LinkedHashMap<>();
+            for (Declared each : DECLARED) {
+                if (each.fact() instanceof OperationFact.ResultIsNoSmallerThan bounded) {
+                    out.computeIfAbsent(each.operation(), operation -> new ArrayList<>())
+                            .add(bounded.container());
+                }
+            }
+            out.replaceAll((operation, held) -> List.copyOf(held));
+            return Map.copyOf(out);
+        }
 
         /** Gathered rather than indexed one to one: an operation states as many bounds as it
          *  states, and each is a fact of its own. */
