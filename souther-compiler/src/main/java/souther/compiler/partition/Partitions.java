@@ -15,7 +15,6 @@ import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.Position;
 import souther.compiler.inputs.StructuralInspection;
 import souther.compiler.inputs.TypeBounds;
-import souther.compiler.inputs.Membership;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.UnreadRule;
@@ -24,7 +23,6 @@ import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
-import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeReachName;
@@ -524,26 +522,26 @@ public final class Partitions {
         for (Place value : values) {
             String written = carrier.written(value);
             classes.add(classAt(term + "/= " + written, "= " + written,
-                    holding(term, carrier, at -> at.sameAs(value)),
+                    holding(term, carrier, new Recognition.CountIs.At(value)),
                     standing(type, carrier, value, symbols)));
         }
         Place other = carrier.somethingOtherThan(values, within);
         String label = "/= " + String.join(", ",
                 values.stream().map(carrier::written).toList());
+        Recognition away = holding(term, carrier,
+                new Recognition.CountIs.AwayFrom(values));
         classes.add(other == null
-                ? PartitionClass.ungeneratable(term + "/" + label, label,
-                        holding(term, carrier, at -> values.stream().noneMatch(at::sameAs)),
+                ? PartitionClass.ungeneratable(term + "/" + label, label, away,
                         "nothing here composed a value of this position other than the ones"
                                 + " singled out")
-                : classAt(term + "/" + label, label,
-                        holding(term, carrier, at -> values.stream().noneMatch(at::sameAs)),
+                : classAt(term + "/" + label, label, away,
                         standing(type, carrier, other, symbols)));
         return List.copyOf(classes);
     }
 
     /** A class over the one value that stands for it, or one nothing produces where there is no
      *  such value — which is what a position wearing a name this module cannot write leaves. */
-    private static PartitionClass classAt(String id, String label, Classifier is,
+    private static PartitionClass classAt(String id, String label, Recognition is,
                                           FixtureTemplate standing) {
         return standing == null
                 ? PartitionClass.ungeneratable(id, label, is,
@@ -556,14 +554,10 @@ public final class Partitions {
         return Witnesses.wrapped(type, FixtureTemplate.on(carrier, at, symbols.scope()::reach), symbols);
     }
 
-    /** A classifier that reads the term's count out of a row and answers about it. */
-    private static Classifier holding(NumericTerm term, Carrier carrier,
-                                      java.util.function.Predicate<Place> holds) {
-        return value -> switch (term.read(value, carrier)) {
-            case NumericTerm.Reading.Number number -> Membership.of(holds.test(number.value()));
-            case NumericTerm.Reading.Missing missing -> new Membership.Incomplete(missing.code());
-            case NumericTerm.Reading.NotNumber _ -> Membership.NO_MATCH;
-        };
+    /** A class that reads the term's count out of a row and answers about it. */
+    private static Recognition holding(NumericTerm term, Carrier carrier,
+                                          Recognition.CountIs is) {
+        return new Recognition.OfACount(term, carrier, is);
     }
 
     /** The cuts a position has, with the values a body singled out added as lines of their own. */
@@ -1295,10 +1289,6 @@ public final class Partitions {
         return representativesOf(type, symbols, policy, within).stream()
                 .map(FixtureTemplate::text).anyMatch(held.text()::equals)
                 ? List.of() : List.of(held);
-    }
-
-    private static boolean isBool(ObservedValue v, boolean expected) {
-        return v instanceof ObservedValue.Bool b && b.value() == expected;
     }
 
     private Partitions() {}

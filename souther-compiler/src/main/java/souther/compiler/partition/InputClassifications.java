@@ -90,16 +90,48 @@ public final class InputClassifications {
 
     /** Where one value at the position falls, or why no class could say. */
     private static Classification classifyOne(Axis axis, ObservedValue value) {
-        // Kept rather than returned on, and not acted on either. A class may read less of a value
-        // than the one after it, so one saying it could not read says nothing about the rest —
-        // including that the rest cannot hold it. An incompleteness is what is left once no class
-        // has claimed the value, so nothing about it is decided until every class has answered.
+        List<String> ids = new ArrayList<>();
+        List<Membership> answers = new ArrayList<>();
+        for (PartitionClass each : axis.classes()) {
+            ids.add(each.id());
+            answers.add(Recognitions.membershipOf(each.recognises(), value));
+        }
+        return decided(axis.id(), ids, answers, value);
+    }
+
+    /**
+     * Where a value falls, given what each class of one axis made of it.
+     *
+     * <p>Every class answers before anything is decided. A class may read less of a value than the
+     * one after it, so one saying it could not read says nothing about the rest — including that the
+     * rest cannot hold it. An incompleteness is what is left once no class has claimed the value.
+     *
+     * <p>Its own function, taking the answers rather than the classes that gave them, because what
+     * is written here is a rule about answers and the three ways it can be broken are not states any
+     * class can now be built in: what a class recognises is a {@link Recognition}, every one of them
+     * reads a value the same way, and so the contract below is held to by something no producer in
+     * this compiler can reach. A rule nothing can exercise is a rule nobody can check.
+     *
+     * @param ids     what each class is called, in the order they were asked
+     * @param answers what each of them made of the value, in the same order
+     * @param about   the value they were asked about, for the sentence a broken contract prints, and
+     *                for nothing else. Null where a caller has none to name
+     */
+    static Classification decided(AxisId at, List<String> ids, List<Membership> answers,
+                                  ObservedValue about) {
+        if (ids.size() != answers.size()) {
+            throw new IllegalArgumentException(
+                    "one answer per class: " + ids.size() + " classes, " + answers.size());
+        }
         Incompleteness.Code incomplete = null;
         boolean disagreed = false;
-        for (PartitionClass each : axis.classes()) {
-            switch (each.classifier().membershipOf(value)) {
+        for (int i = 0; i < answers.size(); i++) {
+            switch (answers.get(i)) {
                 case Membership.Match _ -> {
-                    return Classification.in(each.id());
+                    // A class that holds the value settles it, whatever the ones beside it could not
+                    // read and whatever they disagreed about. What the value is in is an answer; why
+                    // something else could not read it is what is left when there is no answer.
+                    return Classification.in(ids.get(i));
                 }
                 case Membership.Incomplete why -> {
                     if (incomplete == null) {
@@ -115,19 +147,17 @@ public final class InputClassifications {
         // picked between: today every class of a numeric position reads through the same reader,
         // so nothing produces one.
         if (disagreed) {
-            throw new IllegalStateException("classes of " + axis.id()
+            throw new IllegalStateException("classes of " + at
                     + " disagree about why the value could not be read");
         }
         if (incomplete != null) {
-            return Classification.unreadable(incomplete,
-                    axis.id().behavior(), axis.id().term());
+            return Classification.unreadable(incomplete, at.behavior(), at.term());
         }
         // Every class read the value and none holds it, which `Axis` says cannot happen: its classes
         // are exhaustive over the position's values. So this is that contract broken rather than
         // anything about the value, and saying it could not be read would be reporting a
         // measurement failure for a defect in the partition.
-        throw new IllegalStateException("no class of " + axis.id() + " holds a value it read: "
-                + value);
+        throw new IllegalStateException("no class of " + at + " holds a value it read: " + about);
     }
 
     private InputClassifications() {}
