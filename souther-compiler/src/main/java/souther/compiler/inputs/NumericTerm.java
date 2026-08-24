@@ -39,9 +39,13 @@ public sealed interface NumericTerm {
      * about {@code Int.abs} — declared beside it in {@code semantics} — was unreachable from here
      * because the term said the fact rather than naming who says it (#1016).
      *
-     * <p>What a term of this kind adds is the name of the operation. Everything true of the number
-     * follows from that, so a second such term answers with what its own operation declares on the
-     * day it is written, and nothing here is edited for it.
+     * <p>What a term of this kind adds is the name of the operation, and what that settles today is
+     * one of the three questions asked here: {@link #intrinsicBounds} is answered from the
+     * operation and needs nothing else. The other two are still written to {@link SizeOf} — a
+     * carrier is whole because a size counts, and {@link #read} counts what the observation holds
+     * rather than applying the operation to it. Both are right for a measure and neither would be
+     * for a term that is what some other operation answered, so a second such term is not a matter
+     * of implementing this one method (#1027).
      */
     sealed interface ResultOfOperation extends NumericTerm {
 
