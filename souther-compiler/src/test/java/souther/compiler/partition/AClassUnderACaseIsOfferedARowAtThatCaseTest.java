@@ -1,0 +1,150 @@
+package souther.compiler.partition;
+
+import org.junit.jupiter.api.Test;
+
+import souther.compiler.ast.Hir;
+import souther.compiler.check.Prepared;
+import souther.compiler.check.Sig;
+import souther.compiler.check.Symbols;
+import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.Refinement;
+import souther.compiler.inputs.Requirements;
+import souther.compiler.inputs.TermPath;
+import souther.compiler.query.Bodies;
+import souther.compiler.query.Compilation;
+import souther.compiler.query.ReadAs;
+import souther.compiler.query.Scopes;
+import souther.compiler.query.Shapes;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
+
+import java.util.List;
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * A row for a class under a case is a row at that case.
+ *
+ * <p>Issue #1012. The eight combinations of a query's optionals are what decide how a {@code WHERE}
+ * clause is assembled, and nothing offered a row for any of them: the axes were not there. With the
+ * positions read, the row a class under a case is offered has to be that case — which is not
+ * something the generator works out for itself. The class states a narrowing by being the class it
+ * is, the position states one by being under it, and one merge decides both.
+ */
+class AClassUnderACaseIsOfferedARowAtThatCaseTest {
+
+    private static final String QUERIES = """
+            module example.q
+
+            data Tag = String
+            data Limit = Int
+                invariant value >= 1
+
+            data GlobalQuery = { limit: Limit, tag: Tag? }
+            data FeedQuery = { limit: Limit }
+            data ArticleQuery = GlobalQuery | FeedQuery
+            data Page = { n: Int }
+
+            behavior read : (query: ArticleQuery) -> Page
+                constructs Page
+
+            let read (query) = Page { n = 1 }
+            """;
+
+    private record Model(Generator.Subject subject, List<Axis> axes) {}
+
+    private static Model model() {
+        Compilation compilation = Compilation.ofSource(QUERIES, "Main");
+        compilation.answerEverything();
+        String module = compilation.modules().get(0);
+        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
+        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
+        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
+                .filter(b -> b.name().equals("read")).findFirst().orElseThrow();
+        Sig sig = sigs.get("read");
+        InputDomain domain = InputDomain.of(spec, sig, symbols, ReadAs.THE_COMPILATION_DOES);
+        Partitions.Partitioning partitioning =
+                Partitions.of(spec.name(), domain, symbols, ReadAs.THE_COMPILATION_DOES);
+        return new Model(new Generator.Subject(
+                new BehaviorInputs(spec.params().stream().map(Hir.Param::name).toList(),
+                        sig.inputTypes(), symbols, ReadAs.THE_COMPILATION_DOES),
+                partitioning.axes(), HeldCounts.of(domain, symbols)),
+                partitioning.axes());
+    }
+
+    private static TermPath under(String leaf) {
+        return TermPath.of("query").refine(new Refinement.SumCase(
+                TypeSymbols.declared(new TypeKey("example.q", leaf))));
+    }
+
+    /** Every class of every position, including the ones only one case has. */
+    @Test
+    void aClassUnderACaseIsOfferedARow() {
+        Generator.GenerationResult filled = Generator.fill(model().subject(), List.of(),
+                Generator.CandidateCheck.ANY, Budgets.generation());
+
+        assertEquals(List.of(), filled.unresolved(), filled.unresolved().toString());
+        assertTrue(filled.rows().stream().map(Generator.GeneratedRow::labels)
+                        .anyMatch(each -> each.equals(List.of("query@GlobalQuery.tag=Some"))),
+                () -> "no row for the optional under the case: "
+                        + filled.rows().stream().map(Generator.GeneratedRow::labels).toList());
+    }
+
+    /** And the row written for it is that case, because the class under it says so. */
+    @Test
+    void theRowWrittenForItIsThatCase() {
+        Generator.GenerationResult filled = Generator.fill(model().subject(), List.of(),
+                Generator.CandidateCheck.ANY, Budgets.generation());
+
+        for (Generator.GeneratedRow row : filled.rows()) {
+            if (row.labels().stream().anyMatch(each -> each.startsWith("query@GlobalQuery"))) {
+                assertTrue(row.inputs().get(0).text().startsWith("GlobalQuery"),
+                        () -> row.labels() + " is written as " + row.inputs().get(0).text());
+            }
+            if (row.labels().stream().anyMatch(each -> each.startsWith("query@FeedQuery"))) {
+                assertTrue(row.inputs().get(0).text().startsWith("FeedQuery"),
+                        () -> row.labels() + " is written as " + row.inputs().get(0).text());
+            }
+        }
+    }
+
+    /**
+     * And the two cases' positions make no combinations between them.
+     *
+     * <p>What a pair space counts and what a row is offered for come off one merge. Counted as the
+     * product of the classes, a behavior taking a sum would be measured against combinations no
+     * value of it has.
+     */
+    @Test
+    void classesUnderTwoCasesAreNotACombination() {
+        Model model = model();
+        Axis sum = axisAt(model, TermPath.of("query"));
+        Axis tag = axisAt(model, under("GlobalQuery").then("tag"));
+
+        assertTrue(tag.requirements().compatibleWith(
+                        sum.requiring(classOf(sum, "GlobalQuery"))),
+                "a row that is a GlobalQuery is at the positions the case declares");
+        assertFalse(tag.requirements().compatibleWith(sum.requiring(classOf(sum, "FeedQuery"))),
+                "and a row that is a FeedQuery is at none of them");
+        assertEquals(Requirements.NONE.and(TermPath.of("query"),
+                        new Refinement.SumCase(
+                                TypeSymbols.declared(new TypeKey("example.q", "GlobalQuery")))),
+                tag.requirements(),
+                "which the path says on its own, with nothing kept beside it");
+    }
+
+    private static PartitionClass classOf(Axis axis, String id) {
+        return axis.classes().stream().filter(each -> each.id().equals(id)).findFirst()
+                .orElseThrow(() -> new AssertionError("no class " + id + " at " + axis.path()));
+    }
+
+    private static Axis axisAt(Model model, TermPath path) {
+        return model.axes().stream().filter(each -> each.path().equals(path)).findFirst()
+                .orElseThrow(() -> new AssertionError("no axis at " + path + "; there are "
+                        + model.axes().stream().map(Axis::path).toList()));
+    }
+}

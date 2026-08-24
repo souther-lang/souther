@@ -1319,6 +1319,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                             + " offers a row for, so none of them was looked in";
             case THE_RULES_LEAVE_NOTHING_THERE ->
                     "the rules leave no value at " + at;
+            // What the model settles, said as that. A class under one case of a sum and a class
+            // under another are classes of positions that are not in one value, so there is no row
+            // to go looking for.
+            case ONE_POSITION_CANNOT_BE_BOTH ->
+                    at + " would need one position to be two things at once, which no value is";
             case NOTHING_TO_BUILD_AGAINST -> "there was nothing to build a candidate against";
             case NO_VALUES_WERE_ASKED_FOR ->
                     "this build composed no values, so no row was written for " + at;

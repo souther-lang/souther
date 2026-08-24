@@ -303,6 +303,16 @@ public final class Generator {
              * the others (ADR-0091).
              */
             THE_RULES_LEAVE_NOTHING_THERE,
+            /**
+             * One position of the row would have to be two things at once.
+             *
+             * <p>What the model settles, as {@link #THE_RULES_LEAVE_NOTHING_THERE} is, and not
+             * something this compiler fell short of. A class under one case of a sum and a class
+             * under another are classes of positions that are not in one value: no row is a
+             * {@code FeedQuery} and has a {@code GlobalQuery}'s {@code tag}. Reported as a value
+             * nothing composed, an author would go looking for a row that cannot exist.
+             */
+            ONE_POSITION_CANNOT_BE_BOTH,
             /** The module's classes were not there to build a candidate against. */
             NOTHING_TO_BUILD_AGAINST,
             /** The build asked for no values to be composed, so nothing was tried here. What such a
@@ -385,7 +395,7 @@ public final class Generator {
              */
             public boolean provesInfeasible() {
                 return switch (this) {
-                    case THE_RULES_LEAVE_NOTHING_THERE -> true;
+                    case THE_RULES_LEAVE_NOTHING_THERE, ONE_POSITION_CANNOT_BE_BOTH -> true;
                     // Every one of these is this compiler falling short, and none of them is the
                     // model saying anything: another value of the same classes may well build.
                     case NOTHING_COMPOSES_ONE, ALL_CANDIDATES_REJECTED, SEARCH_LIMIT,
@@ -1375,9 +1385,10 @@ public final class Generator {
     private static List<int[]> assignmentsOver(List<Axis> axes, int[] from, int at, int cls,
                                                int[] supporting) {
         List<int[]> out = new ArrayList<>();
-        int[] where = from.clone();
-        where[at] = cls;
-        walkSupporting(axes, where, supporting, 0, out);
+        // What the row is about first, and the origin's own classes kept wherever they can be kept
+        // beside it. Cloned outright, a row about a class under one case of a sum would carry the
+        // classes of the positions under another, which is a row that has to be two things at once.
+        walkSupporting(axes, standing(axes, from, at, cls), supporting, 0, out);
         return out;
     }
 
@@ -1431,11 +1442,7 @@ public final class Generator {
 
     /** Where every position stands when a row is composed from the classes alone. */
     private static int[] composes(List<Axis> axes) {
-        int[] where = new int[axes.size()];
-        for (int i = 0; i < axes.size(); i++) {
-            where[i] = standingAt(axes.get(i), _ -> true);
-        }
-        return where;
+        return standing(axes, null, NOT_HERE, NOT_HERE);
     }
 
     private static void walkSupporting(List<Axis> axes, int[] where, int[] supporting, int filled,
@@ -1446,6 +1453,12 @@ public final class Generator {
         }
         int axis = supporting[filled];
         int stood = where[axis];
+        // A position this row stands at no class of is not one to move it through. What it would
+        // have taken is not a class of this row, so every assignment over it is the same row.
+        if (stood == NOT_HERE) {
+            walkSupporting(axes, where, supporting, filled + 1, out);
+            return;
+        }
         for (int c = 0; c < axes.get(axis).classes().size(); c++) {
             // Where it already stands is not a move, and the assignment that makes it is the one
             // the smaller set already produced.
@@ -1453,7 +1466,11 @@ public final class Generator {
                 continue;
             }
             where[axis] = c;
-            walkSupporting(axes, where, supporting, filled + 1, out);
+            // And a class the rest of the assignment cannot be beside is not a move either: it is
+            // a row that would have to be two things at once, which no value is.
+            if (requiredBy(axes, where) instanceof Requirements.Merge.Merged) {
+                walkSupporting(axes, where, supporting, filled + 1, out);
+            }
         }
         where[axis] = stood;
     }
@@ -1594,11 +1611,7 @@ public final class Generator {
      * merely the first thing this can name. What the row is about does not change with it.
      */
     private static int[] movingOnly(List<Axis> axes, int at, int cls) {
-        int[] where = new int[axes.size()];
-        for (int i = 0; i < axes.size(); i++) {
-            where[i] = i == at ? cls : standingAt(axes.get(i), _ -> true);
-        }
-        return where;
+        return standing(axes, null, at, cls);
     }
 
     /**
@@ -1884,12 +1897,7 @@ public final class Generator {
      * the combination would be several answers a person has to separate.
      */
     private static int[] firstAdmitted(List<Axis> axes, InteractionCells.Cell cell) {
-        int[] where = new int[axes.size()];
-        for (int i = 0; i < axes.size(); i++) {
-            int at = i;
-            where[i] = standingAt(axes.get(i), c -> cell.admits(at, c));
-        }
-        return where;
+        return standing(axes, null, NOT_HERE, NOT_HERE, cell::admits);
     }
 
     /** What a row is about, in the words the model uses. The class's label rather than its id: an id
@@ -2128,16 +2136,21 @@ public final class Generator {
         // the same requirement by being the class it is.
         Requirements required = Requirements.NONE;
         for (int i = 0; i < axes.size(); i++) {
+            // A position this row stands at no class of. What it would have required is not
+            // something the row has to meet, and there is nothing to compose for it.
+            if (where[i] == NOT_HERE) {
+                continue;
+            }
             TermPath path = axes.get(i).path();
             String at = label(axes.get(i), where[i]);
             Requirements.Merge both =
-                    required.merge(requirementsOf(axes.get(i), axes.get(i).classes().get(where[i])));
+                    required.merge(axes.get(i).requiring(axes.get(i).classes().get(where[i])));
             // A row that would have to be two things at one position. Which is not a combination
-            // the model has, so nothing composes one — said here rather than left for the search,
-            // which would report every value it tried as refused.
+            // the model has at all — said here, and said as that: reported as a value nothing
+            // composed, an author would go looking for a row that cannot exist.
             if (!(both instanceof Requirements.Merge.Merged merged)) {
-                return new Attempt(null, UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, at,
-                        Optional.empty());
+                return new Attempt(null, UnresolvedCombination.Reason.ONE_POSITION_CANNOT_BE_BOTH,
+                        at, Optional.empty());
             }
             required = merged.requirements();
             switch (axes.get(i).classes().get(where[i]).representatives().evaluate()) {
@@ -2573,16 +2586,96 @@ public final class Generator {
     }
 
     /**
-     * What a row has to be for {@code cls} to be the class it sits in at {@code axis}.
+     * A row stands at no class of this axis.
      *
-     * <p>The position's own requirements and the one the class states, together. Both are the same
-     * kind of fact and neither stands for the other: a position under a narrowing requires it by
-     * being there at all, and a class of the position above states the same narrowing by being the
-     * class it is. Read as one, a row asked for a {@code FeedQuery} and for a {@code GlobalQuery}'s
-     * {@code tag} is refused before anything is composed for it.
+     * <p>Not a class this could not choose. A position under a narrowing the row does not meet is
+     * one the row is not at — the reading of a written row says the same of it, standing nowhere
+     * below a case it is not — so the assignment has nothing to say there and says that.
      */
-    static Requirements requirementsOf(Axis axis, PartitionClass cls) {
-        return axis.path().requirements().and(axis.path(), cls.selects());
+    private static final int NOT_HERE = -1;
+
+    /**
+     * What an assignment requires of the row, or the position two of its classes disagree about.
+     *
+     * <p>One merge and no second account. An axis the assignment is not at requires nothing: it is
+     * not part of this row, so what it would have needed is not something the row has to meet.
+     */
+    private static Requirements.Merge requiredBy(List<Axis> axes, int[] where) {
+        Requirements required = Requirements.NONE;
+        for (int i = 0; i < axes.size() && i < where.length; i++) {
+            if (where[i] == NOT_HERE) {
+                continue;
+            }
+            Requirements.Merge both =
+                    required.merge(axes.get(i).requiring(axes.get(i).classes().get(where[i])));
+            if (!(both instanceof Requirements.Merge.Merged merged)) {
+                return both;
+            }
+            required = merged.requirements();
+        }
+        return new Requirements.Merge.Merged(required);
+    }
+
+    /**
+     * Where every position stands for a row about the class at {@code at}, keeping what
+     * {@code from} put at the positions that can keep it.
+     *
+     * <p>The row is about one class, so what it requires is settled first and everything else is
+     * chosen beside it. A position whose own narrowing the row does not meet stands at no class of
+     * it — offered its first class regardless, every row about a class under one case of a sum
+     * would ask to be another case as well, and none of them would be composed.
+     *
+     * @param at  which axis the row is about, or {@link #NOT_HERE} where it is about none
+     */
+    private static int[] standing(List<Axis> axes, int[] from, int at, int cls) {
+        return standing(axes, from, at, cls, (_, _) -> true);
+    }
+
+    /** Which classes of a position something outside the requirements will have. */
+    private interface Admits {
+
+        boolean at(int axis, int cls);
+    }
+
+    /** The same, among the classes {@code admits} allows — which is what a cell of the body's own
+     *  combinations leaves at each position. */
+    private static int[] standing(List<Axis> axes, int[] from, int at, int cls, Admits admits) {
+        int[] where = new int[axes.size()];
+        java.util.Arrays.fill(where, NOT_HERE);
+        // What the row is about, settled before anything is chosen beside it. A class never
+        // contradicts its own position: what a path requires is required at the positions above it,
+        // and what a class selects is selected at the position itself.
+        Requirements required = at < 0 ? Requirements.NONE
+                : axes.get(at).requiring(axes.get(at).classes().get(cls));
+        if (at >= 0) {
+            where[at] = cls;
+        }
+        for (int i = 0; i < axes.size(); i++) {
+            if (i == at) {
+                continue;
+            }
+            Axis axis = axes.get(i);
+            Requirements soFar = required;
+            // What the position itself requires, before any class of it is chosen. A position the
+            // row cannot be at takes no class, whichever class would otherwise have stood here.
+            if (!soFar.compatibleWith(axis.requirements())) {
+                continue;
+            }
+            int here = i;
+            int kept = from != null && i < from.length && from[i] != NOT_HERE
+                    && admits.at(here, from[i])
+                    && soFar.compatibleWith(axis.requiring(axis.classes().get(from[i])))
+                    ? from[i]
+                    : standingAt(axis, c -> admits.at(here, c) && soFar.compatibleWith(
+                            axis.requiring(axis.classes().get(c))));
+            where[i] = kept;
+            if (kept != NOT_HERE
+                    && soFar.merge(axis.requiring(axis.classes().get(kept)))
+                            instanceof Requirements.Merge.Merged merged) {
+                required = merged.requirements();
+            }
+        }
+        return where;
     }
 
     /**
