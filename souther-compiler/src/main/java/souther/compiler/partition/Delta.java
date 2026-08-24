@@ -24,11 +24,17 @@ public Delta {
         at = List.copyOf(at);
     }
 
-    /** Where {@code where} does not stand where {@code stands} does. */
+    /**
+     * Where {@code where} does not stand where {@code stands} does.
+     *
+     * <p>Both say where every position of one row is, so both are as long as there are positions.
+     * Asked of one and read off the other, a pair that disagreed about how many positions there are
+     * would come back as a distance rather than as the fault it is.
+     */
 public static Delta between(int[] stands, int[] where) {
         List<Integer> out = new ArrayList<>();
         for (int i = 0; i < where.length; i++) {
-            if (i >= stands.length || where[i] != stands[i]) {
+            if (where[i] != stands[i]) {
                 out.add(i);
             }
         }

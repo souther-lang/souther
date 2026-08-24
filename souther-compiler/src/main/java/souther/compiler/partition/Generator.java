@@ -1490,7 +1490,7 @@ public final class Generator {
         // What the walk came to, added up the way a combination's readings are. A class has the
         // one reading — its own class at its own position — so what is left to say is whether the
         // walk over the origins reached the end of itself.
-        Completeness looked = walk.candidates().isEmpty()
+        Completeness looked = walk.isEmpty()
                 ? Completeness.NOTHING_YET : Completeness.NOTHING_YET.searched();
         if (walk.cutShort()) {
             looked = looked.cutShort();
@@ -1606,6 +1606,12 @@ public final class Generator {
             out.addAll(composed);
             return out;
         }
+
+        /** Whether there is anything to try, asked without building the pair of them into one
+         *  list. */
+        boolean isEmpty() {
+            return stated.isEmpty() && composed.isEmpty();
+        }
     }
 
     /**
@@ -1694,21 +1700,28 @@ public final class Generator {
     private static boolean gather(List<Axis> axes, Interpretation reading, int[] about,
                                   List<ResolvedOrigin> origins, Admits admits,
                                   List<Candidate> out, int cut) {
+        // What the demand asks for settled first, and each origin's own classes kept at every
+        // position that can keep them beside it. Worked out once per origin: it is where that
+        // origin's walk starts from and does not change with how far the walk has gone.
+        List<Started> bases = new ArrayList<>();
+        for (ResolvedOrigin origin : origins) {
+            int[] base = standing(axes, wanting(axes, origin.stands(), reading), about, admits);
+            if (base != null) {
+                bases.add(new Started(origin, base));   // null is this reading not being one value
+            }
+        }
         // Produced further away than the set that produced them, kept until the walk reaches that
         // distance rather than handed out early.
         Map<Integer, List<Candidate>> waiting = new LinkedHashMap<>();
-        for (int moved = 0; moved <= axes.size(); moved++) {
-            for (ResolvedOrigin origin : origins) {
-                // What the demand asks for settled first, and the origin's own classes kept at
-                // every position that can keep them beside it.
-                int[] base = standing(axes, wanting(axes, origin.stands(), reading), about, admits);
-                if (base == null) {
-                    continue;   // this reading is not one value, under this origin
-                }
-                for (int[] supporting : supportingSets(axes, about, moved, base)) {
-                    for (int[] where : assignmentsOver(axes, base, supporting)) {
-                        Candidate candidate = new Candidate(origin, where,
-                                Delta.between(origin.stands(), where));
+        // A set names positions the row is not about, so the largest one is every position but
+        // those. Walked further, the sets are empty and the only thing left to do is hand out what
+        // the readings moved beyond them, which is what happens below either way.
+        for (int moved = 0; moved <= axes.size() - about.length; moved++) {
+            for (Started origin : bases) {
+                for (int[] supporting : supportingSets(axes, about, moved, origin.base())) {
+                    for (int[] where : assignmentsOver(axes, origin.base(), supporting)) {
+                        Candidate candidate = new Candidate(origin.from(), where,
+                                Delta.between(origin.from().stands(), where));
                         waiting.computeIfAbsent(candidate.delta().size(), _ -> new ArrayList<>())
                                 .add(candidate);
                     }
@@ -1718,27 +1731,44 @@ public final class Generator {
             // this one alone: what is due is a fact about the distances, and a walk that read it off
             // the size of the set it had just finished would leave a nearer assignment sitting in
             // the map for as long as the set that produced it was larger than it.
-            for (int distance : new java.util.TreeSet<>(waiting.keySet())) {
-                if (distance > moved) {
-                    break;
-                }
-                // The origins in the order they were gathered, within the one distance. Sorted
-                // rather than generated that way, because an assignment reaches one distance from
-                // more than one size of supporting set.
-                List<Candidate> due = waiting.remove(distance);
-                due.sort(java.util.Comparator.comparingInt(candidate -> candidate.from().index()));
-                for (Candidate candidate : due) {
-                    if (out.size() >= cut) {
-                        return true;
-                    }
-                    out.add(candidate);
-                }
+            if (handOut(waiting, moved, out, cut)) {
+                return true;
             }
         }
-        // What the reading moved beyond the largest set walked. Nothing generates at this distance
-        // any more, so it is handed out in order rather than dropped.
+        // What the readings moved beyond the largest set walked. Nothing generates at these
+        // distances any more, so they are handed out rather than dropped — and handed out the same
+        // way, because which of two candidates one distance apart comes first is one rule and not
+        // one per place a candidate leaves this walk.
+        return handOut(waiting, Integer.MAX_VALUE, out, cut);
+    }
+
+    /**
+     * Where one origin's walk for one reading starts: what the reading asks for, and the origin's
+     * own classes wherever they can be kept beside it.
+     *
+     * <p>A pair and not a map keyed by the origin. An origin holds where its values stand, which is
+     * an array, and an array's equality is its own — so a map of them works only for as long as
+     * every key is the one instance that was put there, and reads as though it worked either way.
+     */
+    private record Started(ResolvedOrigin from, int[] base) {}
+
+    /**
+     * Every candidate of {@code waiting} no further than {@code upTo}, nearest first, onto the end
+     * of {@code out}.
+     *
+     * <p>Within one distance the origins keep the order they were gathered in. Sorted rather than
+     * generated that way, because an assignment reaches one distance from more than one size of
+     * supporting set.
+     *
+     * @return whether {@code cut} stopped this with candidates still waiting
+     */
+    private static boolean handOut(Map<Integer, List<Candidate>> waiting, int upTo,
+                                   List<Candidate> out, int cut) {
         for (int distance : new java.util.TreeSet<>(waiting.keySet())) {
-            for (Candidate candidate : waiting.get(distance)) {
+            if (distance > upTo) {
+                return false;
+            }
+            for (Candidate candidate : sortedByOrigin(waiting.remove(distance))) {
                 if (out.size() >= cut) {
                     return true;
                 }
@@ -1746,6 +1776,11 @@ public final class Generator {
             }
         }
         return false;
+    }
+
+    private static List<Candidate> sortedByOrigin(List<Candidate> due) {
+        due.sort(java.util.Comparator.comparingInt(candidate -> candidate.from().index()));
+        return due;
     }
 
     /**
@@ -1761,9 +1796,6 @@ public final class Generator {
      * was spent by counted what the search reached for rather than what it moved.
      */
     private static List<int[]> supportingSets(List<Axis> axes, int[] about, int moved, int[] base) {
-        if (moved > axes.size()) {
-            return List.of();
-        }
         List<int[]> out = new ArrayList<>();
         chooseSupporting(axes, about, moved, 0, new int[moved], 0, out, base);
         return out;
@@ -2074,25 +2106,6 @@ public final class Generator {
                 && !data.newtype()
                 ? List.copyOf(TypeOps.fieldTypes(data, subject.symbols()).keySet())
                 : null;
-    }
-
-    /**
-     * The assignment a row about one class is written at: that class, and every other position at
-     * the first of its own.
-     *
-     * <p>One position moved and no more, which is what makes the row readable as being about that
-     * class. A row that also moved the positions beside it would be several answers a person has to
-     * separate before any of them says anything, and which of the three the answer turned on would
-     * be exactly what it does not say (issue #967).
-     *
-     * <p>The first class is where the others stand for now, and it is a stand-in for something
-     * better: a value the model already states — a {@code let} in scope, or the value a row already
-     * written puts there — is what a reader would recognise, and the first class of a position is
-     * merely the first thing this can name. What the row is about does not change with it.
-     */
-    private static int[] movingOnly(List<Axis> axes, int at, int cls) {
-        return standing(axes, wanting(axes, null, new Interpretation(Map.of(at, cls))),
-                new int[] {at});
     }
 
     /**
@@ -2467,7 +2480,7 @@ public final class Generator {
         Looking looking = new Looking(subject, axes, selection, check, trial, applied, takes);
         for (Interpretation reading : readings) {
             Perturbations walk = nearestFirst(axes, reading, origins, cell::admits);
-            if (walk.candidates().isEmpty()) {
+            if (walk.isEmpty()) {
                 continue;   // this reading is not one value, and another of them may be
             }
             // The values the model states first, nearest first, and what they may spend counted in
@@ -2478,7 +2491,6 @@ public final class Generator {
             if (found != null) {
                 return found;
             }
-            boolean stopped = looking.stopped() || walk.cutShort();
             found = looking.run(walk.composed(), MOST_RUNS_PER_INTERPRETATION);
             if (found != null) {
                 return found;
@@ -2487,7 +2499,7 @@ public final class Generator {
             // two it was cannot be known without composing the next one, and of the two ways to be
             // wrong only one of them is a claim about the model: said to have looked everywhere, a
             // search that had not sends a person to change a rule over a row it never tried.
-            looking.reading(stopped || looking.stopped());
+            looking.reading(walk.cutShort());
         }
         return looking.nothing(readings.isEmpty());
     }
@@ -2526,7 +2538,9 @@ public final class Generator {
         /** Whether a row was composed, run, and seen going somewhere else. */
         private boolean missed;
 
-        /** Whether the bound stopped the run of candidates just walked. */
+        /** Whether a bound stopped one of the runs of candidates this reading has had. Held
+         *  across them and cleared when the reading answers, because a reading is stopped if any of
+         *  its runs was — read after the next run instead, the first one's stopping was gone. */
         private boolean stopped;
 
         private Completeness looked = Completeness.NOTHING_YET;
@@ -2553,7 +2567,6 @@ public final class Generator {
          *             reading's whole share without asking the behavior anything
          */
         private Witness run(List<Candidate> candidates, int runs) {
-            stopped = false;
             int spent = 0;
             for (Candidate candidate : candidates) {
                 Map<String, FixtureTemplate> given = candidate.from().composes() ? Map.of()
@@ -2613,14 +2626,15 @@ public final class Generator {
             return null;
         }
 
-        /** Whether the last run of candidates was stopped by its bound. */
-        private boolean stopped() {
-            return stopped;
-        }
-
-        /** One more reading answered, and whether anything about it was left untried. */
+        /**
+         * One more reading answered, and whether anything about it was left untried.
+         *
+         * @param cutShort whether the walk had more assignments than it handed over, which is a
+         *                 second way to have stopped beside the runs this counted itself
+         */
         private void reading(boolean cutShort) {
-            looked = cutShort ? looked.cutShort() : looked.searched();
+            looked = cutShort || stopped ? looked.cutShort() : looked.searched();
+            stopped = false;
         }
 
         /** What to say when no reading answered. */
@@ -2662,8 +2676,7 @@ public final class Generator {
 
     /** The positions one reading is about, in the axes' own order. */
     private static int[] about(Interpretation reading) {
-        int[] out = reading.at().stream().mapToInt(Integer::intValue).sorted().toArray();
-        return out;
+        return reading.at().stream().mapToInt(Integer::intValue).sorted().toArray();
     }
 
 

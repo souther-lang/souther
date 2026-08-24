@@ -1,5 +1,7 @@
 package souther.compiler.partition;
 
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -33,8 +35,8 @@ public record Interpretation(Map<Integer, Integer> pins) {
 
     /** Which parameters this is about, which is what an origin either states a value of or does
      *  not. */
-    public Set<String> heads(java.util.List<Axis> axes) {
-        java.util.Set<String> out = new java.util.LinkedHashSet<>();
+    public Set<String> heads(List<Axis> axes) {
+        Set<String> out = new LinkedHashSet<>();
         for (int i : pins.keySet()) {
             out.add(axes.get(i).path().head());
         }
