@@ -5,6 +5,7 @@ import souther.compiler.inputs.BoundaryDomain;
 import souther.compiler.numeric.AdditiveImage;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Place;
@@ -473,6 +474,31 @@ public interface LevelSpace {
             }
 
         };
+    }
+
+    /**
+     * How a sum of counts on these orders is spaced, which is how its terms are spaced together.
+     *
+     * <p>A sum steps only where every one of its terms does: a whole number added to a decimal lands
+     * wherever the decimal does. So one dense order among them makes the sum dense, and it takes all
+     * of them stepping for the sum to step.
+     *
+     * <p>Of counting orders, which every order a sum is over has. A quantity whose orders do not
+     * count has no sum to be spaced and answers before it gets here ({@link #onlyWhereTheyMeet}) —
+     * asked of a string, {@link Carrier#spacing} says dense for a reason that has nothing to do with
+     * addition, and reading that as an answer about a sum is how the two meanings would meet.
+     */
+    static Granularity addedUpOver(java.util.Collection<Carrier> orders) {
+        for (Carrier each : orders) {
+            if (!each.counts()) {
+                throw new IllegalStateException(
+                        "a sum adds counts up, and this order has none: " + each);
+            }
+            if (each.spacing() != Granularity.DISCRETE) {
+                return Granularity.DENSE;
+            }
+        }
+        return Granularity.DISCRETE;
     }
 
     /**

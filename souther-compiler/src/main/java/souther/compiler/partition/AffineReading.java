@@ -295,30 +295,13 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
     java.util.Map<NumericTerm, Carrier> carriers(InputReads reads, Symbols symbols) {
         java.util.Map<NumericTerm, Carrier> on = new java.util.LinkedHashMap<>();
         for (NumericTerm term : form.coefs().keySet()) {
-            Carrier here = carrierOf(term, reads, symbols);
+            Carrier here = reads.read().carrierOf(term, symbols);
             if (here == null || !here.counts()) {
                 return null;
             }
             on.put(term, here);
         }
         return on.isEmpty() ? null : on;
-    }
-
-    /**
-     * The order one term's own position is counted on, or null where the reading has no position
-     * for it.
-     *
-     * <p>The position's, because that is whose values are being read and written: what a term is
-     * measured at is the term's question ({@link NumericTerm#carrierAt}) and what the position holds
-     * is the declaration's, and the two are answered together where the position was read.
-     */
-    static Carrier carrierOf(NumericTerm term, InputReads reads, Symbols symbols) {
-        for (souther.compiler.inputs.Position position : reads.read().positions()) {
-            if (position.term().equals(term)) {
-                return term.carrierAt(position.type(), symbols);
-            }
-        }
-        return null;
     }
 
     /** Whether the operator orders the values around the threshold rather than singling one out. */

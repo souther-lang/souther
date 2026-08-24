@@ -231,6 +231,64 @@ public sealed interface Carrier {
         return !(this instanceof Text);
     }
 
+    /**
+     * Whether a value on this order stands somewhere relative to a value on that one.
+     *
+     * <p>What a rule comparing two positions needs of the orders they are written back on, and the
+     * whole of it. Where the counts are one arithmetic the two stand a number apart; where the order
+     * is one and has no counts at all they stand above or below or level, which is a comparison and
+     * is not a distance. Both are lines a model draws and neither is a claim the other makes.
+     *
+     * <p>Written as the second disjunct rather than by making {@link #sharesCountSpaceWith}
+     * reflexive. A string shares its counts with nothing because it has none, and saying otherwise
+     * to make one caller shorter would leave that one meaning two things — the pair that has no
+     * number between them is exactly the pair a caller must not go on to measure.
+     */
+    default boolean standsAgainst(Carrier other) {
+        return sharesCountSpaceWith(other) || (equals(other) && !counts());
+    }
+
+    /**
+     * Whether both carriers' counts are numbers of one origin and one scale, so that subtracting one
+     * from the other with coefficients of one and minus one names a distance without converting
+     * anything.
+     *
+     * <p>What a quantity has to answer before it is read as how far two positions stand apart
+     * ({@code BorderQuantity.Apart}). A form over several positions needs nothing of the kind: its
+     * coefficients are where a conversion is written, which is how a date-time built out of a date
+     * and a time comes to {@code b - 86400 * d - t} over three carriers that share no counts at all.
+     * A distance has no coefficients to carry one, so what it takes is asked here.
+     *
+     * <p><b>Not "the same kind of number".</b> A second count and a nanosecond count are both a
+     * position on one timeline and are not one count: what a step of one means differs, so the
+     * difference of a second and a nanosecond is a number in neither. A second of the day and a
+     * second of an epoch are the same step from different origins, which is the same answer for the
+     * other reason. Told apart by whether a value could be converted, both pairs would have come
+     * back true and the distance would have been off by whatever the conversion was.
+     *
+     * <p><b>Not reflexive, and that is the definition rather than an omission.</b> A string has no
+     * count, so there is no count space it shares with anything — including another string. Two
+     * strings still stand in an order and still meet, which is a quantity's own answer
+     * ({@link #counts}) and not this one's. Made reflexive to look tidier, this would say two
+     * strings stand a measurable distance apart.
+     */
+    default boolean sharesCountSpaceWith(Carrier other) {
+        return switch (this) {
+            // Whole numbers and decimals are written on one line and step differently along it,
+            // which is a question about the values beside a distance and not about the distance.
+            case Whole _, Dense _ -> other instanceof Whole || other instanceof Dense;
+            case Days _ -> other instanceof Days;
+            case Seconds _ -> other instanceof Seconds;
+            case SecondsOfDay _ -> other instanceof SecondsOfDay;
+            case Nanos _ -> other instanceof Nanos;
+            // The enumeration and not the cases. What a count means here is the place in one
+            // declaration's order, so two sums are two spaces however alike their case lists are.
+            case Ordinal ordinal -> other instanceof Ordinal them
+                    && ordinal.enumeration().equals(them.enumeration());
+            case Text _ -> false;
+        };
+    }
+
     /** How the counts on this carrier are spaced, which is what decides whether a strict bound has a
      * next count to step to. */
     default Granularity spacing() {
@@ -387,18 +445,6 @@ public sealed interface Carrier {
             case Text _ -> e instanceof Hir.StringLit lit
                     ? souther.compiler.numeric.Text.of(lit.value()) : null;
         };
-    }
-
-    /**
-     * The value {@code e} writes down on the carrier of {@code type}, or null where it writes none.
-     *
-     * <p>Where a reader has the position's type rather than its carrier. A type nothing orders has
-     * no values to read here, and saying so once is what keeps every caller from deciding for
-     * itself what an unordered position's literals are.
-     */
-    static Place writtenOn(Core e, Type type, Symbols symbols) {
-        Carrier carrier = ofValue(type, symbols);
-        return carrier == null ? null : carrier.literalOf(e, symbols);
     }
 
     /**
