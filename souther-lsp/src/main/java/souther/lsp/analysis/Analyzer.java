@@ -595,8 +595,7 @@ public final class Analyzer {
                             .filter(Analyzer::settled).toList();
             long met = settled.stream()
                     .filter(item -> item instanceof souther.compiler.query.ItemAssessment.Owed owed
-                            && souther.compiler.query.ItemAssessment.Coverage.hit(
-                                    owed.coverage()))
+                            && owed.hasRowWitness())
                     .count();
             if (!settled.isEmpty()) {
                 parts.add("boundary " + met + "/" + settled.size());
@@ -606,9 +605,16 @@ public final class Analyzer {
                 adequacy.branches() == null ? null : adequacy.branches().get(behavior);
         // The measure was made and made in full. A count shown beside a measurement made in part
         // reads as settled, which is the one thing an editor's one line has no room to qualify.
+        //
+        // This surface's own decision about what to publish, over the same counts the report reads.
+        // The prose can print a partial measure's numbers because it can print the word that
+        // qualifies them; one line in an editor cannot, so it holds to Complete. What both take from
+        // the value is how the numbers are worked out (issue #997).
         if (branch != null
-                && branch.measured() instanceof souther.compiler.query.Measurement.Complete<?>) {
-            parts.add("branch " + branch.coveredObligations() + "/" + branch.obligations());
+                && branch.measured() instanceof souther.compiler.query.Measurement.Complete<
+                        souther.compiler.query.Adequacy.BranchEvidence.Arms> whole) {
+            parts.add("branch " + whole.value().coveredObligations()
+                    + "/" + whole.value().obligations());
         }
         return String.join(" · ", parts);
     }

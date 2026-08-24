@@ -10,7 +10,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -222,16 +221,8 @@ class OnlyAProjectionSaysHowFarAMeasurementGotTest {
      *  are about is whether somebody wrote a thing down. */
     private static String allMainSources() throws IOException {
         StringBuilder out = new StringBuilder();
-        for (String module : Reactor.modules()) {
-            Path main = Reactor.root().resolve(module).resolve("src/main/java");
-            if (!Files.isDirectory(main)) {
-                continue;
-            }
-            try (Stream<Path> files = Files.walk(main)) {
-                for (Path each : files.filter(p -> p.toString().endsWith(".java")).toList()) {
-                    out.append(Files.readString(each, StandardCharsets.UTF_8));
-                }
-            }
+        for (Path each : Reactor.mainJavaSources()) {
+            out.append(Files.readString(each, StandardCharsets.UTF_8));
         }
         return out.toString();
     }

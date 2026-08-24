@@ -119,9 +119,9 @@ class ABoundaryIsDrawnOnATermAndNotAPositionTest {
         Map<String, BorderAssessment> byLabel = new java.util.LinkedHashMap<>();
         partitions(MODEL).get("look").boundaries().forEach(b -> byLabel.put(b.label(), b));
 
-        assertTrue(ItemAssessment.Coverage.hit(onPointOf(byLabel, "String.length(t.label) = 1").coverage()),
+        assertTrue(onPointOf(byLabel, "String.length(t.label) = 1").hasRowWitness(),
                 "the row's label is one character long");
-        assertTrue(ItemAssessment.Coverage.hit(onPointOf(byLabel, "Set.size(t.codes) = 1").coverage()),
+        assertTrue(onPointOf(byLabel, "Set.size(t.codes) = 1").hasRowWitness(),
                 "the row's set holds one code");
         assertEquals(ItemAssessment.Coverage.NoHit.class,
                 onPointOf(byLabel, "List.length(t.names) = 2").coverage().made().orElseThrow().getClass(),

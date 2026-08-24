@@ -692,14 +692,22 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             }
         }
         for (InputCaseEvidence input : signature.inputs()) {
-            if (input.declared().isEmpty()) {
+            // Under the same condition as the output line above it, which is the whole of why it is
+            // spelled here. It asked its measurement for a number and took a nought where there was
+            // none, so an input nobody measured printed `specified 0/3` — a measurement, made by
+            // this line rather than by anything that read a row (issue #997). Nothing in this suite
+            // reaches it: a behavior no row names and a level that asks for nothing leave the whole
+            // signature measure without a number, and this section returns above. Which is a reason
+            // to write the condition and not a reason to leave it out — the one thing the two lines
+            // must not do is differ.
+            if (input.declared().isEmpty() || input.cases().made().isEmpty()) {
                 continue;
             }
             // Counted against the cases a row can be written at. A case the body answers `unreachable`
             // for is one the compiler refuses a row for, so leaving it in the denominator would ask
             // for work that cannot be done and hold the model one case short for ever.
             out.append(String.format("                in #%d specified %d/%d%s%n", input.at() + 1,
-                    input.cases().made().map(it -> it.specified().size()).orElse(0),
+                    input.cases().made().orElseThrow().specified().size(),
                     input.coverable().size(),
                     input.excluded().isEmpty() ? ""
                             : "   excluded " + input.excluded().size()));
@@ -890,8 +898,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 .filter(p -> owed(p).writability().known()).toList();
         List<BorderAssessment.Point> unpromised = points.stream()
                 .filter(p -> !owed(p).writability().known()).toList();
-        long met = measured.stream()
-                .filter(p -> ItemAssessment.Coverage.hit(owed(p).coverage())).count();
+        long met = measured.stream().filter(p -> owed(p).hasRowWitness()).count();
         // A point read from rows some of which could not be read. What was not found there is
         // undecided rather than absent, which is the measurement's answer and no longer a third
         // case of the verdict beside it.
@@ -1172,9 +1179,21 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // falls for that and for a fork whose rule could not be worked out as well. Read as one, a
         // build whose rows all ran was told a row was not read, and every arm it certainly does not
         // reach went unsaid.
-        boolean observed = branch.armsWereReadInFull();
-        out.append(String.format("    branch      %d/%d%s%n", branch.coveredObligations(),
-                branch.obligations(), observed ? "" : "   (undecided: a row was not read)"));
+        //
+        // The same two answers this document's JSON is written from, and not the same decision
+        // about what to show: a person reading a line has room for a number and a word qualifying
+        // it, so the counts are printed under a reading that did not finish and the qualification
+        // is printed beside them. What is shared is where the numbers come from (issue #997).
+        //
+        // Asked of the one thing that answers it. This surface prints the arms out of the findings,
+        // which carry the places to send a reader, so what it needs here is whether the claim stands
+        // at all — and that is the same question, put to the same measure, as the one whose answer
+        // the findings and the JSON are made of. A capability accessor beside the arms would be a
+        // second thing to keep in step with them.
+        boolean observed = branch.unreached().isPresent();
+        Adequacy.BranchEvidence.Arms arms = measured.get();
+        out.append(String.format("    branch      %d/%d%s%n", arms.coveredObligations(),
+                arms.obligations(), observed ? "" : "   (undecided: a row was not read)"));
         // The position alone where the arm is in the module's own source, which the section this is
         // under already names. It is not always: a body is spliced into whatever calls it, so an arm
         // written in a helper another module declares is in that module's file, and there the file is
@@ -1192,9 +1211,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                             + " read over however many rules that is%n",
                     together.module()));
         }
-        if (!observed) {
-            return;
-        }
+        // Whatever findings there are, and no second opinion about whether there may be any. Which
+        // arms may be named is settled where they are collected, so a measure that cannot make the
+        // claim produces none of these — and a condition repeated here would be the same rule kept
+        // in two places, which is how the reading and the numbers came to disagree before.
         for (Adequacy.Finding f : behavior.findings()) {
             if (f.about() instanceof About.AnArmNoRowGoesThrough(var arm)) {
                 out.append(String.format("      %s no row goes through `%s` (%s)%n",
@@ -1775,24 +1795,22 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // write — four empty arrays and a zero used to say the same as a behavior every case of
         // which went uncovered.
         names(output.putArray("declared"), signature.output().declared());
-        measured(output, signature.output().cases());
-        signature.output().cases().made().ifPresent(cases -> {
-            names(output.putArray("specified"), cases.specified());
-            names(output.putArray("observed"), cases.observed());
-            names(output.putArray("verified"), cases.verified());
-            output.put("unclassifiedRows", cases.unclassifiedRows());
+        measured(output, signature.output().cases(), (node, cases) -> {
+            names(node.putArray("specified"), cases.specified());
+            names(node.putArray("observed"), cases.observed());
+            names(node.putArray("verified"), cases.verified());
+            node.put("unclassifiedRows", cases.unclassifiedRows());
         });
         ArrayNode inputs = out.putArray("inputs");
         for (InputCaseEvidence input : signature.inputs()) {
             ObjectNode in = inputs.addObject();
             names(in.putArray("declared"), input.declared());
             names(in.putArray("excluded"), input.excluded());
-            measured(in, input.cases());
-            input.cases().made().ifPresent(cases -> {
-                names(in.putArray("specified"), cases.specified());
-                names(in.putArray("executed"), cases.executed());
-                names(in.putArray("verified"), cases.verified());
-                in.put("unclassifiedRows", cases.unclassifiedRows());
+            measured(in, input.cases(), (node, cases) -> {
+                names(node.putArray("specified"), cases.specified());
+                names(node.putArray("executed"), cases.executed());
+                names(node.putArray("verified"), cases.verified());
+                node.put("unclassifiedRows", cases.unclassifiedRows());
             });
         }
     }
@@ -1831,11 +1849,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 read.put("rulesNotReached", true);
             }
             axis.classes().forEach(a.putArray("classes")::add);
-            // Only where there is a measurement. A position nothing was measured at used to write
-            // an empty `covered` and a zero count, which reads exactly like one where every class
-            // went unreached — the `status` beside them said which and nothing made a reader look.
-            axis.reached().made().ifPresent(reached ->
-                    reached.covered().stream().sorted().forEach(a.putArray("covered")::add));
             ArrayNode excluded = a.putArray("excluded");
             ArrayNode unproven = a.putArray("unprovenClaims");
             for (ClaimAnnotations.Said said : claimed.at(axis.path())) {
@@ -1846,9 +1859,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     e.put("why", word(said.why()));
                 }
             }
-            axis.reached().made().ifPresent(
-                    reached -> a.put("unclassifiedRows", reached.unclassifiedRows()));
-            measured(a, axis.reached());
+            // Only where there is a measurement. A position nothing was measured at used to write
+            // an empty `covered` and a zero count, which reads exactly like one where every class
+            // went unreached — the `status` beside them said which and nothing made a reader look.
+            measured(a, axis.reached(), (node, reached) -> {
+                reached.covered().stream().sorted().forEach(node.putArray("covered")::add);
+                node.put("unclassifiedRows", reached.unclassifiedRows());
+            });
         }
         // The questions the model raised that nothing answered, beside the measures rather than
         // inside one. Every measure here is a reader of them, and a position no axis came back for
@@ -1945,9 +1962,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                         // witness of a side as though it were the side.
                         i.put("relation", point.border().operator(point.role()));
                         i.put("against", point.border().against(point.role()));
-                        i.put("hit", ItemAssessment.Coverage.hit(owed.coverage()));
+                        // Outside the measurement's gate, because it is not this measurement's
+                        // answer. Three things settle it — a row already at the point, a value built
+                        // through the module's decoders, the rules proving the point inhabited — and
+                        // only the first is what the coverage measure reads. So a point nobody
+                        // measured can carry `knownWritable: true` beside a status saying so, and
+                        // the two are consistent: one says whether a row can be written here and the
+                        // other whether anybody looked for one (issue #997).
                         i.put("knownWritable", owed.writability().known());
-                        measured(i, owed.coverage());
+                        // Inside it, because it is. `false` here is `NoHit` — what the rows this
+                        // measurement read came to — and never a measurement that was not made.
+                        measured(i, owed.coverage(), (node, coverage) ->
+                                node.put("hit", ItemAssessment.Coverage.hit(coverage)));
                     }
                 }
             }
@@ -1957,13 +1983,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // counts are the measurement's and are written only where one was made; `truncated` is gone
         // from here entirely, since a space too large to walk says so under `weakening`.
         pairs.put("total", partition.pairs().total());
-        partition.pairs().counted().made().ifPresent(counts -> {
-            pairs.put("covered", counts.covered());
-            pairs.put("witnessedFeasible", counts.witnessedFeasible());
-            pairs.put("provenInfeasible", counts.provenInfeasible());
-            pairs.put("unknown", counts.unknown());
+        measured(pairs, partition.pairs().counted(), (node, counts) -> {
+            node.put("covered", counts.covered());
+            node.put("witnessedFeasible", counts.witnessedFeasible());
+            node.put("provenInfeasible", counts.provenInfeasible());
+            node.put("unknown", counts.unknown());
         });
-        measured(pairs, partition.pairs().counted());
         // Both arrays either way. An absent one and an empty one read the same to a person and not
         // to a reader that checks whether the field is there, and this document's shape is what the
         // schema is written against.
@@ -2005,35 +2030,45 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             return;
         }
         ObjectNode out = behavior.putObject("branch");
-        measured(out, branch.measured());
-        out.put("arms", branch.obligations());
-        out.put("covered", branch.coveredObligations());
-        // Arms counted as one that nothing can show are one, which qualifies the two numbers above.
-        // Said here as well as in the prose, since a count that quietly holds two predicates where
-        // it says one is the shape a consumer would read as a behavior complete over something
-        // nothing ran — and a consumer reads this and not the prose.
-        ArrayNode together = out.putArray("unsettledDecisions");
-        for (souther.compiler.types.CoverageOrigin each : branch.unsettledDecisions()) {
-            together.add(each.module());
-        }
-        // Only where every row was read. An arm a row that never finished might have gone through
-        // is undecided, and a field called `unreached` holding it says something that is not so —
-        // which reading `status` beside it does not undo. Asked of what was observed and not of the
-        // measure as a whole: a fork whose rule could not be worked out leaves that fork's arms out
-        // of `unreached` where they are collected, and says nothing about the arms beside it.
-        ArrayNode unreached = out.putArray("unreached");
-        List<souther.compiler.coverage.CoverageSites.Site> named =
-                branch.armsWereReadInFull() ? branch.unreached() : List.of();
-        for (souther.compiler.coverage.CoverageSites.Site arm : named) {
-            ObjectNode a = unreached.addObject();
-            a.put("label", ArmVocabulary.label(arm));
-            a.put("kind", word(arm.name()));
-            // What the arm is an outcome of. Two fields because the meaning is the pair: an `else`
-            // an author wrote under an `if` and one written under a `guard` are the same outcome of
-            // two constructs, and a consumer told only the outcome cannot tell them apart.
-            a.put("construct", word(arm.construct()));
-            at(a, arm.at(), sources);
-        }
+        measured(out, branch.measured(), (node, arms) -> {
+            node.put("arms", arms.obligations());
+            node.put("covered", arms.coveredObligations());
+            // Arms counted as one that nothing can show are one, which qualifies the two numbers
+            // above. Said here as well as in the prose, since a count that quietly holds two
+            // predicates where it says one is the shape a consumer would read as a behavior
+            // complete over something nothing ran — and a consumer reads this and not the prose.
+            //
+            // Inside the gate although it is the measurement's own answer rather than this value's,
+            // because what it qualifies is the two counts. Where they are not written there is
+            // nothing for it to qualify, and an empty array beside no numbers is an empty set
+            // standing in for a measurement nobody made (issue #997).
+            ArrayNode together = node.putArray("unsettledDecisions");
+            for (souther.compiler.types.CoverageOrigin each : branch.unsettledDecisions()) {
+                together.add(each.module());
+            }
+            // A second question, and the measure answers it rather than this deciding. The first is
+            // whether there is a value; this is whether a negative claim over it stands, and the
+            // measure hands the arms over only where it does. Written here as a condition on the
+            // value, this line would be a rule kept by whoever wrote the next surface.
+            //
+            // Absent rather than empty where it does not. `[]` reads as "no arm goes unreached",
+            // which is a finding, and writing it for a reading that found nothing out is the same
+            // substitution as the counts this measure used to write for a measurement nobody made.
+            branch.unreached().ifPresent(missed -> {
+                ArrayNode unreached = node.putArray("unreached");
+                for (souther.compiler.coverage.CoverageSites.Site arm : missed) {
+                    ObjectNode a = unreached.addObject();
+                    a.put("label", ArmVocabulary.label(arm));
+                    a.put("kind", word(arm.name()));
+                    // What the arm is an outcome of. Two fields because the meaning is the pair: an
+                    // `else` an author wrote under an `if` and one written under a `guard` are the
+                    // same outcome of two constructs, and a consumer told only the outcome cannot
+                    // tell them apart.
+                    a.put("construct", word(arm.construct()));
+                    at(a, arm.at(), sources);
+                }
+            });
+        });
     }
 
     /**
@@ -2188,12 +2223,38 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * (issue #953).
      */
     private static void measured(ObjectNode of, Measure<?> measure) {
-        ReportMeasurement<?> said = ReportMeasurement.of(measure);
+        measured(of, measure, (_, _) -> { });
+    }
+
+    /**
+     * The same, together with the fields this measure's own value supplies.
+     *
+     * <p><b>One door.</b> Every field a document writes off what a measure made goes through here,
+     * and {@code value} is called only where there is something to call it with. Written the other
+     * way — a status here and an {@code ifPresent} beside it at each call site — the rule was a
+     * convention, kept at five of the seven measures and forgotten at the other two, which wrote a
+     * count and a boolean for measurements nobody had made (issue #997). It is not a compile-time
+     * prohibition: {@code Measure.made()} is public, and a writer that wants to reach past this can.
+     * What it does is leave one place to look, and make the shape of a correct measure-writer the
+     * shape the next one is copied from.
+     *
+     * <p><b>What belongs inside and what does not.</b> Inside goes what the measure's value
+     * supplies, and what qualifies that value — a count, what the count is of, the words that say
+     * how to read it. Outside stays what the model says, which is true whether or not anybody
+     * measured ({@code pairs.total}, a border's {@code relation} and {@code against}), and what a
+     * different body of evidence establishes ({@code knownWritable}, which three things other than
+     * this measurement can settle). The question to ask of a field is which evidence supplies it,
+     * not which object it sits in.
+     */
+    private static <T> void measured(ObjectNode of, Measure<T> measure,
+                                     java.util.function.BiConsumer<ObjectNode, T> value) {
+        ReportMeasurement<T> said = ReportMeasurement.of(measure);
         of.put("status", wire(said.status()));
         if (said.reason() != null) {
             of.put("reason", word(said.reason()));
         }
         weakening(of, said.weakenedBy());
+        said.ifMade(it -> value.accept(of, it));
     }
 
     /**

@@ -184,6 +184,9 @@
       "description": "Which arms of the behavior's body the rows go through. Branch-arm coverage, not path coverage: going through both arms of two nested conditions says nothing about their combinations.",
       "required": ["status"],
       "additionalProperties": false,
+      "if": { "properties": { "status": { "enum": ["complete", "partial"] } } },
+      "then": { "required": ["arms", "covered", "unsettledDecisions"] },
+      "else": { "not": { "anyOf": [{ "required": ["arms"] }, { "required": ["covered"] }, { "required": ["unsettledDecisions"] }, { "required": ["unreached"] }] } },
       "properties": {
         "status": { "$ref": "#/$defs/status" },
         "weakening": { "$ref": "#/$defs/weakening" },
@@ -192,16 +195,16 @@
           "enum": ["no_body", "no_arm_obligations", "not_asked", "unreadable", "no_rows",
                    "bodies_not_elaborated"]
         },
-        "arms": { "type": "integer", "minimum": 0 },
-        "covered": { "type": "integer", "minimum": 0 },
+        "arms": { "type": "integer", "minimum": 0, "description": "How many arms this behavior is owed a row for, counted per arm the author wrote rather than per occurrence of it: a helper spliced under three call sites has its arms counted once. An arm the model's own rules prove nothing reaches is not owed and is not counted. Present exactly where the measurement has a value, which is where `status` is `complete` or `partial`. A behavior with no arms to measure has no number here rather than a nought — read as one, a measure that does not apply divided into a covered count of zero and answered a question nobody put." },
+        "covered": { "type": "integer", "minimum": 0, "description": "How many of them some row goes through, through any one occurrence, since going through an arm is going through it whichever call site the row arrived by. Present under the same condition as `arms`, and read together with `unsettledDecisions`." },
         "unsettledDecisions": {
           "type": "array",
-          "description": "The modules that wrote a fork deciding by a rule its caller supplies, where which rule decides could not be worked out. What an arm of such a fork is owed for is one rule, and this leaves open how many rules it stands for -- copies of it put together, or one place a rule chosen while the behavior runs arrives at. Present and empty where every arm is owed for a rule that was worked out. What it qualifies is `arms` and `covered`: those are read over however many rules that is wherever this is not empty, so a reader taking the pair as complete over each of them would be taking it further than it goes.",
+          "description": "The modules that wrote a fork deciding by a rule its caller supplies, where which rule decides could not be worked out. What an arm of such a fork is owed for is one rule, and this leaves open how many rules it stands for -- copies of it put together, or one place a rule chosen while the behavior runs arrives at. Empty where every arm is owed for a rule that was worked out. What it qualifies is `arms` and `covered`, so it is present exactly where those are: where there are no counts there is nothing for it to qualify, and an empty array written beside no numbers would be an empty set standing in for a measurement nobody made.",
           "items": { "type": "string" }
         },
         "unreached": {
           "type": "array",
-          "description": "Arms no row goes through.",
+          "description": "Arms no row goes through. A claim about every row there was, so it is present only where every row could be read and this analysis was not shown wrong — absent otherwise, including where `status` is `partial` because a row did not come back. Empty means no arm goes unreached; absent means which arms do could not be established, and the two are not the same answer. A fork deciding by a rule its caller supplies that could not be worked out leaves that fork's arms out of this and says nothing about the arms beside them, which is what `unsettledDecisions` names.",
           "items": {
             "type": "object",
             "required": ["label", "kind", "at"],
@@ -360,8 +363,11 @@
                   "additionalProperties": false,
                   "oneOf": [
                     { "required": ["notOwed"], "not": { "anyOf": [{ "required": ["relation"] }, { "required": ["against"] }, { "required": ["hit"] }, { "required": ["knownWritable"] }, { "required": ["status"] }, { "required": ["reason"] }] } },
-                    { "required": ["relation", "against", "hit", "knownWritable", "status"], "not": { "required": ["notOwed"] } }
+                    { "required": ["relation", "against", "knownWritable", "status"], "not": { "required": ["notOwed"] } }
                   ],
+                  "if": { "required": ["status"], "properties": { "status": { "enum": ["complete", "partial"] } } },
+                  "then": { "required": ["hit"] },
+                  "else": { "not": { "required": ["hit"] } },
                   "properties": {
                     "point": {
                       "enum": ["on", "off", "in", "out"],
@@ -373,10 +379,13 @@
                     },
                     "relation": { "type": "string", "description": "How a row here has to stand to what `against` names: `=` for a place, `in` for a run of the quantity's values, `/=` for every value but one. Present exactly where a row is owed. Two of the four items ask for a place and two ask for a run of values, so `against` is read together with this: under `=` and `/=` it is a value, and under `in` it is the run written whole. A document carrying a value for all four would name a witness of a run as though it were the run. `<` and `>` were written here by compilers that read a point away from the line as everything past it rather than as the partition the border bounds; a run is written under `in` now." },
                     "against": { "type": "string", "description": "What that relation is against, as an author would write it. Under `=` and `/=` it is one value: a value of the position where the border's `kind` is `at_value`; the other position, stepped where the point is not where the two meet, where it is `between_positions`; and a number the form comes to where it is `over_a_form`. Under `in` it is a run of the quantity's values written whole — `10 < n <= 20` — because a run has two ends and one of them alone would name a value inside it as though it were the run." },
-                    "hit": { "type": "boolean" },
+                    "hit": {
+                      "type": "boolean",
+                      "description": "Whether a row this coverage measurement read stands at the point. Present exactly where the measurement has a value, which is where `status` is `complete` or `partial`. `false` is what the measurement found — no row that could be read is at the point — and never stands for a measurement that was not made or could not be finished: those have no answer here and the key is absent. Under `partial` the `false` is over what was observed, and `weakening` beside it says why that is not a complete absence."
+                    },
                     "knownWritable": {
                       "type": "boolean",
-                      "description": "Whether some row could be at this point. False where a rule reaching the value this position sits in was not read in full — a pattern, a disequality, a strict bound on a decimal — so the point is where the reading stopped rather than where the model does. Such a point is reported and not counted, and no build is refused over it."
+                      "description": "Whether anything has shown that a row can be written at this point. `true` where a row already stands at it, where a value at it was built through the module's own decoders, or where every rule reaching the value this position sits in was read in full and leaves the point inside what they admit. `false` says only that none of those has established it — never that the point cannot be written at, which is what the border refusing to owe the point at all would say. This is its own body of evidence and not this measurement's answer, so it is written whether or not the coverage measurement has a value: a point nobody measured whose rules prove it inhabited carries `true` beside a `status` of `unavailable`, and the two are consistent."
                     },
                     "status": { "$ref": "#/$defs/status" },
                     "weakening": { "$ref": "#/$defs/weakening" },
