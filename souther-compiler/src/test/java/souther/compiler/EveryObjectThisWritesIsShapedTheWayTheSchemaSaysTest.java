@@ -65,7 +65,7 @@ class EveryObjectThisWritesIsShapedTheWayTheSchemaSaysTest {
             "oneOf", "anyOf", "allOf", "if", "then", "else", "not", "dependentRequired",
             // constraints on a value, which say nothing about keys
             "type", "enum", "const", "minimum", "pattern", "minItems", "maxItems",
-            "contains", "minContains", "maxContains",
+            "uniqueItems", "contains", "minContains", "maxContains",
             // prose and plumbing
             "description", "title", "$schema", "$id", "$defs");
 
@@ -95,6 +95,49 @@ class EveryObjectThisWritesIsShapedTheWayTheSchemaSaysTest {
         assertTrue(walk.objects > 20,
                 () -> "the model reaches the objects of the document: " + walk.objects);
         assertEquals(List.of(), walk.wrong, "what the schema shipped beside this refuses");
+    }
+
+    /**
+     * A document written before a key was added is still a document of this version.
+     *
+     * <p>Held on the key added last, which is {@code writableBecause}. The preamble says a key added
+     * since does not raise the version, and what that promises is this: the same schema takes a
+     * document with the key and a document without it. So an absent array is a producer that predates
+     * the field and never a point with no grounds — that is written as an empty array, and a reader
+     * that took the two for one answer would read every older document as a corpus nothing shows
+     * anything about.
+     */
+    @Test
+    void aDocumentWrittenBeforeAKeyWasAddedIsStillOfThisVersion() {
+        JsonNode without = document();
+        int taken = strip(without, "writableBecause");
+        assertTrue(taken > 0, "the document carries the key, or this strips nothing");
+
+        Walk walk = new Walk(schema());
+        walk.of(without, "");
+        assertEquals(List.of(), walk.wrong,
+                "the shipped schema refuses a document written before the key existed");
+    }
+
+    /** Every occurrence of {@code key} taken out, and how many there were. */
+    private static int strip(JsonNode node, String key) {
+        int taken = 0;
+        if (node instanceof tools.jackson.databind.node.ObjectNode object) {
+            if (object.has(key)) {
+                object.remove(key);
+                taken++;
+            }
+            List<String> names = new java.util.ArrayList<>();
+            object.propertyNames().forEach(names::add);
+            for (String name : names) {
+                taken += strip(object.get(name), key);
+            }
+        } else if (node.isArray()) {
+            for (JsonNode each : node) {
+                taken += strip(each, key);
+            }
+        }
+        return taken;
     }
 
     /**

@@ -895,9 +895,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                         .filter(p -> p.item() instanceof ItemAssessment.Owed).toList();
         List<BorderAssessment.Point> measured = points.stream()
                 .filter(p -> owed(p).coverage().made().isPresent())
-                .filter(p -> owed(p).writability().known()).toList();
+                .filter(p -> owed(p).writabilityEvidence().known()).toList();
         List<BorderAssessment.Point> unpromised = points.stream()
-                .filter(p -> !owed(p).writability().known()).toList();
+                .filter(p -> !owed(p).writabilityEvidence().known()).toList();
         long met = measured.stream().filter(p -> owed(p).hasRowWitness()).count();
         // A point read from rows some of which could not be read. What was not found there is
         // undecided rather than absent, which is the measurement's answer and no longer a third
@@ -1960,13 +1960,26 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                         i.put("relation", point.border().operator(point.role()));
                         i.put("against", point.border().against(point.role()));
                         // Outside the measurement's gate, because it is not this measurement's
-                        // answer. Three things settle it — a row already at the point, a value built
-                        // through the module's decoders, the rules proving the point inhabited — and
-                        // only the first is what the coverage measure reads. So a point nobody
-                        // measured can carry `knownWritable: true` beside a status saying so, and
-                        // the two are consistent: one says whether a row can be written here and the
-                        // other whether anybody looked for one (issue #997).
-                        i.put("knownWritable", owed.writability().known());
+                        // answer. What settles it is its own body of evidence, only one ground of
+                        // which the coverage measure reads. So a point nobody measured can carry
+                        // `knownWritable: true` beside a status saying so, and the two are
+                        // consistent: one says whether a row can be written here and the other
+                        // whether anybody looked for one (issue #997).
+                        //
+                        // The grounds beside the verdict, and the verdict kept. Two of the three are
+                        // nowhere else in this document — the attempt is the human surface's and
+                        // `--generate`'s — so a reader given only the boolean cannot tell a point
+                        // the rules prove inhabited, which stands whatever any search afterwards
+                        // makes of it, from one a search happened to reach. The two license
+                        // different sentences (issue #1036).
+                        ItemAssessment.WritabilityEvidence evidence = owed.writabilityEvidence();
+                        i.put("knownWritable", evidence.known());
+                        // In the order the grounds are declared and never the order a set iterated
+                        // in. There is no ranking to read off it: a document holding two grounds
+                        // holds both, and this is a spelling so that two runs that found the same
+                        // thing write the same bytes.
+                        ArrayNode because = i.putArray("writableBecause");
+                                        evidence.inOrder().forEach(ground -> because.add(wire(ground)));
                         // Inside it, because it is. `false` here is `NoHit` — what the rows this
                         // measurement read came to — and never a measurement that was not made.
                         measured(i, owed.coverage(), (node, coverage) ->
@@ -2239,9 +2252,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * supplies, and what qualifies that value — a count, what the count is of, the words that say
      * how to read it. Outside stays what the model says, which is true whether or not anybody
      * measured ({@code pairs.total}, a border's {@code relation} and {@code against}), and what a
-     * different body of evidence establishes ({@code knownWritable}, which three things other than
-     * this measurement can settle). The question to ask of a field is which evidence supplies it,
-     * not which object it sits in.
+     * different body of evidence establishes ({@code knownWritable} and {@code writableBecause},
+     * whose grounds are {@link ItemAssessment.WritabilityEvidence.Ground} and only one of which this
+     * measurement reads). The question to ask of a field is which evidence supplies it, not which
+     * object it sits in.
      */
     private static <T> void measured(ObjectNode of, Measure<T> measure,
                                      java.util.function.BiConsumer<ObjectNode, T> value) {
@@ -2328,6 +2342,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case COMPLETE -> "complete";
             case PARTIAL -> "partial";
             case NOT_APPLICABLE, NOT_MEASURED -> "unavailable";
+        };
+    }
+
+    /** What a document calls a ground a row can be written at a point on. Written out for the same
+     *  reason as the status above: widening what a consumer must handle is a decision about the
+     *  contract, and renaming a constant is a decision about the compiler. Taken off the name, the
+     *  second would silently be the first. */
+    public static String wire(ItemAssessment.WritabilityEvidence.Ground ground) {
+        return switch (ground) {
+            case THE_RULES_PROVE_IT -> "the_rules_prove_it";
+            case A_ROW_IS_AT_IT -> "a_row_is_at_it";
+            case A_VALUE_WAS_BUILT -> "a_value_was_built";
         };
     }
 
