@@ -2,16 +2,16 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.test.RepositoryLayout;
+
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -29,6 +29,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * in between defeats it — but the line that would have to be added first is the one it fails on.
  */
 class WhatACaseMeansIsDecidedInOnePlaceTest {
+
+    /** Read once: what this asks of it does not change between its checks. */
+    private static final RepositoryLayout REPOSITORY = RepositoryLayout.ofWorkingDirectory();
 
     /**
      * Where reading a subject as an optional is part of the answer: where the forms are told apart,
@@ -149,22 +152,6 @@ class WhatACaseMeansIsDecidedInOnePlaceTest {
     }
 
     private static List<Path> mainSources() throws IOException {
-        Path module = Path.of("").toAbsolutePath();
-        Path repo = Files.isDirectory(module.resolve(Path.of("src", "main", "java")))
-                ? module.getParent() : module;
-        List<Path> sources = new ArrayList<>();
-        try (Stream<Path> modules = Files.list(repo)) {
-            for (Path candidate : modules.toList()) {
-                Path root = candidate.resolve(Path.of("src", "main", "java"));
-                if (!Files.isDirectory(root)) {
-                    continue;
-                }
-                try (Stream<Path> walk = Files.walk(root)) {
-                    walk.filter(p -> p.toString().endsWith(".java")).forEach(sources::add);
-                }
-            }
-        }
-        assertFalse(sources.isEmpty(), "found no sources at all — the scan missed the tree");
-        return sources;
+        return REPOSITORY.mainJavaSources();
     }
 }

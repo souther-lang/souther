@@ -331,7 +331,22 @@ class EverySchemaWordIsAccountedForTest {
             // are the citation's own, and are read off it rather than listed here.
             new Vocabulary("at.writtenAt.kind",
                     List.of("$defs", "writtenAt", "properties", "kind"),
-                    List.of(Citation.class), writtenAtWords(), Set.of()));
+                    List.of(Citation.class), writtenAtWords(), Set.of()),
+            // What showed a row can be written at a point. Spelled by the writer rather than by the
+            // constants, the way `status` is: which grounds a consumer must handle is a decision
+            // about the contract, and renaming one inside the compiler is not.
+            new Vocabulary("partition.boundaries[].items[].writableBecause",
+                    List.of("$defs", "partition", "properties", "boundaries", "items", "properties",
+                            "items", "items", "properties", "writableBecause", "items"),
+                    List.of(ItemAssessment.WritabilityEvidence.Ground.class), groundWords(),
+                    Set.of()));
+
+    /** The grounds a document may name, spelled by the one writer of the field. */
+    private static Set<String> groundWords() {
+        return Arrays.stream(ItemAssessment.WritabilityEvidence.Ground.values())
+                .map(AdequacyReport::wire)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+    }
 
     /**
      * The status words the schema allows are the ones the writer can write.
@@ -348,6 +363,52 @@ class EverySchemaWordIsAccountedForTest {
             written.add(AdequacyReport.wire(status));
         }
         assertEquals(STATUS_WORDS, written);
+    }
+
+    /**
+     * The two places the schema keys a condition on a status word, and where those words come from.
+     *
+     * <p>Not a vocabulary a document carries: these are the guards that say which keys an object has
+     * when its measure produced a value — {@code branch} writes its counts and a border's point
+     * writes {@code hit} exactly there (issue #997). So the words are not checked against an enum's
+     * spellings but against the statuses a measure <em>with a value</em> comes out as, worked out by
+     * asking each state of a measure whether it made one. A guard listing a word for a state that
+     * has no value would demand a count of a measurement that has none, which is the shape this
+     * whole field is here to keep out; one missing a word for a state that has one would forbid a
+     * count the writer goes on writing.
+     *
+     * <p>Which is why they are not in {@link #VOCABULARIES}. A vocabulary is what a reader must
+     * handle; this is a condition, and the check that matters is that it selects the right states.
+     */
+    @Test
+    void theWordsAGuardKeysOnAreTheStatusesOfAMeasurementWithAValue() {
+        souther.compiler.query.WeakeningSet by = souther.compiler.query.WeakeningSet.of(
+                new souther.compiler.query.Weakening.ArmsUnsettled(
+                        new souther.compiler.types.CoverageOrigin("m", 0, 0,
+                                souther.compiler.types.CoverageConstruct.IF)));
+        Set<String> withAValue = new LinkedHashSet<>();
+        for (souther.compiler.query.Measure<String> each : List.<
+                souther.compiler.query.Measure<String>>of(
+                new souther.compiler.query.Measurement.Complete<>("a"),
+                new souther.compiler.query.Measurement.Partial<>("a", by),
+                new souther.compiler.query.Measurement.NotMeasured<>(
+                        Adequacy.BranchEvidence.NotAsked.NO_ROWS),
+                new souther.compiler.query.Measurement.FailedToMeasure<>(
+                        Adequacy.BranchEvidence.Unreadable.UNREADABLE, by),
+                new souther.compiler.query.Measure.NotApplicable<>(
+                        Adequacy.BranchEvidence.NoArms.NO_BODY))) {
+            if (each.made().isPresent()) {
+                withAValue.add(AdequacyReport.wire(AdequacyReport.statusOf(each)));
+            }
+        }
+
+        for (List<String> guard : List.of(
+                List.of("$defs", "branch", "if", "properties", "status"),
+                List.of("$defs", "partition", "properties", "boundaries", "items",
+                        "properties", "items", "items", "if", "properties", "status"))) {
+            assertEquals(withAValue, allowedAt(schema(), guard),
+                    guard + ": the guard selects states other than the ones with a value");
+        }
     }
 
     @Test
@@ -479,6 +540,12 @@ class EverySchemaWordIsAccountedForTest {
         held.add("/$defs/partition/properties/axes/items/properties/read/properties/extent");
         held.add("/$defs/partition/properties/unanswered/items/properties/subject/properties/kind");
         held.add("/$defs/ruleId/properties/kind");
+        // The two guards, held by the test above rather than against a vocabulary. They say which
+        // keys an object has where its measure produced a value, so what has to be true of them is
+        // that they name the states that did — not that a reader knows the words.
+        held.add("/$defs/branch/if/properties/status");
+        held.add("/$defs/partition/properties/boundaries/items/properties/items/items/if"
+                + "/properties/status");
 
         List<String> unaccounted = paths.stream().filter(p -> !held.contains(p)).toList();
         assertEquals(List.of(), unaccounted,

@@ -144,7 +144,7 @@ class ARowComposedForAPointIsWritableAndStandsAtItTest {
                     continue;
                 }
                 return each.getValue() instanceof ItemAssessment.Owed owed
-                        && ItemAssessment.Coverage.hit(owed.coverage());
+                        && owed.hasRowWitness();
             }
         }
         return false;

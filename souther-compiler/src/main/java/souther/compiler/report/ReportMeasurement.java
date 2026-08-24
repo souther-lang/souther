@@ -43,15 +43,51 @@ import java.util.Optional;
  * — which is what {@code somethingWasUnreadable} was invented to get back, and what a reader of the
  * JSON could not get at all.
  *
- * @param value what the measure made, where it made anything. Absent is a measurement that was not
- *              made and never a zero standing in for one
+ * <p><b>The value is not handed out.</b> This was a record, so it published an {@code Optional<T>}
+ * accessor beside the word, and a renderer holding one could reach past the status to what it
+ * wrapped exactly as the evidence records let it reach past the measurement — which is the shape
+ * issue #997 was. What a caller can do with the value is ask for it under a guard ({@link #counted()}
+ * then {@link #get()}) or be handed it only if there is one ({@link #ifMade}). Neither makes writing
+ * a number for a measurement that has none impossible — {@code Measure.made()} is public and always
+ * will be — and that is not what they are for. They make the serialization boundary have one door.
  */
-record ReportMeasurement<T>(MeasurementStatus status, MeasureReason reason, WeakeningSet weakenedBy,
-                            Optional<T> value) {
+final class ReportMeasurement<T> {
+
+    private final MeasurementStatus status;
+    private final MeasureReason reason;
+    private final WeakeningSet weakenedBy;
+    /** What the measure made, where it made anything. Absent is a measurement that was not made and
+     *  never a zero standing in for one. */
+    private final Optional<T> value;
+
+    private ReportMeasurement(MeasurementStatus status, MeasureReason reason,
+                              WeakeningSet weakenedBy, Optional<T> value) {
+        this.status = status;
+        this.reason = reason;
+        this.weakenedBy = weakenedBy;
+        this.value = value;
+    }
 
     static <T> ReportMeasurement<T> of(Measure<T> measure) {
         return new ReportMeasurement<>(statusOf(measure), measure.why(),
                 measure.weakening(), measure.made());
+    }
+
+    MeasurementStatus status() {
+        return status;
+    }
+
+    MeasureReason reason() {
+        return reason;
+    }
+
+    WeakeningSet weakenedBy() {
+        return weakenedBy;
+    }
+
+    /** What the measure made, handed over only where it made anything. */
+    void ifMade(java.util.function.Consumer<? super T> then) {
+        value.ifPresent(then);
     }
 
     /**

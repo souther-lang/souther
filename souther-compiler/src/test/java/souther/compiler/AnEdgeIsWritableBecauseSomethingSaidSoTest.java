@@ -11,6 +11,7 @@ import souther.compiler.query.Compilation;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -69,17 +70,20 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
                 "the position starts at 1, so that is where the line is and 0 is no line of it");
 
         ItemAssessment.Owed at = assessmentAt(HOLED, "example.holed", "f", "1");
-        assertInstanceOf(ItemAssessment.Writability.WitnessedByConstruction.class,
-                at.writability(),
-                "and a value at it went through the decoder, which is more than a proof of one");
+        ItemAssessment.WritabilityEvidence evidence = at.writabilityEvidence();
+        assertTrue(evidence.has(ItemAssessment.WritabilityEvidence.Ground.A_VALUE_WAS_BUILT),
+                "and a value at it went through the decoder");
+        assertTrue(evidence.has(ItemAssessment.WritabilityEvidence.Ground.THE_RULES_PROVE_IT),
+                "which the rules already proved, and the two stand together rather than one of them"
+                        + " standing for both");
     }
 
     @Test
     void anEdgeTheSameRuleDoesNotReachIsWitnessedByTheValueThatWasBuilt() {
         ItemAssessment.Owed at = assessmentAt(HOLED, "example.holed", "f", "10");
 
-        assertInstanceOf(ItemAssessment.Writability.WitnessedByConstruction.class,
-                at.writability(), "a value at 10 went through the decoder");
+        assertTrue(at.writabilityEvidence().has(ItemAssessment.WritabilityEvidence.Ground.A_VALUE_WAS_BUILT),
+                "a value at 10 went through the decoder");
         assertInstanceOf(ItemAssessment.Attempt.Built.class, at.attempt(),
                 "and the value it built is kept, because it is also the row an author is offered");
     }
@@ -122,8 +126,10 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
 
         assertInstanceOf(ItemAssessment.Coverage.NoHit.class,
 at.coverage().made().orElseThrow());
-        assertInstanceOf(ItemAssessment.Writability.ProvenByProjection.class, at.writability(),
-                "every rule of `Amount` was read, so 0 is a value it holds");
+        assertEquals(Set.of(ItemAssessment.WritabilityEvidence.Ground.THE_RULES_PROVE_IT),
+                at.writabilityEvidence().grounds(),
+                "every rule of `Amount` was read, so 0 is a value it holds, and that is the whole"
+                        + " of what showed it");
         assertInstanceOf(ItemAssessment.Attempt.Unresolved.class, at.attempt(),
                 "and the search still came back with nothing, which takes nothing away from that");
     }
@@ -178,8 +184,8 @@ at.coverage().made().orElseThrow());
                 example place
                     | "some" : (Order { id = OrderId("0001"), amount = Amount(7) }) -> Ok
                 """;
-        assertInstanceOf(ItemAssessment.Writability.WitnessedByConstruction.class,
-                writabilityAt(model, "example.order", "place", "0"),
+        assertTrue(writabilityAt(model, "example.order", "place", "0")
+                        .has(ItemAssessment.WritabilityEvidence.Ground.A_VALUE_WAS_BUILT),
                 "the id's rule cannot refuse an amount of 0");
     }
 
@@ -205,7 +211,7 @@ at.coverage().made().orElseThrow());
         ItemAssessment.Owed at = assessmentAt(model, "example.at", "f", "0");
         assertInstanceOf(ItemAssessment.Coverage.Hit.class,
 at.coverage().made().orElseThrow());
-        assertInstanceOf(ItemAssessment.Writability.WitnessedByRow.class, at.writability(),
+        assertTrue(at.writabilityEvidence().has(ItemAssessment.WritabilityEvidence.Ground.A_ROW_IS_AT_IT),
                 "the row is the witness");
         assertFalse(at.worthSearching(),
                 "and a value that is already there is not worth building one for");
@@ -246,8 +252,10 @@ at.coverage().made().orElseThrow());
         ItemAssessment.Owed at = assessmentAt(model, "example.unnamed", "f", "0");
         assertEquals(ItemAssessment.Coverage.NotAsked.NO_ROWS,
                 assertInstanceOf(Measurement.NotMeasured.class, at.coverage()).why());
-        assertTrue(at.writability().known(),
+        assertTrue(at.writabilityEvidence().known(),
                 "nobody wrote a row, which says nothing about whether one could be written");
+        assertFalse(at.writabilityEvidence().has(ItemAssessment.WritabilityEvidence.Ground.A_ROW_IS_AT_IT),
+                "and a measurement nobody made puts no row at the point");
         assertInstanceOf(ItemAssessment.Attempt.Built.class, at.attempt(),
                 "a value was built here, and what it settles is the writability and not the rows");
     }
@@ -305,9 +313,9 @@ at.coverage().made().orElseThrow());
                 .map(BorderAssessment.Point::against).sorted().toList();
     }
 
-    private static ItemAssessment.Writability writabilityAt(String model, String module,
-                                                                String behavior, String value) {
-        return assessmentAt(model, module, behavior, value).writability();
+    private static ItemAssessment.WritabilityEvidence writabilityAt(String model, String module,
+                                                                    String behavior, String value) {
+        return assessmentAt(model, module, behavior, value).writabilityEvidence();
     }
 
     /** The point against a line at {@code value}, which is what a row there is owed for. */
@@ -345,13 +353,15 @@ at.coverage().made().orElseThrow());
     @Test
     void aLevelThatComposesNoValueStillReadsWhatTheRulesProve() {
         ItemAssessment.Owed built = assessmentAt(HOLED, "example.holed", "f", "1");
-        assertInstanceOf(ItemAssessment.Writability.WitnessedByConstruction.class,
-                built.writability(), "at `all` a value at it went through the decoder");
+        assertTrue(built.writabilityEvidence().has(ItemAssessment.WritabilityEvidence.Ground.A_VALUE_WAS_BUILT),
+                "at `all` a value at it went through the decoder");
 
         ItemAssessment.Owed unbuilt = assessmentAt(HOLED, "example.holed", "f", "1",
                 Adequacy.Level.WITNESS);
-        assertInstanceOf(ItemAssessment.Writability.ProvenByProjection.class,
-                unbuilt.writability(), "and the rules prove it whether or not anything was built");
+        assertEquals(Set.of(ItemAssessment.WritabilityEvidence.Ground.THE_RULES_PROVE_IT),
+                unbuilt.writabilityEvidence().grounds(),
+                "and the rules prove it whether or not anything was built, which is the one ground"
+                        + " left when nothing was");
         assertTrue(unbuilt.worthSearching(),
                 "a value here would have settled something, so the point is worth searching");
         assertNull(unbuilt.attempt(),
@@ -360,7 +370,7 @@ at.coverage().made().orElseThrow());
         assertInstanceOf(Measurement.Complete.class, unbuilt.coverage(),
                 "the rows were read all the same: what is missing is the value, not the reading");
         assertTrue(unbuilt.coverage().made().orElseThrow() instanceof ItemAssessment.Coverage.NoHit
-                        && unbuilt.writability().known(),
+                        && unbuilt.writabilityEvidence().known(),
                 "so the row is owed at both levels, and this one offers no value to write there");
     }
 

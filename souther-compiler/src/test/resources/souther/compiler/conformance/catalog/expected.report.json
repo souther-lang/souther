@@ -54,11 +54,11 @@
             "extent" : "complete"
           },
           "classes" : [ "None", "Some" ],
-          "covered" : [ "None", "Some" ],
           "excluded" : [ ],
           "unprovenClaims" : [ ],
-          "unclassifiedRows" : 0,
-          "status" : "complete"
+          "status" : "complete",
+          "covered" : [ "None", "Some" ],
+          "unclassifiedRows" : 0
         } ],
         "claimsOffAxis" : [ ],
         "boundaries" : [ {
@@ -70,9 +70,10 @@
             "point" : "on",
             "relation" : "=",
             "against" : "1",
-            "hit" : true,
             "knownWritable" : true,
-            "status" : "complete"
+            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
           }, {
             "point" : "off",
             "notOwed" : "the_rules_refuse_it"
@@ -80,9 +81,10 @@
             "point" : "in",
             "relation" : "in",
             "against" : "1 < String.length(item.sku)",
-            "hit" : true,
             "knownWritable" : true,
-            "status" : "complete"
+            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
           }, {
             "point" : "out",
             "notOwed" : "the_rules_refuse_it"
@@ -96,9 +98,10 @@
             "point" : "on",
             "relation" : "=",
             "against" : "0",
-            "hit" : true,
             "knownWritable" : true,
-            "status" : "complete"
+            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
           }, {
             "point" : "off",
             "notOwed" : "the_rules_refuse_it"
@@ -106,9 +109,10 @@
             "point" : "in",
             "relation" : "in",
             "against" : "0 < item.price",
-            "hit" : true,
             "knownWritable" : true,
-            "status" : "complete"
+            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
           }, {
             "point" : "out",
             "notOwed" : "the_rules_refuse_it"
@@ -122,9 +126,10 @@
             "point" : "on",
             "relation" : "=",
             "against" : "1",
-            "hit" : true,
             "knownWritable" : true,
-            "status" : "complete"
+            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
           }, {
             "point" : "off",
             "notOwed" : "the_rules_refuse_it"
@@ -132,9 +137,10 @@
             "point" : "in",
             "relation" : "in",
             "against" : "1 < item.weight",
-            "hit" : true,
             "knownWritable" : true,
-            "status" : "complete"
+            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
           }, {
             "point" : "out",
             "notOwed" : "the_rules_refuse_it"
@@ -142,11 +148,11 @@
         } ],
         "pairs" : {
           "total" : 0,
+          "status" : "complete",
           "covered" : 0,
           "witnessedFeasible" : 0,
           "provenInfeasible" : 0,
-          "unknown" : 0,
-          "status" : "complete"
+          "unknown" : 0
         },
         "notDerivable" : [ ],
         "notRead" : [ {
@@ -251,11 +257,11 @@
             "extent" : "complete"
           },
           "classes" : [ "通常", "速達", "冷蔵" ],
-          "covered" : [ "冷蔵", "通常", "速達" ],
           "excluded" : [ ],
           "unprovenClaims" : [ ],
-          "unclassifiedRows" : 0,
-          "status" : "complete"
+          "status" : "complete",
+          "covered" : [ "冷蔵", "通常", "速達" ],
+          "unclassifiedRows" : 0
         } ],
         "claimsOffAxis" : [ ],
         "boundaries" : [ {
@@ -267,9 +273,10 @@
             "point" : "on",
             "relation" : "=",
             "against" : "1",
-            "hit" : true,
             "knownWritable" : true,
-            "status" : "complete"
+            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
           }, {
             "point" : "off",
             "notOwed" : "the_rules_refuse_it"
@@ -277,9 +284,10 @@
             "point" : "in",
             "relation" : "in",
             "against" : "1 < String.length(指示.番号)",
-            "hit" : true,
             "knownWritable" : true,
-            "status" : "complete"
+            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
           }, {
             "point" : "out",
             "notOwed" : "the_rules_refuse_it"
@@ -293,9 +301,10 @@
             "point" : "on",
             "relation" : "=",
             "against" : "1",
-            "hit" : false,
             "knownWritable" : true,
-            "status" : "complete"
+            "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+            "status" : "complete",
+            "hit" : false
           }, {
             "point" : "off",
             "notOwed" : "the_rules_refuse_it"
@@ -303,9 +312,10 @@
             "point" : "in",
             "relation" : "in",
             "against" : "1 < String.length(指示.品目[*])",
-            "hit" : true,
             "knownWritable" : true,
-            "status" : "complete"
+            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
           }, {
             "point" : "out",
             "notOwed" : "the_rules_refuse_it"
@@ -319,9 +329,10 @@
             "point" : "on",
             "relation" : "=",
             "against" : "1",
-            "hit" : true,
             "knownWritable" : true,
-            "status" : "complete"
+            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
           }, {
             "point" : "off",
             "notOwed" : "the_rules_refuse_it"
@@ -329,9 +340,10 @@
             "point" : "in",
             "relation" : "in",
             "against" : "1 < 指示.重量",
-            "hit" : true,
             "knownWritable" : true,
-            "status" : "complete"
+            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
           }, {
             "point" : "out",
             "notOwed" : "the_rules_refuse_it"
@@ -339,11 +351,11 @@
         } ],
         "pairs" : {
           "total" : 0,
+          "status" : "complete",
           "covered" : 0,
           "witnessedFeasible" : 0,
           "provenInfeasible" : 0,
-          "unknown" : 0,
-          "status" : "complete"
+          "unknown" : 0
         },
         "notDerivable" : [ "指示.受付日", "指示.締切", "指示.集荷時刻", "指示.記録時刻" ],
         "notRead" : [ {
@@ -353,11 +365,7 @@
       },
       "branch" : {
         "status" : "unavailable",
-        "reason" : "no_body",
-        "arms" : 0,
-        "covered" : 0,
-        "unsettledDecisions" : [ ],
-        "unreached" : [ ]
+        "reason" : "no_body"
       },
       "findings" : [ {
         "kind" : "boundary_unmet",
@@ -426,11 +434,11 @@
             "extent" : "complete"
           },
           "classes" : [ "指示.重量/1 <= x <= 30000", "指示.重量/30000 < x" ],
-          "covered" : [ "指示.重量/1 <= x <= 30000", "指示.重量/30000 < x" ],
           "excluded" : [ ],
           "unprovenClaims" : [ ],
-          "unclassifiedRows" : 0,
-          "status" : "complete"
+          "status" : "complete",
+          "covered" : [ "指示.重量/1 <= x <= 30000", "指示.重量/30000 < x" ],
+          "unclassifiedRows" : 0
         }, {
           "axis" : "出荷する/指示.区分",
           "path" : "指示.区分",
@@ -438,11 +446,11 @@
             "extent" : "complete"
           },
           "classes" : [ "通常", "速達", "冷蔵" ],
-          "covered" : [ "冷蔵", "通常", "速達" ],
           "excluded" : [ ],
           "unprovenClaims" : [ ],
-          "unclassifiedRows" : 0,
-          "status" : "complete"
+          "status" : "complete",
+          "covered" : [ "冷蔵", "通常", "速達" ],
+          "unclassifiedRows" : 0
         }, {
           "axis" : "出荷する/Time.hour(指示.集荷時刻)",
           "path" : "Time.hour(指示.集荷時刻)",
@@ -450,11 +458,11 @@
             "extent" : "complete"
           },
           "classes" : [ "Time.hour(指示.集荷時刻)/0 <= x < 12", "Time.hour(指示.集荷時刻)/12 <= x <= 23" ],
-          "covered" : [ "Time.hour(指示.集荷時刻)/0 <= x < 12", "Time.hour(指示.集荷時刻)/12 <= x <= 23" ],
           "excluded" : [ ],
           "unprovenClaims" : [ ],
-          "unclassifiedRows" : 0,
-          "status" : "complete"
+          "status" : "complete",
+          "covered" : [ "Time.hour(指示.集荷時刻)/0 <= x < 12", "Time.hour(指示.集荷時刻)/12 <= x <= 23" ],
+          "unclassifiedRows" : 0
         } ],
         "claimsOffAxis" : [ ],
         "boundaries" : [ {
@@ -466,9 +474,10 @@
             "point" : "on",
             "relation" : "=",
             "against" : "1",
-            "hit" : true,
             "knownWritable" : true,
-            "status" : "complete"
+            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
           }, {
             "point" : "off",
             "notOwed" : "the_rules_refuse_it"
@@ -476,9 +485,10 @@
             "point" : "in",
             "relation" : "in",
             "against" : "1 < String.length(指示.番号)",
-            "hit" : true,
             "knownWritable" : true,
-            "status" : "complete"
+            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
           }, {
             "point" : "out",
             "notOwed" : "the_rules_refuse_it"
@@ -492,9 +502,10 @@
             "point" : "on",
             "relation" : "=",
             "against" : "1",
-            "hit" : false,
             "knownWritable" : true,
-            "status" : "complete"
+            "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+            "status" : "complete",
+            "hit" : false
           }, {
             "point" : "off",
             "notOwed" : "the_rules_refuse_it"
@@ -502,9 +513,10 @@
             "point" : "in",
             "relation" : "in",
             "against" : "1 < String.length(指示.品目[*])",
-            "hit" : true,
             "knownWritable" : true,
-            "status" : "complete"
+            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
           }, {
             "point" : "out",
             "notOwed" : "the_rules_refuse_it"
@@ -518,9 +530,10 @@
             "point" : "on",
             "relation" : "=",
             "against" : "1",
-            "hit" : true,
             "knownWritable" : true,
-            "status" : "complete"
+            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
           }, {
             "point" : "off",
             "notOwed" : "the_rules_refuse_it"
@@ -528,9 +541,10 @@
             "point" : "in",
             "relation" : "in",
             "against" : "1 < 指示.重量 <= 30000",
-            "hit" : true,
             "knownWritable" : true,
-            "status" : "complete"
+            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
           }, {
             "point" : "out",
             "notOwed" : "the_rules_refuse_it"
@@ -544,30 +558,34 @@
             "point" : "on",
             "relation" : "=",
             "against" : "30000",
-            "hit" : true,
             "knownWritable" : true,
-            "status" : "complete"
+            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
           }, {
             "point" : "off",
             "relation" : "=",
             "against" : "30001",
-            "hit" : true,
             "knownWritable" : true,
-            "status" : "complete"
+            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
           }, {
             "point" : "in",
             "relation" : "in",
             "against" : "1 <= 指示.重量 < 30000",
-            "hit" : true,
             "knownWritable" : true,
-            "status" : "complete"
+            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
           }, {
             "point" : "out",
             "relation" : "in",
             "against" : "30001 < 指示.重量",
-            "hit" : false,
             "knownWritable" : true,
-            "status" : "complete"
+            "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+            "status" : "complete",
+            "hit" : false
           } ]
         }, {
           "axis" : "出荷する/Time.hour(指示.集荷時刻)",
@@ -578,39 +596,43 @@
             "point" : "on",
             "relation" : "=",
             "against" : "11",
-            "hit" : false,
             "knownWritable" : true,
-            "status" : "complete"
+            "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+            "status" : "complete",
+            "hit" : false
           }, {
             "point" : "off",
             "relation" : "=",
             "against" : "12",
-            "hit" : false,
             "knownWritable" : true,
-            "status" : "complete"
+            "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+            "status" : "complete",
+            "hit" : false
           }, {
             "point" : "in",
             "relation" : "in",
             "against" : "0 <= Time.hour(指示.集荷時刻) < 11",
-            "hit" : true,
             "knownWritable" : true,
-            "status" : "complete"
+            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
           }, {
             "point" : "out",
             "relation" : "in",
             "against" : "12 < Time.hour(指示.集荷時刻) <= 23",
-            "hit" : true,
             "knownWritable" : true,
-            "status" : "complete"
+            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
           } ]
         } ],
         "pairs" : {
           "total" : 16,
+          "status" : "complete",
           "covered" : 11,
           "witnessedFeasible" : 11,
           "provenInfeasible" : 0,
-          "unknown" : 5,
-          "status" : "complete"
+          "unknown" : 5
         },
         "notDerivable" : [ "指示.記録時刻" ],
         "notRead" : [ {

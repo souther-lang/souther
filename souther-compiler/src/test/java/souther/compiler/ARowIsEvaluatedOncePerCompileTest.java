@@ -102,7 +102,7 @@ class ARowIsEvaluatedOncePerCompileTest {
 
         Adequacy.Of measured = compilation.adequacy("example.once");
 
-        assertEquals(List.of(), measured.branches().get("take").unreached(),
+        assertEquals(List.of(), measured.branches().get("take").unreached().orElseThrow(),
                 "both arms of `take` were taken, and both were recorded");
     }
 }

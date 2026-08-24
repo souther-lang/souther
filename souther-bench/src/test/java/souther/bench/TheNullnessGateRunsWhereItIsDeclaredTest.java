@@ -64,16 +64,15 @@ class TheNullnessGateRunsWhereItIsDeclaredTest {
 
     @Test
     void theGateIsConfiguredForEveryModuleThatDeclaresItAndNoOther() {
-        List<String> modules = Reactor.modules();
         Set<String> declared = new LinkedHashSet<>();
         Set<String> configured = new LinkedHashSet<>();
-        boolean rootGates = gateIsInTheBuildOf(repoRoot().resolve("pom.xml"));
-        for (String module : modules) {
+        boolean rootGates = gateIsInTheBuildOf(Reactor.root().resolve("pom.xml"));
+        for (Path module : Reactor.modules()) {
             if (declaresNullMarked(module)) {
-                declared.add(module);
+                declared.add(Reactor.name(module));
             }
-            if (rootGates || gateIsInTheBuildOf(repoRoot().resolve(module).resolve("pom.xml"))) {
-                configured.add(module);
+            if (rootGates || gateIsInTheBuildOf(module.resolve("pom.xml"))) {
+                configured.add(Reactor.name(module));
             }
         }
 
@@ -96,13 +95,13 @@ class TheNullnessGateRunsWhereItIsDeclaredTest {
     }
 
     /** Whether any class the module built carries the annotation. */
-    private static boolean declaresNullMarked(String module) {
+    private static boolean declaresNullMarked(Path module) {
         if (!Reactor.hasMainSources(module)) {
             return false;   // nothing of its own to annotate
         }
-        Path classes = repoRoot().resolve(module).resolve("target/classes");
+        Path classes = module.resolve("target/classes");
         assertTrue(Files.isDirectory(classes),
-                module + " has no built classes: this reads what has been built, so a module that has"
+                Reactor.name(module) + " has no built classes: this reads what has been built, so a module that has"
                         + " not been is a hole rather than a pass");
         try (Stream<Path> walk = Files.walk(classes)) {
             return walk.filter(p -> p.toString().endsWith(".class")).anyMatch(TheNullnessGateRunsWhereItIsDeclaredTest::carriesNullMarked);
@@ -162,7 +161,7 @@ class TheNullnessGateRunsWhereItIsDeclaredTest {
     /** The root pom's {@code <properties>}, which is where the gate's options are named. */
     private static Map<String, String> rootProperties() {
         Map<String, String> properties = new LinkedHashMap<>();
-        for (Element block : childrenNamed(parse(repoRoot().resolve("pom.xml")), "properties")) {
+        for (Element block : childrenNamed(parse(Reactor.root().resolve("pom.xml")), "properties")) {
             NodeList children = block.getChildNodes();
             for (int i = 0; i < children.getLength(); i++) {
                 if (children.item(i) instanceof Element element) {
@@ -227,7 +226,4 @@ class TheNullnessGateRunsWhereItIsDeclaredTest {
      * check gives: a list of its own would say what was true when it was written.
      */
 
-    private static Path repoRoot() {
-        return Path.of("").toAbsolutePath().getParent();
-    }
 }

@@ -30,6 +30,7 @@
     </developers>
 
     <modules>
+        <module>souther-test-support</module>
         <module>souther-runtime</module>
         <module>souther-syntax</module>
         <module>souther-compiler</module>
@@ -123,6 +124,12 @@
                 <groupId>org.souther-lang</groupId>
                 <artifactId>souther-build-api</artifactId>
                 <version>${souther.build.api.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.souther-lang</groupId>
+                <artifactId>souther-test-support</artifactId>
+                <version>${project.version}</version>
+                <scope>test</scope>
             </dependency>
             <dependency>
                 <groupId>org.souther-lang</groupId>

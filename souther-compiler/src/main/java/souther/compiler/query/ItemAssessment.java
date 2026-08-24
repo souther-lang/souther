@@ -4,7 +4,10 @@ import souther.compiler.partition.Criterion;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.NotOwedReason;
 
+import java.util.Collections;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Everything known about one of the four coverage items of a border.
@@ -17,8 +20,8 @@ import java.util.List;
  *
  * <p>Where a row is owed, three answers rather than one, because they are about three things and are
  * established by three different means. What the rows showed is read off what this compilation ran.
- * What is proven about a value existing there comes from the rules, or from a value that went through
- * the decoder. What the search did is what the search did — and it is kept even where it changed
+ * What the rules prove about a value existing there is read off the rules, whether or not anything
+ * was ever built. What the search did is what the search did — and it is kept even where it changed
  * neither of the others, because a point the rules already prove is still one a search can fail to
  * produce a row for, and the person who wanted that row is owed the reason.
  */
@@ -30,19 +33,18 @@ public sealed interface ItemAssessment {
     /**
      * A row is owed, and this is what became of it.
      *
-     * @param provenByProjection whether the rules reaching the value this point sits in were read in
-     *                           full and leave the point inside what they admit. What the rules say
-     *                           on their own, so it is settled without building anything and stays
-     *                           true whatever a search afterwards makes of the point
-     * @param attempt            what building a value here came to, or null where nobody asked for
-     *                           one to be built. Null is the absence of the evidence and never a
-     *                           state of the point: whether a value was composed is a fact about who
-     *                           asked, and it used to be carried here as an attempt saying nobody
-     *                           had — a measurement answering a question it was not put (issue
-     *                           #1001)
+     * @param projection what reading the rules reaching the value this point sits in established
+     *                   about a value being there. What the rules say on their own, so it is settled
+     *                   without building anything and stays true whatever a search afterwards makes
+     *                   of the point
+     * @param attempt    what building a value here came to, or null where nobody asked for one to be
+     *                   built. Null is the absence of the evidence and never a state of the point:
+     *                   whether a value was composed is a fact about who asked, and it used to be
+     *                   carried here as an attempt saying nobody had — a measurement answering a
+     *                   question it was not put (issue #1001)
      */
-    record Owed(Criterion criterion, Measurement<Coverage> coverage, boolean provenByProjection,
-                Attempt attempt) implements ItemAssessment {
+    record Owed(Criterion criterion, Measurement<Coverage> coverage,
+                WritabilityProjection projection, Attempt attempt) implements ItemAssessment {
 
         /**
          * Whether building a value here would tell anybody anything.
@@ -57,7 +59,7 @@ public sealed interface ItemAssessment {
          * was repeating what its own input already held.
          */
         public boolean worthSearching() {
-            if (Coverage.hit(coverage)) {
+            if (hasRowWitness()) {
                 return false;
             }
             return coverage instanceof Measurement.Complete<Coverage> whole
@@ -66,41 +68,172 @@ public sealed interface ItemAssessment {
                             && none.why() == Coverage.NotAsked.NO_ROWS;
         }
 
+        /**
+         * Whether a row this compilation observed stands at the point.
+         *
+         * <p>Not the coverage measurement's answer, and named so it cannot be read as one. A row
+         * that was seen at the point is evidence — of the point being writable, of there being
+         * nothing left to search for — and evidence is what this collects. {@code false} is the
+         * absence of that evidence and is never {@code NoHit}: a measurement nobody made has no row
+         * to show and says nothing about whether one is there.
+         *
+         * <p>Read over the states rather than through {@code made()}, so that the {@code false} the
+         * two value-less arms give is written where it can be read as what it is, and so that a
+         * state added to {@link Measurement} arrives here as a compile error rather than as a
+         * silent {@code false}.
+         */
+        public boolean hasRowWitness() {
+            return switch (coverage) {
+                case Measurement.Complete<Coverage> it -> Coverage.hit(it.value());
+                case Measurement.Partial<Coverage> it -> Coverage.hit(it.value());
+                // No value, so no row was seen here. Not a finding that none is.
+                case Measurement.NotMeasured<Coverage> _,
+                     Measurement.FailedToMeasure<Coverage> _ -> false;
+            };
+        }
+
         /** The same point, with what a search of it came to. */
         public Owed settledBy(Attempt searched) {
             if (attempt != null) {
                 throw new IllegalStateException(
                         "a point searched twice: " + criterion + " already has " + attempt);
             }
-            return new Owed(criterion, coverage, provenByProjection, searched);
+            return new Owed(criterion, coverage, projection, searched);
         }
 
         /**
-         * What says a row can be written here: the verdict, over the evidence there is.
+         * What has shown that a row can be written here, read off the three things that show it.
          *
-         * <p>Derived and not held. It was a field beside {@link #attempt}, and the two are not
-         * independent — {@code WitnessedByConstruction} is what {@code attempt instanceof Built}
-         * means — so they were one fact kept twice and a producer could set them apart.
+         * <p>Derived and never held. The three grounds are answers to three different questions this
+         * record already carries, and a set kept beside them would be the same facts written twice —
+         * a value with a row at it and no {@code A_ROW_IS_AT_IT} would be a state somebody could
+         * build. Read through, that state cannot be spelled.
          *
-         * <p>The strongest evidence already in hand first. A row at the value went through the
-         * decoder, which is the whole of what writable means, and costs nothing to read. Then the
-         * value that was built, which went through the same decoder. Then the projection, which
-         * stands behind both rather than in front of them: where it read every rule it proves the
-         * edge inhabited whatever the search made of the particular candidates it tried.
-         *
-         * <p>Which is where the asymmetry lives. A refusal and an attempt nobody made leave the same
-         * verdict, because nothing a search does is evidence against — so composing later can add a
-         * witness and can never take one away.
+         * <p>Which is also what makes composing a search safe. A search changes the {@link #attempt}
+         * and nothing else, and every ground is monotone in what it reads, so the set this answers
+         * can only grow. It used to be a verdict picked from the evidence by a fixed order, where
+         * building a value at a point the rules already proved replaced the proof with the witness —
+         * true of whether anything was known, and false of what was doing the knowing.
          */
-        public Writability writability() {
-            if (Coverage.hit(coverage)) {
-                return new Writability.WitnessedByRow();
+        public WritabilityEvidence writabilityEvidence() {
+            return WritabilityEvidence.of(projection, hasRowWitness(),
+                    attempt instanceof Attempt.Built);
+        }
+    }
+
+    /**
+     * What reading the rules established about a value being at a point.
+     *
+     * <p>Three states because the question has been put in three ways. It was a boolean, and the
+     * {@code false} stood both for a reading that ran and proved nothing — a rule left unread, a
+     * count with no value behind it — and for a line nobody put the question to at all. That is the
+     * shape #997 took out of the coverage measurement, one layer down: an answer manufactured for a
+     * question nobody asked, told apart from a real answer by nothing.
+     *
+     * <p>Nothing here says a point cannot be written at. What refuses a point is the border declining
+     * to owe a row at it ({@link NotOwed}), which is a different shape and stays that way.
+     */
+    enum WritabilityProjection {
+
+        /** The rules reaching the value were read in full and leave the point inside what they
+         *  admit. The one state that is evidence. */
+        PROVEN,
+
+        /** The reading ran and did not get there. A rule it could not read through, or a count whose
+         *  values it cannot show exist — the point is where the reading stopped rather than where
+         *  the model does. */
+        UNPROVEN,
+
+        /** The question was not put. A line between two positions is the one this exists for: what a
+         *  row on it takes is a place both positions admit, and reading each of them on its own does
+         *  not answer that. Told apart from {@link #UNPROVEN} so that implementing the reading later
+         *  moves a line off this state rather than off an answer somebody wrote for it. */
+        NOT_COMPUTED;
+
+        /** Whether this is the state that puts a ground in the evidence. The other two are told apart
+         *  for what they say about the reading, and neither is evidence of anything. */
+        public boolean proves() {
+            return this == PROVEN;
+        }
+
+        /** The two answers a reading that ran can come to. For a caller holding the reading's own
+         *  boolean, so that the third state is never spelled where it cannot arise. */
+        public static WritabilityProjection ofReading(boolean proven) {
+            return proven ? PROVEN : UNPROVEN;
+        }
+    }
+
+    /**
+     * What has shown that a row can be written at a point: the grounds, and never a verdict.
+     *
+     * <p>A set and not a choice, because the three are not alternatives — a point the rules prove can
+     * have a row at it as well, and a value built at it besides. Held as a sum with one case each,
+     * the answer was whichever case an order put first, so the strongest claim there was could be the
+     * one left out.
+     *
+     * <p>Empty is the whole of what {@code Unknown} was. Nothing here can say a point is unwritable:
+     * a decoder refusing every candidate that was tried says nothing about the ones that were not, so
+     * an empty set is the absence of evidence and never evidence of absence. What says a point cannot
+     * be written at is the border refusing to owe it at all.
+     */
+    record WritabilityEvidence(Set<Ground> grounds) {
+
+        /**
+         * One thing that shows a row can be written at a point.
+         *
+         * <p>No order among them, here or anywhere. There is nothing to rank: a set with two grounds
+         * in it holds both, and a reader wanting one of them asks for that one. What order a document
+         * writes them in is the document's, and is settled where the document is written.
+         */
+        public enum Ground {
+
+            /** The rules reaching the value prove the point is inside what they admit. The one ground
+             *  that is about the model rather than about this run, so it stands whatever a search
+             *  afterwards makes of the point. */
+            THE_RULES_PROVE_IT,
+
+            /** A row this compilation read stands at the point, which is a value that went through
+             *  the decoder. The only ground that costs nothing to find. */
+            A_ROW_IS_AT_IT,
+
+            /** A value at the point was built through the module's own decoders. What was built is
+             *  the attempt's to hold; this says only that it was. */
+            A_VALUE_WAS_BUILT
+        }
+
+        public WritabilityEvidence {
+            EnumSet<Ground> held = EnumSet.noneOf(Ground.class);
+            held.addAll(grounds);
+            grounds = Collections.unmodifiableSet(held);
+        }
+
+        /** The grounds that hold, over the three facts that establish them. Where every one of these
+         *  comes from: a caller that assembled a set of its own would be deciding what the facts
+         *  beside it establish, which is this method's question and not a caller's. */
+        public static WritabilityEvidence of(WritabilityProjection projection, boolean rowIsAtIt,
+                                             boolean valueWasBuilt) {
+            EnumSet<Ground> grounds = EnumSet.noneOf(Ground.class);
+            if (projection.proves()) {
+                grounds.add(Ground.THE_RULES_PROVE_IT);
             }
-            if (attempt instanceof Attempt.Built) {
-                return new Writability.WitnessedByConstruction();
+            if (rowIsAtIt) {
+                grounds.add(Ground.A_ROW_IS_AT_IT);
             }
-            return provenByProjection ? new Writability.ProvenByProjection()
-                    : new Writability.Unknown();
+            if (valueWasBuilt) {
+                grounds.add(Ground.A_VALUE_WAS_BUILT);
+            }
+            return new WritabilityEvidence(grounds);
+        }
+
+        /** Whether anything at all has shown a row can be written here. False leaves it open, never
+         *  closed. */
+        public boolean known() {
+            return !grounds.isEmpty();
+        }
+
+        /** Whether this ground is among them. */
+        public boolean has(Ground ground) {
+            return grounds.contains(ground);
         }
     }
 
@@ -153,52 +286,30 @@ public sealed interface ItemAssessment {
             ARMS_UNREADABLE
         }
 
-        static boolean hit(Measurement<Coverage> coverage) {
-            return coverage.made().orElse(null) instanceof Hit;
-        }
-    }
-
-    /**
-     * Whether a row can be written at the point, and what says so.
-     *
-     * <p>Three ways to know and one way not to. A refusal is not among the ways to know: the decoder
-     * refusing every candidate that was tried says nothing about the candidates that were not, so a
-     * point whose values were all refused stays unknown rather than becoming impossible. Nothing here
-     * can say a point is unwritable, and that is the point of the type — what says a point cannot be
-     * written at is the border refusing to owe it at all.
-     */
-    sealed interface Writability {
-
-        /** Every rule reaching the value this position sits in was read, and the point is inside what
-         * they leave. Nothing had to be built to know it. */
-        record ProvenByProjection() implements Writability {}
-
-        /** A row already sits at the point, which is a value that went through the decoder. The
-         * strongest of these and the only one that costs nothing to find. */
-        record WitnessedByRow() implements Writability {}
-
-        /** A value at this point was built through the module's own decoder. What was built is in
-         * {@link Owed#attempt()} and not here: this says which evidence settled the question, and the
-         * evidence itself has one home. */
-        record WitnessedByConstruction() implements Writability {}
-
-        /** Nothing has shown a row can be written here. Not a claim that none can, and it carries no
-         * reason of its own — what was tried and what came of it is the attempt's to say. */
-        record Unknown() implements Writability {}
-
-        /** Whether a row is known to be writable here. False leaves it open, never closed. */
-        default boolean known() {
-            return !(this instanceof Unknown);
+        /**
+         * Whether this is a row at the point.
+         *
+         * <p>Asked of the value and never of the measurement around it. It used to take a
+         * {@code Measurement<Coverage>} and answer {@code false} for all three of {@code
+         * Complete(NoHit)}, a measurement nobody made and one that could not be finished — so the
+         * one answer the rows established and the two states with no answer at all came out as the
+         * same boolean, and a document writing it said no row was at a point nothing had looked at
+         * (issue #997). What has no value has no answer here, and a caller wanting one for a
+         * measurement asks {@link Owed#hasRowWitness()}, which is a different question.
+         */
+        static boolean hit(Coverage coverage) {
+            return coverage instanceof Hit;
         }
     }
 
     /**
      * What was built at this point, and what came of it.
      *
-     * <p>Its own answer and not a shade of {@link Writability}. A point the projection already proved
-     * is one a search can still fail to reach — the two are about different things, and a reader that
-     * recovered the attempt from the verdict would find nothing to say about a row it could not
-     * produce at a point it knows exists. The report reads the verdict; {@code --generate} reads this.
+     * <p>Its own answer and not a shade of {@link WritabilityEvidence}. A point the projection already
+     * proved is one a search can still fail to reach — the two are about different things, and a
+     * reader that recovered the attempt from the grounds would find nothing to say about a row it
+     * could not produce at a point it knows exists. The report reads the grounds; {@code --generate}
+     * reads this.
      *
      * <p>Made once. The row a person is offered and the value that witnessed the point are the same
      * value, built one time and read twice.
@@ -333,6 +444,6 @@ public sealed interface ItemAssessment {
         return this instanceof Owed owed
                 && owed.coverage() instanceof Measurement.Complete<Coverage> whole
                 && whole.value() instanceof Coverage.NoHit
-                && owed.writability().known();
+                && owed.writabilityEvidence().known();
     }
 }

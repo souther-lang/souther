@@ -2,13 +2,14 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
+import souther.test.RepositoryLayout;
+
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -34,6 +35,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * between defeats it; what it does see is the line that has to be added first.
  */
 class TheReadingAndThePlanTakeOneStepDownATypeTest {
+
+    /** Read once: what this asks of it does not change between its checks. */
+    private static final RepositoryLayout REPOSITORY = RepositoryLayout.ofWorkingDirectory();
 
     /** Where the fields are taken off a product shape. */
     private static final String THE_ONE_PLACE = "inputs/StructuralDescent.java";
@@ -141,22 +145,6 @@ class TheReadingAndThePlanTakeOneStepDownATypeTest {
     }
 
     private static List<Path> mainSources() throws IOException {
-        Path module = Path.of("").toAbsolutePath();
-        Path repo = Files.isDirectory(module.resolve(Path.of("src", "main", "java")))
-                ? module.getParent() : module;
-        List<Path> sources = new ArrayList<>();
-        try (Stream<Path> modules = Files.list(repo)) {
-            for (Path candidate : modules.toList()) {
-                Path root = candidate.resolve(Path.of("src", "main", "java"));
-                if (!Files.isDirectory(root)) {
-                    continue;
-                }
-                try (Stream<Path> walk = Files.walk(root)) {
-                    walk.filter(each -> each.toString().endsWith(".java")).forEach(sources::add);
-                }
-            }
-        }
-        sources.sort(Path::compareTo);
-        return sources;
+        return REPOSITORY.mainJavaSources();
     }
 }

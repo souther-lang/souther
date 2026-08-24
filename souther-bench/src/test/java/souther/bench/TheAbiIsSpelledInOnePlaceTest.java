@@ -76,11 +76,11 @@ class TheAbiIsSpelledInOnePlaceTest {
         assertFalse(spellings.contains(""), "a kind of class whose name is its base: " + spellings);
 
         List<String> violations = new ArrayList<>();
-        List<String> scanned = new ArrayList<>();
-        List<String> modules = Reactor.modules();
-        for (String module : modules) {
+        List<Path> scanned = new ArrayList<>();
+        List<Path> modules = Reactor.modules();
+        for (Path module : modules) {
             for (String where : List.of("target/classes", "target/test-classes")) {
-                Path classes = repoRoot().resolve(module).resolve(where);
+                Path classes = module.resolve(where);
                 if (where.endsWith("test-classes") && !Files.isDirectory(classes)) {
                     continue;   // a module with no tests of its own
                 }
@@ -88,7 +88,8 @@ class TheAbiIsSpelledInOnePlaceTest {
                     continue;   // a module with no main sources of its own
                 }
                 assertTrue(Files.isDirectory(classes),
-                        module + " has no built classes: this test covers what has been built, so a"
+                        Reactor.name(module) + " has no built classes: this test covers what has been"
+                                + " built, so a"
                                 + " module that has not been is a hole rather than a pass");
                 walk(classes, violations, spellings);
             }
@@ -135,12 +136,12 @@ class TheAbiIsSpelledInOnePlaceTest {
     @Test
     void andNothingOutsideTheAbiCapitalizesABehaviorsFirstLetter() {
         List<String> callers = new ArrayList<>();
-        for (String module : Reactor.modules()) {
+        for (Path module : Reactor.modules()) {
             if (!Reactor.hasMainSources(module)) {
                 continue;   // a module with no main sources of its own
             }
-            Path classes = repoRoot().resolve(module).resolve("target/classes");
-            assertTrue(Files.isDirectory(classes), module + " has no built classes");
+            Path classes = module.resolve("target/classes");
+            assertTrue(Files.isDirectory(classes), Reactor.name(module) + " has no built classes");
             walkFor(classes, callers, TheAbiIsSpelledInOnePlaceTest::capitalizes);
         }
         assertEquals(List.of(), callers,
@@ -282,7 +283,4 @@ class TheAbiIsSpelledInOnePlaceTest {
     }
 
     /** The tree this module sits in. */
-    private static Path repoRoot() {
-        return Path.of("").toAbsolutePath().getParent();
-    }
 }

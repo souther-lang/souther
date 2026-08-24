@@ -212,7 +212,7 @@ class ARowOfferedForABorderOverAnOperationStandsAtItTest {
         for (BorderAssessment border : evidence.boundaries()) {
             border.items().forEach((role, item) -> {
                 if (item instanceof ItemAssessment.Owed owed
-                        && !ItemAssessment.Coverage.hit(owed.coverage())) {
+                        && !owed.hasRowWitness()) {
                     points.add(border.label() + " " + role);
                 }
             });

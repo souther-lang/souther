@@ -449,27 +449,22 @@ class ARowOfATableIsWrittenAtItsTablesColumnTest {
      * fixture. The first two are what makes it about the cases a repository of well-written sources
      * does not contain: a corpus written by hand reaches no tab and no row too long for a line.
      */
+    private static final List<String> SOURCES = compose();
+
     private static List<String> sources() {
+        return SOURCES;
+    }
+
+    /**
+     * Composed once. Three of the checks above hold their property over the whole of it, and what
+     * it is made of does not change between them.
+     */
+    private static List<String> compose() {
         List<String> out = new ArrayList<>(
                 List.of(TWO_TABLES, A_TAB_REACHING_THE_COLUMN, A_TAB_AFTER_A_COLUMN,
                         NO_SEPARATOR, INDENTED_ONE_DEEPER, ONE_SEPARATOR_MISSING, FULL_WIDTH));
         out.addAll(WhatGoesBetweenTwoTokensOnALineTest.corpus());
-        out.addAll(inTheRepository());
-        return out;
-    }
-
-    /** Every {@code .sou} the repository holds, a build's copies of them left out. */
-    private static List<String> inTheRepository() {
-        try (java.util.stream.Stream<java.nio.file.Path> walk =
-                java.nio.file.Files.walk(java.nio.file.Path.of(".."))) {
-            List<String> out = new ArrayList<>();
-            for (java.nio.file.Path p : walk.filter(q -> q.toString().endsWith(".sou"))
-                    .filter(q -> !q.toString().contains("target")).sorted().toList()) {
-                out.add(java.nio.file.Files.readString(p));
-            }
-            return out;
-        } catch (java.io.IOException e) {
-            throw new java.io.UncheckedIOException(e);
-        }
+        out.addAll(FormatterCorpus.texts());
+        return List.copyOf(out);
     }
 }
