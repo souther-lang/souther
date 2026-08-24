@@ -98,6 +98,97 @@ class ARowOfferedForABorderOverAnOperationStandsAtItTest {
     }
 
     /**
+     * A distance between two positions written back differently, which is the other lowering.
+     *
+     * <p>{@code a} is a whole number and {@code b} a decimal, so the two are one distance on two
+     * orders — the pair the search for a distance on one order was never written for, and the pair
+     * {@link BorderQuantity.Apart} hands to the search over forms instead.
+     */
+    private static final String ACROSS_TWO_ORDERS = """
+            module demo
+
+            data Ok
+            data No
+
+            behavior f : (a: Int, b: Decimal) -> Ok | No
+            let f (a, b) = {
+                guard b > Decimal.fromInt(a) else No
+                Ok
+            }
+            """;
+
+    /**
+     * The points of that border are offered rows too, each position written on its own order.
+     *
+     * <p><b>Asked for the rows and not only for their soundness.</b> Every other test of this
+     * lowering holds a row that was offered to what it must be, and passes when none was: the branch
+     * could stop composing anything and each of them would go on saying nothing. So the rows are
+     * asked for here, where an empty answer is the failure.
+     *
+     * <p>And asked for the spelling, which is the defect itself. Both positions were written on
+     * whichever order the comparison happened to answer with, so an {@code Int} was offered
+     * {@code 0m} — a row the report counted and the compiler will not read.
+     */
+    @Test
+    void thePointsOfABorderAcrossTwoOrdersAreOfferedRowsWrittenOnEachOrder() {
+        Map<String, String> rows = inputsOf(measured(ACROSS_TWO_ORDERS));
+
+        assertEquals(List.of("b = a OFF", "b = a IN", "b = a OUT"),
+                rows.keySet().stream().filter(each -> each.startsWith("b = a ")).toList(),
+                "each point of `b > Decimal.fromInt(a)` that is owed a row has one: " + rows);
+        assertEquals(List.of("(0, 0m)", "(0, 1m)", "(0, -1m)"),
+                rows.entrySet().stream().filter(each -> each.getKey().startsWith("b = a "))
+                        .map(Map.Entry::getValue).toList(),
+                "and the whole number is written as one and the decimal as one: " + rows);
+    }
+
+    /**
+     * The same two orders, where the run one of them leaves has no value the other holds in it.
+     *
+     * <p>{@code b} runs between three tenths and seven tenths, so the line holds {@code a} between
+     * minus two tenths and two tenths — a run with one whole number in it and every decimal around
+     * that one.
+     */
+    private static final String A_RUN_ONE_ORDER_FILLS = """
+            module demo
+
+            data Ok
+            data No
+            data Amount = Decimal
+                invariant value >= 0.3m
+                invariant value <= 0.7m
+
+            behavior f : (a: Int, b: Amount) -> Ok | No
+            let f (a, b) = {
+                guard b.value > Decimal.fromInt(a) + 0.5m else No
+                Ok
+            }
+            """;
+
+    /**
+     * And the pair is searched for on both orders, not on whichever one of them the line was named
+     * by.
+     *
+     * <p><b>The test that fails if the lowering goes away.</b> The one above passes on either
+     * search: the run it leaves has whole numbers in it wherever a walk starts, so a search that
+     * walked the decimals landed on one anyway. Here it does not — the whole numbers are one value
+     * in a run the decimals fill — and a search holding both positions to the decimals hands the
+     * whole number three tenths, which is not a rounding error but a value of a type it is not.
+     *
+     * <p>Measured rather than argued: with both positions on the decimals this model does not come
+     * back with a worse row, it comes back with {@code ArithmeticException: Rounding necessary} out
+     * of the writing of the row.
+     */
+    @Test
+    void andThePairIsSearchedForOnBothOrders() {
+        Map<String, String> rows = inputsOf(measured(A_RUN_ONE_ORDER_FILLS));
+
+        assertEquals("(0, Amount(0.5m))", rows.get("b = a + 0.5 OFF"),
+                "the point on the line has the one whole number the line leaves, and the decimal"
+                        + " half a step above it: " + rows);
+    }
+
+    /**
      * And every row offered at a point stands at that point.
      *
      * <p>Read off the point's own attempt rather than out of the block a report prints: the row a
@@ -136,12 +227,25 @@ class ARowOfferedForABorderOverAnOperationStandsAtItTest {
      * happens is the search's answer and no part of what this holds.
      */
     private static Map<String, String> offeredAt(PartitionEvidence evidence) {
+        return offeredAt(evidence, ARowOfferedForABorderOverAnOperationStandsAtItTest::written);
+    }
+
+    /** The same, as each row's inputs alone — for a model whose rows are not written as dates and
+     *  whose answer nothing here works out. */
+    private static Map<String, String> inputsOf(PartitionEvidence evidence) {
+        return offeredAt(evidence, row -> "("
+                + String.join(", ", row.inputs().stream().map(FixtureTemplate::text).toList()) + ")");
+    }
+
+    private static Map<String, String> offeredAt(
+            PartitionEvidence evidence,
+            java.util.function.Function<Generator.GeneratedRow, String> as) {
         Map<String, String> rows = new LinkedHashMap<>();
         for (BorderAssessment border : evidence.boundaries()) {
             border.items().forEach((role, item) -> {
                 if (item instanceof ItemAssessment.Owed owed
                         && owed.attempt() instanceof ItemAssessment.Attempt.Built built) {
-                    rows.put(border.label() + " " + role, written(built.row()));
+                    rows.put(border.label() + " " + role, as.apply(built.row()));
                 }
             });
         }

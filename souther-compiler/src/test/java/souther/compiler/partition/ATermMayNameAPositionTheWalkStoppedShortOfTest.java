@@ -84,6 +84,42 @@ class ATermMayNameAPositionTheWalkStoppedShortOfTest {
         assertTrue(report.contains("f/o.mid.inner.a = o.mid.inner.b - 2"), report);
     }
 
+    /** Two fields of what a list holds, compared inside a closure. The path reaches them through
+     *  what the sequence holds, which is a step of its own and not a field. */
+    private static final String UNDER_WHAT_A_SEQUENCE_HOLDS = """
+            module example.held
+
+            data Inner = { a: Int, b: Int }
+            data Item  = { inner: Inner }
+            data Cart  = { items: List<Item> }
+
+            data No = { why: Int }
+            data Yes = { v: Int }
+            data Result = No | Yes
+
+            behavior f : (cart: Cart) -> Result
+                constructs Yes, No
+            let f (cart) = {
+                guard List.all(i -> i.inner.a < i.inner.b, cart.items) else No { why = 0 }
+                Yes { v = 1 }
+            }
+            """;
+
+    /**
+     * And so is one under what a sequence holds, which the walk does not reach either.
+     *
+     * <p>A second kind of step and the reason the reading of a path is exhaustive over them. A path
+     * goes into a field, into what a sequence holds, or nowhere while narrowing where it already is;
+     * written for fields alone, the reading answered nothing for every path carrying one of the
+     * other two, and this line — which the compiler drew before any of this — went away.
+     */
+    @Test
+    void andSoIsOneUnderWhatASequenceHolds() {
+        String report = report(UNDER_WHAT_A_SEQUENCE_HOLDS);
+
+        assertTrue(report.contains("f/cart.items[*].inner.a = cart.items[*].inner.b"), report);
+    }
+
     private static String report(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());

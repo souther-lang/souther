@@ -6,6 +6,7 @@ import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.ReadingPolicy;
+import souther.compiler.check.Shape;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeView;
@@ -237,14 +238,12 @@ public final class InputDomain {
      * nothing this can follow.
      *
      * <p>Below {@link #MAX_DEPTH} this is the only answer there is: the walk above stopped, so there
-     * is no position to ask and the type is what the declaration says at each step. One step at a
-     * time and through {@link StructuralDescent}, which is the one place that says what stands
-     * directly under a type — a second walk of that question is what that one exists to prevent.
+     * is no position to ask and the type is what the declaration says at each step.
      *
-     * <p>Fields and nothing else. An element is one of however many a sequence holds and a narrowing
-     * is a requirement rather than a place, and both are read where a position is made rather than
-     * here; a path carrying either below where this reading stops is one this answers nothing for,
-     * which is what it answered before there was any answer at all.
+     * <p>Step by step through {@link StructuralInspection}, which is what the walk above takes its
+     * own steps from. What is under a type is one fact, and a second reading of it here would be
+     * this and that walk disagreeing about what a path reaches — which is the shape of defect this
+     * whole change is about, one level down.
      */
     private Type declaredAt(TermPath path, Symbols symbols) {
         Type here = null;
@@ -255,14 +254,55 @@ public final class InputDomain {
             }
         }
         for (TermPath.Step step : path.steps()) {
-            if (here == null || !(step instanceof TermPath.Step.Field field)) {
-                return null;
-            }
-            StructuralDescent.Children under =
-                    StructuralDescent.of(TypeView.of(here, symbols).shape());
-            here = under == null ? null : under.under().get(field.name());
+            here = here == null ? null : under(here, step, symbols);
         }
         return here;
+    }
+
+    /**
+     * What one step of a path stands at, or null where the declarations put nothing there.
+     *
+     * <p><b>Exhaustive over the kinds of step, with no {@code default}.</b> A path goes into a
+     * field, into what a sequence holds, or nowhere at all while narrowing which values may stand
+     * where it already is ({@link Refinement}) — three, and a reading that answered one of them and
+     * let the rest fall to null would lose a line the model draws for every path carrying one. It
+     * did: written for fields alone, a rule comparing two fields of a list's elements was read as
+     * naming nothing, and the border it draws went away. A fourth kind is a compile error here
+     * rather than a fourth quiet absence.
+     */
+    private static Type under(Type type, TermPath.Step step, Symbols symbols) {
+        TypeView view = TypeView.of(type, symbols);
+        // Asked of the shape rather than through the proof a position is made with. What is under a
+        // type is a question about the type, and a type nothing can be read at answers nothing here
+        // rather than being refused as a position this compiler disagrees with itself about.
+        if (!(view.shape() instanceof Shape.ReadablePositionShape shape)) {
+            return null;
+        }
+        StructuralInspection under =
+                StructuralInspection.of(shape, true, Distinctions.ofType(view, symbols));
+        return switch (step) {
+            case TermPath.Step.Field field -> under instanceof StructuralInspection.Decomposed made
+                    ? made.under().get(field.name()) : null;
+            case TermPath.Step.Element _ -> under instanceof StructuralInspection.Retained on
+                    && on.continuation() instanceof StructuralInspection.Continuation.Elements held
+                    ? held.element() : null;
+            // The same position, read as the case it turned out to be. Null where the case puts
+            // nothing there, which is a case that is the whole of a value.
+            case TermPath.Step.Refine refine -> under instanceof StructuralInspection.Retained on
+                    && on.continuation() instanceof StructuralInspection.Continuation.Branches ways
+                    ? narrowed(ways, refine.refinement()) : null;
+        };
+    }
+
+    /** The type the branch for this narrowing stands at, or null where the sum has no such branch. */
+    private static Type narrowed(StructuralInspection.Continuation.Branches ways,
+                                 Refinement refinement) {
+        for (StructuralInspection.Branch branch : ways.branches()) {
+            if (refinement.equals(branch.refinement())) {
+                return branch.under();
+            }
+        }
+        return null;
     }
 
     /**
