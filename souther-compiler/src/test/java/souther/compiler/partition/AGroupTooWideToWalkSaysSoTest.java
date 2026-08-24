@@ -9,8 +9,8 @@ import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.InputDomain;
-import souther.compiler.interaction.Interaction;
-import souther.compiler.interaction.Interactions;
+import souther.compiler.reading.Interaction;
+import souther.compiler.reading.CoverageRead;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Scopes;
@@ -217,33 +217,33 @@ class AGroupTooWideToWalkSaysSoTest {
     }
 
     /**
-     * And the generation says the walk was not made, in words a row budget does not explain.
+     * An arm behind the group the limit held back is answered from the way into it.
      *
-     * <p>The reason is what a reader acts on. Told the row limit instead, an author raises a number
-     * that changes nothing here — the group was never walked, and no quantity of rows reaches it.
+     * <p>Walking the group is one place a row through an arm is looked for and never the only one.
+     * What it takes to arrive at an arm is what the reading of the body says, and that is there
+     * whether or not the combinations above it were too many to walk — so the limit costs the
+     * combinations of that group and costs no arm its row.
+     *
+     * <p>And the generation still says the walk was not made, in words a row budget does not
+     * explain: the combinations of that group were not looked in, whatever the arms behind it came
+     * to. Told the row limit instead, an author raises a number that changes nothing here.
      */
     @Test
-    void theGenerationSaysTheWalkWasNotMade() {
+    void anArmBehindTheHeldGroupIsAnsweredFromTheWayIntoIt() {
         Model model = Model.of(THIRTEEN);
 
         Generator.GenerationResult composed = Generator.fill(model.subject(), List.of(),
-                Generator.CandidateCheck.ANY, model.groups(), Generator.Trial.NOTHING_RUNS, Budgets.generation());
+                Generator.CandidateCheck.ANY, model.read(), Generator.Trial.NOTHING_RUNS, Budgets.generation());
+
+        assertFalse(composed.arms().isEmpty(), () -> "the arms are answered: " + composed.arms());
+        assertTrue(composed.arms().stream().allMatch(Generator.ArmAttempt.Built.class::isInstance),
+                () -> "each of them with a row through it: " + composed.arms());
 
         List<GenerationReason.GroupsNotOffered> said = composed.reasons().stream()
                 .filter(GenerationReason.GroupsNotOffered.class::isInstance)
                 .map(GenerationReason.GroupsNotOffered.class::cast).toList();
         assertEquals(1, said.size(), () -> "the generation says so once: " + composed.reasons());
         assertEquals(1, said.get(0).groups(), "naming how many groups went unwalked");
-        // Every arm behind it is unresolved with that reason, rather than absent — an absent arm is
-        // one no combination claims, and that is what this must not be mistaken for.
-        List<Generator.ArmAttempt.Unresolved> unresolved = composed.arms().stream()
-                .filter(Generator.ArmAttempt.Unresolved.class::isInstance)
-                .map(Generator.ArmAttempt.Unresolved.class::cast).toList();
-        assertFalse(unresolved.isEmpty(), () -> "the arms are named: " + composed.arms());
-        assertTrue(unresolved.stream().allMatch(arm -> arm.why().stream()
-                        .anyMatch(why -> why.reason() == Generator.UnresolvedCombination.Reason
-                                .THE_GROUP_WAS_NOT_OFFERED)),
-                () -> "each saying the walk was never made: " + unresolved);
     }
 
     /**
@@ -263,7 +263,7 @@ class AGroupTooWideToWalkSaysSoTest {
         Model model = Model.of(THIRTEEN);
 
         Generator.GenerationResult asked = Generator.fill(model.subject(), List.of(),
-                Generator.CandidateCheck.ANY, model.groups(), Generator.Trial.NOTHING_RUNS,
+                Generator.CandidateCheck.ANY, model.read(), Generator.Trial.NOTHING_RUNS,
                 List.of(), Set.of(), Set.of(), Budgets.generation());
 
         assertEquals(List.of(), asked.reasons().stream()
@@ -273,22 +273,42 @@ class AGroupTooWideToWalkSaysSoTest {
     }
 
     /**
-     * Through a compilation, an arm still owed brings the group back and an arm covered does not.
+     * Through a compilation, an arm the rows leave owed is offered one whatever the limit did.
      *
      * <p>The production path, where what is owed comes from what measuring the arms established
      * rather than from a set a caller wrote. Held with the same model twice and only the rows
-     * differing, so the two answers are the rows' and not the model's — and the group is past the
-     * budget in both, which is what says the difference is the obligation and not the limit.
+     * differing, so what the two answers are is the rows' and not the model's — and the group is
+     * past the budget in both, which is what says the difference is the obligation and not the
+     * limit.
      */
     @Test
-    void whatIsOwedDecidesWhetherTheHeldGroupIsNamed() {
+    void whatIsOwedIsAnsweredWhateverTheLimitDidToTheGroup() {
+        List<Generator.ArmAttempt> owed = armsFor(modelWithRows(13, false));
+        assertFalse(owed.isEmpty(),
+                "one row leaves the other arm of each helper owed, and each is answered");
+        assertTrue(owed.stream().allMatch(Generator.ArmAttempt.Built.class::isInstance),
+                () -> "with a row through it, from the way in the reading has for it: " + owed);
         assertEquals(1, groupsNotOfferedFor(modelWithRows(13, false)).size(),
-                "one row leaves the other arm of each helper owed, and the group is named for it");
+                "and the group the limit held back is named, its combinations not being looked in");
+
+        assertEquals(List.of(), armsFor(modelWithRows(13, true)),
+                "two rows take every arm, so nothing is owed at all");
         assertEquals(List.of(), groupsNotOfferedFor(modelWithRows(13, true)),
-                "two rows take every arm, so nothing is owed and the group is not named");
+                "and the group costs this run nothing, so it is not named");
+    }
+
+    /** What the compilation's own generation came to at each arm it was owed one at. */
+    private static List<Generator.ArmAttempt> armsFor(String source) {
+        return fillingFor(source).composed().arms();
     }
 
     private static List<GenerationReason.GroupsNotOffered> groupsNotOfferedFor(String source) {
+        return fillingFor(source).composed().reasons().stream()
+                .filter(GenerationReason.GroupsNotOffered.class::isInstance)
+                .map(GenerationReason.GroupsNotOffered.class::cast).toList();
+    }
+
+    private static souther.compiler.query.Adequacy.Filling fillingFor(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(souther.compiler.query.Adequacy.Asked.fullReport());
         compilation.answerEverything();
@@ -304,9 +324,7 @@ class AGroupTooWideToWalkSaysSoTest {
         assertNotNull(filling, "the module was asked for rows");
         souther.compiler.query.Adequacy.Filling total = filling.get("total");
         assertNotNull(total, "the behavior was asked for rows");
-        return total.composed().reasons().stream()
-                .filter(GenerationReason.GroupsNotOffered.class::isInstance)
-                .map(GenerationReason.GroupsNotOffered.class::cast).toList();
+        return total;
     }
 
     /**
@@ -345,20 +363,19 @@ class AGroupTooWideToWalkSaysSoTest {
             """;
 
     /**
-     * A group held back that every arm behind it was answered elsewhere for is not reported.
+     * A group held back is named for the walk that was not made, and costs no arm its row.
      *
-     * <p>The case an obligation read at the start cannot see. Every arm the outer group claims is
-     * also on the way into one of the three inner ones, and those are offered — so each arm ends up
-     * {@code Built} and nothing is left waiting on the walk that was not made. Counted against the
-     * arms this run began owing, the group would be named while every entry under it said a row was
-     * composed.
+     * <p>Two things and the line says the first. What the limit settled is that none of that
+     * group's combinations was looked in, which nothing else reports: the combination measure
+     * counts what the rows were seen doing, and a walk this declined to make is not that. What it
+     * did not settle is whether the arms behind it are owed rows — every one of them is on the way
+     * into one of the three inner groups, and each is answered from the way into it either way.
      *
-     * <p>Which is why the count is read off the entries. A set rebuilt here from what was owed, what
-     * the row budget stopped at and what the held groups claim would be the order those answers are
-     * asked in, written twice.
+     * <p>Which is why the line is about the combinations rather than about rows. Written as rows
+     * not offered, it said a row was owed where one is written two lines above.
      */
     @Test
-    void aHeldGroupEveryArmOfWhichWasAnsweredElsewhereIsNotReported() {
+    void aHeldGroupIsNamedForTheWalkAndCostsNoArmItsRow() {
         Model model = Model.of(NESTED);
         AdequacyPolicy.OfTheGeneration budget = atMost(8);
 
@@ -368,7 +385,7 @@ class AGroupTooWideToWalkSaysSoTest {
         assertEquals(3, offered.groups().size(), "and the three inner ones are offered");
 
         Generator.GenerationResult composed = Generator.fill(model.subject(), List.of(),
-                Generator.CandidateCheck.ANY, model.groups(), Generator.Trial.NOTHING_RUNS, budget);
+                Generator.CandidateCheck.ANY, model.read(), Generator.Trial.NOTHING_RUNS, budget);
 
         // The held group is one arms were owed behind: without this, the answer below would hold of
         // a group that claimed nothing and would say nothing about when a group is named.
@@ -380,11 +397,10 @@ class AGroupTooWideToWalkSaysSoTest {
                 "arms were owed behind the group that was held back");
 
         assertTrue(composed.arms().stream().allMatch(Generator.ArmAttempt.Built.class::isInstance),
-                () -> "every arm was answered by an offered group: " + composed.arms());
-        assertEquals(List.of(), composed.reasons().stream()
-                        .filter(GenerationReason.GroupsNotOffered.class::isInstance).toList(),
-                () -> "so nothing was left waiting on the walk that was not made: "
-                        + composed.reasons());
+                () -> "every arm behind it has a row through it: " + composed.arms());
+        assertEquals(1, composed.reasons().stream()
+                        .filter(GenerationReason.GroupsNotOffered.class::isInstance).count(),
+                () -> "and the walk that was not made is still said: " + composed.reasons());
     }
 
     /** Which arms a group the limit held back could have been searched at. */
@@ -400,7 +416,12 @@ class AGroupTooWideToWalkSaysSoTest {
     }
 
     /** The behavior's inputs, its axes and the groups its body meets at, off one compile. */
-    private record Model(Generator.Subject subject, List<Interaction> groups) {
+    private record Model(Generator.Subject subject, CoverageRead.Read read) {
+
+        /** The groups of the one reading, for a caller asking about the combinations alone. */
+        List<Interaction> groups() {
+            return read.interactions();
+        }
 
         static Model of(String source) {
             Compilation compilation = Compilation.ofSource(source, "Main");
@@ -429,7 +450,7 @@ class AGroupTooWideToWalkSaysSoTest {
                             sigs.get("total").inputTypes(), symbols,
                             souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
                     partitioning.axes(), HeldCounts.of(inputs, symbols)),
-                    Interactions.of(body, plan, inputs, symbols));
+                    CoverageRead.of("total", body, plan, inputs, symbols));
         }
     }
 }

@@ -2,10 +2,10 @@ package souther.compiler.partition;
 
 import souther.compiler.coverage.ComparisonOccurrence;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.interaction.Condition;
-import souther.compiler.interaction.Factor;
-import souther.compiler.interaction.Interaction;
-import souther.compiler.interaction.Outcome;
+import souther.compiler.reading.Condition;
+import souther.compiler.reading.Factor;
+import souther.compiler.reading.Interaction;
+import souther.compiler.reading.Outcome;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -221,9 +221,8 @@ public final class InteractionCells {
      * The groups to offer, and the ones the limit kept back.
      *
      * <p>Two answers because they are two facts and the second used to be neither returned nor
-     * recorded. A group dropped for its width claims arms, and an arm nothing offered a combination
-     * for is reported as an arm no combination claims — which says the body settles something it
-     * does not.
+     * recorded. A group dropped for its width claims arms, and what was not walked at those arms is
+     * something a caller says rather than something a reader has to notice going missing.
      */
     public record Offered(List<Group> groups, List<NotOffered> notOffered) {
 
@@ -231,6 +230,44 @@ public final class InteractionCells {
             groups = List.copyOf(groups);
             notOffered = List.copyOf(notOffered);
         }
+    }
+
+    /**
+     * Where a row that comes one way may sit, and what a run that came it would be seen to do, or
+     * null where the way places at no class.
+     *
+     * <p>The same lookup a group's way in goes through, asked of one way on its own. A way in to an
+     * arm and the reach of a meeting are the same kind of thing — decisions that hold on the way
+     * somewhere — so what they leave open is read here once and not twice.
+     *
+     * <p>Null where any condition of the way narrows nothing, for the reason a group is dropped for
+     * it: what a cell is for is steering a row along the way, and a condition with no classes to
+     * put a row at leaves the row free to go the other way round that fork. Offered anyway, it would
+     * be a row for an arm it may never take.
+     */
+    public static CellSelection at(souther.compiler.reading.WayIn way,
+                                   souther.compiler.coverage.ControlClaim arrivesAt,
+                                   List<Axis> axes) {
+        if (way.decisions().isEmpty()) {
+            // Nothing has to hold to get here, so there is nothing to steer a row by. The body
+            // itself is reached this way.
+            return null;
+        }
+        Placed placed = placedBy(way.decisions(), axes);
+        if (placed == null) {
+            return null;
+        }
+        // What a run that arrived would be seen doing, beside what holds on the way. Asked for
+        // rather than read off the way, because the two are one thing only where the last decision
+        // on the way is the place itself: a `match` names the case a run matched at, which is the
+        // arm, while a fork on a comparison names the comparison and leaves the arm unsaid. Held to
+        // the way alone, a row seen making the comparison and never seen at the arm certified the
+        // arm (issue #1009).
+        List<souther.compiler.coverage.ControlClaim> claims = new ArrayList<>(placed.claims());
+        if (!claims.contains(arrivesAt)) {
+            claims.add(arrivesAt);
+        }
+        return new CellSelection(placed.cell(), claims);
     }
 
     /** The groups worth offering, over the ordered {@code axes}, and the ones held back. */
@@ -321,13 +358,13 @@ public final class InteractionCells {
      * reading that owns them. Which decisions are here is decided once, so the claims cannot end up
      * being of a different set of them than the classes are.
      */
-    private static Placed placedBy(List<souther.compiler.interaction.Decision> made,
+    private static Placed placedBy(List<souther.compiler.reading.Decision> made,
                                    List<Axis> axes) {
         Cell cell = narrowedBy(
-                made.stream().map(souther.compiler.interaction.Decision::constrains).toList(), axes);
+                made.stream().map(souther.compiler.reading.Decision::constrains).toList(), axes);
         return cell == null ? null
                 : new Placed(cell, made.stream()
-                        .map(souther.compiler.interaction.Decision::claims).toList());
+                        .map(souther.compiler.reading.Decision::claims).toList());
     }
 
     /** What {@code holds} leaves open, or null where any of it narrows nothing or narrows it away. */

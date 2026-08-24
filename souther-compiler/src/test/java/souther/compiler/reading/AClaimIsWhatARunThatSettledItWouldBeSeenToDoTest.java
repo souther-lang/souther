@@ -1,4 +1,4 @@
-package souther.compiler.interaction;
+package souther.compiler.reading;
 
 import souther.compiler.Emitted;
 import org.junit.jupiter.api.Test;
@@ -155,7 +155,7 @@ class AClaimIsWhatARunThatSettledItWouldBeSeenToDoTest {
             souther.compiler.generated.EvaluationArtifact artifact = compilation.db()
                     .ask(new Output.Evaluated(module, Output.CoverageMode.ARMS)).value();
             assertNotNull(artifact, "the model under test emits measured classes");
-            return new Model(Interactions.of(body, plan, inputs, symbols),
+            return new Model(CoverageRead.of(name, body, plan, inputs, symbols).interactions(),
                     new Behavior(artifact.classes(), module, name));
         }
 

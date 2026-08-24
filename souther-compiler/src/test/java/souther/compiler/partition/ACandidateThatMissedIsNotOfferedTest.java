@@ -13,8 +13,8 @@ import souther.compiler.coverage.ControlPointId;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.Observation;
 import souther.compiler.inputs.InputDomain;
-import souther.compiler.interaction.Interaction;
-import souther.compiler.interaction.Interactions;
+import souther.compiler.reading.Interaction;
+import souther.compiler.reading.CoverageRead;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -168,7 +168,7 @@ class ACandidateThatMissedIsNotOfferedTest {
 
     private static Generator.GenerationResult fill(Model model, Generator.Trial trial) {
         return Generator.fill(model.subject(), List.of(), Generator.CandidateCheck.ANY,
-                model.groups(), trial, Budgets.generation());
+                model.read(), trial, Budgets.generation());
     }
 
     /** Every claim any combination of the model makes, so that one run answers all of them. */
@@ -202,7 +202,12 @@ class ACandidateThatMissedIsNotOfferedTest {
         return new Observation(taken, ways);
     }
 
-    private record Model(Generator.Subject subject, List<Interaction> groups) {
+    private record Model(Generator.Subject subject, CoverageRead.Read read) {
+
+        /** The groups of the one reading, for a caller asking about the combinations alone. */
+        List<Interaction> groups() {
+            return read.interactions();
+        }
 
         static Model of(String source, String behavior) {
             Compilation compilation = Compilation.ofSource(source, "Main");
@@ -229,7 +234,8 @@ class ACandidateThatMissedIsNotOfferedTest {
                             souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
                     Partitions.of(spec.name(), inputs, symbols,
                             souther.compiler.query.ReadAs.THE_COMPILATION_DOES).axes(), HeldCounts.of(inputs, symbols)),
-                    Interactions.of(body, CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
+                    CoverageRead.of(spec.name(), body,
+                            CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
                 checked.supplied()), inputs,
                             symbols));
         }

@@ -1,4 +1,4 @@
-package souther.compiler.interaction;
+package souther.compiler.reading;
 
 import org.junit.jupiter.api.Test;
 
@@ -97,8 +97,9 @@ class AWayInIsHeldToWhatAlreadyHeldTest {
         assertNotNull(body, "the behavior under test has a body");
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         InputDomain inputs = compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior);
-        return Interactions.of(body, CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
-                checked.supplied()), inputs, symbols);
+        return CoverageRead.of(behavior, body,
+                CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
+                checked.supplied()), inputs, symbols).interactions();
     }
 
     /**

@@ -57,6 +57,24 @@ public record CellSelection(InteractionCells.Cell cell, List<ControlClaim> claim
     }
 
     /**
+     * Whether this asks for the same row as {@code other}: the same classes, held to the same run.
+     *
+     * <p>Asked rather than left to equality. A cell is a flag per class of each position, which is
+     * an array — so two of these naming one combination are two values that never compare equal,
+     * and a search handed both looks in the same place twice, composes the same candidates against
+     * the same rules, and writes down what it came to twice over.
+     *
+     * <p>Both halves, because either alone is a different question. Two selections over the same
+     * classes and different claims are two things a row of those values would have to be seen
+     * doing; the same claims over different classes are two places to look for one run.
+     */
+    public boolean sameAs(CellSelection other) {
+        return cell.sameAs(other.cell)
+                && new java.util.LinkedHashSet<>(claims)
+                        .equals(new java.util.LinkedHashSet<>(other.claims));
+    }
+
+    /**
      * The row at {@code where} as a witness that this combination is filled, where {@code seen} says
      * it filled it.
      *
