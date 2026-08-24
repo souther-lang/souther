@@ -75,6 +75,19 @@ final class EnsuresChecks {
     }
 
     /**
+     * Whether {@code behavior} states anything of what it answers.
+     *
+     * <p>Asked of the contracts, which is where the answer is: a behavior writing no {@code ensures}
+     * is not put in them ({@code Bodies.Contracts}), so being absent and stating nothing are one
+     * fact rather than two that agree. Answerable without applying anything, because what a behavior
+     * declares does not turn on an input — {@link #contractOf} reads the name and uses the arguments
+     * only to check their number against it.
+     */
+    boolean states(String behavior) {
+        return contracts.containsKey(behavior);
+    }
+
+    /**
      * What {@code behavior}'s check said of an answer of {@code answer} to {@code args}, or null
      * where every rule held — and where the behavior states nothing, which is every rule it has
      * holding.

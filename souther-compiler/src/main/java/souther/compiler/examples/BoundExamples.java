@@ -128,6 +128,59 @@ public final class BoundExamples {
     }
 
     /**
+     * What the bound implementation answered for {@code row}'s inputs, held to what the behavior
+     * declares of what it answers — and to nothing the row records.
+     *
+     * <p>A different oracle from {@link #evaluate}'s, which holds an answer to the declaration and
+     * to the value somebody wrote out. Where the recorded answer is no longer the answer — a world
+     * the rows were not recorded in — what the behavior states still is, and this is the face that
+     * asks only that.
+     *
+     * <p>Applied once per call, as {@code evaluate} is and for the same reason: what the
+     * implementation answers comes out of world state the caller arranges between calls, and two
+     * answers under two worlds are two observations rather than a contradiction.
+     *
+     * <p>Once the binding has been established, a behavior that states nothing is answered
+     * {@link ContractObservation.NothingStated} without the implementation being applied. A binding
+     * nothing may be handed to is answered for first: an implementation of another build states
+     * nothing that can run, and calling that "the model states nothing" would send its author to
+     * write a clause that still would not. To leave a behavior that states nothing out rather than
+     * be told about each of its rows, read {@link #behaviorsWithContracts()}.
+     */
+    public ContractObservation checkContract(RecordedRow row) {
+        if (row == null || row.enumeratedBy() != this) {
+            throw new IllegalArgumentException("a row belongs to the enumeration that made it");
+        }
+        return verifier.contractOnly(row.behavior(), row.written());
+    }
+
+    /**
+     * Which of the bound behaviors have a contract — an {@code ensures} saying something of what
+     * they answer.
+     *
+     * <p>What a behavior declares, asked without applying anything — a behavior writing no
+     * {@code ensures} is not among the module's contracts at all, so this reads a declaration rather
+     * than predicting a run. For a suite that means to hold only the behaviors with a contract to
+     * one, and that would otherwise have to write their names down beside the model.
+     *
+     * <p>Beside {@link ContractObservation.NothingStated} and not instead of it. A suite over every
+     * row is the ordinary way to write one — the arm is what tells an author who did not mean to
+     * leave a behavior out — and narrowing by this is the deliberate exception.
+     *
+     * <p>Walks what is bound on each call and answers a fresh list, so a loop that narrows by it
+     * reads it once rather than once per row.
+     */
+    public List<String> behaviorsWithContracts() {
+        List<String> stating = new ArrayList<>();
+        for (String behavior : bound) {
+            if (verifier.states(behavior)) {
+                stating.add(behavior);
+            }
+        }
+        return List.copyOf(stating);
+    }
+
+    /**
      * What the implementation answered for {@code entry}'s input, held to what the entry states.
      *
      * <p>Enumerated and observed one at a time, as rows are and for the same reason: what the

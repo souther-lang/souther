@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.semantics.ArgumentRef;
 import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.BuiltFrom;
+import souther.compiler.semantics.ConstantArguments;
 import souther.compiler.semantics.ElementLineage;
 import souther.compiler.semantics.ElementShape;
 import souther.compiler.semantics.NumericResult;
@@ -342,11 +343,23 @@ final class DischargeRules {
      */
     static List<ResultBound> boundsOn(Core.PreservedCall call,
                                       Function<Core, BigDecimal> constant) {
-        List<ResultBound> rows =
-                Bound.boundsOnTheResult(call.operation());
+        return boundsOn(call.operation(), CallArguments.readAs(call, constant));
+    }
+
+    /**
+     * The same, for a reader holding the operation and not a call to it: the rows whose condition is
+     * met by what {@code constants} can say about the arguments.
+     *
+     * <p>{@link ConstantArguments#NONE} therefore leaves the rows an operation states whatever it is
+     * given, which for an operation the language hands no number is every row it has — a bound may
+     * only name an argument that is a number ({@link #holdBound}), so there is no other kind for
+     * such an operation to have.
+     */
+    static List<ResultBound> boundsOn(ValueName operation, ConstantArguments constants) {
+        List<ResultBound> rows = Bound.boundsOnTheResult(operation);
         List<ResultBound> holding = new ArrayList<>(rows.size());
         for (ResultBound row : rows) {
-            if (CallArguments.holds(row.provided(), call, constant)) {
+            if (constants.satisfy(row.provided())) {
                 holding.add(row);
             }
         }

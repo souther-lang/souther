@@ -3,7 +3,7 @@ package souther.compiler.check;
 import souther.compiler.core.Core;
 import souther.compiler.semantics.ArgumentRef;
 import souther.compiler.semantics.Combinator;
-import souther.compiler.semantics.ResultBound;
+import souther.compiler.semantics.ConstantArguments;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -56,22 +56,20 @@ public final class CallArguments {
     }
 
     /**
-     * Whether {@code call} meets the condition a fact about its operation was stated under.
+     * What {@code call}'s arguments read as, for a fact that names one of them.
      *
-     * <p>The condition says which argument has to read a certain way; whether it does is read here,
-     * where the call and what its values were read as both are. What a value reads as is the
-     * caller's answer — a name given a constant is that constant — so it is handed in rather than
-     * taken off the syntax at the call.
+     * <p>Between the word and the call, as everything here is: the fact names an argument and this
+     * finds it, and what the value there reads as is the caller's answer — a name given a constant
+     * is that constant — so the reading is handed in rather than taken off the syntax at the call.
+     *
+     * <p>What is done with the answer is not here. Whether a condition on the arguments is met is
+     * one question asked by two readers ({@link ConstantArguments#satisfy}), and answering it here
+     * as well would be the second place it is read.
      */
-    public static boolean holds(ResultBound.Provided provided, Core.PreservedCall call,
-                                java.util.function.Function<Core, java.math.BigDecimal> folded) {
-        return switch (provided) {
-            case ResultBound.Provided.Always _ -> true;
-            case ResultBound.Provided.ConstantAboveZero above -> {
-                java.math.BigDecimal at = folded.apply(of(above.argument(), call));
-                yield at != null && at.signum() > 0;
-            }
-        };
+    public static ConstantArguments readAs(Core.PreservedCall call,
+                                           java.util.function.Function<Core,
+                                                   java.math.BigDecimal> folded) {
+        return argument -> java.util.Optional.ofNullable(folded.apply(of(argument, call)));
     }
 
     private static Combinator handing(ValueName operation, String part) {
