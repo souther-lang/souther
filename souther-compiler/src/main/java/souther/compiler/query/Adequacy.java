@@ -2467,15 +2467,15 @@ public final class Adequacy {
          * file to write by hand.
          */
         private static GenerationOutcome nothingReaches(
-                souther.compiler.interaction.PathAccess access) {
+                souther.compiler.reading.PathAccess access) {
             return switch (access) {
-                case souther.compiler.interaction.PathAccess.Ways _ ->
+                case souther.compiler.reading.PathAccess.Ways _ ->
                         throw new IllegalStateException(
                                 "an arm with ways into it was somewhere a row was looked for");
-                case souther.compiler.interaction.PathAccess.Unreachable _ ->
+                case souther.compiler.reading.PathAccess.Unreachable _ ->
                         new GenerationOutcome.NotApplicable(
                                 GenerationOutcome.NotApplicable.Reason.A_FACT_ABOUT_THE_MODEL);
-                case souther.compiler.interaction.PathAccess.Unsupported(var why) ->
+                case souther.compiler.reading.PathAccess.Unsupported(var why) ->
                         new GenerationOutcome.NotSupported(switch (why) {
                             case NO_WAY_IN_CAN_BE_NAMED -> GenerationOutcome.NotSupported.Reason
                                     .NO_WAY_INTO_THIS_ARM_CAN_BE_NAMED;
@@ -2936,7 +2936,7 @@ public final class Adequacy {
                 }
             }
             return Generator.fill(subject, existing, check,
-                    souther.compiler.interaction.CoverageRead
+                    souther.compiler.reading.CoverageRead
                             .of(spec.name(), body, plan, domain, symbols),
                     trial, baselines, classesOwed(evidence), armsOwed, budget);
         }

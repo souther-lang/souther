@@ -2,10 +2,10 @@ package souther.compiler.partition;
 
 import souther.compiler.coverage.ComparisonOccurrence;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.interaction.Condition;
-import souther.compiler.interaction.Factor;
-import souther.compiler.interaction.Interaction;
-import souther.compiler.interaction.Outcome;
+import souther.compiler.reading.Condition;
+import souther.compiler.reading.Factor;
+import souther.compiler.reading.Interaction;
+import souther.compiler.reading.Outcome;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -246,7 +246,7 @@ public final class InteractionCells {
      * put a row at leaves the row free to go the other way round that fork. Offered anyway, it would
      * be a row for an arm it may never take.
      */
-    public static CellSelection at(souther.compiler.interaction.WayIn way, List<Axis> axes) {
+    public static CellSelection at(souther.compiler.reading.WayIn way, List<Axis> axes) {
         if (way.decisions().isEmpty()) {
             // Nothing has to hold to get here, so there is nothing to steer a row by and nothing a
             // run that arrived would be seen to have done. The body itself is reached this way.
@@ -344,13 +344,13 @@ public final class InteractionCells {
      * reading that owns them. Which decisions are here is decided once, so the claims cannot end up
      * being of a different set of them than the classes are.
      */
-    private static Placed placedBy(List<souther.compiler.interaction.Decision> made,
+    private static Placed placedBy(List<souther.compiler.reading.Decision> made,
                                    List<Axis> axes) {
         Cell cell = narrowedBy(
-                made.stream().map(souther.compiler.interaction.Decision::constrains).toList(), axes);
+                made.stream().map(souther.compiler.reading.Decision::constrains).toList(), axes);
         return cell == null ? null
                 : new Placed(cell, made.stream()
-                        .map(souther.compiler.interaction.Decision::claims).toList());
+                        .map(souther.compiler.reading.Decision::claims).toList());
     }
 
     /** What {@code holds} leaves open, or null where any of it narrows nothing or narrows it away. */

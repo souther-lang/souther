@@ -1,4 +1,4 @@
-package souther.compiler.interaction;
+package souther.compiler.reading;
 
 import java.util.List;
 

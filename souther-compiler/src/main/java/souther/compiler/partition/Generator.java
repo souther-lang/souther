@@ -7,7 +7,7 @@ import souther.compiler.check.FieldDomains;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.inputs.NumericTerm;
-import souther.compiler.interaction.PathAccess;
+import souther.compiler.reading.PathAccess;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
@@ -545,11 +545,11 @@ public final class Generator {
          * or this compiler cannot state what steers a row there. Neither is a search that failed,
          * and carrying either as one would tell a reader a value was looked for.
          */
-        record NoWayIn(int probe, souther.compiler.interaction.PathAccess access)
+        record NoWayIn(int probe, souther.compiler.reading.PathAccess access)
                 implements ArmAttempt {
 
             public NoWayIn {
-                if (access instanceof souther.compiler.interaction.PathAccess.Ways) {
+                if (access instanceof souther.compiler.reading.PathAccess.Ways) {
                     throw new IllegalArgumentException(
                             "an arm with ways into it is one this search had somewhere to look");
                 }
@@ -781,7 +781,7 @@ public final class Generator {
                                         CandidateCheck check,
                                         AdequacyPolicy.OfTheGeneration budget) {
         return fill(subject, existing, check,
-                new souther.compiler.interaction.CoverageRead.Read(List.of(), Map.of()), budget);
+                new souther.compiler.reading.CoverageRead.Read(List.of(), Map.of()), budget);
     }
 
     /**
@@ -795,7 +795,7 @@ public final class Generator {
      */
     public static GenerationResult fill(Subject subject, List<ObservedRow> existing,
                                         CandidateCheck check,
-                                        souther.compiler.interaction.CoverageRead.Read read,
+                                        souther.compiler.reading.CoverageRead.Read read,
                                         AdequacyPolicy.OfTheGeneration budget) {
         return fill(subject, existing, check, read, Trial.NOTHING_RUNS, budget);
     }
@@ -813,7 +813,7 @@ public final class Generator {
      */
     public static GenerationResult fill(Subject subject, List<ObservedRow> existing,
                                         CandidateCheck check,
-                                        souther.compiler.interaction.CoverageRead.Read read,
+                                        souther.compiler.reading.CoverageRead.Read read,
                                         Trial trial, AdequacyPolicy.OfTheGeneration budget) {
         return fill(subject, existing, check, read, trial, List.of(),
                 everyClassNoRowSitsIn(subject, existing), read.arms().keySet(), budget);
@@ -841,7 +841,7 @@ public final class Generator {
      * many combinations of the held-back group would have claimed it.
      */
     public static Set<Integer> everyArmACombinationMayTake(
-            Subject subject, List<souther.compiler.interaction.Interaction> groups,
+            Subject subject, List<souther.compiler.reading.Interaction> groups,
             AdequacyPolicy.OfTheGeneration budget) {
         Set<Integer> out = new LinkedHashSet<>();
         InteractionCells.Offered offered = InteractionCells.of(groups, ordered(subject), budget);
@@ -913,7 +913,7 @@ public final class Generator {
      */
     public static GenerationResult fill(Subject subject, List<ObservedRow> existing,
                                         CandidateCheck check,
-                                        souther.compiler.interaction.CoverageRead.Read read,
+                                        souther.compiler.reading.CoverageRead.Read read,
                                         Trial trial, List<Baseline> baselines,
                                         Set<ClassOwed> classesOwed,
                                         Set<Integer> armsOwed,
@@ -1182,7 +1182,7 @@ public final class Generator {
      * for from one every attempt failed at.
      */
     private static List<CellSelection> whereToLookFor(
-            int probe, souther.compiler.interaction.CoverageRead.Read read,
+            int probe, souther.compiler.reading.CoverageRead.Read read,
             InteractionCells.Offered offered, List<Axis> axes) {
         List<CellSelection> out = new ArrayList<>();
         for (InteractionCells.Group group : offered.groups()) {
@@ -1196,7 +1196,7 @@ public final class Generator {
             }
         }
         if (read.armAt(probe) instanceof PathAccess.Ways ways) {
-            for (souther.compiler.interaction.WayIn way : ways.ways()) {
+            for (souther.compiler.reading.WayIn way : ways.ways()) {
                 CellSelection at = InteractionCells.at(way, axes);
                 if (at != null) {
                     out.add(at);
