@@ -106,6 +106,42 @@ public final class OperationFacts {
             about("Decimal", "toInt", bounded(Rel.GT, at(1), -1, always())),
             about("Decimal", "toInt", bounded(Rel.LT, at(1), 1, always())),
 
+            // A comparison answers a sign and answers it as one of three numbers. That it is one of
+            // three is not what {@code StatesTheOrderOfItsArguments} says: that one says which
+            // argument a positive answer names as the greater, and a comparison answering the
+            // difference of the two would say the same thing about the same order. So the ends are
+            // stated here, where they are what they are — the number, and not the order it decides.
+            about("Int", "compare", bounded(Rel.GE, -1)),
+            about("Int", "compare", bounded(Rel.LE, 1)),
+            about("Decimal", "compare", bounded(Rel.GE, -1)),
+            about("Decimal", "compare", bounded(Rel.LE, 1)),
+
+            // The parts a temporal is read out in, each within the range that part of a calendar
+            // has. A month is one of twelve and a day one of at most thirty-one whatever the date
+            // is, so neither is a bound the arguments decide.
+            about("Time", "hour", bounded(Rel.GE, 0)),
+            about("Time", "hour", bounded(Rel.LE, 23)),
+            about("Time", "minute", bounded(Rel.GE, 0)),
+            about("Time", "minute", bounded(Rel.LE, 59)),
+            about("Time", "second", bounded(Rel.GE, 0)),
+            about("Time", "second", bounded(Rel.LE, 59)),
+            about("Date", "month", bounded(Rel.GE, 1)),
+            about("Date", "month", bounded(Rel.LE, 12)),
+            about("Date", "day", bounded(Rel.GE, 1)),
+            about("Date", "day", bounded(Rel.LE, 31)),
+
+            // And the two whose ends are where the calendar stops rather than where a part of one
+            // does. A year is the year of a date, and a date is written between two of them; a count
+            // of minutes is a count between two date-times, and no two of them stand further apart
+            // than the first and the last. Both are read off what a value of the type can be rather
+            // than written down as numbers here, since what a temporal can be written as is already
+            // answered — by {@code java.time} for a date, which is what the carrier's own ends are
+            // read from, and by {@link souther.compiler.numeric.DateTimes} for a date-time.
+            about("Date", "year", bounded(Rel.GE, java.time.LocalDate.MIN.getYear())),
+            about("Date", "year", bounded(Rel.LE, java.time.LocalDate.MAX.getYear())),
+            about("DateTime", "minutesBetween", bounded(Rel.GE, -minutesAcrossEveryDateTime())),
+            about("DateTime", "minutesBetween", bounded(Rel.LE, minutesAcrossEveryDateTime())),
+
             // The operations that move a value by an amount, each stated through the measure that
             // counts two such values apart. Every one of them works on a local value, where a day
             // is a day and an hour is sixty minutes, so what each states is exact rather than
@@ -235,6 +271,20 @@ public final class OperationFacts {
             about("Decimal", "clamp", answers(at(2), stands(at(2), Rel.GE, at(0)),
                     stands(at(2), Rel.LE, at(1))))));
 
+        // What a count is, said as a bound. An operation counting what it was given answers how many
+        // of something there are, and there is no negative number of them — so this is the meaning
+        // of that kind of fact and not something true of `List.length` in particular. Written beside
+        // each of them it would be four copies of one proposition, and the fifth such operation
+        // would arrive counting and unbounded.
+        //
+        // Generated into the declarations rather than answered beside them. The declarations are the
+        // list and everything else here is read off it, so a bound that existed only in a lookup
+        // would be the one bound nothing holds to the library and the one row no test can count.
+        //
+        // One way round, and it is not a closure over the facts. A count is bounded at nought; a
+        // result bounded at nought is not a count — `Int.abs` answers one and counts nothing.
+        out.addAll(theBoundEveryCountHas(List.copyOf(out)));
+
         // What a construction keeps of what it read, where the answer is nothing. Each group is
         // a reason about what a shape can say, not about the operation being uninteresting.
             //
@@ -266,14 +316,22 @@ public final class OperationFacts {
         // `List.any` states its predicate of some element and not of every one.
         out.addAll(saysNothing(OperationSubject.QUANTIFICATION, op("List", "any")));
 
-        // Their result is not bounded by their arguments at all. The arithmetic and its
-        // function forms answer a number that may be anywhere; a comparison answers a sign,
-        // which is what the order it decides says; a choice answers one of two values, and what
-        // that bounds follows from the case it is in.
+        // Nothing bounds their result, for two reasons.
+        //
+        // The arithmetic and its function forms answer a number that may be anywhere, and a choice
+        // answers one of two values, which is what its cases bound.
+        //
+        // And the two whose number another fact already has whole. `Decimal.fromInt` answers the
+        // number it was given and `Date.daysBetween` the two day counts subtracted, and each says so
+        // as the form it answers (`AnswersAFormOfItsArguments`), which puts the result wherever what
+        // it is a form of stands. A bound written here beside such a form would be a second, weaker
+        // answer to a question that has one, and which of them was read would be whichever reader
+        // arrived.
         out.addAll(saysNothing(OperationSubject.BOUNDS, op("Int", "add"), op("Int", "subtract"), op("Int", "multiply"),
-                op("Decimal", "add"), op("Decimal", "subtract"), op("Decimal", "multiply"), op("Int", "compare"),
-                op("Decimal", "compare"), op("Int", "min"), op("Int", "max"), op("Int", "clamp"), op("Decimal", "min"),
-                op("Decimal", "max"), op("Decimal", "clamp"), op("Decimal", "fromInt"), op("Decimal", "round")));
+                op("Decimal", "add"), op("Decimal", "subtract"), op("Decimal", "multiply"),
+                op("Int", "min"), op("Int", "max"), op("Int", "clamp"), op("Decimal", "min"),
+                op("Decimal", "max"), op("Decimal", "clamp"), op("Decimal", "fromInt"),
+                op("Decimal", "round"), op("Date", "daysBetween")));
 
         // Months and years hold different numbers of days, so neither states a count of the one
         // measure a pair of dates has.
@@ -336,6 +394,29 @@ public final class OperationFacts {
                 op("Date", "day"), op("Time", "hour"), op("Time", "minute"), op("Time", "second"),
                 op("DateTime", "toDate"), op("DateTime", "toTime")));
         return List.copyOf(out);
+    }
+
+    /** The bound each operation that counts what it was given answers under, as a declaration of its
+     *  own — one per such declaration, so that an operation gaining the one gains the other. */
+    private static List<Declared> theBoundEveryCountHas(List<Declared> declared) {
+        List<Declared> out = new ArrayList<>();
+        for (Declared each : declared) {
+            if (each.fact() instanceof OperationFact.CountsWhatItIsGiven) {
+                out.add(new Declared(each.operation(), bounded(Rel.GE, 0)));
+            }
+        }
+        return out;
+    }
+
+    /** How many whole minutes the first date-time and the last stand apart, which is as far apart as
+     *  a count of minutes between two of them reaches either way. Read off the counts the carrier
+     *  runs between: what a date-time can be written as is answered there, and a number written here
+     *  would be a second answer to it. */
+    private static long minutesAcrossEveryDateTime() {
+        return souther.compiler.numeric.DateTimes.MAX.at()
+                .subtract(souther.compiler.numeric.DateTimes.MIN.at())
+                .divideToIntegralValue(java.math.BigDecimal.valueOf(60))
+                .longValueExact();
     }
 
     /** That there is nothing to say of each of {@code operations} under {@code subject}. */

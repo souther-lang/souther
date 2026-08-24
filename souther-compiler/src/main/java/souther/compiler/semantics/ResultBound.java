@@ -12,6 +12,13 @@ import java.math.BigDecimal;
  * between two arguments, a result no greater than a sum — is one the domain would take in and
  * derive nothing from, so it is not writable here rather than written and silently dropped.
  *
+ * <p><b>A bound is where a result stops, so {@link Rel#NE} is not one.</b> Everything else the
+ * relations name is an end: an order names one, and an equality names both at once. A result that is
+ * anything but one value is two ranges with a hole between them, which is not what this says and not
+ * what either reader of it can carry — so it is refused here, where the representation is, and not
+ * at the check that holds a fact to the library's signatures. That one asks whether a fact and a
+ * declaration agree; this one is about what a bound is.
+ *
  * @param against  the argument the result is bounded against, or null where the bound is a constant
  *                 one
  * @param offset   added to that argument, or the constant itself where there is no argument
@@ -24,6 +31,11 @@ public record ResultBound(ArgumentRef against, BigDecimal offset, Rel rel, Provi
         java.util.Objects.requireNonNull(offset, "a bound stands somewhere");
         java.util.Objects.requireNonNull(rel, "and stands some way to it");
         java.util.Objects.requireNonNull(provided, "and under some condition, `Always` if none");
+        if (rel == Rel.NE) {
+            throw new IllegalArgumentException(
+                    "a bound says where a result stops, and `NE` says where it does not stand: "
+                            + against + " " + rel + " " + offset);
+        }
     }
 
     /**

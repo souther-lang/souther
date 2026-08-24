@@ -88,6 +88,176 @@ class ARuleAboutAnOperationsResultCarriesSomethingTest {
                         invariant value >= 0
                     behavior wrap : (x: Int) -> NonNeg constructs NonNeg
                     let wrap (x) = NonNeg(Int.floorMod(x, 100))
+                    """),
+
+            // The measures, whose row is the one every operation that counts what it was given is
+            // declared with rather than one written for it. A program each all the same: what the
+            // derivation produces is a row like any other, and a row nothing fires is a row that
+            // could be dropped unnoticed.
+            new Discharges("List.length", """
+                    module demo
+                    data NonNeg = Int
+                        invariant value >= 0
+                    behavior howMany : (xs: List<Int>) -> NonNeg constructs NonNeg
+                    let howMany (xs) = NonNeg(List.length(xs))
+                    """),
+            new Discharges("String.length", """
+                    module demo
+                    data NonNeg = Int
+                        invariant value >= 0
+                    behavior howLong : (s: String) -> NonNeg constructs NonNeg
+                    let howLong (s) = NonNeg(String.length(s))
+                    """),
+            new Discharges("Set.size", """
+                    module demo
+                    data NonNeg = Int
+                        invariant value >= 0
+                    behavior howMany : (xs: Set<Int>) -> NonNeg constructs NonNeg
+                    let howMany (xs) = NonNeg(Set.size(xs))
+                    """),
+            new Discharges("Map.size", """
+                    module demo
+                    data NonNeg = Int
+                        invariant value >= 0
+                    behavior howMany : (m: Map<String, Int>) -> NonNeg constructs NonNeg
+                    let howMany (m) = NonNeg(Map.size(m))
+                    """),
+
+            // A comparison, at each end of the three numbers it answers.
+            new Discharges("Int.compare", """
+                    module demo
+                    data AtLeastMinusOne = Int
+                        invariant value >= -1
+                    behavior order : (a: Int, b: Int) -> AtLeastMinusOne
+                        constructs AtLeastMinusOne
+                    let order (a, b) = AtLeastMinusOne(Int.compare(a, b))
+                    """),
+            new Discharges("Int.compare", """
+                    module demo
+                    data AtMostOne = Int
+                        invariant value <= 1
+                    behavior order : (a: Int, b: Int) -> AtMostOne constructs AtMostOne
+                    let order (a, b) = AtMostOne(Int.compare(a, b))
+                    """),
+            new Discharges("Decimal.compare", """
+                    module demo
+                    data AtLeastMinusOne = Int
+                        invariant value >= -1
+                    behavior order : (a: Decimal, b: Decimal) -> AtLeastMinusOne
+                        constructs AtLeastMinusOne
+                    let order (a, b) = AtLeastMinusOne(Decimal.compare(a, b))
+                    """),
+            new Discharges("Decimal.compare", """
+                    module demo
+                    data AtMostOne = Int
+                        invariant value <= 1
+                    behavior order : (a: Decimal, b: Decimal) -> AtMostOne constructs AtMostOne
+                    let order (a, b) = AtMostOne(Decimal.compare(a, b))
+                    """),
+
+            // The parts a temporal is read out in, each end of each.
+            new Discharges("Time.hour", """
+                    module demo
+                    data NonNeg = Int
+                        invariant value >= 0
+                    behavior at : (t: Time) -> NonNeg constructs NonNeg
+                    let at (t) = NonNeg(Time.hour(t))
+                    """),
+            new Discharges("Time.hour", """
+                    module demo
+                    data OfADay = Int
+                        invariant value <= 23
+                    behavior at : (t: Time) -> OfADay constructs OfADay
+                    let at (t) = OfADay(Time.hour(t))
+                    """),
+            new Discharges("Time.minute", """
+                    module demo
+                    data NonNeg = Int
+                        invariant value >= 0
+                    behavior at : (t: Time) -> NonNeg constructs NonNeg
+                    let at (t) = NonNeg(Time.minute(t))
+                    """),
+            new Discharges("Time.minute", """
+                    module demo
+                    data OfAnHour = Int
+                        invariant value <= 59
+                    behavior at : (t: Time) -> OfAnHour constructs OfAnHour
+                    let at (t) = OfAnHour(Time.minute(t))
+                    """),
+            new Discharges("Time.second", """
+                    module demo
+                    data NonNeg = Int
+                        invariant value >= 0
+                    behavior at : (t: Time) -> NonNeg constructs NonNeg
+                    let at (t) = NonNeg(Time.second(t))
+                    """),
+            new Discharges("Time.second", """
+                    module demo
+                    data OfAMinute = Int
+                        invariant value <= 59
+                    behavior at : (t: Time) -> OfAMinute constructs OfAMinute
+                    let at (t) = OfAMinute(Time.second(t))
+                    """),
+            new Discharges("Date.month", """
+                    module demo
+                    data Positive = Int
+                        invariant value >= 1
+                    behavior on : (d: Date) -> Positive constructs Positive
+                    let on (d) = Positive(Date.month(d))
+                    """),
+            new Discharges("Date.month", """
+                    module demo
+                    data OfAYear = Int
+                        invariant value <= 12
+                    behavior on : (d: Date) -> OfAYear constructs OfAYear
+                    let on (d) = OfAYear(Date.month(d))
+                    """),
+            new Discharges("Date.day", """
+                    module demo
+                    data Positive = Int
+                        invariant value >= 1
+                    behavior on : (d: Date) -> Positive constructs Positive
+                    let on (d) = Positive(Date.day(d))
+                    """),
+            new Discharges("Date.day", """
+                    module demo
+                    data OfAMonth = Int
+                        invariant value <= 31
+                    behavior on : (d: Date) -> OfAMonth constructs OfAMonth
+                    let on (d) = OfAMonth(Date.day(d))
+                    """),
+
+            // And the two whose ends are where the calendar stops. The numbers are written out here
+            // rather than read from where the declaration reads them: a test that computed its own
+            // expectation the way the thing it tests does would agree with a wrong answer.
+            // `ADeclaredBoundIsWhereTheCarrierStopsTest` is what holds them to the carrier.
+            new Discharges("Date.year", """
+                    module demo
+                    data AfterTheFirst = Int
+                        invariant value >= -999999999
+                    behavior on : (d: Date) -> AfterTheFirst constructs AfterTheFirst
+                    let on (d) = AfterTheFirst(Date.year(d))
+                    """),
+            new Discharges("Date.year", """
+                    module demo
+                    data BeforeTheLast = Int
+                        invariant value <= 999999999
+                    behavior on : (d: Date) -> BeforeTheLast constructs BeforeTheLast
+                    let on (d) = BeforeTheLast(Date.year(d))
+                    """),
+            new Discharges("DateTime.minutesBetween", """
+                    module demo
+                    data NoEarlier = Int
+                        invariant value >= -1051898399472959
+                    behavior apart : (a: DateTime, b: DateTime) -> NoEarlier constructs NoEarlier
+                    let apart (a, b) = NoEarlier(DateTime.minutesBetween(a, b))
+                    """),
+            new Discharges("DateTime.minutesBetween", """
+                    module demo
+                    data NoLater = Int
+                        invariant value <= 1051898399472959
+                    behavior apart : (a: DateTime, b: DateTime) -> NoLater constructs NoLater
+                    let apart (a, b) = NoLater(DateTime.minutesBetween(a, b))
                     """));
 
     private static final List<Discharges> CHOOSING = List.of(

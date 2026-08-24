@@ -17,14 +17,20 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
- * A guard written as the library's {@code compare} against zero states the order it decides.
+ * A guard written as the library's {@code compare} states the order it decides, wherever the
+ * condition settles which side of nought the answer falls on.
  *
- * <p>{@code compare(a, b)} answers the sign of the order of its two arguments, so its result
- * standing in a comparison with zero is that same comparison between {@code a} and {@code b} — one
- * account, from which the six relations and both operand orders follow. Without it the same fact
+ * <p>{@code compare(a, b)} answers the sign of the order of its two arguments, so a condition
+ * leaving that sign on one side of nought is the same comparison between {@code a} and {@code b} —
+ * one account, from which the six relations and both operand orders follow. Without it the same fact
  * settles a construction when written with the operator and settles nothing when written as the
  * call, and which spelling an author reached for decides whether they see a warning they cannot
  * clear.
+ *
+ * <p>Which side the condition leaves is worked out from what the operation declares of its answer
+ * and what the condition says, together ({@code Conditions.standsToNought}). A comparison against
+ * nought is the common way to write one and is not the reading: {@code compare(a, b) >= 1} settles
+ * the same side, and over numbers that step so does {@code > -1}.
  *
  * <p>Read off the verdicts: what a guard failed to state and what it stated and could not settle are
  * both reported, and only the first is what this is about.
@@ -52,6 +58,14 @@ class AComparisonCallStatesTheOrderItDecidesTest {
             """;
 
     private static List<Verdict> verdictsOn(String type, String source) {
+        List<Verdict> on = checked(type, source);
+        assertFalse(on.isEmpty(), "no construction of `" + type + "` was checked at all");
+        return on;
+    }
+
+    /** The verdicts on constructions of {@code type}, which is empty where the program builds none
+     *  the check reaches. */
+    private static List<Verdict> checked(String type, String source) {
         List<Said> said = Collections.synchronizedList(new ArrayList<>());
         InvariantChecker.WATCHING = said;
         try {
@@ -62,10 +76,7 @@ class AComparisonCallStatesTheOrderItDecidesTest {
         } finally {
             InvariantChecker.WATCHING = null;
         }
-        List<Verdict> on = said.stream()
-                .filter(s -> s.type().equals(type)).map(Said::verdict).toList();
-        assertFalse(on.isEmpty(), "no construction of `" + type + "` was checked at all");
-        return on;
+        return said.stream().filter(s -> s.type().equals(type)).map(Said::verdict).toList();
     }
 
     private static void reads(String type, Verdict expected, String source) {
@@ -181,10 +192,113 @@ class AComparisonCallStatesTheOrderItDecidesTest {
         reads("Span", Verdict.UNKNOWN, m);
     }
 
-    /** A comparison against something other than zero is not one relation between the arguments —
-     * the sign is what the order decides, and a bound on the sign is not a bound on the values. */
+    /**
+     * A comparison that bounds how far the answer is from nought and not which side it falls says
+     * nothing about the order. What decides is what the condition leaves, and this one leaves both
+     * sides.
+     *
+     * <p>Over a count, which is where a comparison like this is still open: what the language's own
+     * comparisons answer is one of three numbers, so few conditions on one leave both sides.
+     */
     @Test
-    void aComparisonAgainstSomethingOtherThanZero() {
+    void aComparisonThatBoundsHowFarButNotWhichWayStatesNoOrder() {
+        String m = """
+                module demo
+
+                data Span = Int
+                    invariant value >= 0
+
+                data Held = { span: Span }
+                data TooFar
+
+                behavior settle : (from: Date, to: Date) -> Held | TooFar
+                    constructs Held, Span
+
+                let settle (from, to) = {
+                    guard Date.daysBetween(from, to) <= 5 else TooFar
+                    Held { span = Span(Date.daysBetween(from, to)) }
+                }
+                """;
+        reads("Span", Verdict.UNKNOWN, m);
+    }
+
+    /**
+     * And one against something other than nought that does settle the side states the order, which
+     * is what the answer running between two ends buys. {@code compare(hi, lo) >= 1} leaves the
+     * answer at one, so {@code hi} is above {@code lo} and the difference is above nought.
+     *
+     * <p>Read as the strict relation and not as the weak one: what it proves here is an invariant
+     * that a difference of nought does not satisfy. Read with a zero on the right the same program
+     * proves nothing — {@code >= 0} leaves the two equal — which is what tells the two apart.
+     */
+    @Test
+    void aComparisonAgainstSomethingOtherThanZeroThatSettlesTheSide() {
+        reads("Above", Verdict.PROVED, aboveZeroUnder("Int.compare(hi, lo) >= 1"));
+        reads("Above", Verdict.UNKNOWN, aboveZeroUnder("Int.compare(hi, lo) >= 0"));
+    }
+
+    /**
+     * A strict end below nought is the weak one at it, over numbers that step. {@code > -1} leaves
+     * the answer at nought or one, so the difference is at or above nought and no further — proving
+     * an invariant that admits nought and not one that refuses it.
+     *
+     * <p>Which is the step the numeric domain knows about and this does not say a second time. Said
+     * here, a sign would be free to fall between two whole numbers in one reader and not in the
+     * other.
+     */
+    @Test
+    void aStrictEndBelowNoughtIsTheWeakOneAtIt() {
+        reads("Span", Verdict.PROVED, atOrAboveZeroUnder("Int.compare(hi, lo) > -1"));
+        reads("Above", Verdict.UNKNOWN, aboveZeroUnder("Int.compare(hi, lo) > -1"));
+    }
+
+    /** A difference held above nought, under the guard {@code written}. */
+    private static String aboveZeroUnder(String written) {
+        return """
+                module demo
+
+                data Above = Int
+                    invariant value > 0
+
+                data Held = { span: Above }
+                data TooSmall
+
+                behavior settle : (hi: Int, lo: Int) -> Held | TooSmall
+                    constructs Held, Above
+
+                let settle (hi, lo) = {
+                    guard %s else TooSmall
+                    Held { span = Above(hi - lo) }
+                }
+                """.formatted(written);
+    }
+
+    /** The same difference held at or above nought. */
+    private static String atOrAboveZeroUnder(String written) {
+        return INTS + """
+
+                behavior settle : (hi: Int, lo: Int) -> Held | TooSmall
+                    constructs Held, Span
+
+                let settle (hi, lo) = {
+                    guard %s else TooSmall
+                    Held { span = Span(hi - lo) }
+                }
+                """.formatted(written);
+    }
+
+    /**
+     * And past the sign there is nothing to be unsettled about. A comparison answers one of three
+     * numbers — which is a bound on its result and not the order it decides ({@code OperationFacts},
+     * #1016) — so a guard asking for a second is a guard nothing gets through, and the construction
+     * behind it is not reached at all.
+     *
+     * <p>Beside the test above rather than folded into it: what that one says is that the order is
+     * not stated, and it needs a guard something satisfies to say it. This one says where the
+     * numbers stop, and needs one nothing does.
+     */
+    @Test
+    void nothingReachesWhatIsBehindAGuardAskingForAFourthSign() {
         String m = INTS + """
 
                 behavior settle : (hi: Int, lo: Int) -> Held | TooSmall
@@ -195,7 +309,8 @@ class AComparisonCallStatesTheOrderItDecidesTest {
                     Held { span = Span(hi - lo) }
                 }
                 """;
-        reads("Span", Verdict.UNKNOWN, m);
+        assertEquals(List.of(), checked("Span", m),
+                "a comparison answers at most one, so nothing stands where two was asked for");
     }
 
     /**

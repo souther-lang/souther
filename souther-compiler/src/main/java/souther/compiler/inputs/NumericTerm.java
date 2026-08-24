@@ -4,10 +4,11 @@ import souther.compiler.check.Carrier;
 import souther.compiler.check.Symbols;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Place;
-import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.semantics.ConstantArguments;
+import souther.compiler.semantics.ResultRange;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
@@ -28,6 +29,29 @@ import souther.compiler.types.ValueName;
  * position's type is what made a length unreadable at each of them.
  */
 public sealed interface NumericTerm {
+
+    /**
+     * A term that is what an operation answered, rather than what a location holds.
+     *
+     * <p>Here so that what is true of such a number is asked of the operation that answered it and
+     * not of which kind of term this is. The two were one thing while a size was the only such term:
+     * a size is never negative was written as a property of {@link SizeOf}, and the same proposition
+     * about {@code Int.abs} — declared beside it in {@code semantics} — was unreachable from here
+     * because the term said the fact rather than naming who says it (#1016).
+     *
+     * <p>What a term of this kind adds is the name of the operation, and what that settles today is
+     * one of the three questions asked here: {@link #intrinsicBounds} is answered from the
+     * operation and needs nothing else. The other two are still written to {@link SizeOf} — a
+     * carrier is whole because a size counts, and {@link #read} counts what the observation holds
+     * rather than applying the operation to it. Both are right for a measure and neither would be
+     * for a term that is what some other operation answered, so a second such term is not a matter
+     * of implementing this one method (#1027).
+     */
+    sealed interface ResultOfOperation extends NumericTerm {
+
+        /** The operation whose answer this is. */
+        ValueName.Stdlib operation();
+    }
 
     /** The number a location holds: a numeric parameter, a field of one, a numeric newtype's value. */
     record ValueOf(TermPath path) implements NumericTerm {
@@ -58,7 +82,13 @@ public sealed interface NumericTerm {
      * one pair a reader might actually confuse undistinguished. A check that looks total and is
      * blind in the middle is worse than a stated premise, so the premise is stated.
      */
-    record SizeOf(ValueName.Stdlib measure, TermPath path) implements NumericTerm {
+    record SizeOf(ValueName.Stdlib measure, TermPath path) implements ResultOfOperation {
+
+        /** The measure, under the name every term of this kind answers what answered it by. */
+        @Override
+        public ValueName.Stdlib operation() {
+            return measure;
+        }
 
         @Override
         public String toString() {
@@ -133,15 +163,27 @@ public sealed interface NumericTerm {
     /**
      * What this term's values are, before any rule is read.
      *
-     * <p>Null where the term is a location's own content: what an {@code Int} holds is what its type
-     * holds, and a position nobody bounded is one the model draws no line through (ADR-0090). A size
-     * is not that — it is never negative, and the procedure knows that much without being told
-     * (spec §invariant-discharge-terms), which is what keeps a guard at zero from asking for a row
-     * one below it.
+     * <p>Open where the term is a location's own content: what an {@code Int} holds is what its type
+     * holds, and a position nobody bounded is one the model draws no line through (ADR-0090). A term
+     * that is what an operation answered is not that — a size is never negative, which is what keeps
+     * a guard at zero from asking for a row one below it (spec §invariant-discharge-terms).
+     *
+     * <p><b>Asked of the operation, not answered here.</b> That a size is at or above nought is one
+     * proposition with {@code Int.abs(x) >= 0}, and both are declared where what is true of the
+     * language's operations is declared. Written out here instead, it was the same sentence in a
+     * second vocabulary, and the half declared in {@code semantics} could not be reached from a term
+     * (#1016).
+     *
+     * <p>Read with nothing said about the arguments, because a term of this kind carries none: what
+     * a size is taken of is a container, and a bound may only name an argument that is a number
+     * ({@code check.DischargeRules.holdBound}), so an operation like these declares no row that
+     * names one. A term whose operation does take numbers would have to answer them here rather than
+     * be read the same way and quietly come back wider.
      */
-    default NumericDomain.Bounds ownBounds() {
-        return this instanceof SizeOf
-                ? new NumericDomain.Bounds(Endpoint.inclusive(Count.ZERO), null) : null;
+    default NumericDomain.Bounds intrinsicBounds() {
+        return this instanceof ResultOfOperation answered
+                ? ResultRange.of(answered.operation(), ConstantArguments.NONE)
+                : NumericDomain.Bounds.OPEN;
     }
 
     /** The count at a value, keeping why there is none where there is none. */
