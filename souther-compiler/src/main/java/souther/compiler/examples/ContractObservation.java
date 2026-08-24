@@ -75,32 +75,65 @@ public sealed interface ContractObservation {
     /**
      * A clause did not hold of what the implementation answered.
      *
-     * <p>What was answered is carried twice, and on purpose. {@link StandinEntry} keeps a stated
-     * value and its shown text apart for the reason given there — what a machine reads and what a
-     * person reads must not be one String — and the same holds here from the other side: a consumer
-     * given only the {@link ObservedValue} could not render it, the writer that does being this
-     * package's and needing the module's declarations to tell a newtype from what it wraps. So the
-     * text is written where those are in reach and travels beside the value rather than instead of
-     * it.
+     * <p>What was answered is carried twice, and on purpose: structurally, for a reader that takes
+     * it apart, and written the way a fixture writes a value, for one that shows it. A consumer
+     * given only the {@link ObservedValue} could not render it — the writer that does is this
+     * package's, and it needs the module's declarations to tell a newtype from what it wraps — so
+     * the text travels beside the value rather than instead of it. {@link StandinEntry} keeps a
+     * stated value and its shown text apart for the same reason.
      *
-     * @param why           what the clause said when it did not hold, in the words the runtime
-     *                      writes about one
-     * @param answered      what the implementation answered, structural and loader-free
-     * @param shownAnswered the same, written the way a fixture writes a value
+     * <p>Not a record, and for a different reason from {@link NoClauseWasBroken}'s. A record's
+     * canonical constructor says that any combination of its components is a value: true of two
+     * independent observations, and false the moment one of them is a rendering of another. Written
+     * as one, an {@code answered} of seven could be built beside a {@code shownAnswered} of
+     * {@code "TodoId(99)"} and the two accessors would say different things about one observation;
+     * and the rendering would sit inside {@code equals}, so writing a value differently would make
+     * it a different observation. So the constructor is this package's, and the two are written
+     * together where the declarations that relate them are in reach.
+     *
+     * <p>No equality is defined. Two applications are two observations rather than one answered
+     * twice — which is what this face says everywhere about asking a row again — so there is nothing
+     * for a value equality over them to mean.
      */
-    record Broken(String why, ObservedValue answered, String shownAnswered)
-            implements ContractObservation {
+    final class Broken implements ContractObservation {
 
-        public Broken {
+        private final String why;
+        private final ObservedValue answered;
+        private final String shownAnswered;
+
+        Broken(String why, ObservedValue answered, String shownAnswered) {
             if (why == null || answered == null || shownAnswered == null) {
                 throw new IllegalArgumentException("a broken clause said something about a value");
             }
+            this.why = why;
+            this.answered = answered;
+            this.shownAnswered = shownAnswered;
+        }
+
+        /** What the clause said when it did not hold, in the words the runtime writes about one. */
+        public String why() {
+            return why;
+        }
+
+        /** What the implementation answered, structural and loader-free. */
+        public ObservedValue answered() {
+            return answered;
+        }
+
+        /** The same, written the way a fixture writes a value. */
+        public String shownAnswered() {
+            return shownAnswered;
         }
 
         @Override
         public String shown() {
             return "a clause did not hold: " + why
                     + System.lineSeparator() + "  answered: " + shownAnswered;
+        }
+
+        @Override
+        public String toString() {
+            return getClass().getSimpleName() + "(" + why + ")";
         }
     }
 
