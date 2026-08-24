@@ -623,9 +623,10 @@ public final class GuardThresholds {
                     new BlockReason.ComparisonBetweenPositions();
             case ComparisonAssessment.CutsNothing _ ->
                     new BlockReason.ComparisonCuttingNothing();
+            case ComparisonAssessment.OutsideTheDomain _ ->
+                    new BlockReason.ComparisonCuttingOutsideDomain();
             case ComparisonAssessment.Unread unread -> unread.why();
             case ComparisonAssessment.AtAPosition _, ComparisonAssessment.NoInput _,
-                 ComparisonAssessment.OutsideTheDomain _,
                  ComparisonAssessment.AnswerDependent _ -> null;
         };
         if (why == null) {

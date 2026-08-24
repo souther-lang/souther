@@ -1073,6 +1073,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                             + " is not worked out";
             case RULE_CUTS_NOTHING ->
                     "it was read to the end and cuts nothing this position appears in";
+            case RULE_CUTS_OUTSIDE_WHAT_THE_QUANTITY_HOLDS ->
+                    "it was read to the end and draws its line outside what the quantity it cuts"
+                            + " ever holds";
             // And the four a position reaches, written about the position, because that is all
             // there is: nothing observed a rule to name. Which reasons reach which of the two is
             // settled by the authority a reason belongs to

@@ -240,9 +240,18 @@ public final class EnsuresThresholds {
             case ComparisonAssessment.Unread unread -> reportUnread(
                     new RuleRef.Ensures(rule.id(), clause), comparison, rule.value(), unread.why(),
                     reads, symbols, out.unread());
-            case ComparisonAssessment.AnswerDependent _, ComparisonAssessment.NoInput _,
-                 ComparisonAssessment.CutsNothing _,
-                 ComparisonAssessment.OutsideTheDomain _ -> { }
+            // Read to the end, and the positions are left with no class of their own from this
+            // rule. Which of the two it was is worth saying: the quantity was empty, or the line
+            // falls where the quantity never runs. Neither leaves a measure short of anything, and
+            // both are things the model states at a position a report is asked about.
+            case ComparisonAssessment.CutsNothing _ -> reportUnread(
+                    new RuleRef.Ensures(rule.id(), clause), comparison, rule.value(),
+                    new BlockReason.ComparisonCuttingNothing(), reads, symbols, out.unread());
+            case ComparisonAssessment.OutsideTheDomain _ -> reportUnread(
+                    new RuleRef.Ensures(rule.id(), clause), comparison, rule.value(),
+                    new BlockReason.ComparisonCuttingOutsideDomain(), reads, symbols,
+                    out.unread());
+            case ComparisonAssessment.AnswerDependent _, ComparisonAssessment.NoInput _ -> { }
         }
     }
 
