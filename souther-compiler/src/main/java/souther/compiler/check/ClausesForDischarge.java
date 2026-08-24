@@ -57,7 +57,8 @@ public final class ClausesForDischarge {
                                          Map<String, Hir.FnDef> published) {
         Hir.Module settled = ClauseHelpers.settled(expandable.module(), symbols);
         return new ClausesForDischarge(settled, HelperInliner.forHelpers(settled.name(),
-                HelperInliner.helpersOf(settled), published, InliningPolicy.DISCHARGE));
+                HelperInliner.helpersOf(settled), published, InliningPolicy.DISCHARGE,
+                symbols.library()));
     }
 
     /** The declarations that state an {@code invariant}, as their authors wrote them. */

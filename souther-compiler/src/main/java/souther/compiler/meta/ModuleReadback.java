@@ -1,5 +1,6 @@
 package souther.compiler.meta;
 
+import souther.compiler.stdlib.LibraryNames;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.DeclaredNames;
 import souther.compiler.check.Exposing;
@@ -97,7 +98,8 @@ public final class ModuleReadback {
     }
 
     /** What {@code classes} carry for {@code moduleName}. */
-    public static Readback<ReadableModule> read(String moduleName, PublishedClasses classes) {
+    public static Readback<ReadableModule> read(String moduleName, PublishedClasses classes,
+                                                LibraryNames library) {
         PublishedClasses.Declarations found;
         switch (classes.of(declarationsClassOf(moduleName))) {
             case PublishedClasses.Carried.NoSuchClass _ -> {
@@ -213,7 +215,8 @@ public final class ModuleReadback {
         // Which imports are needed is asked of the header and the declarations — everything that was
         // published except the import lines themselves.
         Exposing.Checked checked =
-                Exposing.check(withNeededImports(parsed, m.header() + "\n" + declarations));
+                Exposing.check(withNeededImports(parsed, m.header() + "\n" + declarations),
+                        library);
         if (!checked.refused().isEmpty()) {
             List<Readback.Exposure> crossed = checked.refused().stream()
                     .map(ModuleReadback::asAnArtifactsFailure).toList();

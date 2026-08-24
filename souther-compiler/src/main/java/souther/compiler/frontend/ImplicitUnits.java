@@ -35,7 +35,7 @@ public final class ImplicitUnits {
     /** Names that mean something without a declaration: the primitives and library namespaces, the
      * runtime's arithmetic failure cases, and Option's two cases (which a module may not declare).
      * The namespaces come from {@link Reserved} — the language's constant — rather than from
-     * {@code Prelude}, whose loading parses sources back through {@link #expand} and so must not
+     * {@code check.StdlibLoader}, which parses sources back through {@link #expand} and so must not
      * be what this class initializes against. */
     private static final Set<String> BUILT_IN = builtIn();
 

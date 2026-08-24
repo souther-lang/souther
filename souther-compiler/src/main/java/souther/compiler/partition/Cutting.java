@@ -61,7 +61,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         ComparedTerms apart = ComparedTerms.of(comparison, read, reads, symbols);
         if (apart != null) {
             return new Cutting(
-                    new BorderQuantity.Apart(behavior, apart.on(), apart.against(), apart.carrier()),
+                    new BorderQuantity.Apart(behavior, apart.on(), apart.against(),
+                            apart.carriers()),
                     new Level.ACount(apart.stepsApart()),
                     new ComparisonClaim.Cut(apart.valueBelongsBelow(), apart.holdsAtTheLine()),
                     null);

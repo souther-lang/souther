@@ -908,7 +908,13 @@ class CompileExampleGenerateTest {
                             | "a wide one" : (wide) -> Accepted { at = "now" }
                         """;
 
+        // The rows composed for a class. A row through an arm is composed from the classes a way
+        // into it leaves and against no stated value — the origins are the class search's, and
+        // nothing here says an arm's row should be written the same way. Included, this would be
+        // asserting that of a search that was never given them.
         List<String> rows = generated(written).get("submit").composed().rows().stream()
+                .filter(row -> row.purposes().stream()
+                        .anyMatch(Generator.Purpose.ForAClass.class::isInstance))
                 .map(CompileExampleGenerateTest::inputsOf).toList();
         assertFalse(rows.isEmpty(), "there are classes the written row is not in");
         assertTrue(rows.stream().allMatch(row -> row.contains("...wide")),
@@ -1077,8 +1083,10 @@ class CompileExampleGenerateTest {
         assertFalse(notAsked.contains("`1 < s < 5`"),
                 "and no point away from one either: " + notAsked);
         // And what a run that asked for no edges does still say, so this is not passing on a block
-        // with nothing in it.
-        assertTrue(notAsked.contains("nothing offers a row for `else` in `label`"), notAsked);
+        // with nothing in it. The arm is looked for at the classes the way into it leaves, and
+        // every value of them is refused here — which is the search's answer and is said as one.
+        assertTrue(notAsked.contains("// no row for `else` in `label`: every value tried was"
+                + " refused at construction"), notAsked);
     }
 
     /**

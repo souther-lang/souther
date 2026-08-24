@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
@@ -108,7 +109,7 @@ public final class CallElaborator {
         if (!(v.denotes() instanceof ValueName.Stdlib lib)) {
             return null;
         }
-        Prelude.PreludeEntry entry = Prelude.entry(lib.qualified());
+        Stdlib.Entry entry = ctx.symbols().library().entry(lib.qualified());
         if (entry == null || !entry.declaration().params().isEmpty()) {
             return null;
         }
@@ -471,7 +472,7 @@ public final class CallElaborator {
                 }
             }
         } catch (CompileException stepError) {
-            int seed = BottomInfer.untypedEmptySeed(args, signature, bind);
+            int seed = BottomInfer.untypedEmptySeed(ctx.symbols().library(), args, signature, bind);
             if (seed < 0 || !BottomInfer.reportsUnresolvedBottom(stepError)) {
                 throw stepError;
             }
@@ -524,7 +525,7 @@ public final class CallElaborator {
                     + "` applies something that is not a name, at " + call.pos());
         }
         boolean library = callee.denotes() instanceof ValueName.Stdlib;
-        Prelude.PreludeEntry entry = library ? Prelude.entry(callee.reaches()) : null;
+        Stdlib.Entry entry = library ? ctx.symbols().library().entry(callee.reaches()) : null;
         // A declaration written with no parameter list is a value ([#fn-declaration]), and an empty
         // `()` would be a second spelling of it. The library was the last place that spelling was
         // still accepted.
@@ -538,7 +539,7 @@ public final class CallElaborator {
         // library call — a recursive helper such as `List.foldFrom` — is not one of these and takes
         // the paths below, as any helper does.
         if (entry != null && entry.declaration().body() instanceof Hir.FnBody.Intrinsic kernel) {
-            Prelude.Signature intrinsic = entry.signature();
+            Stdlib.Signature intrinsic = entry.signature();
             if (args.size() != intrinsic.params().size()) {
                 throw CompileException.of(Diagnostic
                                 .at(call.appliedAt())
@@ -627,7 +628,8 @@ public final class CallElaborator {
         if (required == null) {
             Elaborator.optionCaseWritten(call.written(), call.pos());
             CompileException bareLibraryName = StdlibNames.writtenBare(
-                    call.written(), call.written(), call.name().region());
+                    ctx.symbols().library().names(), call.written(), call.written(),
+                    call.name().region());
             if (bareLibraryName != null) {
                 throw bareLibraryName;
             }

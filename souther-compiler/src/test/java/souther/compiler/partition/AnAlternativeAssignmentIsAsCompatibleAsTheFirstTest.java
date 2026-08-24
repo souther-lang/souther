@@ -9,8 +9,8 @@ import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.InputDomain;
-import souther.compiler.interaction.Interaction;
-import souther.compiler.interaction.Interactions;
+import souther.compiler.reading.Interaction;
+import souther.compiler.reading.CoverageRead;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -70,7 +70,13 @@ class AnAlternativeAssignmentIsAsCompatibleAsTheFirstTest {
             let fee (e, p, q) = Fee(one(p) + one(q))
             """;
 
-    private record Model(Generator.Subject subject, List<Interaction> groups) {}
+    private record Model(Generator.Subject subject, CoverageRead.Read read) {
+
+        /** The groups of the one reading, for a caller asking about the combinations alone. */
+        List<Interaction> groups() {
+            return read.interactions();
+        }
+    }
 
     private static Model model() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
@@ -95,7 +101,7 @@ class AnAlternativeAssignmentIsAsCompatibleAsTheFirstTest {
                 new BehaviorInputs(spec.params().stream().map(Hir.Param::name).toList(),
                         sig.inputTypes(), symbols, ReadAs.THE_COMPILATION_DOES),
                 axes.axes(), HeldCounts.of(inputs, symbols)),
-                Interactions.of(body, plan, inputs, symbols));
+                CoverageRead.of(spec.name(), body, plan, inputs, symbols));
     }
 
     /** The positions under two cases are both axes, which is what the assignments have to hold. */
@@ -122,7 +128,7 @@ class AnAlternativeAssignmentIsAsCompatibleAsTheFirstTest {
 
         Generator.GenerationResult filled = Generator.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.refusing(AnAlternativeAssignmentIsAsCompatibleAsTheFirstTest::notTheFirst),
-                model.groups(), Generator.Trial.NOTHING_RUNS, List.of(), Set.of(), every,
+                model.read(), Generator.Trial.NOTHING_RUNS, List.of(), Set.of(), every,
                 Budgets.generation());
 
         assertEquals(List.of(), filled.unresolved().stream()

@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.ast.Hir;
 import souther.compiler.derive.Deriver;
 import souther.compiler.meta.ModulePath;
@@ -55,7 +56,7 @@ class AnEnumerationIsOneAnswerToTheLanguageAndTheBoundaryTest {
             """;
 
     private final Hir.Module module = derive(MODULE);
-    private final Symbols symbols = TypeChecker.symbols(module);
+    private final Symbols symbols = TypeChecker.symbols(module, DefaultStdlib.get());
 
     @Test
     void everyNamedSumIsAnEnumerationToBothOrToNeither() {
@@ -138,6 +139,6 @@ class AnEnumerationIsOneAnswerToTheLanguageAndTheBoundaryTest {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("m.sou", source);
         return Deriver.derive(Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
-                .db().ask(new Names.Resolved("m")).value());
+                .db().ask(new Names.Resolved("m")).value(), DefaultStdlib.get());
     }
 }

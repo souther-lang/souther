@@ -1413,6 +1413,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case THE_GROUP_WAS_NOT_OFFERED ->
                     "the decisions that settle " + at + " have more combinations together than this"
                             + " offers a row for, so none of them was looked in";
+            // What the partition divides this body's positions into, and not whether a run gets
+            // there. Some decision on the way places at no class, so there is nothing to put a
+            // value at that steers a row along it — a row put at what the rest of the way leaves
+            // may go the other way round that fork.
+            case THE_WAY_IN_PLACES_AT_NO_CLASS ->
+                    "the way to " + at + " holds a decision that no class of any position stands"
+                            + " for, so nothing here can steer a row along it";
             case THE_RULES_LEAVE_NOTHING_THERE ->
                     "the rules leave no value at " + at;
             // What the model settles, said as that. A class under one case of a sum and a class

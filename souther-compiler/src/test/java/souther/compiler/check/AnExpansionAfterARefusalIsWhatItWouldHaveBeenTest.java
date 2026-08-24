@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.CompileException;
@@ -56,7 +57,7 @@ class AnExpansionAfterARefusalIsWhatItWouldHaveBeenTest {
 
     private static HelperInliner inliner() {
         Ast.Module parsed = CstFrontend.parse(MODULE);
-        return HelperInliner.forModule(Resolve.module(parsed, SyntaxSymbols.of(parsed)));
+        return HelperInliner.forModule(Resolve.module(parsed, SyntaxSymbols.of(parsed, DefaultStdlib.get())), DefaultStdlib.get());
     }
 
     private static Hir.Expr expand(HelperInliner inliner, String helper) {

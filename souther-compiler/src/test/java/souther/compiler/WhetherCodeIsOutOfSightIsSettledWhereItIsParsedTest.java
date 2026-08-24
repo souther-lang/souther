@@ -6,7 +6,6 @@ import souther.compiler.diag.QuotedFrom;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.HelperInliner;
-import souther.compiler.check.Prelude;
 import souther.compiler.check.Resolve;
 import souther.compiler.check.SyntaxSymbols;
 import souther.compiler.diag.SourcePos;
@@ -54,7 +53,7 @@ class WhetherCodeIsOutOfSightIsSettledWhereItIsParsedTest {
     @Test
     void everyPositionOfTheStandardLibraryIsOutOfSight() {
         List<SourcePos> positions = new ArrayList<>();
-        Prelude.helpers().values().forEach(fn -> collect(fn.writtenBody(), positions));
+        DefaultStdlib.get().helpers().values().forEach(fn -> collect(fn.writtenBody(), positions));
 
         assertFalse(positions.isEmpty(), "the library has bodies to have positions in");
         assertEquals(List.of(), positions.stream().filter(p -> !(p.quotedFrom() instanceof QuotedFrom.TextItCannotShow)).toList(),
@@ -78,7 +77,7 @@ class WhetherCodeIsOutOfSightIsSettledWhereItIsParsedTest {
         ReadableModule read = assertInstanceOf(ReadableModule.class,
                 assertInstanceOf(Readback.Ready.class,
                         ModuleReadback.read("lib.rule",
-                                ((souther.compiler.meta.ModulePath) classes::get).declarations()),
+                                ((souther.compiler.meta.ModulePath) classes::get).declarations(), DefaultStdlib.get().names()),
                         "the module was published and is on the path").value());
 
         List<SourcePos> positions = new ArrayList<>();
@@ -190,8 +189,8 @@ class WhetherCodeIsOutOfSightIsSettledWhereItIsParsedTest {
     /** {@code fn}'s body as a check downstream reads it, with every helper call expanded. */
     private static Hir.Expr bodyOf(String source, String fn) {
         var parsed = CstFrontend.parseWithSlices(source, null, new SourceId("demo.sou"));
-        Hir.Module module = Resolve.module(parsed.module(), SyntaxSymbols.of(parsed.module()));
-        HelperInliner inliner = HelperInliner.forModule(module);
+        Hir.Module module = Resolve.module(parsed.module(), SyntaxSymbols.of(parsed.module(), DefaultStdlib.get()));
+        HelperInliner inliner = HelperInliner.forModule(module, DefaultStdlib.get());
         Hir.FnDef body = inliner.held().get(fn);
         assertNotNull(body, "the fn under test is one of the module's own");
         return inliner.inline(body.writtenBody(), inliner.bodyOf(fn));

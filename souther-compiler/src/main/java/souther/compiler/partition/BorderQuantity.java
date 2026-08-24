@@ -125,42 +125,99 @@ public sealed interface BorderQuantity {
      * one apart are one apart — read by walking, every such rule was met by no row and had no row
      * anything could compose.
      *
-     * <p>One carrier, because both sides are ordered by it. Two operands may be comparable and share
-     * no carrier — an enumeration's case is comparable on its sum's order without ranging over it —
-     * so what makes this line measurable is the carrier and not the type the comparison type-checked
-     * under.
+     * <p>An order apiece, and the two need not be one. Which order a position is read and written on
+     * is a question about that position, and a distance runs between two positions that answer it
+     * differently as readily as between two that agree: a decimal against a whole number is one
+     * distance written two ways. Held as one order for the pair, whichever of them a caller happened
+     * to have was used to write both back and to read both off a row — and where that order belonged
+     * to neither, the border was met by no row and composed for by none (#1018).
+     *
+     * <p>What the two do have to share is the counts, and only where there are counts to share.
+     * Where they meet is a place on both orders whatever they are; where they stand a number apart
+     * is a number in one arithmetic, and two orders with different origins or different steps have
+     * no such number ({@link Carrier#sharesCountSpaceWith}). A pair that shares none is an
+     * arithmetic form over both positions and is read as {@link OverAForm}, whose coefficients are
+     * where a conversion between two orders is written.
      */
-    record Apart(String behavior, NumericTerm on, NumericTerm against, Carrier of)
-            implements BorderQuantity {
+    record Apart(String behavior, NumericTerm on, NumericTerm against,
+                 Map<NumericTerm, Carrier> carriers) implements BorderQuantity {
 
         public Apart {
-            if (behavior == null || on == null || against == null || of == null) {
-                throw new IllegalArgumentException("a distance names two positions and one order");
+            if (behavior == null || on == null || against == null || carriers == null) {
+                throw new IllegalArgumentException("a distance names two positions and their orders");
             }
+            // First, because a distance between one position and itself is what the rest of this
+            // cannot be asked about: two terms that are one term are one key, and a map of them
+            // would refuse the pair with a sentence about maps.
+            if (on.equals(against)) {
+                throw new IllegalArgumentException(
+                        "a distance runs between two positions, and this names one twice: " + on);
+            }
+            carriers = Map.copyOf(carriers);
+            // An order per position, held here so no reader has to answer for a position with none.
+            // A map beside a pair is two structures, and two structures are what come apart.
+            if (!carriers.keySet().equals(java.util.Set.of(on, against))) {
+                throw new IllegalArgumentException("a distance is between the positions it names,"
+                        + " each on one order: " + java.util.Set.of(on, against) + " against "
+                        + carriers.keySet());
+            }
+            Carrier here = carriers.get(on);
+            Carrier there = carriers.get(against);
+            if (!here.standsAgainst(there)) {
+                throw new IllegalArgumentException("a distance is between two orders a value of"
+                        + " one stands somewhere on: " + here + " against " + there);
+            }
+        }
+
+        /** The order the first position is read and written on. */
+        private Carrier onCarrier() {
+            return carriers.get(on);
+        }
+
+        /** The order the other position is read and written on. */
+        private Carrier againstCarrier() {
+            return carriers.get(against);
+        }
+
+        /** Whether the two positions stand on one order, which is every pair a rule names itself and
+         *  is what decides which search a point of this line is looked for by. */
+        private boolean onOneCarrier() {
+            return onCarrier().equals(againstCarrier());
+        }
+
+        /** Whether a distance between them is a number at all, which two strings give no. Asked of
+         *  either, since a pair that shares its counts shares whether it has any. */
+        private boolean counts() {
+            return onCarrier().counts();
         }
 
         /**
-         * A whole number of the carrier's own steps, where it has one; every number where it does
-         * not; and only the level where the two meet where the carrier's values do not count at all.
+         * A whole number of steps where both orders step; every number where either does not; and
+         * only the level where the two meet where their values do not count at all.
          *
          * <p>Three answers and not two. Two decimals stand every distance apart and no next distance
          * apart, and two strings stand no measurable distance apart and are still one above the
-         * other — so what a carrier says about its steps and what it says about its numbers are
-         * asked separately.
+         * other — so what an order says about its steps and what it says about its numbers are asked
+         * separately.
+         *
+         * <p>Of both orders and not of one, which is the same rule a form of several positions is
+         * spaced by ({@link LevelSpace#addedUpOver}): a distance between a whole number and a decimal
+         * lands wherever the decimal does.
          */
         @Override
         public LevelSpace levels() {
-            if (!of.counts()) {
+            if (!counts()) {
                 return LevelSpace.onlyWhereTheyMeet();
             }
-            return of.spacing() == souther.compiler.numeric.Granularity.DISCRETE
+            return LevelSpace.addedUpOver(carriers.values())
+                    == souther.compiler.numeric.Granularity.DISCRETE
                     ? LevelSpace.steppingBy(java.math.BigDecimal.ONE) : LevelSpace.dense();
         }
 
-        /** Either end's, which is the one order both are ordered by. */
+        /** That position's own, which is what it is read off a row and written back on. */
         @Override
         public Carrier carrierOf(NumericTerm asked) {
-            return on.equals(asked) || against.equals(asked) ? of : null;
+            return carriers.get(asked);
         }
 
         /**
@@ -177,8 +234,11 @@ public sealed interface BorderQuantity {
          */
         @Override
         public Stands standsAt(Criterion where, Observation row) {
-            NumericTerm.Reading here = on.read(row.at(on.path()), of);
-            NumericTerm.Reading there = against.read(row.at(against.path()), of);
+            // Each on its own order. Read on one order for the pair, a position written back
+            // differently from the other was read as a value it does not hold — a date read as a
+            // whole number is no number at all, and the row stood at nothing (#1018).
+            NumericTerm.Reading here = on.read(row.at(on.path()), onCarrier());
+            NumericTerm.Reading there = against.read(row.at(against.path()), againstCarrier());
             if (here instanceof NumericTerm.Reading.Missing
                     || there instanceof NumericTerm.Reading.Missing) {
                 return Stands.UNREADABLE;
@@ -187,7 +247,7 @@ public sealed interface BorderQuantity {
                     || !(there instanceof NumericTerm.Reading.Number againstAt)) {
                 return Stands.NO;
             }
-            if (!of.counts()) {
+            if (!counts()) {
                 // No number between them, and an order all the same. The only level such a quantity
                 // takes is the one where they meet, so what the item asks is which way round they
                 // stand from it.
@@ -213,9 +273,32 @@ public sealed interface BorderQuantity {
             };
         }
 
+        /**
+         * The pair's own search where both stand on one order, and the form's where they do not.
+         *
+         * <p>Two lowerings and not a search that takes two orders. What a point of this line asks
+         * for is an assignment of both positions, and there is already a search that assigns several
+         * positions each on its own order ({@link Standing.OfAForm}) — a distance is that form with
+         * coefficients of one and minus one. So the pair that needs it is handed to it, and the
+         * search written for one order is left answering for exactly the pairs it was written for.
+         *
+         * <p>Which is not a preference between them. A form adds its positions up and two strings
+         * add up to nothing, so a pair with no counts can only be searched for by the first;
+         * generalising that one to two orders would have left it deciding, per pair, which of them
+         * to walk along and which to land on — the same shape of premise this issue was about.
+         *
+         * <p>The quantity is unchanged either way. What a border is of and how a row for it is found
+         * are two questions ({@link Standing}), so a distance searched for as a form is still a
+         * distance, and a report still names it beside the other position rather than as a form.
+         */
         @Override
         public Standing standingAt(Criterion where) {
-            return new Standing.OfTwoOnOneCarrier(on, against, of, where);
+            if (onOneCarrier()) {
+                return new Standing.OfTwoOnOneCarrier(on, against, onCarrier(), where);
+            }
+            return new Standing.OfAForm(
+                    LinearForm.<NumericTerm>atom(on).minus(LinearForm.atom(against)),
+                    carriers, levels(), where);
         }
 
         @Override
@@ -328,17 +411,12 @@ public sealed interface BorderQuantity {
         /**
          * How the sum steps, which is how its positions step together.
          *
-         * <p>A sum steps only where every one of its terms does: a whole number added to a decimal
-         * lands wherever the decimal does. Read off the one order a form was held to, this was
-         * whatever that order said; a form of whole numbers still answers what it did.
+         * <p>Asked of {@link LevelSpace#addedUpOver}, which a distance asks too. The two are one
+         * question — a distance is a form of two positions weighed one and minus one — and answered
+         * apiece they were free to disagree about a pair of orders that step differently.
          */
         souther.compiler.numeric.Granularity spacing() {
-            for (Carrier each : on.values()) {
-                if (each.spacing() != souther.compiler.numeric.Granularity.DISCRETE) {
-                    return souther.compiler.numeric.Granularity.DENSE;
-                }
-            }
-            return souther.compiler.numeric.Granularity.DISCRETE;
+            return LevelSpace.addedUpOver(on.values());
         }
 
         /** The order that position is read and written on, and null for a position not in the

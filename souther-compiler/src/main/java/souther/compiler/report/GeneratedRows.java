@@ -490,9 +490,15 @@ public final class GeneratedRows {
                 // Each of what was tried, because they are not one fact: a combination the model
                 // refuses and one the search stopped at are different news, and a line carrying
                 // whichever came first carried the order the cells were walked in.
+                // Named for the finding and not for where the search went. A class's own search is
+                // about the class either way; an arm's is looked for at the classes a way into it
+                // leaves, and named for those it read as the class's line — the same words twice,
+                // so the arm's news was dropped as a repeat of the class's (issue #1009).
                 case GenerationOutcome.CannotGenerate cannot -> cannot.why().forEach(why ->
                         say(out, said, String.format("// no row for `%s` in `%s`: %s%n",
-                                why.subject(), behavior, saidOf(why))));
+                                each.finding().about() instanceof About.AnArmNoRowGoesThrough
+                                        ? about(each.finding()) : why.subject(),
+                                behavior, saidOf(why))));
                 // Told apart from the one above it in its own words. A strategy that tried and
                 // composed nothing and a finding nothing takes are different pieces of news: the
                 // first says a row may still be writable by hand, the second says no run of this
@@ -526,9 +532,12 @@ public final class GeneratedRows {
                 // Beside the line above rather than folded into it. That one is a budget an author
                 // can raise; this is a walk that was never made, and a reader told the first where
                 // the second happened would raise a limit that changes nothing.
+                // What was not walked, and not what is missing from the block. A row through an arm
+                // behind one of these comes from the way into the arm and is offered above, so a
+                // line saying rows were not offered here says a row is owed where one is written.
                 case GenerationReason.GroupsNotOffered held -> String.format(
-                        "// no rows offered for %d %s of `%s`: each has more combinations together"
-                                + " than this walks, so none of them was looked in%n",
+                        "// the combinations of %d %s of `%s` were not looked in: each has more of"
+                                + " them together than this walks%n",
                         held.groups(), held.groups() == 1 ? "group of decisions" : "groups of"
                                 + " decisions", held.behavior());
                 case GenerationReason.NothingToBuildAgainst none -> String.format(
@@ -642,6 +651,9 @@ public final class GeneratedRows {
             case NO_CERTIFIED_WITNESS ->
                     "no row composed for it was seen reaching it, which does not make the"
                             + " combination unreachable";
+            case THE_WAY_IN_PLACES_AT_NO_CLASS ->
+                    "the way to it holds a decision that no class of any position stands for, so"
+                            + " nothing here can steer a row along it";
             case THE_RULES_LEAVE_NOTHING_THERE ->
                     "the rules leave no value here, and every combination they do leave was tried";
             case ONE_POSITION_CANNOT_BE_BOTH ->

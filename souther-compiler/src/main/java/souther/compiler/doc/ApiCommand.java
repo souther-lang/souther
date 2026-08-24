@@ -1,7 +1,8 @@
 package souther.compiler.doc;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.Reserved;
-import souther.compiler.check.Prelude;
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.ast.Hir;
 import souther.compiler.types.Type;
 
@@ -30,8 +31,14 @@ public final class ApiCommand {
     }
 
     static int run(String[] args, PrintStream out, PrintStream err, Caller caller) {
+        // The boundary: a command that lists the library is not downstream of a compile, so this is
+        // where the process's library is read. Everything below is handed the value.
+        return run(args, out, err, caller, DefaultStdlib.get());
+    }
+
+    static int run(String[] args, PrintStream out, PrintStream err, Caller caller, Stdlib stdlib) {
         if (args.length == 0) {
-            listPublished(out, null);
+            listPublished(out, null, stdlib);
             return 0;
         }
         // Which of the things this line asked for is the one being answered. The forms below read
@@ -58,7 +65,7 @@ public final class ApiCommand {
                 return 2;
             }
             String needle = args[1].toLowerCase();
-            List<String> found = surface().entrySet().stream()
+            List<String> found = surface(stdlib).entrySet().stream()
                     .filter(e -> e.getKey().toLowerCase().contains(needle))
                     .map(e -> line(e.getKey(), e.getValue()))
                     .toList();
@@ -71,7 +78,7 @@ public final class ApiCommand {
         }
         String asked = args[0];
         if (asked.contains(".")) {
-            Signature signature = surface().get(asked);
+            Signature signature = surface(stdlib).get(asked);
             if (signature == null) {
                 err.println("no stdlib declaration `" + asked + "`");
                 return 2;
@@ -87,7 +94,7 @@ public final class ApiCommand {
             err.println("modules: " + String.join(", ", Reserved.QUALIFIERS.stream().sorted().toList()));
             return 2;
         }
-        listPublished(out, asked + ".");
+        listPublished(out, asked + ".", stdlib);
         return 0;
     }
 
@@ -95,8 +102,8 @@ public final class ApiCommand {
      *  none is a value rather than a function of no arguments. */
     record Signature(List<String> paramNames, List<Type> paramTypes, Type result) {}
 
-    private static void listPublished(PrintStream out, String prefix) {
-        surface().forEach((name, signature) -> {
+    private static void listPublished(PrintStream out, String prefix, Stdlib stdlib) {
+        surface(stdlib).forEach((name, signature) -> {
             if (prefix == null || name.startsWith(prefix)) {
                 out.println(line(name, signature));
             }
@@ -112,23 +119,23 @@ public final class ApiCommand {
      * with only the arguments its caller writes. Leaving it out would have this command contradict the
      * specification about what exists.
      *
-     * <p>Which names those are and what order they come in are both {@link Prelude#published()}'s
+     * <p>Which names those are and what order they come in are both {@link Stdlib#published()}'s
      * answer, walked here rather than rebuilt: a listing assembled from the declarations and then
      * the rewrites puts every sugar after every module, whichever module it reads as. What each
      * name's signature comes from is this command's own question, and the only one it decides.
      */
-    static Map<String, Signature> surface() {
+    static Map<String, Signature> surface(Stdlib stdlib) {
         Map<String, Signature> surface = new LinkedHashMap<>();
-        for (String name : Prelude.published()) {
-            Prelude.Rewrite rewrite = Prelude.rewriteOf(name);
+        for (String name : stdlib.published()) {
+            Stdlib.Rewrite rewrite = stdlib.rewriteOf(name);
             if (rewrite != null) {
-                Prelude.PreludeEntry target = Prelude.entry(rewrite.target().qualified());
+                Stdlib.Entry target = stdlib.entry(rewrite.target().qualified());
                 if (target != null) {
                     surface.put(name, declared(target, rewrite.keptArgs()));
                 }
                 continue;
             }
-            Prelude.PreludeEntry entry = Prelude.entry(name);
+            Stdlib.Entry entry = stdlib.entry(name);
             if (entry != null) {
                 surface.put(name, declared(entry, entry.signature().params().size()));
             }
@@ -136,7 +143,7 @@ public final class ApiCommand {
         return surface;
     }
 
-    private static Signature declared(Prelude.PreludeEntry entry, int arity) {
+    private static Signature declared(Stdlib.Entry entry, int arity) {
         List<Hir.FnParam> params = entry.declaration().params();
         List<Type> types = entry.signature().params();
         List<String> names = new ArrayList<>();

@@ -1,5 +1,7 @@
 package souther.compiler.check;
 
+import souther.compiler.DefaultStdlib;
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.core.Core;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
@@ -118,8 +120,10 @@ final class Accumulations {
     /** Read once, and held to the library while it is read. The library is the same library for
      * every module compiled. */
     private static final class Derived {
-        private static final Map<ValueName, Accumulation> RULES = read();
-        private static final Map<ValueName, Integer> CONTAINERS = containers();
+        private static final Map<ValueName, Accumulation> RULES =
+                read(DefaultStdlib.get());
+        private static final Map<ValueName, Integer> CONTAINERS =
+                containers(DefaultStdlib.get());
     }
 
     /**
@@ -129,10 +133,13 @@ final class Accumulations {
      * defect {@link Question} exists to catch seen from the other end — so it is raised here, where
      * the name is read, rather than left to a test.
      */
-    private static Map<ValueName, Accumulation> read() {
+    /* A pure function of the library, so the holder above is the only thing here that reaches for
+     * the process's own — {@link souther.compiler.DefaultStdlib} says who may and why the loader
+     * may not. */
+    private static Map<ValueName, Accumulation> read(Stdlib stdlib) {
         Map<ValueName, Accumulation> rules = new LinkedHashMap<>();
         ACCUMULATES.forEach((operation, accumulation) -> {
-            if (Prelude.entry(operation.toString()) == null) {
+            if (stdlib.entry(operation.toString()) == null) {
                 throw new IllegalStateException(operation + " is named an accumulation and the"
                         + " library declares no such operation");
             }
@@ -150,10 +157,10 @@ final class Accumulations {
      * construction; two of them would be a declaration that does not say which it walks, and is
      * refused rather than guessed at.
      */
-    private static Map<ValueName, Integer> containers() {
+    private static Map<ValueName, Integer> containers(Stdlib stdlib) {
         Map<ValueName, Integer> where = new LinkedHashMap<>();
         Derived.RULES.keySet().forEach(operation -> {
-            Prelude.Signature signature = Prelude.entry(operation.toString()).signature();
+            Stdlib.Signature signature = stdlib.entry(operation.toString()).signature();
             int found = -1;
             for (int i = 0; i < signature.params().size(); i++) {
                 Type param = signature.params().get(i);

@@ -43,7 +43,8 @@ public record HelperGraph(Map<String, Set<String>> callsOf, SequencedSet<String>
         Map<String, Set<String>> callsOf = new LinkedHashMap<>();
         for (Map.Entry<String, Hir.FnDef> e : table.reachable().entrySet()) {
             Set<String> called = new LinkedHashSet<>();
-            HelperInliner.helperCallsIn(e.getValue().writtenBody(), table.reachable(), called);
+            HelperInliner.helperCallsIn(table.library(), e.getValue().writtenBody(),
+                    table.reachable(), called);
             callsOf.put(e.getKey(), called);
         }
         SequencedSet<String> recursive = new LinkedHashSet<>();
@@ -95,7 +96,7 @@ public record HelperGraph(Map<String, Set<String>> callsOf, SequencedSet<String>
         return reached;
     }
 
-    /** Whether {@code target} is reachable from {@code from}. Prelude helpers never call a module's
+    /** Whether {@code target} is reachable from {@code from}. The library's helpers never call a module's
      * own helpers, so a cycle stays within the module's own helpers. */
     private static boolean reaches(Map<String, Set<String>> callsOf, String from, String target,
                                    Set<String> seen) {

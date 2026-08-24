@@ -1,5 +1,7 @@
 package souther.compiler.jvm;
 
+import java.util.stream.Collectors;
+import java.util.Arrays;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Constructor;
@@ -13,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A generated class's name can only be made from a {@link GeneratedClass}, and only here.
+ * A JVM class name can only be made by naming a Souther entity, and only here.
  *
  * <p>Measured against the shape of the API rather than against an answer, for the same reason the
  * resolution rule is: the rule that a reader asks rather than spells was written down on
@@ -37,10 +39,17 @@ class NoPublicWayToMakeAGeneratedClassNameTest {
                 "and none is reachable by reflection either");
     }
 
-    /** The only way in takes an identity. A public entry point that took a spelling would be the old
-     *  API back under a new name. */
+    /**
+     * Every way in takes an identity. A public entry point that took a spelling would be the old API
+     * back under a new name.
+     *
+     * <p>Two of them, because two kinds of thing have a class here and they are told apart by what
+     * they are: one this compilation emits, and one the language declares whose class the runtime
+     * ships (ADR-0087). Written out with the identity each takes rather than counted, so that a
+     * third arriving is a decision somebody made here.
+     */
     @Test
-    void theOnlyWayInTakesAnIdentity() {
+    void everyWayInTakesAnIdentity() {
         List<Method> makers = new ArrayList<>();
         for (Class<?> c : List.of(SoutherJvmAbi.class, GeneratedClasses.class, JvmClassName.class)) {
             for (Method m : c.getMethods()) {
@@ -49,10 +58,22 @@ class NoPublicWayToMakeAGeneratedClassNameTest {
                 }
             }
         }
-        assertEquals(1, makers.size(), "one way to a name, and it is nameOf: " + makers);
-        Method nameOf = makers.get(0);
-        assertEquals(SoutherJvmAbi.class, nameOf.getDeclaringClass());
-        assertEquals(List.of(GeneratedClass.class), List.of(nameOf.getParameterTypes()));
+
+        assertEquals(List.of(SoutherJvmAbi.class, SoutherJvmAbi.class),
+                makers.stream().map(Method::getDeclaringClass).toList(),
+                () -> "a name is made in the ABI and nowhere else: " + makers);
+        assertEquals(
+                List.of("nameOf(GeneratedClass)", "nameOfLanguageDeclaration(TypeSymbol)"),
+                makers.stream().map(NoPublicWayToMakeAGeneratedClassNameTest::written)
+                        .sorted().toList(),
+                () -> "each takes what the thing is, and neither takes a spelling: " + makers);
+    }
+
+    /** A maker as its whole signature. The parameter list is read out entire: a second parameter is
+     *  where a spelling would arrive beside the identity, which is the shape this is about. */
+    private static String written(Method m) {
+        return m.getName() + "(" + Arrays.stream(m.getParameterTypes())
+                .map(Class::getSimpleName).collect(Collectors.joining(", ")) + ")";
     }
 
     /**

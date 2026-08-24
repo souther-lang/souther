@@ -1,5 +1,7 @@
 package souther.compiler.check;
 
+import souther.compiler.DefaultStdlib;
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.semantics.ArgumentRef;
 import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.BuiltFrom;
@@ -122,12 +124,12 @@ final class DischargeRules {
      * an operation says otherwise. Read off the building table, whose every row already answers to a
      * program that fires it.
      */
-    static Set<String> constructionKinds() {
+    static Set<String> constructionKinds(Stdlib stdlib) {
         Set<String> kinds = new LinkedHashSet<>();
         Bound.buildsItsResultFrom().forEach(operation -> {
             BuiltFrom built = Bound.buildsItsResultFrom(operation);
-            Prelude.PreludeEntry entry = operation instanceof ValueName.Stdlib library
-                    ? Prelude.entry(library.qualified()) : null;
+            Stdlib.Entry entry = operation instanceof ValueName.Stdlib library
+                    ? stdlib.entry(library.qualified()) : null;
             String kind = entry == null ? null : kindOf(entry.signature().result());
             if (kind != null) {
                 kinds.add(kind + "." + built.shape());
@@ -220,13 +222,13 @@ final class DischargeRules {
      * a capability, wrong the day the capability changes; asked this way, the operations that arrive
      * are exactly the ones an author could write a discharging program for.
      */
-    private static Set<ValueName> formOperationsThisCarries() {
+    private static Set<ValueName> formOperationsThisCarries(Stdlib stdlib) {
         Set<ValueName> carried = new LinkedHashSet<>();
         // Over the declared forms and not over everything that answers the question. A sum and a
         // difference answer it by being the arithmetic they are, and what reads them is the
         // grammar; a program firing one would be firing the operator.
         for (ValueName operation : Bound.answersAFormOfItsArguments()) {
-            if (everyPartIsANumber(operation)) {
+            if (everyPartIsANumber(stdlib, operation)) {
                 carried.add(operation);
             }
         }
@@ -250,9 +252,9 @@ final class DischargeRules {
      * {@link OperationFactBinder} held before any of this was asked. What is left to decide is what
      * stands there.
      */
-    private static boolean everyPartIsANumber(ValueName operation) {
-        Prelude.Signature signature =
-                Prelude.entry(((ValueName.Stdlib) operation).qualified()).signature();
+    private static boolean everyPartIsANumber(Stdlib stdlib, ValueName operation) {
+        Stdlib.Signature signature =
+                stdlib.entry(((ValueName.Stdlib) operation).qualified()).signature();
         if (!Question.isANumber(signature.result())) {
             return false;
         }
@@ -263,9 +265,9 @@ final class DischargeRules {
 
     /** Those of them the read-through table has, by name, for the test that holds each to a
      * construction it discharges. */
-    static Set<String> formNames() {
+    static Set<String> formNames(Stdlib stdlib) {
         Set<String> names = new LinkedHashSet<>();
-        formOperationsThisCarries().forEach(operation -> names.add(operation.toString()));
+        formOperationsThisCarries(stdlib).forEach(operation -> names.add(operation.toString()));
         return names;
     }
 
@@ -440,7 +442,10 @@ final class DischargeRules {
         /** What the declarations came to, held to the library. The list is walked whole, so a fact
          *  nothing here looks up is one this has held all the same. */
         private static final List<OperationFacts.Declared> SEMANTICS =
-                OperationFactBinder.bindAll();
+                OperationFactBinder.bindAll(DefaultStdlib.get());
+        /* Holding the declarations to the library is a pure function of it, so this holder is the
+         * only thing here that reaches for the process's own — {@link DefaultStdlib} says who may
+         * and why the loader may not. */
 
         /**
          * What the language declares an operation answers.
@@ -526,8 +531,8 @@ final class DischargeRules {
      * row names, would leave the operation with a meaning no program reaches and no diagnostic
      * anywhere. Held here, before any call is read.
      */
-    static void holdNumericResult(ValueName operation, NumericResult rule) {
-        Prelude.Signature signature = holdTheOperationToTheLibrary(operation).signature();
+    static void holdNumericResult(Stdlib stdlib, ValueName operation, NumericResult rule) {
+        Stdlib.Signature signature = holdTheOperationToTheLibrary(stdlib, operation).signature();
         Type answers = Question.numberAnsweredBy(signature.result());
         List<Arithmetic.Reads> reads = rule.computes().reads();
         if (signature.params().size() != reads.size()) {
@@ -543,7 +548,7 @@ final class DischargeRules {
         }
         switch (rule.at()) {
             case NumericResult.Answered.Directly ignored ->
-                    holdTheResultToTheDeclaration(operation, Question::isANumber,
+                    holdTheResultToTheDeclaration(stdlib, operation, Question::isANumber,
                             "a number for the arithmetic it computes to be answered at");
             case NumericResult.Answered.InTheCaseCarrying(Type carried) -> {
                 if (!(signature.result() instanceof Type.Union(Set<TypeSymbol> members))) {
@@ -575,7 +580,7 @@ final class DischargeRules {
             }
         }
         if (rule.unless() != null) {
-            holdToTheDeclaration(operation, rule.unless().argument(), null,
+            holdToTheDeclaration(stdlib, operation, rule.unless().argument(), null,
                     Question::isANumber, "the argument a failure is decided by");
         }
     }
@@ -586,16 +591,16 @@ final class DischargeRules {
      * operation answers. A rule pairing an operation with a measure of something else would state a
      * relation between two values that have none.
      */
-    static void holdShift(ValueName operation, OperationFact.ShiftsBy
+    static void holdShift(Stdlib stdlib, ValueName operation, OperationFact.ShiftsBy
             shift) {
-        holdToTheDeclaration(operation, shift.amount(), null, Question::isANumber,
+        holdToTheDeclaration(stdlib, operation, shift.amount(), null, Question::isANumber,
                 "the amount a shift moves by");
-        Prelude.PreludeEntry counts = Prelude.entry(shift.measure().qualified());
+        Stdlib.Entry counts = stdlib.entry(shift.measure().qualified());
         if (counts == null) {
             throw new IllegalStateException("the rule about " + operation + " counts through "
                     + shift.measure().qualified() + ", which the library does not declare");
         }
-        Prelude.PreludeEntry shifted = holdTheOperationToTheLibrary(operation);
+        Stdlib.Entry shifted = holdTheOperationToTheLibrary(stdlib, operation);
         List<Type> counted = counts.signature().params();
         if (counted.size() != 2 || !Question.isANumber(counts.signature().result())
                 || !counted.get(0).equals(shifted.signature().result())
@@ -603,14 +608,14 @@ final class DischargeRules {
             throw new IllegalStateException(shift.measure().qualified()
                     + " does not count two of what " + operation + " answers apart as a number");
         }
-        holdToTheDeclaration(operation, shift.of(), null,
+        holdToTheDeclaration(stdlib, operation, shift.of(), null,
                 t -> t.equals(shifted.signature().result()), "the value a shift moves from");
     }
 
     /** As {@link #bind}, for the arguments a case names: the one it answers, and the two sides of
      * each condition it is reached under. */
-    static void holdCase(ValueName operation, OperationFact.Case one) {
-        holdTheResultToTheDeclaration(operation, Question::isANumber,
+    static void holdCase(Stdlib stdlib, ValueName operation, OperationFact.Case one) {
+        holdTheResultToTheDeclaration(stdlib, operation, Question::isANumber,
                 "a number for a case of the definition to answer");
         List<ArgumentRef> named = new ArrayList<>();
         named.add(one.answers());
@@ -618,14 +623,14 @@ final class DischargeRules {
             named.add(stands.left());
             named.add(stands.right());
         });
-        named.forEach(each -> holdToTheDeclaration(operation, each, null, Question::isANumber,
+        named.forEach(each -> holdToTheDeclaration(stdlib, operation, each, null, Question::isANumber,
                 "an argument a case of the definition names"));
     }
 
     /** As {@link #bind}, for the arguments a bound names: the one the result is bounded against, and
      * the one a condition on the rule reads. Each is a separate claim about a separate argument. */
-    static void holdBound(ValueName operation, ResultBound bound) {
-        holdTheResultToTheDeclaration(operation, Question::isANumber,
+    static void holdBound(Stdlib stdlib, ValueName operation, ResultBound bound) {
+        holdTheResultToTheDeclaration(stdlib, operation, Question::isANumber,
                 "a number for a bound on the result to hold of");
         List<ArgumentRef> named = new ArrayList<>();
         if (bound.against() != null) {
@@ -636,16 +641,18 @@ final class DischargeRules {
                 constant) {
             named.add(constant.argument());
         }
-        named.forEach(one -> holdToTheDeclaration(operation, one, null, Question::isANumber,
+        named.forEach(one -> holdToTheDeclaration(stdlib, operation, one, null, Question::isANumber,
                 "an argument a bound on the result names"));
     }
 
     /** As {@link #bind}, for a rule that names more than one argument: each is held to the
      * declaration on its own, since each is a separate claim about a separate argument. */
-    static Map<ValueName, List<ArgumentRef>> bindEach(Map<ValueName, List<ArgumentRef>> rules, ArgumentRef derived,
+    static Map<ValueName, List<ArgumentRef>> bindEach(Stdlib stdlib,
+                                                Map<ValueName, List<ArgumentRef>> rules,
+                                                ArgumentRef derived,
                                                 Predicate<Type> required, String what) {
         rules.forEach((operation, reads) -> reads.forEach(one ->
-                bind(Map.of(operation, one), Function.identity(), derived, required, what)));
+                bind(stdlib, Map.of(operation, one), Function.identity(), derived, required, what)));
         return rules;
     }
 
@@ -656,10 +663,11 @@ final class DischargeRules {
      * does not hand is caught by {@link ArgumentRef}; one that writes a position the signature already
      * answers is caught here, since two answers to one question are what come apart later.
      */
-    static <T> Map<ValueName, T> bind(Map<ValueName, T> rules, Function<T, ArgumentRef> reads,
-                                      ArgumentRef derived, Predicate<Type> required, String what) {
+    static <T> Map<ValueName, T> bind(Stdlib stdlib, Map<ValueName, T> rules,
+                                      Function<T, ArgumentRef> reads, ArgumentRef derived,
+                                      Predicate<Type> required, String what) {
         rules.forEach((operation, rule) ->
-                holdToTheDeclaration(operation, reads.apply(rule), derived, required, what));
+                holdToTheDeclaration(stdlib, operation, reads.apply(rule), derived, required, what));
         return rules;
     }
 
@@ -676,14 +684,14 @@ final class DischargeRules {
      * depended on which kinds of fact happened to name an argument. A kind added later would have
      * lost the same way, silently, on the day its arm was written empty.
      */
-    static Prelude.PreludeEntry holdTheOperationToTheLibrary(ValueName operation) {
+    static Stdlib.Entry holdTheOperationToTheLibrary(Stdlib stdlib, ValueName operation) {
         // Every fact is about an operation the library declares, so the operation says which
         // library and which name rather than a spelling this would have to take apart.
         if (!(operation instanceof ValueName.Stdlib library)) {
             throw new IllegalStateException("a fact is declared of " + operation
                     + ", which is not a library operation");
         }
-        Prelude.PreludeEntry entry = Prelude.entry(library.qualified());
+        Stdlib.Entry entry = stdlib.entry(library.qualified());
         if (entry == null) {
             throw new IllegalStateException("a fact is declared of " + library.qualified()
                     + ", which the library does not declare");
@@ -706,9 +714,9 @@ final class DischargeRules {
      * form is about a count and a bound about a number, and the difference between those two is a
      * difference between the propositions and not between two ways of holding one.
      */
-    static void holdTheResultToTheDeclaration(ValueName operation, Predicate<Type> required,
-            String what) {
-        Type result = holdTheOperationToTheLibrary(operation).signature().result();
+    static void holdTheResultToTheDeclaration(Stdlib stdlib, ValueName operation,
+            Predicate<Type> required, String what) {
+        Type result = holdTheOperationToTheLibrary(stdlib, operation).signature().result();
         if (result == null || !required.test(result)) {
             throw new IllegalStateException("what " + ((ValueName.Stdlib) operation).qualified()
                     + " answers is " + (result == null ? "left to its body" : Type.show(result))
@@ -730,21 +738,21 @@ final class DischargeRules {
      * counts days; whether this check can then do anything with such a form is a different question
      * and belongs to the check ({@link #formOperationsThisCarries}).
      */
-    static void holdAFormOfItsArguments(ValueName operation,
+    static void holdAFormOfItsArguments(Stdlib stdlib, ValueName operation,
             souther.compiler.numeric.NumericDomain.LinearForm<ArgumentRef> form) {
-        holdTheResultToTheDeclaration(operation, Question::countsToANumber,
+        holdTheResultToTheDeclaration(stdlib, operation, Question::countsToANumber,
                 "a value with a count for a form of its arguments to be about");
         for (ArgumentRef argument : form.coefs().keySet()) {
-            holdToTheDeclaration(operation, argument, null, Question::countsToANumber,
+            holdToTheDeclaration(stdlib, operation, argument, null, Question::countsToANumber,
                     "an argument the result is a form of");
         }
     }
 
     /** The same, for one rule. Asked per rule so that whatever holds a whole declaration source can
      *  walk it and hold each of them, rather than reaching for a table of its own. */
-    static void holdToTheDeclaration(ValueName operation, ArgumentRef at, ArgumentRef derived,
-                                     Predicate<Type> required, String what) {
-        Prelude.PreludeEntry entry = holdTheOperationToTheLibrary(operation);
+    static void holdToTheDeclaration(Stdlib stdlib, ValueName operation, ArgumentRef at,
+                                     ArgumentRef derived, Predicate<Type> required, String what) {
+        Stdlib.Entry entry = holdTheOperationToTheLibrary(stdlib, operation);
         ValueName.Stdlib library = (ValueName.Stdlib) operation;
         List<Type> params = entry.signature().params();
         int position = CallArguments.positionIn(at, operation);

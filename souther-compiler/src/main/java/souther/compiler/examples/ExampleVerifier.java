@@ -924,7 +924,8 @@ public final class ExampleVerifier {
                         .computeIfAbsent(published.classes(),
                                 _ -> new java.util.concurrent.ConcurrentHashMap<>())
                         .computeIfAbsent(behavior, named -> DeclarationAgreement.of(module.name(),
-                                named, declared.get(), published.classes()));
+                                named, declared.get(), published.classes(),
+                                symbols.library()));
             };
         };
     }

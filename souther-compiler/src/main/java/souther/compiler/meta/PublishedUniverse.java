@@ -1,5 +1,6 @@
 package souther.compiler.meta;
 
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Exposing;
@@ -66,13 +67,19 @@ public final class PublishedUniverse {
      */
     private final Map<String, Readback<Read>> resolutions = new LinkedHashMap<>();
 
-    private PublishedUniverse(PublishedClasses classes) {
+    /** The library a published module's names are resolved against. Handed over rather than
+     *  reached for: reading a published module is resolving it, and what a name means there is the
+     *  same question it is anywhere else. */
+    private final Stdlib stdlib;
+
+    private PublishedUniverse(PublishedClasses classes, Stdlib stdlib) {
+        this.stdlib = stdlib;
         this.classes = classes;
     }
 
     /** The universe those classes declare. Nothing is read until a module is asked for. */
-    public static PublishedUniverse of(PublishedClasses classes) {
-        return new PublishedUniverse(classes);
+    public static PublishedUniverse of(PublishedClasses classes, Stdlib stdlib) {
+        return new PublishedUniverse(classes, stdlib);
     }
 
     /**
@@ -124,7 +131,7 @@ public final class PublishedUniverse {
             // What the reading answered, kept as it answered it. Which of the states a name is in
             // used to be asked again of the classes afterwards, because a reading that failed
             // answered null however it failed.
-            Readback<ReadableModule> readback = ModuleReadback.read(name, classes);
+            Readback<ReadableModule> readback = ModuleReadback.read(name, classes, stdlib.names());
             readbacks.put(name, readback);
             if (!(readback instanceof Readback.Ready<ReadableModule>(ReadableModule readable))) {
                 continue;
@@ -262,7 +269,7 @@ public final class PublishedUniverse {
                     ScopeRefusals.of(scoped.refused()));
         }
         Resolve.Resolution resolution = Resolve.resolving(readable.module(),
-                scoped.meanings().writtenSymbols(registry), scoped.values());
+                scoped.meanings().writtenSymbols(registry, stdlib), scoped.values());
         if (!resolution.unresolved().isEmpty()) {
             // What resolution has for each of them is a report, written for an author holding the
             // file and quoting the line — a line of the text this reading assembled. So what

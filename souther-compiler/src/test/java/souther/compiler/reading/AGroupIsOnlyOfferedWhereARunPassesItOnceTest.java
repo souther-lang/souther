@@ -1,4 +1,4 @@
-package souther.compiler.interaction;
+package souther.compiler.reading;
 
 import org.junit.jupiter.api.Test;
 
@@ -118,15 +118,17 @@ class AGroupIsOnlyOfferedWhereARunPassesItOnceTest {
     void aMeetingARunMayComeBackToIsNotOffered() {
         Model model = Model.of(SHIPPING, "shippingFee");
 
-        List<Interaction> asIfRepeated = Interactions.of(model.body(),
-                model.planWhereEverythingRepeats(), model.inputs(), model.symbols());
+        List<Interaction> asIfRepeated = CoverageRead.of(model.behavior(), model.body(),
+                model.planWhereEverythingRepeats(), model.inputs(), model.symbols())
+                .interactions();
 
         assertTrue(asIfRepeated.isEmpty(),
                 "nothing could show a row to sit in one of these, so none is offered");
     }
 
     /** One model, read the way the generator reads it. */
-    private record Model(Core body, CoverageSites.Plan plan, InputDomain inputs, Symbols symbols) {
+    private record Model(String behavior, Core body, CoverageSites.Plan plan, InputDomain inputs,
+                         Symbols symbols) {
 
         static Model of(String source, String behavior) {
             Compilation compilation = Compilation.ofSource(source, "Main");
@@ -136,14 +138,15 @@ class AGroupIsOnlyOfferedWhereARunPassesItOnceTest {
             assertNotNull(checked, "the model under test compiles");
             Core body = checked.behaviorBodies().get(behavior);
             assertNotNull(body, "the behavior under test has a body");
-            return new Model(body, CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
+            return new Model(behavior, body,
+                    CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
                 checked.supplied()),
                     compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior),
                     Scopes.derived(compilation.db(), module).value());
         }
 
         List<Interaction> groups() {
-            return Interactions.of(body, plan, inputs, symbols);
+            return CoverageRead.of(behavior, body, plan, inputs, symbols).interactions();
         }
 
         /** The same plan, answering that a run may come back to anywhere. What the walk cannot be

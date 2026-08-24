@@ -1,5 +1,6 @@
 package souther.compiler.derive;
 
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.check.Symbols;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.ast.Hir;
@@ -29,8 +30,8 @@ public final class Deriver {
 
     private Deriver() {}
 
-    public static Hir.Module derive(Hir.Module module) {
-        return derive(module, TypeChecker.symbols(module));
+    public static Hir.Module derive(Hir.Module module, Stdlib stdlib) {
+        return derive(module, TypeChecker.symbols(module, stdlib));
     }
 
     /** Derives codecs using {@code symbols} for type resolution (own definitions plus any

@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.Compiler;
 import souther.compiler.check.InvariantChecker.GaveUp;
 import souther.compiler.check.InvariantChecker.Said;
@@ -388,7 +389,7 @@ class ARuleAboutAnOperationsResultCarriesSomethingTest {
 
     @Test
     void everyReadThroughHasAConstructionThatFiresIt() {
-        assertEquals(new TreeSet<>(DischargeRules.formNames()), namesOf(READ_AS_THEIR_ARGUMENT));
+        assertEquals(new TreeSet<>(DischargeRules.formNames(DefaultStdlib.get())), namesOf(READ_AS_THEIR_ARGUMENT));
     }
 
     /**

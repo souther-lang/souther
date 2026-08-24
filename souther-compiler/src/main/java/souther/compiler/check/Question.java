@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.semantics.OperationFacts;
 import souther.compiler.semantics.OperationSubject;
 import souther.compiler.types.Type;
@@ -36,7 +37,7 @@ enum Question {
      * container holds and that is said. */
     COMBINATOR("what it hands its closure") {
         @Override
-        boolean asksOf(Prelude.Signature signature) {
+        boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
             return signature.params().stream().anyMatch(t -> t instanceof Type.FnOf);
         }
 
@@ -76,7 +77,7 @@ enum Question {
      */
     REDUCTION("whether it reduces a container from a seed through its closure") {
         @Override
-        boolean asksOf(Prelude.Signature signature) {
+        boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
             Type result = signature.result();
             if (result == null || signature.params().stream().noneMatch(Question::holdsElements)) {
                 return false;
@@ -124,7 +125,7 @@ enum Question {
      */
     ACCUMULATION("whether it accumulates what its container holds, and from what through what") {
         @Override
-        boolean asksOf(Prelude.Signature signature) {
+        boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
             Type result = signature.result();
             return result != null && signature.params().stream().anyMatch(
                     t -> holdsElements(t) && result.equals(Terms.elementType(t)));
@@ -151,7 +152,7 @@ enum Question {
      * what became of a container's elements, and of a string this names only its length. */
     BUILT("what it keeps of the container it is built from") {
         @Override
-        boolean asksOf(Prelude.Signature signature) {
+        boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
             return holdsElements(signature.result())
                     && signature.params().stream().anyMatch(Question::holdsElements);
         }
@@ -177,7 +178,7 @@ enum Question {
      * container or a string. */
     PREDICATE_CARRY("where the predicate it states reads its container, and how far that travels") {
         @Override
-        boolean asksOf(Prelude.Signature signature) {
+        boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
             return signature.result() == Type.Prim.BOOL
                     && signature.params().stream().anyMatch(Question::hasASize);
         }
@@ -203,7 +204,7 @@ enum Question {
      * that is the shape an emptiness check has, and the question is whether this one is that. */
     EMPTINESS("which size call it means") {
         @Override
-        boolean asksOf(Prelude.Signature signature) {
+        boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
             return signature.result() == Type.Prim.BOOL && signature.params().size() == 1
                     && hasASize(signature.params().get(0));
         }
@@ -229,7 +230,7 @@ enum Question {
      * what the container holds — which says nothing yet about how many elements it has to hold of. */
     QUANTIFICATION("whether it states its predicate of every element") {
         @Override
-        boolean asksOf(Prelude.Signature signature) {
+        boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
             return signature.result() == Type.Prim.BOOL
                     && signature.params().stream().anyMatch(Question::hasASize)
                     && signature.params().stream().anyMatch(
@@ -258,7 +259,7 @@ enum Question {
      * a projection is. */
     PROJECTION("which argument is the projection it is stated over") {
         @Override
-        boolean asksOf(Prelude.Signature signature) {
+        boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
             return signature.result() == Type.Prim.BOOL
                     && signature.params().stream().anyMatch(Question::hasASize)
                     && signature.params().stream().anyMatch(
@@ -284,7 +285,7 @@ enum Question {
     /** Whether the number it answers is a size the domain can name ({@link DischargeRules#isSize}). */
     SIZE("whether the number it answers is a size") {
         @Override
-        boolean asksOf(Prelude.Signature signature) {
+        boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
             return signature.result() == Type.Prim.INT
                     && signature.params().stream().anyMatch(Question::hasASize);
         }
@@ -312,7 +313,7 @@ enum Question {
      */
     ORDER("whether it answers the order of its two arguments") {
         @Override
-        boolean asksOf(Prelude.Signature signature) {
+        boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
             return signature.result() == Type.Prim.INT
                     && signature.params().size() == 2
                     && signature.params().get(0).equals(signature.params().get(1));
@@ -353,7 +354,7 @@ enum Question {
      */
     BOUNDS("what bounds the number it answers") {
         @Override
-        boolean asksOf(Prelude.Signature signature) {
+        boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
             return isANumber(signature.result());
         }
 
@@ -380,11 +381,11 @@ enum Question {
      */
     MEASURE("what it states through the measure counting the two apart") {
         @Override
-        boolean asksOf(Prelude.Signature signature) {
+        boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
             return signature.result() != null && !isANumber(signature.result())
                     && signature.params().contains(signature.result())
                     && signature.params().stream().anyMatch(Question::isANumber)
-                    && hasAMeasureCountingTwoApart(signature.result());
+                    && hasAMeasureCountingTwoApart(stdlib, signature.result());
         }
 
         @Override
@@ -410,7 +411,7 @@ enum Question {
      */
     CHOICE("whether it answers one of its arguments, and in which cases") {
         @Override
-        boolean asksOf(Prelude.Signature signature) {
+        boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
             return isANumber(signature.result())
                     && signature.params().stream().anyMatch(Question::isANumber);
         }
@@ -444,7 +445,7 @@ enum Question {
      */
     FORM("what it answers, counted, in what its arguments are counted as") {
         @Override
-        boolean asksOf(Prelude.Signature signature) {
+        boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
             return countsToANumber(signature.result())
                     && signature.params().stream().anyMatch(Question::countsToANumber);
         }
@@ -479,7 +480,7 @@ enum Question {
      */
     NUMERIC_RESULT("what number it computes, and where it answers it") {
         @Override
-        boolean asksOf(Prelude.Signature signature) {
+        boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
             Type number = numberAnsweredBy(signature.result());
             return number != null && signature.params().size() >= 2
                     && number.equals(signature.params().get(0))
@@ -509,7 +510,7 @@ enum Question {
     }
 
     /** Whether an operation declared with {@code signature} is one this is asked of. */
-    abstract boolean asksOf(Prelude.Signature signature);
+    abstract boolean asksOf(Stdlib stdlib, Stdlib.Signature signature);
 
     /** Whether {@code operation} has a rule answering this. */
     abstract boolean answeredFor(ValueName operation);
@@ -529,18 +530,18 @@ enum Question {
      * nothing about what it answers, so the questions about that are not asked of it; what it hands
      * its closure is a question about its arguments, and is.
      */
-    static List<Question> askedOf(Prelude.Signature signature) {
-        return List.of(values()).stream().filter(q -> q.asksOf(signature)).toList();
+    static List<Question> askedOf(Stdlib stdlib, Stdlib.Signature signature) {
+        return List.of(values()).stream().filter(q -> q.asksOf(stdlib, signature)).toList();
     }
 
     /** Whether this is asked of the library operation named {@code qualified}. A sugar has no
      * declaration of its own and is asked what the call it becomes is asked: it is that call, with
      * some of its arguments already supplied. */
-    boolean asksOfOperation(String qualified) {
-        Prelude.Rewrite rewrite = Prelude.rewriteOf(qualified);
-        Prelude.PreludeEntry entry =
-                Prelude.entry(rewrite == null ? qualified : rewrite.target().qualified());
-        return entry != null && asksOf(entry.signature());
+    boolean asksOfOperation(Stdlib stdlib, String qualified) {
+        Stdlib.Rewrite rewrite = stdlib.rewriteOf(qualified);
+        Stdlib.Entry entry =
+                stdlib.entry(rewrite == null ? qualified : rewrite.target().qualified());
+        return entry != null && asksOf(stdlib, entry.signature());
     }
 
     /** Whether a construction over {@code t} is one whose elements a shape can speak of. Read where
@@ -559,8 +560,8 @@ enum Question {
      * strings apart — a size counts one of them. So the range is read off the declarations, and the
      * day the library gains such a measure the operations of that kind come into range and are asked.
      */
-    private static boolean hasAMeasureCountingTwoApart(Type t) {
-        return Prelude.entries().values().stream().anyMatch(entry -> {
+    private static boolean hasAMeasureCountingTwoApart(Stdlib stdlib, Type t) {
+        return stdlib.entries().values().stream().anyMatch(entry -> {
             List<Type> counted = entry.signature().params();
             return isANumber(entry.signature().result()) && counted.size() == 2
                     && counted.get(0).equals(t) && counted.get(1).equals(t);

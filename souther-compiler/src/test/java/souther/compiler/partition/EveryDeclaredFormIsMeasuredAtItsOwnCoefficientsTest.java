@@ -36,7 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 class EveryDeclaredFormIsMeasuredAtItsOwnCoefficientsTest {
 
     /** A rule written over the operation, and the line it draws. */
-    private record Observation(String parameters, String condition, String label) {}
+    record Observation(String parameters, String condition, String label) {}
 
     /**
      * One rule per declared operation, and the line each draws.
@@ -44,8 +44,13 @@ class EveryDeclaredFormIsMeasuredAtItsOwnCoefficientsTest {
      * <p>Written as a rule and read as a line, so what is measured is what a model would get. The
      * unit is in the number: two minutes is 120 of the seconds a date-time counts, two hours 7200,
      * two days 172800, and a day put together out of a date and a time is 86400 of them.
+     *
+     * <p>Reachable from beside this rather than copied there. {@link
+     * ARowComposedForAPointIsWritableAndStandsAtItTest} asks something else of the same models, and
+     * a second table would be a second list of which operations there are — which is the one thing
+     * the test above it exists to keep single.
      */
-    private static final Map<ValueName, Observation> MEASURED = measured();
+    static final Map<ValueName, Observation> MEASURED = measured();
 
     private static Map<ValueName, Observation> measured() {
         Map<ValueName, Observation> out = new LinkedHashMap<>();
@@ -83,7 +88,7 @@ class EveryDeclaredFormIsMeasuredAtItsOwnCoefficientsTest {
     void eachDrawsItsLineAtTheNumbersItWasDeclaredWith() {
         List<String> off = new ArrayList<>();
         MEASURED.forEach((operation, observed) -> {
-            List<String> drawn = labelsOf(observed.parameters(), observed.condition());
+            List<String> drawn = labelsOf(observed);
             if (!List.of(observed.label()).equals(drawn)) {
                 off.add(operation + ": " + observed.condition() + " draws " + drawn
                         + " and not [" + observed.label() + "]");
@@ -92,8 +97,16 @@ class EveryDeclaredFormIsMeasuredAtItsOwnCoefficientsTest {
         assertEquals(List.of(), off);
     }
 
-    private static List<String> labelsOf(String parameters, String condition) {
-        String model = """
+    /**
+     * The model one of these rules is measured in.
+     *
+     * <p>Beside the table rather than beside each reader of it. {@link
+     * ARowComposedForAPointIsWritableAndStandsAtItTest} asks its own question of these same models,
+     * and a second copy of this would be two models under one table — measured here and not there
+     * the moment either copy moved.
+     */
+    static String modelOf(Observation observed) {
+        return """
                 module demo
 
                 data Ok
@@ -104,8 +117,12 @@ class EveryDeclaredFormIsMeasuredAtItsOwnCoefficientsTest {
                     guard %s else No
                     Ok
                 }
-                """.formatted(parameters,
-                parameters.replaceAll(":\\s*[A-Za-z<>]+", ""), condition);
+                """.formatted(observed.parameters(),
+                observed.parameters().replaceAll(":\\s*[A-Za-z<>]+", ""), observed.condition());
+    }
+
+    private static List<String> labelsOf(Observation observed) {
+        String model = modelOf(observed);
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();

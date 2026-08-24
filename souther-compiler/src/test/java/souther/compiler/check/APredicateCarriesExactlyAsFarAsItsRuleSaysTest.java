@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.Compiler;
 import souther.compiler.semantics.ElementShape;
 import souther.compiler.diag.Severity;
@@ -187,7 +188,7 @@ class APredicateCarriesExactlyAsFarAsItsRuleSaysTest {
         List<String> wrong = new ArrayList<>();
         for (Predicate p : PREDICATES) {
             for (ElementShape shape : ElementShape.values()) {
-                boolean builds = DischargeRules.constructionKinds().contains(p.kind() + "." + shape);
+                boolean builds = DischargeRules.constructionKinds(DefaultStdlib.get()).contains(p.kind() + "." + shape);
                 if (builds != (p.travels().get(shape) != Travels.NO_SUCH_CONSTRUCTION)) {
                     wrong.add(operationOf(p) + " through " + shape
                             + (builds ? ": the library builds this and no answer is written"

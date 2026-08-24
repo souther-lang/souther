@@ -6,6 +6,7 @@ import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.ReadingPolicy;
+import souther.compiler.check.Shape;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeView;
@@ -199,6 +200,109 @@ public final class InputDomain {
      */
     public Position at(TermPath path) {
         return byPath.get(path);
+    }
+
+    /**
+     * The order one term is read off a row and written back on, or null where it has none.
+     *
+     * <p><b>The one answer, so that nothing derives it from an expression.</b> A rule is written
+     * beside operands, and the type of an operand is not the type of the position the rule is about:
+     * an operation the arithmetic rewrote into a form of two positions is compared as what it
+     * answers with, so {@code Date.daysBetween(a, b) > 10} has {@code Int} on both sides and dates
+     * at both positions. Read off the comparison, every position of that rule was written back as a
+     * whole number and read off a row as one, and both directions agreed with each other and with
+     * nothing else (#1018).
+     *
+     * <p>Two questions, answered where each is known. What a term measures is the term's — a size is
+     * a whole number whatever it is taken of — and what the location holds is this reading's, which
+     * is why the two meet here rather than at whichever caller had both to hand.
+     *
+     * <p><b>A term under no position of this reading still has an order.</b> This reading stops at
+     * {@link #MAX_DEPTH}, where a report stops being about anything an author would call one input,
+     * and nothing stops a rule from naming what is under that. What a report is about and what a
+     * declaration says are two questions, and only the first of them stops there — so the type is
+     * followed down to wherever the rule named ({@link #declaredAt}) and the line is drawn.
+     *
+     * <p>The position first and the descent only where there is none. A position may stand under a
+     * narrowing, and what it holds there is what a row writes; walking the declaration again would
+     * answer with what the field was declared as before anything narrowed it.
+     */
+    public Carrier carrierOf(NumericTerm term, Symbols symbols) {
+        Position position = at(term.path());
+        return term.carrierAt(
+                position != null ? position.type() : declaredAt(term.path(), symbols), symbols);
+    }
+
+    /**
+     * What the declarations put at {@code path}, however far down it goes, or null where they put
+     * nothing this can follow.
+     *
+     * <p>Below {@link #MAX_DEPTH} this is the only answer there is: the walk above stopped, so there
+     * is no position to ask and the type is what the declaration says at each step.
+     *
+     * <p>Step by step through {@link StructuralInspection}, which is what the walk above takes its
+     * own steps from. What is under a type is one fact, and a second reading of it here would be
+     * this and that walk disagreeing about what a path reaches — which is the shape of defect this
+     * whole change is about, one level down.
+     */
+    private Type declaredAt(TermPath path, Symbols symbols) {
+        Type here = null;
+        for (Parameter parameter : parameters) {
+            if (parameter.name().equals(path.head())) {
+                here = parameter.type();
+                break;
+            }
+        }
+        for (TermPath.Step step : path.steps()) {
+            here = here == null ? null : under(here, step, symbols);
+        }
+        return here;
+    }
+
+    /**
+     * What one step of a path stands at, or null where the declarations put nothing there.
+     *
+     * <p><b>Exhaustive over the kinds of step, with no {@code default}.</b> A path goes into a
+     * field, into what a sequence holds, or nowhere at all while narrowing which values may stand
+     * where it already is ({@link Refinement}) — three, and a reading that answered one of them and
+     * let the rest fall to null would lose a line the model draws for every path carrying one. It
+     * did: written for fields alone, a rule comparing two fields of a list's elements was read as
+     * naming nothing, and the border it draws went away. A fourth kind is a compile error here
+     * rather than a fourth quiet absence.
+     */
+    private static Type under(Type type, TermPath.Step step, Symbols symbols) {
+        TypeView view = TypeView.of(type, symbols);
+        // Asked of the shape rather than through the proof a position is made with. What is under a
+        // type is a question about the type, and a type nothing can be read at answers nothing here
+        // rather than being refused as a position this compiler disagrees with itself about.
+        if (!(view.shape() instanceof Shape.ReadablePositionShape shape)) {
+            return null;
+        }
+        StructuralInspection under =
+                StructuralInspection.of(shape, true, Distinctions.ofType(view, symbols));
+        return switch (step) {
+            case TermPath.Step.Field field -> under instanceof StructuralInspection.Decomposed made
+                    ? made.under().get(field.name()) : null;
+            case TermPath.Step.Element _ -> under instanceof StructuralInspection.Retained on
+                    && on.continuation() instanceof StructuralInspection.Continuation.Elements held
+                    ? held.element() : null;
+            // The same position, read as the case it turned out to be. Null where the case puts
+            // nothing there, which is a case that is the whole of a value.
+            case TermPath.Step.Refine refine -> under instanceof StructuralInspection.Retained on
+                    && on.continuation() instanceof StructuralInspection.Continuation.Branches ways
+                    ? narrowed(ways, refine.refinement()) : null;
+        };
+    }
+
+    /** The type the branch for this narrowing stands at, or null where the sum has no such branch. */
+    private static Type narrowed(StructuralInspection.Continuation.Branches ways,
+                                 Refinement refinement) {
+        for (StructuralInspection.Branch branch : ways.branches()) {
+            if (refinement.equals(branch.refinement())) {
+                return branch.under();
+            }
+        }
+        return null;
     }
 
     /**

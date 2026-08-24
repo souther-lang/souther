@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.semantics.ArgumentRef;
 import souther.compiler.semantics.OperationFact;
 import souther.compiler.semantics.OperationFacts;
@@ -48,49 +49,50 @@ final class OperationFactBinder {
      * one's own. Reading {@link OperationFacts#declarations()} directly, a test could show that the
      * facts there are valid and not that a fact added later would be visited at all.
      */
-    static List<OperationFacts.Declared> bindAll(List<OperationFacts.Declared> declared) {
+    static List<OperationFacts.Declared> bindAll(Stdlib stdlib,
+                                                List<OperationFacts.Declared> declared) {
         List<OperationFacts.Declared> visited = new ArrayList<>();
         for (OperationFacts.Declared each : declared) {
             // Before the switch and outside it, so that being declared is what holds a fact to the
             // library rather than being a kind that happens to name an argument. An arm below with
             // nothing in it then says what it means — there is nothing to check beyond the
             // operation — instead of standing for a declaration nothing looked at.
-            DischargeRules.holdTheOperationToTheLibrary(each.operation());
+            DischargeRules.holdTheOperationToTheLibrary(stdlib, each.operation());
             // No default. A kind of fact added is a kind this has to say how to hold, rather than
             // one that passes through unchecked because nothing here mentions it.
             switch (each.fact()) {
                 case OperationFact.AnswersAFormOfItsArguments answers ->
-                        DischargeRules.holdAFormOfItsArguments(each.operation(), answers.form());
+                        DischargeRules.holdAFormOfItsArguments(stdlib, each.operation(), answers.form());
                 // Both arguments, because which is the greater and which the lesser are one
                 // statement and a signature could disagree with either half.
                 case OperationFact.StatesTheOrderOfItsArguments states -> {
-                    DischargeRules.holdToTheDeclaration(each.operation(), states.order().greater(),
+                    DischargeRules.holdToTheDeclaration(stdlib, each.operation(), states.order().greater(),
                             null, type -> true, "the argument a positive answer names as greater");
-                    DischargeRules.holdToTheDeclaration(each.operation(), states.order().lesser(),
+                    DischargeRules.holdToTheDeclaration(stdlib, each.operation(), states.order().lesser(),
                             null, type -> true, "the argument a positive answer names as lesser");
                 }
-                case OperationFact.ShiftsBy shifts -> DischargeRules.holdShift(each.operation(),
+                case OperationFact.ShiftsBy shifts -> DischargeRules.holdShift(stdlib, each.operation(),
                         shifts);
                 case OperationFact.BoundsItsResult bounded ->
-                        DischargeRules.holdBound(each.operation(), bounded.bound());
+                        DischargeRules.holdBound(stdlib, each.operation(), bounded.bound());
                 case OperationFact.BuildsItsResultFrom builds ->
-                        DischargeRules.holdToTheDeclaration(each.operation(),
+                        DischargeRules.holdToTheDeclaration(stdlib, each.operation(),
                                 builds.built().from(),
                                 new ArgumentRef.TheContainer(),
                                 Question::holdsElements,
                                 "the container something is built from");
                 case OperationFact.ResultIsNoSmallerThan bounded ->
-                        DischargeRules.holdToTheDeclaration(each.operation(), bounded.container(),
+                        DischargeRules.holdToTheDeclaration(stdlib, each.operation(), bounded.container(),
                                 new ArgumentRef.TheContainer(),
                                 Question::holdsElements,
                                 "a container the result is no smaller than");
                 case OperationFact.ReadsItsContainer reads ->
-                        DischargeRules.holdToTheDeclaration(each.operation(), reads.container(),
+                        DischargeRules.holdToTheDeclaration(stdlib, each.operation(), reads.container(),
                                 new ArgumentRef.TheContainer(),
                                 Question::holdsElements,
                                 "the container a predicate reads");
                 case OperationFact.IsStatedOverAProjection over ->
-                        DischargeRules.holdToTheDeclaration(each.operation(), over.projection(),
+                        DischargeRules.holdToTheDeclaration(stdlib, each.operation(), over.projection(),
                                 new ArgumentRef.TheClosure(),
                                 type -> type instanceof Type.FnOf,
                                 "the projection a predicate is stated over");
@@ -104,9 +106,9 @@ final class OperationFactBinder {
                      OperationFact.CountsWhatItIsGiven _,
                      OperationFact.EveryCountItGivesIsACountSomeValueHas _ -> { }
                 case OperationFact.ComputesANumber computes ->
-                        DischargeRules.holdNumericResult(each.operation(), computes.result());
+                        DischargeRules.holdNumericResult(stdlib, each.operation(), computes.result());
                 case OperationFact.IsDefinedByCases defined ->
-                        DischargeRules.holdCase(each.operation(), defined.one());
+                        DischargeRules.holdCase(stdlib, each.operation(), defined.one());
             }
             visited.add(each);
         }
@@ -114,8 +116,8 @@ final class OperationFactBinder {
     }
 
     /** The same, over what the language declares. */
-    static List<OperationFacts.Declared> bindAll() {
-        return bindAll(OperationFacts.declarations());
+    static List<OperationFacts.Declared> bindAll(Stdlib stdlib) {
+        return bindAll(stdlib, OperationFacts.declarations());
     }
 
     private OperationFactBinder() {}

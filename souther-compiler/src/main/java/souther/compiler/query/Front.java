@@ -132,6 +132,20 @@ public final class Front {
     public record Policy() implements Input<souther.compiler.examples.EvaluationPolicy> {}
 
     /**
+     * The standard library this compilation reads names against.
+     *
+     * <p>Held as an input for the reason the two above are: everything a compilation resolves is
+     * resolved against one library, and a reader that fetched its own could be resolving one module
+     * against a different set of declarations from the module beside it. What sets it is the
+     * compilation, once, as it starts.
+     *
+     * <p>The library is the same value for every compilation in a process today — there is one
+     * bundled library and no way to name another. It travels as an input all the same, because what
+     * a name means is a question about the compilation asking, and an answer that reached for a
+     * process-wide value would be right by coincidence rather than by construction.
+     */
+    public record Library() implements Input<souther.compiler.stdlib.Stdlib> {}
+    /**
      * How much of a declaration's clauses a reading may hold apart.
      *
      * <p>Held as an input for the reason the one above is: it belongs to the compilation, and every
@@ -140,6 +154,7 @@ public final class Front {
      * readings of the same declaration, and each would answer a position differently while both
      * stayed sound.
      */
+
     public record Reading() implements Input<souther.compiler.check.ReadingPolicy> {
 
         /**
@@ -318,7 +333,8 @@ public final class Front {
             // read here is still the model file's lines.
             Ast.Module joined = withAttachedRows(db, raw, layout.exampleFilesOf()
                     .getOrDefault(name, List.of()));
-            Exposing.Checked checked = Exposing.check(joined);
+            Exposing.Checked checked = Exposing.check(joined,
+                    db.ask(new Library()).value().names());
             if (checked.refused().isEmpty()) {
                 return Answer.of(checked);
             }
@@ -515,7 +531,8 @@ public final class Front {
                 if (layout.idOfModule().containsKey(name) || !tried.add(name)) {
                     continue;
                 }
-                Readback<ReadableModule> readback = ModuleReadback.read(name, classes);
+                Readback<ReadableModule> readback = ModuleReadback.read(name, classes,
+                        db.ask(new Library()).value().names());
                 if (readback instanceof Readback.NotReady.SaysNothing<ReadableModule>) {
                     continue;   // absent; which of its importers minds is worked out below
                 }

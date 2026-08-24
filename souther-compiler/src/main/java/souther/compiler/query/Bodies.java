@@ -1280,7 +1280,8 @@ public final class Bodies {
             // fn of its own. Joined here, a table built for this module would answer that it holds a
             // published helper, and the table the check builds — which is handed the same two apart —
             // would answer that it does not.
-            HelperTable table = HelperTable.of(settled.value(), imported.value(), policy);
+            HelperTable table = HelperTable.of(settled.value(), imported.value(), policy,
+                    db.ask(new Front.Library()).value());
             return Answer.of(new Of(table, HelperGraph.of(table)));
         }
     }
