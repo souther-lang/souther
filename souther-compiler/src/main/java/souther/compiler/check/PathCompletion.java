@@ -27,7 +27,7 @@ import souther.compiler.core.Core;
  *
  * <p>Both steps read what already knows. The arithmetic and what a value's kind of number holds are
  * the recipes' ({@link DerivedNumericFacts}); which case comes back and under what condition is the
- * table's ({@link DischargeRules.TheOtherCaseWhen}, through {@link TheOtherCase}); and what a
+ * table's ({@link souther.compiler.semantics.NumericResult.TheOtherCaseWhen}, through {@link TheOtherCase}); and what a
  * condition rules out is {@link Predicates}'. Nothing about a primitive's own domain is written down
  * here, which is what keeps this from being a second place each operation has to be described in.
  *

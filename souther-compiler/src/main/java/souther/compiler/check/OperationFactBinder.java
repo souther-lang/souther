@@ -87,6 +87,10 @@ final class OperationFactBinder {
                 // the question is even about.
                 case OperationFact.StatesItsPredicateOfEveryElement _,
                      OperationFact.MeansTheSameAsASizeOfNought _ -> { }
+                case OperationFact.ComputesANumber computes ->
+                        DischargeRules.holdNumericResult(each.operation(), computes.result());
+                case OperationFact.IsDefinedByCases defined ->
+                        DischargeRules.holdCase(each.operation(), defined.one());
             }
             visited.add(each);
         }

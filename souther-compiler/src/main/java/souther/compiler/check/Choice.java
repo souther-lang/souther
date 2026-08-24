@@ -177,14 +177,15 @@ record Choice(Kind kind, List<Arm> arms) {
      * question about the library, and it is answered by the time an arm exists.
      */
     private static Choice defined(Core.PreservedCall call) {
-        DischargeRules.Choices defined = DischargeRules.chosenBy(call);
-        if (defined == null) {
+        List<souther.compiler.semantics.OperationFact.Case> defined =
+                DischargeRules.chosenBy(call);
+        if (defined.isEmpty()) {
             return null;
         }
-        List<Arm> arms = new ArrayList<>(defined.cases().size());
-        for (DischargeRules.Choice one : defined.cases()) {
+        List<Arm> arms = new ArrayList<>(defined.size());
+        for (souther.compiler.semantics.OperationFact.Case one : defined) {
             List<ArgumentRelation> relations = new ArrayList<>(one.given().size());
-            for (DischargeRules.ArgumentsStand stands : one.given()) {
+            for (souther.compiler.semantics.OperationFact.ArgumentsStand stands : one.given()) {
                 relations.add(new ArgumentRelation(CallArguments.of(stands.left(), call), stands.rel(),
                         CallArguments.of(stands.right(), call)));
             }

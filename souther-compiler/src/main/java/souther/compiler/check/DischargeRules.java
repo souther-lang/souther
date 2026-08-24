@@ -207,83 +207,6 @@ final class DischargeRules {
     static final Set<ValueName> SHIFTS_BY_NOTHING_MEASURABLE = Set.of(
             op("Date", "addMonths"), op("Date", "addYears"));
 
-    /** A relation between two arguments: {@code left rel right}. What a case of a piecewise
-     * definition is reached under, written in the arguments the operation was given and in nothing
-     * else. */
-    record ArgumentsStand(ArgumentRef left, Rel rel, ArgumentRef right) {}
-
-    private static ArgumentsStand where(ArgumentRef left, Rel rel, ArgumentRef right) {
-        return new ArgumentsStand(left, rel, right);
-    }
-
-    /** One case of an operation's definition: the argument it answers there, and what holds of the
-     * arguments where it does. */
-    record Choice(ArgumentRef answers, List<ArgumentsStand> given) {}
-
-    private static Choice answers(ArgumentRef argument, ArgumentsStand... given) {
-        return new Choice(argument, List.of(given));
-    }
-
-    /**
-     * An operation's definition, as the cases it is written in.
-     *
-     * <p>The list is exhaustive: the conditions of its cases cover everything the operation can be
-     * given, so what holds in every case holds of the result. That is the whole of what makes a
-     * reading of these sound, and it is a claim about the list rather than about any row in it — a
-     * case left out does not make the others wrong, it makes a clause provable that the values can
-     * fail. So the cases are written as the library writes them, in the order it writes them, and
-     * each is held to a program that reaches it.
-     */
-    record Choices(List<Choice> cases) {}
-
-    private static Choices choices(Choice... cases) {
-        return new Choices(List.of(cases));
-    }
-
-    /**
-     * The operations that answer one of the values they were given, as the cases they are defined in.
-     *
-     * <p>Each is the library's own definition read back: {@code min(a, b)} is {@code a} where
-     * {@code a < b} and {@code b} otherwise, and {@code clamp(lo, hi, n)} is written as a chain of
-     * two conditions, so the second and third cases carry the denial of what stands before them.
-     * Carrying it is not tidiness — {@code clamp} does not ask that {@code lo} be below {@code hi},
-     * and where it is not, the case that answers {@code hi} is reached with {@code n} above
-     * {@code lo}. A rule that said the result is between the two would prove a clause the values
-     * fail.
-     *
-     * <p>Stated here rather than as bounds on the result ({@link #BOUNDS_ON_THE_RESULT}) because
-     * what these answer depends on the arguments, and a bound that does not may not be written for
-     * them. The bounds a case gives — a smaller of two is no greater than either — follow from the
-     * case and are derived where the cases are read, so they are not a second table to keep in step
-     * with this one.
-     *
-     * <p>Read through {@link #chosenBy} in one place ({@link Choice}), which turns a case into an arm
-     * written in the values a call was given. A reader wanting the cases asks there and is never
-     * handed a row: what a row names is an argument of an operation, and a second reading of that is
-     * a second answer to keep in step.
-     */
-    private static final Map<ValueName, Choices> CHOOSES = Map.of(
-            op("Int", "min"), choices(
-                    answers(at(0), where(at(0), Rel.LT, at(1))),
-                    answers(at(1), where(at(0), Rel.GE, at(1)))),
-            op("Decimal", "min"), choices(
-                    answers(at(0), where(at(0), Rel.LT, at(1))),
-                    answers(at(1), where(at(0), Rel.GE, at(1)))),
-            op("Int", "max"), choices(
-                    answers(at(0), where(at(0), Rel.GT, at(1))),
-                    answers(at(1), where(at(0), Rel.LE, at(1)))),
-            op("Decimal", "max"), choices(
-                    answers(at(0), where(at(0), Rel.GT, at(1))),
-                    answers(at(1), where(at(0), Rel.LE, at(1)))),
-            op("Int", "clamp"), choices(
-                    answers(at(0), where(at(2), Rel.LT, at(0))),
-                    answers(at(1), where(at(2), Rel.GE, at(0)), where(at(2), Rel.GT, at(1))),
-                    answers(at(2), where(at(2), Rel.GE, at(0)), where(at(2), Rel.LE, at(1)))),
-            op("Decimal", "clamp"), choices(
-                    answers(at(0), where(at(2), Rel.LT, at(0))),
-                    answers(at(1), where(at(2), Rel.GE, at(0)), where(at(2), Rel.GT, at(1))),
-                    answers(at(2), where(at(2), Rel.GE, at(0)), where(at(2), Rel.LE, at(1)))));
-
     /**
      * The operations answering a number that answer none of their arguments back, in three groups.
      *
@@ -334,224 +257,6 @@ final class DischargeRules {
             op("Int", "min"), op("Int", "max"), op("Int", "clamp"),
             op("Decimal", "min"), op("Decimal", "max"), op("Decimal", "clamp"));
 
-    /** Where an operation answers a number: as its result, or as one case of the union its result
-     * is. Two positions and not two tables — what an operation computes is one question, and the
-     * surface a value arrives on is what {@link NumericMeaning} exists to stop deciding rules. */
-    sealed interface Answered {
-
-        /** The result itself is the number. */
-        record Directly() implements Answered {}
-
-        /**
-         * One case of the union carries it, told apart by what that case carries.
-         *
-         * <p>By the type and not by the name of the case. What a primitive-headed case binds is the
-         * primitive itself (spec §primitive-arm), so the type is what the arm's pattern already
-         * settled and a name would be a second spelling of it.
-         */
-        record InTheCaseCarrying(Type carried) implements Answered {}
-    }
-
-    /**
-     * What number an operation computes, given its arguments.
-     *
-     * <p>A method rather than an enum the reader switches on: what a row says is which arithmetic
-     * this is, and the arithmetic is a {@link NumericMeaning}, so a row answers with one. A reader
-     * that turned a tag back into a meaning would be a second place deciding which arguments go
-     * where.
-     */
-    sealed interface Computes {
-
-        /** The number a call handing over {@code args} computes. */
-        NumericMeaning of(List<Core> args);
-
-        /**
-         * What each argument has to be for this row to be about the operation, in the order the
-         * operation takes them.
-         *
-         * <p>The row reads arguments by position — the second one is what it divides by — so the
-         * positions are what a declaration can drift out from under. A count alone does not catch
-         * it: an operation whose scale and mode swapped places still takes four arguments, and what
-         * would change is only which of them this reads as the scale. Written here and held to the
-         * declaration before any call is read ({@link #bindNumericResults}).
-         */
-        List<Reads> reads();
-
-        /** Arithmetic the language also writes as an operator. The two reach one kernel in one
-         * argument order — {@code Int.add} is {@code IntMath.addExact}, which is what {@code +}
-         * emits — so they compute one value and are read as one term. */
-        record TheOperator(BinOp op) implements Computes {
-            @Override
-            public NumericMeaning of(List<Core> args) {
-                return new NumericMeaning.Operator(op, args.get(0), args.get(1));
-            }
-
-            @Override
-            public List<Reads> reads() {
-                return TWO_OF_ITS_OWN;
-            }
-        }
-
-        /** A division of whole numbers truncated toward zero — the quotient {@code /} answers,
-         * reached where the divisor is one the model admits as zero. */
-        record ATruncatingQuotient() implements Computes {
-            @Override
-            public NumericMeaning of(List<Core> args) {
-                return new NumericMeaning.TruncatingQuotient(args.get(0), args.get(1));
-            }
-
-            @Override
-            public List<Reads> reads() {
-                return TWO_OF_ITS_OWN;
-            }
-        }
-
-        /** What that division leaves. The language writes no operator for it. */
-        record ATruncatingRemainder() implements Computes {
-            @Override
-            public NumericMeaning of(List<Core> args) {
-                return new NumericMeaning.TruncatingRemainder(args.get(0), args.get(1));
-            }
-
-            @Override
-            public List<Reads> reads() {
-                return TWO_OF_ITS_OWN;
-            }
-        }
-
-        /** A division of decimals rounded where the call says to round it. Not {@code /} over
-         * {@code Decimal}, which rounds at a significant-digit precision the run time sets. */
-        record AQuotientRoundedToAScale() implements Computes {
-            @Override
-            public NumericMeaning of(List<Core> args) {
-                return new NumericMeaning.RoundedQuotient(
-                        args.get(0), args.get(1), args.get(2), args.get(3));
-            }
-
-            @Override
-            public List<Reads> reads() {
-                return List.of(Reads.THE_NUMBER_IT_ANSWERS, Reads.THE_NUMBER_IT_ANSWERS,
-                        Reads.A_SCALE, Reads.A_ROUNDING_MODE);
-            }
-        }
-    }
-
-    /** Two numbers of the kind the operation answers, which is what all the arithmetic over a pair
-     * of them takes. */
-    private static final List<Reads> TWO_OF_ITS_OWN =
-            List.of(Reads.THE_NUMBER_IT_ANSWERS, Reads.THE_NUMBER_IT_ANSWERS);
-
-    /**
-     * What one argument of a numeric operation is, as far as a row about it needs to know.
-     *
-     * <p>Not a type. What the row needs held is the argument's <em>part</em> in the arithmetic, and
-     * two of the three answer differently for different operations — the number an operation
-     * answers is {@code Int} for one and {@code Decimal} for another, and a row saying "a number"
-     * would be held to neither.
-     */
-    enum Reads {
-
-        /** A number of the kind the operation answers. */
-        THE_NUMBER_IT_ANSWERS,
-
-        /** How many places the answer is rounded to, which is a count and so an {@code Int}. */
-        A_SCALE,
-
-        /** Which way it rounds there. */
-        A_ROUNDING_MODE;
-
-        /** Whether an argument declared {@code at} is this, for an operation answering
-         * {@code answered}. */
-        boolean heldBy(Type at, Type answered) {
-            return switch (this) {
-                case THE_NUMBER_IT_ANSWERS -> at.equals(answered);
-                case A_SCALE -> at == Type.Prim.INT;
-                case A_ROUNDING_MODE -> at instanceof Type.Ref(souther.compiler.types.TypeSymbol name)
-                        && name.module().equals(souther.compiler.types.TypeSymbol.RUNTIME)
-                        && name.name().equals("RoundingMode");
-            };
-        }
-    }
-
-    /**
-     * Which case of the union came back, as a condition on what the operation was given.
-     *
-     * <p>What a union-answering operation's other case <em>means</em>. {@code Int.divide} comes back
-     * as {@code DivisionByZero} exactly where the divisor is zero, and that is one fact with two
-     * readings: an arm taking that case has established the condition, and an arm taking the number
-     * has established its denial. Written once as the condition rather than twice as two rules, so
-     * the two cannot come apart.
-     *
-     * <p>About which case came back and not about whether a number was answered, which are two
-     * things. {@code Int.divide} answers no number for the one pair whose quotient no {@code Int}
-     * holds either — it aborts (spec §stdlib-int), and an abort comes back as no case at all, so no
-     * arm is reached and there is nothing for a condition to say. A row that named the overflow here
-     * would put it on the {@code DivisionByZero} arm, which is a fact that arm has not established.
-     * What is written down is the case selection, and it is exactly right for that.
-     *
-     * <p>Declared whatever the numeric domain can hold of it. That a divisor is not zero is a
-     * disequality, which a domain reasoning in ranges reads little from — and what an operation
-     * guarantees is not decided by what a reader does with it. Written down where it is true, it is
-     * read by whatever can read it and by whatever comes to be able to.
-     *
-     * @param argument which argument the condition is about
-     * @param op       how it stands to {@code than}
-     * @param than     the number it stands against
-     */
-    record TheOtherCaseWhen(ArgumentRef argument, BinOp op, long than) {}
-
-    /**
-     * What an operation computes, where it answers it, and when it answers nothing.
-     *
-     * @param unless the condition under which the union comes back as a case other than the
-     *               number's, or null for an operation whose result is the number itself
-     */
-    record NumericResult(Answered at, Computes computes, TheOtherCaseWhen unless) {}
-
-    /**
-     * The number each operation computes, and the result it answers it at.
-     *
-     * <p>What the table answers is which arithmetic an operation is, and not which operator it is
-     * the function form of. The narrower question left every operation answering {@code Int |
-     * DivisionByZero} out of the table for the shape of its result, and the arithmetic it computed
-     * unreadable through the only surface an author has when the divisor is not a literal they can
-     * argue about (#959). The result position is a column here rather than a second table, because
-     * an operation computing a quotient computes one whether the zero divisor is an abort or a case.
-     *
-     * <p>{@code Decimal.divide} states its scale and its mode, so the number it computes is not the
-     * one {@code /} over {@code Decimal} computes: that operator rounds to a significant-digit
-     * precision the run time sets (spec §stdlib-decimal). The two are different arithmetic and are
-     * two rows' worth of meaning, not one — and the operator's is a row nothing writes, since it is
-     * the operator and reaches {@link NumericMeaning.Operator} where it stands.
-     */
-    private static final Map<ValueName, NumericResult> NUMERIC_RESULTS = Map.of(
-            op("Int", "add"), directly(new Computes.TheOperator(BinOp.ADD)),
-            op("Int", "subtract"), directly(new Computes.TheOperator(BinOp.SUB)),
-            op("Int", "multiply"), directly(new Computes.TheOperator(BinOp.MUL)),
-            op("Decimal", "add"), directly(new Computes.TheOperator(BinOp.ADD)),
-            op("Decimal", "subtract"), directly(new Computes.TheOperator(BinOp.SUB)),
-            op("Decimal", "multiply"), directly(new Computes.TheOperator(BinOp.MUL)),
-            op("Int", "divide"),
-                    inTheCaseCarrying(Type.INT, new Computes.ATruncatingQuotient(), byZero()),
-            op("Int", "truncatingRemainder"),
-                    inTheCaseCarrying(Type.INT, new Computes.ATruncatingRemainder(), byZero()),
-            op("Decimal", "divide"),
-                    inTheCaseCarrying(Type.DECIMAL, new Computes.AQuotientRoundedToAScale(),
-                            byZero()));
-
-    private static NumericResult directly(Computes computes) {
-        return new NumericResult(new Answered.Directly(), computes, null);
-    }
-
-    private static NumericResult inTheCaseCarrying(Type carried, Computes computes,
-                                                   TheOtherCaseWhen unless) {
-        return new NumericResult(new Answered.InTheCaseCarrying(carried), computes, unless);
-    }
-
-    /** The condition every division comes back as {@code DivisionByZero} under. */
-    private static TheOtherCaseWhen byZero() {
-        return new TheOtherCaseWhen(at(1), BinOp.EQ, 0);
-    }
 
     /**
      * The operations answering a number that compute no arithmetic of their own, in three groups.
@@ -658,7 +363,7 @@ final class DischargeRules {
     }
 
     static Set<ValueName> numericResultOperations() {
-        return NUMERIC_RESULTS.keySet();
+        return Bound.computesANumber();
     }
 
     static Set<ValueName> orderings() {
@@ -682,7 +387,7 @@ final class DischargeRules {
     }
 
     static Set<ValueName> choosingOperations() {
-        return Bound.CHOICES.keySet();
+        return Bound.isDefinedByCases();
     }
 
     /** Those of them the choosing table has, by name, for the test that holds each case to a
@@ -720,8 +425,9 @@ final class DischargeRules {
 
     /** The cases {@code e} is defined in, or null where it is not a call to an operation that
      * answers one of the values it was given. */
-    static Choices chosenBy(Core e) {
-        return e instanceof Core.PreservedCall call ? Bound.CHOICES.get(call.operation()) : null;
+    static List<souther.compiler.semantics.OperationFact.Case> chosenBy(Core e) {
+        return e instanceof Core.PreservedCall call ? Bound.isDefinedByCases(call.operation())
+                : List.of();
     }
 
     /**
@@ -902,9 +608,23 @@ final class DischargeRules {
                 ValueName operation) {
             return souther.compiler.semantics.OperationFacts.boundsOnTheResult(operation);
         }
-        private static final Map<ValueName, Choices> CHOICES = bindChoices(CHOOSES);
-        private static final Map<ValueName, NumericResult> ARITHMETIC =
-                bindNumericResults(NUMERIC_RESULTS);
+        private static Set<ValueName> isDefinedByCases() {
+            return souther.compiler.semantics.OperationFacts.isDefinedByCases();
+        }
+
+        private static List<souther.compiler.semantics.OperationFact.Case> isDefinedByCases(
+                ValueName operation) {
+            return souther.compiler.semantics.OperationFacts.isDefinedByCases(operation);
+        }
+
+        private static Set<ValueName> computesANumber() {
+            return souther.compiler.semantics.OperationFacts.computesANumber();
+        }
+
+        private static souther.compiler.semantics.NumericResult computesANumber(
+                ValueName operation) {
+            return souther.compiler.semantics.OperationFacts.computesANumber(operation);
+        }
     }
 
     /**
@@ -917,9 +637,9 @@ final class DischargeRules {
      * row names, would leave the operation with a meaning no program reaches and no diagnostic
      * anywhere. Held here, before any call is read.
      */
-    private static Map<ValueName, NumericResult> bindNumericResults(
-            Map<ValueName, NumericResult> rules) {
-        rules.forEach((operation, rule) -> {
+    static void holdNumericResult(ValueName operation,
+                                  souther.compiler.semantics.NumericResult rule) {
+        {
             Prelude.PreludeEntry entry = Prelude.entry(((ValueName.Stdlib) operation).qualified());
             if (entry == null) {
                 throw new IllegalStateException("a rule about what number it computes is written for "
@@ -927,7 +647,7 @@ final class DischargeRules {
             }
             Prelude.Signature signature = entry.signature();
             Type answers = Question.numberAnsweredBy(signature.result());
-            List<Reads> reads = rule.computes().reads();
+            List<souther.compiler.semantics.Arithmetic.Reads> reads = rule.computes().reads();
             if (signature.params().size() != reads.size()) {
                 throw new IllegalStateException(operation + " takes " + signature.params().size()
                         + " argument(s), and the arithmetic written for it reads " + reads.size());
@@ -940,14 +660,14 @@ final class DischargeRules {
                 }
             }
             switch (rule.at()) {
-                case Answered.Directly ignored -> {
+                case souther.compiler.semantics.NumericResult.Answered.Directly ignored -> {
                     if (!Question.isANumber(signature.result())) {
                         throw new IllegalStateException(operation + " answers "
                                 + Type.show(signature.result())
                                 + ", so the number it computes is not its result");
                     }
                 }
-                case Answered.InTheCaseCarrying(Type carried) -> {
+                case souther.compiler.semantics.NumericResult.Answered.InTheCaseCarrying(Type carried) -> {
                     if (!(signature.result() instanceof Type.Union(Set<TypeSymbol> members))) {
                         throw new IllegalStateException(operation + " answers "
                                 + Type.show(signature.result())
@@ -977,11 +697,10 @@ final class DischargeRules {
                 }
             }
             if (rule.unless() != null) {
-                bind(Map.of(operation, rule.unless().argument()), Function.identity(), null,
+                holdToTheDeclaration(operation, rule.unless().argument(), null,
                         Question::isANumber, "the argument a failure is decided by");
             }
-        });
-        return rules;
+        }
     }
 
     /**
@@ -1013,18 +732,15 @@ final class DischargeRules {
 
     /** As {@link #bind}, for the arguments a case names: the one it answers, and the two sides of
      * each condition it is reached under. */
-    private static Map<ValueName, Choices> bindChoices(Map<ValueName, Choices> rules) {
-        rules.forEach((operation, choices) -> choices.cases().forEach(choice -> {
-            List<ArgumentRef> named = new ArrayList<>();
-            named.add(choice.answers());
-            choice.given().forEach(stands -> {
-                named.add(stands.left());
-                named.add(stands.right());
-            });
-            named.forEach(one -> bind(Map.of(operation, one), Function.identity(), null,
-                    Question::isANumber, "an argument a case of the definition names"));
-        }));
-        return rules;
+    static void holdCase(ValueName operation, souther.compiler.semantics.OperationFact.Case one) {
+        List<ArgumentRef> named = new ArrayList<>();
+        named.add(one.answers());
+        one.given().forEach(stands -> {
+            named.add(stands.left());
+            named.add(stands.right());
+        });
+        named.forEach(each -> holdToTheDeclaration(operation, each, null, Question::isANumber,
+                "an argument a case of the definition names"));
     }
 
     /** As {@link #bind}, for the arguments a bound names: the one the result is bounded against, and
@@ -1192,19 +908,21 @@ final class DischargeRules {
 
     /** What {@code operation} computes and where it answers it, or null where the table says
      * nothing of it. */
-    static NumericResult numericResult(ValueName operation) {
+    static souther.compiler.semantics.NumericResult numericResult(ValueName operation) {
         // An expression that calls nothing is asked this, and answering it is what says so. The
         // tables are immutable maps, which refuse a null key rather than answering for it, and a
         // reader that guarded the call itself would be one guard per reader.
-        return operation == null ? null : Bound.ARITHMETIC.get(operation);
+        return Bound.computesANumber(operation);
     }
 
     /** The operator {@code operation} is, where it answers one directly and the language writes it
      * as an operator too — else null. What a call to it is read as where it stands. */
     static BinOp operator(ValueName operation) {
-        NumericResult result = numericResult(operation);
-        return result != null && result.at() instanceof Answered.Directly
-                && result.computes() instanceof Computes.TheOperator written
+        souther.compiler.semantics.NumericResult result = numericResult(operation);
+        return result != null
+                && result.at() instanceof souther.compiler.semantics.NumericResult.Answered.Directly
+                && result.computes()
+                        instanceof souther.compiler.semantics.Arithmetic.TheOperator written
                 ? written.op() : null;
     }
 

@@ -226,7 +226,7 @@ final class PathEngine {
      * {@code in} with what taking this arm's case says about what the operation was given.
      *
      * <p>An operation answering its number as one case of a union comes back as the other case under
-     * a condition it declares ({@link DischargeRules.TheOtherCaseWhen}), and which arm was taken
+     * a condition it declares ({@link souther.compiler.semantics.NumericResult.TheOtherCaseWhen}), and which arm was taken
      * settles that condition both ways: the arm carrying the number was taken because it does not
      * hold, and the other arm because it does. So a {@code DivisionByZero} arm has established that
      * the divisor is zero, which is a fact about a value the caller handed over and not about the

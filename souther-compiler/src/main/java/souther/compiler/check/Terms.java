@@ -1191,9 +1191,9 @@ final class Terms {
      */
     private Opens arithmetic(Type carried, Core scrutinee, Denotations at) {
         Core called = originating(scrutinee, at, new HashSet<>());
-        DischargeRules.NumericResult result = called == null ? null
+        souther.compiler.semantics.NumericResult result = called == null ? null
                 : DischargeRules.numericResult(operationOf(called));
-        if (result == null || !(result.at() instanceof DischargeRules.Answered.InTheCaseCarrying(
+        if (result == null || !(result.at() instanceof souther.compiler.semantics.NumericResult.Answered.InTheCaseCarrying(
                 Type answersIn)) || !answersIn.equals(carried)) {
             return new Opens(scrutinee, subjectOf(scrutinee, at), null);
         }
@@ -1699,7 +1699,7 @@ final class Terms {
      * carries.
      *
      * <p>{@code answered} is which of the two: an operation stating its arithmetic answers it
-     * directly or as one case of a union ({@link DischargeRules.Answered}), and reading the row only
+     * directly or as one case of a union ({@link souther.compiler.semantics.NumericResult.Answered}), and reading the row only
      * at the first left a divide unreadable at the call and readable at the arm that opens it. Which
      * is right for what an arm binds and wrong for a reader standing where the call is — the same
      * arithmetic, asked before there is an arm.
@@ -1713,7 +1713,7 @@ final class Terms {
         // answered for was a row this could not see, which is the silence the table exists to
         // remove. `asOperator` still writes a call as the operator it stands for, which is what
         // names the value; what it computes is answered here.
-        DischargeRules.NumericResult result =
+        souther.compiler.semantics.NumericResult result =
                 DischargeRules.numericResult(operationOf(e));
         if (result != null && answersIn(result, answered)) {
             return computedBy(result, argsOf(e), answered);
@@ -1726,9 +1726,9 @@ final class Terms {
 
     /** Whether {@code result} says the operation answers a value of {@code answered}: its own, or
      * the one the case carrying that type holds. */
-    private static boolean answersIn(DischargeRules.NumericResult result, Type answered) {
-        return result.at() instanceof DischargeRules.Answered.Directly
-                || result.at() instanceof DischargeRules.Answered.InTheCaseCarrying(Type carried)
+    private static boolean answersIn(souther.compiler.semantics.NumericResult result, Type answered) {
+        return result.at() instanceof souther.compiler.semantics.NumericResult.Answered.Directly
+                || result.at() instanceof souther.compiler.semantics.NumericResult.Answered.InTheCaseCarrying(Type carried)
                         && carried.equals(answered);
     }
 
@@ -1743,8 +1743,8 @@ final class Terms {
      * come through here, which is what keeps one value from being two meanings depending on which
      * of the two reached it.
      */
-    NumericMeaning computedBy(DischargeRules.NumericResult result, List<Core> args, Type answered) {
-        return theOneOf(result.computes().of(args), answered);
+    NumericMeaning computedBy(souther.compiler.semantics.NumericResult result, List<Core> args, Type answered) {
+        return theOneOf(NumericMeanings.of(result.computes(), args), answered);
     }
 
     /** {@code meaning}, as the arithmetic it is where the language writes that arithmetic two ways.

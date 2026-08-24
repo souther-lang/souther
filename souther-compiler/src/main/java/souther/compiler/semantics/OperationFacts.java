@@ -1,6 +1,8 @@
 package souther.compiler.semantics;
 
 import souther.compiler.numeric.NumericDomain.Rel;
+import souther.compiler.types.BinOp;
+import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -166,7 +168,68 @@ public final class OperationFacts {
             about("List", "isEmpty", meansSizeOf("List", "length")),
             about("Set", "isEmpty", meansSizeOf("Set", "size")),
             about("Map", "isEmpty", meansSizeOf("Map", "size")),
-            about("String", "isEmpty", meansSizeOf("String", "length")));
+            about("String", "isEmpty", meansSizeOf("String", "length")),
+
+            // Which arithmetic each operation computes, and where it answers it. A division comes
+            // back as `DivisionByZero` where its divisor is nought, so the number is in the case
+            // carrying it rather than the result itself.
+            about("Int", "add", computes(new Arithmetic.TheOperator(BinOp.ADD))),
+            about("Int", "subtract", computes(new Arithmetic.TheOperator(BinOp.SUB))),
+            about("Int", "multiply", computes(new Arithmetic.TheOperator(BinOp.MUL))),
+            about("Decimal", "add", computes(new Arithmetic.TheOperator(BinOp.ADD))),
+            about("Decimal", "subtract", computes(new Arithmetic.TheOperator(BinOp.SUB))),
+            about("Decimal", "multiply", computes(new Arithmetic.TheOperator(BinOp.MUL))),
+            about("Int", "divide",
+                    computesInTheCaseCarrying(Type.INT, new Arithmetic.ATruncatingQuotient())),
+            about("Int", "truncatingRemainder",
+                    computesInTheCaseCarrying(Type.INT, new Arithmetic.ATruncatingRemainder())),
+            about("Decimal", "divide",
+                    computesInTheCaseCarrying(Type.DECIMAL,
+                            new Arithmetic.AQuotientRoundedToAScale())),
+
+            // The operations that answer one of the values they were given, as the cases their
+            // definitions are written in.
+            about("Int", "min", answers(at(0), stands(at(0), Rel.LT, at(1)))),
+            about("Int", "min", answers(at(1), stands(at(0), Rel.GE, at(1)))),
+            about("Decimal", "min", answers(at(0), stands(at(0), Rel.LT, at(1)))),
+            about("Decimal", "min", answers(at(1), stands(at(0), Rel.GE, at(1)))),
+            about("Int", "max", answers(at(0), stands(at(0), Rel.GT, at(1)))),
+            about("Int", "max", answers(at(1), stands(at(0), Rel.LE, at(1)))),
+            about("Decimal", "max", answers(at(0), stands(at(0), Rel.GT, at(1)))),
+            about("Decimal", "max", answers(at(1), stands(at(0), Rel.LE, at(1)))),
+            about("Int", "clamp", answers(at(0), stands(at(2), Rel.LT, at(0)))),
+            about("Int", "clamp", answers(at(1), stands(at(2), Rel.GE, at(0)),
+                    stands(at(2), Rel.GT, at(1)))),
+            about("Int", "clamp", answers(at(2), stands(at(2), Rel.GE, at(0)),
+                    stands(at(2), Rel.LE, at(1)))),
+            about("Decimal", "clamp", answers(at(0), stands(at(2), Rel.LT, at(0)))),
+            about("Decimal", "clamp", answers(at(1), stands(at(2), Rel.GE, at(0)),
+                    stands(at(2), Rel.GT, at(1)))),
+            about("Decimal", "clamp", answers(at(2), stands(at(2), Rel.GE, at(0)),
+                    stands(at(2), Rel.LE, at(1)))));
+
+    private static OperationFact computes(Arithmetic arithmetic) {
+        return new OperationFact.ComputesANumber(new NumericResult(
+                new NumericResult.Answered.Directly(), arithmetic, null));
+    }
+
+    /** The condition every division comes back as {@code DivisionByZero} under. */
+    private static OperationFact computesInTheCaseCarrying(Type carried, Arithmetic arithmetic) {
+        return new OperationFact.ComputesANumber(new NumericResult(
+                new NumericResult.Answered.InTheCaseCarrying(carried), arithmetic,
+                new NumericResult.TheOtherCaseWhen(at(1), BinOp.EQ, 0)));
+    }
+
+    private static OperationFact answers(ArgumentRef argument,
+                                         OperationFact.ArgumentsStand... given) {
+        return new OperationFact.IsDefinedByCases(
+                new OperationFact.Case(argument, List.of(given)));
+    }
+
+    private static OperationFact.ArgumentsStand stands(ArgumentRef left, Rel rel,
+                                                       ArgumentRef right) {
+        return new OperationFact.ArgumentsStand(left, rel, right);
+    }
 
     private static OperationFact noSmallerThan(ArgumentRef container) {
         return new OperationFact.ResultIsNoSmallerThan(container);
@@ -325,6 +388,28 @@ public final class OperationFacts {
         return Index.EMPTINESS.keySet();
     }
 
+    /** What {@code operation} computes and where it answers it, or null where it computes no
+     *  arithmetic of its own. */
+    public static NumericResult computesANumber(ValueName operation) {
+        return operation == null ? null : Index.ARITHMETIC.get(operation);
+    }
+
+    /** The operations that compute arithmetic of their own. */
+    public static java.util.Set<ValueName> computesANumber() {
+        return Index.ARITHMETIC.keySet();
+    }
+
+    /** The cases {@code operation}'s definition is written in, in the order they are declared, or
+     *  an empty list where it answers none of the values it was given. */
+    public static List<OperationFact.Case> isDefinedByCases(ValueName operation) {
+        return Index.CASES.getOrDefault(operation, List.of());
+    }
+
+    /** The operations that answer one of the values they were given. */
+    public static java.util.Set<ValueName> isDefinedByCases() {
+        return Index.CASES.keySet();
+    }
+
     /** The indexes, read off the declarations on the first ask. */
     private static final class Index {
 
@@ -358,6 +443,25 @@ public final class OperationFacts {
         private static final java.util.Set<ValueName> QUANTIFIERS = java.util.Set.copyOf(
                 index(OperationFact.StatesItsPredicateOfEveryElement.class,
                         fact -> fact).keySet());
+
+        private static final Map<ValueName, NumericResult> ARITHMETIC =
+                index(OperationFact.ComputesANumber.class, OperationFact.ComputesANumber::result);
+
+        /** In the order they are declared, which is the order the library writes them: what holds
+         *  in every case holds of the result, and that is a claim about the run of them. */
+        private static final Map<ValueName, List<OperationFact.Case>> CASES = cases();
+
+        private static Map<ValueName, List<OperationFact.Case>> cases() {
+            Map<ValueName, List<OperationFact.Case>> out = new LinkedHashMap<>();
+            for (Declared each : DECLARED) {
+                if (each.fact() instanceof OperationFact.IsDefinedByCases defined) {
+                    out.computeIfAbsent(each.operation(), operation -> new ArrayList<>())
+                            .add(defined.one());
+                }
+            }
+            out.replaceAll((operation, held) -> List.copyOf(held));
+            return Map.copyOf(out);
+        }
 
         /** Gathered rather than indexed one to one: an operation is no smaller than as many
          *  containers as it names, and each is a fact of its own. */

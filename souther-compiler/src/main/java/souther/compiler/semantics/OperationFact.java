@@ -175,4 +175,52 @@ public sealed interface OperationFact {
             java.util.Objects.requireNonNull(size, "this one names the size it means");
         }
     }
+
+    /** The operation computes a number, and this says which arithmetic and where it answers it. */
+    record ComputesANumber(NumericResult result) implements OperationFact {
+
+        public ComputesANumber {
+            java.util.Objects.requireNonNull(result, "this one says what it computes");
+        }
+    }
+
+    /**
+     * The operation answers one of the values it was given, and this is one case of the definition
+     * it is written in: which argument it answers there, and what has to hold of the arguments for
+     * that case to be reached.
+     *
+     * <p>The cases of one operation are exhaustive between them: their conditions cover everything
+     * it can be given, so what holds in every case holds of the result. That is what makes reading
+     * them sound, and it is a claim about the set rather than about any one of them — a case left
+     * out does not make the others wrong, it makes a clause provable that the values can fail. So
+     * they are declared as the library writes them, in the order it writes them.
+     */
+    record IsDefinedByCases(Case one) implements OperationFact {
+
+        public IsDefinedByCases {
+            java.util.Objects.requireNonNull(one, "this one states a case");
+        }
+    }
+
+    /** One case of a piecewise definition: the argument it answers, and what the arguments stand as
+     *  for it to be reached. */
+    record Case(ArgumentRef answers, java.util.List<ArgumentsStand> given) {
+
+        public Case {
+            java.util.Objects.requireNonNull(answers, "a case answers an argument");
+            given = java.util.List.copyOf(given);
+        }
+    }
+
+    /** A relation between two arguments: {@code left rel right}. What a case is reached under,
+     *  written in the arguments the operation was given and in nothing else. */
+    record ArgumentsStand(ArgumentRef left, souther.compiler.numeric.NumericDomain.Rel rel,
+                          ArgumentRef right) {
+
+        public ArgumentsStand {
+            java.util.Objects.requireNonNull(left, "a relation has two sides");
+            java.util.Objects.requireNonNull(rel, "and stands some way");
+            java.util.Objects.requireNonNull(right, "a relation has two sides");
+        }
+    }
 }
