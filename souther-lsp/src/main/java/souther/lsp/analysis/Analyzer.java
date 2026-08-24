@@ -686,8 +686,8 @@ public final class Analyzer {
         }
         Range diagRange = rangeOfRegion(diagnosed);
         if (overlaps(diagRange, requested)) {
-            out.add(new CodeAction.Applied("Replace with '" + d.suggestion() + "'", uri, diagRange,
-                    d.suggestion()));
+            out.add(new CodeAction.Applied("Replace with '" + d.suggestion() + "'",
+                    new CodeAction.Edit(uri, diagRange, d.suggestion())));
         }
         return out;
     }
@@ -742,8 +742,8 @@ public final class Analyzer {
             if (resolvesActions) {
                 return List.of(offer);
             }
-            CodeAction.Applied eager = resolve(offer, text, graph);
-            return eager == null ? List.of() : List.of(eager);
+            CodeAction.Edit eager = resolve(offer, text, graph);
+            return eager == null ? List.of() : List.of(new CodeAction.Applied(offer.title(), eager));
         }
         return List.of();
     }
@@ -790,7 +790,7 @@ public final class Analyzer {
      * put a comment into somebody's source. What there is to write is the generator's answer, and it
      * is the count that is asked.
      */
-    public CodeAction.Applied resolve(CodeAction.Deferred offer, String text, ModuleGraph graph) {
+    public CodeAction.Edit resolve(CodeAction.Deferred offer, String text, ModuleGraph graph) {
         if (graph == null || text == null) {
             return null;
         }
@@ -823,7 +823,7 @@ public final class Analyzer {
         // module's own source or an attached file — and moving a block is easier than finding out
         // why one landed somewhere surprising.
         Position end = new Position((int) text.lines().count(), 0);
-        return new CodeAction.Applied(offer.title(), offer.uri(), new Range(end, end),
+        return new CodeAction.Edit(offer.uri(), new Range(end, end),
                 System.lineSeparator() + block.text());
     }
 

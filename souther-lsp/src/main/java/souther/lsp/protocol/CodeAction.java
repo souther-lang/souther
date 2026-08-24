@@ -20,8 +20,24 @@ public sealed interface CodeAction {
     /** The document the offer is about. */
     String uri();
 
-    /** An offer whose edit is already worked out: replacing {@code range} in {@code uri}. */
-    record Applied(String title, String uri, Range range, String newText) implements CodeAction {}
+    /**
+     * What an action does to a document: replacing {@code range} in {@code uri} with {@code newText}.
+     *
+     * <p>Its own thing rather than fields of an action, because it is what a resolve produces. The
+     * protocol says a resolve fills in the properties an action was sent without and alters none of
+     * the ones it was sent with, so what is worked out then has to be smaller than an action — able
+     * to be added to what the client sent back, and not to stand in for it.
+     */
+    record Edit(String uri, Range range, String newText) {}
+
+    /** An offer whose edit is already worked out. */
+    record Applied(String title, Edit edit) implements CodeAction {
+
+        @Override
+        public String uri() {
+            return edit.uri();
+        }
+    }
 
     /**
      * An offer whose edit is worked out when somebody takes it.

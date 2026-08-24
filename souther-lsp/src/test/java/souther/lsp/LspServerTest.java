@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -385,6 +386,93 @@ class LspServerTest {
                 "the `behavior` line, zero-based");
         assertTrue(lenses.get(0).get("command").get("title").asString().contains("row"),
                 lenses.get(0).toString());
+    }
+
+    /**
+     * A resolve fills in what the action was sent without, and alters nothing it was sent with.
+     *
+     * <p>The data is what identifies the work, and the client hands it back for exactly that. A
+     * reply built as a fresh action rather than from the request drops whatever the server did not
+     * think to write again — which is the data first, and then anything the client itself added.
+     */
+    @Test
+    void resolvingAnActionKeepsWhatTheClientSentAndAddsTheEdit() throws Exception {
+        Path dir = Files.createTempDirectory("resolve");
+        String text = """
+                module example.trip
+
+                data Amount = Int
+                    invariant value >= 0
+
+                data Draft = { cost: Amount }
+                data Submitted = { cost: Amount }
+                data Waiting = { cost: Amount }
+
+                behavior submit : (request: Draft) -> Submitted | Waiting
+                    constructs Submitted, Waiting
+
+                let submit (request) = {
+                    guard request.cost.value <= 100 else Waiting { cost = request.cost }
+                    Submitted { cost = request.cost }
+                }
+
+                example submit
+                    | (Draft { cost = Amount(50) }) -> Submitted { cost = Amount(50) }
+                """;
+        Path source = dir.resolve("demo.sou");
+        Files.writeString(source, text);
+        String uri = source.toUri().toString();
+
+        byte[] input = frames(
+                message(1, "initialize", Map.of(
+                        "rootUri", dir.toUri().toString(),
+                        "initializationOptions", Map.of("souther", Map.of("adequacy", "witness")),
+                        "capabilities", Map.of("textDocument", Map.of("codeAction", Map.of(
+                                "dataSupport", true,
+                                "resolveSupport", Map.of("properties", List.of("edit"))))))),
+                message(null, "initialized", Map.of()),
+                message(null, "textDocument/didOpen", Map.of(
+                        "textDocument", Map.of("uri", uri, "text", text))),
+                message(2, "textDocument/codeAction", Map.of(
+                        "textDocument", Map.of("uri", uri),
+                        "range", Map.of("start", Map.of("line", 9, "character", 0),
+                                "end", Map.of("line", 9, "character", 0)),
+                        "context", Map.of("diagnostics", List.of()))));
+
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        new LspServer(new MessageConnection(new ByteArrayInputStream(input), out)).run();
+        JsonNode offered = responseFor(readFrames(out.toByteArray()), 2);
+        assertEquals(1, offered.size(), offered.toString());
+        JsonNode action = offered.get(0);
+        assertFalse(action.has("edit"), "the offer is made without one: " + action);
+        assertTrue(action.has("data"), "and with what identifies the work: " + action);
+
+        // The same action back, as a client that took it sends it.
+        Map<String, Object> taken = new LinkedHashMap<>();
+        action.properties().forEach(p -> taken.put(p.getKey(), p.getValue()));
+        byte[] second = frames(
+                message(1, "initialize", Map.of(
+                        "rootUri", dir.toUri().toString(),
+                        "initializationOptions", Map.of("souther", Map.of("adequacy", "witness")),
+                        "capabilities", Map.of("textDocument", Map.of("codeAction", Map.of(
+                                "dataSupport", true,
+                                "resolveSupport", Map.of("properties", List.of("edit"))))))),
+                message(null, "initialized", Map.of()),
+                message(null, "textDocument/didOpen", Map.of(
+                        "textDocument", Map.of("uri", uri, "text", text))),
+                message(3, "codeAction/resolve", taken));
+
+        ByteArrayOutputStream back = new ByteArrayOutputStream();
+        new LspServer(new MessageConnection(new ByteArrayInputStream(second), back)).run();
+        JsonNode resolved = responseFor(readFrames(back.toByteArray()), 3);
+
+        assertEquals(action.get("title"), resolved.get("title"), "the title is the client's");
+        assertEquals(action.get("kind"), resolved.get("kind"), "and so is the kind");
+        assertEquals(action.get("data"), resolved.get("data"),
+                "and the data it handed back is the data it gets back");
+        assertTrue(resolved.has("edit"), "with the one property it asked to be filled in");
+        assertTrue(resolved.get("edit").get("changes").get(uri).get(0).get("newText").asString()
+                .contains("-> <?>"), resolved.toString());
     }
 
     // --- helpers: build and read framed JSON-RPC messages ---

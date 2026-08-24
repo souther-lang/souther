@@ -659,7 +659,8 @@ class AnalyzerTest {
 
         assertEquals(1, actions.size(), actions.toString());
         assertEquals("Replace with 'value'", actions.get(0).title());
-        assertEquals("value", assertInstanceOf(CodeAction.Applied.class, actions.get(0)).newText());
+        assertEquals("value",
+                assertInstanceOf(CodeAction.Applied.class, actions.get(0)).edit().newText());
     }
 
     @Test

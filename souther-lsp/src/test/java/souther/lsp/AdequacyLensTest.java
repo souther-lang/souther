@@ -184,7 +184,7 @@ class AdequacyLensTest {
         CodeAction.Deferred offered =
                 assertInstanceOf(CodeAction.Deferred.class, actions.get(0));
 
-        CodeAction.Applied taken = analyzer.resolve(offered, TRIP, graph);
+        CodeAction.Edit taken = analyzer.resolve(offered, TRIP, graph);
         assertNotNull(taken, "and taking it writes rows");
         for (String line : taken.newText().lines().filter(l -> !l.isBlank()).toList()) {
             assertTrue(line.startsWith("//"), "every line is a comment: " + line);
@@ -211,7 +211,7 @@ class AdequacyLensTest {
         Analyzer resolving = measuring(Adequacy.Level.ALL, true);
         CodeAction.Deferred offered = assertInstanceOf(CodeAction.Deferred.class,
                 resolving.codeActions(MODULE, TRIP, on(9), graph).get(0));
-        assertEquals(eager.newText(), resolving.resolve(offered, TRIP, graph).newText(),
+        assertEquals(eager.edit().newText(), resolving.resolve(offered, TRIP, graph).newText(),
                 "and the rows are the same rows either way");
     }
 

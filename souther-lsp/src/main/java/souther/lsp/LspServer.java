@@ -471,14 +471,18 @@ public final class LspServer {
         action.put("title", a.title());
         action.put("kind", "quickfix");
         switch (a) {
-            case CodeAction.Applied applied -> action.put("edit", Map.of("changes",
-                    Map.of(applied.uri(),
-                            List.of(textEdit(applied.range(), applied.newText())))));
+            case CodeAction.Applied applied -> action.put("edit", changes(applied.edit()));
             case CodeAction.Deferred deferred -> action.put("data",
                     Map.of("uri", deferred.uri(), "module", deferred.module(),
                             "behavior", deferred.behavior()));
         }
         return action;
+    }
+
+    /** One edit, as the property of an action that carries it. */
+    private static Map<String, Object> changes(CodeAction.Edit edit) {
+        return Map.of("changes",
+                Map.of(edit.uri(), List.of(textEdit(edit.range(), edit.newText()))));
     }
 
     /**
@@ -487,6 +491,11 @@ public final class LspServer {
      * <p>The document is read again here rather than remembered from when the offer was made: an
      * editor asks what is available on every cursor move and resolves one of them much later, and
      * an edit composed against the older text would be written into source it was not composed for.
+     *
+     * <p>What comes back is what the client sent, with the one property it was sent without. A
+     * resolve fills in what an action was missing and alters nothing else it carries — the data that
+     * identifies the work among them — so the reply is built from the request rather than from a
+     * fresh action, which would drop whatever this server did not think to write again.
      *
      * <p>An action that resolves to nothing comes back as it went in, with no edit. There is nothing
      * to write, and writing the notes instead would put a comment into somebody's source.
@@ -503,10 +512,17 @@ public final class LspServer {
         if (uri == null || module == null || behavior == null || title == null) {
             return params;
         }
-        CodeAction.Applied resolved = analyzer.resolve(
+        CodeAction.Edit edit = analyzer.resolve(
                 new CodeAction.Deferred(title, uri, module, behavior), documents.get(uri),
                 workspace.snapshot(documents.openDocuments()));
-        return resolved == null ? params : written(resolved);
+        if (edit == null) {
+            return params;
+        }
+        Map<String, Object> resolved = new LinkedHashMap<>();
+        params.properties().forEach(property ->
+                resolved.put(property.getKey(), property.getValue()));
+        resolved.put("edit", changes(edit));
+        return resolved;
     }
 
     private static String text(JsonNode at, String field) {
