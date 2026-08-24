@@ -50,8 +50,27 @@ public record RowRef(String behavior, SourceId source, RowIdentity identity) {
                 + "` is written in no source this compile holds: " + row.identity().shown());
     }
 
-    /** As a person is shown it: the row's own name under the behavior it is written for. */
-    public String shown() {
-        return behavior + " " + identity.shown();
+    /**
+     * As a person is shown it, given what the caller calls the source this row is written in.
+     *
+     * <p><b>Two rows never read as one.</b> The identity above is three things and this was two, so
+     * a behavior with a first row in its module and a first row in an attached file was two facts
+     * that a reader saw once — which is the same loss the identity was widened to stop, at the last
+     * step (issue #996).
+     *
+     * <p>Which parts it takes is what the identity needs to stay apart. A row written with a name
+     * carries one no other row of its behavior has, so the name and the behavior are enough and the
+     * file it is in is noise. A row written without one is numbered within its source, so the
+     * source is what tells it from the row of the same number in the file beside it.
+     *
+     * @param source what the caller calls this row's source. Named by the caller for the reason
+     *               every other source in a report is: the identity a compile files a source under
+     *               is a position in a list for a build and a URI for an editor, and neither is
+     *               what a person is shown
+     */
+    public String shown(String source) {
+        return identity instanceof RowIdentity.Named
+                ? behavior + " " + identity.shown()
+                : behavior + " " + identity.shown() + " in " + source;
     }
 }

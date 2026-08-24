@@ -183,7 +183,10 @@ public sealed interface Target {
 
         @Override
         public String shown(SourceNameResolver names) {
-            return row.shown();
+            // The row decides which of its parts a reader needs; the caller decides what its file
+            // is called. Written the other way round, a renderer would be choosing how much of an
+            // identity to show, which is the row's to say.
+            return row.shown(names.nameOf(row.source()));
         }
 
         @Override

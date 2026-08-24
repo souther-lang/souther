@@ -3,11 +3,14 @@ package souther.compiler;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.RowIdentity;
+import souther.compiler.observe.RowRef;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -104,5 +107,69 @@ class TwoRowsThatDidNotComeBackAreTwoReasonsTest {
                         .filter(gap -> gap.scope() == Incompleteness.Scope.ROW)
                         .map(Incompleteness::subject).toList(),
                 "the first row of each source is a row of its own");
+    }
+
+    /**
+     * And a reader sees two of them.
+     *
+     * <p>The last step of the same thing. What tells the two apart is the source, and the form a
+     * person is shown was the behavior and the row's own name — so the identity was widened, the
+     * document carried both, and the lines under the module read alike. A test that asked the
+     * identity would not have noticed: this asks what is shown.
+     */
+    @Test
+    void andAReaderSeesTwoOfThem() {
+        Compilation compilation = overrunning(List.of("""
+                module example.shown
+
+                data Draft = { n: Int }
+                data Ok = { n: Int }
+
+                behavior take : (request: Draft) -> Ok
+                    constructs Ok
+
+                let take (request) = Ok { n = request.n }
+
+                example take
+                    | (Draft { n = 1 }) -> Ok { n = 1 }
+                """, """
+                examples for example.shown
+
+                example take
+                    | (Draft { n = 2 }) -> Ok { n = 2 }
+                """), "take");
+
+        List<String> shown = reasonsOf(compilation, "example.shown").stream()
+                .filter(gap -> gap.scope() == Incompleteness.Scope.ROW)
+                .map(gap -> gap.shown(souther.compiler.diag.SourceNameResolver.identity()))
+                .toList();
+
+        assertEquals(2, shown.size(), () -> "two rows did not come back: " + shown);
+        assertEquals(shown.size(), Set.copyOf(shown).size(),
+                () -> "and a reader is shown two things rather than one said twice: " + shown);
+    }
+
+    /**
+     * Which is a property of a row's own form and not of this model.
+     *
+     * <p>Held on the values, because the shown form is what a reader has and two rows reading alike
+     * is the whole of the loss. A named row carries a name no other row of its behavior has, so it
+     * says the file it is in nowhere; an unnamed one is numbered within its source, so it does.
+     */
+    @Test
+    void whatIsShownOfARowTellsItFromAnyOther() {
+        souther.compiler.source.SourceId first = new souther.compiler.source.SourceId("0");
+        souther.compiler.source.SourceId second = new souther.compiler.source.SourceId("1");
+        List<RowRef> rows = List.of(
+                new RowRef("take", first, new RowIdentity.Unnamed(1)),
+                new RowRef("take", second, new RowIdentity.Unnamed(1)),
+                new RowRef("take", first, new RowIdentity.Unnamed(2)),
+                new RowRef("take", first, new RowIdentity.Named("holds")),
+                new RowRef("cancel", first, new RowIdentity.Unnamed(1)));
+
+        List<String> shown = rows.stream().map(row -> row.shown(row.source().value())).toList();
+
+        assertEquals(rows.size(), Set.copyOf(shown).size(),
+                () -> "two rows read as one: " + shown);
     }
 }
