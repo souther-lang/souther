@@ -45,7 +45,7 @@
                  "probe_mapping_lost",
                  "output_cases_unreadable", "input_cases_unreadable", "row_did_not_finish",
                  "border_value_unreadable", "rule_unread", "position_not_read",
-                 "question_unanswered", "rules_not_reached",
+                 "question_unanswered", "rules_not_reached", "bodies_not_elaborated",
                  "pair_space_truncated", "proof_contradicted", "arms_unsettled"]
       }
     },

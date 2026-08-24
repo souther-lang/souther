@@ -2,6 +2,7 @@ package souther.compiler.report;
 
 import souther.compiler.observe.MeasureReason;
 import souther.compiler.observe.MeasurementStatus;
+import souther.compiler.query.Measure;
 import souther.compiler.query.Measurement;
 import souther.compiler.query.WeakeningSet;
 
@@ -48,9 +49,9 @@ import java.util.Optional;
 record ReportMeasurement<T>(MeasurementStatus status, MeasureReason reason, WeakeningSet weakenedBy,
                             Optional<T> value) {
 
-    static <T> ReportMeasurement<T> of(Measurement<T> measurement) {
-        return new ReportMeasurement<>(statusOf(measurement), measurement.why(),
-                measurement.weakening(), measurement.made());
+    static <T> ReportMeasurement<T> of(Measure<T> measure) {
+        return new ReportMeasurement<>(statusOf(measure), measure.why(),
+                measure.weakening(), measure.made());
     }
 
     /**
@@ -64,11 +65,13 @@ record ReportMeasurement<T>(MeasurementStatus status, MeasureReason reason, Weak
         return weakenedBy.isEmpty() ? MeasurementStatus.COMPLETE : MeasurementStatus.PARTIAL;
     }
 
-    private static MeasurementStatus statusOf(Measurement<?> measurement) {
-        return switch (measurement) {
+    private static MeasurementStatus statusOf(Measure<?> measure) {
+        return switch (measure) {
+            // The one word that is not about how far measuring got, and the only arm above
+            // `Measurement` that produces it. A measure typed as a measurement cannot reach here.
+            case Measure.NotApplicable<?> _ -> MeasurementStatus.NOT_APPLICABLE;
             case Measurement.Complete<?> _ -> MeasurementStatus.COMPLETE;
             case Measurement.Partial<?> _ -> MeasurementStatus.PARTIAL;
-            case Measurement.NotApplicable<?> _ -> MeasurementStatus.NOT_APPLICABLE;
             case Measurement.NotMeasured<?> _ -> MeasurementStatus.NOT_MEASURED;
             // The fifth state, under the fourth word. What tells it from the one above is the
             // weakening this carries, which is why the two are emitted together and never apart.

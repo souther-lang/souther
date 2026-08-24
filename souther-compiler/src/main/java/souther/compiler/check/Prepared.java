@@ -164,6 +164,19 @@ public final class Prepared {
         return Requirements.implementationOf(module(), behavior);
     }
 
+    /** Whether {@code behavior}'s body is written here as a {@code let} of its own name, which a
+     *  {@code >->} composition's is not. Read from the declarations, so it answers whether or not
+     *  this module was elaborated ({@link Requirements#writesItsOwnBody}). */
+    public boolean writesItsOwnBody(Hir.BehaviorDef behavior) {
+        return Requirements.writesItsOwnBody(module(), behavior);
+    }
+
+    /** Whether {@code behavior} is a {@code >->} composition, whose positions, lines and arms are
+     *  its stages' ({@link Requirements#isComposition}). */
+    public boolean isComposition(Hir.BehaviorDef behavior) {
+        return Requirements.isComposition(behavior);
+    }
+
     /** The names its source offers to whatever reads it, which no stage rewrites. */
     public List<String> exposing() {
         return desugared.module().exposing();

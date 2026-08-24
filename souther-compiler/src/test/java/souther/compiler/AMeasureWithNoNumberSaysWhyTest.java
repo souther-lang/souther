@@ -9,6 +9,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.ItemAssessment;
+import souther.compiler.query.Measure;
 import souther.compiler.query.Measurement;
 import souther.compiler.query.Weakening;
 import souther.compiler.query.WeakeningSet;
@@ -481,20 +482,26 @@ class AMeasureWithNoNumberSaysWhyTest {
      * A measure answers with a number, or with why it has none — and either way with what it went
      * without.
      *
-     * <p>Five states and no way to build a sixth. It used to be a status and a reason held beside
-     * each other, checked where the value was built because either could be written without the
-     * other; the arms carry what they need and there is nothing left to check. What this holds is
-     * that the arms mean what they say, over every measure the model produces rather than over the
-     * ones a test remembered.
+     * <p>Five arms across two types and no way to build a sixth: whether there is a question here
+     * is {@code Measure}'s and how far asking it got is {@code Measurement}'s. It used to be a
+     * status and a reason held beside each other, checked where the value was built because either
+     * could be written without the other; the arms carry what they need and there is nothing left
+     * to check. What this holds is that the arms mean what they say, over every measure the model
+     * produces rather than over the ones a test remembered.
      */
     @Test
     void everyMeasureAnswersWithANumberOrWithWhyItHasNone() {
         List<Object[]> measures = allMeasures();
         assertTrue(measures.size() > 20, "the model produces every kind: " + measures.size());
         for (Object[] measure : measures) {
-            Measurement<?> made = (Measurement<?>) measure[1];
+            Measure<?> made = (Measure<?>) measure[1];
             String what = (String) measure[0];
             switch (made) {
+                case Measure.NotApplicable<?> it -> {
+                    assertNotNull(it.why(), what + " has no number and does not say why");
+                    assertTrue(it.weakening().isEmpty(),
+                            what + " has nothing to be about and went without something");
+                }
                 case Measurement.Complete<?> it -> {
                     assertNull(it.why(), what + " has a number and says why it has none");
                     assertTrue(it.weakening().isEmpty(),
@@ -504,11 +511,6 @@ class AMeasureWithNoNumberSaysWhyTest {
                     assertNull(it.why(), what + " has a number and says why it has none");
                     assertFalse(it.weakening().isEmpty(),
                             what + " was made in part and does not say what by");
-                }
-                case Measurement.NotApplicable<?> it -> {
-                    assertNotNull(it.why(), what + " has no number and does not say why");
-                    assertTrue(it.weakening().isEmpty(),
-                            what + " has nothing to be about and went without something");
                 }
                 case Measurement.NotMeasured<?> it -> {
                     assertNotNull(it.why(), what + " has no number and does not say why");

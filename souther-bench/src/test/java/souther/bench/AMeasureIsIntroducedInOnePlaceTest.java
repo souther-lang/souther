@@ -36,7 +36,15 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class AMeasureIsIntroducedInOnePlaceTest {
 
-    private static final String MEASUREMENT = "souther.compiler.query.Measurement";
+    /**
+     * The top of the hierarchy, so that the arms are counted wherever they sit in it.
+     *
+     * <p>Asked of {@code Measure} and not of {@code Measurement}: whether there is a question here
+     * and how far asking it got are two types since #996, and a check that named the lower one
+     * would stop seeing {@code NotApplicable} the moment it moved — which is the case it was
+     * written to watch.
+     */
+    private static final String MEASURE = "souther.compiler.query.Measure";
 
     /**
      * Every method that makes a state of a measurement, and how many it makes.
@@ -64,14 +72,14 @@ class AMeasureIsIntroducedInOnePlaceTest {
             Map.entry("souther.compiler.query.Coverages#verdictOf(Lsouther/compiler/query/Coverages$Met;ZLsouther/compiler/partition/Border;Lsouther/compiler/query/Adequacy$Observed;)Lsouther/compiler/query/Measurement;", 3),
             Map.entry("souther.compiler.query.Coverages#whyNoGuardLine(Lsouther/compiler/query/Adequacy$Observed;Lsouther/compiler/query/Adequacy$Level;)Lsouther/compiler/query/Measurement;", 2),
             Map.entry("souther.compiler.query.Coverages#whyNoInvariantLine(Lsouther/compiler/query/Adequacy$Observed;Lsouther/compiler/query/Adequacy$Level;)Lsouther/compiler/query/Measurement;", 1),
-            Map.entry("souther.compiler.query.PartitionDerivation#noSubject()Lsouther/compiler/query/Measurement;", 1),
-            Map.entry("souther.compiler.query.PartitionDerivation#of(Ljava/util/List;Lsouther/compiler/partition/MeasureClosure$OfThePartition;)Lsouther/compiler/query/Measurement;", 4),
+            Map.entry("souther.compiler.query.PartitionDerivation#noSubject()Lsouther/compiler/query/Measure;", 1),
+            Map.entry("souther.compiler.query.PartitionDerivation#of(Ljava/util/List;Lsouther/compiler/partition/MeasureClosure$OfThePartition;)Lsouther/compiler/query/Measure;", 4),
             Map.entry("souther.compiler.query.OutputCaseEvidence#none()Lsouther/compiler/query/OutputCaseEvidence;", 1),
             Map.entry("souther.compiler.query.OutputCaseEvidence#of(Ljava/lang/String;Ljava/util/Set;Lsouther/compiler/query/OutputCaseEvidence$Cases;ZLsouther/compiler/query/WeakeningSet;)Lsouther/compiler/query/OutputCaseEvidence;", 3),
             Map.entry("souther.compiler.query.InputCaseEvidence#none(I)Lsouther/compiler/query/InputCaseEvidence;", 1),
             Map.entry("souther.compiler.query.InputCaseEvidence#of(Ljava/lang/String;ILjava/util/Set;Ljava/util/Set;Lsouther/compiler/query/InputCaseEvidence$Cases;ZLsouther/compiler/query/WeakeningSet;)Lsouther/compiler/query/InputCaseEvidence;", 3),
-            Map.entry("souther.compiler.query.BoundaryDerivation#noSubject()Lsouther/compiler/query/Measurement;", 1),
-            Map.entry("souther.compiler.query.BoundaryDerivation#of(Ljava/util/List;Lsouther/compiler/partition/MeasureClosure$OfTheBorder;)Lsouther/compiler/query/Measurement;", 4),
+            Map.entry("souther.compiler.query.BoundaryDerivation#noSubject()Lsouther/compiler/query/Measure;", 1),
+            Map.entry("souther.compiler.query.BoundaryDerivation#of(Ljava/util/List;Lsouther/compiler/partition/MeasureClosure$OfTheBorder;)Lsouther/compiler/query/Measure;", 4),
             Map.entry("souther.compiler.query.Adequacy$SignatureEvidence#notASum(Lsouther/compiler/query/OutputCaseEvidence;Ljava/util/List;)Lsouther/compiler/query/Adequacy$SignatureEvidence;", 1),
             Map.entry("souther.compiler.query.Adequacy$SignatureEvidence#noRows(Lsouther/compiler/query/OutputCaseEvidence;Ljava/util/List;)Lsouther/compiler/query/Adequacy$SignatureEvidence;", 1),
             Map.entry("souther.compiler.query.Adequacy$SignatureEvidence#of(Lsouther/compiler/query/OutputCaseEvidence;Ljava/util/List;)Lsouther/compiler/query/Adequacy$SignatureEvidence;", 2),
@@ -82,6 +90,7 @@ class AMeasureIsIntroducedInOnePlaceTest {
             Map.entry("souther.compiler.query.Adequacy$BranchEvidence#noArms(Lsouther/compiler/query/Adequacy$BranchEvidence$NoArms;)Lsouther/compiler/query/Adequacy$BranchEvidence;", 1),
             Map.entry("souther.compiler.query.Adequacy$BranchEvidence#notAsked(Lsouther/compiler/query/Adequacy$BranchEvidence$NotAsked;)Lsouther/compiler/query/Adequacy$BranchEvidence;", 1),
             Map.entry("souther.compiler.query.Adequacy$BranchEvidence#unreadable(Lsouther/compiler/query/WeakeningSet;)Lsouther/compiler/query/Adequacy$BranchEvidence;", 1),
+            Map.entry("souther.compiler.query.Adequacy$BranchEvidence#unelaborated(Ljava/lang/String;)Lsouther/compiler/query/Adequacy$BranchEvidence;", 1),
             Map.entry("souther.compiler.query.Adequacy$BranchEvidence#measured(Ljava/lang/String;Ljava/util/List;Ljava/util/Set;Lsouther/compiler/check/PathReachability$Answers$AsRun;Lsouther/compiler/query/WeakeningSet;)Lsouther/compiler/query/Adequacy$BranchEvidence;", 2),
             Map.entry("souther.compiler.query.Coverages#whyNothingWasAsked(Lsouther/compiler/query/Adequacy$Level;)Lsouther/compiler/query/Measurement;", 1),
             Map.entry("souther.compiler.query.OutputCaseEvidence#notAsked(Ljava/util/Set;)Lsouther/compiler/query/OutputCaseEvidence;", 1),
@@ -93,9 +102,9 @@ class AMeasureIsIntroducedInOnePlaceTest {
 
     @Test
     void nothingButTheIntroductionRuleMakesACaseOfAMeasure() throws Exception {
-        List<String> cases = casesOf(MEASUREMENT);
+        List<String> cases = casesOf(MEASURE);
 
-        assertEquals(5, cases.size(), () -> "the states of a measurement: " + cases);
+        assertEquals(5, cases.size(), () -> "the arms of a measure: " + cases);
 
         Map<String, Integer> made = new LinkedHashMap<>();
         for (Compiled.Site site : Compiled.sites()) {
@@ -117,10 +126,25 @@ class AMeasureIsIntroducedInOnePlaceTest {
     private static List<String> casesOf(String... measures) throws ClassNotFoundException {
         List<String> out = new ArrayList<>();
         for (String measure : measures) {
-            for (Class<?> each : Class.forName(measure).getPermittedSubclasses()) {
+            gather(Class.forName(measure), out);
+        }
+        return out;
+    }
+
+    /**
+     * The arms under one type, descending wherever a permitted subclass is itself a sum.
+     *
+     * <p>{@code Measure} permits {@code NotApplicable} and {@code Measurement}, and only the first
+     * is an arm: the second is where the four states of a measurement live. Descending rather than
+     * listing keeps this counting what the types say and not what a test remembered.
+     */
+    private static void gather(Class<?> type, List<String> out) {
+        for (Class<?> each : type.getPermittedSubclasses()) {
+            if (each.isSealed()) {
+                gather(each, out);
+            } else {
                 out.add(each.getName());
             }
         }
-        return out;
     }
 }

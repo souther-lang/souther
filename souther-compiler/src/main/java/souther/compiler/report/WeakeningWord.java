@@ -38,6 +38,9 @@ public enum WeakeningWord {
     /** A position whose rules nothing enumerated. */
     RULES_NOT_REACHED,
 
+    /** The bodies of the module were not elaborated, so what is inside them was not read. */
+    BODIES_NOT_ELABORATED,
+
 
     /** The space of combinations was too large to walk to the end of. */
     PAIR_SPACE_TRUNCATED,

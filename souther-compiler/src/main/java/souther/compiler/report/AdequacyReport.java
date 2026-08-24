@@ -13,6 +13,7 @@ import souther.compiler.meta.ModuleMetadata;
 import souther.compiler.check.Prepared;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.query.InputCaseEvidence;
+import souther.compiler.query.Measure;
 import souther.compiler.query.Measurement;
 import souther.compiler.query.Weakening;
 import souther.compiler.query.WeakeningSet;
@@ -257,8 +258,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // Anything larger than a behavior holds this one: a source that could not be evaluated is
             Adequacy.SignatureEvidence signature =
                     signatures == null ? null : signatures.get(behavior.name());
+            // Null where the coverage did not answer at all, which is the compile not having got
+            // that far and is not this behavior having nothing to cover. `NONE` is the second of
+            // those and is reached only where the declarations say so.
             PartitionEvidence partition = partitions == null ? null
-                    : partitions.getOrDefault(behavior.name(), PartitionEvidence.NONE);
+                    : PartitionEvidence.answeredFor(partitions, module, behavior);
             // Null where the compile did not get far enough to be asked, which is not a measure that
             // came back with nothing. Every measure that did run says why it has no number.
             Adequacy.BranchEvidence branch =
@@ -392,8 +396,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * that was made and found nothing, so a report reading them back would call the first adequate
      * and the second covered.
      */
-    private List<Measurement<?>> requiredMeasures() {
-        List<Measurement<?>> measures = new ArrayList<>();
+    private List<Measure<?>> requiredMeasures() {
+        List<Measure<?>> measures = new ArrayList<>();
         for (ModuleReport module : modules) {
             for (BehaviorReport behavior : module.behaviors()) {
                 // The cases of the signature, which every bar refuses over.
@@ -478,15 +482,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * counted and is exactly what stops a verdict of satisfied: it is the case where a gap could have
      * been found and nobody looked.
      */
-    private void add(List<Measurement<?>> measures, Measurement<?> measurement) {
-        if (measurement != null && !(measurement instanceof Measurement.NotApplicable<?>)) {
-            measures.add(measurement);
+    private void add(List<Measure<?>> measures, Measure<?> measure) {
+        if (measure != null && !(measure instanceof Measure.NotApplicable<?>)) {
+            measures.add(measure);
         }
     }
 
     /** One border point's own measurement, asked of the point. Written out here as well, the answer
      *  a point nobody is owed a row at gets would be this report deciding it. */
-    private static Measurement<?> measurementOf(ItemAssessment item) {
+    private static Measure<?> measurementOf(ItemAssessment item) {
         return item.weakeningSource();
     }
 
@@ -1073,6 +1077,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 };
                 case Adequacy.BranchEvidence.Unreadable _ ->
                         "not measured (the arms could not be read)";
+                // The model says this behavior writes a body. What it owes is unknown rather than
+                // nothing, which is the difference this line exists to show.
+                case Adequacy.BranchEvidence.Unelaborated _ ->
+                        "not measured (this module's bodies were not elaborated)";
                 case Adequacy.BranchEvidence.NotAsked it ->
                         // The one measure a report says nothing about, because it is not a measure
                         // of this report: what was asked for is an input to the whole run, and a
@@ -1081,7 +1089,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                         // this behavior and is said here.
                         it == Adequacy.BranchEvidence.NotAsked.NO_ROWS
                                 ? "not measured (no row names this behavior)" : null;
-                default -> null;
+                // Not a `null` for whatever is left. The arm measure carries one of the four reason
+                // types above and nothing else, so a fifth arriving here is a reason nobody decided
+                // a word for — and answered with `null` it would leave the line out altogether,
+                // which is the measure going quiet about a number it does not have.
+                default -> throw new IllegalStateException(
+                        "the arm measure has no word for " + measured.reason());
             };
             if (said != null) {
                 out.append(String.format("    branch      %s%n", said));
@@ -1355,12 +1368,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     /**
      * One measurement in the word a document uses.
      *
-     * <p>Public because it is the projection, and the projection is the only thing that turns five
-     * states into four words. A caller outside this package that wants the word asks here; one that
-     * wants the state asks the measurement, which is what the five arms are for.
+     * <p>Public because it is the projection, and the projection is the only thing that turns the
+     * states into words. A caller outside this package that wants the word asks here; one that
+     * wants the state asks the measure, which is what the arms are for.
      */
-    public static MeasurementStatus statusOf(Measurement<?> measurement) {
-        return ReportMeasurement.of(measurement).status();
+    public static MeasurementStatus statusOf(Measure<?> measure) {
+        return ReportMeasurement.of(measure).status();
     }
 
     /**
@@ -2093,8 +2106,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * this document could not get at all while the difference lived in a boolean on the reason
      * (issue #953).
      */
-    private static void measured(ObjectNode of, Measurement<?> measurement) {
-        ReportMeasurement<?> said = ReportMeasurement.of(measurement);
+    private static void measured(ObjectNode of, Measure<?> measure) {
+        ReportMeasurement<?> said = ReportMeasurement.of(measure);
         of.put("status", wire(said.status()));
         if (said.reason() != null) {
             of.put("reason", word(said.reason()));
@@ -2156,6 +2169,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 case souther.compiler.partition.ClosureGap.RulesNotReached _ ->
                         WeakeningWord.RULES_NOT_REACHED;
             };
+            case Weakening.BodiesNotElaborated _ -> WeakeningWord.BODIES_NOT_ELABORATED;
             case Weakening.PairSpaceTruncated _ -> WeakeningWord.PAIR_SPACE_TRUNCATED;
             case Weakening.ProofContradicted _ -> WeakeningWord.PROOF_CONTRADICTED;
             case Weakening.ArmsUnsettled _ -> WeakeningWord.ARMS_UNSETTLED;

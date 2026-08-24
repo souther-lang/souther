@@ -32,7 +32,7 @@ import java.util.Set;
  *                 a body declares reaches this: what leaves a denominator is what the rules refuse
  */
 public record InputCaseEvidence(int at, Set<TypeSymbol> declared, Set<TypeSymbol> excluded,
-                                Measurement<Cases> cases) {
+                                Measure<Cases> cases) {
 
     /**
      * What the rows reached at this position, where anybody counted.
@@ -77,7 +77,7 @@ public record InputCaseEvidence(int at, Set<TypeSymbol> declared, Set<TypeSymbol
     /** No cases at the given input, which is what a position that is not a sum has. */
     public static InputCaseEvidence none(int at) {
         return new InputCaseEvidence(at, Set.of(), Set.of(),
-                new Measurement.NotApplicable<>(NotASum.NOT_A_SUM));
+                new Measure.NotApplicable<>(NotASum.NOT_A_SUM));
     }
 
     /** The same for one input, and for the reason {@link OutputCaseEvidence#notAsked} gives. */

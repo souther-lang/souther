@@ -178,7 +178,7 @@ class OnlyAProjectionSaysHowFarAMeasurementGotTest {
         }
         assertEquals(Set.of(
                         "souther.compiler.query.Adequacy$Finding#by(Ljava/lang/String;"
-                                + "Lsouther/compiler/query/Measurement;"
+                                + "Lsouther/compiler/query/Measure;"
                                 + "Lsouther/compiler/diag/Citation;"
                                 + "Lsouther/compiler/query/About;)"
                                 + "Lsouther/compiler/query/Adequacy$Finding;",

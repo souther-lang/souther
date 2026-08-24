@@ -404,7 +404,7 @@ public final class Adequacy {
      * measure itself could not see.
      */
     public record SignatureEvidence(OutputCaseEvidence output, List<InputCaseEvidence> inputs,
-                                    Measurement<Counted> counted) {
+                                    Measure<Counted> counted) {
 
         /** That the signature's cases were counted. */
         public record Counted() {}
@@ -427,7 +427,7 @@ public final class Adequacy {
         public static SignatureEvidence notASum(OutputCaseEvidence output,
                                                 List<InputCaseEvidence> inputs) {
             return new SignatureEvidence(output, inputs,
-                    new Measurement.NotApplicable<>(NotASum.NOT_A_SUM));
+                    new Measure.NotApplicable<>(NotASum.NOT_A_SUM));
         }
 
         public static SignatureEvidence noRows(OutputCaseEvidence output,
@@ -1162,7 +1162,7 @@ public final class Adequacy {
      *                {@link #all} beside it, because a measure that quietly counted such an arm as
      *                covered would report a full denominator and hide the one fact worth acting on.
      */
-    public record BranchEvidence(Measurement<Arms> measured) {
+    public record BranchEvidence(Measure<Arms> measured) {
 
         /**
          * The arms of one behavior and what the rows went through.
@@ -1235,8 +1235,32 @@ public final class Adequacy {
             UNREADABLE
         }
 
+        /**
+         * The bodies this measure counts arms in were not made.
+         *
+         * <p>Named for the absence and not for any of the things that cause it: a module the
+         * compile stopped in has no elaborated bodies, and nothing here can tell which of the ways
+         * that happens it was. What a reader of this knows is that the model says a body is written
+         * and what it holds was not read.
+         *
+         * <p>Its own reason rather than {@link NoArms#NO_BODY}, which is the claim it used to be
+         * answered with. That claim is about the model and this is about the compile, and the two
+         * were one answer while the measure read the elaborated bodies for both (issue #996).
+         */
+        public enum Unelaborated implements souther.compiler.observe.FailureReason {
+            BODIES_NOT_ELABORATED
+        }
+
         public static BranchEvidence noArms(NoArms reason) {
-            return new BranchEvidence(new Measurement.NotApplicable<>(reason));
+            return new BranchEvidence(new Measure.NotApplicable<>(reason));
+        }
+
+        /** The model says this behavior writes a body and nothing elaborated it, so what it owes
+         *  was not read. */
+        public static BranchEvidence unelaborated(String module) {
+            return new BranchEvidence(new Measurement.FailedToMeasure<>(
+                    Unelaborated.BODIES_NOT_ELABORATED,
+                    WeakeningSet.of(new Weakening.BodiesNotElaborated(module))));
         }
 
         public static BranchEvidence notAsked(NotAsked reason) {
@@ -1302,7 +1326,7 @@ public final class Adequacy {
 
         /** Whether this behavior has arms for the measure to be about. */
         public boolean applicable() {
-            return !(measured instanceof Measurement.NotApplicable<Arms>);
+            return !(measured instanceof Measure.NotApplicable<Arms>);
         }
 
         /**
@@ -1494,11 +1518,11 @@ public final class Adequacy {
             // classes bought nothing and left a body that owes no arm looking like a body nobody
             // measured (issue #955).
             souther.compiler.coverage.CoverageSites.Plan plan = Output.Evaluated.planOf(db, name);
-            // Which behaviors this module implements at all. Read here because a behavior with no
-            // body of its own owes no arm of its own, whatever its stages owe.
-            souther.compiler.query.Bodies.Elaborated checked =
-                    db.ask(new Bodies.Checked(name)).value();
-            Set<String> withBodies = checked == null ? Set.of() : checked.behaviorBodies().keySet();
+            // Whether the bodies came back at all. Which behaviors have one is the model's answer
+            // and is asked of the declarations below; this is the other question — whether what a
+            // body holds could be read — and answering both from this map is what made a module the
+            // compile stopped in report every behavior as one with no body (issue #996).
+            boolean bodiesRead = db.ask(new Bodies.Checked(name)).value() != null;
             Map<String, Observed> byTarget = levelOf(db).readsRows() ? rowsOf(db, name) : Map.of();
             Set<Integer> lit = new LinkedHashSet<>();
             for (Observed observed : byTarget.values()) {
@@ -1520,8 +1544,8 @@ public final class Adequacy {
                 souther.compiler.check.PathReachability.Answers.AsRun arrives =
                         reachable == null ? NOTHING_PROVEN
                                 : reachable.getOrDefault(behavior.name(), NOTHING_PROVEN);
-                BranchEvidence absent = whyNoArms(behavior.name(), withBodies, arms, arrives,
-                        instrumented, observed);
+                BranchEvidence absent = whyNoArms(name, prepared.value().writesItsOwnBody(behavior),
+                        bodiesRead, arms, arrives, instrumented, observed);
                 if (absent != null) {
                     out.put(behavior.name(), absent);
                     continue;
@@ -1548,13 +1572,31 @@ public final class Adequacy {
          * {@code NOT_ASKED} for it would hold a verdict open for a measurement that would find
          * nothing however it was made — which is the defect the applicability answer exists to
          * prevent, one size down from the {@code >->} composition it was written for (issue #955).
+         *
+         * <p><b>And a proof of absence in the model comes before either.</b> The two inapplicable
+         * answers below are claims about what is written — this behavior has no body of its own,
+         * this body owes no arm — so both are gated on the compile having got far enough to say so.
+         * Both used to be read off what came back: the first from the elaborated bodies and the
+         * second from the plan, which is itself read off them. A module the compile stopped in has
+         * neither, so it answered {@code NO_BODY} for every behavior in it — beside a report line
+         * saying {@code implemented} (issue #996).
+         *
+         * @param writesItsOwnBody what the declarations say, from the one reader of them
+         * @param bodiesRead       whether the elaborated bodies came back, which is what the arms
+         *                         and the plan below are read from
          */
-        private static BranchEvidence whyNoArms(String behavior, Set<String> withBodies,
+        private static BranchEvidence whyNoArms(String module, boolean writesItsOwnBody,
+                boolean bodiesRead,
                 List<souther.compiler.coverage.CoverageSites.Site> arms,
                 souther.compiler.check.PathReachability.Answers.AsRun arrives,
                 boolean instrumented, Observed observed) {
-            if (!withBodies.contains(behavior)) {
+            if (!writesItsOwnBody) {
                 return BranchEvidence.noArms(BranchEvidence.NoArms.NO_BODY);
+            }
+            if (!bodiesRead) {
+                // The model says there is a body. Nothing read it, so what it owes is unknown —
+                // which is not the same as owing nothing, and reads identically without this.
+                return BranchEvidence.unelaborated(module);
             }
             // What is owed, and not what was numbered. An arm the rules prove nothing arrives at is
             // instrumented and is not owed, so a behavior whose every numbered arm is one of those
@@ -1810,7 +1852,12 @@ public final class Adequacy {
             Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
             Answer<Symbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
-            if (!prepared.present() || !scope.present() || !sigs.present()) {
+            // What a row is offered for is what the coverage found, so a coverage that did not
+            // answer leaves this nothing to offer from. Absence and not `PartitionEvidence.NONE`:
+            // that answer says the model holds nothing to cover, and read for this one it turned a
+            // compile that stopped into a module with no work in it (issue #996).
+            Answer<Map<String, PartitionEvidence>> coverage = db.ask(new Coverage(name));
+            if (!prepared.present() || !scope.present() || !sigs.present() || !coverage.present()) {
                 return Answer.absent();
             }
             souther.compiler.query.Bodies.Elaborated checked =
@@ -1842,7 +1889,7 @@ public final class Adequacy {
                     db.ask(new Bodies.StatedContracts(name)).value();
 
             Map<String, List<Finding>> findings = db.ask(new Findings(name)).value();
-            Map<String, PartitionEvidence> partitions = db.ask(new Coverage(name)).value();
+            Map<String, PartitionEvidence> partitions = coverage.value();
 
             Map<String, Filling> out = new LinkedHashMap<>();
             FixtureReader.Construction building = constructing(db, name,
@@ -1875,8 +1922,7 @@ public final class Adequacy {
                             byTarget.getOrDefault(spec.name(), Observed.NONE), building,
                             domainOf(readInputs, spec), arrivalsOf(arrives, spec),
                             statedOf(declared, spec), runningRowsOf(trials, spec.name(), sig),
-                            partitions == null ? PartitionEvidence.NONE
-                                    : partitions.getOrDefault(spec.name(), PartitionEvidence.NONE),
+                            PartitionEvidence.answeredFor(partitions, prepared.value(), spec),
                             levelOf(db).runsInstrumentedRows(),
                             db.ask(new Front.Adequacy()).value().generation());
                 } catch (LinkageError _) {
@@ -1896,8 +1942,7 @@ public final class Adequacy {
                 out.put(spec.name(), new Filling(composed, offered(spec.name(), edges),
                         dispositions(findings == null ? List.of()
                                         : findings.getOrDefault(spec.name(), List.of()),
-                                edges, partitions == null ? null : partitions.get(spec.name()),
-                                composed, spec)));
+                                edges, partitions.get(spec.name()), composed, spec)));
             }
             // In the order the module declares them, because the block printed from this is read
             // against the one before it.
@@ -2703,7 +2748,7 @@ public final class Adequacy {
          * holds the rest is a regression run through this producer with two leaves that went without
          * different things.
          */
-        public static Finding by(String behavior, Measurement<?> found, Citation at, About about) {
+        public static Finding by(String behavior, Measure<?> found, Citation at, About about) {
             return new Finding(behavior, found.weakening(), at, about);
         }
 
@@ -3436,9 +3481,9 @@ public final class Adequacy {
                 none.add(InputCaseEvidence.notAsked(i, declaredIn.get(i), inExcluded.get(i)));
             }
             OutputCaseEvidence out = OutputCaseEvidence.notAsked(declaredOut);
-            return out.cases() instanceof Measurement.NotApplicable<OutputCaseEvidence.Cases>
+            return out.cases() instanceof Measure.NotApplicable<OutputCaseEvidence.Cases>
                     && none.stream().allMatch(in ->
-                            in.cases() instanceof Measurement.NotApplicable<InputCaseEvidence.Cases>)
+                            in.cases() instanceof Measure.NotApplicable<InputCaseEvidence.Cases>)
                     ? SignatureEvidence.notASum(out, none)
                     : SignatureEvidence.notAsked(out, none);
         }

@@ -920,8 +920,7 @@ final class Coverages {
             // found either way, and what it did not find is undecided rather than absent.
             case Measurement.Partial<ItemAssessment.Coverage> part ->
                     part.value() instanceof ItemAssessment.Coverage.Hit ? 3 : 2;
-            case Measurement.NotApplicable<ItemAssessment.Coverage> _,
-                 Measurement.NotMeasured<ItemAssessment.Coverage> _,
+            case Measurement.NotMeasured<ItemAssessment.Coverage> _,
                  Measurement.FailedToMeasure<ItemAssessment.Coverage> _ -> 0;
         };
     }

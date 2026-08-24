@@ -8,6 +8,7 @@ import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.examples.EvaluationPolicy;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.Measure;
 import souther.compiler.query.Measurement;
 
 import java.util.ArrayList;
@@ -158,7 +159,7 @@ class AMeasureWeakerThanCompleteSaysWhatMadeItSoTest {
      */
     @Test
     void aMeasurementThatCouldNotBeFinishedIsTheOneUnavailableWithAWeakening() {
-        List<Measurement<?>> failed = new ArrayList<>();
+        List<Measure<?>> failed = new ArrayList<>();
         for (AdequacyReport.ModuleReport module : report.modules()) {
             for (AdequacyReport.BehaviorReport behavior : module.behaviors()) {
                 if (behavior.branch() != null) {
@@ -170,7 +171,7 @@ class AMeasureWeakerThanCompleteSaysWhatMadeItSoTest {
                 }
             }
         }
-        for (Measurement<?> each : failed) {
+        for (Measure<?> each : failed) {
             boolean unfinished = each instanceof Measurement.FailedToMeasure<?>;
             assertEquals(unfinished, !each.weakening().isEmpty() && each.made().isEmpty(),
                     () -> "only a measurement that could not be finished is a no-number that went"
