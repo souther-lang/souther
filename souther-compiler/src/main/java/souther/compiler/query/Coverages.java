@@ -119,7 +119,7 @@ final class Coverages {
     static PartitionEvidence of(Hir.SpecBehavior behavior, InputDomain inputs, Sig sig,
                                 Symbols symbols, ReadingPolicy policy, Core body,
                                 souther.compiler.check.ElementBindings elements,
-                                CoverageSites.Plan plan, souther.compiler.query.Adequacy.Observed observed,
+                                CoverageSites.Plan plan, souther.compiler.query.Adequacy.RowReading observed,
                                 souther.compiler.query.Adequacy.Level level,
                                 List<BorderAssessment> boundaries,
                                 PathReachability.Answers arrives,
@@ -140,7 +140,7 @@ final class Coverages {
         List<Axis> divided = new ArrayList<>();
         List<PartitionEvidence.Unanswered> standing = new ArrayList<>();
         Readings readings = Readings.of(rows, where, partitioning.axes(),
-                observed.incompleteness().stream()
+                observed.gaps().stream()
                         .filter(gap -> gap.code().leftNoRowRead()).toList());
         for (Axis axis : partitioning.axes()) {
             // What the model asked about this position and nothing answered, said before anything
@@ -552,7 +552,7 @@ final class Coverages {
      *                  left short of what it is owed, and not that the region is idle here.
      */
     static List<BorderAssessment> assess(
-            Axis axis, BehaviorInputs where, souther.compiler.query.Adequacy.Observed observed,
+            Axis axis, BehaviorInputs where, souther.compiler.query.Adequacy.RowReading observed,
             souther.compiler.query.Adequacy.Level level, boolean knownWritable, Probe probe,
             souther.compiler.inputs.Quantities rules, ReachingCuts reaching,
             souther.compiler.numeric.NumericDomain.Bounds within) {
@@ -632,7 +632,7 @@ final class Coverages {
      * trusted to repeat them.
      */
     private static BorderAssessment assessed(Border border, OneShapeOfBorder shape,
-                                             souther.compiler.query.Adequacy.Observed observed,
+                                             souther.compiler.query.Adequacy.RowReading observed,
                                              souther.compiler.query.Adequacy.Level level) {
         // Whether meeting this border takes the comparison having run, asked of the rule rather than
         // read off which kind it is, and asked once for the border rather than once per point. A
@@ -1029,7 +1029,7 @@ final class Coverages {
      */
     static List<BorderAssessment> assessBetween(
             Partitions.Partitioning partitioning, BehaviorInputs where,
-            souther.compiler.query.Adequacy.Observed observed,
+            souther.compiler.query.Adequacy.RowReading observed,
             souther.compiler.query.Adequacy.Level level, Probe probe) {
         // Keyed by the line the author drew, the way a line at a place is. A guard inside a
         // non-recursive helper is read once per call of that helper, and the rows do not owe the same
@@ -1052,7 +1052,7 @@ final class Coverages {
     /** What a reading of the rows comes to, once what could not be read is accounted for. */
     private static Measurement<ItemAssessment.Coverage> verdictOf(
             Met met, boolean guard, souther.compiler.partition.Border border,
-            souther.compiler.query.Adequacy.Observed observed) {
+            souther.compiler.query.Adequacy.RowReading observed) {
         List<RowOutcome> rows = observed.rows();
         if (met == Met.YES) {
             // Found is found: a row settles this whatever else went unread, so nothing weakens it.
@@ -1066,7 +1066,7 @@ final class Coverages {
         if (met == Met.UNREADABLE) {
             by.add(new Weakening.BorderValueUnreadable(border));
         }
-        for (Incompleteness gap : observed.incompleteness()) {
+        for (Incompleteness gap : observed.gaps()) {
             // Rows nothing read at all bear on every line. Rows that were read and did not finish
             // bear on a line a fork drew and on no other: meeting one takes the comparison having
             // run, which a row that stopped never reached.
@@ -1137,7 +1137,7 @@ final class Coverages {
      * classes that record where the row went exist and survived.
      */
     private static Measurement<ItemAssessment.Coverage> whyNoGuardLine(
-            souther.compiler.query.Adequacy.Observed observed,
+            souther.compiler.query.Adequacy.RowReading observed,
             souther.compiler.query.Adequacy.Level level) {
         Measurement<ItemAssessment.Coverage> nobodyAsked = whyNothingWasAsked(level);
         if (nobodyAsked != null) {
@@ -1149,7 +1149,7 @@ final class Coverages {
         if (observed.armsUnseen()) {
             // Started and not finished, so it says what it went without.
             Set<Weakening> by = new LinkedHashSet<>();
-            for (Incompleteness gap : observed.incompleteness()) {
+            for (Incompleteness gap : observed.gaps()) {
                 by.add(new Weakening.ObservationIncomplete(gap));
             }
             return new Measurement.FailedToMeasure<>(
@@ -1185,7 +1185,7 @@ final class Coverages {
      * that could say so would be able to say something that is not true of it.
      */
     private static Measurement<ItemAssessment.Coverage> whyNoInvariantLine(
-            souther.compiler.query.Adequacy.Observed observed,
+            souther.compiler.query.Adequacy.RowReading observed,
             souther.compiler.query.Adequacy.Level level) {
         Measurement<ItemAssessment.Coverage> nobodyAsked = whyNothingWasAsked(level);
         if (nobodyAsked != null) {

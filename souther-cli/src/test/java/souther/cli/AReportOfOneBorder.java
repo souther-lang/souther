@@ -170,7 +170,7 @@ final class AReportOfOneBorder {
                                                    Adequacy.AdequacyBar held) {
         AdequacyReport.BehaviorReport behavior = new AdequacyReport.BehaviorReport(
                 "weigh", souther.compiler.check.BehaviorImplementation.IMPLEMENTED,
-                1, 0, WeakeningSet.none(), null, partition,
+                Adequacy.RowReading.NONE, WeakeningSet.none(), null, partition,
                 souther.compiler.query.ClaimAnnotations.NONE, null, List.of());
         return new AdequacyReport(AdequacyReport.SCHEMA_VERSION, "test",
                 held, WeakeningSet.none(),

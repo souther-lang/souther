@@ -825,7 +825,7 @@ public final class Adequacy {
                 return Answer.absent();
             }
             Set<Integer> lit = new LinkedHashSet<>();
-            for (Observed observed : rowsOf(db, name).values()) {
+            for (RowReading observed : rowsOf(db, name).values()) {
                 for (RowOutcome row : observed.rows()) {
                     lit.addAll(seenBy(row).taken());
                 }
@@ -834,6 +834,48 @@ public final class Adequacy {
                     new LinkedHashMap<>();
             proven.value().forEach((behavior, answers) -> out.put(behavior, answers.asRunWith(lit)));
             return Answer.of(Ordered.map(out));
+        }
+    }
+
+    /**
+     * How far the reading of each behavior's rows got, and what it read.
+     *
+     * <p>An answer of its own because it is one, and because more than one thing reads it. Every
+     * measure counted over the rows reads it; so does the document, which prints how many rows a
+     * behavior has and how many of them are waiting. The document used to walk the sources itself
+     * and build the same thing a second time — the same loop over {@code Output.Examples}, the same
+     * gathering of what stopped each one — so which rows a behavior had and what its measures were
+     * counted over were two readings that happened to agree (issue #996).
+     *
+     * <p>Total over the module's behaviors, and answers for every one of them whether or not
+     * anything was seen: a behavior with no row at all is the case a source nobody could evaluate
+     * matters most for. What the level asked for is answered here as well — a build that does not
+     * read rows gets a reading that says so, rather than every caller writing that gate again.
+     */
+    public record Rows(String name) implements Key<Map<String, RowReading>> {
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<String, RowReading>> compute(Db db) {
+            if (!levelOf(db).readsRows()) {
+                Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
+                if (!prepared.present()) {
+                    return Answer.absent();
+                }
+                Map<String, RowReading> none = new LinkedHashMap<>();
+                for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
+                    none.put(behavior.name(), RowReading.NOT_ASKED);
+                }
+                return Answer.of(Ordered.map(none));
+            }
+            // Not copied into an ordered map. What `rowsOf` answers with reads a behavior nothing
+            // named as whatever stopped every source, and a copy taken of its entries would answer
+            // for the names it holds and drop that.
+            return Answer.of(rowsOf(db, name));
         }
     }
 
@@ -864,7 +906,7 @@ public final class Adequacy {
             // the answer: what the level decides is what work to do, and the work this measure does
             // is reading every row of the module (issue #955).
             boolean asked = levelOf(db).readsRows();
-            Map<String, Observed> byTarget = asked ? rowsOf(db, name) : Map.of();
+            Map<String, RowReading> byTarget = asked ? rowsOf(db, name) : Map.of();
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             // What each body can answer with, so that a case only an unreachable arm produces is not
             // counted. Read from the same reachability the arms are counted by.
@@ -886,7 +928,7 @@ public final class Adequacy {
                     continue;   // a behavior whose signature did not work out has nothing to measure
                 }
                 out.put(behavior.name(), evidenceOf(behavior.name(), sig, scope.value(), asked,
-                        byTarget.getOrDefault(behavior.name(), Observed.NONE),
+                        byTarget.getOrDefault(behavior.name(), RowReading.NONE),
                         behavior instanceof Hir.SpecBehavior spec ? spec.params().stream()
                                 .map(Hir.Param::name).toList() : List.of(),
                         readInputs == null ? InputDomain.NONE
@@ -936,7 +978,7 @@ public final class Adequacy {
                                     : checked.decisions(),
                             checked == null ? souther.compiler.coverage.SuppliedRules.NONE : checked.supplied());
             Level level = levelOf(db);
-            Map<String, Observed> byTarget = level.readsRows() ? rowsOf(db, name) : Map.of();
+            Map<String, RowReading> byTarget = level.readsRows() ? rowsOf(db, name) : Map.of();
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             // What the guards above each place leave, asked once for the module and read by
             // every measure below — the same reason the reading of the input is.
@@ -959,7 +1001,7 @@ public final class Adequacy {
                 if (sig == null) {
                     continue;
                 }
-                Observed seen = byTarget.getOrDefault(spec.name(), Observed.NONE);
+                RowReading seen = byTarget.getOrDefault(spec.name(), RowReading.NONE);
                 // Counted with nothing a body claims in scope. What was claimed travels beside the
                 // numbers rather than into them ({@link Claimed}), and the two meet where a report
                 // is written.
@@ -1025,7 +1067,7 @@ public final class Adequacy {
             // been evaluated, which only the instrumented classes say. And whether anything was
             // measured against the rows at all, which is what `off` answers.
             Level level = levelOf(db);
-            Map<String, Observed> byTarget = level.readsRows() ? rowsOf(db, name) : Map.of();
+            Map<String, RowReading> byTarget = level.readsRows() ? rowsOf(db, name) : Map.of();
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             // What the guards above each place leave, asked once for the module and read by
             // every measure below — the same reason the reading of the input is.
@@ -1054,7 +1096,7 @@ public final class Adequacy {
                         bodies.get(spec.name()),
                         elementsOf.getOrDefault(spec.name(),
                                 souther.compiler.check.ElementBindings.NONE), plan,
-                        byTarget.getOrDefault(spec.name(), Observed.NONE), level, building,
+                        byTarget.getOrDefault(spec.name(), RowReading.NONE), level, building,
                         domainOf(readInputs, spec), arrivalsOf(arrives, spec),
                         statedOf(declared, spec)));
             }
@@ -1066,7 +1108,7 @@ public final class Adequacy {
                 Hir.SpecBehavior spec, Sig sig, Symbols symbols,
                 souther.compiler.check.ReadingPolicy policy, souther.compiler.core.Core body,
                 souther.compiler.check.ElementBindings elements,
-                souther.compiler.coverage.CoverageSites.Plan plan, Observed observed,
+                souther.compiler.coverage.CoverageSites.Plan plan, RowReading observed,
                 Level level, FixtureReader.Construction building, InputDomain domain,
                 souther.compiler.check.PathReachability.Answers arrives,
                 souther.compiler.check.StatedContract stated) {
@@ -1523,9 +1565,9 @@ public final class Adequacy {
             // body holds could be read — and answering both from this map is what made a module the
             // compile stopped in report every behavior as one with no body (issue #996).
             boolean bodiesRead = db.ask(new Bodies.Checked(name)).value() != null;
-            Map<String, Observed> byTarget = levelOf(db).readsRows() ? rowsOf(db, name) : Map.of();
+            Map<String, RowReading> byTarget = levelOf(db).readsRows() ? rowsOf(db, name) : Map.of();
             Set<Integer> lit = new LinkedHashSet<>();
-            for (Observed observed : byTarget.values()) {
+            for (RowReading observed : byTarget.values()) {
                 for (RowOutcome row : observed.rows()) {
                     lit.addAll(seenBy(row).taken());
                 }
@@ -1540,7 +1582,7 @@ public final class Adequacy {
                 // would report an arm the body does not have.
                 List<souther.compiler.coverage.CoverageSites.Site> arms =
                         plan.arms(behavior.name());
-                Observed observed = byTarget.getOrDefault(behavior.name(), Observed.NONE);
+                RowReading observed = byTarget.getOrDefault(behavior.name(), RowReading.NONE);
                 souther.compiler.check.PathReachability.Answers.AsRun arrives =
                         reachable == null ? NOTHING_PROVEN
                                 : reachable.getOrDefault(behavior.name(), NOTHING_PROVEN);
@@ -1589,7 +1631,7 @@ public final class Adequacy {
                 boolean bodiesRead,
                 List<souther.compiler.coverage.CoverageSites.Site> arms,
                 souther.compiler.check.PathReachability.Answers.AsRun arrives,
-                boolean instrumented, Observed observed) {
+                boolean instrumented, RowReading observed) {
             if (!writesItsOwnBody) {
                 return BranchEvidence.noArms(BranchEvidence.NoArms.NO_BODY);
             }
@@ -1632,12 +1674,12 @@ public final class Adequacy {
          * find at all. Both arrive here as the fact they are rather than as a word for how far the
          * measurement got.
          */
-        private static WeakeningSet rowsBehind(Observed observed) {
+        private static WeakeningSet rowsBehind(RowReading observed) {
             Set<Weakening> out = new LinkedHashSet<>();
             // Both kinds are already here. A row that stopped is a reason of its own, written where
             // it stopped; this used to walk the dispositions beside them and say it a second time,
             // in a vocabulary that named the row without saying which source it is in (issue #996).
-            for (Incompleteness gap : observed.incompleteness()) {
+            for (Incompleteness gap : observed.gaps()) {
                 out.add(new Weakening.ObservationIncomplete(gap));
             }
             return WeakeningSet.ofAll(out);
@@ -1655,29 +1697,106 @@ public final class Adequacy {
      * @param rows           what was observed
      * @param incompleteness why what was observed is not all there was
      */
-    public record Observed(List<RowOutcome> rows, List<Incompleteness> incompleteness) {
+    public record Observed(List<RowOutcome> rows) {
 
-        public static final Observed NONE = new Observed(List.of(), List.of());
+        public static final Observed NONE = new Observed(List.of());
 
         public Observed {
             rows = List.copyOf(rows);
-            incompleteness = List.copyOf(incompleteness);
+        }
+    }
+
+    /**
+     * How far the reading of one behavior's rows got, and what it read.
+     *
+     * <p><b>The one measure that can never be inapplicable.</b> A behavior has rows to read, even
+     * where there are none of them, so there is nothing here for {@code NotApplicable} to be about
+     * and this is a {@link Measurement} rather than a {@link Measure}. Which is what #996 was: the
+     * measures counted <em>over</em> the rows may every one of them have nothing to be about — a
+     * behavior with no body, an output that is not a sum, rules that divide no position — and then
+     * a run that went without something had nobody left to carry it. The reading always can.
+     *
+     * <p>{@code Complete} where every source was observed and every row came to a decision;
+     * {@code Partial} where rows were read and something was gone without; {@code FailedToMeasure}
+     * where nothing was read at all; {@code NotMeasured} where the level does not read rows. So
+     * zero rows read in full and no rows read are two states rather than one empty list, which is
+     * a question three readers used to answer by hand.
+     *
+     * <p>What the reading went without lives in the weakening and nowhere else. It used to sit
+     * beside the rows as a list, and every reader took what it wanted from that list by its own
+     * rule — five of them, disagreeing about which reasons bear on what. Which of them bear on a
+     * given measure is still that measure's own answer; what has changed is that they all read one
+     * thing, and that whatever none of them takes is still carried here.
+     */
+    public record RowReading(Measurement<Observed> measured) {
+
+        /** A reading that read no rows and went without nothing: this behavior has none written.
+         *  Not the same as {@link #NOT_ASKED}, and not the same as rows nothing came back from. */
+        public static final RowReading NONE =
+                new RowReading(new Measurement.Complete<>(Observed.NONE));
+
+        /** Nothing was asked of a behavior's rows, which is not a reading that found none. */
+        public static final RowReading NOT_ASKED =
+                new RowReading(new Measurement.NotMeasured<>(NotAsked.ROWS_NOT_ASKED));
+
+        /** Why a reading was not made. Its own enum: what the level did not ask for is not one of
+         *  the ways a reading that was made came out. */
+        public enum NotAsked implements souther.compiler.observe.NotMeasuredReason {
+            /** This build does not read rows, so nothing was seen and nothing is owed about it. */
+            ROWS_NOT_ASKED
+        }
+
+        /** Nothing came back at all, so a measure over what remains is over none of them. */
+        public enum Unavailable implements souther.compiler.observe.FailureReason {
+            ROWS_UNAVAILABLE
+        }
+
+        /**
+         * The reading of {@code rows}, given what its sources went without.
+         *
+         * <p>The one place the states are chosen between, so that no caller pairs rows with an
+         * account of them they do not go with.
+         */
+        public static RowReading of(List<RowOutcome> rows, List<Incompleteness> gaps) {
+            if (gaps.isEmpty()) {
+                return new RowReading(new Measurement.Complete<>(new Observed(rows)));
+            }
+            Set<Weakening> by = new LinkedHashSet<>();
+            for (Incompleteness gap : gaps) {
+                by.add(new Weakening.ObservationIncomplete(gap));
+            }
+            WeakeningSet went = WeakeningSet.ofAll(by);
+            return new RowReading(rows.isEmpty()
+                    ? new Measurement.FailedToMeasure<>(Unavailable.ROWS_UNAVAILABLE, went)
+                    : new Measurement.Partial<>(new Observed(rows), went));
+        }
+
+        /** The rows this reading read, which is none where it read none and none where it read
+         *  nothing. Which of those it is, is {@link #measured}. */
+        public List<RowOutcome> rows() {
+            return measured.made().map(Observed::rows).orElseGet(List::of);
+        }
+
+        /** What this reading went without, as the reasons themselves. One projection, shared with
+         *  the document that prints them ({@link WeakeningSet#observationCauses}). */
+        public List<Incompleteness> gaps() {
+            return measured.weakening().observationCauses();
         }
 
         /** Whether everything there was to see was seen. Only then does an unreached thing mean
          * nothing reaches it, rather than nothing was watching. */
         public boolean complete() {
-            return incompleteness.isEmpty();
+            return measured instanceof Measurement.Complete<Observed>;
         }
 
         /**
          * Whether the arms were asked for and not produced.
          *
-         * <p>The rows below then ran without instrumentation and carry no arms at all, which reads
+         * <p>The rows then ran without instrumentation and carry no arms at all, which reads
          * exactly like a body no row goes through. Not the same as arms nobody asked for.
          */
         public boolean armsUnseen() {
-            return incompleteness.stream()
+            return gaps().stream()
                     .anyMatch(gap -> gap.code() == Incompleteness.Code.INSTRUMENTATION_ABSENT);
         }
 
@@ -1691,12 +1810,9 @@ public final class Adequacy {
          * the rows that remain is a measure over some of them with nothing in it to say so.
          *
          * <p>Which codes say it is each code's own answer ({@link Incompleteness.Code#leftNoRowRead}).
-         * Listed here they were two, and the module whose classes could not be made was a third
-         * — measured: it read as rows-all-seen, and the generator offered work for a behavior whose
-         * rows nothing had read.
          */
         public boolean someRowsUnseen() {
-            return incompleteness.stream().anyMatch(gap -> gap.code().leftNoRowRead());
+            return gaps().stream().anyMatch(gap -> gap.code().leftNoRowRead());
         }
     }
 
@@ -1707,7 +1823,7 @@ public final class Adequacy {
      * belongs to all of them: nothing in it was seen, so nothing about any behavior it holds rows for
      * is settled.
      */
-    static Map<String, Observed> rowsOf(Db db, String module) {
+    static Map<String, RowReading> rowsOf(Db db, String module) {
         java.util.SequencedSet<SourceId> origins = db.ask(new Front.ExampleSources(module)).value();
         Map<String, List<RowOutcome>> rows = new LinkedHashMap<>();
         Map<String, List<Incompleteness>> stopped = new LinkedHashMap<>();
@@ -1749,11 +1865,11 @@ public final class Adequacy {
         if (prepared.present() && prepared.value() != null) {
             prepared.value().behaviors().forEach(each -> named.add(each.name()));
         }
-        Map<String, Observed> out = new LinkedHashMap<>();
+        Map<String, RowReading> out = new LinkedHashMap<>();
         for (String behavior : named) {
             List<Incompleteness> gaps = new ArrayList<>(everywhere);
             gaps.addAll(stopped.getOrDefault(behavior, List.of()));
-            out.put(behavior, new Observed(rows.getOrDefault(behavior, List.of()), gaps));
+            out.put(behavior, RowReading.of(rows.getOrDefault(behavior, List.of()), gaps));
         }
         return new WithFallback(out, everywhere);
     }
@@ -1770,31 +1886,32 @@ public final class Adequacy {
 
     /** The map above, answering for a behavior nothing named with whatever stopped every source. A
      * behavior with no rows of its own is still not measurable where a source went unread. */
-    private static final class WithFallback extends java.util.AbstractMap<String, Observed> {
+    private static final class WithFallback extends java.util.AbstractMap<String, RowReading> {
 
-        private final Map<String, Observed> known;
-        private final Observed fallback;
+        private final Map<String, RowReading> known;
+        private final RowReading fallback;
+        private final boolean nothingEverywhere;
 
-        WithFallback(Map<String, Observed> known, List<Incompleteness> everywhere) {
+        WithFallback(Map<String, RowReading> known, List<Incompleteness> everywhere) {
             this.known = known;
-            this.fallback = everywhere.isEmpty() ? Observed.NONE
-                    : new Observed(List.of(), everywhere);
+            this.nothingEverywhere = everywhere.isEmpty();
+            this.fallback = RowReading.of(List.of(), everywhere);
         }
 
         @Override
-        public Observed get(Object key) {
-            Observed there = known.get(key);
+        public RowReading get(Object key) {
+            RowReading there = known.get(key);
             return there != null ? there : fallback;
         }
 
         @Override
-        public Observed getOrDefault(Object key, Observed absent) {
-            Observed there = known.get(key);
-            return there != null ? there : (fallback.complete() ? absent : fallback);
+        public RowReading getOrDefault(Object key, RowReading absent) {
+            RowReading there = known.get(key);
+            return there != null ? there : (nothingEverywhere ? absent : fallback);
         }
 
         @Override
-        public Set<Entry<String, Observed>> entrySet() {
+        public Set<Entry<String, RowReading>> entrySet() {
             return known.entrySet();
         }
     }
@@ -1872,7 +1989,7 @@ public final class Adequacy {
                                     ? souther.compiler.coverage.DecisionSources.NONE
                                     : checked.decisions(),
                             checked == null ? souther.compiler.coverage.SuppliedRules.NONE : checked.supplied());
-            Map<String, Observed> byTarget = rowsOf(db, name);
+            Map<String, RowReading> byTarget = rowsOf(db, name);
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             // What the guards above each place leave, asked once for the module and read by
             // every measure below — the same reason the reading of the input is.
@@ -1917,7 +2034,7 @@ public final class Adequacy {
                             bodies.get(spec.name()),
                             elementsOf.getOrDefault(spec.name(),
                                     souther.compiler.check.ElementBindings.NONE), plan,
-                            byTarget.getOrDefault(spec.name(), Observed.NONE), building,
+                            byTarget.getOrDefault(spec.name(), RowReading.NONE), building,
                             domainOf(readInputs, spec), arrivalsOf(arrives, spec),
                             statedOf(declared, spec), runningRowsOf(trials, spec.name(), sig),
                             PartitionEvidence.answeredFor(partitions, prepared.value(), spec),
@@ -2440,7 +2557,7 @@ public final class Adequacy {
                 List<Generator.Baseline> baselines, List<Finding> owed,
                 souther.compiler.core.Core body,
                 souther.compiler.check.ElementBindings elements,
-                souther.compiler.coverage.CoverageSites.Plan plan, Observed observed,
+                souther.compiler.coverage.CoverageSites.Plan plan, RowReading observed,
                 FixtureReader.Construction building, InputDomain domain,
                 souther.compiler.check.PathReachability.Answers arrives,
                 souther.compiler.check.StatedContract stated, Generator.Trial trial,
@@ -2452,7 +2569,7 @@ public final class Adequacy {
                 // which may already be sitting in the file that could not be evaluated.
                 return new Generator.GenerationResult(List.of(), List.of(),
                         List.of(new souther.compiler.partition.GenerationReason.RowsNotRead(
-                                spec.name(), observed.incompleteness())));
+                                spec.name(), observed.gaps())));
             }
             List<RowOutcome> rows = observed.rows();
             List<String> parameters = spec.params().stream().map(Hir.Param::name).toList();
@@ -3437,7 +3554,7 @@ public final class Adequacy {
      *                   no row can be built at, and counting it holds the model short for ever
      */
     static SignatureEvidence evidenceOf(String name, Sig sig, Symbols symbols, boolean asked,
-                                        Observed seen,
+                                        RowReading seen,
                                         List<String> parameters, InputDomain read,
                                         souther.compiler.core.Core body,
                                         souther.compiler.coverage.CoverageSites.Plan plan,
@@ -3529,7 +3646,7 @@ public final class Adequacy {
         // holds on their behalf. A row that was seen and did not finish is not here: it arrives
         // through the case it could not be classified into, which is what the counts already say.
         Set<Weakening> unseen = new LinkedHashSet<>();
-        for (Incompleteness gap : seen.incompleteness()) {
+        for (Incompleteness gap : seen.gaps()) {
             if (gap.code().leftNoRowRead()) {
                 unseen.add(new Weakening.ObservationIncomplete(gap));
             }

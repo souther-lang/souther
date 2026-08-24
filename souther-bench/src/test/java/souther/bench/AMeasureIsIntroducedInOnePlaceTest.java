@@ -69,9 +69,15 @@ class AMeasureIsIntroducedInOnePlaceTest {
             Map.ofEntries(
             Map.entry("souther.compiler.query.Coverages#pairsOf(Ljava/lang/String;Ljava/util/List;Lsouther/compiler/query/Coverages$Readings;ZLsouther/compiler/partition/AdequacyPolicy$OfTheMeasures;)Lsouther/compiler/query/PartitionEvidence$PairSpace;", 2),
             Map.entry("souther.compiler.query.Coverages#coverageOf(Lsouther/compiler/partition/Axis;Lsouther/compiler/query/Coverages$Readings;Z)Lsouther/compiler/query/PartitionEvidence$AxisCoverage;", 2),
-            Map.entry("souther.compiler.query.Coverages#verdictOf(Lsouther/compiler/query/Coverages$Met;ZLsouther/compiler/partition/Border;Lsouther/compiler/query/Adequacy$Observed;)Lsouther/compiler/query/Measurement;", 3),
-            Map.entry("souther.compiler.query.Coverages#whyNoGuardLine(Lsouther/compiler/query/Adequacy$Observed;Lsouther/compiler/query/Adequacy$Level;)Lsouther/compiler/query/Measurement;", 2),
-            Map.entry("souther.compiler.query.Coverages#whyNoInvariantLine(Lsouther/compiler/query/Adequacy$Observed;Lsouther/compiler/query/Adequacy$Level;)Lsouther/compiler/query/Measurement;", 1),
+            Map.entry("souther.compiler.query.Coverages#verdictOf(Lsouther/compiler/query/Coverages$Met;ZLsouther/compiler/partition/Border;Lsouther/compiler/query/Adequacy$RowReading;)Lsouther/compiler/query/Measurement;", 3),
+            Map.entry("souther.compiler.query.Coverages#whyNoGuardLine(Lsouther/compiler/query/Adequacy$RowReading;Lsouther/compiler/query/Adequacy$Level;)Lsouther/compiler/query/Measurement;", 2),
+            Map.entry("souther.compiler.query.Coverages#whyNoInvariantLine(Lsouther/compiler/query/Adequacy$RowReading;Lsouther/compiler/query/Adequacy$Level;)Lsouther/compiler/query/Measurement;", 1),
+            // The reading of a behavior's rows, which is a measure like the ones counted over them
+            // and is the one that can never be inapplicable. `of` chooses between the three states
+            // a reading that was asked for comes to; the two constants are a behavior with no rows
+            // written and a build that does not read rows, which are not the same nothing.
+            Map.entry("souther.compiler.query.Adequacy$RowReading#of(Ljava/util/List;Ljava/util/List;)Lsouther/compiler/query/Adequacy$RowReading;", 3),
+            Map.entry("souther.compiler.query.Adequacy$RowReading#<clinit>()V", 2),
             Map.entry("souther.compiler.query.PartitionDerivation#noSubject()Lsouther/compiler/query/Measure;", 1),
             Map.entry("souther.compiler.query.PartitionDerivation#of(Ljava/util/List;Lsouther/compiler/partition/MeasureClosure$OfThePartition;)Lsouther/compiler/query/Measure;", 4),
             Map.entry("souther.compiler.query.OutputCaseEvidence#none()Lsouther/compiler/query/OutputCaseEvidence;", 1),

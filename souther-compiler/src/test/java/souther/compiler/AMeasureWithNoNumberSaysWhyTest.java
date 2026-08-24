@@ -444,7 +444,10 @@ class AMeasureWithNoNumberSaysWhyTest {
         AdequacyReport.BehaviorReport reported = AdequacyReport.of(compilation)
                 .modules().get(0).behaviors().stream()
                 .filter(b -> b.name().equals("elsewhere")).findFirst().orElseThrow();
-        assertEquals(0, reported.rows(), "nothing was read");
+        // And the count says so rather than saying zero. `0` is a behavior whose rows were read and
+        // numbered none of them, which is the other half of the pair this test is about: written
+        // as a number, "nothing was read" and "nothing was written" were the same byte.
+        assertEquals(java.util.OptionalInt.empty(), reported.rows(), "nothing was read");
         assertTrue(AdequacyReport.of(compilation).modules().get(0).incompleteness().stream()
                         .anyMatch(gap -> gap.code() == Incompleteness.Code.OBSERVATION_ABSENT),
                 "and there may well have been something to read");

@@ -75,7 +75,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         return ReportMeasurement.statusOf(weakenedBy);
     }
 
-    public static final int SCHEMA_VERSION = 6;
+    public static final int SCHEMA_VERSION = 7;
 
     /**
      * Whether the rows meet what the bar this report is read against asks of them.
@@ -110,9 +110,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     /**
-     * @param injected  whether the behavior still has no {@code let} to run
-     * @param rows      how many {@code example} rows name it, across every source that writes one
-     * @param pending   how many of those are recorded rather than evaluated
+     * @param reading   how far the reading of this behavior's rows got, and what it read. The
+     *                  counts a document prints are this measurement's value and are absent where
+     *                  it has none: a source nobody evaluated leaves no row to count, and printing
+     *                  {@code rows 0} for it says the author wrote none (issue #996)
      * @param signature what those rows establish about the cases of its inputs and its output
      * @param claimed   what the body declared cannot arrive, beside the measures rather than in
      *                  them. The two are joined where this report is written and nowhere else,
@@ -121,7 +122,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      *                  behavior print and what a build is warned about — one list, read three ways
      */
     public record BehaviorReport(String name, BehaviorImplementation implementation,
-                                 int rows, int pending,
+                                 Adequacy.RowReading reading,
                                  WeakeningSet weakenedBy,
                                  Adequacy.SignatureEvidence signature,
                                  PartitionEvidence partition,
@@ -136,6 +137,30 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
          *  {@link AdequacyReport#status()} gives. */
         public MeasurementStatus status() {
             return ReportMeasurement.statusOf(weakenedBy);
+        }
+
+        /**
+         * How many {@code example} rows name this behavior, where its rows were read.
+         *
+         * <p>Absent where they were not. A count of what came back is not a count of what was
+         * written, and a reader shown {@code 0} beside a source nobody evaluated is told the author
+         * wrote no row — which sends them to write one that may already be there.
+         */
+        public java.util.OptionalInt rows() {
+            return reading.measured().made()
+                    .map(seen -> java.util.OptionalInt.of(seen.rows().size()))
+                    .orElseGet(java.util.OptionalInt::empty);
+        }
+
+        /** How many of those are recorded rather than evaluated. Absent for the reason
+         *  {@link #rows()} is. */
+        public java.util.OptionalInt pending() {
+            return reading.measured().made()
+                    .map(seen -> java.util.OptionalInt.of((int) seen.rows().stream()
+                            .filter(r -> r.disposition()
+                                    == souther.compiler.observe.Disposition.PENDING)
+                            .count()))
+                    .orElseGet(java.util.OptionalInt::empty);
         }
 
         /** The findings of one kind, in the order the measure produced them. */
@@ -195,32 +220,27 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     private static ModuleReport moduleReport(Compilation compilation, String name, Prepared module) {
-        Map<String, List<RowOutcome>> byTarget = new LinkedHashMap<>();
+        // The same reading every measure beside them reads, asked for rather than made again. Two
+        // evaluations of one model can disagree — a row that ran out of time under the instrumented
+        // one and held under the other — and a report whose counts came from one while its coverage
+        // came from the other would say a case is verified and its arm unreached in the same breath.
+        // The findings `--strict` exits on come from these same rows, so the exit code and what is
+        // printed agree. This walked the sources itself and built the second of those two readings
+        // (issue #996).
+        Map<String, Adequacy.RowReading> readings =
+                compilation.db().ask(new Adequacy.Rows(name)).value();
         List<Incompleteness> incompleteness = new ArrayList<>();
-        // The same rows every measure beside them reads. Two evaluations of
-        // one model can disagree — a row that ran out of time under the instrumented one and held
-        // under the other — and a report whose counts came from one while its coverage came from the
-        // other would say a case is verified and its arm unreached in the same breath. The findings
-        // `--strict` exits on come from these same rows, so the exit code and what is printed agree.
-        for (SourceId sourceId : compilation.exampleSourcesOf(name)) {
-            Output.Examples.Of observed =
-                    compilation.db().ask(Output.Examples.asked(compilation.db(), name, sourceId)).value();
-            if (observed == null) {
-                // The rows of this source were never evaluated, so nothing here can be counted as
-                // covered or as missing. Which is a fact about the measurement, not about the model.
-                incompleteness.add(Incompleteness.ofSource(
-                        Incompleteness.Code.OBSERVATION_ABSENT, sourceId));
-                continue;
-            }
-            for (Incompleteness gap : observed.incompleteness()) {
-                // One entry per reason. A module-level failure found from each of three attached files
-                // is one failure, and a build that counts these should count one.
-                if (incompleteness.stream().noneMatch(had -> had.identity().equals(gap.identity()))) {
-                    incompleteness.add(gap);
+        if (readings != null) {
+            for (Adequacy.RowReading reading : readings.values()) {
+                for (Incompleteness gap : reading.gaps()) {
+                    // One entry per reason. A module-level failure found from each of three attached
+                    // files is one failure, and a build that counts these should count one; so is a
+                    // reason that counts against every behavior, which every one of them carries.
+                    if (incompleteness.stream()
+                            .noneMatch(had -> had.identity().equals(gap.identity()))) {
+                        incompleteness.add(gap);
+                    }
                 }
-            }
-            for (RowOutcome row : observed.rows()) {
-                byTarget.computeIfAbsent(row.target(), _ -> new ArrayList<>()).add(row);
             }
         }
         Map<String, Adequacy.SignatureEvidence> signatures =
@@ -251,10 +271,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 compilation.db().ask(new Adequacy.Findings(name)).value();
         List<BehaviorReport> behaviors = new ArrayList<>();
         for (Hir.BehaviorDef behavior : module.behaviors()) {
-            List<RowOutcome> rows = byTarget.getOrDefault(behavior.name(), List.of());
-            int pending = (int) rows.stream()
-                    .filter(r -> r.disposition() == souther.compiler.observe.Disposition.PENDING)
-                    .count();
+            // Null where the compile did not get far enough for the rows to be asked about, which
+            // is not a reading that found none.
+            Adequacy.RowReading reading = readings == null ? Adequacy.RowReading.NOT_ASKED
+                    : readings.getOrDefault(behavior.name(), Adequacy.RowReading.NONE);
             // Anything larger than a behavior holds this one: a source that could not be evaluated is
             Adequacy.SignatureEvidence signature =
                     signatures == null ? null : signatures.get(behavior.name());
@@ -269,7 +289,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     branches == null ? null : branches.get(behavior.name());
             behaviors.add(new BehaviorReport(behavior.name(),
                     module.implementationOf(behavior),
-                    rows.size(), pending,
+                    reading,
                     wentWithout(signature, partition, branch),
                     signature, partition,
                     claims == null ? ClaimAnnotations.NONE
@@ -331,7 +351,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * build that refused one would refuse the practice of recording what an injected behavior owes. */
     public int pendingRows() {
         return modules.stream().flatMap(m -> m.behaviors().stream())
-                .mapToInt(BehaviorReport::pending).sum();
+                .map(BehaviorReport::pending)
+                .filter(java.util.OptionalInt::isPresent)
+                .mapToInt(java.util.OptionalInt::getAsInt).sum();
     }
 
     /** Everything the measures found, across everything reported. */
@@ -517,10 +539,16 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     wire(ReportMeasurement.statusOf(module.weakenedBy()))));
             for (BehaviorReport behavior : module.behaviors()) {
                 counted.merge(behavior.implementation(), 1, Integer::sum);
-                out.append(String.format("  %s %s rows %-4d pending %d%n",
+                // A number where the rows were read, and what stopped them being read where they
+                // were not. Written as `0` for both, this line said an author had written no row
+                // for a behavior whose rows nobody had looked at.
+                out.append(String.format("  %s %s %s%n",
                         DisplayColumns.padRight(behavior.name(), 24),
                         DisplayColumns.padRight(behavior.implementation().written(), 13),
-                        behavior.rows(), behavior.pending()));
+                        behavior.rows().isPresent()
+                                ? String.format("rows %-4d pending %d",
+                                        behavior.rows().getAsInt(), behavior.pending().getAsInt())
+                                : "rows not read"));
                 signature(out, behavior);
                 partition(out, behavior, module.declaredIn(), names);
                 branch(out, behavior, module.declaredIn(), names);
@@ -1605,8 +1633,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 ObjectNode b = behaviors.addObject();
                 b.put("name", behavior.name());
                 b.put("implementation", behavior.implementation().written());
-                b.put("rows", behavior.rows());
-                b.put("pending", behavior.pending());
+                // Written where the rows were read, and left out where they were not. A zero here
+                // is a behavior whose rows were read and numbered none of them, which a consumer
+                // acts on differently from rows nobody read.
+                behavior.rows().ifPresent(count -> b.put("rows", count));
+                behavior.pending().ifPresent(count -> b.put("pending", count));
                 b.put("status", wire(behavior.status()));
                 weakening(b, behavior.weakenedBy());
                 signature(b, behavior.signature());
