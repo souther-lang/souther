@@ -53,17 +53,6 @@ final class DischargeRules {
         return new ValueName.Stdlib(alias, name);
     }
 
-    /** The pure, total stdlib calls whose result is a number the domain can name: the size of a
-     * container or a string. Each becomes an atom keyed by the call written over its argument's path
-     * — {@code List.length(b.items)} — so an invariant clause and a guard naming the same container
-     * name the same atom, and the guard discharges the clause. The argument must be a nameable path:
-     * {@code List.length(List.map(f, xs))} is not this atom, and nothing relates the two.
-     *
-     * <p>Shared with the partition, which draws a boundary on the same calls ({@link
-     * NumericMeasures}). Two lists would let a rule be discharged here and reported as one the model
-     * does not state there. */
-    private static final Set<ValueName> SIZE_CALLS = NumericMeasures.calls();
-
     /** The argument the signature already says the elements come from, where the operation takes a
      * closure at all — so a rule about such an operation writes no position of its own. */
     private static final ArgumentRef CONTAINER = new ArgumentRef.TheContainer();
@@ -177,7 +166,7 @@ final class DischargeRules {
     }
 
     static Set<ValueName> sizeCalls() {
-        return SIZE_CALLS;
+        return NumericMeasures.calls();
     }
 
     static Set<ValueName> numericResultOperations() {
@@ -711,7 +700,7 @@ final class DischargeRules {
     }
 
     static boolean isSize(ValueName operation) {
-        return SIZE_CALLS.contains(operation);
+        return NumericMeasures.isMeasure(operation);
     }
 
     static boolean isQuantifier(ValueName operation) {
