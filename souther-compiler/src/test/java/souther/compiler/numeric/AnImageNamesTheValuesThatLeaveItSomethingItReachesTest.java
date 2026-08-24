@@ -55,7 +55,7 @@ class AnImageNamesTheValuesThatLeaveItSomethingItReachesTest {
 
         AffinePreimage answer = rest.affinePreimage(at(3), at(3), Granularity.DISCRETE);
 
-        assertEquals(new AffinePreimage.Stepping(at(1), at(2)), answer);
+        assertEquals(new AffinePreimage.Stepping(at(1), at(2), Granularity.DISCRETE), answer);
         leavesSomethingReached(rest, at(3), at(3), answer);
     }
 
@@ -75,7 +75,7 @@ class AnImageNamesTheValuesThatLeaveItSomethingItReachesTest {
 
         AffinePreimage answer = rest.affinePreimage(at(-3), at(3), Granularity.DISCRETE);
 
-        assertEquals(new AffinePreimage.Stepping(at(1), at(2)), answer);
+        assertEquals(new AffinePreimage.Stepping(at(1), at(2), Granularity.DISCRETE), answer);
         leavesSomethingReached(rest, at(-3), at(3), answer);
     }
 
@@ -144,8 +144,8 @@ class AnImageNamesTheValuesThatLeaveItSomethingItReachesTest {
         assertEquals(new AffinePreimage.Filling(Rational.ONE, at(3)),
                 new AffinePreimage.Filling(
                         Rational.of(new java.math.BigDecimal("1.3")), at(3)));
-        assertEquals(new AffinePreimage.Stepping(at(1), at(2)),
-                new AffinePreimage.Stepping(at(7), at(2)));
+        assertEquals(new AffinePreimage.Stepping(at(1), at(2), Granularity.DISCRETE),
+                new AffinePreimage.Stepping(at(7), at(2), Granularity.DISCRETE));
     }
 
     /**
@@ -179,7 +179,12 @@ class AnImageNamesTheValuesThatLeaveItSomethingItReachesTest {
     void aProgressionIsWrittenInTheNumbersThePositionHolds() {
         assertThrows(IllegalArgumentException.class,
                 () -> new AffinePreimage.Stepping(new Rational(BigInteger.ONE, BigInteger.TWO),
-                        at(2)));
+                        at(2), Granularity.DISCRETE));
+        // And the same progression is what a position whose values fill is left with, so the
+        // refusal is about the position and not about the halves.
+        assertEquals(new Rational(BigInteger.ONE, BigInteger.TWO),
+                new AffinePreimage.Stepping(new Rational(BigInteger.ONE, BigInteger.TWO),
+                        at(2), Granularity.DENSE).from());
         // And a coset of the decimals: a generator that is no whole number once the units are out of
         // it, and a member that is no decimal a model writes.
         assertThrows(IllegalArgumentException.class,

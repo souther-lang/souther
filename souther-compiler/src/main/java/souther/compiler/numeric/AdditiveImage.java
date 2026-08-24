@@ -172,7 +172,16 @@ public sealed interface AdditiveImage {
         public AffinePreimage affinePreimage(Rational coefficient, Rational target,
                                              Granularity source) {
             if (source != Granularity.DISCRETE) {
-                return new AffinePreimage.Filling(Rational.ZERO, Rational.ONE);
+                // A position that fills, weighed against a residue that steps. What works out is
+                // `(t - g·k)/c` for whole `k`, which is a progression the position's values pass
+                // through — and it is a progression whether or not its members are whole. Answered
+                // before with every value the position has, on the ground that no caller weighed
+                // positions spaced differently; one that does is a search with nothing to go on.
+                //
+                // Wider than the truth only in that a member may be no decimal a model writes,
+                // which the position refuses when it is asked for that member.
+                return new AffinePreimage.Stepping(target.dividedBy(coefficient),
+                        generator.dividedBy(coefficient).abs(), source);
             }
             Rational divisor = Rational.gcd(coefficient, generator);
             Rational steps = target.dividedBy(divisor);
@@ -181,13 +190,13 @@ public sealed interface AdditiveImage {
             }
             java.math.BigInteger modulus = generator.dividedBy(divisor).numerator();
             if (modulus.equals(java.math.BigInteger.ONE)) {
-                return new AffinePreimage.Stepping(Rational.ZERO, Rational.ONE);
+                return new AffinePreimage.Stepping(Rational.ZERO, Rational.ONE, source);
             }
             java.math.BigInteger weight = coefficient.dividedBy(divisor).numerator().mod(modulus);
             java.math.BigInteger at = steps.numerator()
                     .multiply(weight.modInverse(modulus))
                     .mod(modulus);
-            return new AffinePreimage.Stepping(Rational.of(at), Rational.of(modulus));
+            return new AffinePreimage.Stepping(Rational.of(at), Rational.of(modulus), source);
         }
     }
 
@@ -257,7 +266,33 @@ public sealed interface AdditiveImage {
         public AffinePreimage affinePreimage(Rational coefficient, Rational target,
                                              Granularity source) {
             if (source != Granularity.DENSE) {
-                return new AffinePreimage.Stepping(Rational.ZERO, Rational.ONE);
+                // The other mixed pairing: a position that steps, against a residue that fills.
+                // A whole `x` works out where `(t - c·x)/g` is a written decimal, and multiplying
+                // through by what the position's weight brings in leaves one residue class of the
+                // part of it that is neither two nor five — the same reduction this image makes of
+                // its own generator, since twos and fives are units among the finite decimals.
+                Rational per = coefficient.dividedBy(generator);
+                Rational owed = target.dividedBy(generator);
+                java.math.BigInteger spread =
+                        Rational.of(per.numerator()).unitsRemoved().numerator().abs();
+                if (spread.equals(java.math.BigInteger.ONE)) {
+                    return new AffinePreimage.Stepping(Rational.ZERO, Rational.ONE, source);
+                }
+                java.math.BigDecimal reached =
+                        owed.times(Rational.of(per.denominator())).asWrittenDecimal();
+                if (reached == null) {
+                    return new AffinePreimage.None();
+                }
+                // `x ≡ (t/g)·den(c/g) · inverse(num(c/g)) (mod spread)`, taken over the whole
+                // numbers: the member is a decimal here and the position holds whole numbers, so a
+                // target that is no whole multiple leaves this position nothing.
+                Rational at = Rational.of(reached).times(
+                        Rational.of(Rational.of(per.numerator()).unitsRemoved().numerator()
+                                .mod(spread).modInverse(spread)));
+                if (!at.isWhole()) {
+                    return new AffinePreimage.None();
+                }
+                return new AffinePreimage.Stepping(at, Rational.of(spread), source);
             }
             Rational per = coefficient.dividedBy(generator);
             Rational owed = target.dividedBy(generator);

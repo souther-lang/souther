@@ -87,11 +87,11 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         if (read == null || !read.orders()) {
             return null;
         }
-        Carrier carrier = read.carrier(reads, symbols);
-        if (carrier == null || !carrier.counts()) {
+        java.util.Map<NumericTerm, Carrier> on = read.carriers(reads, symbols);
+        if (on == null) {
             return null;
         }
-        return new Cutting(new BorderQuantity.OverAForm(behavior, read.form(), carrier),
+        return new Cutting(new BorderQuantity.OverAForm(behavior, read.form(), on),
                 new Level.ACount(new Count(read.cut())), read.claim(),
                 quantities.runsBetween(read.form()));
     }
@@ -134,7 +134,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         java.math.BigDecimal per = QuantityKey.per(direction);
         return Seam.of(of.levels(), at,
                 valueBelongsBelow() ? Towards.BELOW : Towards.ABOVE,
-                new Seam.Scale(per, direction.coefs().size() == 1 ? of.carrier() : null));
+                new Seam.Scale(per, direction.coefs().size() == 1
+                        ? of.carrierOf(direction.coefs().keySet().iterator().next()) : null));
     }
 
     /**
@@ -190,7 +191,11 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * the line falls is asked of the order it sits on.
      */
     Place singledValue() {
-        return seam().at().asAValueOf(of.carrier());
+        // On the order the position it divides is written on. A quantity used to answer with one
+        // order for everything under it; a form may now be over positions written back differently,
+        // and the value named here is a value of one of them.
+        NumericTerm divides = dividedPosition();
+        return seam().at().asAValueOf(divides == null ? null : of.carrierOf(divides));
     }
 
     /**

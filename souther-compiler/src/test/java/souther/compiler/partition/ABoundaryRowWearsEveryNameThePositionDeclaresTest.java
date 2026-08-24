@@ -115,8 +115,8 @@ class ABoundaryRowWearsEveryNameThePositionDeclaresTest {
                     continue;   // no row is owed there, so there is none to write
                 }
                 out.add(role + " -> "
-                        + (Generator.probeFixing(subject, border.label(role), axis.term()
-                                        .carrierAt(axis.type(), symbols),
+                        + (Generator.probeFixing(subject, border.label(role),
+                                ignored -> axis.term().carrierAt(axis.type(), symbols),
                                 java.util.Map.of(axis.term(),
                                         ((Level.OnACarrier) each.at()).at()),
                                 Generator.CandidateCheck.ANY)

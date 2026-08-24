@@ -190,7 +190,7 @@ public final class LevelRealizer {
                 AffineReading.ordered(over.form());
         boolean bounded = true;
         for (Level level : LevelCandidateSource.forItem(over.where(), levels)) {
-            Search search = new Search(terms, over.of(), within);
+            Search search = new Search(terms, over.on(), within);
             Reached reached = search.solve(level.asACount());
             if (reached == Reached.FOUND) {
                 Realization made = found(search.fixing(), within);
@@ -294,16 +294,17 @@ public final class LevelRealizer {
     private final class Search {
 
         private final List<Map.Entry<NumericTerm, java.math.BigDecimal>> terms;
-        private final Carrier carrier;
         /**
-         * Whether the position's own values step, which the carrier answers.
+         * The order each position is read and written on, in the order the terms are walked.
          *
-         * <p>Asked of the carrier and not of the level space. Both say the same thing about every
-         * form the suite reaches, and only one of them is about the positions: a level space steps
-         * because the positions under it do, so reading the answer off the levels is reading it from
-         * the thing it follows from.
+         * <p>One apiece rather than one for the form. Every question the walk asks of an order is
+         * about a position — whether its values step, what its next value is, how far it may be
+         * moved — and answering them from one order handed to the whole form walked a decimal
+         * position over the whole numbers, or the other way about, wherever a form's positions were
+         * not written back the same way. What the form's positions do share is the unit their counts
+         * are in, and that is asked where the form is built rather than here.
          */
-        private final boolean whole;
+        private final Carrier[] carriers;
         /** Where a row for the item being searched for may be written. */
         private final souther.compiler.inputs.SearchRegion within;
         private final Place[] at;
@@ -328,11 +329,13 @@ public final class LevelRealizer {
         private int taken;
         private int asked;
 
-        Search(List<Map.Entry<NumericTerm, java.math.BigDecimal>> terms, Carrier carrier,
-               souther.compiler.inputs.SearchRegion within) {
+        Search(List<Map.Entry<NumericTerm, java.math.BigDecimal>> terms,
+               Map<NumericTerm, Carrier> on, souther.compiler.inputs.SearchRegion within) {
             this.terms = terms;
-            this.carrier = carrier;
-            this.whole = carrier.spacing() == souther.compiler.numeric.Granularity.DISCRETE;
+            this.carriers = new Carrier[terms.size()];
+            for (int i = 0; i < terms.size(); i++) {
+                carriers[i] = on.get(terms.get(i).getKey());
+            }
             this.within = within;
             this.at = new Place[terms.size()];
             this.runsBetween = new NumericDomain.Bounds[terms.size()];
@@ -346,7 +349,9 @@ public final class LevelRealizer {
                     coefs.put(terms.get(j).getKey(),
                             souther.compiler.numeric.Rational.of(terms.get(j).getValue()));
                 }
-                fromHere[i] = AdditiveImage.of(coefs, ignored -> carrier.spacing());
+                // Each term's own spacing, which is what the image was always asking for: a sum of
+                // whole numbers lands on whole numbers, and one decimal among them makes it dense.
+                fromHere[i] = AdditiveImage.of(coefs, term -> on.get(term).spacing());
             }
         }
 
@@ -406,7 +411,7 @@ public final class LevelRealizer {
                     fromHere[i + 1].affinePreimage(
                             souther.compiler.numeric.Rational.of(coef),
                             souther.compiler.numeric.Rational.of(owed),
-                            carrier.spacing()),
+                            carriers[i].spacing()),
                     left);
             return switch (may) {
                 case CandidateDomain.None ignored -> Reached.EXHAUSTED;
@@ -489,7 +494,7 @@ public final class LevelRealizer {
         private Reached outward(int i, CandidateDomain.Outward on, java.math.BigDecimal owed,
                                 java.math.BigDecimal coef,
                                 souther.compiler.inputs.SearchRegion here) {
-            for (Place x : Outwards.from(new Count(on.from()), new Count(on.by()), carrier,
+            for (Place x : Outwards.from(new Count(on.from()), new Count(on.by()), carriers[i],
                     on.within(), VALUES_A_PROGRESSION_WITHOUT_AN_END_IS_TRIED_AT)) {
                 if (trying(i, Count.number(x).at(), owed, coef, here) == Reached.FOUND) {
                     return Reached.FOUND;
@@ -518,7 +523,7 @@ public final class LevelRealizer {
         private Reached solving(int i, java.math.BigDecimal owed, java.math.BigDecimal coef,
                                 NumericDomain.Bounds left) {
             java.math.BigDecimal solved;
-            if (whole) {
+            if (carriers[i].spacing() == souther.compiler.numeric.Granularity.DISCRETE) {
                 java.math.BigDecimal[] divided = owed.divideAndRemainder(coef);
                 if (divided[1].signum() != 0) {
                     return Reached.EXHAUSTED;

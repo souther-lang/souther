@@ -58,7 +58,23 @@ public sealed interface Standing {
      * quantity's answer, and a search that worked it out again from the coefficients would be the
      * quantity's reading written a second time, free to disagree with it about where the next level
      * is.
+     *
+     * <p>And an order per position beside it. What a form's positions must share is the unit their
+     * counts are in ({@link Carrier#counting}), which a decimal and a whole number do without being
+     * written back the same way — so which order each of them is read and written on is a question
+     * per position. Handed one order for all of them, a search walked every position over the values
+     * of whichever order it was given.
      */
     record OfAForm(souther.compiler.numeric.NumericDomain.LinearForm<NumericTerm> form,
-                   Carrier of, LevelSpace levels, Criterion where) implements Standing {}
+                   java.util.Map<NumericTerm, Carrier> on, LevelSpace levels, Criterion where)
+            implements Standing {
+
+        public OfAForm {
+            on = java.util.Map.copyOf(on);
+            if (!on.keySet().equals(form.coefs().keySet())) {
+                throw new IllegalArgumentException("a form stands over the positions it names, each"
+                        + " on one order: " + form.coefs().keySet() + " against " + on.keySet());
+            }
+        }
+    }
 }

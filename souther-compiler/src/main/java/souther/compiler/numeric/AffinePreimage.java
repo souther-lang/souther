@@ -26,12 +26,27 @@ public sealed interface AffinePreimage {
     record None() implements AffinePreimage {}
 
     /**
-     * Every {@code from + by·k} for a whole {@code k}.
+     * Every {@code from + by·k} for a whole {@code k}, through the values of a position spaced as
+     * {@code spacing} says.
      *
-     * @param by always positive. One is every whole number, which is what a position under no
-     *           congruence is left with
+     * <p><b>What steps is the set and not always the position.</b> A position whose values fill,
+     * weighed against a residue that steps, reaches exactly a progression through its own values —
+     * {@code d - n} at two and a half is met by {@code d} at two and a half, three and a half, and
+     * no other. So a member need not be whole, and whether it may be is what the position's spacing
+     * says rather than something true of every progression.
+     *
+     * <p>Which is why the spacing comes with it. A coset of halves offered to a position that counts
+     * is a value it does not hold offered as one it does, and that is worth refusing; refusing it by
+     * requiring every progression to be written in whole numbers refused the dense position's answer
+     * along with it, and the reading that could not say that answer gave back every value the
+     * position has — which is safe and is nothing a search can use.
+     *
+     * @param by      always positive. One is every whole number, which is what a position under no
+     *                congruence is left with
+     * @param spacing how the position's own values are spaced. Its members are values of that
+     *                position, so a position that counts takes a progression of whole numbers
      */
-    record Stepping(Rational from, Rational by) implements AffinePreimage {
+    record Stepping(Rational from, Rational by, Granularity spacing) implements AffinePreimage {
 
         /**
          * With the member written as the one between none and {@code by}.
@@ -42,10 +57,10 @@ public sealed interface AffinePreimage {
          * answers with nothing to tell a reader they are one.
          */
         public Stepping {
-            if (from == null || by == null || by.signum() <= 0) {
+            if (from == null || by == null || spacing == null || by.signum() <= 0) {
                 throw new IllegalArgumentException("a progression steps by something positive: " + by);
             }
-            if (!from.isWhole() || !by.isWhole()) {
+            if (spacing == Granularity.DISCRETE && (!from.isWhole() || !by.isWhole())) {
                 throw new IllegalArgumentException(
                         "a position whose values step takes whole numbers, so a progression of them"
                                 + " is written in whole numbers: " + from + " by " + by);

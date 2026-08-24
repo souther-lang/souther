@@ -62,7 +62,7 @@ class AQuotientNoDecimalWritesIsAProofAndNotAGivingUpTest {
         Standing.OfAForm aThird = new Standing.OfAForm(
                 new NumericDomain.LinearForm<>(BigDecimal.ZERO,
                         Map.of(value("b"), new BigDecimal("3"))),
-                new Carrier.Dense(),
+                Map.of(value("b"), new Carrier.Dense()),
                 LevelSpace.overFiniteDecimals(new BigDecimal("3")),
                 new Criterion.AtTheLevel(new Level.ACount(Count.of(BigDecimal.ONE))));
 
@@ -76,7 +76,7 @@ class AQuotientNoDecimalWritesIsAProofAndNotAGivingUpTest {
         Standing.OfAForm aWhole = new Standing.OfAForm(
                 new NumericDomain.LinearForm<>(BigDecimal.ZERO,
                         Map.of(value("b"), new BigDecimal("3"))),
-                new Carrier.Dense(),
+                Map.of(value("b"), new Carrier.Dense()),
                 LevelSpace.overFiniteDecimals(new BigDecimal("3")),
                 new Criterion.AtTheLevel(new Level.ACount(Count.of(new BigDecimal("6")))));
 

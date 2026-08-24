@@ -486,7 +486,9 @@ final class Coverages {
          * would name a witness as though it were the item.
          */
         souther.compiler.partition.Generator.BoundaryAttempt attempt(
-                String label, souther.compiler.check.Carrier carrier,
+                String label,
+                java.util.function.Function<souther.compiler.inputs.NumericTerm,
+                        souther.compiler.check.Carrier> on,
                 Map<souther.compiler.inputs.NumericTerm, Place> fixing);
     }
 
@@ -672,7 +674,8 @@ final class Coverages {
                 // offered for goes in beside it rather than being read back off it.
                 return switch (realizer.realize(quantity.standingAt(criterion), within.where())) {
                     case Realization.Found found -> whatCameOfIt(
-                            probe.attempt(label, quantity.carrier(), found.fixing()), label, within);
+                            probe.attempt(label, quantity::carrierOf, found.fixing()),
+                            label, within);
                     // And the two ways of finding nothing are not one answer. A walk of the whole
                     // of what the rules leave that reaches no value settles the point; a search
                     // that stopped, or one that composed no candidate at all, settles nothing

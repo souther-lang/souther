@@ -1667,7 +1667,8 @@ public final class Generator {
      * candidates that were tried, and another value of the same edge may build; what comes back says
      * which of the two happened and leaves the reading to the caller.
      */
-    public static BoundaryAttempt probeFixing(Subject subject, String label, Carrier carrier,
+    public static BoundaryAttempt probeFixing(Subject subject, String label,
+                                              java.util.function.Function<NumericTerm, Carrier> on,
                                               Map<NumericTerm, Place> fixing, CandidateCheck check) {
         Map<String, List<FixtureTemplate>> decided = new LinkedHashMap<>();
         // What the rest of the row has to sit beside. A field of a record is not chosen from its own
@@ -1677,6 +1678,14 @@ public final class Generator {
         Map<String, Place> settled = new LinkedHashMap<>();
         Map<String, UnresolvedCombination.Reason> heldBack = new LinkedHashMap<>();
         for (Map.Entry<NumericTerm, Place> each : fixing.entrySet()) {
+            // The order this position is written back on, which is the position's own. Handed one
+            // order for the whole fixing, a form over positions written back differently wrote each
+            // of them as a value of whichever order the quantity happened to answer with.
+            Carrier carrier = on.apply(each.getKey());
+            if (carrier == null) {
+                throw new IllegalStateException("a row is owed at " + each.getKey()
+                        + " and the quantity it is owed for is over no such position");
+            }
             Edge edge = edgeAt(subject, carrier, each.getKey(), each.getValue(), fixing.size() > 1);
             if (edge.values().isEmpty()) {
                 return new BoundaryAttempt.Unresolved(
