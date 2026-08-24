@@ -1,13 +1,12 @@
 package souther.bench;
 
+import souther.test.RepositoryLayout;
+
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -33,21 +32,16 @@ final class Reactor {
 
     private Reactor() {}
 
-    /** The modules the root pom names. */
-    static List<String> modules() {
-        String pom;
-        try {
-            pom = Files.readString(root().resolve("pom.xml"));
-        } catch (IOException unreadable) {
-            throw new UncheckedIOException(unreadable);
-        }
-        List<String> out = new ArrayList<>();
-        Matcher named = Pattern.compile("<module>([^<]+)</module>").matcher(pom);
-        while (named.find()) {
-            out.add(named.group(1));
-        }
-        assertTrue(out.size() > 1, () -> "the root pom names " + out);
-        return List.copyOf(out);
+    private static final RepositoryLayout REPOSITORY = RepositoryLayout.ofWorkingDirectory();
+
+    /** The modules the root pom names, as directories. */
+    static List<Path> modules() {
+        return REPOSITORY.modules();
+    }
+
+    /** What to call one of them in a message. */
+    static String name(Path module) {
+        return module.getFileName().toString();
     }
 
     /**
@@ -58,20 +52,25 @@ final class Reactor {
      * publishes, and stand where that artifact's consumer stands — has nothing here to walk, and
      * finding nothing is the whole answer rather than a gap in one.
      */
-    static boolean hasMainSources(String module) {
-        return Files.isDirectory(root().resolve(module).resolve("src/main/java"));
+    static boolean hasMainSources(Path module) {
+        return Files.isDirectory(module.resolve("src/main/java"));
+    }
+
+    /** Every {@code .java} of every one of them. */
+    static List<Path> mainJavaSources() {
+        return REPOSITORY.mainJavaSources();
     }
 
     /** Every compiled class of every one of them. */
     static List<Path> classes() throws IOException {
         List<Path> found = new ArrayList<>();
-        for (String module : modules()) {
+        for (Path module : modules()) {
             if (!hasMainSources(module)) {
                 continue;
             }
-            Path built = root().resolve(module).resolve("target/classes");
+            Path built = module.resolve("target/classes");
             assertTrue(Files.isDirectory(built),
-                    module + " has no built classes: this check covers what has been built, so a"
+                    name(module) + " has no built classes: this check covers what has been built, so a"
                             + " module that has not been is a hole rather than a pass");
             try (Stream<Path> walk = Files.walk(built)) {
                 walk.filter(each -> each.toString().endsWith(".class")).forEach(found::add);
@@ -82,6 +81,6 @@ final class Reactor {
 
     /** The repository, from the module this runs in. */
     static Path root() {
-        return Path.of("").toAbsolutePath().getParent();
+        return REPOSITORY.root();
     }
 }

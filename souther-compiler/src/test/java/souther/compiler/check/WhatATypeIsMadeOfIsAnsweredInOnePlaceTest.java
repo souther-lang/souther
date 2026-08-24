@@ -2,6 +2,8 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.test.RepositoryLayout;
+
 import souther.compiler.DefaultStdlib;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.msg.MessageValues;
@@ -22,7 +24,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -42,6 +43,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * its own one leaf is not that. Held here at what it produces rather than at the call it makes.
  */
 class WhatATypeIsMadeOfIsAnsweredInOnePlaceTest {
+
+    /** Read once: what this asks of it does not change between its checks. */
+    private static final RepositoryLayout REPOSITORY = RepositoryLayout.ofWorkingDirectory();
 
     /** A sum two deep, and a leaf two of its cases reach. */
     private static final String MODULE = """
@@ -357,23 +361,7 @@ class WhatATypeIsMadeOfIsAnsweredInOnePlaceTest {
     }
 
     private static List<Path> mainSources() throws IOException {
-        Path module = Path.of("").toAbsolutePath();
-        Path repo = Files.isDirectory(module.resolve(Path.of("src", "main", "java")))
-                ? module.getParent() : module;
-        List<Path> sources = new ArrayList<>();
-        try (Stream<Path> modules = Files.list(repo)) {
-            for (Path candidate : modules.toList()) {
-                Path root = candidate.resolve(Path.of("src", "main", "java"));
-                if (!Files.isDirectory(root)) {
-                    continue;
-                }
-                try (Stream<Path> walk = Files.walk(root)) {
-                    walk.filter(each -> each.toString().endsWith(".java")).forEach(sources::add);
-                }
-            }
-        }
-        sources.sort(Path::compareTo);
-        return sources;
+        return REPOSITORY.mainJavaSources();
     }
 
     // --- helpers ---------------------------------------------------------------------------------
