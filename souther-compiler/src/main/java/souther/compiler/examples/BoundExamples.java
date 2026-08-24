@@ -128,6 +128,52 @@ public final class BoundExamples {
     }
 
     /**
+     * What the bound implementation answered for {@code row}'s inputs, held to what the behavior
+     * declares of what it answers — and to nothing the row records.
+     *
+     * <p>A different oracle from {@link #evaluate}'s, which holds an answer to the declaration and
+     * to the value somebody wrote out. Where the recorded answer is no longer the answer — a world
+     * the rows were not recorded in — what the behavior states still is, and this is the face that
+     * asks only that.
+     *
+     * <p>Applied once per call, as {@code evaluate} is and for the same reason: what the
+     * implementation answers comes out of world state the caller arranges between calls, and two
+     * answers under two worlds are two observations rather than a contradiction.
+     *
+     * <p>A behavior that states nothing is answered {@link ContractObservation.NothingStated}
+     * without the implementation being applied. To leave such a behavior's rows out rather than be
+     * told about each of them, read {@link #behaviorsStatingContracts()}.
+     */
+    public ContractObservation checkContract(RecordedRow row) {
+        if (row == null || row.enumeratedBy() != this) {
+            throw new IllegalArgumentException("a row belongs to the enumeration that made it");
+        }
+        return verifier.contractOnly(row.behavior(), row.written());
+    }
+
+    /**
+     * Which of the bound behaviors state something of what they answer.
+     *
+     * <p>What a behavior declares, asked without applying anything — a behavior writing no
+     * {@code ensures} is not among the module's contracts at all, so this reads a declaration rather
+     * than predicting a run. For a suite that means to hold only the behaviors with a contract to
+     * one, and that would otherwise have to write their names down beside the model.
+     *
+     * <p>Beside {@link ContractObservation.NothingStated} and not instead of it. This is for an
+     * author who means to leave a behavior out; the arm is for one who did not mean to and would
+     * otherwise have a green suite asserting that a call did not throw.
+     */
+    public List<String> behaviorsStatingContracts() {
+        List<String> stating = new ArrayList<>();
+        for (String behavior : bound) {
+            if (verifier.states(behavior)) {
+                stating.add(behavior);
+            }
+        }
+        return List.copyOf(stating);
+    }
+
+    /**
      * What the implementation answered for {@code entry}'s input, held to what the entry states.
      *
      * <p>Enumerated and observed one at a time, as rows are and for the same reason: what the

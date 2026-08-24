@@ -396,9 +396,127 @@ public final class ExampleVerifier {
                                         + deadline.budgetMs() + "ms"));
             }
             case Deadline.Outcome.Threw(Throwable cause) -> {
-                return whatTheWorkerThrew(cause);
+                return new StandinObservation.Unobserved(whatTheWorkerThrew(cause));
             }
         }
+    }
+
+    /**
+     * Whether {@code behavior} states anything of what it answers.
+     *
+     * <p>Declaration metadata, so nothing is applied to answer it. It is the same fact
+     * {@link ContractObservation.NothingStated} reports after a row has run, asked before one is.
+     */
+    boolean states(String behavior) {
+        return ensures.states(behavior);
+    }
+
+    /**
+     * What the bound implementation answered for {@code row}'s inputs, held to what {@code behavior}
+     * declares of what it answers and to nothing the row records.
+     *
+     * <p>Through the run's deadline, as a row and a stand-in's entry are, and for that reason: the
+     * binding decides where applied code runs and what bounds it, and a third route to it would be
+     * the binding meaning three things.
+     */
+    ContractObservation contractOnly(String behavior, Hir.ExampleRow row) {
+        switch (deadline.given(new Deadline.Work.Row(behavior, row.pos(), row.identity()),
+                () -> checkingContract(behavior, row))) {
+            case Deadline.Outcome.Finished(ContractObservation observed) -> {
+                return observed;
+            }
+            case Deadline.Outcome.Overran(Runnable abandon) -> {
+                abandon.run();
+                return new ContractObservation.Unobserved(
+                        new StandinObservation.Reason.TheObservationRanOut(
+                                "the implementation did not answer within "
+                                        + deadline.budgetMs() + "ms"));
+            }
+            case Deadline.Outcome.Threw(Throwable cause) -> {
+                return new ContractObservation.Unobserved(whatTheWorkerThrew(cause));
+            }
+        }
+    }
+
+    private ContractObservation checkingContract(String behavior, Hir.ExampleRow row) {
+        Sig sig = sigs.get(behavior);
+        ExampleTarget target = targetOf(behavior);
+        if (sig == null || target == null) {
+            return new ContractObservation.Unobserved(
+                    new StandinObservation.Reason.TheEntryWasNotRead(
+                            "`" + behavior + "` has nothing to apply its inputs to"));
+        }
+        Answerer.Answer.Something applies;
+        switch (target.handing()) {
+            case Handing.NothingApplies _ -> {
+                return new ContractObservation.Unobserved(
+                        new StandinObservation.Reason.TheImplementationWasNotReached(
+                                "nothing this run was given applies `" + behavior + "`"));
+            }
+            case Handing.NotEstablished(Agreement why) -> {
+                return new ContractObservation.Unobserved(
+                        new StandinObservation.Reason.TheImplementationIsOfAnotherBuild(
+                                String.valueOf(why)));
+            }
+            case Handing.MayApply(Answerer.Answer.Something something) -> applies = something;
+        }
+        // After the binding is known good and before anything is applied. A behavior that states
+        // nothing holds an implementation to nothing whatever it answers, so applying it would spend
+        // a call to learn what the declaration already said — and asking this first would answer
+        // "the model states nothing" for a binding nothing may be handed to, sending its author to
+        // write a clause that would still not run.
+        if (!ensures.states(behavior)) {
+            return new ContractObservation.NothingStated(behavior);
+        }
+        FixtureReader fixtures = newFixtureReader();
+        Object[] args;
+        try {
+            args = new Object[sig.ins().size()];
+            for (int i = 0; i < args.length; i++) {
+                args[i] = fixtures.built(row.inputs().get(i), sig.ins().get(i));
+            }
+        } catch (FixtureException fe) {
+            return new ContractObservation.Unobserved(
+                    new StandinObservation.Reason.TheEntryWasNotRead(
+                            String.valueOf(fe.getMessage())));
+        }
+        // What the row records is not read at all — not built, not compared. That is the whole of
+        // what makes this a different oracle from `evaluate`'s, and reading it here to report it
+        // beside a broken clause would put the recorded answer back into a face that does not have
+        // one.
+        Object answered;
+        try {
+            answered = applies.applying(List.of())
+                    .to(handed(fixtures, target, args, sig.ins()));
+        } catch (InvocationFailure f) {
+            return new ContractObservation.Unobserved(
+                    new StandinObservation.Reason.TheInvocationAborted(
+                            String.valueOf(f.getCause())));
+        } catch (ImplementationNotReached | StandinNotBuilt e) {
+            return new ContractObservation.Unobserved(
+                    new StandinObservation.Reason.TheImplementationWasNotReached(
+                            String.valueOf(e.getMessage())));
+        } catch (FixtureException fe) {
+            return new ContractObservation.Unobserved(
+                    new StandinObservation.Reason.AValueCouldNotCross(
+                            String.valueOf(fe.getMessage())));
+        }
+        answered = projected(answered, sig.outputType());
+        // Into this compile's classes before the check, for the reason
+        // `keepsWhatIsDeclaredOfWhatItAnswered` does it: the emitted check guards each rule with an
+        // `instanceof` against the class this compile emitted, so an answer of another loader's
+        // classes matches no guard and every rule is skipped — the check would run and say nothing.
+        Object here;
+        try {
+            here = inTheseClasses(fixtures, fixtures.typeOf(answered), sig, answered);
+        } catch (FixtureException | ImplementationNotReached e) {
+            return new ContractObservation.Unobserved(
+                    new StandinObservation.Reason.AValueCouldNotCross(
+                            String.valueOf(e.getMessage())));
+        }
+        String why = ensures.notHeld(new ValueName.Behavior(module.name(), behavior), args, here);
+        return why == null ? new ContractObservation.NoClauseWasBroken()
+                : new ContractObservation.Broken(why, fixtures.observed(answered));
     }
 
     /**
@@ -409,18 +527,20 @@ public final class ExampleVerifier {
      * defect in this machinery into an ordinary answer about a stand-in — a reader would be told the
      * two could not be compared where in fact this code failed. What the implementation itself threw
      * never arrives here: it is {@link InvocationFailure} and was already answered.
+     *
+     * <p>Answers the reason and not an observation, so both faces wrap it in their own. Answering one
+     * face's type and casting it in the other is a narrowing nothing checks, and it holds only while
+     * this has the one arm it has today.
      */
-    private static StandinObservation whatTheWorkerThrew(Throwable cause) {
+    private static StandinObservation.Reason whatTheWorkerThrew(Throwable cause) {
         FailurePhase overspent = overspending(cause);
         if (overspent != null) {
-            return new StandinObservation.Unobserved(
-                    new StandinObservation.Reason.TheObservationRanOut(
-                            "the observation went through more than " + overspent + " allows"));
+            return new StandinObservation.Reason.TheObservationRanOut(
+                    "the observation went through more than " + overspent + " allows");
         }
         if (cause instanceof StackExhaustedException || cause instanceof StackOverflowError) {
-            return new StandinObservation.Unobserved(
-                    new StandinObservation.Reason.TheObservationRanOut(
-                            "the observation ran out of stack"));
+            return new StandinObservation.Reason.TheObservationRanOut(
+                    "the observation ran out of stack");
         }
         if (cause instanceof java.util.concurrent.CancellationException) {
             throw new java.util.concurrent.CancellationException(
