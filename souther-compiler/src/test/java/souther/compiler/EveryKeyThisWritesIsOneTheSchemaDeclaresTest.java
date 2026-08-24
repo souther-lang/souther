@@ -63,8 +63,33 @@ class EveryKeyThisWritesIsOneTheSchemaDeclaresTest {
         }
     }
 
+    /**
+     * A model whose clause leaves a question standing, which is a different object.
+     *
+     * <p>Its own model and not a second thing asked of the one above. A comparison raises a question
+     * exactly where the reading of it reached a line, and that line answers it — so a question that
+     * stands comes from a clause about a position, and that is what this writes. Asked of one model
+     * for both, the object under test moved whenever the reading of comparisons did.
+     */
+    private static final String MODEL_WITH_A_QUESTION = """
+            module m
+
+            data Length = Int
+                invariant square = value * value >= 4
+
+            behavior price : (length: Length) -> Int
+            let price (length) = if length.value >= 5 then 1 else 2
+
+            example price
+                | "one" : (Length(5)) -> 1
+            """;
+
     private static JsonNode document() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
+        return document(MODEL);
+    }
+
+    private static JsonNode document(String model) {
+        Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return JSON.readTree(AdequacyReport.of(compilation).json(SourceNameResolver.identity()));
@@ -124,7 +149,8 @@ class EveryKeyThisWritesIsOneTheSchemaDeclaresTest {
     /** And the same of a question, which is the other object this change writes. */
     @Test
     void everyKeyOfAQuestionIsDeclaredOnAQuestion() throws Exception {
-        JsonNode standing = document().get("modules").get(0).get("behaviors").get(0)
+        JsonNode standing = document(MODEL_WITH_A_QUESTION)
+                .get("modules").get(0).get("behaviors").get(0)
                 .get("partition").get("unanswered");
         assertNotNull(standing, "the model leaves a question standing");
 

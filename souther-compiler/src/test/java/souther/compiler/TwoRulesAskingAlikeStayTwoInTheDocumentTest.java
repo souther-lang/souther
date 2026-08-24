@@ -79,19 +79,31 @@ class TwoRulesAskingAlikeStayTwoInTheDocumentTest {
                 .get("modules").get(0).get("behaviors").get(0);
     }
 
-    /** The questions, as a consumer of the document reads them. */
+    /** What the reading left standing, as a consumer of the document reads it. */
     private static JsonNode standing(String source) {
-        return behaviorOf(source).get("partition").get("unanswered");
+        return behaviorOf(source).get("partition").get("notRead");
     }
 
     /** And the findings they came out as, which is the other surface a consumer reads. */
     private static List<JsonNode> reported(String source) {
         List<JsonNode> out = new ArrayList<>();
         for (JsonNode each : behaviorOf(source).get("findings")) {
-            if (each.get("kind").asString().equals("rule_unaccounted")) {
+            if (each.get("kind").asString().equals("partition_not_read")) {
                 out.add(each);
             }
         }
+        return out;
+    }
+
+    /** What each entry says about anything but which rule it is, which is what makes the two ask
+     *  alike. */
+    private static Set<String> asked(Iterable<JsonNode> entries) {
+        Set<String> out = new LinkedHashSet<>();
+        entries.forEach(each -> {
+            JsonNode copy = each.deepCopy();
+            ((tools.jackson.databind.node.ObjectNode) copy).remove("ruleId");
+            out.add(copy.toString());
+        });
         return out;
     }
 
@@ -121,9 +133,12 @@ class TwoRulesAskingAlikeStayTwoInTheDocumentTest {
     void twoArmsNamedAlikeAreTwoRules() {
         JsonNode standing = standing(TWO_ARMS);
 
-        assertEquals(4, standing.size(), () -> "two rules, two questions each: " + standing);
-        assertEquals(4, whole(standing).size(),
-                () -> "and four entries a consumer can tell apart: " + standing);
+        assertEquals(2, standing.size(), () -> "one entry per rule: " + standing);
+        assertEquals(1, asked(standing).size(),
+                () -> "and the fixture really asks alike — same position, same handle, same"
+                        + " reason: " + standing);
+        assertEquals(2, whole(standing).size(),
+                () -> "so two entries a consumer can tell apart: " + standing);
         assertEquals(2, rules(standing).size(), () -> "which two rules they are: " + standing);
     }
 
@@ -138,9 +153,11 @@ class TwoRulesAskingAlikeStayTwoInTheDocumentTest {
     void andSoDoTheFindingsTheyCameOutAs() {
         List<JsonNode> reported = reported(TWO_ARMS);
 
-        assertEquals(4, reported.size(), () -> "one per question: " + reported);
-        assertEquals(4, whole(reported).size(),
-                () -> "four a consumer can tell apart: " + reported);
+        assertEquals(2, reported.size(), () -> "one per rule: " + reported);
+        assertEquals(1, asked(reported).size(),
+                () -> "asking alike here too: " + reported);
+        assertEquals(2, whole(reported).size(),
+                () -> "two a consumer can tell apart: " + reported);
         assertEquals(2, rules(reported).size(), () -> "and two rules: " + reported);
     }
 
@@ -149,8 +166,8 @@ class TwoRulesAskingAlikeStayTwoInTheDocumentTest {
     void twoComparisonsOfOneConditionAreTwoRules() {
         JsonNode standing = standing(TWO_COMPARISONS);
 
-        assertEquals(4, standing.size(), () -> "two rules, two questions each: " + standing);
-        assertEquals(4, whole(standing).size(), () -> "all four distinguishable: " + standing);
+        assertEquals(2, standing.size(), () -> "one entry per rule: " + standing);
+        assertEquals(2, whole(standing).size(), () -> "both distinguishable: " + standing);
         assertEquals(2, rules(standing).size(), () -> "and two rules: " + standing);
         assertEquals(2, rules(reported(TWO_COMPARISONS)).size(),
                 () -> "on both surfaces: " + reported(TWO_COMPARISONS));
