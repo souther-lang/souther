@@ -90,11 +90,6 @@ public final class SyntaxSymbols implements NameSense {
         return new SyntaxSymbols(module, registry, names, library);
     }
 
-    /** No module at all — for signatures written over primitives and type variables only. */
-    public static SyntaxSymbols none(Stdlib stdlib) {
-        return new SyntaxSymbols("", Registry.empty(), Denoting.NONE, stdlib.names());
-    }
-
     /** The library's names as this module is resolved against them. */
     public LibraryNames library() {
         return library;

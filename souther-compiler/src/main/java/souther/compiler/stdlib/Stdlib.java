@@ -202,11 +202,6 @@ public final class Stdlib {
         return intrinsics.get(key);
     }
 
-    /** Every kernel the library names, keyed by its key. */
-    public Map<String, Intrinsic> intrinsics() {
-        return intrinsics;
-    }
-
     /**
      * The declaration the language itself gives under {@code address}, or null where it gives none.
      *
@@ -218,13 +213,6 @@ public final class Stdlib {
      */
     public Hir.Def languageDeclaration(TypeKey address) {
         return TypeSymbol.RUNTIME.equals(address.module()) ? language.get(address.name()) : null;
-    }
-
-    /** The identity a bare {@code written} denotes among the language's own declarations, or null
-     *  where it denotes none. The lowest rung of a module's scope: a module's own declaration or
-     *  import of the same name is what the name means there. */
-    public TypeSymbol languageType(String written) {
-        return language.containsKey(written) ? TypeSymbol.runtime(written) : null;
     }
 
     /** What resolving a module against this library takes. */
@@ -334,11 +322,6 @@ public final class Stdlib {
             }
             language.put(def.name(), def);
             return this;
-        }
-
-        /** What the language declares so far, for a loader that resolves its sources against it. */
-        public Map<String, Hir.Def> languageSoFar() {
-            return Collections.unmodifiableMap(language);
         }
 
         /** The finished library. */

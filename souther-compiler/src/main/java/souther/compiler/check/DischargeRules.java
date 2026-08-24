@@ -443,6 +443,9 @@ final class DischargeRules {
          *  nothing here looks up is one this has held all the same. */
         private static final List<OperationFacts.Declared> SEMANTICS =
                 OperationFactBinder.bindAll(DefaultStdlib.get());
+        /* Holding the declarations to the library is a pure function of it, so this holder is the
+         * only thing here that reaches for the process's own — {@link DefaultStdlib} says who may
+         * and why the loader may not. */
 
         /**
          * What the language declares an operation answers.

@@ -185,13 +185,12 @@ public final class HelperTable {
         return other instanceof HelperTable t
                 && module.equals(t.module) && policy == t.policy
                 && reached.equals(t.reached) && declared.equals(t.declared)
-                && emits.equals(t.emits) && stdlib == t.stdlib;
+                && emits.equals(t.emits) && stdlib.equals(t.stdlib);
     }
 
     @Override
     public int hashCode() {
-        return java.util.Objects.hash(module, policy, reached, declared, emits,
-                System.identityHashCode(stdlib));
+        return java.util.Objects.hash(module, policy, reached, declared, emits, stdlib);
     }
 
     @Override

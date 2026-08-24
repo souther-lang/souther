@@ -55,7 +55,8 @@ public final class StdlibLoader {
     }
 
     /** One library module as it was read: what the language calls it, and what it parsed to. */
-    private record Parsed(Reserved.StdlibModule declared, Ast.Module module, String resource) {
+    private record Parsed(Reserved.StdlibModule declared, Ast.Module module, String resource,
+                          DeclaredNames.Index<Ast.Def> indexed) {
     }
 
     /**
@@ -104,10 +105,9 @@ public final class StdlibLoader {
         List<Parsed> parsed = new ArrayList<>();
         for (Reserved.StdlibModule declared : Reserved.MODULES) {
             String resource = "/" + declared.moduleName().replace('.', '/') + ".sou";
-            parsed.add(new Parsed(declared,
-                    CstFrontend.parseWhatAModulePublished(read(resource),
-                            new SourceProvenance.TheStandardLibrary(declared.moduleName())),
-                    resource));
+            Ast.Module module = CstFrontend.parseWhatAModulePublished(read(resource),
+                    new SourceProvenance.TheStandardLibrary(declared.moduleName()));
+            parsed.add(new Parsed(declared, module, resource, indexed(module, resource)));
         }
         return parsed;
     }
@@ -124,7 +124,7 @@ public final class StdlibLoader {
         Map<String, Ast.Def> declared = new LinkedHashMap<>();
         Map<String, String> declaredBy = new HashMap<>();
         for (Parsed source : sources) {
-            for (Ast.Def def : indexed(source).declarations().values()) {
+            for (Ast.Def def : source.indexed().declarations().values()) {
                 String already = declaredBy.put(def.name(), source.resource());
                 if (already != null) {
                     throw new IllegalStateException("the standard library declares `" + def.name()
@@ -156,7 +156,7 @@ public final class StdlibLoader {
         }
         return SyntaxSymbols.overTheseLibraryNames(TypeSymbol.RUNTIME,
                 Registry.ofRead(Map.of(TypeSymbol.RUNTIME, new Registry.Declared<>(
-                        indexed(source).declarations(),
+                        source.indexed().declarations(),
                         Registry.baseNames(source.module().exposing())))),
                 Denoting.of(scope, Map.of()),
                 LibraryNames.ofTheLibraryBeingLoaded(declares.keySet()));
@@ -167,10 +167,10 @@ public final class StdlibLoader {
      * @throws IllegalStateException where the indexing refuses a declaration. The standard library is
      *     this compiler's own source: a declaration it may not have is a resource shipped in the jar
      *     being wrong, which is refused where it is read like the rest of what is checked here. */
-    private static DeclaredNames.Index<Ast.Def> indexed(Parsed source) {
-        DeclaredNames.Index<Ast.Def> indexed = Registry.indexed(source.module());
+    private static DeclaredNames.Index<Ast.Def> indexed(Ast.Module module, String resource) {
+        DeclaredNames.Index<Ast.Def> indexed = Registry.indexed(module);
         if (!indexed.refusals().isEmpty()) {
-            throw new IllegalStateException("prelude resource " + source.resource()
+            throw new IllegalStateException("prelude resource " + resource
                     + " carries a declaration the indexing refused: `"
                     + indexed.refusals().get(0).refused().name() + "`");
         }

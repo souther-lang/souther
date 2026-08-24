@@ -110,14 +110,9 @@ public record Preserved(Map<ValueName, CompleteSignature> operations, SettledVal
         private static final Preserved OPERATIONS = readTheLibrary(DefaultStdlib.get());
     }
 
-    /* Derived from the shipped library and from nothing else, so it is a constant of this compiler
-     * rather than a fact about a compilation: the same rules under every compile and under any
-     * backend. The lifetime decision is {@link souther.compiler.DefaultStdlib}'s and the derivation
-     * below is a pure function of a {@link Stdlib}, so a test hands it one of its own.
-     *
-     * The loader that builds a Stdlib must not read this table: it would be asking for the library
-     * while the library is being read. Held by
-     * OnlyABoundaryOrAProcessConstantReadsTheDefaultLibraryTest. */
+    /* A pure function of the library, so the holder above is the only thing here that reaches for
+     * the process's own — {@link souther.compiler.DefaultStdlib} says who may and why the loader
+     * may not. */
     private static Preserved readTheLibrary(Stdlib stdlib) {
         Map<ValueName, CompleteSignature> operations = new LinkedHashMap<>();
         stdlib.entries().forEach((qualified, entry) -> {

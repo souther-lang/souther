@@ -62,11 +62,16 @@ class NoPublicWayToMakeAGeneratedClassNameTest {
                 () -> "a name is made in the ABI and nowhere else: " + makers);
         assertEquals(
                 List.of("nameOf(GeneratedClass)", "nameOfLanguageDeclaration(TypeSymbol)"),
-                makers.stream()
-                        .map(m -> m.getName() + "("
-                                + m.getParameterTypes()[0].getSimpleName() + ")")
+                makers.stream().map(NoPublicWayToMakeAGeneratedClassNameTest::written)
                         .sorted().toList(),
                 () -> "each takes what the thing is, and neither takes a spelling: " + makers);
+    }
+
+    /** A maker as its whole signature. The parameter list is read out entire: a second parameter is
+     *  where a spelling would arrive beside the identity, which is the shape this is about. */
+    private static String written(Method m) {
+        return m.getName() + "(" + java.util.Arrays.stream(m.getParameterTypes())
+                .map(Class::getSimpleName).collect(java.util.stream.Collectors.joining(", ")) + ")";
     }
 
     /**
