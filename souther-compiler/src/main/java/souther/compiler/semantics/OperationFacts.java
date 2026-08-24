@@ -305,9 +305,13 @@ public final class OperationFacts {
 
         // What they answer is no form of what they were given, for three reasons.
         //
-        // Arithmetic the language composes: `Int.add(a, b)` answers `a + b`, and a fact here would
-        // be a second path saying what the grammar already reads — such a call is read as the
-        // operator it stands for before anything asks about the operation.
+        // A product is one only where an operand is written down: `Int.multiply(a, b)` is
+        // arithmetic over `a` and `b` and is a form of neither, since what multiplies each is the
+        // other. A sum and a difference are not here at all — what they answer is a form of what
+        // they were given, and they say so by being the arithmetic they are
+        // (`ComputesANumber`, read by `DischargeRules.formOperations`). A silence here would deny
+        // that, which is why the two cannot both be written: a name under a subject says nothing is
+        // true of it there.
         //
         // A number of their own: `compare` answers a sign, `floorMod` a remainder, `abs` a distance
         // with the sign dropped, `toInt` a whole number, `round` a value at another scale. What such
@@ -323,8 +327,8 @@ public final class OperationFacts {
         // for, and why the refusal is written down beside the ones that are accepted. A component
         // is read out of a count by dividing or by taking a remainder: the year a day falls in, the
         // second within a minute, the day a second falls in, the second within a day.
-        out.addAll(saysNothing(OperationSubject.FORM, op("Int", "add"), op("Int", "subtract"), op("Int", "multiply"),
-                op("Decimal", "add"), op("Decimal", "subtract"), op("Decimal", "multiply"), op("Int", "compare"),
+        out.addAll(saysNothing(OperationSubject.FORM, op("Int", "multiply"),
+                op("Decimal", "multiply"), op("Int", "compare"),
                 op("Decimal", "compare"), op("Int", "floorMod"), op("Int", "abs"), op("Decimal", "abs"), op("Decimal", "toInt"),
                 op("Decimal", "round"), op("Int", "min"), op("Int", "max"), op("Int", "clamp"), op("Decimal", "min"), op("Decimal", "max"),
                 op("Decimal", "clamp"), op("Date", "addMonths"), op("Date", "addYears"),

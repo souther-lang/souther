@@ -170,8 +170,38 @@ final class DischargeRules {
         return Bound.statesTheOrder();
     }
 
+    /**
+     * The operations that answer, counted, some arithmetic over what they were given.
+     *
+     * <p>Two sources and one question. Most of them say so by declaring the form
+     * ({@link OperationFacts#answersAFormOfItsArguments}); a sum and a difference say it by being
+     * the arithmetic they are, which {@link OperationFact.ComputesANumber} already records and
+     * {@link Terms#asOperator} already reads. Declaring the form for those as well would be the
+     * same statement twice, and leaving them out of the question altogether would be worse: the
+     * silence beside it says there is nothing true here, and of {@code Int.add} that is false.
+     */
     static Set<ValueName> formOperations() {
-        return Bound.answersAFormOfItsArguments();
+        Set<ValueName> answered = new LinkedHashSet<>(Bound.answersAFormOfItsArguments());
+        for (ValueName operation : Bound.computesANumber()) {
+            if (isASumOrADifference(Bound.computesANumber(operation))) {
+                answered.add(operation);
+            }
+        }
+        return answered;
+    }
+
+    /**
+     * Whether what it computes is a sum or a difference of what it was given, at every call.
+     *
+     * <p>All three conditions. A product is a form only where one operand is written down, so it is
+     * no form of its arguments; a quotient answers a case other than the number's where its divisor
+     * is nought, and a form that holds unless something is not a form.
+     */
+    private static boolean isASumOrADifference(NumericResult computed) {
+        return computed.unless() == null
+                && computed.at() instanceof NumericResult.Answered.Directly
+                && computed.computes() instanceof Arithmetic.TheOperator operator
+                && (operator.op() == BinOp.ADD || operator.op() == BinOp.SUB);
     }
 
     /** What {@code operation} answers, counted, in what its arguments are counted as — or null
@@ -196,8 +226,11 @@ final class DischargeRules {
      */
     private static Set<ValueName> formOperationsThisCarries() {
         Set<ValueName> carried = new LinkedHashSet<>();
-        for (ValueName operation : formOperations()) {
-            if (everyArgumentIsANumber(operation)) {
+        // Over the declared forms and not over everything that answers the question. A sum and a
+        // difference answer it by being the arithmetic they are, and what reads them is the
+        // grammar; a program firing one would be firing the operator.
+        for (ValueName operation : Bound.answersAFormOfItsArguments()) {
+            if (everyPartIsANumber(operation)) {
                 carried.add(operation);
             }
         }
@@ -205,20 +238,31 @@ final class DischargeRules {
     }
 
     /**
-     * Whether every argument the declared form names stands at a number this check relates.
+     * Whether the result and every argument the declared form names stand at a number this check
+     * relates.
+     *
+     * <p>Both ends, because the fact is an equation between them: what the operation answers,
+     * counted, and what it was given, counted. A form whose arguments this can carry and whose
+     * result it cannot is a form it cannot carry.
+     *
+     * <p>Asked with {@link Question#isANumber} where the binding asks
+     * {@link Question#countsToANumber}. That is the difference between what is true of the
+     * operation and what this check can do with it — a date counts and is no number, so
+     * {@code Date.daysBetween} is declared and is not carried here.
      *
      * <p>The library has the operation and the argument is one it takes, both of which
      * {@link OperationFactBinder} held before any of this was asked. What is left to decide is what
      * stands there.
      */
-    private static boolean everyArgumentIsANumber(ValueName operation) {
-        Prelude.PreludeEntry entry = Prelude.entry(((ValueName.Stdlib) operation).qualified());
-        List<Type> params = entry.signature().params();
-        return answersAFormOf(operation).coefs().keySet().stream().allMatch(argument -> {
-            int position = CallArguments.positionIn(argument, operation);
-            return position >= 0 && position < params.size()
-                    && Question.isANumber(params.get(position));
-        });
+    private static boolean everyPartIsANumber(ValueName operation) {
+        Prelude.Signature signature =
+                Prelude.entry(((ValueName.Stdlib) operation).qualified()).signature();
+        if (!Question.isANumber(signature.result())) {
+            return false;
+        }
+        List<Type> params = signature.params();
+        return answersAFormOf(operation).coefs().keySet().stream().allMatch(argument ->
+                Question.isANumber(params.get(CallArguments.positionIn(argument, operation))));
     }
 
     /** Those of them the read-through table has, by name, for the test that holds each to a
