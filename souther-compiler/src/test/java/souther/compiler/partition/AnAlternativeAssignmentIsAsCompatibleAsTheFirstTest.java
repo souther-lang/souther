@@ -95,7 +95,7 @@ class AnAlternativeAssignmentIsAsCompatibleAsTheFirstTest {
                 new BehaviorInputs(spec.params().stream().map(Hir.Param::name).toList(),
                         sig.inputTypes(), symbols, ReadAs.THE_COMPILATION_DOES),
                 axes.axes(), HeldCounts.of(inputs, symbols)),
-                CoverageRead.of(body, plan, inputs, symbols).interactions());
+                CoverageRead.of(spec.name(), body, plan, inputs, symbols).interactions());
     }
 
     /** The positions under two cases are both axes, which is what the assignments have to hold. */

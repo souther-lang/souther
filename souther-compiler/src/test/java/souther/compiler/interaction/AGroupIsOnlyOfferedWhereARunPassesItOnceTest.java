@@ -118,7 +118,7 @@ class AGroupIsOnlyOfferedWhereARunPassesItOnceTest {
     void aMeetingARunMayComeBackToIsNotOffered() {
         Model model = Model.of(SHIPPING, "shippingFee");
 
-        List<Interaction> asIfRepeated = CoverageRead.of(model.body(),
+        List<Interaction> asIfRepeated = CoverageRead.of(model.behavior(), model.body(),
                 model.planWhereEverythingRepeats(), model.inputs(), model.symbols())
                 .interactions();
 
@@ -127,7 +127,8 @@ class AGroupIsOnlyOfferedWhereARunPassesItOnceTest {
     }
 
     /** One model, read the way the generator reads it. */
-    private record Model(Core body, CoverageSites.Plan plan, InputDomain inputs, Symbols symbols) {
+    private record Model(String behavior, Core body, CoverageSites.Plan plan, InputDomain inputs,
+                         Symbols symbols) {
 
         static Model of(String source, String behavior) {
             Compilation compilation = Compilation.ofSource(source, "Main");
@@ -137,14 +138,15 @@ class AGroupIsOnlyOfferedWhereARunPassesItOnceTest {
             assertNotNull(checked, "the model under test compiles");
             Core body = checked.behaviorBodies().get(behavior);
             assertNotNull(body, "the behavior under test has a body");
-            return new Model(body, CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
+            return new Model(behavior, body,
+                    CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
                 checked.supplied()),
                     compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior),
                     Scopes.derived(compilation.db(), module).value());
         }
 
         List<Interaction> groups() {
-            return CoverageRead.of(body, plan, inputs, symbols).interactions();
+            return CoverageRead.of(behavior, body, plan, inputs, symbols).interactions();
         }
 
         /** The same plan, answering that a run may come back to anywhere. What the walk cannot be

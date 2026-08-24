@@ -400,7 +400,7 @@ class ARowNothingRanFillsNoCombinationTest {
                             sig.inputTypes(), symbols,
                             souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
                     partitioning.axes(), HeldCounts.of(inputs, symbols)),
-                    CoverageRead.of(body, plan, inputs, symbols).interactions());
+                    CoverageRead.of(spec.name(), body, plan, inputs, symbols).interactions());
         }
     }
 }

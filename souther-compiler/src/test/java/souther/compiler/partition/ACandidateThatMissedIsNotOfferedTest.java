@@ -229,7 +229,8 @@ class ACandidateThatMissedIsNotOfferedTest {
                             souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
                     Partitions.of(spec.name(), inputs, symbols,
                             souther.compiler.query.ReadAs.THE_COMPILATION_DOES).axes(), HeldCounts.of(inputs, symbols)),
-                    CoverageRead.of(body, CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
+                    CoverageRead.of(spec.name(), body,
+                            CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
                 checked.supplied()), inputs,
                             symbols).interactions());
         }

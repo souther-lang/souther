@@ -2892,8 +2892,8 @@ public final class Adequacy {
                 }
             }
             return Generator.fill(subject, existing, check,
-                    souther.compiler.interaction.CoverageRead.of(body, plan, domain, symbols)
-                            .interactions(),
+                    souther.compiler.interaction.CoverageRead
+                            .of(spec.name(), body, plan, domain, symbols).interactions(),
                     trial, baselines, classesOwed(evidence), armsOwed, budget);
         }
 
