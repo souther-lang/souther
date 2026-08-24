@@ -50,16 +50,6 @@ public sealed interface Weakening {
     /** The same at one of a behavior's inputs, counted from zero. */
     record InputCasesUnreadable(String behavior, int at) implements Weakening {}
 
-    /**
-     * A row was observed and stopped before it finished, so what it would have gone through went
-     * with it.
-     *
-     * <p>Named by the row, which is what tells one from another. A measure weakened by this counted
-     * over rows that are all there and one of which is not all there — which is not the same as a
-     * measure over rows nothing saw, and reads identically without this.
-     */
-    record RowDidNotFinish(souther.compiler.observe.RowIdentity row) implements Weakening {}
-
     /** A row's value at one border could not be read, so what is not found at that border is
      *  undecided rather than absent. */
     record BorderValueUnreadable(souther.compiler.partition.Border border) implements Weakening {}

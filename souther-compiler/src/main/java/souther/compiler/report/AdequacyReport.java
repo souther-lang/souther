@@ -2156,7 +2156,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     throw new IllegalArgumentException("an observation writes its own code");
             case Weakening.OutputCasesUnreadable _ -> WeakeningWord.OUTPUT_CASES_UNREADABLE;
             case Weakening.InputCasesUnreadable _ -> WeakeningWord.INPUT_CASES_UNREADABLE;
-            case Weakening.RowDidNotFinish _ -> WeakeningWord.ROW_DID_NOT_FINISH;
             case Weakening.BorderValueUnreadable _ -> WeakeningWord.BORDER_VALUE_UNREADABLE;
             case Weakening.ModelReadingIncomplete it -> switch (it.cause()) {
                 case souther.compiler.partition.ClosureGap.RuleUnread _ ->

@@ -1041,15 +1041,16 @@ final class Coverages {
             by.add(new Weakening.BorderValueUnreadable(border));
         }
         for (Incompleteness gap : observed.incompleteness()) {
-            if (gap.code().leftNoRowRead()) {
+            // Rows nothing read at all bear on every line. Rows that were read and did not finish
+            // bear on a line a fork drew and on no other: meeting one takes the comparison having
+            // run, which a row that stopped never reached.
+            //
+            // Read off the reasons rather than off the dispositions beside them. What a row that
+            // stopped costs a measure is said once, where the row stopped (`ExampleVerifier`), and
+            // a second reading here was a second statement of it that could differ (issue #996).
+            if (gap.code().leftNoRowRead()
+                    || (guard && gap.scope() == Incompleteness.Scope.ROW)) {
                 by.add(new Weakening.ObservationIncomplete(gap));
-            }
-        }
-        if (guard) {
-            for (RowOutcome row : rows) {
-                if (row.disposition() == souther.compiler.observe.Disposition.INCOMPLETE) {
-                    by.add(new Weakening.RowDidNotFinish(row.identity()));
-                }
             }
         }
         ItemAssessment.Coverage seen = new ItemAssessment.Coverage.NoHit();

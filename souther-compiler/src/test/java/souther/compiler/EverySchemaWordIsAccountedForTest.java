@@ -266,8 +266,11 @@ class EverySchemaWordIsAccountedForTest {
                             "reason"),
                     souther.compiler.query.InputCaseEvidence.NotASum.class,
                     souther.compiler.query.InputCaseEvidence.NoRows.class, souther.compiler.query.NothingWasAsked.class),
+            // `row_did_not_finish` said in this vocabulary what `row_undecided` says in the
+            // observation codes, and named the row without its source, so two rows of one behavior
+            // were one word. Retired rather than gone, for the reason `probe_mapping_lost` is.
             new Vocabulary("weakening[]", List.of("$defs", "weakening", "items"),
-                    Set.of("probe_mapping_lost"),
+                    Set.of("probe_mapping_lost", "row_did_not_finish"),
                     Incompleteness.Code.class,
                     souther.compiler.report.WeakeningWord.class),
             new Vocabulary("incompleteness.scope",

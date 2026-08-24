@@ -1634,13 +1634,11 @@ public final class Adequacy {
          */
         private static WeakeningSet rowsBehind(Observed observed) {
             Set<Weakening> out = new LinkedHashSet<>();
+            // Both kinds are already here. A row that stopped is a reason of its own, written where
+            // it stopped; this used to walk the dispositions beside them and say it a second time,
+            // in a vocabulary that named the row without saying which source it is in (issue #996).
             for (Incompleteness gap : observed.incompleteness()) {
                 out.add(new Weakening.ObservationIncomplete(gap));
-            }
-            for (RowOutcome row : observed.rows()) {
-                if (row.disposition() == Disposition.INCOMPLETE) {
-                    out.add(new Weakening.RowDidNotFinish(row.identity()));
-                }
             }
             return WeakeningSet.ofAll(out);
         }

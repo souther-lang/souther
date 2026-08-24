@@ -148,13 +148,17 @@ class WhatAWholeWentWithoutIsWhatItsPartsWentWithoutTest {
         }
         holds(lost, "the report", report.weakenedBy(), acrossModules);
 
-        // And the run reached each way a fact arrives, so the rule above was held over every path
-        // rather than over whichever one this model happened to take.
+        // And the run reached more than one way a fact arrives, so the rule above was held over
+        // more than one path rather than over whichever one this model happened to take.
+        //
+        // Pinned rather than counted. A threshold is met by whatever happens to be produced, and
+        // the arms are not fixed: `RowDidNotFinish` was one of these and is now an observation like
+        // any other, said in the reasons' own vocabulary (issue #996). What the fixture reaches is
+        // written down, so a path that stops arriving fails here instead of being made up for.
         Set<String> kinds = new LinkedHashSet<>();
         everything.forEach(each -> kinds.add(each.getClass().getSimpleName()));
-        assertTrue(kinds.contains("ObservationIncomplete") && kinds.contains("ModelReadingIncomplete")
-                        && kinds.size() >= 3,
-                () -> "the model reaches every way a measure goes without something: " + kinds);
+        assertEquals(Set.of("ObservationIncomplete", "ModelReadingIncomplete"), kinds,
+                () -> "the ways this model goes without something: " + kinds);
 
         // And at least one part carries a fact no other part of its behavior does, so the rule
         // above is not one a whole satisfies whatever it drops. A union is a set: a part left out
