@@ -968,13 +968,10 @@ class CompileExampleGenerateTest {
                             | "a near one" : (near) -> Accepted { at = "now" }
                         """;
 
-        // The rows composed for a class. A row through an arm is composed from the classes a way
-        // into it leaves and against no stated value — the origins are the class search's, and
-        // nothing here says an arm's row should be written the same way. Included, this would be
-        // asserting that of a search that was never given them.
+        // Every row offered, whatever it was composed for. A row through an arm is written against
+        // a value the model states the way a row for a class is, so a filter here would be leaving
+        // out the rows this used to be unable to say anything about (issue #1034).
         List<String> rows = generated(written).get("submit").composed().rows().stream()
-                .filter(row -> row.purposes().stream()
-                        .anyMatch(Generator.Purpose.ForAClass.class::isInstance))
                 .map(CompileExampleGenerateTest::inputsOf).toList();
         assertFalse(rows.isEmpty(), "there are classes the written row is not in");
         // Where a row keeps any of the value it was written from, that value is the author's own.
