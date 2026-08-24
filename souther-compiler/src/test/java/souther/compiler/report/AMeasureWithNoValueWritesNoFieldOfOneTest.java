@@ -9,6 +9,8 @@ import souther.compiler.query.Compilation;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -200,5 +202,149 @@ class AMeasureWithNoValueWritesNoFieldOfOneTest {
         assertEquals(2, branch.get("arms").asInt());
         assertFalse(branch.get("unreached").isEmpty(),
                 () -> "the one row takes the guard's continued arm and not its else: " + branch);
+    }
+
+    /**
+     * And what the shipped schema says about all this is true of what the writer writes.
+     *
+     * <p>Its own test because nothing else checks it. The walk that holds the schema and the writer
+     * together reads a composition's branches for the keys they allow and never for what they
+     * require, and says so — so an {@code if}/{@code then} added to the schema is a sentence nothing
+     * enforces, and a wrong one would sit there being read by consumers. The two conditions this
+     * change added are read out of the file and applied here, over a document holding both sides of
+     * each of them.
+     *
+     * <p>Read from the schema rather than restated. A condition written here as well would be the
+     * same decision in two files, which is what the shipped schema and this compiler's writers were
+     * before anybody walked them together.
+     */
+    @Test
+    void theConditionsTheSchemaStatesAreTrueOfWhatIsWritten() {
+        JsonNode schema = schema();
+        JsonNode report = reportOf(INJECTED, Adequacy.Level.WITNESS);
+
+        JsonNode branches = schema.get("$defs").get("branch");
+        int checked = 0;
+        for (JsonNode module : report.get("modules")) {
+            for (JsonNode each : module.get("behaviors")) {
+                if (each.has("branch")) {
+                    holds(branches, each.get("branch"));
+                    checked++;
+                }
+            }
+        }
+        assertTrue(checked >= 2, "both a measured branch and an unmeasured one are in this report");
+
+        JsonNode items = schema.get("$defs").get("partition").get("properties").get("boundaries")
+                .get("items").get("properties").get("items").get("items");
+        int measured = 0;
+        int not = 0;
+        for (JsonNode module : report.get("modules")) {
+            for (JsonNode each : module.get("behaviors")) {
+                if (!each.has("partition")) {
+                    continue;
+                }
+                for (JsonNode border : each.get("partition").get("boundaries")) {
+                    for (JsonNode point : border.get("items")) {
+                        holds(items, point);
+                        if (point.has("status")) {
+                            boolean withAValue = List.of("complete", "partial")
+                                    .contains(point.get("status").asString());
+                            measured += withAValue ? 1 : 0;
+                            not += withAValue ? 0 : 1;
+                        }
+                    }
+                }
+            }
+        }
+        // Both sides of the condition, in the one document. The corpus checked in beside this has no
+        // point at a status with no value, so a check run over that alone would be a check on the
+        // half of the condition that was already true (issue #997).
+        int withAValue = measured;
+        int without = not;
+        assertTrue(withAValue > 0 && without > 0,
+                () -> "the level was chosen so that both arms occur: " + withAValue + " measured, "
+                        + without + " not");
+    }
+
+    /** The {@code if}/{@code then}/{@code else} of one object, applied to one document node. */
+    private static void holds(JsonNode declared, JsonNode written) {
+        boolean guard = true;
+        for (String key : declared.get("if").get("properties").propertyNames()) {
+            JsonNode words = declared.get("if").get("properties").get(key).get("enum");
+            boolean here = written.has(key) && anyIs(words, written.get(key).asString());
+            guard &= here;
+        }
+        for (String required : declared.get("if").has("required")
+                ? names(declared.get("if").get("required")) : List.<String>of()) {
+            guard &= written.has(required);
+        }
+        JsonNode taken = declared.get(guard ? "then" : "else");
+        for (String key : required(taken)) {
+            assertTrue(written.has(key),
+                    () -> "the schema requires " + key + " here and it is not written: " + written);
+        }
+        for (String key : forbidden(taken)) {
+            assertFalse(written.has(key),
+                    () -> "the schema forbids " + key + " here and it is written: " + written);
+        }
+    }
+
+    private static boolean anyIs(JsonNode words, String word) {
+        for (JsonNode each : words) {
+            if (word.equals(each.asString())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static List<String> names(JsonNode array) {
+        List<String> out = new java.util.ArrayList<>();
+        for (JsonNode each : array) {
+            out.add(each.asString());
+        }
+        return out;
+    }
+
+    private static List<String> required(JsonNode of) {
+        return of != null && of.has("required") ? names(of.get("required")) : List.of();
+    }
+
+    /**
+     * The keys a branch of the condition writes out of the document, however it spells it.
+     *
+     * <p>Two spellings because two conditions needed two: one key is {@code not: {required: [k]}}
+     * and several are {@code not: {anyOf: [{required: [k]}, ...]}}. A reader of this that understood
+     * only one of them would pass over the other in silence, which is the failure it is here to
+     * catch, so meeting anything else is a failure rather than something skipped.
+     */
+    private static List<String> forbidden(JsonNode of) {
+        if (of == null || !of.has("not")) {
+            return List.of();
+        }
+        JsonNode not = of.get("not");
+        if (not.has("required")) {
+            return names(not.get("required"));
+        }
+        assertTrue(not.has("anyOf"), () -> "a refusal spelled a way this does not read: " + not);
+        List<String> out = new java.util.ArrayList<>();
+        for (JsonNode each : not.get("anyOf")) {
+            assertTrue(each.has("required") && each.size() == 1,
+                    () -> "a refusal spelled a way this does not read: " + each);
+            out.addAll(names(each.get("required")));
+        }
+        return out;
+    }
+
+    private static JsonNode schema() {
+        try (java.io.InputStream in = AdequacyReport.class
+                .getResourceAsStream("/souther/adequacy-schema-7.json")) {
+            assertNotNull(in, "adequacy-schema-7.json ships beside the compiler");
+            return JsonMapper.builder().build().readTree(
+                    new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8));
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
     }
 }

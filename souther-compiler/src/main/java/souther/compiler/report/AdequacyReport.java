@@ -692,14 +692,22 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             }
         }
         for (InputCaseEvidence input : signature.inputs()) {
-            if (input.declared().isEmpty()) {
+            // Under the same condition as the output line above it, which is the whole of why it is
+            // spelled here. It asked its measurement for a number and took a nought where there was
+            // none, so an input nobody measured printed `specified 0/3` — a measurement, made by
+            // this line rather than by anything that read a row (issue #997). Nothing in this suite
+            // reaches it: a behavior no row names and a level that asks for nothing leave the whole
+            // signature measure without a number, and this section returns above. Which is a reason
+            // to write the condition and not a reason to leave it out — the one thing the two lines
+            // must not do is differ.
+            if (input.declared().isEmpty() || input.cases().made().isEmpty()) {
                 continue;
             }
             // Counted against the cases a row can be written at. A case the body answers `unreachable`
             // for is one the compiler refuses a row for, so leaving it in the denominator would ask
             // for work that cannot be done and hold the model one case short for ever.
             out.append(String.format("                in #%d specified %d/%d%s%n", input.at() + 1,
-                    input.cases().made().map(it -> it.specified().size()).orElse(0),
+                    input.cases().made().orElseThrow().specified().size(),
                     input.coverable().size(),
                     input.excluded().isEmpty() ? ""
                             : "   excluded " + input.excluded().size()));
