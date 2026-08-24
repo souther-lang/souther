@@ -1,8 +1,8 @@
 package souther.compiler.codegen;
 
-import souther.compiler.stdlib.Stdlib;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Boundary;
 import souther.compiler.check.Symbols;
@@ -60,7 +60,7 @@ class AnEmitterWritesWhatItWasHandedTest {
             """;
 
     private final Hir.Module module = derive(MODULE);
-    private final Symbols symbols = TypeChecker.symbols(module, souther.compiler.DefaultStdlib.get());
+    private final Symbols symbols = TypeChecker.symbols(module, DefaultStdlib.get());
     private final CodecGen codec = codecGen();
 
     @Test
@@ -152,6 +152,6 @@ class AnEmitterWritesWhatItWasHandedTest {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("m.sou", source);
         return Deriver.derive(Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
-                .db().ask(new Names.Resolved("m")).value(), souther.compiler.DefaultStdlib.get());
+                .db().ask(new Names.Resolved("m")).value(), DefaultStdlib.get());
     }
 }

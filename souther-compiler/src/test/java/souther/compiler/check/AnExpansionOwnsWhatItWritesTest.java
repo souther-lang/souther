@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.stdlib.Stdlib;
+import souther.compiler.DefaultStdlib;
 import souther.compiler.diag.Primary;
 
 import souther.compiler.ast.Ast;
@@ -33,7 +33,7 @@ class AnExpansionOwnsWhatItWritesTest {
 
     private static Hir.Module resolved(String source) {
         Ast.Module parsed = CstFrontend.parse(source);
-        return Resolve.module(parsed, SyntaxSymbols.of(parsed, souther.compiler.DefaultStdlib.get()));
+        return Resolve.module(parsed, SyntaxSymbols.of(parsed, DefaultStdlib.get()));
     }
 
     /** Every binding in {@code e}, in the order they are written. */
@@ -75,7 +75,7 @@ class AnExpansionOwnsWhatItWritesTest {
                 %s
                 let f (x) = x
                 """.formatted(defs));
-        HelperInliner inliner = HelperInliner.forModule(m, souther.compiler.DefaultStdlib.get());
+        HelperInliner inliner = HelperInliner.forModule(m, DefaultStdlib.get());
         return inliner.inline(inliner.held().get(of).writtenBody(), inliner.bodyOf(of));
     }
 

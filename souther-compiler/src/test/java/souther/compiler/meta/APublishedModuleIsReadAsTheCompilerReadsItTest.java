@@ -2,6 +2,7 @@ package souther.compiler.meta;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.Compiler;
 import souther.compiler.ast.Hir;
 import souther.compiler.types.ValueName;
@@ -64,7 +65,7 @@ class APublishedModuleIsReadAsTheCompilerReadsItTest {
     @Test
     void aModuleReachedWithoutAnImportIsRead() {
         Map<String, byte[]> both = Compiler.compileModules(List.of(LIB, QUALIFYING));
-        PublishedUniverse universe = PublishedUniverse.of(new ClassFileDeclarations(both::get), souther.compiler.DefaultStdlib.get());
+        PublishedUniverse universe = PublishedUniverse.of(new ClassFileDeclarations(both::get), DefaultStdlib.get());
 
         readingOf(universe, "app.uses", "the module names a type of another and is read");
 
@@ -123,7 +124,7 @@ class APublishedModuleIsReadAsTheCompilerReadsItTest {
     @Test
     void aDeclarationThatReadsThroughAnotherModulesHelperIsRead() {
         Map<String, byte[]> classes = Compiler.compileModules(List.of(OFFERING, READING));
-        PublishedUniverse universe = PublishedUniverse.of(new ClassFileDeclarations(classes::get), souther.compiler.DefaultStdlib.get());
+        PublishedUniverse universe = PublishedUniverse.of(new ClassFileDeclarations(classes::get), DefaultStdlib.get());
 
         readingOf(universe, "example.order",
                 "its invariant calls a helper `example.money` published, which the import brings in");
@@ -154,7 +155,7 @@ class APublishedModuleIsReadAsTheCompilerReadsItTest {
         classes.keySet().removeIf(binary -> binary.contains("money"));
         org.junit.jupiter.api.Assertions.assertTrue(classes.size() < all,
                 "the module being withheld is one this set had");
-        PublishedUniverse universe = PublishedUniverse.of(new ClassFileDeclarations(classes::get), souther.compiler.DefaultStdlib.get());
+        PublishedUniverse universe = PublishedUniverse.of(new ClassFileDeclarations(classes::get), DefaultStdlib.get());
 
         Readback.Failure why = refusalOf(universe, "example.line");
 
@@ -190,7 +191,7 @@ class APublishedModuleIsReadAsTheCompilerReadsItTest {
                 "pub.twice.B", dataClass("data Same = Int"),
                 "pub.naming.$Module", moduleClass("pub.naming", List.of(), List.of("Note")),
                 "pub.naming.Note", dataClass("data Note = { s: pub.twice.Same }"));
-        PublishedUniverse universe = PublishedUniverse.of(n -> PublishedClasses.carrying(published.get(n)), souther.compiler.DefaultStdlib.get());
+        PublishedUniverse universe = PublishedUniverse.of(n -> PublishedClasses.carrying(published.get(n)), DefaultStdlib.get());
 
         assertInstanceOf(Readback.Failure.InvalidDeclarations.class,
                 refusalOf(universe, "pub.twice"),
@@ -247,6 +248,6 @@ class APublishedModuleIsReadAsTheCompilerReadsItTest {
 
     private static PublishedUniverse universeOf(String source) {
         Map<String, byte[]> classes = Compiler.compile(source);
-        return PublishedUniverse.of(new ClassFileDeclarations(classes::get), souther.compiler.DefaultStdlib.get());
+        return PublishedUniverse.of(new ClassFileDeclarations(classes::get), DefaultStdlib.get());
     }
 }

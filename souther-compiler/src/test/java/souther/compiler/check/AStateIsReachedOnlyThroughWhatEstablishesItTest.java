@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.stdlib.Stdlib;
 import org.junit.jupiter.api.Test;
 import souther.compiler.ast.Ast;
@@ -118,7 +119,7 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
 
     private static Hir.Module resolved(String source) {
         Ast.Module parsed = CstFrontend.parse(source);
-        return Resolve.resolving(parsed, SyntaxSymbols.of(parsed, souther.compiler.DefaultStdlib.get())).module();
+        return Resolve.resolving(parsed, SyntaxSymbols.of(parsed, DefaultStdlib.get())).module();
     }
 
     private static String signature(Method m) {
@@ -193,7 +194,7 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
                     constructs Amount
                 let go (n) = Amount(n)
                 """);
-        Symbols scope = TypeChecker.symbols(resolved, souther.compiler.DefaultStdlib.get());
+        Symbols scope = TypeChecker.symbols(resolved, DefaultStdlib.get());
         Hir.FnDef written = resolved.fns().stream()
                 .filter(f -> f.name().equals("go")).findFirst().orElseThrow();
 
@@ -511,7 +512,7 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
                 let go (n) = wrap(n)
                 let wrap (n) = Wrapped(n)
                 """);
-        Symbols scope = TypeChecker.symbols(resolved, souther.compiler.DefaultStdlib.get());
+        Symbols scope = TypeChecker.symbols(resolved, DefaultStdlib.get());
         Hir.FnDef unsettled = resolved.fns().stream()
                 .filter(f -> f.name().equals("wrap")).findFirst().orElseThrow();
 
@@ -573,9 +574,9 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
 
                 let isOk (n: Int) : Bool = Wrapped(n) == Wrapped(0)
                 """);
-        Symbols scope = TypeChecker.symbols(resolved, souther.compiler.DefaultStdlib.get());
+        Symbols scope = TypeChecker.symbols(resolved, DefaultStdlib.get());
         InvariantSettled settled =
-                InvariantSettled.settle(Expandable.check(resolved, Map.of(), souther.compiler.DefaultStdlib.get()), scope, Map.of());
+                InvariantSettled.settle(Expandable.check(resolved, Map.of(), DefaultStdlib.get()), scope, Map.of());
         InvariantSettled.Def amount = settled.defs().stream()
                 .filter(d -> d.name().equals("Amount")).findFirst().orElseThrow();
 
@@ -797,12 +798,12 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
      */
     @Test
     void anAssemblyRefusesAnAnswerForAnotherModulesDeclaration() {
-        Symbols scopeA = TypeChecker.symbols(resolvedA(), souther.compiler.DefaultStdlib.get());
+        Symbols scopeA = TypeChecker.symbols(resolvedA(), DefaultStdlib.get());
         InvariantSettled a = InvariantSettled.settle(
-                Expandable.check(resolvedA(), Map.of(), souther.compiler.DefaultStdlib.get()), scopeA, Map.of());
-        Symbols scopeB = TypeChecker.symbols(resolvedB(), souther.compiler.DefaultStdlib.get());
+                Expandable.check(resolvedA(), Map.of(), DefaultStdlib.get()), scopeA, Map.of());
+        Symbols scopeB = TypeChecker.symbols(resolvedB(), DefaultStdlib.get());
         InvariantSettled b = InvariantSettled.settle(
-                Expandable.check(resolvedB(), Map.of(), souther.compiler.DefaultStdlib.get()), scopeB, Map.of());
+                Expandable.check(resolvedB(), Map.of(), DefaultStdlib.get()), scopeB, Map.of());
 
         Derived.Def ofA = Derived.Def.derive(defNamed(a, "Amount"), scopeA);
         Derived.Def ofB = Derived.Def.derive(defNamed(b, "Amount"), scopeB);
@@ -819,11 +820,11 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
      *  shape — so the key tells them apart even less there. */
     @Test
     void anAssemblyRefusesAnAnswerForAnotherModulesDefinition() {
-        Symbols scopeA = TypeChecker.symbols(resolvedA(), souther.compiler.DefaultStdlib.get());
+        Symbols scopeA = TypeChecker.symbols(resolvedA(), DefaultStdlib.get());
         Derived.Module a = Derived.Module.assemble(
-                InvariantSettled.settle(Expandable.check(resolvedA(), Map.of(), souther.compiler.DefaultStdlib.get()), scopeA, Map.of()),
+                InvariantSettled.settle(Expandable.check(resolvedA(), Map.of(), DefaultStdlib.get()), scopeA, Map.of()),
                 Map.of("Amount", Derived.Def.derive(defNamed(InvariantSettled.settle(
-                        Expandable.check(resolvedA(), Map.of(), souther.compiler.DefaultStdlib.get()), scopeA, Map.of()), "Amount"), scopeA)));
+                        Expandable.check(resolvedA(), Map.of(), DefaultStdlib.get()), scopeA, Map.of()), "Amount"), scopeA)));
         Hir.FnDef ofA = a.fns().get(0);
         Hir.FnDef ofB = new Hir.FnDef(ofA.written(), "b", ofA.params(), ofA.declaredReturn(),
                 ofA.body(), ofA.modifiers(), ofA.pos());
@@ -904,7 +905,7 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
 
                 let n = 1
                 """);
-        assertEquals("m", Expandable.check(wellFounded, Map.of(), souther.compiler.DefaultStdlib.get()).name());
+        assertEquals("m", Expandable.check(wellFounded, Map.of(), DefaultStdlib.get()).name());
 
         Hir.Module reachesItself = resolved("""
                 module m exposing ( a )
@@ -913,7 +914,7 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
                 let b = a
                 """);
         CompileException refused =
-                assertThrows(CompileException.class, () -> Expandable.check(reachesItself, Map.of(), souther.compiler.DefaultStdlib.get()));
+                assertThrows(CompileException.class, () -> Expandable.check(reachesItself, Map.of(), DefaultStdlib.get()));
         assertTrue(refused.getMessage().contains("a"), refused.getMessage());
     }
 
@@ -933,13 +934,13 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
 
                 let positive (n: Int) : Bool = n > 0
                 """);
-        Expandable expandable = Expandable.check(resolved, Map.of(), souther.compiler.DefaultStdlib.get());
+        Expandable expandable = Expandable.check(resolved, Map.of(), DefaultStdlib.get());
 
         assertTrue(clauseOf(expandable.module().defs(), "Amount") instanceof Hir.Apply,
                 "the clause is a call to the helper until something expands it");
 
         InvariantSettled settled = InvariantSettled.settle(expandable,
-                TypeChecker.symbols(expandable.module(), souther.compiler.DefaultStdlib.get()), Map.of());
+                TypeChecker.symbols(expandable.module(), DefaultStdlib.get()), Map.of());
 
         assertFalse(clauseOf(settled.defs().stream().map(InvariantSettled.Def::def).toList(),
                         "Amount") instanceof Hir.Apply,

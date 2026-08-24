@@ -1,5 +1,6 @@
 package souther.compiler.doc;
 
+import souther.compiler.DefaultStdlib;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayOutputStream;
@@ -47,7 +48,7 @@ class AListedValueIsWrittenWithoutAnArgumentListTest {
 
     @Test
     void anArgumentListIsWrittenExactlyWhereTheDeclarationDeclaresOne() {
-        Map<String, ApiCommand.Signature> surface = ApiCommand.surface(souther.compiler.DefaultStdlib.get());
+        Map<String, ApiCommand.Signature> surface = ApiCommand.surface(DefaultStdlib.get());
         List<String> values = new ArrayList<>();
         List<String> functions = new ArrayList<>();
 

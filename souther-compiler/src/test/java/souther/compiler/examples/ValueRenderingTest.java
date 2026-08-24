@@ -2,6 +2,7 @@ package souther.compiler.examples;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.check.Symbols;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.TypeKey;
@@ -25,7 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class ValueRenderingTest {
 
     private static ValueRendering rendering() {
-        Symbols symbols = Symbols.none(souther.compiler.DefaultStdlib.get());
+        Symbols symbols = Symbols.none(DefaultStdlib.get());
         return new ValueRendering(new NeutralForm(symbols));
     }
 

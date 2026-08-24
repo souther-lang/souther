@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.numeric.NumericDomain;
@@ -48,7 +49,7 @@ class WhatAValueCarriesBelongsToTheAtomTest {
     }
 
     private static Terms terms() {
-        return new Terms(Symbols.none(souther.compiler.DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        return new Terms(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
     }
 
     private static Core.Read list(BindingId of) {

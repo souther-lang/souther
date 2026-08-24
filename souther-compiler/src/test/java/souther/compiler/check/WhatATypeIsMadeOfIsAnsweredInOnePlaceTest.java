@@ -1,8 +1,8 @@
 package souther.compiler.check;
 
-import souther.compiler.stdlib.Stdlib;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.msg.MessageValues;
 import souther.compiler.meta.ModulePath;
@@ -58,7 +58,7 @@ class WhatATypeIsMadeOfIsAnsweredInOnePlaceTest {
             """;
 
     private final Hir.Module module = resolved(MODULE);
-    private final Symbols symbols = TypeChecker.symbols(module, souther.compiler.DefaultStdlib.get());
+    private final Symbols symbols = TypeChecker.symbols(module, DefaultStdlib.get());
 
     @Test
     void aCaseThatIsASumIsTheLeavesUnderIt() {
@@ -99,7 +99,7 @@ class WhatATypeIsMadeOfIsAnsweredInOnePlaceTest {
                 data Top = A | B
                 """);
         assertEquals(List.of("R", "T", "P", "Q"),
-                shown(AtomSpace.subjectAtoms(Type.ref(named(shared, "Top")), TypeChecker.symbols(shared, souther.compiler.DefaultStdlib.get()))));
+                shown(AtomSpace.subjectAtoms(Type.ref(named(shared, "Top")), TypeChecker.symbols(shared, DefaultStdlib.get()))));
     }
 
     @Test
@@ -138,7 +138,7 @@ class WhatATypeIsMadeOfIsAnsweredInOnePlaceTest {
                 data S = A | S
                 """);
         assertEquals(List.of("A"),
-                shown(AtomSpace.subjectAtoms(Type.ref(named(itself, "S")), TypeChecker.symbols(itself, souther.compiler.DefaultStdlib.get()))));
+                shown(AtomSpace.subjectAtoms(Type.ref(named(itself, "S")), TypeChecker.symbols(itself, DefaultStdlib.get()))));
     }
 
     /** What a sum declares, asked of the declaration — the same leaves, and its own name is not one. */

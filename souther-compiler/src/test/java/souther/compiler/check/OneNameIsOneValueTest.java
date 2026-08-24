@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
@@ -38,7 +39,7 @@ class OneNameIsOneValueTest {
 
     @Test
     void oneKeyIsRefusedASecondKindOfNumber() {
-        Terms terms = new Terms(Symbols.none(souther.compiler.DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        Terms terms = new Terms(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         BindingId binding = binding();
         Denotations at = Denotations.none().location(binding, AsPlaces.of(binding), AsPlaces.term(binding));
         FactSubject whole = terms.atomOf(new Core.Read("n", binding, Type.INT, POS), at);
@@ -61,7 +62,7 @@ class OneNameIsOneValueTest {
      */
     @Test
     void twoValuesThatOnceWroteOneNameAreTwoTerms() {
-        Terms terms = new Terms(Symbols.none(souther.compiler.DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        Terms terms = new Terms(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         Denotations at = Denotations.none();
         Core.Str awkward = new Core.Str("a\", \"b", Type.STRING, POS);
 

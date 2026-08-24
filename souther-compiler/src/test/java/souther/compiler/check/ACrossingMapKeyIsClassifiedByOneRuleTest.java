@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.stdlib.Stdlib;
+import souther.compiler.DefaultStdlib;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.frontend.CstFrontend;
@@ -62,13 +62,13 @@ class ACrossingMapKeyIsClassifiedByOneRuleTest {
             data MixedKey = Mixed
             """;
 
-    private final Symbols symbols = Symbols.of(resolved(), souther.compiler.DefaultStdlib.get());
+    private final Symbols symbols = Symbols.of(resolved(), DefaultStdlib.get());
 
     /** A sum's cases are read by name, so the module has to be resolved before its enumerations can
      *  be asked about. */
     private static Hir.Module resolved() {
         Ast.Module parsed = CstFrontend.parse(MODULE);
-        return Resolve.module(parsed, SyntaxSymbols.of(parsed, souther.compiler.DefaultStdlib.get()));
+        return Resolve.module(parsed, SyntaxSymbols.of(parsed, DefaultStdlib.get()));
     }
 
     private MapKeyRepresentation classify(Type key) {

@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.stdlib.Stdlib;
+import souther.compiler.DefaultStdlib;
 import souther.compiler.source.SourceId;
 import souther.compiler.diag.QuotedFrom;
 
@@ -137,8 +137,8 @@ class ACopiedBodyIsReadAgainstAFileThisCompileHasTest {
     /** {@code behavior}'s body with every helper call expanded, as a check downstream reads it. */
     private static Hir.Expr expanded(String source, String fn) {
         var parsed = CstFrontend.parseWithSlices(source, null, new SourceId("demo.sou"));
-        Hir.Module module = Resolve.module(parsed.module(), SyntaxSymbols.of(parsed.module(), souther.compiler.DefaultStdlib.get()));
-        HelperInliner inliner = HelperInliner.forModule(module, souther.compiler.DefaultStdlib.get());
+        Hir.Module module = Resolve.module(parsed.module(), SyntaxSymbols.of(parsed.module(), DefaultStdlib.get()));
+        HelperInliner inliner = HelperInliner.forModule(module, DefaultStdlib.get());
         Hir.FnDef body = inliner.held().get(fn);
         assertNotNull(body, "the fn under test is one of the module's own");
         return inliner.inline(body.writtenBody(), inliner.bodyOf(fn));

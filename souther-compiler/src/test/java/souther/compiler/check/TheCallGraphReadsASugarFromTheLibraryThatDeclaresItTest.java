@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.SourcePos;
@@ -56,19 +57,19 @@ class TheCallGraphReadsASugarFromTheLibraryThatDeclaresItTest {
 
     private static Set<String> callsIn(Hir.Expr e) {
         Set<String> out = new LinkedHashSet<>();
-        HelperInliner.helperCallsIn(souther.compiler.DefaultStdlib.get(), e, souther.compiler.DefaultStdlib.get().helpers(), out);
+        HelperInliner.helperCallsIn(DefaultStdlib.get(), e, DefaultStdlib.get().helpers(), out);
         return out;
     }
 
     @Test
     void theLibraryDeclaresAtLeastOneSugarForThisToBeAbout() {
-        assertFalse(souther.compiler.DefaultStdlib.get().rewrites().isEmpty(),
+        assertFalse(DefaultStdlib.get().rewrites().isEmpty(),
                 "a claim about every sugar says nothing where there are none");
     }
 
     @Test
     void aSugarWrittenWithWhatItStandsForReachesWhatItRewritesTo() {
-        souther.compiler.DefaultStdlib.get().rewrites().forEach((sugar, rewrite) -> {
+        DefaultStdlib.get().rewrites().forEach((sugar, rewrite) -> {
             Set<String> reached = callsIn(callTo(sugar, rewrite.keptArgs()));
 
             assertEquals(Set.of(rewrite.target().qualified()), reached,
@@ -79,7 +80,7 @@ class TheCallGraphReadsASugarFromTheLibraryThatDeclaresItTest {
 
     @Test
     void andOneWrittenWithAnotherNumberOfArgumentsReachesNothing() {
-        souther.compiler.DefaultStdlib.get().rewrites().forEach((sugar, rewrite) -> {
+        DefaultStdlib.get().rewrites().forEach((sugar, rewrite) -> {
             assertEquals(Set.of(), callsIn(callTo(sugar, rewrite.keptArgs() + 1)),
                     sugar + " written with one argument too many is not the call it stands for");
             if (rewrite.keptArgs() > 0) {
@@ -101,9 +102,9 @@ class TheCallGraphReadsASugarFromTheLibraryThatDeclaresItTest {
     @Test
     void theFoldSugarRewritesToSomethingAModuleWouldHaveToEmit() {
         HelperTable table = HelperTable.of("probe", Map.of(), Map.of(), Map.of(),
-                InliningPolicy.FULL, souther.compiler.DefaultStdlib.get());
+                InliningPolicy.FULL, DefaultStdlib.get());
         HelperGraph graph = HelperGraph.of(table);
-        Stdlib.Rewrite fold = souther.compiler.DefaultStdlib.get().rewriteOf("List.fold");
+        Stdlib.Rewrite fold = DefaultStdlib.get().rewriteOf("List.fold");
 
         assertNotNull(fold, "`List.fold` is sugar for the fold the combinators are derived from");
         assertEquals("List.foldFrom", fold.target().qualified());

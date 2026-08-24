@@ -59,15 +59,15 @@ class ThePublishedSurfaceIsFixedTest {
         assertTrue(current.contains("List.fold("), "the `List.fold` sugar is part of the surface");
         assertFalse(current.contains("List.foldFrom"),
                 "a private declaration is not on the surface, so it is not in the snapshot");
-        assertEquals(souther.compiler.DefaultStdlib.get().published().size(), current.lines().filter(l -> !l.isBlank()).count(),
+        assertEquals(DefaultStdlib.get().published().size(), current.lines().filter(l -> !l.isBlank()).count(),
                 "one line per published name");
     }
 
     /** One line per published name, in qualifier then declaration order. */
     private static String render() {
         List<String> lines = new ArrayList<>();
-        for (String qualified : souther.compiler.DefaultStdlib.get().published()) {
-            Stdlib.Entry entry = souther.compiler.DefaultStdlib.get().entry(qualified);
+        for (String qualified : DefaultStdlib.get().published()) {
+            Stdlib.Entry entry = DefaultStdlib.get().entry(qualified);
             if (entry == null) {
                 // `List.fold` is sugar: it is written and reached, and has no declaration of its own.
                 lines.add(qualified + "(step, seed, xs)");

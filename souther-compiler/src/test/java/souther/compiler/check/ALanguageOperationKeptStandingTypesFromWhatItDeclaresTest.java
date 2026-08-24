@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
@@ -39,7 +40,7 @@ class ALanguageOperationKeptStandingTypesFromWhatItDeclaresTest {
                 ConstructionOrigin.own(), POS, null);
 
         Core typed = Elaborator.elaborate(call, Scope.NONE,
-                CheckContext.of(Symbols.none(souther.compiler.DefaultStdlib.get())).preserving(KEPT));
+                CheckContext.of(Symbols.none(DefaultStdlib.get())).preserving(KEPT));
 
         Core.PreservedCall kept = assertInstanceOf(Core.PreservedCall.class, typed);
         assertEquals(new ValueName.Stdlib("List", "length"), kept.operation());
@@ -62,7 +63,7 @@ class ALanguageOperationKeptStandingTypesFromWhatItDeclaresTest {
                 ConstructionOrigin.own(), POS, null);
 
         Core typed = Elaborator.elaborate(call, Scope.NONE,
-                CheckContext.of(Symbols.none(souther.compiler.DefaultStdlib.get())).preserving(KEPT));
+                CheckContext.of(Symbols.none(DefaultStdlib.get())).preserving(KEPT));
 
         assertEquals(Type.list(Type.INT), typed.type());
     }
@@ -94,6 +95,6 @@ class ALanguageOperationKeptStandingTypesFromWhatItDeclaresTest {
                 ConstructionOrigin.own(), POS, null);
 
         assertThrows(RuntimeException.class, () -> Elaborator.elaborate(call, Scope.NONE,
-                CheckContext.of(Symbols.none(souther.compiler.DefaultStdlib.get())).preserving(KEPT)));
+                CheckContext.of(Symbols.none(DefaultStdlib.get())).preserving(KEPT)));
     }
 }

@@ -1,8 +1,8 @@
 package souther.compiler.derive;
 
-import souther.compiler.stdlib.Stdlib;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.AtomSpace;
 import souther.compiler.check.Boundary;
@@ -84,11 +84,11 @@ class ADerivedSumCodecHasOneVariantPerAtomTest {
     }
 
     private Boundary.Alternatives settled(String sum) {
-        return Boundary.of(Type.ref(sumData(sum).declares()), TypeChecker.symbols(derived, souther.compiler.DefaultStdlib.get()));
+        return Boundary.of(Type.ref(sumData(sum).declares()), TypeChecker.symbols(derived, DefaultStdlib.get()));
     }
 
     private List<TypeSymbol> atomsOf(String sum) {
-        return AtomSpace.subjectAtoms(Type.ref(sumData(sum).declares()), TypeChecker.symbols(derived, souther.compiler.DefaultStdlib.get()));
+        return AtomSpace.subjectAtoms(Type.ref(sumData(sum).declares()), TypeChecker.symbols(derived, DefaultStdlib.get()));
     }
 
     private static List<String> names(List<TypeSymbol> atoms) {
@@ -109,6 +109,6 @@ class ADerivedSumCodecHasOneVariantPerAtomTest {
         byId.put("m.sou", source);
         Hir.Module resolved = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
                 .db().ask(new Names.Resolved("m")).value();
-        return Deriver.derive(resolved, souther.compiler.DefaultStdlib.get());
+        return Deriver.derive(resolved, DefaultStdlib.get());
     }
 }

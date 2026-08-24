@@ -2,6 +2,7 @@ package souther.compiler.conformance;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.Reserved;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.cst.CstLexer;
@@ -164,7 +165,7 @@ class AConformanceCorpusReachesEveryConstructTheLanguageDeclaresTest {
         Set<String> missing = new TreeSet<>();
         for (Reserved.StdlibModule module : Reserved.MODULES) {
             String qualifier = module.qualifier();
-            boolean declaresOperations = souther.compiler.DefaultStdlib.get().entries().keySet().stream()
+            boolean declaresOperations = DefaultStdlib.get().entries().keySet().stream()
                     .anyMatch(qualified -> qualified.startsWith(qualifier + "."));
             if (declaresOperations ? !called.contains(qualifier) : !named.contains(qualifier)) {
                 missing.add(qualifier + " (" + module.moduleName()

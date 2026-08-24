@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.source.SourceId;
 
 import souther.compiler.check.Prepared;
@@ -56,7 +57,7 @@ public final class Compilation {
         // And the one place this compilation's standard library is settled. Read here so that every
         // name resolved for it is resolved against one library, rather than against whichever one
         // each reader reached for.
-        db.set(new Front.Library(), souther.compiler.DefaultStdlib.get());
+        db.set(new Front.Library(), DefaultStdlib.get());
         // And the one place an adequacy budget is made. Every measure of one behavior is handed
         // this one, so a behavior measured twice in one compilation is measured under the same
         // limits both times.

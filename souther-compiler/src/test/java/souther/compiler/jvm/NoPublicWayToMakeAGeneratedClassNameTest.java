@@ -1,5 +1,7 @@
 package souther.compiler.jvm;
 
+import java.util.stream.Collectors;
+import java.util.Arrays;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Constructor;
@@ -70,8 +72,8 @@ class NoPublicWayToMakeAGeneratedClassNameTest {
     /** A maker as its whole signature. The parameter list is read out entire: a second parameter is
      *  where a spelling would arrive beside the identity, which is the shape this is about. */
     private static String written(Method m) {
-        return m.getName() + "(" + java.util.Arrays.stream(m.getParameterTypes())
-                .map(Class::getSimpleName).collect(java.util.stream.Collectors.joining(", ")) + ")";
+        return m.getName() + "(" + Arrays.stream(m.getParameterTypes())
+                .map(Class::getSimpleName).collect(Collectors.joining(", ")) + ")";
     }
 
     /**

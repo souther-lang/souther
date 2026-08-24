@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.HelperInliner;
 import souther.compiler.check.ValueCycles;
@@ -132,7 +133,7 @@ class EveryTreeAnExpansionIsGivenIsStillWellFoundedTest {
                 // module was written around is not passing by having nothing left to walk
                 assertTrue(HelperInliner.helpersOf(tree).containsKey(value),
                         "the " + stage + " tree of " + name + " no longer declares `" + value + "`");
-                assertDoesNotThrow(() -> ValueCycles.rejectIn(tree, published, souther.compiler.DefaultStdlib.get()),
+                assertDoesNotThrow(() -> ValueCycles.rejectIn(tree, published, DefaultStdlib.get()),
                         "the " + stage + " tree of " + name + " is expanded, and its values reach"
                                 + " themselves");
             });
@@ -170,6 +171,6 @@ class EveryTreeAnExpansionIsGivenIsStillWellFoundedTest {
         assertTrue(resolved.present(), "resolution answers; the refusal comes later");
 
         assertThrows(CompileException.class,
-                () -> ValueCycles.rejectIn(resolved.value(), Map.of(), souther.compiler.DefaultStdlib.get()));
+                () -> ValueCycles.rejectIn(resolved.value(), Map.of(), DefaultStdlib.get()));
     }
 }

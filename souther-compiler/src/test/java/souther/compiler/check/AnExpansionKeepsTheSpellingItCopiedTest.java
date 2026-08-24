@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.stdlib.Stdlib;
+import souther.compiler.DefaultStdlib;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.WrittenName;
@@ -87,7 +87,7 @@ class AnExpansionKeepsTheSpellingItCopiedTest {
     /** Every name in {@code helper}'s expanded body that points at characters not spelling it. */
     private static List<String> misspelled(String source, String helper) {
         Ast.Module parsed = CstFrontend.parse(source);
-        HelperInliner inliner = HelperInliner.forModule(Resolve.module(parsed, SyntaxSymbols.of(parsed, souther.compiler.DefaultStdlib.get())), souther.compiler.DefaultStdlib.get());
+        HelperInliner inliner = HelperInliner.forModule(Resolve.module(parsed, SyntaxSymbols.of(parsed, DefaultStdlib.get())), DefaultStdlib.get());
         Hir.Expr expanded =
                 inliner.inline(inliner.held().get(helper).writtenBody(), inliner.bodyOf(helper));
 

@@ -1,5 +1,6 @@
 package souther.compiler.codegen;
 
+import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -214,8 +215,7 @@ final class Intrinsics {
         // identity here, this was the one route from a Souther name to a JVM one that did not go
         // through `SoutherJvmAbi` — which is the place that exists to be the only one.
         if (t instanceof Type.Ref r && TypeSymbol.RUNTIME.equals(r.name().module())) {
-            return souther.compiler.jvm.SoutherJvmAbi.nameOfLanguageDeclaration(r.name())
-                    .classDesc();
+            return SoutherJvmAbi.nameOfLanguageDeclaration(r.name()).classDesc();
         }
         return CD_Object;   // Ref, Var, Tuple, Union, Nothing
     }

@@ -1,8 +1,8 @@
 package souther.compiler.partition;
 
-import souther.compiler.stdlib.Stdlib;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Resolve;
@@ -63,11 +63,11 @@ class AnOpenPositionIsAReadingThatRanToTheEndTest {
             data Email = String invariant String.matches("[a-z]+", value)
             """;
 
-    private final Symbols symbols = Symbols.of(resolved(), souther.compiler.DefaultStdlib.get());
+    private final Symbols symbols = Symbols.of(resolved(), DefaultStdlib.get());
 
     private static Hir.Module resolved() {
         Ast.Module parsed = CstFrontend.parse(MODULE);
-        return Resolve.module(parsed, SyntaxSymbols.of(parsed, souther.compiler.DefaultStdlib.get()));
+        return Resolve.module(parsed, SyntaxSymbols.of(parsed, DefaultStdlib.get()));
     }
 
     private TypeSymbol named(String type) {

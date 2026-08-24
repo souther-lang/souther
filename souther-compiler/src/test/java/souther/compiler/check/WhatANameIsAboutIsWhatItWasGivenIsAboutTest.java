@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.types.BinOp;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
@@ -42,7 +43,7 @@ class WhatANameIsAboutIsWhatItWasGivenIsAboutTest {
 
     private final Hir.Binders binders = new Hir.Binders(OWNER);
     private final PathEngine engine =
-            new PathEngine(Symbols.none(souther.compiler.DefaultStdlib.get()), Map.of(), Terms.Of.THE_DISCHARGE_TREE, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+            new PathEngine(Symbols.none(DefaultStdlib.get()), Map.of(), Terms.Of.THE_DISCHARGE_TREE, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
 
     @Test
     void aNameGivenAPlaceIsAboutThatPlace() {

@@ -2,6 +2,7 @@ package souther.compiler.meta;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.query.Compilation;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Output;
@@ -334,7 +335,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
     @Test
     void twoBuildsOfOneSourceAgree() {
         Agreement held = DeclarationAgreement.of("example.stale", "rename",
-                declarationsOf(MODEL), declarationsOf(MODEL), souther.compiler.DefaultStdlib.get());
+                declarationsOf(MODEL), declarationsOf(MODEL), DefaultStdlib.get());
 
         assertInstanceOf(Agreement.Agree.class, held,
                 "nothing a crossing depends on differs between them");
@@ -353,7 +354,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
                 "invariant length(value) > 3");
 
         Agreement held = DeclarationAgreement.of("example.stale", "rename",
-                declarationsOf(narrowed), declarationsOf(MODEL), souther.compiler.DefaultStdlib.get());
+                declarationsOf(narrowed), declarationsOf(MODEL), DefaultStdlib.get());
 
         Agreement.Disagree said = assertInstanceOf(Agreement.Disagree.class, held,
                 "an invariant is part of what a value is, so the two read the same value differently");
@@ -376,7 +377,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
                 .replace("data Title = String", "// what a todo is called\ndata Title = String");
 
         Agreement held = DeclarationAgreement.of("example.stale", "rename",
-                declarationsOf(spaced), declarationsOf(MODEL), souther.compiler.DefaultStdlib.get());
+                declarationsOf(spaced), declarationsOf(MODEL), DefaultStdlib.get());
 
         assertInstanceOf(Agreement.Agree.class, held,
                 "how a declaration is written out is not something a value can be read differently by");
@@ -395,7 +396,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
                 "let rename (t, to) = Todo { done = t.done, title = to }");
 
         Agreement held = DeclarationAgreement.of("example.stale", "rename",
-                declarationsOf(rewritten), declarationsOf(MODEL), souther.compiler.DefaultStdlib.get());
+                declarationsOf(rewritten), declarationsOf(MODEL), DefaultStdlib.get());
 
         assertInstanceOf(Agreement.Agree.class, held,
                 "a `let` body is not read by anything crossing into the answer");
@@ -416,7 +417,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
                 "data Outcome = Todo | NotFound | Archived");
 
         Agreement held = DeclarationAgreement.of("example.stale", "find",
-                declarationsOf(answering), declarationsOf(UNION_MODEL), souther.compiler.DefaultStdlib.get());
+                declarationsOf(answering), declarationsOf(UNION_MODEL), DefaultStdlib.get());
 
         Agreement.Disagree said = assertInstanceOf(Agreement.Disagree.class, held,
                 "the answer has no case for what the row expects");
@@ -447,7 +448,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
                 "the union's own line is untouched, so what differs is the case and nothing else");
 
         Agreement held = DeclarationAgreement.of("example.stale", "find",
-                declarationsOf(UNION_MODEL), declarationsOf(asAUnit), souther.compiler.DefaultStdlib.get());
+                declarationsOf(UNION_MODEL), declarationsOf(asAUnit), DefaultStdlib.get());
 
         Agreement.Disagree said = assertInstanceOf(Agreement.Disagree.class, held,
                 "the case's own declaration is reached through the union that lists it");
@@ -466,7 +467,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
                 .replace("done = t.done", "finished = t.finished");
 
         Agreement held = DeclarationAgreement.of("example.stale", "rename",
-                declarationsOf(renamed), declarationsOf(MODEL), souther.compiler.DefaultStdlib.get());
+                declarationsOf(renamed), declarationsOf(MODEL), DefaultStdlib.get());
 
         Agreement.Disagree said = assertInstanceOf(Agreement.Disagree.class, held,
                 "a decoder reads fields by name");
@@ -486,7 +487,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
                 .replace("let rename (t, to) =", "let rename (t, to, also) =");
 
         Agreement held = DeclarationAgreement.of("example.stale", "rename",
-                declarationsOf(moved), declarationsOf(MODEL), souther.compiler.DefaultStdlib.get());
+                declarationsOf(moved), declarationsOf(MODEL), DefaultStdlib.get());
 
         Agreement.Disagree said = assertInstanceOf(Agreement.Disagree.class, held);
         assertEquals("rename", said.declaration());
@@ -507,7 +508,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
                 "let describe (t: Title) : String = trim(trim(t.value))");
 
         Agreement held = DeclarationAgreement.of("example.published", "rename",
-                declarationsOf(moved), declarationsOf(EXPOSING_MODEL), souther.compiler.DefaultStdlib.get());
+                declarationsOf(moved), declarationsOf(EXPOSING_MODEL), DefaultStdlib.get());
 
         assertInstanceOf(Agreement.Agree.class, held,
                 "nothing a value crossing into the answer meets is read through it");
@@ -520,7 +521,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
                 "let longEnough (s: String) : Bool = length(s) > 3");
 
         Agreement held = DeclarationAgreement.of("example.published", "rename",
-                declarationsOf(moved), declarationsOf(EXPOSING_MODEL), souther.compiler.DefaultStdlib.get());
+                declarationsOf(moved), declarationsOf(EXPOSING_MODEL), DefaultStdlib.get());
 
         assertInstanceOf(Agreement.Disagree.class, held,
                 "what a value is admitted by is read through it");
@@ -538,7 +539,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
                 "import example.shared ( Note, Title )");
 
         Agreement held = DeclarationAgreement.of("example.root", "rename",
-                declarationsOf(List.of(SHARED, reordered)), declarationsOf(List.of(SHARED, ROOT)), souther.compiler.DefaultStdlib.get());
+                declarationsOf(List.of(SHARED, reordered)), declarationsOf(List.of(SHARED, ROOT)), DefaultStdlib.get());
 
         assertInstanceOf(Agreement.Agree.class, held,
                 "an import list is the names it brings in, not the order they are written in");
@@ -560,7 +561,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
                         "let describe (t: Title) : String = t.value");
 
         Agreement held = DeclarationAgreement.of("example.published", "rename",
-                declarationsOf(withoutIt), declarationsOf(EXPOSING_MODEL), souther.compiler.DefaultStdlib.get());
+                declarationsOf(withoutIt), declarationsOf(EXPOSING_MODEL), DefaultStdlib.get());
 
         assertInstanceOf(Agreement.Agree.class, held,
                 "what a helper nothing reads through brought in is not read through either");
@@ -578,7 +579,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
         String written = DECIMAL_MODEL.replace("value >= 1.0m", "value >= 1.00m");
 
         Agreement held = DeclarationAgreement.of("example.rates", "raise",
-                declarationsOf(written), declarationsOf(DECIMAL_MODEL), souther.compiler.DefaultStdlib.get());
+                declarationsOf(written), declarationsOf(DECIMAL_MODEL), DefaultStdlib.get());
 
         assertInstanceOf(Agreement.Agree.class, held,
                 "the two admit the same values, which is what the invariant says");
@@ -590,7 +591,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
         String raised = DECIMAL_MODEL.replace("value >= 1.0m", "value >= 1.5m");
 
         Agreement held = DeclarationAgreement.of("example.rates", "raise",
-                declarationsOf(raised), declarationsOf(DECIMAL_MODEL), souther.compiler.DefaultStdlib.get());
+                declarationsOf(raised), declarationsOf(DECIMAL_MODEL), DefaultStdlib.get());
 
         assertInstanceOf(Agreement.Disagree.class, held);
     }
@@ -611,7 +612,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
 
         Agreement held = DeclarationAgreement.of("example.root", "rename",
                 declarationsOf(List.of(SHARED, QUALIFYING_ROOT)),
-                declarationsOf(List.of(narrowed, QUALIFYING_ROOT)), souther.compiler.DefaultStdlib.get());
+                declarationsOf(List.of(narrowed, QUALIFYING_ROOT)), DefaultStdlib.get());
 
         Agreement.Disagree said = assertInstanceOf(Agreement.Disagree.class, held,
                 "what the field's type is declared by moved, and nothing imported it");
@@ -631,7 +632,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
     void aNameReachedThroughAnAliasIsTheNameItReaches() {
         Agreement held = DeclarationAgreement.of("example.root", "rename",
                 declarationsOf(List.of(SHARED, ALIASING_ROOT)),
-                declarationsOf(List.of(SHARED, QUALIFYING_ROOT)), souther.compiler.DefaultStdlib.get());
+                declarationsOf(List.of(SHARED, QUALIFYING_ROOT)), DefaultStdlib.get());
 
         assertInstanceOf(Agreement.Agree.class, held,
                 "both name the same declaration, however each was written");
@@ -651,7 +652,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
                 .replace("trim(t.value)", "String.trim(t.value)");
 
         Agreement held = DeclarationAgreement.of("example.literal", "retag",
-                declarationsOf(withoutIt), declarationsOf(LITERAL_MODEL), souther.compiler.DefaultStdlib.get());
+                declarationsOf(withoutIt), declarationsOf(LITERAL_MODEL), DefaultStdlib.get());
 
         assertInstanceOf(Agreement.Agree.class, held,
                 "nothing compared here is written with `trim`; a literal saying so is not writing it");
@@ -675,11 +676,11 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
 
         assertInstanceOf(Agreement.Agree.class,
                 DeclarationAgreement.of("example.composing", "priceAndSettle",
-                        declarationsOf(COMPOSING_MODEL), declarationsOf(COMPOSING_MODEL), souther.compiler.DefaultStdlib.get()),
+                        declarationsOf(COMPOSING_MODEL), declarationsOf(COMPOSING_MODEL), DefaultStdlib.get()),
                 "two builds of one composition agree");
         assertInstanceOf(Agreement.Disagree.class,
                 DeclarationAgreement.of("example.composing", "price",
-                        declarationsOf(moved), declarationsOf(COMPOSING_MODEL), souther.compiler.DefaultStdlib.get()),
+                        declarationsOf(moved), declarationsOf(COMPOSING_MODEL), DefaultStdlib.get()),
                 "and what a stage answers with having moved is a disagreement for that stage");
     }
 
@@ -697,7 +698,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
                         "let longEnough (text: String) : Bool = length(text) > 0");
 
         Agreement held = DeclarationAgreement.of("example.published", "rename",
-                declarationsOf(renamed), declarationsOf(EXPOSING_MODEL), souther.compiler.DefaultStdlib.get());
+                declarationsOf(renamed), declarationsOf(EXPOSING_MODEL), DefaultStdlib.get());
 
         assertInstanceOf(Agreement.Agree.class, held,
                 "what a binding is called is not something a value can be read differently by");
@@ -718,7 +719,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
 
         Agreement held = DeclarationAgreement.of("example.shadowing", "rename",
                 declarationsOf(List.of(SHADOWING_SHARED, withoutIt)),
-                declarationsOf(List.of(SHADOWING_SHARED, SHADOWING_MODEL)), souther.compiler.DefaultStdlib.get());
+                declarationsOf(List.of(SHADOWING_SHARED, SHADOWING_MODEL)), DefaultStdlib.get());
 
         assertInstanceOf(Agreement.Agree.class, held,
                 "the field is called `note`; it does not name what the import brings in");
@@ -738,7 +739,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
 
         Agreement held = DeclarationAgreement.of("example.order", "price",
                 declarationsOf(List.of(tightened, READING)),
-                declarationsOf(List.of(OFFERING, READING)), souther.compiler.DefaultStdlib.get());
+                declarationsOf(List.of(OFFERING, READING)), DefaultStdlib.get());
 
         Agreement.Disagree said = assertInstanceOf(Agreement.Disagree.class, held,
                 "the rule the reader's invariant is read through admits something else now");
@@ -759,7 +760,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
         String other = READING_A_FIELD.replace("r.min >= 0", "r.max >= 0");
 
         Agreement held = DeclarationAgreement.of("example.range", "check",
-                declarationsOf(other), declarationsOf(READING_A_FIELD), souther.compiler.DefaultStdlib.get());
+                declarationsOf(other), declarationsOf(READING_A_FIELD), DefaultStdlib.get());
 
         assertInstanceOf(Agreement.Disagree.class, held,
                 "the two admit different values, so the declaration reading them moved");
@@ -777,7 +778,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
         String implemented = INJECTING + "\nlet charge (a) = Amount(a.value)\n";
 
         Agreement held = DeclarationAgreement.of("example.injecting", "charge",
-                declarationsOf(implemented), declarationsOf(INJECTING), souther.compiler.DefaultStdlib.get());
+                declarationsOf(implemented), declarationsOf(INJECTING), DefaultStdlib.get());
 
         assertInstanceOf(Agreement.Disagree.class, held,
                 "one of them may have an implementation supplied for it and the other may not");
@@ -799,7 +800,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
 
         Agreement held = DeclarationAgreement.of("example.model", "retitle",
                 declarationsOf(List.of(FORMATTING, USING_FORMAT)),
-                declarationsOf(List.of(moved, USING_FORMAT)), souther.compiler.DefaultStdlib.get());
+                declarationsOf(List.of(moved, USING_FORMAT)), DefaultStdlib.get());
 
         assertInstanceOf(Agreement.Agree.class, held,
                 "nothing a declaration is read through is declared there");
@@ -819,7 +820,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
                 "invariant length(value) > 3");
 
         Agreement held = DeclarationAgreement.of("example.root", "rename",
-                declarationsOf(List.of(SHARED, ROOT)), declarationsOf(List.of(narrowed, ROOT)), souther.compiler.DefaultStdlib.get());
+                declarationsOf(List.of(SHARED, ROOT)), declarationsOf(List.of(narrowed, ROOT)), DefaultStdlib.get());
 
         Agreement.Disagree said = assertInstanceOf(Agreement.Disagree.class, held,
                 "the module the rows are written for agrees, and what it imports does not");
@@ -831,7 +832,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
     @Test
     void twoBuildsOfAModelWithAnImportAgree() {
         Agreement held = DeclarationAgreement.of("example.root", "rename",
-                declarationsOf(List.of(SHARED, ROOT)), declarationsOf(List.of(SHARED, ROOT)), souther.compiler.DefaultStdlib.get());
+                declarationsOf(List.of(SHARED, ROOT)), declarationsOf(List.of(SHARED, ROOT)), DefaultStdlib.get());
 
         assertInstanceOf(Agreement.Agree.class, held);
     }
@@ -846,7 +847,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
     @Test
     void classesCarryingNoDeclarationsCannotBeToldEitherWay() {
         Agreement held = DeclarationAgreement.of("example.stale", "rename",
-                declarationsOf(MODEL), _ -> new PublishedClasses.Carried.NoSuchClass(), souther.compiler.DefaultStdlib.get());
+                declarationsOf(MODEL), _ -> new PublishedClasses.Carried.NoSuchClass(), DefaultStdlib.get());
 
         Agreement.Unreadable said = assertInstanceOf(Agreement.Unreadable.class, held,
                 "nothing was published, so nothing was established");
@@ -868,7 +869,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
         PublishedClasses incomplete = missing("example.stale.Title",
                 declarationsOf(MODEL));
 
-        Agreement held = DeclarationAgreement.of("example.stale", "rename", declarationsOf(MODEL), incomplete, souther.compiler.DefaultStdlib.get());
+        Agreement held = DeclarationAgreement.of("example.stale", "rename", declarationsOf(MODEL), incomplete, DefaultStdlib.get());
 
         Agreement.Unreadable said = assertInstanceOf(Agreement.Unreadable.class, held,
                 "a declaration was published and the class carrying it is not there");
@@ -893,7 +894,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
         PublishedClasses ours = declarationsOf(List.of(SHARED, ROOT));
 
         Agreement held = DeclarationAgreement.of("example.root", "rename", ours,
-                without("example.shared", declarationsOf(List.of(SHARED, ROOT))), souther.compiler.DefaultStdlib.get());
+                without("example.shared", declarationsOf(List.of(SHARED, ROOT))), DefaultStdlib.get());
 
         Agreement.Unreadable said = assertInstanceOf(Agreement.Unreadable.class, held,
                 "the module is carried and the module its import line names is not");
@@ -928,11 +929,11 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
 
         assertInstanceOf(Agreement.Agree.class,
                 DeclarationAgreement.of("example.beside", "make",
-                        declarationsOf(beside), declarationsOf(BESIDE), souther.compiler.DefaultStdlib.get()),
+                        declarationsOf(beside), declarationsOf(BESIDE), DefaultStdlib.get()),
                 "nothing a row of `make` meets is declared by `Unrelated`");
         assertInstanceOf(Agreement.Disagree.class,
                 DeclarationAgreement.of("example.beside", "make",
-                        declarationsOf(reached), declarationsOf(BESIDE), souther.compiler.DefaultStdlib.get()),
+                        declarationsOf(reached), declarationsOf(BESIDE), DefaultStdlib.get()),
                 "and the same edit to what it answers with is one");
     }
 
@@ -952,7 +953,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
                 "data Band = String\n    invariant length(value) > 0");
 
         Agreement held = DeclarationAgreement.of("example.depending", "charge",
-                declarationsOf(moved), declarationsOf(DEPENDING), souther.compiler.DefaultStdlib.get());
+                declarationsOf(moved), declarationsOf(DEPENDING), DefaultStdlib.get());
 
         Agreement.Disagree said = assertInstanceOf(Agreement.Disagree.class, held,
                 "what answers the dependency hands back is read by the row that supplied it");
@@ -993,7 +994,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
     /** What holding {@code ours} against {@code theirs} for {@code behavior} answers with. */
     private static Class<?> kindOf(String ours, String theirs, String behavior) {
         return DeclarationAgreement.of("example.stale", behavior,
-                declarationsOf(ours), declarationsOf(theirs), souther.compiler.DefaultStdlib.get()).getClass();
+                declarationsOf(ours), declarationsOf(theirs), DefaultStdlib.get()).getClass();
     }
 
     /** {@code classes} with {@code absent} not on it, as an incomplete jar has it. */

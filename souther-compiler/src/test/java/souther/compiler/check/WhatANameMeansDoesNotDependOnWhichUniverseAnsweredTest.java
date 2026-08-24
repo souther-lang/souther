@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.meta.ModulePath;
@@ -119,7 +120,7 @@ class WhatANameMeansDoesNotDependOnWhichUniverseAnsweredTest {
         assertEquals(java.util.List.of(), scoped.refused(),
                 "nothing about this model is refused");
         Resolve.Resolution answered = Resolve.resolving(subject.module(),
-                scoped.meanings().writtenSymbols(declaredBy(db, readings), souther.compiler.DefaultStdlib.get()), scoped.values());
+                scoped.meanings().writtenSymbols(declaredBy(db, readings), DefaultStdlib.get()), scoped.values());
         assertEquals(java.util.List.of(), answered.unresolved(),
                 () -> "every name was answered: " + answered.unresolved());
         return answered.module();
@@ -190,7 +191,7 @@ class WhatANameMeansDoesNotDependOnWhichUniverseAnsweredTest {
         Scoping.Scoped scoped =
                 Scoping.of(new ModuleUniverse.OfWhatIsRead(readings), withoutTheTable);
         Resolve.Resolution answered = Resolve.resolving(withoutTheTable.module(),
-                scoped.meanings().writtenSymbols(declaredBy(db, readings), souther.compiler.DefaultStdlib.get()), scoped.values());
+                scoped.meanings().writtenSymbols(declaredBy(db, readings), DefaultStdlib.get()), scoped.values());
 
         assertTrue(answered.unresolved().stream()
                         .anyMatch(e -> e.getMessage().contains("length")),

@@ -1,9 +1,9 @@
 package souther.compiler.diag;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.source.SourceId;
 import souther.compiler.diag.QuotedFrom;
 
-import souther.compiler.stdlib.Stdlib;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.query.Compilation;
@@ -106,7 +106,7 @@ class APositionKnowsItsFileTest {
      */
     @Test
     void aModuleReadOffThePathCarriesNoFileOfThisCompiles() {
-        Hir.FnDef helper = souther.compiler.DefaultStdlib.get().helpers().values().iterator().next();
+        Hir.FnDef helper = DefaultStdlib.get().helpers().values().iterator().next();
 
         assertInstanceOf(QuotedFrom.TextItCannotShow.class, helper.pos().quotedFrom(),
                 "the prelude is in no source of the compile that reads it");

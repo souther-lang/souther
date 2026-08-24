@@ -1,5 +1,6 @@
 package souther.compiler.doc;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.Reserved;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.ast.Hir;
@@ -32,7 +33,7 @@ public final class ApiCommand {
     static int run(String[] args, PrintStream out, PrintStream err, Caller caller) {
         // The boundary: a command that lists the library is not downstream of a compile, so this is
         // where the process's library is read. Everything below is handed the value.
-        return run(args, out, err, caller, souther.compiler.DefaultStdlib.get());
+        return run(args, out, err, caller, DefaultStdlib.get());
     }
 
     static int run(String[] args, PrintStream out, PrintStream err, Caller caller, Stdlib stdlib) {

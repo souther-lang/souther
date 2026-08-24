@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.RowPosition;
 import souther.compiler.core.Core;
@@ -244,8 +245,7 @@ public final class HelperTyping {
      * written, each copying the other, which is the answer this pass gave before there was an order
      * at all.
      */
-    private static List<Hir.FnDef> valuesBeforeTheValuesThatNameThem(
-            souther.compiler.stdlib.Stdlib stdlib, Map<String, Hir.FnDef> held) {
+    private static List<Hir.FnDef> valuesBeforeTheValuesThatNameThem(Stdlib stdlib, Map<String, Hir.FnDef> held) {
         Map<String, Set<String>> names = new LinkedHashMap<>();
         for (Map.Entry<String, Hir.FnDef> e : held.entrySet()) {
             if (!(e.getValue().body() instanceof Hir.FnBody.Written written)) {

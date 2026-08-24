@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.source.SourceId;
 
 import souther.compiler.ast.Ast;
@@ -415,7 +416,7 @@ public final class Names {
 
     /** The library this compilation resolves against, asked of the store rather than of the
      *  process: what a name means is a question about this compilation. */
-    private static souther.compiler.stdlib.Stdlib library(Db db) {
+    private static Stdlib library(Db db) {
         return db.ask(new Front.Library()).value();
     }
 

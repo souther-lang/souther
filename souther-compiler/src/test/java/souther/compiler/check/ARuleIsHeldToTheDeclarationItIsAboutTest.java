@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.semantics.ArgumentRef;
 import souther.compiler.semantics.BuiltFrom;
@@ -36,13 +37,13 @@ class ARuleIsHeldToTheDeclarationItIsAboutTest {
     }
 
     private static void bindCarried(String operation, ArgumentRef container) {
-        DischargeRules.holdToTheDeclaration(souther.compiler.DefaultStdlib.get(), op(operation), container,
+        DischargeRules.holdToTheDeclaration(DefaultStdlib.get(), op(operation), container,
                 new ArgumentRef.TheContainer(), Question::holdsElements,
                 "the container a predicate reads");
     }
 
     private static void bindBuilt(String operation, ArgumentRef from) {
-        DischargeRules.holdToTheDeclaration(souther.compiler.DefaultStdlib.get(), op(operation),
+        DischargeRules.holdToTheDeclaration(DefaultStdlib.get(), op(operation),
                 new BuiltFrom(new ElementLineage.SameAs(new ElementLineage.Source(from, 1)),
                         SizeAgainstItsSource.AT_MOST).from(),
                 new ArgumentRef.TheContainer(), Question::holdsElements,
@@ -106,7 +107,7 @@ class ARuleIsHeldToTheDeclarationItIsAboutTest {
     /** The binding reads what the declaration says, so a table it agrees with binds. */
     @Test
     void aRuleThatAgreesWithTheDeclaration() {
-        assertDoesNotThrow(() -> DischargeRules.bind(souther.compiler.DefaultStdlib.get(), 
+        assertDoesNotThrow(() -> DischargeRules.bind(DefaultStdlib.get(), 
                 Map.of(op("List.reverse"), new ArgumentRef.At(0)),
                 Function.identity(), new ArgumentRef.TheContainer(),
                 (Type t) -> Question.holdsElements(t), "the container something is built from"));

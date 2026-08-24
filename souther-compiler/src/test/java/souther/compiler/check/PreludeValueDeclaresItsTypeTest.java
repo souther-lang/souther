@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.WrittenName;
@@ -34,7 +35,7 @@ class PreludeValueDeclaresItsTypeTest {
 
     @Test
     void everyShippedValueStatesItsType() {
-        for (Stdlib.Entry entry : souther.compiler.DefaultStdlib.get().entries().values()) {
+        for (Stdlib.Entry entry : DefaultStdlib.get().entries().values()) {
             if (entry.declaration().params().isEmpty()) {
                 assertNotNull(entry.signature().result(),
                         "`" + entry.declaration().name() + "` is a value with no stated type");

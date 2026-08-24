@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
@@ -77,7 +78,7 @@ class AReductionsShapeIsReadOffItsDeclarationTest {
     @Test
     void everyWalkWrittenDownIsOneTheQuestionIsAskedOf() {
         for (ValueName operation : Reductions.answered()) {
-            assertTrue(Question.REDUCTION.asksOfOperation(souther.compiler.DefaultStdlib.get(), operation.toString()),
+            assertTrue(Question.REDUCTION.asksOfOperation(DefaultStdlib.get(), operation.toString()),
                     operation + " has a rule and is not asked whether it is a walk");
         }
     }

@@ -1,5 +1,6 @@
 package souther.compiler.codegen;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.Type;
 
@@ -39,7 +40,7 @@ class KernelDescriptorsComeFromDeclarationsTest {
             if (!(entry.getValue() instanceof Intrinsics.RuntimeStatic kernel)) {
                 continue;
             }
-            Stdlib.Signature declared = souther.compiler.DefaultStdlib.get().intrinsic(entry.getKey()).signature();
+            Stdlib.Signature declared = DefaultStdlib.get().intrinsic(entry.getKey()).signature();
             for (int i = 0; i < declared.params().size(); i++) {
                 // An erased slot is passed as Object whatever arrives, which is what the declared
                 // type would give too, so the observed type cannot disagree there.

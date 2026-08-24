@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.stdlib.Stdlib;
+import souther.compiler.DefaultStdlib;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.frontend.CstFrontend;
@@ -44,9 +44,9 @@ class TheRecursiveHelpersAreAnsweredInDeclarationOrderTest {
 
     private static HelperTable tableOf(String source) {
         Ast.Module parsed = CstFrontend.parse(source);
-        Hir.Module resolved = Resolve.module(parsed, SyntaxSymbols.of(parsed, souther.compiler.DefaultStdlib.get()));
+        Hir.Module resolved = Resolve.module(parsed, SyntaxSymbols.of(parsed, DefaultStdlib.get()));
         return HelperTable.of(resolved.name(), HelperInliner.helpersOf(resolved),
-                Map.of(), Map.of(), InliningPolicy.FULL, souther.compiler.DefaultStdlib.get());
+                Map.of(), Map.of(), InliningPolicy.FULL, DefaultStdlib.get());
     }
 
     /** The module's own declarations, in the order the answer holds them. The shipped prelude has

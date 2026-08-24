@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.types.BinOp;
 import souther.compiler.ast.Hir;
 import souther.compiler.types.CoverageOrigin;
@@ -49,9 +50,9 @@ class OneValueIsOneLocationHoweverItWasSpelledTest {
         BindingId i = BINDERS.binder("i", POS).id();
         Location root = Location.of(i);
 
-        assertNotEquals(root, root.then(Type.INT, "n", Symbols.none(souther.compiler.DefaultStdlib.get())));
-        assertNotEquals(root.then(Type.INT, "n", Symbols.none(souther.compiler.DefaultStdlib.get())),
-                root.then(Type.INT, "m", Symbols.none(souther.compiler.DefaultStdlib.get())));
+        assertNotEquals(root, root.then(Type.INT, "n", Symbols.none(DefaultStdlib.get())));
+        assertNotEquals(root.then(Type.INT, "n", Symbols.none(DefaultStdlib.get())),
+                root.then(Type.INT, "m", Symbols.none(DefaultStdlib.get())));
     }
 
     @Test
@@ -67,6 +68,6 @@ class OneValueIsOneLocationHoweverItWasSpelledTest {
     }
 
     private static Location of(Core e) {
-        return Location.of(e, Symbols.none(souther.compiler.DefaultStdlib.get()), Location::of);
+        return Location.of(e, Symbols.none(DefaultStdlib.get()), Location::of);
     }
 }

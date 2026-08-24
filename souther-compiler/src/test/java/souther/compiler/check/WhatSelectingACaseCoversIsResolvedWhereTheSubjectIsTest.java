@@ -1,8 +1,8 @@
 package souther.compiler.check;
 
-import souther.compiler.stdlib.Stdlib;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.ast.Hir;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
@@ -51,7 +51,7 @@ class WhatSelectingACaseCoversIsResolvedWhereTheSubjectIsTest {
             """;
 
     private final Hir.Module module = resolved(MODULE);
-    private final Symbols symbols = TypeChecker.symbols(module, souther.compiler.DefaultStdlib.get());
+    private final Symbols symbols = TypeChecker.symbols(module, DefaultStdlib.get());
 
     @Test
     void aCaseThatIsASumCoversTheLeavesUnderIt() {

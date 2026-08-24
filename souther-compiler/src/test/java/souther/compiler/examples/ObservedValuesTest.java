@@ -2,6 +2,7 @@ package souther.compiler.examples;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.check.Symbols;
 import souther.compiler.observe.Limits;
 import souther.compiler.observe.ObservedValue;
@@ -28,7 +29,7 @@ class ObservedValuesTest {
     private static final Limits WIDE = new Limits(16, 10_000, 64, 1024);
 
     private static ObservedValue observe(Object live, Limits limits) {
-        Symbols symbols = Symbols.none(souther.compiler.DefaultStdlib.get());
+        Symbols symbols = Symbols.none(DefaultStdlib.get());
         return ObservedValues.of(live, symbols, new NeutralForm(symbols), limits);
     }
 

@@ -1,5 +1,6 @@
 package souther.compiler.jvm;
 
+import java.util.Set;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeKey;
 
@@ -33,11 +34,10 @@ public final class SoutherJvmAbi {
      * fault in this compiler and is held by
      * {@code EveryLanguageDeclarationHasAJvmImplementationTest}.
      */
-    private static final java.util.Set<String> PROVIDED_BY_THE_RUNTIME =
-            java.util.Set.of("RoundingMode");
+    private static final Set<String> PROVIDED_BY_THE_RUNTIME = Set.of("RoundingMode");
 
     /** Those, by the bare name the library declares them under. */
-    public static java.util.Set<String> providedByTheRuntime() {
+    public static Set<String> providedByTheRuntime() {
         return PROVIDED_BY_THE_RUNTIME;
     }
 
