@@ -88,7 +88,7 @@ class EveryDeclaredFormIsMeasuredAtItsOwnCoefficientsTest {
     void eachDrawsItsLineAtTheNumbersItWasDeclaredWith() {
         List<String> off = new ArrayList<>();
         MEASURED.forEach((operation, observed) -> {
-            List<String> drawn = labelsOf(observed.parameters(), observed.condition());
+            List<String> drawn = labelsOf(observed);
             if (!List.of(observed.label()).equals(drawn)) {
                 off.add(operation + ": " + observed.condition() + " draws " + drawn
                         + " and not [" + observed.label() + "]");
@@ -97,8 +97,16 @@ class EveryDeclaredFormIsMeasuredAtItsOwnCoefficientsTest {
         assertEquals(List.of(), off);
     }
 
-    private static List<String> labelsOf(String parameters, String condition) {
-        String model = """
+    /**
+     * The model one of these rules is measured in.
+     *
+     * <p>Beside the table rather than beside each reader of it. {@link
+     * ARowComposedForAPointIsWritableAndStandsAtItTest} asks its own question of these same models,
+     * and a second copy of this would be two models under one table — measured here and not there
+     * the moment either copy moved.
+     */
+    static String modelOf(Observation observed) {
+        return """
                 module demo
 
                 data Ok
@@ -109,8 +117,12 @@ class EveryDeclaredFormIsMeasuredAtItsOwnCoefficientsTest {
                     guard %s else No
                     Ok
                 }
-                """.formatted(parameters,
-                parameters.replaceAll(":\\s*[A-Za-z<>]+", ""), condition);
+                """.formatted(observed.parameters(),
+                observed.parameters().replaceAll(":\\s*[A-Za-z<>]+", ""), observed.condition());
+    }
+
+    private static List<String> labelsOf(Observation observed) {
+        String model = modelOf(observed);
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();

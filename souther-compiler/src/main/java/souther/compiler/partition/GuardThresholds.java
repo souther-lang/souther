@@ -641,31 +641,33 @@ public final class GuardThresholds {
     /**
      * The number an expression names and the order that number is read and written on.
      *
-     * @param term what the expression names
-     * @param on   the order it is counted on
+     * @param term  what the expression names
+     * @param order what it is counted on
      */
-    record Named(NumericTerm term, Carrier on) {}
+    record Named(NumericTerm term, Carrier order) {}
 
     /**
      * The same, or null where the expression names no number this can put an order under.
      *
-     * <p>The two together because every reader of one wants the other, and each of them is asked of
-     * the one place that answers it: which position an expression names is {@link #termOf}'s, and
-     * which order that position is read and written on is the reading of the declarations'
-     * ({@link InputDomain#carrierOf}). Nothing here looks at what the expression's own type is. A
-     * rule compares what an operation answered rather than the positions the arithmetic rewrote it
-     * into, so the operands of {@code Date.daysBetween(a, b) > 10} are whole numbers where its
-     * positions hold dates — and a reading that took the order off the comparison wrote both
-     * positions back as whole numbers, read them off a row as whole numbers, and agreed with itself
-     * about a border nothing could meet (#1018).
+     * <p>The two together because no reader of a line wants one without the other, and both readings
+     * of a comparison want them the same way round. Neither answer is made here: which position an
+     * expression names is {@link #termOf}'s and which order that position is counted on is the
+     * reading of the declarations' ({@link InputDomain#carrierOf}).
+     *
+     * <p>In particular the expression's own type is not read, here or anywhere a line is drawn. It
+     * would agree wherever a rule names its positions itself and disagree wherever an operation
+     * stands between them: the operands of {@code Date.daysBetween(a, b) > 10} are whole numbers
+     * where its positions hold dates. Taking the order off the comparison wrote both positions back
+     * as whole numbers and read them off a row as whole numbers, which agreed with itself about a
+     * border nothing could meet (#1018).
      */
     static Named namedBy(Core e, InputReads reads, Symbols symbols) {
         NumericTerm term = termOf(e, reads, symbols);
         if (term == null) {
             return null;
         }
-        Carrier on = reads.read().carrierOf(term, symbols);
-        return on == null ? null : new Named(term, on);
+        Carrier order = reads.read().carrierOf(term, symbols);
+        return order == null ? null : new Named(term, order);
     }
 
     private GuardThresholds() {}

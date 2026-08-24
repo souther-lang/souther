@@ -90,17 +90,49 @@ class TwoOrdersShareTheirCountsOrTheyDoNotTest {
                 shared, "the orders whose counts are one arithmetic");
     }
 
-    /** And the answer does not depend on which of the two is asked. */
+    /**
+     * The pairs a rule can compare two positions on, which is those and the one with no counts.
+     *
+     * <p>The question a reading of a comparison actually asks, and the reason the one above is not
+     * made reflexive to answer it. Two strings stand one above the other and no number apart, so the
+     * pair is here and is not up there — and a caller that measured how far apart they stand would
+     * be reading this answer as that one.
+     */
+    @Test
+    void theseOrdersCanBeComparedAgainstEachOther() {
+        List<String> compared = new ArrayList<>();
+        ORDERS.forEach((here, one) -> ORDERS.forEach((there, other) -> {
+            if (one.standsAgainst(other)) {
+                compared.add(here + "/" + there);
+            }
+        }));
+
+        assertEquals(List.of(
+                        "Int/Int", "Int/Decimal",
+                        "Decimal/Int", "Decimal/Decimal",
+                        "Date/Date",
+                        "DateTime/DateTime",
+                        "Time/Time",
+                        "Instant/Instant",
+                        "String/String",
+                        "Colour/Colour",
+                        "Size/Size"),
+                compared, "the orders a rule can compare two positions on");
+    }
+
+    /** And neither answer depends on which of the two is asked. */
     @Test
     void neitherOrderOfAPairAnswersDifferently() {
         List<String> disagreed = new ArrayList<>();
         ORDERS.forEach((here, one) -> ORDERS.forEach((there, other) -> {
-            if (one.sharesCountSpaceWith(other) != other.sharesCountSpaceWith(one)) {
+            if (one.sharesCountSpaceWith(other) != other.sharesCountSpaceWith(one)
+                    || one.standsAgainst(other) != other.standsAgainst(one)) {
                 disagreed.add(here + "/" + there);
             }
         }));
 
         assertEquals(List.of(), disagreed,
-                "sharing a count space is a fact about the pair, not about which one was asked");
+                "what two orders are to each other is a fact about the pair, not about which one"
+                        + " was asked");
     }
 }

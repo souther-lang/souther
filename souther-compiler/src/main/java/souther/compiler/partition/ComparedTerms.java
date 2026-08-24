@@ -25,16 +25,19 @@ import java.util.Map;
  * {@code ensures} draw the same line between the same two positions; what differs is what meeting it
  * takes, and that is the origin's to answer rather than this one's.
  *
- * <p>Asked of the carrier and not of the type. Two operands compare only when they are of one type,
- * and a type is not what makes a line measurable: an enumeration's case is comparable on its sum's
- * order while carrying no places of its own, and two newtypes of one base are two types whose values
- * are ordered alike. What both sides can be read as is the carrier, so that is what is asked about.
+ * <p>Asked of the orders and not of the types. A type is not what makes a line measurable: an
+ * enumeration's case is comparable on its sum's order while carrying no places of its own, and two
+ * newtypes of one base are two types whose values are ordered alike. What both positions can be read
+ * as is the order, so that is what is asked about — and what is asked of the pair is that their
+ * counts are one arithmetic, which is narrower than their being one order and wider than their being
+ * one type.
  *
- * <p><b>Of the positions' carriers, and never of the operands'.</b> The two agree wherever a rule
- * names its positions itself, and part company the moment an operation stands between them: the
- * operands of {@code Date.daysBetween(a, b) > 10} are whole numbers and its positions hold dates.
- * Read off the comparison, both positions were written back and read off a row as whole numbers, and
- * the border could be met by no row and composed for by none (#1018).
+ * <p><b>The positions' orders, and never the operands'.</b> The two agree wherever a rule names its
+ * positions itself, and part company the moment an operation stands between them: the operands of
+ * {@code Date.daysBetween(a, b) > 10} are whole numbers and its positions hold dates. Read off the
+ * comparison, both positions were written back and read off a row as whole numbers, and the border
+ * could be met by no row and composed for by none (#1018). Nothing here reads an operand's type, and
+ * the guard that used to — the two operands being of one order — was about neither position.
  *
  * @param holdsAtTheLine whether the line's own values satisfy the comparison, which is what tells
  *                       {@code <} from {@code <=} and is the whole of what the row on the line shows
@@ -64,7 +67,8 @@ record ComparedTerms(NumericTerm on, NumericTerm against, Map<NumericTerm, Carri
             GuardThresholds.Named against =
                     GuardThresholds.namedBy(comparison.right(), reads, symbols);
             Map<NumericTerm, Carrier> carriers = on == null || against == null ? null
-                    : aDistanceBetween(on.term(), on.on(), against.term(), against.on());
+                    : aDistanceBetween(on.term(), on.order(),
+                            against.term(), against.order());
             if (carriers != null) {
                 // The subject is the one the author wrote on the left, which the canonical form
                 // keeps too. Which of the two a line is named by is not something to derive where
@@ -81,12 +85,16 @@ record ComparedTerms(NumericTerm on, NumericTerm against, Map<NumericTerm, Carri
      * The two positions on the orders they are read and written on, or null where they are not two
      * positions a distance runs between.
      *
-     * <p>Three things make them one, and each of them is refused here rather than further down. One
-     * position is not two, and {@code a > a} names one twice — read as a distance it would be a line
-     * at nowhere between a position and itself. A position this reading has no order for is one
-     * nothing can be written at. And two orders that share no counts have no difference: a whole
-     * number of days and a whole number is not a number of anything, so such a pair is left to be
-     * read as the form it is, which carries the conversion in its coefficients.
+     * <p>Three things make them one, and each of them is a classification rather than a complaint:
+     * a pair refused here is read as whatever it is instead, and an arithmetic form is what it is
+     * instead. One position is not two, and {@code a > a} names one twice. A position this reading
+     * has no order for is one nothing can be written at. And two orders that share no counts have no
+     * difference — a whole number of days and a whole number is not a number of anything — so such a
+     * pair is left to the form it is, which carries the conversion in its coefficients.
+     *
+     * <p>Whether two orders make such a pair is {@link Carrier#standsAgainst}'s to say, and it is
+     * what refuses a distance built out of a pair that is not one. Classifying and refusing are two
+     * jobs and one rule, so the rule is in one place and neither writes it out again.
      *
      * <p>Which is why the answer is a carrier apiece and not one for the pair. A distance between
      * two positions written back differently — a decimal against a whole number is the pair that
@@ -94,13 +102,8 @@ record ComparedTerms(NumericTerm on, NumericTerm against, Map<NumericTerm, Carri
      */
     private static Map<NumericTerm, Carrier> aDistanceBetween(NumericTerm on, Carrier here,
                                                               NumericTerm against, Carrier there) {
-        if (on == null || against == null || here == null || there == null || on.equals(against)) {
-            return null;
-        }
-        // One order, or two whose counts are the same numbers. The first admits the pair that has no
-        // counts at all: two strings stand no measurable distance apart and still stand one above
-        // the other, which is a line this reading keeps.
-        if (!here.equals(there) && !here.sharesCountSpaceWith(there)) {
+        if (on == null || against == null || here == null || there == null
+                || on.equals(against) || !here.standsAgainst(there)) {
             return null;
         }
         Map<NumericTerm, Carrier> both = new LinkedHashMap<>();
@@ -129,17 +132,20 @@ record ComparedTerms(NumericTerm on, NumericTerm against, Map<NumericTerm, Carri
         if (two == null) {
             return null;
         }
-        // Here the orders come from the reading of the declarations and from nowhere else. A term
-        // the arithmetic produced has no expression that names it, so there is nothing to take a
-        // type off — which is the whole of what went wrong when one was taken off the comparison.
-        Map<NumericTerm, Carrier> carriers = aDistanceBetween(
-                two[0], reads.read().carrierOf(two[0], symbols),
-                two[1], reads.read().carrierOf(two[1], symbols));
-        // And here the counts are asked for, which the reading above does not ask. A form holds the
-        // two apart by a number it read off the rule, and a number of nothing is not a distance —
-        // where the pair meets is the only place such a rule could cut, and that is the line the
-        // reading above draws.
-        if (carriers == null || !carriers.get(two[0]).counts()) {
+        // The orders come from the reading of the declarations, the way they do above. A term the
+        // arithmetic produced has no expression naming it, so there is not even a type here to take
+        // one off — which is the whole of what went wrong when one was taken off the comparison.
+        Carrier here = reads.read().carrierOf(two[0], symbols);
+        Carrier there = reads.read().carrierOf(two[1], symbols);
+        // And the counts are asked for, which the reading above does not ask. A form holds the two
+        // apart by a number it read off the rule, and a number of nothing is not a distance — where
+        // the pair meets is the only place such a rule could cut, and that is the line the reading
+        // above draws. Of either order, since a pair that shares its counts has them or has neither.
+        if (here == null || !here.counts()) {
+            return null;
+        }
+        Map<NumericTerm, Carrier> carriers = aDistanceBetween(two[0], here, two[1], there);
+        if (carriers == null) {
             return null;
         }
         ComparisonClaim.Cut cut = (ComparisonClaim.Cut) read.claim();

@@ -232,6 +232,23 @@ public sealed interface Carrier {
     }
 
     /**
+     * Whether a value on this order stands somewhere relative to a value on that one.
+     *
+     * <p>What a rule comparing two positions needs of the orders they are written back on, and the
+     * whole of it. Where the counts are one arithmetic the two stand a number apart; where the order
+     * is one and has no counts at all they stand above or below or level, which is a comparison and
+     * is not a distance. Both are lines a model draws and neither is a claim the other makes.
+     *
+     * <p>Written as the second disjunct rather than by making {@link #sharesCountSpaceWith}
+     * reflexive. A string shares its counts with nothing because it has none, and saying otherwise
+     * to make one caller shorter would leave that one meaning two things — the pair that has no
+     * number between them is exactly the pair a caller must not go on to measure.
+     */
+    default boolean standsAgainst(Carrier other) {
+        return sharesCountSpaceWith(other) || (equals(other) && !counts());
+    }
+
+    /**
      * Whether both carriers' counts are numbers of one origin and one scale, so that subtracting one
      * from the other with coefficients of one and minus one names a distance without converting
      * anything.

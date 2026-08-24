@@ -113,7 +113,7 @@ class ARowComposedForAPointIsWritableAndStandsAtItTest {
      */
     private static void forEachComposedRow(OfAComposedRow held) {
         EveryDeclaredFormIsMeasuredAtItsOwnCoefficientsTest.MEASURED.forEach((operation, observed) -> {
-            String model = modelOf(observed);
+            String model = EveryDeclaredFormIsMeasuredAtItsOwnCoefficientsTest.modelOf(observed);
             PartitionEvidence measured = measured(model);
             for (BorderAssessment border : measured.boundaries()) {
                 border.items().forEach((role, item) -> {
@@ -139,7 +139,7 @@ class ARowComposedForAPointIsWritableAndStandsAtItTest {
     /** Whether the point is met, read off the item rather than out of a report's text. */
     private static boolean met(PartitionEvidence evidence, String point) {
         for (BorderAssessment border : evidence.boundaries()) {
-            for (Map.Entry<?, ? extends ItemAssessment> each : border.items().entrySet()) {
+            for (Map.Entry<PointRole, ItemAssessment> each : border.items().entrySet()) {
                 if (!point.equals(border.label() + " " + each.getKey())) {
                     continue;
                 }
@@ -164,24 +164,6 @@ class ARowComposedForAPointIsWritableAndStandsAtItTest {
             }
         }
         return said;
-    }
-
-    /** The model a rule over one operation is measured in, which is the one beside this. */
-    private static String modelOf(
-            EveryDeclaredFormIsMeasuredAtItsOwnCoefficientsTest.Observation observed) {
-        return """
-                module demo
-
-                data Ok
-                data No
-
-                behavior f : (%s) -> Ok | No
-                let f (%s) = {
-                    guard %s else No
-                    Ok
-                }
-                """.formatted(observed.parameters(),
-                observed.parameters().replaceAll(":\\s*[A-Za-z<>]+", ""), observed.condition());
     }
 
     private static PartitionEvidence measured(String source) {

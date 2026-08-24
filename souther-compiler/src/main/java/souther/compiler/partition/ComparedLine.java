@@ -55,14 +55,14 @@ record ComparedLine(NumericTerm term, Place value, Carrier carrier,
                            Symbols symbols) {
         BinOp op = comparison.op();
         GuardThresholds.Named named = GuardThresholds.namedBy(comparison.left(), reads, symbols);
-        Place value = named == null ? null : named.on().literalOf(comparison.right(), symbols);
+        Place value = named == null ? null : named.order().literalOf(comparison.right(), symbols);
         if (named == null || value == null) {
             named = GuardThresholds.namedBy(comparison.right(), reads, symbols);
-            value = named == null ? null : named.on().literalOf(comparison.left(), symbols);
+            value = named == null ? null : named.order().literalOf(comparison.left(), symbols);
             op = mirrored(op);
         }
         NumericTerm term = named == null ? null : named.term();
-        Carrier carrier = named == null ? null : named.on();
+        Carrier carrier = named == null ? null : named.order();
         if (term == null || value == null) {
             // Nothing here is a position against a value the carrier writes. It may still be a
             // statement about one position: `a + 1 <= 10` and `a <= b - b + 9` are both `a <= 9`,

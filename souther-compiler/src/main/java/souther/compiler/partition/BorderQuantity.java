@@ -163,9 +163,9 @@ public sealed interface BorderQuantity {
             }
             Carrier here = carriers.get(on);
             Carrier there = carriers.get(against);
-            if (!here.equals(there) && !here.sharesCountSpaceWith(there)) {
-                throw new IllegalArgumentException("a distance is a number both orders count in,"
-                        + " and these share none: " + here + " against " + there);
+            if (!here.standsAgainst(there)) {
+                throw new IllegalArgumentException("a distance is between two orders a value of"
+                        + " one stands somewhere on: " + here + " against " + there);
             }
         }
 
