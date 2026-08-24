@@ -98,6 +98,25 @@ public interface LevelSpace {
     }
 
     /**
+     * Whether this order can be parted at {@code level} at all, which is not whether the quantity
+     * takes it.
+     *
+     * <p>Two different questions, and a rule may cut where the quantity has nothing: {@code 2 * a
+     * <= 9} parts the even numbers between eight and ten and nine is not one of them, so the line
+     * is real and {@link #attainable} is false. What this asks is whether the order has a place
+     * there for a line to be — and an order whose only number is where two positions meet has one
+     * place and no others, so a line three apart on it is a line nowhere.
+     *
+     * <p>True by default, because an order that counts is parted anywhere: a level it does not take
+     * still falls between two it does. Asked of the order rather than worked out by whoever holds
+     * the carrier, which is what made a reader guard on the carrier counting — a property of the
+     * values standing in for a property of the places.
+     */
+    default boolean canCutAt(Level level) {
+        return true;
+    }
+
+    /**
      * The nearest level the quantity can take at or past {@code from}, the way {@code towards} says,
      * or empty where the order names none there.
      *
@@ -473,6 +492,17 @@ public interface LevelSpace {
                 return Witness.of(inspect(run).end(from));
             }
 
+            /**
+             * Where they meet, and nowhere else.
+             *
+             * <p>The one place this order has a number for. A rule holding two strings three apart
+             * asks for a line at a distance the order has no place for at all, which is not a line
+             * this compiler could not find — there is none.
+             */
+            @Override
+            public boolean canCutAt(Level level) {
+                return Counting.countOf(level).at().signum() == 0;
+            }
         };
     }
 

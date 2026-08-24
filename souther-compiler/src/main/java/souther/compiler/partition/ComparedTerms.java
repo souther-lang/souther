@@ -60,8 +60,7 @@ record ComparedTerms(NumericTerm on, NumericTerm against, Map<NumericTerm, Carri
      * <p>An equality is not one of these. {@code a == b} puts the whole of one arm on the line, and
      * that arm is already a row the branch measure asks for.
      */
-    static ComparedTerms of(Core.Binary comparison, AffineReading read, InputReads reads,
-                            Symbols symbols) {
+    static ComparedTerms asWritten(Core.Binary comparison, InputReads reads, Symbols symbols) {
         if (ordersStrictly(comparison.op())) {
             GuardThresholds.Named on = GuardThresholds.namedBy(comparison.left(), reads, symbols);
             GuardThresholds.Named against =
@@ -78,7 +77,7 @@ record ComparedTerms(NumericTerm on, NumericTerm against, Map<NumericTerm, Carri
                         holdsAtTheLine(comparison.op()) == !onIsAbove(comparison.op()), Count.ZERO);
             }
         }
-        return fromTheForm(read, reads, symbols);
+        return null;
     }
 
     /**
@@ -123,8 +122,8 @@ record ComparedTerms(NumericTerm on, NumericTerm against, Map<NumericTerm, Carri
      * where they meet is not where that rule cuts — read as a line at zero it would ask for a pair
      * that proves nothing about it.
      */
-    private static ComparedTerms fromTheForm(AffineReading read, InputReads reads,
-                                             Symbols symbols) {
+    static ComparedTerms fromTheForm(AffineReading read, InputReads reads,
+                                     Symbols symbols) {
         if (read == null || !read.orders()) {
             return null;
         }
@@ -137,11 +136,12 @@ record ComparedTerms(NumericTerm on, NumericTerm against, Map<NumericTerm, Carri
         // one off — which is the whole of what went wrong when one was taken off the comparison.
         Carrier here = reads.read().carrierOf(two[0], symbols);
         Carrier there = reads.read().carrierOf(two[1], symbols);
-        // And the counts are asked for, which the reading above does not ask. A form holds the two
-        // apart by a number it read off the rule, and a number of nothing is not a distance — where
-        // the pair meets is the only place such a rule could cut, and that is the line the reading
-        // above draws. Of either order, since a pair that shares its counts has them or has neither.
-        if (here == null || !here.counts()) {
+        // Whether the order has a place at the number the rule wrote is the order's own answer and
+        // is asked where the quantity is built ({@link LevelSpace#canCutAt}). Asked here as "do
+        // these counts count", a property of the values stood in for a property of the places: two
+        // strings stand no measurable distance apart and are still one above the other, so the
+        // place they meet is a line — and this refused it, leaving the spelling to draw one.
+        if (here == null) {
             return null;
         }
         Map<NumericTerm, Carrier> carriers = aDistanceBetween(two[0], here, two[1], there);
