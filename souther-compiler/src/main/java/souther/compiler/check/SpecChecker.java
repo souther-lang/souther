@@ -484,9 +484,10 @@ public final class SpecChecker {
     }
 
     /**
-     * A member of an output union lays its fields flatly beside the `"type"` discriminator the union
-     * writes (spec §jvm-anonymous-union), so a member declaring a field of that name and the tag want one key. The
-     * same rule a sum's cases are under, asked of the signature so a composition is subject to it too.
+     * A member of an output union lays its fields flatly beside the discriminator the union writes
+     * (spec §jvm-anonymous-union), so a member declaring a field of that name and the tag want one
+     * key. The same rule a sum's cases are under, asked of the signature so a composition is subject
+     * to it too. Which key that is, is {@code Boundary}'s and is not named again here.
      */
     static void checkUnionMemberFields(Hir.Module module, Map<String, Sig> sigs, Symbols symbols) {
         for (Hir.BehaviorDef b : module.behaviors()) {
