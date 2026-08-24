@@ -27,9 +27,45 @@ public sealed interface ItemAssessment {
     /** No row is owed here, and this is what settles it. */
     record NotOwed(NotOwedReason reason) implements ItemAssessment {}
 
-    /** A row is owed, and this is what became of it. */
-    record Owed(Criterion criterion, Measurement<Coverage> coverage, Writability writability,
-                Attempt attempt) implements ItemAssessment {}
+    /**
+     * A row is owed, and this is what became of it.
+     *
+     * @param provenByProjection whether the rules reaching the value this point sits in were read in
+     *                           full and leave the point inside what they admit. What the rules say
+     *                           on their own, so it is settled without building anything and stays
+     *                           true whatever a search afterwards makes of the point
+     */
+    record Owed(Criterion criterion, Measurement<Coverage> coverage, boolean provenByProjection,
+                Attempt attempt) implements ItemAssessment {
+
+        /**
+         * What says a row can be written here: the verdict, over the evidence there is.
+         *
+         * <p>Derived and not held. It was a field beside {@link #attempt}, and the two are not
+         * independent — {@code WitnessedByConstruction} is what {@code attempt instanceof Built}
+         * means — so they were one fact kept twice and a producer could set them apart.
+         *
+         * <p>The strongest evidence already in hand first. A row at the value went through the
+         * decoder, which is the whole of what writable means, and costs nothing to read. Then the
+         * value that was built, which went through the same decoder. Then the projection, which
+         * stands behind both rather than in front of them: where it read every rule it proves the
+         * edge inhabited whatever the search made of the particular candidates it tried.
+         *
+         * <p>Which is where the asymmetry lives. A refusal and an attempt nobody made leave the same
+         * verdict, because nothing a search does is evidence against — so composing later can add a
+         * witness and can never take one away.
+         */
+        public Writability writability() {
+            if (Coverage.hit(coverage)) {
+                return new Writability.WitnessedByRow();
+            }
+            if (attempt instanceof Attempt.Built) {
+                return new Writability.WitnessedByConstruction();
+            }
+            return provenByProjection ? new Writability.ProvenByProjection()
+                    : new Writability.Unknown();
+        }
+    }
 
     /**
      * Whether a row is at this point, and whether that could be told.

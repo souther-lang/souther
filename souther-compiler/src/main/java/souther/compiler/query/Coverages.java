@@ -671,7 +671,7 @@ final class Coverages {
                     ItemAssessment.Attempt attempt = whereOneIsWorthBuilding(coverage,
                             () -> shape.search(owed.criterion(), border.label(role)));
                     yield new ItemAssessment.Owed(owed.criterion(), coverage,
-                            writabilityOf(coverage, shape.provenWritable(), attempt), attempt);
+                            shape.provenWritable(), attempt);
                 }
             });
         }
@@ -1099,35 +1099,6 @@ final class Coverages {
         ItemAssessment.Coverage seen = new ItemAssessment.Coverage.NoHit();
         return by.isEmpty() ? new Measurement.Complete<>(seen)
                 : new Measurement.Partial<>(seen, WeakeningSet.ofAll(by));
-    }
-
-    /**
-     * What says a row can be written at one boundary: the verdict, over the evidence there is.
-     *
-     * <p>The strongest evidence already in hand first. A row at the value went through the decoder,
-     * which is the whole of what writable means, and costs nothing to read. Then the value that was
-     * built, which went through the same decoder. Then the projection, which stands behind both rather
-     * than in front of them: where it read every rule it proves the edge inhabited whatever the search
-     * made of the particular candidates it tried.
-     *
-     * <p>Only the verdict is decided here. What was tried and what came of it is the attempt's to
-     * say, and it is kept whether or not it changed this answer — an edge the projection proves is one
-     * a search can still fail to reach, and a reader that had only this could not tell that it had.
-     */
-    private static ItemAssessment.Writability writabilityOf(
-            Measurement<ItemAssessment.Coverage> coverage, boolean knownWritable,
-            ItemAssessment.Attempt attempt) {
-        if (ItemAssessment.Coverage.hit(coverage)) {
-            return new ItemAssessment.Writability.WitnessedByRow();
-        }
-        if (attempt instanceof ItemAssessment.Attempt.Built) {
-            return new ItemAssessment.Writability.WitnessedByConstruction();
-        }
-        // A refusal and an attempt nobody made leave the same verdict, and a projection that read
-        // every rule proves what neither of them found. Which is where the asymmetry lives: nothing
-        // a search does can take a proof away, because nothing a search does is evidence against.
-        return knownWritable ? new ItemAssessment.Writability.ProvenByProjection()
-                : new ItemAssessment.Writability.Unknown();
     }
 
     /**
