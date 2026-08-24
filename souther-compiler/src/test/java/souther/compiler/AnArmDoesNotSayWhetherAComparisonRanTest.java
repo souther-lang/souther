@@ -154,7 +154,7 @@ coverageOf(linesFor("-1", "100000", "Manual"), "gate/r.cost", "100000").made().o
         assertNotNull(branches, "the model under test compiles");
 
         assertEquals(List.of("then", "else"),
-                branches.get("gate").all().stream()
+                branches.get("gate").arms().all().stream()
                         .map(souther.compiler.report.ArmVocabulary::label).toList());
     }
 }

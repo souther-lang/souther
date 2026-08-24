@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import souther.compiler.query.ItemAssessment;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.numeric.Count;
@@ -91,7 +90,7 @@ class ARunBoundedAtBothEndsIsLookedInsideTest {
         BorderAssessment after = bordersOf(cut("2") + "    | \"inside\" : (" + offered
                 + ") -> No { why = 1 }\n").get("3 * n = 1");
         assertNotNull(after);
-        assertTrue(ItemAssessment.Coverage.hit(after.owedAt(PointRole.IN).coverage()),
+        assertTrue(after.owedAt(PointRole.IN).hasRowWitness(),
                 "the row offered for the run is a row inside it: " + offered);
     }
 

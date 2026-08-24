@@ -1,6 +1,5 @@
 package souther.compiler;
 
-import souther.compiler.query.ItemAssessment;
 import souther.compiler.report.AdequacyReport;
 import org.junit.jupiter.api.Test;
 
@@ -103,7 +102,7 @@ class CompileExampleBoundaryTest {
                     | (Draft { cost = Amount(50) }) -> Submitted
                 """);
         BorderAssessment.Point zero = at(away, "0").get(0);
-        assertFalse(ItemAssessment.Coverage.hit(zero.owed().coverage()));
+        assertFalse(zero.owed().hasRowWitness());
         assertEquals(MeasurementStatus.COMPLETE, AdequacyReport.statusOf(zero.item().weakeningSource()));
         assertTrue(zero.border().rule().named().startsWith("invariant"),
                 zero.border().rule().named());
@@ -113,7 +112,7 @@ class CompileExampleBoundaryTest {
                 example submit
                     | (Draft { cost = Amount(0) }) -> Submitted
                 """);
-        assertTrue(ItemAssessment.Coverage.hit(at(edge, "0").get(0).owed().coverage()),
+        assertTrue(at(edge, "0").get(0).owed().hasRowWitness(),
                 "a row is written at the edge");
     }
 
@@ -128,7 +127,7 @@ class CompileExampleBoundaryTest {
 
         BorderAssessment.Point hundred = at(evidence, "100").get(0);
         assertEquals(MeasurementStatus.COMPLETE, AdequacyReport.statusOf(hundred.item().weakeningSource()));
-        assertTrue(ItemAssessment.Coverage.hit(hundred.owed().coverage()),
+        assertTrue(hundred.owed().hasRowWitness(),
                 "the row wrote 100 and the guard compared it");
         assertTrue(hundred.border().rule().isWrittenRatherThanNamed(),
                 hundred.border().rule().named());
@@ -173,8 +172,8 @@ class CompileExampleBoundaryTest {
 
         assertEquals(MeasurementStatus.COMPLETE, AdequacyReport.statusOf(second.item().weakeningSource()),
                 "the arms were measured");
-        assertFalse(ItemAssessment.Coverage.hit(second.owed().coverage()), "no row was ever compared against 100");
-        assertFalse(ItemAssessment.Coverage.hit(first.owed().coverage()), "and the row wrote -1, not 0");
+        assertFalse(second.owed().hasRowWitness(), "no row was ever compared against 100");
+        assertFalse(first.owed().hasRowWitness(), "and the row wrote -1, not 0");
     }
 
     @Test

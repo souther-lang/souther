@@ -65,9 +65,9 @@ class ARuleIsWhatItSaysAfterTheCallSiteHasSaidItsPartTest {
                         : ([ Person { age = Age(20) }, Person { age = Age(10) } ], [ ]) -> Count(1)
                 """);
 
-        assertEquals(4, twice.obligations(), "two thresholds, two arms each");
-        assertEquals(2, twice.coveredObligations(),
-                () -> "and only the first threshold's: " + twice.unreached());
+        assertEquals(4, twice.arms().obligations(), "two thresholds, two arms each");
+        assertEquals(2, twice.arms().coveredObligations(),
+                () -> "and only the first threshold's: " + twice.unreached().orElseThrow());
     }
 
     /** A comparison a predicate binds to a name before answering with it is still what it decides. */
@@ -97,9 +97,9 @@ class ARuleIsWhatItSaysAfterTheCallSiteHasSaidItsPartTest {
                         : ([ Person { age = Age(20) }, Person { age = Age(10) } ], [ ]) -> Count(1)
                 """);
 
-        assertEquals(4, twice.obligations(), "two predicates, two arms each");
-        assertEquals(2, twice.coveredObligations(),
-                () -> "and only the first's: " + twice.unreached());
+        assertEquals(4, twice.arms().obligations(), "two predicates, two arms each");
+        assertEquals(2, twice.arms().coveredObligations(),
+                () -> "and only the first's: " + twice.unreached().orElseThrow());
     }
 
     /**
@@ -134,7 +134,7 @@ class ARuleIsWhatItSaysAfterTheCallSiteHasSaidItsPartTest {
                         : (Person { active = true, retired = false }) -> No
                 """);
 
-        assertEquals(6, both.obligations(),
+        assertEquals(6, both.arms().obligations(),
                 "the two calls decide different things, and the fork above them is its own");
     }
 
@@ -165,8 +165,8 @@ class ARuleIsWhatItSaysAfterTheCallSiteHasSaidItsPartTest {
                     | "both grown" : (Person { age = Age(20) }, Person { age = Age(30) }) -> Yes
                 """);
 
-        assertEquals(4, both.obligations(),
+        assertEquals(4, both.arms().obligations(),
                 () -> "the helper's two calls are one arm, beside the fork that calls them: "
-                        + both.all().size() + " occurrences");
+                        + both.arms().all().size() + " occurrences");
     }
 }

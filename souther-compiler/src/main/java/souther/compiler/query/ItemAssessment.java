@@ -57,13 +57,37 @@ public sealed interface ItemAssessment {
          * was repeating what its own input already held.
          */
         public boolean worthSearching() {
-            if (Coverage.hit(coverage)) {
+            if (hasRowWitness()) {
                 return false;
             }
             return coverage instanceof Measurement.Complete<Coverage> whole
                             && whole.value() instanceof Coverage.NoHit
                     || coverage instanceof Measurement.NotMeasured<Coverage> none
                             && none.why() == Coverage.NotAsked.NO_ROWS;
+        }
+
+        /**
+         * Whether a row this compilation observed stands at the point.
+         *
+         * <p>Not the coverage measurement's answer, and named so it cannot be read as one. A row
+         * that was seen at the point is evidence — of the point being writable, of there being
+         * nothing left to search for — and evidence is what this collects. {@code false} is the
+         * absence of that evidence and is never {@code NoHit}: a measurement nobody made has no row
+         * to show and says nothing about whether one is there.
+         *
+         * <p>Read over the states rather than through {@code made()}, so that the {@code false} the
+         * two value-less arms give is written where it can be read as what it is, and so that a
+         * state added to {@link Measurement} arrives here as a compile error rather than as a
+         * silent {@code false}.
+         */
+        public boolean hasRowWitness() {
+            return switch (coverage) {
+                case Measurement.Complete<Coverage> it -> Coverage.hit(it.value());
+                case Measurement.Partial<Coverage> it -> Coverage.hit(it.value());
+                // No value, so no row was seen here. Not a finding that none is.
+                case Measurement.NotMeasured<Coverage> _,
+                     Measurement.FailedToMeasure<Coverage> _ -> false;
+            };
         }
 
         /** The same point, with what a search of it came to. */
@@ -93,7 +117,7 @@ public sealed interface ItemAssessment {
          * witness and can never take one away.
          */
         public Writability writability() {
-            if (Coverage.hit(coverage)) {
+            if (hasRowWitness()) {
                 return new Writability.WitnessedByRow();
             }
             if (attempt instanceof Attempt.Built) {
@@ -153,8 +177,19 @@ public sealed interface ItemAssessment {
             ARMS_UNREADABLE
         }
 
-        static boolean hit(Measurement<Coverage> coverage) {
-            return coverage.made().orElse(null) instanceof Hit;
+        /**
+         * Whether this is a row at the point.
+         *
+         * <p>Asked of the value and never of the measurement around it. It used to take a
+         * {@code Measurement<Coverage>} and answer {@code false} for all three of {@code
+         * Complete(NoHit)}, a measurement nobody made and one that could not be finished — so the
+         * one answer the rows established and the two states with no answer at all came out as the
+         * same boolean, and a document writing it said no row was at a point nothing had looked at
+         * (issue #997). What has no value has no answer here, and a caller wanting one for a
+         * measurement asks {@link Owed#hasRowWitness()}, which is a different question.
+         */
+        static boolean hit(Coverage coverage) {
+            return coverage instanceof Hit;
         }
     }
 
