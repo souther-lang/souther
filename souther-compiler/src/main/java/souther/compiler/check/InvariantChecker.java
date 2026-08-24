@@ -416,7 +416,8 @@ public final class InvariantChecker {
      *                 that is not its own
      */
     record Seeded(ConstraintState<FactSubject> constraints, Map<String, FactSubject> atoms, Map<String, FactSubject> keys,
-                  Map<String, FactSubject> held, Reading reading, ReadingEvidence took,
+                  Map<String, FactSubject> held, Map<String, ValueName> heldBy,
+                  Reading reading, ReadingEvidence took,
                   boolean everyClauseRead, Set<String> notGathered,
                   Set<String> unreadOfEveryValue,
                   Map<RuleRef, Map<Core, PartRead>> readBy,
@@ -435,6 +436,7 @@ public final class InvariantChecker {
          *  every position, since nothing here knows which of them the rules were about. */
         static Seeded nothingRead() {
             return new Seeded(ConstraintState.<FactSubject>top(), Map.of(), Map.of(), Map.of(),
+                    Map.of(),
                     new Reading(List.of(), List.of(), Map.of(), Map.of(), Map.of()),
                     new ReadingEvidence(),
                     false, Set.of(FieldDomains.THE_VALUE), Set.of(FieldDomains.THE_VALUE),
@@ -610,6 +612,7 @@ public final class InvariantChecker {
             Map<String, FactSubject> atoms = new LinkedHashMap<>();
             Map<String, Type> typeAt = new LinkedHashMap<>();
             Map<String, FactSubject> held = new LinkedHashMap<>();
+            Map<String, ValueName> heldBy = new LinkedHashMap<>();
             Map<String, FactSubject> keys = new LinkedHashMap<>();
             for (Map.Entry<String, BindingId> field : bindings.entrySet()) {
                 Type type = fields.get(field.getKey());
@@ -619,7 +622,7 @@ public final class InvariantChecker {
                     // record inside a newtype was filed one step deeper than anything asks for.
                     c.name(new Core.Read(field.getKey(), field.getValue(), type, NOWHERE),
                             data.newtype() ? "" : field.getKey(), type, at, symbols, 1,
-                            atoms, typeAt, held, keys);
+                            atoms, typeAt, held, heldBy, keys);
                 }
             }
             // Which values each position is left, off the clauses the walk reached. What reached this
@@ -695,8 +698,16 @@ public final class InvariantChecker {
                 // taken of it. Two coordinates at one path and two atoms: a reading that resolved
                 // only the first left a rule over two counts unconditioned while the same rule was
                 // read whole when it was asked about.
-                FactSubject atom = where.measured()
-                        ? held.get(where.path()) : atoms.get(where.path());
+                FactSubject atom = switch (where.kind()) {
+                    case FieldDomains.CoordinateKind.OfItsOwnValue _ -> atoms.get(where.path());
+                    // A count and nothing else. What a clause of a value has words for is the
+                    // position and how much it holds; a number some other operation answers of the
+                    // same location is a quantity the declarations never mention, so what they say
+                    // about it is nothing rather than whatever stands in the count's slot (#1027).
+                    case FieldDomains.CoordinateKind.OfWhatAnOperationAnswers taken ->
+                            NumericMeasures.isMeasure(taken.operation())
+                                    ? held.get(where.path()) : null;
+                };
                 if (atom == null) {
                     continue;
                 }
@@ -707,7 +718,7 @@ public final class InvariantChecker {
                 }
                 constraints = ConstraintState.settling(constraints, atom, each.getValue(), spaced);
             }
-            return new Seeded(constraints, atoms, keys, held, reading, took, read,
+            return new Seeded(constraints, atoms, keys, held, Map.copyOf(heldBy), reading, took, read,
                     Set.copyOf(notGathered), unreadOfEveryValue, readBy, Map.copyOf(spacing));
         } catch (RuntimeException why) {
             gaveUp("seedFields " + named.name(), why);
@@ -738,7 +749,8 @@ public final class InvariantChecker {
      */
     private void name(Core value, String path, Type type, Denotations at, Symbols symbols,
                       int depth, Map<String, FactSubject> atoms, Map<String, Type> typeAt,
-                      Map<String, FactSubject> held, Map<String, FactSubject> keys) {
+                      Map<String, FactSubject> held, Map<String, ValueName> heldBy,
+                      Map<String, FactSubject> keys) {
         // What the position is called, and the atom it is. Asked together, because where a position
         // is a number the domain carries the two are one identity read once — and this asks it of
         // every level of a chain, so reading it twice costs more than the chain is long.
@@ -763,6 +775,13 @@ public final class InvariantChecker {
         FactSubject counted = terms.takenAtomOf(value, type, at);
         if (counted != null) {
             held.put(path, counted);
+            // And which operation that count is of. What the clauses of a value have words for is
+            // the position and how much it holds, and the second of those is one operation — the one
+            // that counts what the position's type holds. Kept beside the atom rather than left to
+            // be worked out again wherever a coordinate is named: a count and a number some other
+            // operation answers of the same location are two quantities, and a coordinate that
+            // recorded only "not the value" brought them to one name (#1027).
+            heldBy.put(path, NumericMeasures.takenOf(type, symbols));
         }
         // Through the names, to the value that has the fields. Each is read at the path it is worn
         // under, since wearing a name is not being somewhere else. How far the names reach is
@@ -785,7 +804,7 @@ public final class InvariantChecker {
         for (Map.Entry<String, Type> field : clauses.fieldsOf(data).entrySet()) {
             name(new Core.FieldAccess(inner, field.getKey(), field.getValue(), NOWHERE),
                     GuaranteeWalk.under(path, field.getKey()), field.getValue(), at, symbols, depth + 1,
-                    atoms, typeAt, held, keys);
+                    atoms, typeAt, held, heldBy, keys);
         }
     }
 

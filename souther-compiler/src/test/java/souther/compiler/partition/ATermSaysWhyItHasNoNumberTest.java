@@ -34,7 +34,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 class ATermSaysWhyItHasNoNumberTest {
 
     private static final NumericTerm VALUE = new NumericTerm.ValueOf(TermPath.of("x"));
-    private static final NumericTerm LENGTH = new NumericTerm.SizeOf(
+    private static final NumericTerm LENGTH = new NumericTerm.TakenOf(
             ValueName.Stdlib.operation("String", "length"), TermPath.of("x"));
     private static final TypeSymbol WRAPPER = TypeSymbols.declared(new TypeKey("example", "Wrapped"));
 

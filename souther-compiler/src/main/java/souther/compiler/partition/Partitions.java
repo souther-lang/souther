@@ -118,7 +118,8 @@ public final class Partitions {
          * and asking for a row at it is asking for work nobody may be able to do.
          *
          * <p>And false at a count, unless every count that measure could give is one some value has
-         * ({@link NumericMeasures#everyCountHasAValue}). What the projection settles is which numbers
+         * (the operation's own {@code EveryAnswerItCanGiveHasASourceValue}). What the projection
+         * settles is which numbers
          * the rules leave, and three is a number they leave whether or not three of the thing exist:
          * a `Set<Bool>` is capped at two, and a `List<T>` of one needs a `T` that something inhabits.
          * The domain has no term for either, so such an edge is settled by a value rather than by an
@@ -130,9 +131,17 @@ public final class Partitions {
          * written by repeating a character. Declining the proof there too would take away every
          * `String.length` edge in the corpus over collections that have no values. */
         public boolean edgeIsKnownWritable(NumericTerm term) {
-            return !uncertain.contains(term)
-                    && !(term instanceof NumericTerm.SizeOf size
-                            && !NumericMeasures.everyCountHasAValue(size.measure()));
+            return !uncertain.contains(term) && switch (term) {
+                // What a location holds is what its type holds, so an edge on it is an edge some
+                // value stands at by the type having been declared.
+                case NumericTerm.ValueOf _ -> true;
+                // And what an operation answered is the operation's to say. Asked of the arm it is
+                // taken as instead, every operation sharing an arm would carry one answer: a string
+                // of any length exists and a `Set<Bool>` of three does not, and both are counts.
+                case NumericTerm.TakenOf taken ->
+                        souther.compiler.semantics.OperationFacts
+                                .everyAnswerItCanGiveHasASourceValue(taken.operation());
+            };
         }
 
         /** Only the positions the model actually divides. */
@@ -426,7 +435,7 @@ public final class Partitions {
                 Axis here2 = axis;
                 keep(out, measured, refine(axis,
                         () -> singledClasses(points, at, here2.type(), only, symbols),
-                        mergedPoints(axis.cuts(), points, at.carrierAt(axis.type(), symbols)),
+                        mergedPoints(axis.cuts(), points, at.answeredOn(axis.type(), symbols)),
                         axis.parted()),
                         new BodyCutInspection.Evidence(), rules);
                 continue;
@@ -473,7 +482,7 @@ public final class Partitions {
             // where the type is a newtype carrying one, and a plain `Decimal` has none — read off the
             // bound, every such position would be called an integer and a threshold of `0.5m` would
             // be asked for its exact `long`. A size is a whole number whatever it is a size of.
-            Carrier carrier = term.carrierAt(axis.type(), symbols);
+            Carrier carrier = term.answeredOn(axis.type(), symbols);
             // Through `excluding`, so that a class list replaced by the intervals a threshold cuts
             // keeps only the exclusions it still has classes for.
             //
@@ -578,7 +587,7 @@ public final class Partitions {
     private static List<PartitionClass> singledClasses(List<GuardThresholds.Guards.Singled> points,
                                                        NumericTerm term, Type type,
                                                        NumericDomain.Bounds within, Symbols symbols) {
-        Carrier carrier = term.carrierAt(type, symbols);
+        Carrier carrier = term.answeredOn(type, symbols);
         List<Place> values = new ArrayList<>();
         for (GuardThresholds.Guards.Singled each : points) {
             if (values.stream().noneMatch(had -> had.sameAs(each.value()))) {

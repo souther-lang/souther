@@ -295,7 +295,7 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
     java.util.Map<NumericTerm, Carrier> carriers(InputReads reads, Symbols symbols) {
         java.util.Map<NumericTerm, Carrier> on = new java.util.LinkedHashMap<>();
         for (NumericTerm term : form.coefs().keySet()) {
-            Carrier here = reads.read().carrierOf(term, symbols);
+            Carrier here = reads.read().answeredOn(term, symbols);
             if (here == null || !here.counts()) {
                 return null;
             }

@@ -103,8 +103,9 @@ final class OperationFactBinder {
                 case OperationFact.StatesItsPredicateOfEveryElement _,
                      OperationFact.MeansTheSameAsASizeOfNought _,
                      OperationFact.SaysNothingOf _,
-                     OperationFact.CountsWhatItIsGiven _,
-                     OperationFact.EveryCountItGivesIsACountSomeValueHas _ -> { }
+                     OperationFact.EveryAnswerItCanGiveHasASourceValue _ -> { }
+                case OperationFact.AnswersANumberTakenOfTheOneValueItIsGiven taken ->
+                        DischargeRules.holdTakenOf(stdlib, each.operation(), taken.how());
                 case OperationFact.ComputesANumber computes ->
                         DischargeRules.holdNumericResult(stdlib, each.operation(), computes.result());
                 case OperationFact.IsDefinedByCases defined ->

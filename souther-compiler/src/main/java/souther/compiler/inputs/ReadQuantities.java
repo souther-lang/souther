@@ -277,7 +277,7 @@ final class ReadQuantities implements Quantities {
 
     /** What this input calls the number at one of a value's coordinates. */
     private static InputAtom called(TermPath root, FieldDomains.Coordinate at) {
-        return new InputAtom.Named(root.toString(), at.path(), at.measured());
+        return new InputAtom.Named(root.toString(), at.path(), at.kind());
     }
 
     /** The same, of a term this input holds. One number under one name whichever side it arrives
@@ -285,7 +285,7 @@ final class ReadQuantities implements Quantities {
     private InputAtom.Named called(NumericTerm term) {
         TermPath root = rootOf(term.path());
         FieldDomains.Coordinate at = coordinateOf(root, term);
-        return new InputAtom.Named(root.toString(), at.path(), at.measured());
+        return new InputAtom.Named(root.toString(), at.path(), at.kind());
     }
 
     /**
@@ -344,16 +344,16 @@ final class ReadQuantities implements Quantities {
         if (symbols == null) {
             return null;
         }
-        // Asked of the term, which is what knows. A count is a whole number whatever it is a count
-        // of and a position measured by its own values is spaced by its type, and both of those are
-        // {@link NumericTerm#carrierAt}'s one answer — so the position is looked up to be handed
+        // Asked of the term, which is what knows. What an operation answers is spaced by what that
+        // operation answers and a position measured by its own values is spaced by its type, and
+        // both of those are {@link NumericTerm#answeredOn}'s one answer — so the position is looked up to be handed
         // over rather than to decide anything. Asked of the position instead, a fact the term owns
         // would depend on whether the walk that reads this input reached the place the term sits
         // at, and a count under more steps than that walk goes down would lose the floor every
         // count has.
         Position at = byPath.get(term.path());
         souther.compiler.check.Carrier carrier =
-                term.carrierAt(at == null ? null : at.type(), symbols);
+                term.answeredOn(at == null ? null : at.type(), symbols);
         return carrier == null ? null : carrier.spacing();
     }
 
@@ -530,8 +530,17 @@ final class ReadQuantities implements Quantities {
         // Written with the steps inside a sequence in it, so two positions never come to one name.
         // No clause is written at such a name, so a lookup finds nothing — which is what a clause
         // of the value says about a position inside a collection.
-        return new FieldDomains.Coordinate(term.path().stepsSpelledUnder(root),
-                term instanceof NumericTerm.SizeOf);
+        //
+        // Named by the operation and not by "something was taken here". A count of a string and the
+        // magnitude of a number at the same path are two quantities, and a flag brought them to one
+        // name — so a guard bounding one would have been read against the clauses written about the
+        // other (#1027).
+        String spelled = term.path().stepsSpelledUnder(root);
+        return switch (term) {
+            case NumericTerm.ValueOf _ -> FieldDomains.Coordinate.value(spelled);
+            case NumericTerm.TakenOf taken ->
+                    FieldDomains.Coordinate.takenBy(spelled, taken.operation());
+        };
     }
 
     /** The term a form is, where it is one term taken as itself, or null where it is arithmetic. */

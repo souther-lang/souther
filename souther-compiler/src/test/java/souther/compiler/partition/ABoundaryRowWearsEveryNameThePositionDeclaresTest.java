@@ -118,7 +118,7 @@ class ABoundaryRowWearsEveryNameThePositionDeclaresTest {
                 }
                 out.add(role + " -> "
                         + (Generator.probeFixing(subject, border.label(role),
-                                ignored -> axis.term().carrierAt(axis.type(), symbols),
+                                ignored -> axis.term().answeredOn(axis.type(), symbols),
                                 java.util.Map.of(axis.term(),
                                         ((Level.OnACarrier) each.at()).at()),
                                 Generator.CandidateCheck.ANY)

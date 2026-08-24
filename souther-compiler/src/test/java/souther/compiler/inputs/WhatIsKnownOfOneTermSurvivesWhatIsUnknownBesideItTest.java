@@ -148,7 +148,7 @@ class WhatIsKnownOfOneTermSurvivesWhatIsUnknownBesideItTest {
         Read read = read(DEEPER_THAN_THE_WALK);
         TermPath deep = TermPath.of("p").then("m").then("inner").then("xs");
         assertNull(read.inputs().at(deep), "the walk does not reach this far");
-        NumericTerm buried = new NumericTerm.SizeOf(
+        NumericTerm buried = new NumericTerm.TakenOf(
                 souther.compiler.check.NumericMeasures.takenOf(
                         read.inputs().at(TermPath.of("p").then("ys")).type(), read.symbols()),
                 deep);
@@ -177,36 +177,63 @@ class WhatIsKnownOfOneTermSurvivesWhatIsUnknownBesideItTest {
             """;
 
     /**
-     * Two spellings of one count weigh it twice.
+     * Two operations taken of one location are two numbers.
      *
-     * <p>A term carries which measure was written and a number does not, so a form can name one
-     * number twice. What it is weighed by is then the two coefficients together — read as a
-     * renaming, the form would come back weighing that count once, which is a range for a form the
-     * caller did not write.
+     * <p>This held the other way round while a coordinate recorded only that something had been
+     * taken here rather than what. Two terms over one path then came to one name, so a form naming
+     * both was weighed as one number named twice, and what the clause said about the count of a list
+     * was read as saying the same about anything else taken of it (#1027).
+     *
+     * <p>What each is left is now each operation's own, and for one the declarations never mention
+     * that is everything — the safe direction, and the direction a reading that has no word for a
+     * quantity has to take. So a form naming it runs nowhere this can say, rather than running where
+     * a different quantity runs.
      *
      * <p>No model reaches this today: which measure is taken of a position is settled by its type,
-     * so a body has one to write. It is held here because the reading turns a finer key into a
-     * coarser one, and a translation that loses a key has to say what it does with the two values
-     * rather than keeping whichever arrived last.
+     * so a body has one to write, and the second term here is built by hand. It is held because the
+     * reading is a translation between two vocabularies, and one that brought two keys to one had to
+     * be trusted to add what it found rather than keep whichever arrived last.
      */
     @Test
-    void twoSpellingsOfOneCountWeighItTwice() {
+    void twoOperationsTakenOfOneLocationAreTwoNumbers() {
         Read read = read(COUNTED);
         NumericTerm one = size(read, "xs");
-        NumericTerm other = new NumericTerm.SizeOf(
+        NumericTerm other = new NumericTerm.TakenOf(
                 souther.compiler.types.ValueName.Stdlib.operation("Set", "size"),
                 TermPath.of("p").then("xs"));
         Map<NumericTerm, BigDecimal> coefs = new LinkedHashMap<>();
         coefs.put(one, BigDecimal.ONE);
         coefs.put(other, BigDecimal.ONE);
 
-        NumericDomain.Bounds twice = read.quantities()
+        NumericDomain.Bounds both = read.quantities()
                 .runsBetween(new NumericDomain.LinearForm<>(BigDecimal.ZERO, coefs));
 
         assertEquals(Endpoint.inclusive(count(5)), read.quantities().runsBetween(one).max(),
-                "the clause counts it at five");
+                "the clause counts the list at five");
+        assertNull(read.quantities().runsBetween(other).max(),
+                "and says nothing about a number some other operation answers of it");
+        assertNull(both.max(),
+                "so a form naming both runs nowhere this reading can say");
+    }
+
+    /**
+     * One number named twice is weighed twice.
+     *
+     * <p>The half above cannot show, and the one the translation is really about: a form carries a
+     * coefficient per number, and a reading that renamed the keys had to add what two of them
+     * brought rather than keep whichever arrived last.
+     */
+    @Test
+    void oneCountNamedWithACoefficientOfTwoRunsToTwiceWhatItIsBounded() {
+        Read read = read(COUNTED);
+        NumericTerm one = size(read, "xs");
+
+        NumericDomain.Bounds twice = read.quantities().runsBetween(
+                new NumericDomain.LinearForm<>(BigDecimal.ZERO,
+                        Map.of(one, BigDecimal.valueOf(2))));
+
         assertEquals(Endpoint.inclusive(count(10)), twice.max(),
-                "and a form naming it twice runs to twice that");
+                "a count held at five, taken twice, runs to ten");
     }
 
     /** Two positions the record relates, beside a collection no clause counts. */
@@ -307,7 +334,7 @@ class WhatIsKnownOfOneTermSurvivesWhatIsUnknownBesideItTest {
 
     private static NumericTerm size(Read read, String field) {
         TermPath at = TermPath.of("p").then(field);
-        return new NumericTerm.SizeOf(souther.compiler.check.NumericMeasures.takenOf(
+        return new NumericTerm.TakenOf(souther.compiler.check.NumericMeasures.takenOf(
                 read.inputs().at(at).type(), read.symbols()), at);
     }
 

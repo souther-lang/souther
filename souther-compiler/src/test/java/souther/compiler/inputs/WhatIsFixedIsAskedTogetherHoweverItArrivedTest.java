@@ -208,7 +208,7 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
     @Test
     void aCountFixedBelowNoneLeavesNothingThoughNoClauseSaysSo() {
         Read read = read(BAG, "take");
-        NumericTerm size = new NumericTerm.SizeOf(
+        NumericTerm size = new NumericTerm.TakenOf(
                 souther.compiler.check.NumericMeasures.takenOf(
                         read.inputs().at(TermPath.of("b").then("xs")).type(), read.symbols()),
                 TermPath.of("b").then("xs"));
@@ -333,15 +333,17 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
             souther.compiler.check.FieldDomains readIn = souther.compiler.check.FieldDomains.of(
                     name, data, read.symbols(), ReadAs.THE_COMPILATION_DOES, settled);
             souther.compiler.check.FieldDomains.Carried<String> taken = whole.given(Map.of(
-                    new souther.compiler.check.FieldDomains.Coordinate("x", false), count(at)))
-                    .constraintsOver(coordinate -> coordinate.measured()
+                    souther.compiler.check.FieldDomains.Coordinate.value("x"), count(at)))
+                    .constraintsOver(coordinate -> coordinate.kind()
+                                    instanceof souther.compiler.check.FieldDomains
+                                            .CoordinateKind.OfWhatAnOperationAnswers
                                     ? "#" + coordinate.path() : coordinate.path(),
                             subject -> "?" + subject);
 
             assertEquals(readIn.holdsNothing().isPresent(),
                     taken.constraints().holdsNothing(taken.positions()).isPresent(),
                     "whether anything is left, with x at " + at);
-            assertEquals(readIn.leftAt("y", false),
+            assertEquals(readIn.leftAt("y", new souther.compiler.check.FieldDomains.CoordinateKind.OfItsOwnValue()),
                     taken.constraints().numbers().boundsOf(
                             NumericDomain.LinearForm.<String>atom("y")),
                     "where y runs, with x at " + at);
@@ -434,7 +436,7 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
 
     private static NumericTerm size(Read read, String field) {
         TermPath at = TermPath.of("p").then(field);
-        return new NumericTerm.SizeOf(souther.compiler.check.NumericMeasures.takenOf(
+        return new NumericTerm.TakenOf(souther.compiler.check.NumericMeasures.takenOf(
                 read.inputs().at(at).type(), read.symbols()), at);
     }
 

@@ -56,18 +56,26 @@ sealed interface InputAtom {
      * @param measured  whether this is the count taken of the place rather than its own value. Two
      *                  numbers at one place, and a rule about one says nothing about the other
      */
-    record Named(String parameter, String path, boolean measured) implements InputAtom {
+    record Named(String parameter, String path,
+                 souther.compiler.check.FieldDomains.CoordinateKind kind) implements InputAtom {
 
         public Named {
             if (parameter == null || path == null) {
                 throw new IllegalArgumentException("a named number sits somewhere");
             }
+            java.util.Objects.requireNonNull(kind, "and is some number of what is there");
         }
 
         @Override
         public String toString() {
             String at = path.isEmpty() ? parameter : parameter + "." + path;
-            return measured ? "|" + at + "|" : at;
+            return switch (kind) {
+                case souther.compiler.check.FieldDomains.CoordinateKind.OfItsOwnValue _ -> at;
+                case souther.compiler.check.FieldDomains.CoordinateKind
+                        .OfWhatAnOperationAnswers taken ->
+                        taken.operation() instanceof souther.compiler.types.ValueName.Stdlib named
+                                ? named.qualified() + "(" + at + ")" : "|" + at + "|";
+            };
         }
     }
 

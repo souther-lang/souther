@@ -135,8 +135,8 @@ record ComparedTerms(NumericTerm on, NumericTerm against, Map<NumericTerm, Carri
         // The orders come from the reading of the declarations, the way they do above. A term the
         // arithmetic produced has no expression naming it, so there is not even a type here to take
         // one off — which is the whole of what went wrong when one was taken off the comparison.
-        Carrier here = reads.read().carrierOf(two[0], symbols);
-        Carrier there = reads.read().carrierOf(two[1], symbols);
+        Carrier here = reads.read().answeredOn(two[0], symbols);
+        Carrier there = reads.read().answeredOn(two[1], symbols);
         // And the counts are asked for, which the reading above does not ask. A form holds the two
         // apart by a number it read off the rule, and a number of nothing is not a distance — where
         // the pair meets is the only place such a rule could cut, and that is the line the reading

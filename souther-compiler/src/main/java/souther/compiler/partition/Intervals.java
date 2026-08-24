@@ -187,7 +187,7 @@ final class Intervals {
                                           Symbols symbols, Endpoint min, Endpoint max) {
         // What the counts in a label stand for. A day count is a carrier and never a name for the
         // line, so the class an author reads is spelled in dates where the position holds them.
-        Carrier carrier = of.carrierAt(type, symbols);
+        Carrier carrier = of.answeredOn(type, symbols);
         List<PartitionClass> classes = new ArrayList<>();
         for (Band run : runs) {
             String label = rangeOf(run, min, max).label(carrier);
@@ -213,8 +213,10 @@ final class Intervals {
         return List.copyOf(classes);
     }
 
+    /** What the range is a range of, in the words a reader of the report has: the operation where
+     *  the number is what one answered, and the position's own value otherwise. */
     private static String measureOf(NumericTerm of) {
-        return of instanceof NumericTerm.SizeOf size ? size.measure().qualified() : "value";
+        return of instanceof NumericTerm.TakenOf taken ? taken.operation().qualified() : "value";
     }
 
     /**

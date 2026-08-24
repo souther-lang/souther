@@ -2002,7 +2002,11 @@ public final class Generator {
      */
     private static Edge edgeAt(Subject subject, Carrier carrier, NumericTerm term, Place at,
                                boolean besideAnother) {
-        if (besideAnother && term instanceof NumericTerm.SizeOf) {
+        // A number an operation answered is met by several values and only one of them can be
+        // offered beside a second position being fixed as well. True of every such number and not
+        // of counts alone — three is answered by three and by minus three as much as by three
+        // characters — so it is asked of what the term is rather than of which operation it names.
+        if (besideAnother && term instanceof NumericTerm.TakenOf) {
             return Edge.none(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
         for (Axis axis : subject.axes()) {
@@ -2011,17 +2015,15 @@ public final class Generator {
             }
         }
         // No axis at this position, which a behavior whose inputs nothing bounds has none of while
-        // its body still draws lines between them. A count taken of a location is not writable this
-        // way: four is not what goes at the position, it is four characters somebody has to choose.
-        Type declared = term instanceof NumericTerm.SizeOf ? null : declaredAt(subject, term.path());
+        // its body still draws lines between them. A number an operation answered is not writable
+        // this way: four is not what goes at the position, it is four characters — or a three and a
+        // minus three — somebody has to choose, and choosing needs the axis's own type.
+        Type declared = term instanceof NumericTerm.TakenOf ? null : declaredAt(subject, term.path());
         if (declared == null) {
             return Edge.none(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
-        FixtureTemplate standing = Witnesses.wrapped(declared,
-                FixtureTemplate.on(carrier, at, subject.symbols().scope()::reach),
-                subject.symbols());
-        return standing == null ? Edge.none(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)
-                : new Edge(List.of(standing), null, at, null);
+        return edgeFrom(TermRealizations.at(term, declared, carrier, at, subject.symbols(),
+                subject.inputs().policy()), term, at);
     }
 
     /** The type declared at a position this subject has no axis for, which is a bare parameter and
@@ -3315,32 +3317,30 @@ public final class Generator {
      */
     private static Edge edgeOf(Axis axis, Carrier carrier, Place at, Symbols symbols,
                                ReadingPolicy policy) {
-        if (!(axis.term() instanceof NumericTerm.SizeOf)) {
-            // Written by the carrier the line was drawn on, and wearing every name the position
-            // declares. Read off the boundary's own shape instead, a count on one carrier could be
-            // written as a literal of another — which is how a date-time's second count reached a
-            // row as an `Int`, and the decoder refused it with the report saying only that every
-            // value tried had been refused.
-            FixtureTemplate standing = Witnesses.wrapped(axis.type(),
-                    FixtureTemplate.on(carrier, at, symbols.scope()::reach), symbols);
-            return standing == null
-                    ? Edge.none(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)
-                    : new Edge(List.of(standing), null, at, null);
-        }
-        int size = CountDomain.asCount(at);
-        if (size < 0) {
-            return Edge.none(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
-        }
-        Type holder = TypeOps.base(axis.type(), symbols);
-        Witnesses.Sized built = Witnesses.ofSize(holder, size, symbols, policy, Set.of());
-        if (built.values().isEmpty()) {
-            return Edge.none(Witnesses.reasonForSize(holder, size, policy, symbols));
-        }
-        List<FixtureTemplate> out = new ArrayList<>();
-        for (FixtureTemplate each : built.values()) {
-            out.add(Witnesses.wrapped(axis.type(), each, symbols));
-        }
-        return new Edge(out, null, null, built.heldBack());
+        return edgeFrom(
+                TermRealizations.at(axis.term(), axis.type(), carrier, at, symbols, policy),
+                axis.term(), at);
+    }
+
+    /**
+     * One realization as an edge of the search.
+     *
+     * <p>Where the position itself is settled, and where it is not. A term that is a location's
+     * content is fixed at the place the line was drawn on; a term that is what an operation answered
+     * leaves the position free — three characters is not the position standing at three — so what
+     * the search records as settled is the one and not the other. The one question here the variant
+     * genuinely settles, and asked of the variant.
+     */
+    private static Edge edgeFrom(TermRealizations.Realization made, NumericTerm term, Place at) {
+        Place settled = switch (term) {
+            case NumericTerm.ValueOf _ -> at;
+            case NumericTerm.TakenOf _ -> null;
+        };
+        return switch (made) {
+            case TermRealizations.Realization.BuiltNone none -> Edge.none(none.why());
+            case TermRealizations.Realization.Built built ->
+                    new Edge(built.values(), null, settled, built.heldBack());
+        };
     }
 
     private Generator() {}

@@ -338,7 +338,7 @@ class WhatAClauseDrawsALineOnTest {
                     () -> measure + " draws a line: " + valuesOf(clauses));
             assertEquals(List.of(), clauses.unread(),
                     () -> measure + " was read, so nothing says otherwise: " + clauses.unread());
-            assertTrue(clauses.thresholds().get(0).term() instanceof NumericTerm.SizeOf,
+            assertTrue(clauses.thresholds().get(0).term() instanceof NumericTerm.TakenOf,
                     () -> measure + " is a line on the measure: "
                             + clauses.thresholds().get(0).term());
         }

@@ -623,10 +623,10 @@ public final class GuardThresholds {
      * names, and a boundary on it could not be looked for in a row.
      */
     static NumericTerm termOf(Core e, InputReads reads, Symbols symbols) {
-        NumericMeasures.Measured measured = NumericMeasures.measureIn(e);
+        NumericMeasures.Measured measured = NumericMeasures.takenIn(e);
         if (measured != null) {
             TermPath of = reads.pathOf(measured.of(), symbols);
-            return of == null ? null : new NumericTerm.SizeOf(measured.operation(), of);
+            return of == null ? null : new NumericTerm.TakenOf(measured.operation(), of);
         }
         TermPath path = reads.pathOf(e, symbols);
         return path == null ? null : new NumericTerm.ValueOf(path);
@@ -666,7 +666,7 @@ public final class GuardThresholds {
         if (term == null) {
             return null;
         }
-        Carrier order = reads.read().carrierOf(term, symbols);
+        Carrier order = reads.read().answeredOn(term, symbols);
         return order == null ? null : new Named(term, order);
     }
 

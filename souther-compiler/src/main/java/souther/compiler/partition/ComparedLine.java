@@ -97,7 +97,7 @@ record ComparedLine(NumericTerm term, Place value, Carrier carrier,
         // The position's own order, not the order of whichever operand it was written beside. The
         // reading two methods up asks the same question of the same place, and `10 >= a + 1` names
         // the position on the right.
-        Carrier carrier = term == null ? null : reads.read().carrierOf(term, symbols);
+        Carrier carrier = term == null ? null : reads.read().answeredOn(term, symbols);
         if (carrier == null || !carrier.counts()) {
             return null;
         }

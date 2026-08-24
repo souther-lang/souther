@@ -801,15 +801,15 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
      */
     @Test
     void onlyAStringsLengthIsACountEveryValueHas() {
-        assertTrue(NumericMeasures.everyCountHasAValue(
+        assertTrue(souther.compiler.semantics.OperationFacts.everyAnswerItCanGiveHasASourceValue(
                         ValueName.Stdlib.operation("String", "length")),
                 "a string of any length is a character repeated");
-        assertFalse(NumericMeasures.everyCountHasAValue(
+        assertFalse(souther.compiler.semantics.OperationFacts.everyAnswerItCanGiveHasASourceValue(
                         ValueName.Stdlib.operation("List", "length")),
                 "a list of one needs an element, and a type nothing inhabits has none");
-        assertFalse(NumericMeasures.everyCountHasAValue(ValueName.Stdlib.operation("Set", "size")),
+        assertFalse(souther.compiler.semantics.OperationFacts.everyAnswerItCanGiveHasASourceValue(ValueName.Stdlib.operation("Set", "size")),
                 "a set of three needs three that differ");
-        assertFalse(NumericMeasures.everyCountHasAValue(ValueName.Stdlib.operation("Map", "size")),
+        assertFalse(souther.compiler.semantics.OperationFacts.everyAnswerItCanGiveHasASourceValue(ValueName.Stdlib.operation("Map", "size")),
                 "and a map of three needs three keys that differ");
     }
 

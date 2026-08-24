@@ -149,7 +149,8 @@ class EverySemanticDeclarationIsHeldToTheLibraryTest {
                 new ArrayList<>(OperationFacts.declarations());
         gained.add(new OperationFacts.Declared(
                 new ValueName.Stdlib("List", "howManyThereAreNot"),
-                new OperationFact.CountsWhatItIsGiven()));
+                new OperationFact.AnswersANumberTakenOfTheOneValueItIsGiven(
+                        new souther.compiler.semantics.TakenAs.HowManyItHolds())));
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
                 () -> OperationFactBinder.bindAll(DefaultStdlib.get(), gained),
