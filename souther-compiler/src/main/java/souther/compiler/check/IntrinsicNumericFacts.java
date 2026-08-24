@@ -49,6 +49,16 @@ import java.util.List;
  */
 final class IntrinsicNumericFacts {
 
+    /**
+     * A call whose arguments none of its operation's rows name, which is what a measure is: it is
+     * given a container, and a bound may only name an argument that is a number
+     * ({@link DischargeRules#holdBound}). So the rows read under this are all of them, and the one
+     * premise is written here rather than once for the condition on the arguments and again for the
+     * argument a row stands against.
+     */
+    private static final java.util.function.Function<ArgumentRef, LinearForm<FactSubject>>
+            NO_ARGUMENTS = _ -> null;
+
     private IntrinsicNumericFacts() {}
 
     /**
@@ -66,9 +76,8 @@ final class IntrinsicNumericFacts {
         // What the measure itself states of what it answers, which is that a count is at or above
         // nought. Read off the operation's rows and not written here: it is the same proposition as
         // `Int.abs(x) >= 0`, and a copy of it here was the half of it a partition could not reach
-        // (#1016). Nothing answers the arguments, and nothing has to — a measure is given a
-        // container and a row may only name an argument that is a number.
-        bounding(DischargeRules.boundsOn(size, ConstantArguments.NONE), atom, _ -> null, out);
+        // (#1016).
+        bounding(DischargeRules.boundsOn(size, ConstantArguments.NONE), atom, NO_ARGUMENTS, out);
         // A construction's result is no smaller than each source the rule names for it. A rule may
         // name more than one — `a ++ b` is as long as either half — so this is a loop where the
         // building below is one answer.

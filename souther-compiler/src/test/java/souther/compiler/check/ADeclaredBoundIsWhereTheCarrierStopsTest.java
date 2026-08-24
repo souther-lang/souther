@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalTime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -32,6 +33,12 @@ class ADeclaredBoundIsWhereTheCarrierStopsTest {
         return ResultRange.of(ValueName.Stdlib.operation(module, operation), ConstantArguments.NONE);
     }
 
+    /** A pair of ends, both counts and both of the range's own. */
+    private static NumericDomain.Bounds between(long low, long high) {
+        return new NumericDomain.Bounds(Endpoint.inclusive(Count.of(low)),
+                Endpoint.inclusive(Count.of(high)));
+    }
+
     /** The count an end of a carrier's extent is at, which is where the values of that carrier
      *  stop. */
     private static BigDecimal endOf(Carrier carrier, boolean lower) {
@@ -47,11 +54,28 @@ class ADeclaredBoundIsWhereTheCarrierStopsTest {
     @Test
     void theYearOfADateStopsWhereADateDoes() {
         NumericDomain.Bounds declared = declaredFor("Date", "year");
-        long first = LocalDate.ofEpochDay(endOf(new Carrier.Days(), true).longValueExact()).getYear();
-        long last = LocalDate.ofEpochDay(endOf(new Carrier.Days(), false).longValueExact()).getYear();
+        long first = LocalDate.ofEpochDay(endOf(Carrier.DATE, true).longValueExact()).getYear();
+        long last = LocalDate.ofEpochDay(endOf(Carrier.DATE, false).longValueExact()).getYear();
         assertEquals(new NumericDomain.Bounds(Endpoint.inclusive(Count.of(first)),
                         Endpoint.inclusive(Count.of(last))), declared,
                 "the years a date can be written in are the years of the first date and the last");
+    }
+
+    /**
+     * The parts of a time of day, against the seconds of a day a time runs between.
+     *
+     * <p>These are written out where they are declared, since what an hour is does not follow from
+     * where a carrier stops — a day holds twenty-four of them however far the counting goes. What
+     * does follow is that the two agree: {@code 86399} and {@code 23} are one statement about a day
+     * said twice, and nothing tied them together until this asked.
+     */
+    @Test
+    void thePartsOfATimeStopWhereADayDoes() {
+        LocalTime last = LocalTime.ofSecondOfDay(endOf(Carrier.TIME, false).longValueExact());
+        LocalTime first = LocalTime.ofSecondOfDay(endOf(Carrier.TIME, true).longValueExact());
+        assertEquals(between(first.getHour(), last.getHour()), declaredFor("Time", "hour"));
+        assertEquals(between(first.getMinute(), last.getMinute()), declaredFor("Time", "minute"));
+        assertEquals(between(first.getSecond(), last.getSecond()), declaredFor("Time", "second"));
     }
 
     /**
@@ -61,8 +85,8 @@ class ADeclaredBoundIsWhereTheCarrierStopsTest {
     @Test
     void aCountOfMinutesStopsWhereTwoDateTimesStopStandingApart() {
         NumericDomain.Bounds declared = declaredFor("DateTime", "minutesBetween");
-        BigDecimal apart = endOf(new Carrier.Seconds(), false)
-                .subtract(endOf(new Carrier.Seconds(), true))
+        BigDecimal apart = endOf(Carrier.MOMENT, false)
+                .subtract(endOf(Carrier.MOMENT, true))
                 .divideToIntegralValue(BigDecimal.valueOf(60));
         assertEquals(new NumericDomain.Bounds(Endpoint.inclusive(Count.of(apart.negate())),
                         Endpoint.inclusive(Count.of(apart))), declared,
