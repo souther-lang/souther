@@ -127,6 +127,10 @@ final class Coverages {
     }
 
     /**
+     * @param partitioning what the model divides this behavior into, made once by
+     *                   {@link souther.compiler.query.Adequacy.Divided} and read here. Worked out
+     *                   again on the way in, this and the boundaries beside it would be two
+     *                   derivations of one thing and two chances to disagree about it
      * @param boundaries what was established about every line this behavior's rules drew, made once
      *                   by {@link souther.compiler.query.Adequacy.Boundaries} and read here. Measuring
      *                   a line takes putting a value through the module's decoders, which is not
@@ -134,13 +138,11 @@ final class Coverages {
      *                   happen twice.
      */
     static PartitionEvidence of(Hir.SpecBehavior behavior, InputDomain inputs, Sig sig,
-                                Symbols symbols, ReadingPolicy policy, Core body,
-                                souther.compiler.check.ElementBindings elements,
-                                CoverageSites.Plan plan, souther.compiler.query.Adequacy.RowReading observed,
+                                Symbols symbols, ReadingPolicy policy,
+                                Partitions.Partitioning partitioning,
+                                souther.compiler.query.Adequacy.RowReading observed,
                                 souther.compiler.query.Adequacy.Level level,
                                 List<BorderAssessment> boundaries,
-                                PathReachability.Answers arrives,
-                                souther.compiler.check.StatedContract stated,
                                 souther.compiler.partition.AdequacyPolicy.OfTheMeasures budget) {
         List<RowOutcome> rows = observed.rowsSeen();
         List<String> parameters = behavior.params().stream().map(Hir.Param::name).toList();
@@ -148,9 +150,6 @@ final class Coverages {
         // a field under a name is reached by taking the name off, and a walk given the paths
         // alone reaches nothing where the derivation reaches a field.
         BehaviorInputs where = new BehaviorInputs(parameters, sig.inputTypes(), symbols, policy);
-        Partitions.Partitioning partitioning =
-                partitioningOf(behavior, inputs, sig, symbols, policy, body, elements, plan,
-                        arrives, stated).geometry();
 
         List<PartitionEvidence.AxisCoverage> axes = new ArrayList<>();
 

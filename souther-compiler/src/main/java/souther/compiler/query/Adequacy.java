@@ -1022,21 +1022,96 @@ public final class Adequacy {
                 if (sig == null) {
                     continue;
                 }
+                souther.compiler.partition.Partitions.Partitioning divided =
+                        db.ask(new Divided(name, spec.name())).value();
+                if (divided == null) {
+                    continue;
+                }
                 RowReading seen = Rows.readingFor(byTarget, spec.name());
                 // Counted with nothing a body claims in scope. What was claimed travels beside the
                 // numbers rather than into them ({@link Claimed}), and the two meet where a report
                 // is written.
                 out.put(spec.name(), Coverages.of(spec, domainOf(readInputs, spec), sig,
-                        scope.value(), db.ask(new Front.Reading()).value(), bodies.get(spec.name()),
-                        elementsOf.getOrDefault(spec.name(),
-                                souther.compiler.check.ElementBindings.NONE), plan, seen,
+                        scope.value(), db.ask(new Front.Reading()).value(), divided, seen,
                         level, boundaries == null ? List.of()
                                 : boundaries.getOrDefault(spec.name(), List.of()),
-                        arrivalsOf(arrives, spec), statedOf(declared, spec),
                         db.ask(new Front.Adequacy()).value().measures()));
             }
             return Answer.of(Ordered.map(out));
         }
+    }
+
+    /**
+     * What the model divides one behavior into: every position, every class, every line.
+     *
+     * <p><b>The one derivation.</b> What a report says is not covered, what a build is refused over
+     * and what a generator writes a row for have to be the same positions and the same classes, and
+     * this was worked out separately by each of the three — one meaning derived in three places,
+     * which is three chances to disagree about a model nobody edited in between (issue #1001).
+     *
+     * <p>Keyed by the behavior and not by the module, because that is the unit the work is in. A
+     * caller wanting one behavior's positions had to have every behavior's derived to get them.
+     *
+     * <p>What is not here is the reading of the declarations this was worked out from. That holds a
+     * way of asking them a further question and belongs to whoever is asking; kept in the answer, it
+     * would make the answer compare by which compute had built it.
+     */
+    public record Divided(String name, String behavior)
+            implements Key<souther.compiler.partition.Partitions.Partitioning> {
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<souther.compiler.partition.Partitions.Partitioning> compute(Db db) {
+            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
+            Answer<Symbols> scope = Names.derivedSymbols(db, name);
+            Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
+            if (!prepared.present() || !scope.present() || !sigs.present()) {
+                return Answer.absent();
+            }
+            Hir.SpecBehavior spec = specOf(prepared.value(), behavior);
+            Sig sig = sigs.value().get(behavior);
+            if (spec == null || sig == null) {
+                // No such behavior here, or one this compilation could not give a signature. Either
+                // way there is nothing to divide, which is not the same as a behavior the model
+                // divides nowhere.
+                return Answer.absent();
+            }
+            souther.compiler.query.Bodies.Elaborated checked =
+                    db.ask(new Bodies.Checked(name)).value();
+            Map<String, souther.compiler.core.Core> bodies =
+                    checked == null ? Map.of() : checked.behaviorBodies();
+            souther.compiler.coverage.CoverageSites.Plan plan =
+                    souther.compiler.coverage.CoverageSites.of(bodies,
+                            checked == null
+                                    ? souther.compiler.coverage.DecisionSources.NONE
+                                    : checked.decisions(),
+                            checked == null ? souther.compiler.coverage.SuppliedRules.NONE
+                                    : checked.supplied());
+            return Answer.of(Coverages.partitioningOf(spec,
+                    domainOf(db.ask(new Inputs(name)).value(), spec), sig, scope.value(),
+                    db.ask(new Front.Reading()).value(), bodies.get(behavior),
+                    checked == null ? souther.compiler.check.ElementBindings.NONE
+                            : checked.elementBindings().getOrDefault(behavior,
+                                    souther.compiler.check.ElementBindings.NONE),
+                    plan,
+                    arrivalsOf(db.ask(new PathReached(name)).value(), spec),
+                    statedOf(db.ask(new Bodies.StatedContracts(name)).value(), spec)).geometry());
+        }
+    }
+
+    /** The behavior of that name that has inputs of its own, or null. A composition's inputs are its
+     *  first stage's and are divided there. */
+    private static Hir.SpecBehavior specOf(souther.compiler.check.Prepared prepared, String name) {
+        for (Hir.BehaviorDef each : prepared.behaviors()) {
+            if (each instanceof Hir.SpecBehavior spec && spec.name().equals(name)) {
+                return spec;
+            }
+        }
+        return null;
     }
 
     /**
@@ -1113,13 +1188,14 @@ public final class Adequacy {
                 if (sig == null) {
                     continue;
                 }
+                souther.compiler.partition.Partitions.Partitioning divided =
+                        db.ask(new Divided(name, spec.name())).value();
+                if (divided == null) {
+                    continue;
+                }
                 out.put(spec.name(), assess(spec, sig, symbols, db.ask(new Front.Reading()).value(),
-                        bodies.get(spec.name()),
-                        elementsOf.getOrDefault(spec.name(),
-                                souther.compiler.check.ElementBindings.NONE), plan,
-                        Rows.readingFor(byTarget, spec.name()), level, building,
-                        domainOf(readInputs, spec), arrivalsOf(arrives, spec),
-                        statedOf(declared, spec)));
+                        divided, Rows.readingFor(byTarget, spec.name()), level, building,
+                        domainOf(readInputs, spec)));
             }
             return Answer.of(Ordered.map(out));
         }
@@ -1127,21 +1203,15 @@ public final class Adequacy {
         /** Every line of one behavior, with what the rows and the decoder say about each. */
         private static List<BorderAssessment> assess(
                 Hir.SpecBehavior spec, Sig sig, Symbols symbols,
-                souther.compiler.check.ReadingPolicy policy, souther.compiler.core.Core body,
-                souther.compiler.check.ElementBindings elements,
-                souther.compiler.coverage.CoverageSites.Plan plan, RowReading observed,
-                Level level, FixtureReader.Construction building, InputDomain domain,
-                souther.compiler.check.PathReachability.Answers arrives,
-                souther.compiler.check.StatedContract stated) {
+                souther.compiler.check.ReadingPolicy policy,
+                souther.compiler.partition.Partitions.Partitioning divided, RowReading observed,
+                Level level, FixtureReader.Construction building, InputDomain domain) {
             List<String> parameters = spec.params().stream().map(Hir.Param::name).toList();
             souther.compiler.partition.BehaviorInputs inputs =
                     new souther.compiler.partition.BehaviorInputs(parameters, sig.inputTypes(),
                             symbols, policy);
-            Coverages.Partitioned partitioned =
-                    Coverages.partitioningOf(spec, domain, sig, symbols, policy, body, elements,
-                            plan, arrives, stated);
-            souther.compiler.partition.Partitions.Partitioning partitioning = partitioned.geometry();
-            souther.compiler.inputs.Quantities reading = partitioned.reading();
+            souther.compiler.partition.Partitions.Partitioning partitioning = divided;
+            souther.compiler.inputs.Quantities reading = domain.quantities(symbols);
             Coverages.Probe probe =
                     probing(partitioning, sig, symbols, policy, parameters, building, domain);
             // Two sources and not one. A line drawn at a count of a position comes off that position's
@@ -2067,6 +2137,11 @@ public final class Adequacy {
                 if (sig == null) {
                     continue;
                 }
+                souther.compiler.partition.Partitions.Partitioning divided =
+                        db.ask(new Divided(name, spec.name())).value();
+                if (divided == null) {
+                    continue;
+                }
                 List<BorderAssessment> edges = boundaries == null ? List.of()
                         : boundaries.getOrDefault(spec.name(), List.of());
                 Generator.GenerationResult composed;
@@ -2077,12 +2152,9 @@ public final class Adequacy {
                                     prepared.value(), symbols),
                             findings == null ? List.of()
                                     : findings.getOrDefault(spec.name(), List.of()),
-                            bodies.get(spec.name()),
-                            elementsOf.getOrDefault(spec.name(),
-                                    souther.compiler.check.ElementBindings.NONE), plan,
+                            divided, bodies.get(spec.name()), plan,
                             Rows.readingFor(byTarget, spec.name()), building,
-                            domainOf(readInputs, spec), arrivalsOf(arrives, spec),
-                            statedOf(declared, spec), runningRowsOf(trials, spec.name(), sig),
+                            domainOf(readInputs, spec), runningRowsOf(trials, spec.name(), sig),
                             PartitionEvidence.answeredFor(partitions, prepared.value(), spec),
                             levelOf(db).runsInstrumentedRows(),
                             db.ask(new Front.Adequacy()).value().generation());
@@ -2601,12 +2673,11 @@ public final class Adequacy {
                 Hir.SpecBehavior spec, Sig sig, Symbols symbols,
                 souther.compiler.check.ReadingPolicy policy,
                 List<Generator.Baseline> baselines, List<Finding> owed,
+                souther.compiler.partition.Partitions.Partitioning partitioning,
                 souther.compiler.core.Core body,
-                souther.compiler.check.ElementBindings elements,
                 souther.compiler.coverage.CoverageSites.Plan plan, RowReading observed,
                 FixtureReader.Construction building, InputDomain domain,
-                souther.compiler.check.PathReachability.Answers arrives,
-                souther.compiler.check.StatedContract stated, Generator.Trial trial,
+                Generator.Trial trial,
                 PartitionEvidence evidence, boolean recording,
                 souther.compiler.partition.AdequacyPolicy.OfTheGeneration budget) {
             if (observed.someRowsUnseen()) {
@@ -2624,9 +2695,6 @@ public final class Adequacy {
             souther.compiler.partition.BehaviorInputs inputs =
                     new souther.compiler.partition.BehaviorInputs(parameters, sig.inputTypes(),
                             symbols, policy);
-            souther.compiler.partition.Partitions.Partitioning partitioning =
-                    Coverages.partitioningOf(spec, domain, sig, symbols, policy, body, elements,
-                            plan, arrives, stated).geometry();
             Generator.Subject subject =
                     new Generator.Subject(inputs, partitioning.axes(), souther.compiler.partition.HeldCounts.of(domain, symbols));
             Generator.CandidateCheck check = building == null ? Generator.CandidateCheck.ANY
