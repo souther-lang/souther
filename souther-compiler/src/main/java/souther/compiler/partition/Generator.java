@@ -350,10 +350,10 @@ public final class Generator {
              * this says the walk never started. Raising the row budget changes the first and not
              * the second.
              *
-             * <p>Named at all because the alternative is silence. An arm claimed only by a group
-             * held back leaves no entry, and an arm with no entry is one no combination claims —
-             * so the report said the body never reaches it, which is a statement about the model
-             * this compiler was not entitled to make.
+             * <p>Named at all because the alternative is silence about the one thing raising a
+             * budget does not fix. What the arm itself came to is its own entry's to say — a row
+             * through it comes from the way into it whether or not anything above it was walked —
+             * and this is the second half of that entry where there is one.
              */
             THE_GROUP_WAS_NOT_OFFERED,
             /**
@@ -570,7 +570,7 @@ public final class Generator {
                 why = List.copyOf(why);
                 if (why.isEmpty()) {
                     throw new IllegalArgumentException(
-                            "an arm nothing was tried at is one no combination claims");
+                            "an arm nothing was tried at is one with no way into it");
                 }
             }
         }
@@ -834,11 +834,10 @@ public final class Generator {
      * outcome of every factor — which includes arms no single combination of it claims, since two
      * factors that disagree about a position have choices no row sits in.
      *
-     * <p>That direction is the safe one and the other is not. An arm left out is an arm nothing
-     * asks for, and an arm nothing asks for is reported as one no combination claims — which says
-     * the body settles something it does not. An arm asked for and not found is answered
-     * {@link UnresolvedCombination.Reason#THE_GROUP_WAS_NOT_OFFERED}, which is true of it however
-     * many combinations of the held-back group would have claimed it.
+     * <p>That direction is the safe one and the other is not. An arm left out of what a caller asks
+     * for is an arm this composes nothing for, and a caller with no measurement beside it has
+     * nothing to tell that from an arm nothing could be composed for. An arm asked for and not
+     * found says what each place it was looked in came to.
      */
     public static Set<Integer> everyArmACombinationMayTake(
             Subject subject, List<souther.compiler.reading.Interaction> groups,
@@ -1006,11 +1005,9 @@ public final class Generator {
         Set<Integer> left = new LinkedHashSet<>(armsOwed);
         Map<Integer, GeneratedRow> built = new LinkedHashMap<>();
         Map<Integer, List<UnresolvedCombination>> failed = new LinkedHashMap<>();
-        // Arms a combination was still to be searched at when the limit came. Collected by walking
-        // the rest of the cells and composing nothing, which costs a claim lookup each and is the
-        // only way to tell an arm the search ran out on from one no combination claims — the two
-        // are one silence, and a reader told the second where the first happened is told the model
-        // settles something it does not.
+        // Arms the row budget ran out before, which is what the search stopping looks like from an
+        // arm. Told apart from an arm with nowhere to look, because raising the budget changes one
+        // of them and nothing about the other.
         Set<Integer> cutOff = new LinkedHashSet<>();
         // And the arms behind a group nothing walked, which is a second silence with a different
         // cause. The one above is a budget that ran out with the arm still owed; this is a group
@@ -1041,29 +1038,34 @@ public final class Generator {
                     cutOff.add(probe);
                     break;
                 }
-                Witness found =
-                        witnessFor(subject, axes, selection, check, trial, ran, List.of(probe));
-                if (found instanceof Witness.None none) {
-                    UnresolvedCombination why = new UnresolvedCombination(
-                            none.classes(), none.reason(), none.detail(), none.said());
-                    unresolved.add(why);
-                    failed.computeIfAbsent(probe, _ -> new ArrayList<>()).add(why);
-                    continue;
-                }
-                GeneratedRow row = found instanceof Witness.Certified made ? made.row()
-                        : ((Witness.Unconfirmed) found).row();
-                if (found instanceof Witness.Unconfirmed) {
-                    // Nothing watched it, so what it is offered for is what the reading says and
-                    // not what anything saw. Said once for the behavior: it is one fact about this
-                    // generation.
-                    unconfirmed = true;
-                }
-                // What else this row goes through is what watching it says, and nothing else. A
+                // Each of the three, one at a time, so that a fourth added later has to be decided
+                // about here rather than fall in with whichever of these a cast happened to take.
+                // What else this row goes through is what watching it says, and nothing else: a
                 // cell claims the arms a reading believes a row filling it takes, and discharging
-                // them on that belief is the reading certifying itself — so the arms that come off
-                // the list here are the ones the run was seen taking (issue #1009).
-                List<Integer> also = found instanceof Witness.Certified made
-                        ? alsoThrough(made.by().seen(), left, probe) : List.of();
+                // them on that belief is the reading certifying itself (issue #1009).
+                GeneratedRow row;
+                List<Integer> also;
+                switch (witnessFor(subject, axes, selection, check, trial, ran, List.of(probe))) {
+                    case Witness.None none -> {
+                        UnresolvedCombination why = new UnresolvedCombination(
+                                none.classes(), none.reason(), none.detail(), none.said());
+                        unresolved.add(why);
+                        failed.computeIfAbsent(probe, _ -> new ArrayList<>()).add(why);
+                        continue;
+                    }
+                    case Witness.Certified made -> {
+                        row = made.row();
+                        also = alsoThrough(made.by().seen(), left, probe);
+                    }
+                    case Witness.Unconfirmed offer -> {
+                        row = offer.row();
+                        // Nothing watched it, so what it is offered for is what the reading says
+                        // and not what anything saw, and no other arm comes off the list for it.
+                        // Said once for the behavior: it is one fact about this generation.
+                        also = List.of();
+                        unconfirmed = true;
+                    }
+                }
                 List<Purpose> purposes = new ArrayList<>(row.purposes());
                 also.forEach(each -> purposes.add(new Purpose.ForAnArm(each)));
                 GeneratedRow offering = purposes.size() == row.purposes().size() ? row
@@ -1085,17 +1087,21 @@ public final class Generator {
                     || !(read.armAt(probe) instanceof PathAccess.Ways)) {
                 continue;
             }
-            // A way in was read and nothing was tried along it. Which of two things that is, is
-            // said here rather than left to a reader of an empty list: a group the limit held back
-            // was the only place a combination would have been looked in, or every way in this
-            // reading has places at no class of any position.
-            UnresolvedCombination why = notOffered.contains(probe)
-                    ? new UnresolvedCombination(List.of(),
-                            UnresolvedCombination.Reason.THE_GROUP_WAS_NOT_OFFERED)
-                    : new UnresolvedCombination(List.of(),
-                            UnresolvedCombination.Reason.THE_WAY_IN_PLACES_AT_NO_CLASS);
-            unresolved.add(why);
-            failed.computeIfAbsent(probe, _ -> new ArrayList<>()).add(why);
+            // A way in was read and nothing was tried along it, which is two things and not one:
+            // every way this reading has places at no class of any position, and — where the arm is
+            // behind one — a group the limit held back was never walked either. Both are said. They
+            // do not order against each other: one is what the partition divides this body into and
+            // the other is what this run declined to do, and a reader handed whichever a condition
+            // reached first was handed the order the branches were written in.
+            List<UnresolvedCombination> nowhere = new ArrayList<>();
+            nowhere.add(new UnresolvedCombination(List.of(),
+                    UnresolvedCombination.Reason.THE_WAY_IN_PLACES_AT_NO_CLASS));
+            if (notOffered.contains(probe)) {
+                nowhere.add(new UnresolvedCombination(List.of(),
+                        UnresolvedCombination.Reason.THE_GROUP_WAS_NOT_OFFERED));
+            }
+            unresolved.addAll(nowhere);
+            failed.computeIfAbsent(probe, _ -> new ArrayList<>()).addAll(nowhere);
         }
         // One entry per arm the run was asked about, in the order it was asked. An arm the limit
         // cut off carries that beside whatever was tried before it: a place the model refuses says
@@ -2193,6 +2199,10 @@ public final class Generator {
             // Run once per set of values, however many places a row of them was looked for. What a
             // run of one row did is one fact: two arms searched on their own can come to the same
             // values, and running them again would be the same row applied twice and counted twice.
+            //
+            // Keyed by what the row is written as. A template is the text and the expression it
+            // stands for, and the second is a tree whose equality is its own — so a pair of them
+            // makes no key, while the text is the whole of what a row applied twice would be.
             switch (applied.computeIfAbsent(
                     named.inputs().stream().map(FixtureTemplate::text).toList(),
                     _ -> trial.run(named.inputs()))) {

@@ -2450,9 +2450,10 @@ public final class Adequacy {
                 case Generator.ArmAttempt.NoWayIn none -> nothingReaches(none.access());
                 // An arm this run was not asked about. Every finding's arm is asked about, so what
                 // is left here is a finding that reached this without one — which is a defect in
-                // what was handed in rather than anything about the model.
+                // what was handed in rather than anything about the model, and is said as that: a
+                // reading that fell short of the arm is a different thing and did not happen.
                 case null -> new GenerationOutcome.NotSupported(GenerationOutcome.NotSupported
-                        .Reason.THE_READING_DID_NOT_REACH_THIS_ARM);
+                        .Reason.THIS_RUN_WAS_NOT_ASKED_ABOUT_THIS_ARM);
             };
         }
 

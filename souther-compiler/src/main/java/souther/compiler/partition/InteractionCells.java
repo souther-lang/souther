@@ -221,9 +221,8 @@ public final class InteractionCells {
      * The groups to offer, and the ones the limit kept back.
      *
      * <p>Two answers because they are two facts and the second used to be neither returned nor
-     * recorded. A group dropped for its width claims arms, and an arm nothing offered a combination
-     * for is reported as an arm no combination claims — which says the body settles something it
-     * does not.
+     * recorded. A group dropped for its width claims arms, and what was not walked at those arms is
+     * something a caller says rather than something a reader has to notice going missing.
      */
     public record Offered(List<Group> groups, List<NotOffered> notOffered) {
 
