@@ -561,6 +561,12 @@ class AMeasureWithNoNumberSaysWhyTest {
     /** Every measure the model produces, as (what it is, what it came to). */
     private static List<Object[]> allMeasures() {
         List<Object[]> measures = new ArrayList<>();
+        // The reading of each behavior's rows, which is a measure like the ones counted over them.
+        // This is a list somebody has to remember to add to, and leaving the newest measure out of
+        // it is the shape of the defect that made it a measure at all (issue #996).
+        for (Map.Entry<String, Adequacy.RowReading> each : readings().entrySet()) {
+            measures.add(new Object[] {"rows " + each.getKey(), each.getValue().measured()});
+        }
         for (Map.Entry<String, Adequacy.BranchEvidence> each : branches().entrySet()) {
             measures.add(new Object[] {"branch " + each.getKey(),
                     each.getValue().measured()});
@@ -670,6 +676,12 @@ class AMeasureWithNoNumberSaysWhyTest {
         }
         assertFalse(kept.isEmpty(), behavior + " is in the report");
         return String.join("\n", kept);
+    }
+
+    private static Map<String, Adequacy.RowReading> readings() {
+        Compilation compilation = compiled();
+        return compilation.db()
+                .ask(new Adequacy.Rows(compilation.modules().get(0))).value();
     }
 
     private static Map<String, Adequacy.BranchEvidence> branches() {

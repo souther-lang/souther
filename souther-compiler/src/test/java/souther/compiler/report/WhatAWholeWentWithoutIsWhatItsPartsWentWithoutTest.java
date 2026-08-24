@@ -104,8 +104,20 @@ class WhatAWholeWentWithoutIsWhatItsPartsWentWithoutTest {
         for (AdequacyReport.ModuleReport module : report.modules()) {
             WeakeningSet acrossBehaviors = WeakeningSet.none();
             for (AdequacyReport.BehaviorReport behavior : module.behaviors()) {
-                WeakeningSet parts = WeakeningSet.none();
+                // The reading of the rows is one of the parts. Left out, this passes as long as
+                // some measure counted over those rows carries the same facts — which is a set
+                // holding one value twice and not a rule being kept. A behavior every measure of
+                // which has nothing to be about carries them nowhere else, and that is the case the
+                // rule is for (issue #996).
+                WeakeningSet parts = behavior.reading().measured().weakening();
                 List<WeakeningSet> apart = new ArrayList<>();
+                // Not among the parts counted below. Whether a part is load-bearing asks whether it
+                // carries something the rest do not, and the reading holds every gap the measures
+                // counted over those rows took from it — so counting it makes each of them
+                // redundant and the count says nothing. That the reading is load-bearing is held
+                // where it can be shown on its own: a behavior every measure of which has nothing
+                // to be about carries its run's shortfall nowhere else
+                // (`AModuleEveryMeasureOfWhichDoesNotApplyStillSaysWhatItWentWithout`).
 
                 if (behavior.signature() != null) {
                     Adequacy.SignatureEvidence signature = behavior.signature();
