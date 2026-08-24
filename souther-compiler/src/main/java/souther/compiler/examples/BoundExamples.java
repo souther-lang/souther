@@ -140,9 +140,12 @@ public final class BoundExamples {
      * implementation answers comes out of world state the caller arranges between calls, and two
      * answers under two worlds are two observations rather than a contradiction.
      *
-     * <p>A behavior that states nothing is answered {@link ContractObservation.NothingStated}
-     * without the implementation being applied. To leave such a behavior's rows out rather than be
-     * told about each of them, read {@link #behaviorsStatingContracts()}.
+     * <p>Once the binding has been established, a behavior that states nothing is answered
+     * {@link ContractObservation.NothingStated} without the implementation being applied. A binding
+     * nothing may be handed to is answered for first: an implementation of another build states
+     * nothing that can run, and calling that "the model states nothing" would send its author to
+     * write a clause that still would not. To leave a behavior that states nothing out rather than
+     * be told about each of its rows, read {@link #behaviorsStatingContracts()}.
      */
     public ContractObservation checkContract(RecordedRow row) {
         if (row == null || row.enumeratedBy() != this) {

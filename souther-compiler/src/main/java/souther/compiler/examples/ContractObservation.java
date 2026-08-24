@@ -2,8 +2,6 @@ package souther.compiler.examples;
 
 import souther.compiler.observe.ObservedValue;
 
-import java.util.Locale;
-
 /**
  * What a bound implementation answered for a row's inputs, held to what the behavior declares of
  * what it answers — and to nothing the row records.
@@ -25,13 +23,19 @@ import java.util.Locale;
 public sealed interface ContractObservation {
 
     /**
-     * What to say about this observation, in one line per thing said.
+     * What to say about this observation, for a consumer building an assertion message.
      *
-     * <p>The language is handed in and not picked here, for the reason
-     * {@link RowEvaluation#shown(Locale)} takes one: what answers a reader has to say which reader,
-     * and that is the consumer.
+     * <p>Takes no language, and that is the difference from {@link RowEvaluation#shown(java.util.Locale)}
+     * rather than an omission from it. That one renders <em>diagnostics</em>, which are what a
+     * compile reports and are written in the catalogs the compiler ships; handing it a language is
+     * how a reader picks one. Nothing here is a diagnostic. No compile reports that a clause held,
+     * and a sentence in the catalog is one classified as either a rule reported or a word said
+     * beside one — these are neither.
+     *
+     * <p>So they are this face's own words, as {@link StandinObservation.Reason#said()}'s are, and
+     * taking a language only to ignore it would promise a choice that is not there.
      */
-    String shown(Locale locale);
+    String shown();
 
     /**
      * No clause of the behavior was shown to be broken by what the implementation answered.
@@ -55,8 +59,8 @@ public sealed interface ContractObservation {
         NoClauseWasBroken() {}
 
         @Override
-        public String shown(Locale locale) {
-            return "no clause was broken";
+        public String shown() {
+            return "no clause of the behavior was broken by what was answered";
         }
 
         @Override
@@ -68,23 +72,32 @@ public sealed interface ContractObservation {
     /**
      * A clause did not hold of what the implementation answered.
      *
-     * @param why      what the clause said when it did not hold, in the words the runtime writes
-     *                 about one
-     * @param answered what the implementation answered, so a reader is told what broke it and not
-     *                 only that something did
+     * <p>What was answered is carried twice, and on purpose. {@link StandinEntry} keeps a stated
+     * value and its shown text apart for the reason given there — what a machine reads and what a
+     * person reads must not be one String — and the same holds here from the other side: a consumer
+     * given only the {@link ObservedValue} could not render it, the writer that does being this
+     * package's and needing the module's declarations to tell a newtype from what it wraps. So the
+     * text is written where those are in reach and travels beside the value rather than instead of
+     * it.
+     *
+     * @param why           what the clause said when it did not hold, in the words the runtime
+     *                      writes about one
+     * @param answered      what the implementation answered, structural and loader-free
+     * @param shownAnswered the same, written the way a fixture writes a value
      */
-    record Broken(String why, ObservedValue answered) implements ContractObservation {
+    record Broken(String why, ObservedValue answered, String shownAnswered)
+            implements ContractObservation {
 
         public Broken {
-            if (why == null) {
-                throw new IllegalArgumentException("a broken clause said something");
+            if (why == null || shownAnswered == null) {
+                throw new IllegalArgumentException("a broken clause said something about a value");
             }
         }
 
         @Override
-        public String shown(Locale locale) {
+        public String shown() {
             return "a clause did not hold: " + why
-                    + System.lineSeparator() + "  answered: " + answered;
+                    + System.lineSeparator() + "  answered: " + shownAnswered;
         }
     }
 
@@ -101,7 +114,7 @@ public sealed interface ContractObservation {
     record NothingStated(String behavior) implements ContractObservation {
 
         @Override
-        public String shown(Locale locale) {
+        public String shown() {
             return "`" + behavior + "` states nothing of what it answers,"
                     + " so this row held the implementation to nothing";
         }
@@ -121,7 +134,7 @@ public sealed interface ContractObservation {
     record Unobserved(StandinObservation.Reason why) implements ContractObservation {
 
         @Override
-        public String shown(Locale locale) {
+        public String shown() {
             return "nothing was held to the declaration: " + why.said();
         }
     }

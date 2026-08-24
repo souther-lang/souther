@@ -15,7 +15,6 @@ import java.net.URLClassLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -159,8 +158,15 @@ class AnImplementationIsHeldToTheDeclarationAndNotToTheRecordTest {
                 assertInstanceOf(ContractObservation.Broken.class, seen);
         assertFalse(broken.why().isBlank(), "the clause said something about not holding");
 
-        String shown = seen.shown(Locale.ENGLISH);
-        assertTrue(shown.contains("7"), "what it answered is in what a suite would print: " + shown);
+        // Written the way a fixture writes a value, which is what tells a reader that the id wears
+        // `TodoId` rather than being a number that happens to be seven. The value's own `toString`
+        // says neither, and is what an arm with no declarations in reach would be left with.
+        assertEquals("Todo { done = false, id = TodoId(7), title = Title(\"write the SQL\") }",
+                broken.shownAnswered());
+        assertTrue(seen.shown().contains(broken.shownAnswered()),
+                "and it is what a suite would print: " + seen.shown());
+        assertInstanceOf(souther.compiler.observe.ObservedValue.Constructed.class, broken.answered(),
+                "beside the value itself, which is what a machine reads");
     }
 
     /**
@@ -180,7 +186,7 @@ class AnImplementationIsHeldToTheDeclarationAndNotToTheRecordTest {
                 assertInstanceOf(ContractObservation.NothingStated.class, seen,
                         "an implementation that throws when applied was not applied");
         assertEquals("findTodo", stated.behavior());
-        assertTrue(seen.shown(Locale.ENGLISH).contains("findTodo"));
+        assertTrue(seen.shown().contains("findTodo"));
     }
 
     /**
@@ -227,17 +233,38 @@ class AnImplementationIsHeldToTheDeclarationAndNotToTheRecordTest {
      */
     @Test
     void aModelWhoseClauseCannotBeReadMakesNoBoundExamples() {
-        String namesNothing = MODEL.replace(
-                "behavior findTodo : (id: TodoId) -> Todo | NotFound\n",
-                """
-                behavior findTodo : (id: TodoId) -> Todo | NotFound
-                    ensures Todo -> value.id.value == nobodyDeclaredThis(id)
-                """);
+        // `Bodies.Contracts` gives a behavior up in two ways, and both leave it out of the contracts
+        // exactly as a behavior that states nothing is left out. Both arms are held, because either
+        // one reaching `BoundExamples` would be reported as `NothingStated`.
 
+        // `Unanswerable`: the clause rests on a name that denotes nothing. It carries no diagnostic
+        // of its own — the name was reported where it was written — so what refuses the model is
+        // that report.
+        CompileException named = assertThrows(CompileException.class, () ->
+                        SoutherExamples.ofSource(declaring("value.id.value == nobodyDeclaredThis(id)")),
+                "a clause resting on a name that denotes nothing");
+        assertFalse(named.diagnostics().isEmpty(), "the name was reported where it was written");
+
+        // `CompileException`: the clause is read and refused. `BehaviorChecker` raises E1619 inside
+        // `contractOf`, and `Bodies.Contracts` files it as a report rather than raising.
         CompileException refused = assertThrows(CompileException.class,
-                () -> SoutherExamples.ofSource(namesNothing),
-                "the rows cannot be run: what the behavior states could not be read");
-        assertFalse(refused.diagnostics().isEmpty(), "and the name was reported where it was written");
+                () -> SoutherExamples.ofSource(MODEL.replace(
+                        "behavior findTodo : (id: TodoId) -> Todo | NotFound\n",
+                        """
+                        behavior findTodo : (id: TodoId) -> Todo | NotFound
+                            ensures Title -> value.id.value == id.value
+                        """)),
+                "an arm that is not a case of what the behavior answers");
+        assertEquals(List.of("E1619"),
+                refused.diagnostics().stream().map(souther.compiler.diag.Diagnostic::code).distinct().toList());
+    }
+
+    /** {@link #MODEL} with one clause written on {@code findTodo}. */
+    private static String declaring(String clause) {
+        return MODEL.replace(
+                "behavior findTodo : (id: TodoId) -> Todo | NotFound\n",
+                "behavior findTodo : (id: TodoId) -> Todo | NotFound\n"
+                        + "    ensures Todo -> " + clause + "\n");
     }
 
     // --- harness ---------------------------------------------------------------------------------

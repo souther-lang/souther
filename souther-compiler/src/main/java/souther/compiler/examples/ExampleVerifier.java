@@ -515,8 +515,16 @@ public final class ExampleVerifier {
                             String.valueOf(e.getMessage())));
         }
         String why = ensures.notHeld(new ValueName.Behavior(module.name(), behavior), args, here);
-        return why == null ? new ContractObservation.NoClauseWasBroken()
-                : new ContractObservation.Broken(why, fixtures.observed(answered));
+        // Written here and not in the arm. What writes a value the way a fixture writes one needs the
+        // module's declarations to tell a newtype from what it wraps, and an arm holding neither
+        // could only fall back on the value's own `toString` — a shape no report should be written
+        // from, and one that would differ from every other value this compiler shows a reader.
+        if (why == null) {
+            return new ContractObservation.NoClauseWasBroken();
+        }
+        ObservedValue observed = fixtures.observed(answered);
+        return new ContractObservation.Broken(why, observed,
+                fixtures.shown(observed, sig.outputType()));
     }
 
     /**
@@ -543,8 +551,11 @@ public final class ExampleVerifier {
                     "the observation ran out of stack");
         }
         if (cause instanceof java.util.concurrent.CancellationException) {
+            // Said of an observation and not of a stand-in's entry: a contract check comes through
+            // here as well, and naming one of the two callers would report the other's cancellation
+            // as something it is not.
             throw new java.util.concurrent.CancellationException(
-                    "interrupted while observing a stand-in's entry");
+                    "interrupted while making an observation");
         }
         if (cause instanceof RuntimeException re) {
             throw re;
