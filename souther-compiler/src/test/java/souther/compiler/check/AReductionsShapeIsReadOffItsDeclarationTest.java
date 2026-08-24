@@ -1,7 +1,6 @@
 package souther.compiler.check;
 
 import souther.compiler.DefaultStdlib;
-import souther.compiler.stdlib.Stdlib;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain.Bounds;

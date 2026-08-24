@@ -1,7 +1,6 @@
 package souther.compiler.check;
 
 import souther.compiler.DefaultStdlib;
-import souther.compiler.stdlib.Stdlib;
 import org.junit.jupiter.api.Test;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
