@@ -337,7 +337,22 @@ class EverySchemaWordIsAccountedForTest {
             // are the citation's own, and are read off it rather than listed here.
             new Vocabulary("at.writtenAt.kind",
                     List.of("$defs", "writtenAt", "properties", "kind"),
-                    List.of(Citation.class), writtenAtWords(), Set.of()));
+                    List.of(Citation.class), writtenAtWords(), Set.of()),
+            // What showed a row can be written at a point. Spelled by the writer rather than by the
+            // constants, the way `status` is: which grounds a consumer must handle is a decision
+            // about the contract, and renaming one inside the compiler is not.
+            new Vocabulary("partition.boundaries[].items[].writableBecause",
+                    List.of("$defs", "partition", "properties", "boundaries", "items", "properties",
+                            "items", "items", "properties", "writableBecause", "items"),
+                    List.of(ItemAssessment.WritabilityEvidence.Ground.class), groundWords(),
+                    Set.of()));
+
+    /** The grounds a document may name, spelled by the one writer of the field. */
+    private static Set<String> groundWords() {
+        return Arrays.stream(ItemAssessment.WritabilityEvidence.Ground.values())
+                .map(AdequacyReport::wire)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+    }
 
     /**
      * The status words the schema allows are the ones the writer can write.

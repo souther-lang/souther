@@ -1423,8 +1423,13 @@ public final class Adequacy {
             // model's, and this is handed both rather than assembling one of them.
             List<BorderAssessment> out = new ArrayList<>();
             for (Axis axis : partitioning.axes()) {
+                // A reading that ran, so its answer is one of the two a reading comes to. The third
+                // state belongs to the lines between two positions, where the question is not put at
+                // all, and is spelled there rather than here — a boolean lifted at the boundary it
+                // is answered at cannot arrive somewhere as the wrong one of the three.
                 out.addAll(Coverages.assess(partitioning.along(axis), inputs, observed, level,
-                        partitioning.edgeIsKnownWritable(axis.term())));
+                        ItemAssessment.WritabilityProjection.ofReading(
+                                partitioning.edgeIsKnownWritable(axis.term()))));
             }
             out.addAll(Coverages.assessBetween(partitioning, inputs, observed, level));
             return List.copyOf(out);

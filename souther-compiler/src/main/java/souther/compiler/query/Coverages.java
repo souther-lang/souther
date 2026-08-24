@@ -529,13 +529,14 @@ final class Coverages {
     static List<BorderAssessment> assess(
             List<Border> lines, BehaviorInputs where,
             souther.compiler.query.Adequacy.RowReading observed,
-            souther.compiler.query.Adequacy.Level level, boolean knownWritable) {
+            souther.compiler.query.Adequacy.Level level,
+            ItemAssessment.WritabilityProjection projection) {
         // Keyed by the line rather than by the reading of it. A guard inside a non-recursive helper
         // is read once per call of that helper, and the rows do not owe the same border twice for
         // having been offered it twice; what each reading saw is merged below.
         java.util.SequencedMap<BoundaryLine, BorderAssessment> out = new java.util.LinkedHashMap<>();
         for (Border each : lines) {
-            out.merge(BoundaryLine.of(each), assessed(each, reading(each, where, knownWritable),
+            out.merge(BoundaryLine.of(each), assessed(each, reading(each, where, projection),
                             observed, level),
                     Coverages::whicheverSawMore);
         }
@@ -550,9 +551,9 @@ final class Coverages {
      * whether the rules prove it writable are all carried through untouched, and the only thing this
      * puts in is the attempt at the points the measurement itself says are worth an attempt.
      *
-     * <p>Which is what makes composing later safe to do. The verdict is read off the evidence, and
-     * nothing a search finds is evidence against a point — so this can add a witness and can never
-     * take one away, whenever it is run and however many points it is run over.
+     * <p>Which is what makes composing later safe to do. What shows a point writable is read off the
+     * evidence, and nothing a search finds is evidence against a point — so this can add a ground and
+     * can never take one away, whenever it is run and however many points it is run over.
      */
     static List<BorderAssessment> searched(List<BorderAssessment> measured, BehaviorInputs where,
                                            Probe probe, souther.compiler.inputs.Quantities rules,
@@ -613,8 +614,10 @@ final class Coverages {
         /** Whether one of {@code rows} meets {@code criterion}, and whether that could be told. */
         Met met(Criterion criterion, List<RowOutcome> rows);
 
-        /** Whether the rules this reading took in prove a row can be written at this border. */
-        boolean provenWritable();
+        /** What reading the rules this reading took in established about a row being writable at
+         *  this border. Three answers rather than two: a shape whose rules were never put the
+         *  question is not one whose rules failed to answer it. */
+        ItemAssessment.WritabilityProjection projection();
     }
 
     /** What building a row at one point of a border comes to. Its own interface beside the reading
@@ -667,7 +670,7 @@ final class Coverages {
                     // composed is a fact about who asked for one, and a measurement that carried it
                     // was answering a question it had not been put.
                     yield new ItemAssessment.Owed(owed.criterion(), coverage,
-                            shape.provenWritable(), null);
+                            shape.projection(), null);
                 }
             });
         }
@@ -684,7 +687,7 @@ final class Coverages {
      * place reaching the reader of a pair as an {@code IllegalStateException}.
      */
     private static OneShapeOfBorder reading(Border border, BehaviorInputs where,
-                                            boolean knownWritable) {
+                                            ItemAssessment.WritabilityProjection projection) {
         BorderQuantity quantity = border.cut().of();
         java.util.Optional<souther.compiler.coverage.ComparisonOccurrence> site =
                 border.origin().comparisonAt();
@@ -696,8 +699,8 @@ final class Coverages {
             }
 
             @Override
-            public boolean provenWritable() {
-                return knownWritable;
+            public ItemAssessment.WritabilityProjection projection() {
+                return projection;
             }
         };
     }
@@ -1022,11 +1025,12 @@ final class Coverages {
      * neither of them, so there is no axis to hang it off — and a behavior can have one while having
      * no axis at all, which is every model whose inputs are plain numbers nothing bounds.
      *
-     * <p>Nothing is promised of one yet. Whether a row can be written on the line takes a place both
-     * positions admit, and until that is read the line is one nothing has shown to be writable —
-     * which is reported and not counted, the same account any other unpromised edge gets. Two ranges
-     * overlapping is not two positions holding a pair, and what refuses the pair need not be in
-     * either range.
+     * <p>Nothing is promised of one yet, and the projection says so in the one word for it. Whether
+     * a row can be written on the line takes a place both positions admit, and reading each position
+     * on its own does not answer that: two ranges overlapping is not two positions holding a pair,
+     * and what refuses the pair need not be in either range. So the reading is not made rather than
+     * made and coming to nothing, and the line is one nothing has shown to be writable — reported and
+     * not counted, the same account any other unpromised edge gets.
      */
     static List<BorderAssessment> assessBetween(
             Partitions.Partitioning partitioning, BehaviorInputs where,
@@ -1039,7 +1043,9 @@ final class Coverages {
         java.util.SequencedMap<BoundaryLine, BorderAssessment> out = new LinkedHashMap<>();
         for (Border each : partitioning.between()) {
             out.merge(BoundaryLine.of(each),
-                    assessed(each, reading(each, where, false), observed, level),
+                    assessed(each, reading(each, where,
+                                    ItemAssessment.WritabilityProjection.NOT_COMPUTED),
+                            observed, level),
                     Coverages::whicheverSawMore);
         }
         return List.copyOf(out.values());
