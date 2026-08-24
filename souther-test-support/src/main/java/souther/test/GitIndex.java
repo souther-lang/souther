@@ -44,11 +44,27 @@ public final class GitIndex {
         this.tracked = List.copyOf(tracked);
     }
 
+    /**
+     * What git is asked. The index and not the working tree, and separated by NUL so that a file
+     * whose name would otherwise be quoted comes back as it is.
+     */
+    static final List<String> LS_FILES = List.of("ls-files", "-z", "--cached");
+
     /** What git holds in {@code layout}'s repository. */
     public static GitIndex of(RepositoryLayout layout) {
+        return of(layout, LS_FILES.toArray(String[]::new));
+    }
+
+    /**
+     * The same, asked with {@code arguments}.
+     *
+     * <p>Here so that a check can watch this refuse a git that refuses, which is the behaviour
+     * everything built on this depends on and the one that cannot be reached by asking correctly.
+     */
+    static GitIndex of(RepositoryLayout layout, String... arguments) {
         Path root = layout.root();
         List<Path> tracked = new ArrayList<>();
-        for (String name : run(root, "ls-files", "-z", "--cached").split("\0")) {
+        for (String name : run(root, arguments).split("\0")) {
             if (!name.isEmpty()) {
                 tracked.add(Path.of(name));
             }
@@ -86,49 +102,74 @@ public final class GitIndex {
     private static String run(Path root, String... arguments) {
         List<String> command = new ArrayList<>(List.of("git", "-C", root.toString()));
         command.addAll(List.of(arguments));
-        Path complaint;
+        Path answer = temporary("git-ls-files", ".out");
+        Path complaint = temporary("git-ls-files", ".err");
+        try {
+            return outcomeOf(command, answer, complaint);
+        } finally {
+            // A temporary file left in the temporary directory is not worth replacing the reason
+            // this is being unwound with. After a timeout the process may not have let go of it
+            // yet, and losing "git did not finish" to "could not delete a file" would answer a
+            // question nobody asked.
+            deleteQuietly(answer);
+            deleteQuietly(complaint);
+        }
+    }
+
+    /**
+     * What running {@code command} came to, with neither of its streams on a pipe.
+     *
+     * <p>Both go to files, so nothing here is reading the process while it runs. That is what makes
+     * the bound below a bound: reading a pipe is waiting for the process to write, and a wait for
+     * the process cannot be reached from inside a wait for its output. With the streams on files,
+     * the process is finished, or forced to be, before anything it wrote is read.
+     */
+    private static String outcomeOf(List<String> command, Path answer, Path complaint) {
         Process git;
         try {
-            // What git says about itself goes to a file rather than a pipe. Read from a pipe it
-            // would have to be read while the list is being read, and one reader cannot do both:
-            // git blocked writing a full stderr pipe never finishes writing the list this is
-            // blocked reading.
-            complaint = Files.createTempFile("git-ls-files", ".err");
             git = new ProcessBuilder(command)
-                    .redirectError(ProcessBuilder.Redirect.to(complaint.toFile()))
+                    .redirectOutput(answer.toFile())
+                    .redirectError(complaint.toFile())
                     .start();
         } catch (IOException noGit) {
             throw new IllegalStateException("cannot run " + String.join(" ", command)
                     + ": this reads what the repository holds and git is what holds it", noGit);
         }
-        byte[] out;
-        String err;
-        int status;
         try {
-            out = git.getInputStream().readAllBytes();
             if (!git.waitFor(2, TimeUnit.MINUTES)) {
                 git.destroyForcibly();
-                throw new IllegalStateException(String.join(" ", command) + " did not finish");
+                throw new IllegalStateException(String.join(" ", command)
+                        + " did not finish within two minutes: this refuses rather than waiting on"
+                        + " a git that is not going to answer");
             }
-            status = git.exitValue();
-            err = Files.readString(complaint, StandardCharsets.UTF_8).trim();
+            int status = git.exitValue();
+            if (status != 0) {
+                throw new IllegalStateException(String.join(" ", command) + " exited " + status
+                        + ": " + Files.readString(complaint, StandardCharsets.UTF_8).trim());
+            }
+            return Files.readString(answer, StandardCharsets.UTF_8);
         } catch (IOException unreadable) {
             throw new UncheckedIOException(unreadable);
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException(String.join(" ", command) + " was interrupted",
                     interrupted);
-        } finally {
-            try {
-                Files.deleteIfExists(complaint);
-            } catch (IOException leftBehind) {
-                throw new UncheckedIOException(leftBehind);
-            }
         }
-        if (status != 0) {
-            throw new IllegalStateException(String.join(" ", command) + " exited " + status + ": "
-                    + err);
+    }
+
+    private static Path temporary(String name, String suffix) {
+        try {
+            return Files.createTempFile(name, suffix);
+        } catch (IOException noRoom) {
+            throw new UncheckedIOException(noRoom);
         }
-        return new String(out, StandardCharsets.UTF_8);
+    }
+
+    private static void deleteQuietly(Path path) {
+        try {
+            Files.deleteIfExists(path);
+        } catch (IOException leftBehind) {
+            // Said above: not worth the reason this is being unwound with.
+        }
     }
 }

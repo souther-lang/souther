@@ -70,12 +70,22 @@ public final class RepositoryLayout {
      * also reads no more of the repository than the path it is standing on.
      */
     public static RepositoryLayout ofWorkingDirectory() {
-        return of(Path.of("").toAbsolutePath().normalize());
+        return of(Path.of(""));
     }
 
-    /** The repository {@code start} is in, for a caller that already knows where it is standing. */
+    /**
+     * The repository {@code start} is in, for a caller that already knows where it is standing.
+     *
+     * <p>{@code start} is made absolute here, which is the one place a path from outside becomes
+     * one of this class's own. A relative path means whatever the working directory is, and this
+     * class exists so that nothing else has to know what that is; searching upward from one would
+     * reach the working directory's own parents through {@code ..} segments it never resolved, and
+     * from a bare name like {@code souther-compiler} it would reach nothing at all — its parent is
+     * null and the search would end at the first step. Making it absolute at the door is what stops
+     * that from being each caller's problem to remember.
+     */
     public static RepositoryLayout of(Path start) {
-        Path root = rootAbove(start);
+        Path root = rootAbove(start.toAbsolutePath().normalize());
         List<Path> modules = new ArrayList<>();
         List<Path> sourceTrees = new ArrayList<>();
         for (String named : modulesNamedBy(root.resolve("pom.xml"))) {

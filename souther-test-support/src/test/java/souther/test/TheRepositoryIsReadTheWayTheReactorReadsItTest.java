@@ -44,6 +44,24 @@ class TheRepositoryIsReadTheWayTheReactorReadsItTest {
         }
     }
 
+    /**
+     * Including from a path that means nothing on its own.
+     *
+     * <p>A relative path is a working directory away from being somewhere, and this class exists so
+     * that nothing else has to know what the working directory is. Left as written, {@code "."} has
+     * no parent to search upward through and {@code "souther-compiler"} has none either, so the
+     * search would end at the first step — for a path naming a real directory. The tests here run
+     * in a module, so both of these reach the same root as everything else.
+     */
+    @Test
+    void includingFromOneThatMeansNothingWithoutTheWorkingDirectory() {
+        Path root = REPOSITORY.root();
+        assertEquals(root, RepositoryLayout.of(Path.of(".")).root());
+        assertEquals(root, RepositoryLayout.of(Path.of("")).root());
+        assertEquals(root, RepositoryLayout.of(Path.of("src")).root(), "a directory of this module");
+        assertEquals(root, RepositoryLayout.of(Path.of("..")).root(), "and the root itself");
+    }
+
     @Test
     void theModulesAreTheOnesTheRootPomNames() {
         List<String> named = REPOSITORY.modules().stream()
