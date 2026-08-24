@@ -1026,8 +1026,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // stopped by one limit at one position came out as one line.
         for (Adequacy.Finding f : behavior.findings()) {
             if (f.about() instanceof About.ARuleThisCouldNotRead(var it)) {
-                out.append(String.format("      %s not read: %s — %s, about `%s`%n",
-                        mark(f), cited(it.cited(), names, declaredIn),
+                // Two sentences, because two opposite things are being said. A form no reader takes
+                // apart is a limit of this compiler; a rule whose quantity is empty was read from
+                // end to end and says what it says. Written under one word, a line read "not read:
+                // it was read to the end and cuts nothing" — which is what the reader is left to
+                // make sense of.
+                out.append(String.format("      %s %s: %s — %s, about `%s`%n",
+                        mark(f), it.readingStopped() ? "not read" : "no line",
+                        cited(it.cited(), names, declaredIn),
                         whyUnread(it.reason()), it.at()));
             }
         }

@@ -313,8 +313,8 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
                   onSpan                   implemented   rows 1    pending 0
                     signature   not applicable (this behavior's output is not a sum)
                     partition   not applicable (the rules of this behavior divide no position)
-                      · not read: invariant Span #1 — it relates two positions rather than dividing one, about `v.startsAt`
-                      · not read: invariant Span #1 — it relates two positions rather than dividing one, about `v.endsAt`
+                      · no line: invariant Span #1 — it relates two positions rather than dividing one, about `v.startsAt`
+                      · no line: invariant Span #1 — it relates two positions rather than dividing one, about `v.endsAt`
                     border      not applicable (the rules of this behavior draw no line)
                 """), report);
     }
@@ -329,8 +329,8 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
                   onFloor                  implemented   rows 1    pending 0
                     signature   not applicable (this behavior's output is not a sum)
                     partition   not applicable (the rules of this behavior divide no position)
-                      · not read: invariant Floor #1 — it relates two positions rather than dividing one, about `v.n`
-                      · not read: invariant Floor #1 — it relates two positions rather than dividing one, about `v.min`
+                      · no line: invariant Floor #1 — it relates two positions rather than dividing one, about `v.n`
+                      · no line: invariant Floor #1 — it relates two positions rather than dividing one, about `v.min`
                     border      not applicable (the rules of this behavior draw no line)
                 """), report);
     }

@@ -567,16 +567,24 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     }
 
     /**
-     * Whether any {@code not read} line of {@code block} is about {@code position}.
+     * Whether any line of {@code block} saying a rule left the position with no line is about
+     * {@code position}.
      *
      * <p>Asked as a line rather than as a prefix. A finding about a rule names the rule first and
      * the position after it, and one about a position names the position — so a test matching
      * `+not read: <position>+` stopped meaning anything for the first kind rather than failing,
      * which is a negative assertion that passes because the words moved.
+     *
+     * <p>Either word, because the report writes two: a reading that stopped is `+not read+` and a
+     * rule read to the end that divided no position is `+no line+`. Which of them a rule gets is
+     * its reason's business and not this one's — what is asked here is whether the position was
+     * named at all.
      */
     private static boolean notReadAbout(String block, String position) {
-        return block.lines().anyMatch(line -> line.contains("not read:")
+        return block.lines().anyMatch(line ->
+                (line.contains("not read:") || line.contains("no line:"))
                 && (line.contains("not read: " + position + " ")
+                        || line.contains("no line: " + position + " ")
                         || line.contains("about `" + position + "`")));
     }
 }

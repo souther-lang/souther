@@ -768,7 +768,8 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
     }
 
     /**
-     * Whether any {@code not read} line of {@code block} is about {@code position}.
+     * Whether any line of {@code block} saying a rule left the position with no line is about
+     * {@code position}, under either word the report writes for that.
      *
      * <p>Asked as a line rather than as a prefix. A finding about a rule names the rule first and
      * the position after it, and one about a position names the position — so a test matching
@@ -776,8 +777,10 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
      * which is a negative assertion that passes because the words moved.
      */
     private static boolean notReadAbout(String block, String position) {
-        return block.lines().anyMatch(line -> line.contains("not read:")
+        return block.lines().anyMatch(line ->
+                (line.contains("not read:") || line.contains("no line:"))
                 && (line.contains("not read: " + position + " ")
+                        || line.contains("no line: " + position + " ")
                         || line.contains("about `" + position + "`")));
     }
 
