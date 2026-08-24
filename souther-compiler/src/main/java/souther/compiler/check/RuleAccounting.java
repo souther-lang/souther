@@ -100,32 +100,15 @@ public final class RuleAccounting {
     public static RuleAccounting ofComparison(RuleRef rule, Required.ComparisonSubject of,
                                               RuleCitation cited) {
         Required required = Required.ofComparison(of);
-        return new RuleAccounting(rule, cited, required, answersOf(rule, required, of));
-    }
-
-    /**
-     * What answered each question the comparison raises.
-     *
-     * <p>Every arm that raises a question is one the reading reached a line on, so the reading
-     * answers it: the classes either side of the line are what it divided the position into, and
-     * the values it named are where the rows go. The arms that raise nothing have nothing to
-     * answer, and reaching this with a question would mean an arm raising one the reading never
-     * settled.
-     */
-    private static Map<Owed, Outcome> answersOf(RuleRef rule, Required required,
-                                                Required.ComparisonSubject of) {
-        return answers(rule, required, owed -> switch (of) {
-            case Required.ComparisonSubject.AnInput _,
-                 Required.ComparisonSubject.AcrossPositions _ ->
-                    new Outcome.Accounted(Reader.THE_END_READING);
-            case Required.ComparisonSubject.AnswerDependent _,
-                 Required.ComparisonSubject.NoInput _,
-                 Required.ComparisonSubject.CutsNothing _,
-                 Required.ComparisonSubject.OutsideTheDomain _,
-                 Required.ComparisonSubject.Unread _ -> throw new IllegalStateException(
-                    "a comparison that raises nothing was asked what answered " + owed
-                            + " of " + rule);
-        });
+        // Every question a comparison raises is one the reading of it answered, which is what
+        // deriving both from the one reading comes to: an arm raises a question exactly where it
+        // reached a line, and the line is the answer — the classes either side of it are what it
+        // divided the position into, and the value it named is where the row goes. So a comparison
+        // whose question nothing settled is not a state this can be in, rather than one nothing
+        // happens to produce. Where the reading stopped, nothing is raised and what stopped it is
+        // recorded instead.
+        return new RuleAccounting(rule, cited, required,
+                answers(rule, required, _ -> new Outcome.Accounted(Reader.THE_END_READING)));
     }
 
     /** Which rule of the model, as everything that names a rule names it. */

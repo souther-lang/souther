@@ -202,7 +202,7 @@ public final class Partitions {
         for (Axis axis : kept) {
             keep(new ArrayList<>(), measured, axis, null, unread);
         }
-        MeasureClosure.Both closed = MeasureClosure.of(kept, List.of(), unread);
+        MeasureClosure.Both closed = MeasureClosure.of(kept, unread);
         return new Partitioning(kept, uncertain, undividedIn(measured),
                 List.copyOf(unread), blockedIn(measured), List.copyOf(notSeparated),
                 List.of(), linesAlong(kept, quantities, symbols), List.of(), ReachingCuts.NONE,
@@ -500,7 +500,7 @@ public final class Partitions {
                     reachable.stream().map(Threshold::parts).toList()),
                     reachable.isEmpty() ? null : new BodyCutInspection.Evidence(), rules);
         }
-        MeasureClosure.Both closed = MeasureClosure.of(out, compared, rules);
+        MeasureClosure.Both closed = MeasureClosure.of(out, rules);
         return new Partitioning(out, base.uncertain(),
                 undividedIn(measured), List.copyOf(rules), blockedIn(measured),
                 // Carried across: what a reading could not hold together is a fact about the

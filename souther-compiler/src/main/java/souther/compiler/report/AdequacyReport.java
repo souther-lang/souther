@@ -2243,8 +2243,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                         WeakeningWord.RULE_UNREAD;
                 case souther.compiler.partition.ClosureGap.PositionNotReachedInto _ ->
                         WeakeningWord.POSITION_NOT_READ;
-                case souther.compiler.partition.ClosureGap.QuestionUnanswered _,
-                     souther.compiler.partition.ClosureGap.ComparisonUnanswered _ ->
+                case souther.compiler.partition.ClosureGap.QuestionUnanswered _ ->
                         WeakeningWord.QUESTION_UNANSWERED;
                 case souther.compiler.partition.ClosureGap.RulesNotReached _ ->
                         WeakeningWord.RULES_NOT_REACHED;
