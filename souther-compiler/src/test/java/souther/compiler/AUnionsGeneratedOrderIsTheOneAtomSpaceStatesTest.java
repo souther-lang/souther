@@ -2,6 +2,10 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
+import java.lang.classfile.ClassFile;
+import java.lang.classfile.CodeElement;
+import java.lang.classfile.MethodModel;
+import java.lang.classfile.instruction.TypeCheckInstruction;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -46,10 +50,25 @@ class AUnionsGeneratedOrderIsTheOneAtomSpaceStatesTest {
             behavior locate : (n: Int) -> Where | NotFound
             """;
 
+    private static final List<String> STATED =
+            List.of("m.NotFound", "m.Domestic", "m.Overseas", "m.Draft");
+
     @Test
     void theInterfacePermitsTheAtomsInTheOrderTheyAreStatedIn() throws Exception {
-        assertEquals(List.of("m.NotFound", "m.Domestic", "m.Overseas", "m.Draft"), permitsOf("locate"),
+        assertEquals(STATED, permitsOf("locate"),
                 "the union's members are its roots in name order, each descended where it is a sum");
+    }
+
+    /**
+     * And the encoder dispatches in the same order.
+     *
+     * <p>Read as well as the {@code permits}, because they are two places the order is written down
+     * and the defect was a consumer restating it. Holding only the interface leaves a sort that came
+     * back inside the encoder alone unreported, which is the same shape from one step further in.
+     */
+    @Test
+    void theEncoderDispatchesInThatOrderToo() {
+        assertEquals(STATED, encoderDispatchOf("locate"));
     }
 
     /** And not the order sorting the atoms by name gives, which is what codegen used to write. */
@@ -67,5 +86,26 @@ class AUnionsGeneratedOrderIsTheOneAtomSpaceStatesTest {
                 AUnionsGeneratedOrderIsTheOneAtomSpaceStatesTest.class.getClassLoader());
         return Arrays.stream(loader.loadClass(Emitted.result("m", behavior)).getPermittedSubclasses())
                 .map(Class::getName).toList();
+    }
+
+    /** The types the union's encoder tests, in the order it tests them. */
+    private static List<String> encoderDispatchOf(String behavior) {
+        Map<String, byte[]> classes = Compiler.compileModules(List.of(MODULE));
+        byte[] encoder = classes.get(Emitted.resultEncoder("m", behavior));
+        List<String> tested = new ArrayList<>();
+        for (MethodModel method : ClassFile.of().parse(encoder).methods()) {
+            if (!method.methodName().stringValue().equals("encode")) {
+                continue;
+            }
+            method.code().ifPresent(code -> {
+                for (CodeElement element : code) {
+                    if (element instanceof TypeCheckInstruction check
+                            && check.opcode() == java.lang.classfile.Opcode.INSTANCEOF) {
+                        tested.add(check.type().asSymbol().displayName());
+                    }
+                }
+            });
+        }
+        return tested.stream().map(n -> "m." + n).toList();
     }
 }

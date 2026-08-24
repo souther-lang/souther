@@ -11,6 +11,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Whether the declarations an answer reads a row's values by are the ones the row is written for.
@@ -420,6 +421,38 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
         Agreement.Disagree said = assertInstanceOf(Agreement.Disagree.class, held,
                 "the answer has no case for what the row expects");
         assertEquals("Outcome", said.declaration());
+    }
+
+    /**
+     * A case of a union that stopped being a unit, with the union itself untouched.
+     *
+     * <p>What the union lists is the same list of the same names, so a comparison that read the
+     * union and stopped there sees nothing. What changed is one of the declarations it lists, and
+     * that changes how a value of it crosses: a unit is the discriminator alone and a product lays
+     * its fields beside it.
+     *
+     * <p>Written for the deletion rather than for the coverage. A sum used to carry a derived
+     * decoder and encoder, and those were compared here; they are derived from the declaration now
+     * ({@code check.Boundary}) and the comparison is {@code declares} and {@code cases}. That is
+     * only safe if the walk reaches the case's own declaration, and this is that being measured
+     * rather than argued — the neighbouring test moves the union's own list and would pass either
+     * way.
+     */
+    @Test
+    void aCaseThatStoppedBeingAUnitIsADisagreementThoughTheUnionIsUnchanged() {
+        // `data Outcome = Todo | NotFound` is the same line in both, and `NotFound` is a unit in one
+        // and a product in the other.
+        String asAUnit = UNION_MODEL.replace("data NotFound = { title: Title }", "data NotFound");
+        assertTrue(asAUnit.contains("data Outcome = Todo | NotFound"),
+                "the union's own line is untouched, so what differs is the case and nothing else");
+
+        Agreement held = DeclarationAgreement.of("example.stale", "find",
+                declarationsOf(UNION_MODEL), declarationsOf(asAUnit));
+
+        Agreement.Disagree said = assertInstanceOf(Agreement.Disagree.class, held,
+                "the case's own declaration is reached through the union that lists it");
+        assertEquals("NotFound", said.declaration(),
+                "the walk reports the case it reached, not the union it came through");
     }
 
     /**

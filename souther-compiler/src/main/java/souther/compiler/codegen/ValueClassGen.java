@@ -219,6 +219,15 @@ final class ValueClassGen {
             // is, and the codecs on both sides read it from here.
             if (enumeration) {
                 emitTagMethod(cb, alternatives.wireCases());
+            }
+            // Where a case stands in the declaration is the language's order (ADR-0069) and not how
+            // a value is written, so it is gated on what answers that — the same `Ordering` every
+            // reader of a comparison asks, which is what sends them to this class's `__order`. The
+            // two gates hold of the same sums today. Written as one, a wire form that stopped being
+            // a bare tag would take the ordering methods with it and leave a comparison calling a
+            // method nothing emitted.
+            if (Ordering.of(Type.ref(sum.declares()), symbols) instanceof Ordering.Places places
+                    && places.enumeration().equals(sum.declares())) {
                 emitOrderMethods(cb, cdX, alternatives.atoms());
             }
             codec.emitCodecFactory(cb, "decoder", CD_RDecoder, cd(new GeneratedClass.Decoder(valueOf(sum), DecoderKind.VALUE)),

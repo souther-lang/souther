@@ -103,10 +103,12 @@ class AnEnumerationIsOneAnswerToTheLanguageAndTheBoundaryTest {
      * questions, and this is where holding them apart earns itself.
      *
      * <p>What used to read the boundary's question through the language's one is
-     * {@code NeutralForm.readsABareName}, which decides how a fixture writes a value standing at a
-     * position. Answered by {@code isUnitOnlySum}, a fixture at a union of units wrote
-     * {@code {"type": "Denied"}} for a value the union writes as {@code "Denied"} — the same value
-     * travelling two ways depending on where it sat, which is #994's own subject.
+     * {@code NeutralForm.readsABareName}, which decides the neutral form of a value standing at a
+     * position. Answered by {@code isUnitOnlySum}, a union of units came out as {@code {}} — the
+     * empty object a unit writes on its own — where its generated encoder writes {@code "Denied"}.
+     * No verification outcome moved when it changed, both the row's value and the answer being
+     * normalised through the same walk; what changed is that the neutral form is now the form the
+     * boundary actually reads.
      */
     @Test
     void aUnionOfUnitsIsWrittenAsABareTagAndIsNoNamedSum() {
