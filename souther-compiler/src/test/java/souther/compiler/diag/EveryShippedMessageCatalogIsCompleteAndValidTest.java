@@ -10,6 +10,7 @@ import souther.compiler.diag.msg.MessageValues;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.Ordering;
+import souther.compiler.Reserved;
 import souther.compiler.check.Prelude;
 import souther.compiler.types.Type;
 
@@ -1029,7 +1030,7 @@ public class EveryShippedMessageCatalogIsCompleteAndValidTest {
         for (String line : Files.readAllLines(catalog, StandardCharsets.UTF_8)) {
             Matcher m = quoted.matcher(line);
             while (m.find()) {
-                if (!Prelude.isQualifier(m.group(1))) {
+                if (!Reserved.isQualifier(m.group(1))) {
                     continue;
                 }
                 String qualified = m.group(1) + "." + m.group(2);
