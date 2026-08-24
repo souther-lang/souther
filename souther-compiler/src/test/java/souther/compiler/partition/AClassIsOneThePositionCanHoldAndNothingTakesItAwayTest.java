@@ -95,9 +95,16 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
         return partitioning.axes().get(0);
     }
 
+    /**
+     * The classes of the parameter's own position, which is the first axis read.
+     *
+     * <p>Not the only one. A case that carries a record puts positions under the parameter, and
+     * what those divide into is a question about them — asked here, a model whose sum holds a
+     * record would be answered with a field's classes or with none.
+     */
     private static List<String> classesOf(Partitions.Partitioning partitioning) {
-        assertEquals(1, partitioning.axes().size(), partitioning.axes().toString());
-        return classesAt(partitioning, partitioning.axes().get(0).path().toString());
+        String parameter = partitioning.axes().get(0).path().head();
+        return classesAt(partitioning, parameter);
     }
 
     /** The classes of the position at {@code path}, where a behavior has more than one. */

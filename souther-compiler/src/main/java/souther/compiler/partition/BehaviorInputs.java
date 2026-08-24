@@ -4,6 +4,7 @@ import souther.compiler.check.Shape;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
+import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.StructuralDescent;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.observe.ObservedValue;
@@ -170,6 +171,12 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, Symbols 
      * written, and answering a caller that wants one with the first of them would report what is
      * covered off an element it chose — so such a position answers null here and {@link #valuesAt}
      * is what reads it.
+     *
+     * <p><b>Null runs three answers together, and a caller that has to tell them apart asks
+     * {@link #occurrencesAt}.</b> The walk could not be taken, or it was taken and the row stands
+     * nowhere here — the empty list, an element of nothing or a position under a case the row is
+     * not at — or several values stand and none of them is the one. What is covered and what a
+     * measurement is short of are different answers about a row, and only that one keeps them.
      */
     public ObservedValue valueAt(List<ObservedValue> inputs, TermPath path) {
         List<ObservedValue> values = valuesAt(inputs, path);
@@ -230,8 +237,57 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, Symbols 
                                 inside, deeper));
                     }
                 }
+                // The value stays where it is and what may stand there narrows. A row whose value
+                // does not meet the narrowing takes the step and stands nowhere below it — the
+                // same answer a row writing the empty list gives at an element, and not the answer
+                // a row nothing could read gives. What refuses the step is the type and the path
+                // disagreeing about what is at this position, which is nothing about the row.
+                case TermPath.Step.Refine refine -> {
+                    Type narrowed = narrowing(refine.refinement(), view, here);
+                    if (narrowed == null) {
+                        return false;
+                    }
+                    if (stands(refine.refinement(), here)) {
+                        out.add(new Standing(here, narrowed, reached.refine(refine.refinement()),
+                                at));
+                    }
+                }
             }
             return true;
+        }
+
+        /**
+         * The type standing here once {@code refinement} has narrowed it, or null where the
+         * position's shape is not one that refinement is of.
+         *
+         * <p>Null is the walk and the declaration disagreeing, which is the same thing a field
+         * step answers null for: nothing went wrong with the row.
+         *
+         * <p>Nothing is descended into. What a sum's case holds is the value the sum held, and what
+         * an optional holds is at no name of its own — so both narrow the type at this position and
+         * leave the value where it is.
+         */
+        private static Type narrowing(Refinement refinement, TypeView view, ObservedValue here) {
+            return switch (refinement) {
+                case Refinement.SumCase one -> view.shape() instanceof Shape.Sum
+                        ? Type.ref(one.leaf()) : null;
+                case Refinement.Presence presence ->
+                        !(view.shape() instanceof Shape.Optional optional) ? null
+                                : presence.present() ? optional.element() : view.declared();
+            };
+        }
+
+        /** Whether the value written here is one {@code refinement} leaves standing. */
+        private static boolean stands(Refinement refinement, ObservedValue here) {
+            return switch (refinement) {
+                case Refinement.SumCase one -> switch (here) {
+                    case ObservedValue.Unit unit -> one.leaf().equals(unit.type());
+                    case ObservedValue.Constructed made -> one.leaf().equals(made.type());
+                    default -> false;
+                };
+                case Refinement.Presence presence ->
+                        presence.present() != (here instanceof ObservedValue.Absent);
+            };
         }
     }
 }

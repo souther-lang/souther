@@ -384,7 +384,11 @@ public final class PathReachability {
                 // would claim work the domains did not do.
                 for (Core.Case arm : match.cases()) {
                     PathEngine.Entered in = engine.enteringArm(arm, match.scrutinee(), k, at);
-                    walk(arm.body(), in.known(), in.at(), reads, decided, false);
+                    // And the name the arm binds stands for the scrutinee's position narrowed to
+                    // the case it selects, which is where a comparison written inside the arm draws
+                    // its line.
+                    walk(arm.body(), in.known(), in.at(), reads.insideArm(match, arm, symbols),
+                            decided, false);
                 }
             }
             default -> {

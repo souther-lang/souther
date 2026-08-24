@@ -85,6 +85,18 @@ public final class UnreachableClaims {
             claimedIn(match, names, symbols, plan, answering, found);
         }
         boolean inside = reachable && answering.at(e);
+        // Each arm under what it says the value it matched turned out to be: the name it binds
+        // stands for the scrutinee's position narrowed to that case, so a claim written about a
+        // position inside the arm is about a position of the input. Every other child is walked as
+        // it was.
+        if (e instanceof Core.Match match) {
+            claimedUnder(match.scrutinee(), names, symbols, plan, answering, inside, found);
+            for (Core.Case arm : match.cases()) {
+                claimedUnder(arm.body(), names.insideArm(match, arm, symbols), symbols, plan,
+                        answering, inside, found);
+            }
+            return;
+        }
         Core.forEachChild(e,
                 child -> claimedUnder(child, names, symbols, plan, answering, inside, found));
     }

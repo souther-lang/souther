@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.Refinement;
 import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
 
@@ -25,20 +26,32 @@ import souther.compiler.values.ValueSet;
  *                        <p>Null is "not written out here" and never "holds nothing" — a class
  *                        that holds nothing is not a class of the position, and what decides that
  *                        is the reading this is put to
+ * @param selects         the narrowing a row sits in this class thereby meets, and null where
+ *                        sitting in it narrows nothing. What tells a case of a sum from a value of
+ *                        a range: a row in the {@code GlobalQuery} class of a position <em>is</em> a
+ *                        {@code GlobalQuery} there, which is what the positions under that case
+ *                        require of it.
+ *
+ *                        <p>Kept beside {@link #id} rather than recovered from it. The id is a name
+ *                        for a report and is stable within its axis; which narrowing the class is
+ *                        is what decides whether two classes can be in one row, and reading that
+ *                        off a name is the same position answering differently depending on how it
+ *                        was spelled
  */
 public record PartitionClass(String id, String label, Classifier classifier,
-                             RepresentativeSource representatives, ValueSet denotes) {
+                             RepresentativeSource representatives, ValueSet denotes,
+                             Refinement selects) {
 
     public static PartitionClass of(String id, String label, Classifier classifier,
                                     RepresentativeSource representatives) {
-        return new PartitionClass(id, label, classifier, representatives, null);
+        return new PartitionClass(id, label, classifier, representatives, null, null);
     }
 
     /** A class nothing can produce a value for, and why. */
     public static PartitionClass ungeneratable(String id, String label, Classifier classifier,
                                                String why) {
         return new PartitionClass(id, label, classifier,
-                new RepresentativeSource.Ungeneratable(why), null);
+                new RepresentativeSource.Ungeneratable(why), null, null);
     }
 
     /**
@@ -50,7 +63,18 @@ public record PartitionClass(String id, String label, Classifier classifier,
      * whole, which is the safe direction — the class stays.
      */
     public PartitionClass holding(ValueSet values) {
-        return new PartitionClass(id, label, classifier, representatives, values);
+        return new PartitionClass(id, label, classifier, representatives, values, selects);
+    }
+
+    /**
+     * The same class, saying which narrowing a row in it meets.
+     *
+     * <p>Written by the producer that knows, as {@link #holding} is. A class that narrows nothing
+     * says nothing here, and a reader asking what a row in it has to be is answered with the
+     * requirements of its position and no more.
+     */
+    public PartitionClass selecting(Refinement refinement) {
+        return new PartitionClass(id, label, classifier, representatives, denotes, refinement);
     }
 
     /**
