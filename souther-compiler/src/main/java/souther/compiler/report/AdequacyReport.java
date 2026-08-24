@@ -97,10 +97,31 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     public record ModuleReport(String module, SourceId declaredIn,
-                               List<Incompleteness> incompleteness, List<BehaviorReport> behaviors) {
+                               List<BehaviorReport> behaviors) {
         public ModuleReport {
-            incompleteness = List.copyOf(incompleteness);
             behaviors = List.copyOf(behaviors);
+        }
+
+        /**
+         * Why the measures of this module could not read everything, as the reasons themselves.
+         *
+         * <p>Derived from what its behaviors went without, and not gathered beside it. These are the
+         * lines a document prints under a behavior and the entries a build counts; the status above
+         * them is the same union read another way, and the two were assembled separately — one from
+         * the measures, one by walking the sources again. A list built the second way can hold a
+         * reason no measure carried, which is a report saying something the measures beside it do
+         * not (issue #996).
+         *
+         * <p>One entry per reason. A reason that counts against every behavior is carried by every
+         * one of them and is one thing to tell an author, and a module-wide failure found from each
+         * of three attached files is one failure.
+         */
+        public List<Incompleteness> incompleteness() {
+            Map<Object, Incompleteness> byIdentity = new LinkedHashMap<>();
+            for (Incompleteness gap : weakenedBy().observationCauses()) {
+                byIdentity.putIfAbsent(gap.identity(), gap);
+            }
+            return List.copyOf(byIdentity.values());
         }
 
         /**
@@ -246,36 +267,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // (issue #996).
         Map<String, Adequacy.RowReading> readings =
                 compilation.db().ask(new Adequacy.Rows(name)).value();
-        List<Incompleteness> incompleteness = new ArrayList<>();
-        if (readings != null) {
-            for (Adequacy.RowReading reading : readings.values()) {
-                for (Incompleteness gap : reading.gaps()) {
-                    // One entry per reason. A module-level failure found from each of three attached
-                    // files is one failure, and a build that counts these should count one; so is a
-                    // reason that counts against every behavior, which every one of them carries.
-                    if (incompleteness.stream()
-                            .noneMatch(had -> had.identity().equals(gap.identity()))) {
-                        incompleteness.add(gap);
-                    }
-                }
-            }
-        }
         Map<String, Adequacy.SignatureEvidence> signatures =
                 compilation.db().ask(new Adequacy.Witnesses(name)).value();
         Map<String, PartitionEvidence> partitions =
                 compilation.db().ask(new Adequacy.Coverage(name)).value();
-        // Why the rows a position could not place could not be placed. The count is the axis's and
-        // says how much; this says what happened, and joining the two lists is this report's job
-        // rather than the coverage's — one of them is a measurement and the other is a reason.
-        if (partitions != null) {
-            for (PartitionEvidence partition : partitions.values()) {
-                for (Incompleteness gap : partition.whyUnclassified()) {
-                    if (incompleteness.stream().noneMatch(had -> had.identity().equals(gap.identity()))) {
-                        incompleteness.add(gap);
-                    }
-                }
-            }
-        }
         Map<String, Adequacy.BranchEvidence> branches =
                 compilation.db().ask(new Adequacy.BranchCoverage(name)).value();
         // What each body declared, read where it was judged. Beside the measures and never inside
@@ -312,7 +307,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     findings == null ? List.of()
                             : findings.getOrDefault(behavior.name(), List.of())));
         }
-        return new ModuleReport(name, compilation.sourceIdOf(name), incompleteness, behaviors);
+        return new ModuleReport(name, compilation.sourceIdOf(name), behaviors);
     }
 
     /** This report with only the modules and behaviors the caller asked about. A name that matches
@@ -326,19 +321,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             }
             List<BehaviorReport> behaviors = behavior == null ? m.behaviors()
                     : m.behaviors().stream().filter(b -> behavior.equals(b.name())).toList();
-            // What a filtered report says has to be about what it shows. A reason another behavior
-            // could not be measured, carried into a report that does not mention that behavior, is a
-            // status nothing in front of the reader accounts for.
-            //
-            // A reason larger than a behavior stays: a whole source that could not be evaluated is
-            // missing rows for whatever it held, this behavior included.
-            Set<String> shown = behaviors.stream().map(BehaviorReport::name)
-                    .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
-            List<Incompleteness> gaps = behavior == null ? m.incompleteness()
-                    : m.incompleteness().stream()
-                            .filter(gap -> gap.behavior().map(shown::contains).orElse(true))
-                            .toList();
-            ModuleReport one = new ModuleReport(m.module(), m.declaredIn(), gaps, behaviors);
+            // What a filtered report says is about what it shows, and nothing here arranges that.
+            // The reasons are what the behaviors shown went without, so dropping a behavior drops
+            // what only it carried and keeps what a whole source cost every one of them. That was a
+            // filter over a list of the module's own, which is a second statement of who a reason
+            // counts against — asked of the reason where it belongs (issue #996).
+            ModuleReport one = new ModuleReport(m.module(), m.declaredIn(), behaviors);
             kept.add(one);
             overall = overall.union(one.weakenedBy());
         }
@@ -390,17 +378,58 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         if (!adequacyGaps().isEmpty()) {
             return AdequacyStatus.NOT_SATISFIED;
         }
-        boolean unread = modules.stream().anyMatch(m -> !m.incompleteness().isEmpty());
-        // Every measure the bar rests on came to an answer nothing weakened. A measurement made in
-        // part is one whose gaps may not be gaps, and one that could not be finished came to no
+        // Every measure the verdict rests on came to an answer nothing weakened. A measurement made
+        // in part is one whose gaps may not be gaps, and one that could not be finished came to no
         // answer at all — neither settles a bar.
-        return !unread && requiredMeasures().stream().allMatch(
-                m -> m instanceof Measurement.Complete<?>)
+        //
+        // The support evidence and the domain measures, which are two questions. This used to ask
+        // the second and then reach past it for a list of reasons, which is the bar's decision
+        // taken away from it: a reason about a measure this build is not held to held the verdict
+        // open, and a reason no measure carried held it open on nobody's authority (issue #996).
+        return java.util.stream.Stream.concat(requiredSupport().stream(),
+                        requiredEvidence().stream())
+                .allMatch(m -> m instanceof Measurement.Complete<?>)
                 ? AdequacyStatus.SATISFIED : AdequacyStatus.UNDETERMINED;
     }
 
     /**
-     * The measures this verdict rests on: the ones that could find a gap the bar refuses over.
+     * What the verdict rests on that is not a measure of the model: the reading of the rows.
+     *
+     * <p>Every domain measure below is counted over the rows, so how far they were read is what
+     * each of those answers is worth. A measure of the model that found no gap over rows that did
+     * not all come back has found that no gap is <em>visible</em>, which is not the same answer and
+     * is the one a bar cannot be settled by.
+     *
+     * <p>Required whether or not any domain measure applies, which is where the two differ. "No
+     * measure to be short of is not a doubt" is about the model: a behavior the bar can refuse
+     * nothing about has been asked and has nothing to answer for (issue #955). Its rows were still
+     * read or not read, and that is a separate fact — a module every measure of which is
+     * inapplicable and whose one row did not come back is undetermined, and every one of those
+     * measures is entitled to say it went without nothing (issue #996).
+     *
+     * <p><b>Except where the build does not read rows at all.</b> That is not a reading that fell
+     * short; it is this build saying it makes no measurement over rows, and every measure over them
+     * says so too — so a bar that asks for one of those is held open by that measure, and a bar
+     * that asks for none of them is a bar this build was never going to answer. Held open here as
+     * well, a build that measures nothing would be undetermined about a model the bar can refuse
+     * nothing about, which is the answer #955 took out.
+     */
+    private List<Measurement<?>> requiredSupport() {
+        List<Measurement<?>> support = new ArrayList<>();
+        for (ModuleReport module : modules) {
+            for (BehaviorReport behavior : module.behaviors()) {
+                Measurement<?> reading = behavior.reading().measured();
+                if (!(reading instanceof Measurement.NotMeasured<?>)) {
+                    support.add(reading);
+                }
+            }
+        }
+        return support;
+    }
+
+    /**
+     * The measures of the model this verdict rests on: the ones that could find a gap the bar
+     * refuses over.
      *
      * <p>Two questions and each asked of the one thing that answers it. Whether a measure was made,
      * and how much of it, is the measurement's own answer and is read from it. Which kinds of gap a
@@ -419,7 +448,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * that was made and found nothing, so a report reading them back would call the first adequate
      * and the second covered.
      */
-    private List<Measure<?>> requiredMeasures() {
+    private List<Measure<?>> requiredEvidence() {
         List<Measure<?>> measures = new ArrayList<>();
         for (ModuleReport module : modules) {
             for (BehaviorReport behavior : module.behaviors()) {

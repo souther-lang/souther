@@ -176,7 +176,7 @@ final class AReportOfOneBorder {
         return new AdequacyReport(AdequacyReport.SCHEMA_VERSION, "test",
                 held, WeakeningSet.none(),
                 List.of(new AdequacyReport.ModuleReport("example.wide",
-                        new SourceId("wide.sou"), List.of(), List.of(behavior))))
+                        new SourceId("wide.sou"), List.of(behavior))))
                 .adequacy();
     }
 }
