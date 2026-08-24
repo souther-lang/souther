@@ -50,6 +50,24 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
     private static final ReadingPolicy POLICY = new ReadingPolicy(64, 12);
     private static final TermPath AT = TermPath.of("x");
 
+    /**
+     * Numbers the operation actually answers, which is where its own bound runs.
+     *
+     * <p>Asked of the operation rather than written here. An hour of the day stops at twenty-three
+     * and a count does not stop at all, and a walk over numbers of its own would be testing one of
+     * them outside what it answers — where building nothing is the right answer and reading nothing
+     * back proves nothing.
+     */
+    private static List<Long> answerable(NumericTerm term) {
+        List<Long> out = new ArrayList<>();
+        for (long each : new long[] {0, 1, 3, 7, 23}) {
+            if (term.intrinsicBounds().admits(Count.of(each))) {
+                out.add(each);
+            }
+        }
+        return out;
+    }
+
     /** The type each operation is applied to, for the walk below to have a position to stand at. */
     private static Type sourceOf(ValueName operation) {
         Type declared = DefaultStdlib.get().entry(
@@ -103,7 +121,7 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
             Carrier answered = term.answeredOn(source, SYMBOLS);
             Carrier observed = term.observedOn(source, SYMBOLS);
             assertNotNull(answered, operation + " answers a number, so there is an order for it");
-            for (long each : new long[] {0, 1, 3, 7}) {
+            for (long each : answerable(term)) {
                 Place asked = Count.of(each);
                 TermRealizations.Realization made =
                         TermRealizations.at(term, source, answered, asked, SYMBOLS, POLICY);
@@ -145,7 +163,7 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
                     new NumericTerm.TakenOf((ValueName.Stdlib) operation, AT);
             Type source = sourceOf(operation);
             Carrier answered = term.answeredOn(source, SYMBOLS);
-            for (long each : new long[] {0, 1, 3, 7}) {
+            for (long each : answerable(term)) {
                 assertInstanceOf(TermRealizations.Realization.Built.class,
                         TermRealizations.at(term, source, answered, Count.of(each), SYMBOLS, POLICY),
                         operation + " says every number it answers is one some value answers, and"
@@ -168,13 +186,14 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
                 number(term("String", "length").read(new ObservedValue.Text("😀"),
                         Carrier.TEXT)),
                 "a string counts in code points, and one emoji is one of them");
-        assertEquals(Count.of(3),
-                number(term("Int", "abs").read(new ObservedValue.Integer(-3), Carrier.WHOLE)),
-                "a magnitude is the number with its sign dropped");
-        assertEquals(Count.of(new BigDecimal("3.5")),
-                number(term("Decimal", "abs").read(
-                        new ObservedValue.Decimal(new BigDecimal("-3.5")), Carrier.DENSE)),
-                "and a decimal's magnitude is a decimal");
+        assertEquals(Count.of(13),
+                number(term("Time", "hour").read(
+                        new ObservedValue.Temporal("13:45:12"), Carrier.TIME)),
+                "a quarter to two in the afternoon falls in the thirteenth hour");
+        assertEquals(Count.of(0),
+                number(term("Time", "hour").read(
+                        new ObservedValue.Temporal("00:45:12"), Carrier.TIME)),
+                "and three quarters of an hour past midnight falls in the noughth");
     }
 
     /**
@@ -187,12 +206,35 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
      */
     @Test
     void whatATakenNumberIsMeasuredByIsTheOperationsResult() {
-        assertEquals(Carrier.WHOLE, term("Int", "abs").answeredOn(Type.INT, SYMBOLS));
-        assertEquals(Carrier.DENSE, term("Decimal", "abs").answeredOn(Type.DECIMAL, SYMBOLS));
+        assertEquals(Carrier.WHOLE, term("Time", "hour").answeredOn(Type.Prim.TIME, SYMBOLS),
+                "an hour is counted by one");
+        assertEquals(Carrier.TIME, term("Time", "hour").observedOn(Type.Prim.TIME, SYMBOLS),
+                "while the value it is read off counts the seconds of its day");
         assertEquals(Carrier.WHOLE, term("String", "length").answeredOn(Type.STRING, SYMBOLS),
                 "and a count is whole however the thing counted is ordered");
         assertEquals(Carrier.TEXT, term("String", "length").observedOn(Type.STRING, SYMBOLS),
                 "while what is read at the position is still a string");
+    }
+
+    /**
+     * A number an operation answers is read off the value's own order, and a boundary on it is drawn
+     * on the answer's.
+     *
+     * <p>The assertion the whole separation turns on, and the one the size operations cannot make:
+     * a string has no count of its own, so nothing could tell which of the two orders a single
+     * carrier meant. A time has one, and the two orders are different — thirteen hours is
+     * forty-six thousand eight hundred seconds — so a reader handed the wrong one answers a number
+     * rather than nothing, and nothing about it looks like a failure (#1027).
+     */
+    @Test
+    void theOrderAValueIsReadOnIsNotTheOrderItsAnswerIsMeasuredOn() {
+        NumericTerm hour = term("Time", "hour");
+        assertEquals(Count.of(13),
+                number(hour.read(new ObservedValue.Temporal("13:00:00"), Carrier.TIME)));
+        assertInstanceOf(NumericTerm.Reading.NotNumber.class,
+                hour.read(new ObservedValue.Temporal("13:00:00"), Carrier.WHOLE),
+                "and handed the order the answer is measured on, the same value reads as no number"
+                        + " at all — the two orders are not one another's stand-in");
     }
 
     /**
@@ -217,8 +259,8 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
     void theNumberAnOperationAnswersIsTypedByTheLibrary() {
         assertEquals(Type.INT,
                 NumericAnswers.typeOf(ValueName.Stdlib.operation("String", "length"), SYMBOLS));
-        assertEquals(Type.DECIMAL,
-                NumericAnswers.typeOf(ValueName.Stdlib.operation("Decimal", "abs"), SYMBOLS));
+        assertEquals(Type.INT,
+                NumericAnswers.typeOf(ValueName.Stdlib.operation("Time", "hour"), SYMBOLS));
         // Not among the terms this change makes, and asked all the same: what an operation answers
         // is a question about the operation, and the answer here is the one that would have been
         // taken from the argument's order by a reader that assembled it itself.
@@ -256,6 +298,13 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
             case Hir.StringLit lit -> new ObservedValue.Text(lit.value());
             case Hir.Neg neg -> negated(observed(neg.operand()));
             case Hir.ListLit list -> collection(list.elements());
+            // A temporal is written as the namespace applied to an ISO string, and a row holds it
+            // as that text. Which temporal it is the position says, not the text — so the oracle
+            // keeps the text and lets the carrier handed to the reader decide, which is the whole
+            // arrangement being tested.
+            case Hir.Apply built when built.args().size() == 1
+                    && built.args().get(0) instanceof Hir.StringLit iso ->
+                    new ObservedValue.Temporal(iso.value());
             default -> throw new IllegalStateException(
                     "a realizer built something this oracle does not read: " + written);
         };

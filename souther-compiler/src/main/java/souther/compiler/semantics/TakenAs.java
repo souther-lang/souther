@@ -50,19 +50,60 @@ public sealed interface TakenAs {
     }
 
     /**
-     * How far from nought a number stands, which is the number with its sign dropped.
+     * Which part of a time of day it is: the hour it falls in, the minute within that hour, the
+     * second within that minute.
      *
-     * <p>Over the operation's own kind of number and not over a count: {@code Decimal.abs} answers
-     * a decimal, so the values beside a boundary on it are the decimals and not the whole numbers
-     * either side. That is the half a term measured by what the operation is a kind of could not
-     * have said.
+     * <p>One arm for the three and not one each. What tells them apart is which part is taken, and a
+     * part is a value rather than a kind of question — written as three arms, the next reader to add
+     * one would be adding a way of taking a number rather than a member of a family that already
+     * has a way, and the two directions would each grow a case for it (#1027).
+     *
+     * <p>The clearest case of the two ends of a term being two orders. A time is counted in seconds
+     * of its day and what these answer is counted by one, so what a boundary on the hour is drawn on
+     * is not what the value at the position is read on. Both taken from one carrier, a line at the
+     * thirteenth hour would be a line at the thirteenth second.
      */
-    record AbsoluteMagnitude() implements TakenAs {
+    record PartOfTime(TimePart part) implements TakenAs {
+
+        public PartOfTime {
+            java.util.Objects.requireNonNull(part, "this one says which part");
+        }
 
         @Override
         public boolean takenOf(Type source, Type answered) {
-            return source.equals(answered)
-                    && (answered == Type.Prim.INT || answered == Type.Prim.DECIMAL);
+            return source == Type.Prim.TIME && answered == Type.Prim.INT;
+        }
+    }
+
+    /** A part of a time of day, in the order the parts run. */
+    enum TimePart {
+
+        /** The hour it falls in, of the twenty-four a day has. */
+        HOUR(3600, 24),
+
+        /** The minute within that hour. */
+        MINUTE(60, 60),
+
+        /** The second within that minute. */
+        SECOND(1, 60);
+
+        private final int seconds;
+        private final int many;
+
+        TimePart(int seconds, int many) {
+            this.seconds = seconds;
+            this.many = many;
+        }
+
+        /** How many seconds one of these is worth, which is what reading and writing both count
+         *  in: a time is a count of seconds into its day and this is the step that count moves by. */
+        public int seconds() {
+            return seconds;
+        }
+
+        /** How many of these there are before the part above it turns over. */
+        public int many() {
+            return many;
         }
     }
 }

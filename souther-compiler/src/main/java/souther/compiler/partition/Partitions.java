@@ -587,7 +587,8 @@ public final class Partitions {
     private static List<PartitionClass> singledClasses(List<GuardThresholds.Guards.Singled> points,
                                                        NumericTerm term, Type type,
                                                        NumericDomain.Bounds within, Symbols symbols) {
-        Carrier carrier = term.answeredOn(type, symbols);
+        souther.compiler.inputs.TermOrders orders = term.ordersAt(type, symbols);
+        Carrier carrier = orders.answered();
         List<Place> values = new ArrayList<>();
         for (GuardThresholds.Guards.Singled each : points) {
             if (values.stream().noneMatch(had -> had.sameAs(each.value()))) {
@@ -598,13 +599,13 @@ public final class Partitions {
         for (Place value : values) {
             String written = carrier.written(value);
             classes.add(classAt(term + "/= " + written, "= " + written,
-                    holding(term, carrier, new Recognition.CountIs.At(value)),
+                    holding(term, orders, new Recognition.CountIs.At(value)),
                     standing(type, carrier, value, symbols)));
         }
         Place other = carrier.somethingOtherThan(values, within);
         String label = "/= " + String.join(", ",
                 values.stream().map(carrier::written).toList());
-        Recognition away = holding(term, carrier,
+        Recognition away = holding(term, orders,
                 new Recognition.CountIs.AwayFrom(values));
         classes.add(other == null
                 ? PartitionClass.ungeneratable(term + "/" + label, label, away,
@@ -631,9 +632,9 @@ public final class Partitions {
     }
 
     /** A class that reads the term's count out of a row and answers about it. */
-    private static Recognition holding(NumericTerm term, Carrier carrier,
+    private static Recognition holding(NumericTerm term, souther.compiler.inputs.TermOrders on,
                                           Recognition.CountIs is) {
-        return new Recognition.OfACount(term, carrier, is);
+        return new Recognition.OfACount(term, on, is);
     }
 
     /** The cuts a position has, with the values a body singled out added as lines of their own. */
@@ -758,7 +759,9 @@ public final class Partitions {
         List<Seam> parted = new ArrayList<>(axis.parted());
         for (Cut cut : axis.cuts()) {
             BoundaryTarget where = BoundaryTarget.at(
-                    new BorderQuantity.OfACoordinate(axis.id(), axis.term(), cut.carrier()),
+                    new BorderQuantity.OfACoordinate(axis.id(), axis.term(),
+                            new souther.compiler.inputs.TermOrders(
+                                    axis.term().observedOn(axis.type(), symbols), cut.carrier())),
                     new Level.OnACarrier(cut.carrier(), cut.at()));
             for (OriginRef origin : cut.origins()) {
                 Seam parts = Border.parts(where, origin);
@@ -773,7 +776,9 @@ public final class Partitions {
             // instead, a line drawn on a count taken of a position would be written back as a value
             // of the position.
             BoundaryTarget target = BoundaryTarget.at(
-                    new BorderQuantity.OfACoordinate(axis.id(), axis.term(), cut.carrier()),
+                    new BorderQuantity.OfACoordinate(axis.id(), axis.term(),
+                            new souther.compiler.inputs.TermOrders(
+                                    axis.term().observedOn(axis.type(), symbols), cut.carrier())),
                     new Level.OnACarrier(cut.carrier(), cut.at()));
             for (OriginRef origin : cut.origins()) {
                 // Null where the position does not reach the line at all, which is the line and not

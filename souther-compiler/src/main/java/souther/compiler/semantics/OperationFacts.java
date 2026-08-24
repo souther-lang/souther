@@ -86,8 +86,11 @@ public final class OperationFacts {
             about("String", "length", takenAs(new TakenAs.HowManyItHolds())),
             about("Set", "size", takenAs(new TakenAs.HowManyItHolds())),
             about("Map", "size", takenAs(new TakenAs.HowManyItHolds())),
-            about("Int", "abs", takenAs(new TakenAs.AbsoluteMagnitude())),
-            about("Decimal", "abs", takenAs(new TakenAs.AbsoluteMagnitude())),
+            // `Int.abs` and `Decimal.abs` are not here and cannot be. They are ordinary `let`s over
+            // `<` and `-`, so a body reading expands them and reads the comparison inside; a term
+            // standing for the call would be a second reading of the same call, which is what the
+            // exclusivity below refuses.
+            about("Time", "hour", takenAs(new TakenAs.PartOfTime(TakenAs.TimePart.HOUR))),
 
             // A count is never negative, and each of these says so itself. Derived from the arm
             // instead, the arm would be where a bound is really declared and every operation
@@ -100,13 +103,12 @@ public final class OperationFacts {
             about("Map", "size", bounded(Rel.GE, 0)),
 
             // And the ones every answer of which some value it could be given answers. A string of
-            // any length is written by repeating a character; `abs` answers `n` at `n` and at `-n`.
-            // The counts over an element the language may have none of are not here, and say why
-            // where the fact is declared.
+            // any length is written by repeating a character; every hour of the day is an hour some
+            // time falls in. The counts over an element the language may have none of are not here,
+            // and say why where the fact is declared.
             about("String", "length",
                     new OperationFact.EveryAnswerItCanGiveHasASourceValue()),
-            about("Int", "abs", new OperationFact.EveryAnswerItCanGiveHasASourceValue()),
-            about("Decimal", "abs", new OperationFact.EveryAnswerItCanGiveHasASourceValue()),
+            about("Time", "hour", new OperationFact.EveryAnswerItCanGiveHasASourceValue()),
 
             // What holds of a result wherever the call is written. Each is a fact about the
             // operation, so it is stated at every call and not only where something was guarded:

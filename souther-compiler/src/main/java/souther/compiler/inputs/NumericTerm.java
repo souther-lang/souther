@@ -208,7 +208,7 @@ public sealed interface NumericTerm {
     private static Reading taken(TakenAs how, ObservedValue at, Carrier observed) {
         return switch (how) {
             case TakenAs.HowManyItHolds _ -> howMany(at);
-            case TakenAs.AbsoluteMagnitude _ -> howFarFromNought(at, observed);
+            case TakenAs.PartOfTime taken -> partOfTime(taken.part(), at, observed);
         };
     }
 
@@ -231,25 +231,32 @@ public sealed interface NumericTerm {
     }
 
     /**
-     * How far from nought an observed number stands.
+     * Which hour, minute or second of its day an observed time falls in.
      *
-     * <p>Decoded on the order the value is written on and answered on the same one, which is what
-     * makes this one arm over two operations: {@code Int.abs} answers a whole number and
-     * {@code Decimal.abs} a decimal, and neither is a fact this arm states — the operation's own
-     * result type is, and a carrier read off here would be the same number for both.
+     * <p>Decoded on the order the value is written on — a time counts the seconds into its day — and
+     * answered on the order the operation answers, which is a count by one. The two are different
+     * orders here, which is why the value is not read on the order the answer is measured on: read
+     * that way, {@code 13:45:12} would be the thirteenth second rather than the thirteenth hour.
+     *
+     * <p>Divided and then taken the remainder of, which is what a part of a count is. The hour is
+     * the whole hours in the day so far; the minute is the whole minutes, of which the hours are
+     * dropped.
      */
-    private static Reading howFarFromNought(ObservedValue at, Carrier observed) {
+    private static Reading partOfTime(TakenAs.TimePart part, ObservedValue at, Carrier observed) {
         if (observed == null) {
             return new Reading.NotNumber();
         }
         Place read = observed.placeOf(at);
-        // A place that is not a count has no sign to drop. A string orders lexicographically and
-        // stands for itself, and no operation declaring this arm is given one — so this is the
-        // observation being something else, which is what `NotNumber` says.
+        // A place that is not a count is not a time of day. No operation declaring this arm is
+        // given anything else, so this is the observation being something other than what the
+        // position declares, which is what `NotNumber` says.
         if (!(read instanceof Count count)) {
             return new Reading.NotNumber();
         }
-        return new Reading.Number(count.signum() < 0 ? count.negate() : count);
+        java.math.BigDecimal seconds = count.at();
+        return new Reading.Number(Count.of(seconds
+                .divideToIntegralValue(java.math.BigDecimal.valueOf(part.seconds()))
+                .remainder(java.math.BigDecimal.valueOf(part.many()))));
     }
 
     /** How the values beside a boundary on this term are found. A count steps like an {@code Int};

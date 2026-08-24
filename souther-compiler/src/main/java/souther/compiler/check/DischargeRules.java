@@ -10,6 +10,7 @@ import souther.compiler.semantics.ElementLineage;
 import souther.compiler.semantics.ElementShape;
 import souther.compiler.semantics.NumericResult;
 import souther.compiler.semantics.OperationFact;
+import souther.compiler.ast.Hir;
 import souther.compiler.semantics.OperationFacts;
 import souther.compiler.semantics.PositiveOrder;
 import souther.compiler.semantics.ResultBound;
@@ -740,8 +741,32 @@ final class DischargeRules {
      */
     static void holdTakenOf(Stdlib stdlib, ValueName operation,
             souther.compiler.semantics.TakenAs how) {
-        Stdlib.Signature signature = holdTheOperationToTheLibrary(stdlib, operation).signature();
+        Stdlib.Entry entry = holdTheOperationToTheLibrary(stdlib, operation);
+        Stdlib.Signature signature = entry.signature();
         String named = ((ValueName.Stdlib) operation).qualified();
+        // A call the reading expands is a call the reading already understands. `Int.abs` is an
+        // ordinary `let` over `<` and `-`, so a body reading takes the comparison inside it and
+        // draws the line the definition draws; a term standing for the call would be a second
+        // reading of the same call, and which of the two a report showed would be whichever reader
+        // arrived. Refused here, so the exclusivity is a property of what can be declared rather
+        // than of which operations somebody thought to leave out (#1027).
+        if (!(entry.declaration().body() instanceof Hir.FnBody.Intrinsic)) {
+            throw new IllegalStateException(named + " is written in the language, so its body is"
+                    + " read where it is called and a term of what it answers would be a second"
+                    + " reading of the same call");
+        }
+        // And a call some other representation already reads is one this must not read too. A form
+        // says what the result is in the arguments' own counts, which is more than a term standing
+        // for it can say; declared as both, `Decimal.fromInt(n)` would be `n` to one reader and an
+        // opaque number to another.
+        if (OperationFacts.answersAFormOfItsArguments(operation) != null) {
+            throw new IllegalStateException(named + " already answers a form of its arguments, which"
+                    + " says more about what it answers than a term standing for it can");
+        }
+        if (OperationFacts.computesANumber(operation) != null) {
+            throw new IllegalStateException(named + " already computes an arithmetic this reads,"
+                    + " which says more about what it answers than a term standing for it can");
+        }
         if (signature.params().size() != 1) {
             throw new IllegalStateException(named + " takes " + signature.params().size()
                     + " arguments, and a number taken of the one value an operation is given is"

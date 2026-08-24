@@ -105,8 +105,7 @@ final class TermRealizations {
                                      Symbols symbols, ReadingPolicy policy) {
         return switch (how) {
             case TakenAs.HowManyItHolds _ -> holding(sourceType, answer, symbols, policy);
-            case TakenAs.AbsoluteMagnitude _ ->
-                    eitherSideOfNought(sourceType, answered, answer, symbols);
+            case TakenAs.PartOfTime taken -> atThatPart(taken.part(), sourceType, answer, symbols);
         };
     }
 
@@ -132,35 +131,36 @@ final class TermRealizations {
     }
 
     /**
-     * The two numbers a magnitude is answered at, which is the number and its negation.
+     * A time of day whose given part stands at that number, with the parts below it at nought.
      *
-     * <p>Both, and the positive one first. They are one edge and not two — a row at either stands at
-     * the same boundary — so offering only one would call an edge unwritable wherever the position's
-     * rules happen to exclude that side. At nought the two are the same value and one is offered.
+     * <p>One of the many, and not the many. Every time in that hour answers the same hour, and
+     * which of them is offered is this reader's to choose — what it owes is that what it offers
+     * reads back, not that it enumerates the inverse. Nought below is the plain choice: the hour on
+     * the hour.
      *
-     * <p>On the order the value is written on, which for these operations is the order the answer is
-     * measured on as well. Written on the answer's order without asking, an operation reading a date
-     * and answering a count would put a whole number where a date goes.
+     * <p>Written on the order the value is written on, which is the seconds of its day, and not on
+     * the order the answer is measured on. Written on the answer's, the thirteenth hour would be
+     * offered as the thirteenth second — the same mistake as reading it that way, in the other
+     * direction, and the reason both directions take the source's order.
      */
-    private static Realization eitherSideOfNought(Type sourceType, Carrier answered, Place answer,
-                                                  Symbols symbols) {
-        if (!(answer instanceof Count count)) {
+    private static Realization atThatPart(TakenAs.TimePart part, Type sourceType, Place answer,
+                                          Symbols symbols) {
+        if (!(answer instanceof Count count) || !count.whole() || count.signum() < 0
+                || count.at().compareTo(java.math.BigDecimal.valueOf(part.many())) >= 0) {
+            // Outside the parts a day has. Not this reader's to report as a refusal: what a part
+            // runs between is the operation's declared bound, and a number outside it is a number
+            // nothing answers.
             return new Realization.BuiltNone(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
-        List<Place> both = count.signum() == 0 ? List.of(count) : List.of(count, count.negate());
-        List<FixtureTemplate> out = new ArrayList<>();
-        for (Place each : both) {
-            FixtureTemplate standing = Witnesses.wrapped(sourceType,
-                    FixtureTemplate.on(answered, each, symbols.scope()::reach), symbols);
-            if (standing != null) {
-                out.add(standing);
-            }
-        }
-        return out.isEmpty()
+        Place seconds = Count.of(count.at()
+                .multiply(java.math.BigDecimal.valueOf(part.seconds())));
+        FixtureTemplate standing = Witnesses.wrapped(sourceType,
+                FixtureTemplate.on(Carrier.TIME, seconds, symbols.scope()::reach), symbols);
+        return standing == null
                 ? new Realization.BuiltNone(
                         Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)
-                : new Realization.Built(out, null);
+                : new Realization.Built(List.of(standing), null);
     }
 
     /** One value, wearing every name the position declares, or the reason there is none. */

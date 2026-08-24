@@ -52,7 +52,14 @@ public sealed interface Recognition {
      * the number — and what a value that is not a number, or one that could not be read, comes to —
      * was spelled twice in this package and would have been spelled a third time by the next one.
      */
-    record OfACount(NumericTerm term, Carrier carrier, CountIs is) implements Recognition {}
+    record OfACount(NumericTerm term, souther.compiler.inputs.TermOrders orders, CountIs is)
+            implements Recognition {
+
+        /** What the count is compared on, which is what the class was written in. */
+        public Carrier carrier() {
+            return orders.answered();
+        }
+    }
 
     /** What is asked of the count once it has been read. */
     sealed interface CountIs {

@@ -196,7 +196,7 @@ final class Intervals {
             // The run's own answer about what is in it. Read off a range of the position's counts,
             // a class whose line falls at a place the position has no value for had no end to state
             // — so it held every value, and two such classes each held everything the other did.
-            Recognition is = new Recognition.OfACount(of, carrier,
+            Recognition is = new Recognition.OfACount(of, of.ordersAt(type, symbols),
                     new Recognition.CountIs.InARun(run));
             if (inside == null) {
                 classes.add(PartitionClass.ungeneratable(id, label, is,

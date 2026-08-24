@@ -298,7 +298,8 @@ class WhatAClauseDrawsALineOnTest {
                                                 new AxisId("findTodo", "id"),
                                                 new souther.compiler.inputs.NumericTerm.ValueOf(
                                                         souther.compiler.inputs.TermPath.of("id")),
-                                                new Carrier.Whole()),
+                                                souther.compiler.inputs.TermOrders.itself(
+                                                        new Carrier.Whole())),
                                         new Level.OnACarrier(new Carrier.Whole(),
                                                 clauses.singled().get(0).value())),
                                 clauses.singled().get(0).origin(),

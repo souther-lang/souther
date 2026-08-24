@@ -644,7 +644,13 @@ public final class GuardThresholds {
      * @param term  what the expression names
      * @param order what it is counted on
      */
-    record Named(NumericTerm term, Carrier order) {}
+    record Named(NumericTerm term, souther.compiler.inputs.TermOrders orders) {
+
+        /** What a line on it is measured on, which is what most readers of a pair want. */
+        Carrier order() {
+            return orders.answered();
+        }
+    }
 
     /**
      * The same, or null where the expression names no number this can put an order under.
@@ -666,8 +672,8 @@ public final class GuardThresholds {
         if (term == null) {
             return null;
         }
-        Carrier order = reads.read().answeredOn(term, symbols);
-        return order == null ? null : new Named(term, order);
+        souther.compiler.inputs.TermOrders orders = reads.read().ordersOf(term, symbols);
+        return orders.answered() == null ? null : new Named(term, orders);
     }
 
     private GuardThresholds() {}
