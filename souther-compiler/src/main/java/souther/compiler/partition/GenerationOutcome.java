@@ -157,23 +157,6 @@ public sealed interface GenerationOutcome {
                     "which arm of an attempted construction is taken is whether making the value"
                             + " held its own rules, and no class of an input names that"),
 
-            /** The reading of the body did not reach this arm at all. */
-            THE_READING_DID_NOT_REACH_THIS_ARM(
-                    "the reading of this body did not get to this arm, so nothing here knows what"
-                            + " it takes to arrive at it"),
-
-            /**
-             * This run composed for other things and was never asked about this arm.
-             *
-             * <p>Which is neither of the two above it and is nobody's fault but this compiler's
-             * wiring: what a run is asked about is what the measure found, and a finding that
-             * arrived here without its arm on that list means the two came apart. Said in its own
-             * words rather than under the reading falling short, which is a different thing that
-             * did not happen.
-             */
-            THIS_RUN_WAS_NOT_ASKED_ABOUT_THIS_ARM(
-                    "this run was not asked to compose anything for this arm, so nothing here"
-                            + " looked for a row through it"),
 
             /** Nothing searches for an input by the output it produces. */
             NO_STRATEGY_FOR_AN_OUTPUT_CASE(

@@ -1,5 +1,7 @@
 package souther.compiler.reading;
 
+import souther.compiler.coverage.ControlClaim;
+
 import java.util.List;
 
 /**
@@ -22,18 +24,33 @@ import java.util.List;
 public sealed interface PathAccess {
 
     /**
-     * The ways to it, all of them.
+     * The ways to it, all of them, and what a run that is here would be seen to have done.
+     *
+     * <p>Two halves and the second is not the last of the first. What holds on the way to a place
+     * and being at the place are different things, and for a fork on a comparison they are said in
+     * different vocabularies: the way in is the comparison coming out a way, which a recording
+     * answers with {@code saw}, and the place is somewhere a run passes, which it answers with
+     * {@code lit}. A {@code match} reads the same both ways round — the case a run matched at is
+     * the arm — so a search held to the ways alone passes there and, at a fork on a comparison,
+     * certifies a row that was never seen arriving (issue #1009).
      *
      * <p>Never empty. A place this reading reached and found no way to is {@link Unreachable}, and
      * the emptiness would otherwise be a third meaning of the same value.
+     *
+     * @param arrivesAt what a run that got here is recorded as having done, which is what says a
+     *                  row went through this place and not merely where one would be steered
      */
-    record Ways(List<WayIn> ways) implements PathAccess {
+    record Ways(List<WayIn> ways, ControlClaim arrivesAt) implements PathAccess {
 
         public Ways {
             ways = List.copyOf(ways);
             if (ways.isEmpty()) {
                 throw new IllegalArgumentException(
                         "a place reached no way is Unreachable, and says which reading shows it");
+            }
+            if (arrivesAt == null) {
+                throw new IllegalArgumentException(
+                        "a place a row is steered to is one a run can be shown to have reached");
             }
         }
     }
@@ -71,11 +88,11 @@ public sealed interface PathAccess {
         /**
          * What this reading is short of.
          *
-         * <p>Told apart because they are short of different things. Two of these are what the path
-         * language cannot state at all; two are limits this reading holds itself to and would answer
+         * <p>Told apart because they are short of different things. One is what the path language
+         * cannot state at all; two are limits this reading holds itself to and would answer
          * differently if the limit moved; two are places a run reaches under something other than
-         * this behavior's inputs. A single word over all of them would tell a reader that a body no
-         * setting reaches is the same news as one a bound stopped short of.
+         * this behavior's inputs. A single word over all of them would tell a reader that a place
+         * no setting reaches is the same news as one a bound stopped short of.
          */
         public enum Why {
 
@@ -97,12 +114,7 @@ public sealed interface PathAccess {
 
             /** Which arm of an attempted construction is taken is whether the value's own rules held,
              *  and no class of an input names that. */
-            THE_CONSTRUCTION_DECIDES_IT,
-
-            /** The walk did not get here at all. A place the plan numbered and this reading never
-             *  visited, which is this reading falling short of its own contract rather than any of
-             *  the limits above — kept so that the answer is total and the shortfall is visible. */
-            THE_READING_DID_NOT_REACH_IT
+            THE_CONSTRUCTION_DECIDES_IT
         }
     }
 }

@@ -1271,8 +1271,14 @@ public final class Generator {
         }
         if (read.armAt(probe) instanceof PathAccess.Ways ways) {
             for (souther.compiler.reading.WayIn way : ways.ways()) {
-                CellSelection at = InteractionCells.at(way, axes);
-                if (at != null) {
+                CellSelection at = InteractionCells.at(way, ways.arrivesAt(), axes);
+                // The same place twice is one place. A combination of the body's decisions and a
+                // way into one of its arms can name the same classes held to the same run — a
+                // combination of one factor is exactly the way into the arm it settles — and the
+                // two are independent readings that neither know nor need to know that. Looked in
+                // twice, the second composes the same candidates against the same rules for an
+                // answer the first already has, and says what it came to a second time.
+                if (at != null && out.stream().noneMatch(already -> already.at.sameAs(at))) {
                     // The way into one arm, which is nowhere else's to look in and so is not kept
                     // beyond this arm's search.
                     out.add(new WhereToLook(at, List.of(probe)));

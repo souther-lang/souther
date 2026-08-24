@@ -204,17 +204,61 @@ class EveryFindingHasAGenerationDispositionTest {
                 "each is answered with the row composed for a combination that takes it: " + arms);
     }
 
+    /**
+     * An arm a strategy takes and composes nothing for is answered by what the search came to.
+     *
+     * <p>The way into this arm is a comparison between a value the body works out and a position
+     * beside it, and the classes it leaves are ones this can put a row at — so a search runs, and
+     * what it comes to is what a reader is told. Answered {@link GenerationOutcome.NotSupported}
+     * instead, an author would be told no strategy reaches the arm while one had just tried.
+     */
     @Test
-    void anArmNoStrategyReachesIsNotSupportedRatherThanUnanswered() {
+    void anArmAStrategyTriesAndComposesNothingForSaysWhatItCameTo() {
         Compilation compilation = compiled(POLICY);
         List<Adequacy.GenerationDisposition> arms =
                 filling(compilation, "example.policy", "fee").generation().stream()
                         .filter(d -> d.finding().kind() == Adequacy.Kind.ARM_UNREACHED).toList();
 
         assertEquals(1, arms.size());
-        assertTrue(arms.get(0).outcome()
-                        instanceof GenerationOutcome.NotSupported,
-                "no strategy composes an input to reach an arm: " + arms);
+        assertTrue(arms.get(0).outcome() instanceof GenerationOutcome.CannotGenerate,
+                "a search ran at this arm and came to something: " + arms);
+    }
+
+    /** A fork inside a block, whose body runs where something applies it. */
+    private static final String IN_A_BLOCK = """
+            module example.block
+
+            data Flag = On | Off
+
+            behavior mark : (flags: List<Flag>) -> List<Int>
+
+            let mark (flags) = List.map(f ->
+                match f with
+                    | On -> 1
+                    | Off -> 0, flags)
+
+            example mark
+                | "one on" : ([On]) -> [1]
+            """;
+
+    /**
+     * An arm no strategy reaches is {@link GenerationOutcome.NotSupported} rather than unanswered.
+     *
+     * <p>What steers a row into this one is what the thing applying the block applies it to, which
+     * is not a class of this behavior's inputs — so there is nothing for a search to work from, and
+     * that is a fact about what this compiler can state rather than about the body.
+     */
+    @Test
+    void anArmNoStrategyReachesIsNotSupportedRatherThanUnanswered() {
+        Compilation compilation = compiled(IN_A_BLOCK);
+        List<Adequacy.GenerationDisposition> arms =
+                filling(compilation, "example.block", "mark").generation().stream()
+                        .filter(d -> d.finding().kind() == Adequacy.Kind.ARM_UNREACHED).toList();
+
+        assertFalse(arms.isEmpty(), "the arm the row does not take is found");
+        assertTrue(arms.stream().allMatch(
+                        d -> d.outcome() instanceof GenerationOutcome.NotSupported),
+                "no strategy composes an input to reach an arm inside a block: " + arms);
     }
 
     // --- a case of an input, which is the one gap the three answers all reach ---------------------

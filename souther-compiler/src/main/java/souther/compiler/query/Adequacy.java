@@ -2448,12 +2448,16 @@ public final class Adequacy {
                 case Generator.ArmAttempt.Unresolved none ->
                         new GenerationOutcome.CannotGenerate(none.why());
                 case Generator.ArmAttempt.NoWayIn none -> nothingReaches(none.access());
-                // An arm this run was not asked about. Every finding's arm is asked about, so what
-                // is left here is a finding that reached this without one — which is a defect in
-                // what was handed in rather than anything about the model, and is said as that: a
-                // reading that fell short of the arm is a different thing and did not happen.
-                case null -> new GenerationOutcome.NotSupported(GenerationOutcome.NotSupported
-                        .Reason.THIS_RUN_WAS_NOT_ASKED_ABOUT_THIS_ARM);
+                // No attempt was recorded for this arm, which is not a search that reached it and
+                // stopped: a run that never composed anything — the classes would not link, no
+                // position was left to divide — records why in its own words, and this asks for
+                // them. The same question a class with no attempt asks, answered in the same place
+                // (issue #1009): a word of this reading's own beside it would be a second answer to
+                // one question, free to disagree with the first the day either moves.
+                case null -> new GenerationOutcome.CannotGenerate(
+                        new Generator.UnresolvedCombination(
+                                List.of(souther.compiler.report.ArmVocabulary.label(arm)),
+                                whyNothingWasTried(composed)));
             };
         }
 
@@ -2489,9 +2493,6 @@ public final class Adequacy {
                                             .THE_ARM_RUNS_WHERE_SOMETHING_CALLS_IT;
                             case THE_CONSTRUCTION_DECIDES_IT -> GenerationOutcome.NotSupported.Reason
                                     .A_CONSTRUCTION_DECIDES_THIS_ARM;
-                            case THE_READING_DID_NOT_REACH_IT ->
-                                    GenerationOutcome.NotSupported.Reason
-                                            .THE_READING_DID_NOT_REACH_THIS_ARM;
                         });
             };
         }

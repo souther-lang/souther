@@ -1,6 +1,7 @@
 package souther.compiler.reading;
 
 import souther.compiler.core.Core;
+import souther.compiler.coverage.ControlClaim;
 import souther.compiler.coverage.ControlPointId;
 import souther.compiler.coverage.CoverageSites;
 
@@ -33,30 +34,43 @@ final class Arms {
         this.plan = plan;
     }
 
-    /** How arm {@code part} of {@code fork} is reached, where the plan numbered that arm. An arm no
-     *  run could be recorded at is not one anything reports, so nothing is kept for it. */
+    /**
+     * How arm {@code part} of {@code fork} is reached, where the plan numbered that arm.
+     *
+     * <p>An arm no run could be recorded at is not one anything reports, so nothing is kept for it
+     * — and it is the same answer that decides both: what a run at the arm would be seen doing is
+     * what the reading here is handed on with, and where there is none there is nothing to hold a
+     * row to.
+     */
     void at(Core fork, int part, Reach reach) {
         ControlPointId.ArmOccurrence[] arms = plan.armsOf(fork);
-        if (arms == null || part < 0 || part >= arms.length || arms[part] == null
-                || arms[part].probe().isEmpty()) {
+        if (arms == null || part < 0 || part >= arms.length || arms[part] == null) {
             return;
         }
-        byArm.put(arms[part].probe().getAsInt(), reach.told());
+        ControlClaim.of(arms[part]).ifPresent(arrivesAt ->
+                byArm.put(arms[part].probe().getAsInt(), reach.told(arrivesAt)));
     }
 
     /**
      * One answer per arm of {@code behavior}, in the order the plan numbered them.
      *
-     * <p>The plan's arms are the whole of it. What the walk recorded is what it reached, and an arm
-     * missing from that is not an arm without a way in — it is this reading having fallen short, and
-     * it is written as that rather than left out. A caller reading a key that is not there would be
-     * deciding what the absence meant, which is the thing this type exists to stop.
+     * <p>The plan's arms are the whole of it, and that the walk reached every one of them is
+     * checked here rather than made true by filling in. An arm this reading never got to is not a
+     * kind of answer — it is this reading falling short of what it says it does — and written as
+     * one it would be a value a reader has to act on, indistinguishable from the arms whose way in
+     * really is beyond what the path language states. The check would then hold of a walk that
+     * stopped early, which is the whole of what it is for.
      */
     Map<Integer, PathAccess> found(String behavior) {
         Map<Integer, PathAccess> out = new LinkedHashMap<>();
         for (CoverageSites.Site arm : plan.arms(behavior)) {
-            out.put(arm.index(), byArm.getOrDefault(arm.index(), new PathAccess.Unsupported(
-                    PathAccess.Unsupported.Why.THE_READING_DID_NOT_REACH_IT)));
+            PathAccess access = byArm.get(arm.index());
+            if (access == null) {
+                throw new IllegalStateException("the reading of `" + behavior + "` did not reach"
+                        + " arm " + arm.index() + " at " + arm.at()
+                        + "; every arm the plan numbered is one this walk goes to");
+            }
+            out.put(arm.index(), access);
         }
         return java.util.Collections.unmodifiableMap(out);
     }

@@ -17,6 +17,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -134,22 +135,25 @@ class AnArmThePlanNumberedIsToldHowItIsReachedTest {
     }
 
     /**
-     * No arm is answered by this reading having missed it.
+     * An arm the walk does not reach is this reading falling short, and it says so where it happens.
      *
-     * <p>The totality above is kept by filling in, so it holds whether or not the walk reached
-     * everywhere. This is the other half: what filled in is nothing, on every shape here. Without
-     * it, a walk that stopped short would still satisfy the equation and say so in a word nobody
-     * reads.
+     * <p>The equation above holds because the reading is held to it, and not because a value was
+     * put in for the arms it missed. Such a value is one a reader has to act on, and there is
+     * nothing to do about it: it is neither a way in, nor a proof that no run arrives, nor one of
+     * the things the path language cannot state. Filled in, a walk that stopped early satisfies
+     * the equation and says nothing anybody reads.
      */
     @Test
-    void nothingIsAnsweredByTheWalkHavingMissedIt() {
-        for (String source : List.of(NESTED, ASKED_TWICE, IN_A_BLOCK, NOTHING_ARRIVES)) {
-            for (Map.Entry<Integer, PathAccess> each : read(source).answer.arms().entrySet()) {
-                assertTrue(!(each.getValue() instanceof PathAccess.Unsupported(var why))
-                                || why != PathAccess.Unsupported.Why.THE_READING_DID_NOT_REACH_IT,
-                        "arm " + each.getKey() + " was reached by the walk: " + source);
-            }
-        }
+    void anArmTheWalkDoesNotReachIsRefusedRatherThanFilledIn() {
+        Read read = read(NESTED);
+
+        // A collector the walk never told anything, over the same plan: every arm of the behavior
+        // is one it is short of.
+        Arms missed = new Arms(read.plan);
+
+        assertFalse(read.armSites().isEmpty(), "the behavior has arms to be short of");
+        assertThrows(IllegalStateException.class, () -> missed.found(read.behavior),
+                "an arm the plan numbered and this did not reach is nothing to hand on");
     }
 
     /**

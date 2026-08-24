@@ -25,8 +25,8 @@ sealed interface Reach {
         }
 
         @Override
-        public PathAccess told() {
-            return new PathAccess.Ways(ways);
+        public PathAccess told(souther.compiler.coverage.ControlClaim arrivesAt) {
+            return new PathAccess.Ways(ways, arrivesAt);
         }
     }
 
@@ -46,7 +46,7 @@ sealed interface Reach {
         }
 
         @Override
-        public PathAccess told() {
+        public PathAccess told(souther.compiler.coverage.ControlClaim arrivesAt) {
             return new PathAccess.Unsupported(why);
         }
     }
@@ -60,7 +60,7 @@ sealed interface Reach {
         }
 
         @Override
-        public PathAccess told() {
+        public PathAccess told(souther.compiler.coverage.ControlClaim arrivesAt) {
             return new PathAccess.Unreachable(why);
         }
     }
@@ -74,7 +74,7 @@ sealed interface Reach {
         }
 
         @Override
-        public PathAccess told() {
+        public PathAccess told(souther.compiler.coverage.ControlClaim arrivesAt) {
             return new PathAccess.Unsupported(why);
         }
     }
@@ -82,6 +82,13 @@ sealed interface Reach {
     /** The ways to go on under, which the last two have none of. */
     List<WayIn> ways();
 
-    /** What a place reached this way is told, which is never the coarse ways themselves. */
-    PathAccess told();
+    /**
+     * What a place reached this way is told, which is never the coarse ways themselves.
+     *
+     * <p>The place's own claim is asked for whatever this came to, because only the reading that
+     * knows where it is has one — the walk carries how to get somewhere and never what somewhere
+     * is. Where there are ways, it is half of the answer: what steers a row here and what a run
+     * that arrived is seen doing are two facts and a search for a row through here needs both.
+     */
+    PathAccess told(souther.compiler.coverage.ControlClaim arrivesAt);
 }

@@ -245,14 +245,29 @@ public final class InteractionCells {
      * put a row at leaves the row free to go the other way round that fork. Offered anyway, it would
      * be a row for an arm it may never take.
      */
-    public static CellSelection at(souther.compiler.reading.WayIn way, List<Axis> axes) {
+    public static CellSelection at(souther.compiler.reading.WayIn way,
+                                   souther.compiler.coverage.ControlClaim arrivesAt,
+                                   List<Axis> axes) {
         if (way.decisions().isEmpty()) {
-            // Nothing has to hold to get here, so there is nothing to steer a row by and nothing a
-            // run that arrived would be seen to have done. The body itself is reached this way.
+            // Nothing has to hold to get here, so there is nothing to steer a row by. The body
+            // itself is reached this way.
             return null;
         }
         Placed placed = placedBy(way.decisions(), axes);
-        return placed == null ? null : new CellSelection(placed.cell(), placed.claims());
+        if (placed == null) {
+            return null;
+        }
+        // What a run that arrived would be seen doing, beside what holds on the way. Asked for
+        // rather than read off the way, because the two are one thing only where the last decision
+        // on the way is the place itself: a `match` names the case a run matched at, which is the
+        // arm, while a fork on a comparison names the comparison and leaves the arm unsaid. Held to
+        // the way alone, a row seen making the comparison and never seen at the arm certified the
+        // arm (issue #1009).
+        List<souther.compiler.coverage.ControlClaim> claims = new ArrayList<>(placed.claims());
+        if (!claims.contains(arrivesAt)) {
+            claims.add(arrivesAt);
+        }
+        return new CellSelection(placed.cell(), claims);
     }
 
     /** The groups worth offering, over the ordered {@code axes}, and the ones held back. */
