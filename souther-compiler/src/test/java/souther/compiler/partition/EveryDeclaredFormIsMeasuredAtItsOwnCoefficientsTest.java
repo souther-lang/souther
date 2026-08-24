@@ -36,7 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 class EveryDeclaredFormIsMeasuredAtItsOwnCoefficientsTest {
 
     /** A rule written over the operation, and the line it draws. */
-    private record Observation(String parameters, String condition, String label) {}
+    record Observation(String parameters, String condition, String label) {}
 
     /**
      * One rule per declared operation, and the line each draws.
@@ -44,8 +44,13 @@ class EveryDeclaredFormIsMeasuredAtItsOwnCoefficientsTest {
      * <p>Written as a rule and read as a line, so what is measured is what a model would get. The
      * unit is in the number: two minutes is 120 of the seconds a date-time counts, two hours 7200,
      * two days 172800, and a day put together out of a date and a time is 86400 of them.
+     *
+     * <p>Reachable from beside this rather than copied there. {@link
+     * ARowComposedForAPointIsWritableAndStandsAtItTest} asks something else of the same models, and
+     * a second table would be a second list of which operations there are — which is the one thing
+     * the test above it exists to keep single.
      */
-    private static final Map<ValueName, Observation> MEASURED = measured();
+    static final Map<ValueName, Observation> MEASURED = measured();
 
     private static Map<ValueName, Observation> measured() {
         Map<ValueName, Observation> out = new LinkedHashMap<>();

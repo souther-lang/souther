@@ -39,30 +39,36 @@ record ComparedLine(NumericTerm term, Place value, Carrier carrier,
      * What {@code comparison} draws, or null where it draws nothing.
      *
      * <p>The position-bearing side is read first and the comparison is turned round where it is on
-     * the right: {@code 100000 >= cost} says what {@code cost <= 100000} says. The carrier comes
-     * from the side that named the position, so the literal on the other side is read on the carrier
-     * the line is being drawn on — a size call is an {@code Int} there, and a position holding dates
+     * the right: {@code 100000 >= cost} says what {@code cost <= 100000} says. The carrier is the
+     * position's own ({@link souther.compiler.inputs.InputDomain#carrierOf}), and the literal on the
+     * other side is read on it — a size call is an {@code Int} there, and a position holding dates
      * is a day count.
+     *
+     * <p>The position's order and not the operand's type, which is a distinction that costs nothing
+     * here and everything next door. An operand that names a position is written as that position,
+     * so the two agreed wherever this reading reached an answer at all; the reading beside this one
+     * compares what an operation answered, and there the operands are whole numbers while the
+     * positions hold dates (#1018). One question with one place to ask it is what keeps that from
+     * depending on which reading a rule happens to fall into.
      */
     static ComparedLine of(Core.Binary comparison, AffineReading read, InputReads reads,
                            Symbols symbols) {
         BinOp op = comparison.op();
-        NumericTerm term = GuardThresholds.termOf(comparison.left(), reads, symbols);
-        Place value = Carrier.writtenOn(comparison.right(), comparison.left().type(), symbols);
-        if (term == null || value == null) {
-            term = GuardThresholds.termOf(comparison.right(), reads, symbols);
-            value = Carrier.writtenOn(comparison.left(), comparison.right().type(), symbols);
+        GuardThresholds.Named named = GuardThresholds.namedBy(comparison.left(), reads, symbols);
+        Place value = named == null ? null : named.on().literalOf(comparison.right(), symbols);
+        if (named == null || value == null) {
+            named = GuardThresholds.namedBy(comparison.right(), reads, symbols);
+            value = named == null ? null : named.on().literalOf(comparison.left(), symbols);
             op = mirrored(op);
         }
+        NumericTerm term = named == null ? null : named.term();
+        Carrier carrier = named == null ? null : named.on();
         if (term == null || value == null) {
             // Nothing here is a position against a value the carrier writes. It may still be a
             // statement about one position: `a + 1 <= 10` and `a <= b - b + 9` are both `a <= 9`,
             // and which quantity a rule cuts is the arithmetic's answer rather than the spelling's.
             return fromTheForm(read, reads, symbols);
         }
-        Carrier carrier = Carrier.ofValue(
-                op == comparison.op() ? comparison.left().type() : comparison.right().type(),
-                symbols);
         return switch (ComparisonClaim.of(op)) {
             case ComparisonClaim.Cut cut -> new ComparedLine(term, value, carrier,
                     cut.valueBelongsBelow(), cut.holdsAtTheValue(), false);
@@ -89,9 +95,9 @@ record ComparedLine(NumericTerm term, Place value, Carrier carrier,
         }
         NumericTerm term = read.oneCoordinate();
         // The position's own order, not the order of whichever operand it was written beside. The
-        // reading two methods up is careful about the same thing — it takes the type from the side
-        // that named the position — and `10 >= a + 1` names it on the right.
-        Carrier carrier = term == null ? null : AffineReading.carrierOf(term, reads, symbols);
+        // reading two methods up asks the same question of the same place, and `10 >= a + 1` names
+        // the position on the right.
+        Carrier carrier = term == null ? null : reads.read().carrierOf(term, symbols);
         if (carrier == null || !carrier.counts()) {
             return null;
         }

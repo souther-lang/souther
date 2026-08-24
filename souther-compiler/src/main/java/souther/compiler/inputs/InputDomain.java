@@ -202,6 +202,70 @@ public final class InputDomain {
     }
 
     /**
+     * The order one term is read off a row and written back on, or null where it has none.
+     *
+     * <p><b>The one answer, so that nothing derives it from an expression.</b> A rule is written
+     * beside operands, and the type of an operand is not the type of the position the rule is about:
+     * an operation the arithmetic rewrote into a form of two positions is compared as what it
+     * answers with, so {@code Date.daysBetween(a, b) > 10} has {@code Int} on both sides and dates
+     * at both positions. Read off the comparison, every position of that rule was written back as a
+     * whole number and read off a row as one, and both directions agreed with each other and with
+     * nothing else (#1018).
+     *
+     * <p>Two questions, answered where each is known. What a term measures is the term's — a size is
+     * a whole number whatever it is taken of — and what the location holds is this reading's, which
+     * is why the two meet here rather than at whichever caller had both to hand.
+     *
+     * <p><b>A term under no position of this reading still has an order.</b> This reading stops at
+     * {@link #MAX_DEPTH}, where a report stops being about anything an author would call one input,
+     * and nothing stops a rule from naming what is under that. What a report is about and what a
+     * declaration says are two questions, and only the first of them stops there — so the type is
+     * followed down to wherever the rule named ({@link #declaredAt}) and the line is drawn.
+     *
+     * <p>The position first and the descent only where there is none. A position may stand under a
+     * narrowing, and what it holds there is what a row writes; walking the declaration again would
+     * answer with what the field was declared as before anything narrowed it.
+     */
+    public Carrier carrierOf(NumericTerm term, Symbols symbols) {
+        Position position = at(term.path());
+        return term.carrierAt(
+                position != null ? position.type() : declaredAt(term.path(), symbols), symbols);
+    }
+
+    /**
+     * What the declarations put at {@code path}, however far down it goes, or null where they put
+     * nothing this can follow.
+     *
+     * <p>Below {@link #MAX_DEPTH} this is the only answer there is: the walk above stopped, so there
+     * is no position to ask and the type is what the declaration says at each step. One step at a
+     * time and through {@link StructuralDescent}, which is the one place that says what stands
+     * directly under a type — a second walk of that question is what that one exists to prevent.
+     *
+     * <p>Fields and nothing else. An element is one of however many a sequence holds and a narrowing
+     * is a requirement rather than a place, and both are read where a position is made rather than
+     * here; a path carrying either below where this reading stops is one this answers nothing for,
+     * which is what it answered before there was any answer at all.
+     */
+    private Type declaredAt(TermPath path, Symbols symbols) {
+        Type here = null;
+        for (Parameter parameter : parameters) {
+            if (parameter.name().equals(path.head())) {
+                here = parameter.type();
+                break;
+            }
+        }
+        for (TermPath.Step step : path.steps()) {
+            if (here == null || !(step instanceof TermPath.Step.Field field)) {
+                return null;
+            }
+            StructuralDescent.Children under =
+                    StructuralDescent.of(TypeView.of(here, symbols).shape());
+            here = under == null ? null : under.under().get(field.name());
+        }
+        return here;
+    }
+
+    /**
      * The same input, asked about a quantity over several of its positions.
      *
      * <p>The relational half of what a reading of an input can say. A {@link Position} answers about

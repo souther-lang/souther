@@ -78,6 +78,26 @@ class ARowOfferedForABorderOverAnOperationStandsAtItTest {
     }
 
     /**
+     * A row is offered at each of that border's own points.
+     *
+     * <p>What the round trip below is over. It holds every row offered to its own point and says
+     * nothing about there being any, so it passed while this border offered none at all and the only
+     * rows going round were the ones for the lines through each date's own values (#1018).
+     *
+     * <p>Which is not the general promise that a point has a row — a point nothing composes for is
+     * an answer the search is entitled to give. It is this border, over an operation whose positions
+     * are written back differently from what it answers, and the four points it draws.
+     */
+    @Test
+    void thePointsOfThatBorderAreOfferedRows() {
+        Map<String, String> rows = offeredAt(measured(SPAN));
+
+        assertEquals(List.of("a = b - 10 ON", "a = b - 10 OFF", "a = b - 10 IN", "a = b - 10 OUT"),
+                rows.keySet().stream().filter(each -> each.startsWith("a = b - 10 ")).toList(),
+                "each point of `Date.daysBetween(a, b) > 10` has a row: " + rows);
+    }
+
+    /**
      * And every row offered at a point stands at that point.
      *
      * <p>Read off the point's own attempt rather than out of the block a report prints: the row a
