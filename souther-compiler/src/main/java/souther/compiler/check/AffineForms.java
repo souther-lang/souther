@@ -6,6 +6,7 @@ import souther.compiler.numeric.NumericDomain.LinearForm;
 import souther.compiler.types.BindingId;
 
 import java.math.BigDecimal;
+import java.util.Map;
 
 /**
  * Reading an expression as {@code const + Σ coef·atom}, over whatever a caller counts as an atom.
@@ -271,6 +272,16 @@ public final class AffineForms {
             case Core.Binary b when b.op() == BinOp.MUL ->
                     Terms.scale(formOf(b.left(), at, reading, following, stopped),
                             formOf(b.right(), at, reading, following, stopped));
+            // An operation the library says answers arithmetic over what it was given is that
+            // arithmetic here: `Decimal.fromInt(n)` is `n`, `Date.daysBetween(a, b)` is `b - a`,
+            // and a rule about the arguments is a rule about the call. Composed here beside the
+            // operators, because that is what such an operation is — read at either caller's leaf
+            // instead, one of the two would have it and a statement the model makes would be
+            // measured by one reader and not the other.
+            case Core.PreservedCall _ when formSaidOf(e) != null ->
+                    answered(e, at, reading, following, stopped);
+            case Core.Call _ when formSaidOf(e) != null ->
+                    answered(e, at, reading, following, stopped);
             case Core.FieldAccess fa when reading.readsThrough(fa, at) ->
                     formOf(fa.target(), at, reading, following, stopped);
             // A binding an expansion introduced (`let $0_n = n.value in $0_n * 2`) is what a helper
@@ -282,6 +293,70 @@ public final class AffineForms {
                     stopped);
             default -> null;
         };
+    }
+
+    /**
+     * {@code call} read as the form the library says it answers, or null where one of the arguments
+     * it is written over does not compose.
+     *
+     * <p>Over what each argument is counted as, which is the form that argument itself reads as
+     * here. So a shift of a position by a written number and a shift of one position by another are
+     * one rule with two readings, and neither is a case anybody wrote.
+     */
+    private static <A, E> LinearForm<A> answered(Core call, E at, Reading<A, E> reading,
+                                                 java.util.Set<BindingId> following,
+                                                 Stop<A, E> stopped) {
+        LinearForm<souther.compiler.semantics.ArgumentRef> says = formSaidOf(call);
+        java.util.List<Core> args = Terms.argsOf(call);
+        // The expansion's own stops, kept off the walk's. What is inside a declared form is not
+        // what an author wrote: the arguments stand where they stand because the library says the
+        // operation answers this much of them, and a reader that cannot carry one of them has not
+        // met an expression an author would change — it has met this call.
+        Stop<A, E> inside = new Stop<>();
+        LinearForm<A> form = LinearForm.constant(says.constant());
+        for (Map.Entry<souther.compiler.semantics.ArgumentRef, BigDecimal> each
+                : says.coefs().entrySet()) {
+            int position = CallArguments.positionIn(each.getKey(), Terms.operationOf(call));
+            if (position < 0 || position >= args.size()) {
+                return stoppedAtTheCall(call, at, stopped);
+            }
+            LinearForm<A> argument = formOf(args.get(position), at, reading, following, inside);
+            if (argument == null) {
+                return stoppedAtTheCall(call, at, stopped);
+            }
+            form = form.plus(argument.times(each.getValue()));
+        }
+        return form;
+    }
+
+    /**
+     * No form, and the call recorded as where the reading stopped.
+     *
+     * <p>The call and not what was found inside it. A stop is reported at the most particular
+     * expression with no rule here, which is what an author would change — and inside a form the
+     * library declares there is no such expression: the author wrote the call. Reported from
+     * within, a rule over what {@code Date.daysBetween} answers came back as a rule about the field
+     * the expansion reached, which is a rule the model does not state and a spelling nobody wrote.
+     */
+    private static <A, E> LinearForm<A> stoppedAtTheCall(Core call, E at, Stop<A, E> stopped) {
+        if (stopped.at == null) {
+            stopped.at = new Outcome.StoppedAt<>(call, at);
+        }
+        return null;
+    }
+
+    /**
+     * What the library says {@code e} answers in what it was given, or null where it says nothing —
+     * including where {@code e} is no call at all.
+     *
+     * <p>Asked of the operation the call resolved to and not of which of the two shapes of call node
+     * it is. A body that runs holds a library call one way and the tree a declaration's rules are
+     * read in holds it another, and the fact is about the operation either way; read off one shape,
+     * the same statement would be composed in one representation and left a leaf in the other.
+     */
+    private static LinearForm<souther.compiler.semantics.ArgumentRef> formSaidOf(Core e) {
+        souther.compiler.types.ValueName operation = Terms.operationOf(e);
+        return operation == null ? null : DischargeRules.answersAFormOf(operation);
     }
 
     private AffineForms() {}

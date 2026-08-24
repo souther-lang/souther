@@ -373,7 +373,7 @@ enum Question {
             return signature.result() != null && !isANumber(signature.result())
                     && signature.params().contains(signature.result())
                     && signature.params().stream().anyMatch(Question::isANumber)
-                    && isCounted(signature.result());
+                    && hasAMeasureCountingTwoApart(signature.result());
         }
 
         @Override
@@ -421,15 +421,21 @@ enum Question {
     },
 
     /**
-     * Whether the number it answers is a number it was given ({@link DischargeRules#answersItsArgument}).
-     * Asked of an operation answering a number from a number, which is the shape a value re-expressed
-     * has — the result may be one of the arguments read again rather than a number computed from them.
+     * What it answers, counted, in what its arguments are counted as
+     * ({@link DischargeRules#answersAFormOf}). Asked of an operation whose result counts and that
+     * was given something that counts, which is the shape a value re-expressed has — the result may
+     * be arithmetic over what it was given rather than a number of its own.
+     *
+     * <p>Counted and not a number, so the dates are in range. {@code Date.daysBetween} answers a
+     * number from two values that are not numbers, and {@code Date.addDays} a value that is not one
+     * — asked of numbers alone, neither is even a question, and the operations this exists for
+     * would have been out of range of it.
      */
-    FORM("whether the number it answers is one it was given") {
+    FORM("what it answers, counted, in what its arguments are counted as") {
         @Override
         boolean asksOf(Prelude.Signature signature) {
-            return isANumber(signature.result())
-                    && signature.params().stream().anyMatch(Question::isANumber);
+            return countsToANumber(signature.result())
+                    && signature.params().stream().anyMatch(Question::countsToANumber);
         }
 
         @Override
@@ -542,7 +548,7 @@ enum Question {
      * strings apart — a size counts one of them. So the range is read off the declarations, and the
      * day the library gains such a measure the operations of that kind come into range and are asked.
      */
-    private static boolean isCounted(Type t) {
+    private static boolean hasAMeasureCountingTwoApart(Type t) {
         return Prelude.entries().values().stream().anyMatch(entry -> {
             List<Type> counted = entry.signature().params();
             return isANumber(entry.signature().result()) && counted.size() == 2
@@ -555,6 +561,25 @@ enum Question {
      * as what puts an operation in range of one. */
     static boolean isANumber(Type t) {
         return t == Type.Prim.INT || t == Type.Prim.DECIMAL;
+    }
+
+    /**
+     * Whether values of {@code t} count to a number.
+     *
+     * <p>Wider than {@link #isANumber} and asked where the arithmetic is over counts rather than
+     * over numbers a model wrote: a date is not a number and counts days, so a difference of two of
+     * them is a number of days. Asked of {@link Carrier}, which is the one table saying which types
+     * have an order with counts under it — a second answer here would be a second table, and a type
+     * that is a carrier to one of them and not to the other is what that costs.
+     *
+     * <p>Asked without the declarations, which is what a reading of the library's own signatures
+     * has: {@link Carrier#ofPrimitive} answers where the type settles it and leaves a name
+     * unanswered. The names in those signatures are the error unions and {@code RoundingMode}, and
+     * a form is written over none of them.
+     */
+    static boolean countsToANumber(Type t) {
+        Carrier carrier = Carrier.ofPrimitive(t);
+        return carrier != null && carrier.counts();
     }
 
     /**

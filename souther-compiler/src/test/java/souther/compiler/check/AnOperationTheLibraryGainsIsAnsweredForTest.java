@@ -76,6 +76,35 @@ class AnOperationTheLibraryGainsIsAnsweredForTest {
     }
 
     /**
+     * And no operation is on both sides of a question at once. A silence is a decision that nothing
+     * is true under the subject, so beside a rule saying what is it is not a spare row — it is the
+     * denial of what the rule says, and the two cannot both be read without one of them being
+     * wrong.
+     *
+     * <p>The direction the other two cannot see. Both of them read the union: a range covered is a
+     * range where every operation has a rule <em>or</em> a silence, and a name written down is a
+     * name the question asks of either way. So a silence was only ever tested as a filler, and one
+     * that had become false stayed where it was — {@code Int.add} was declared to say nothing of
+     * what it answers in what it was given, next to the arithmetic the language reads it as, for as
+     * long as no rule for it reached this question. Nothing here fell over, because covering a
+     * range is all either of them asks.
+     */
+    @Test
+    void noOperationBothAnswersAQuestionAndIsSilentUnderIt() {
+        List<String> saidBothWays = new ArrayList<>();
+        for (Question question : Question.values()) {
+            for (ValueName operation : question.answeredOperations()) {
+                if (question.nothingSaidOf().contains(operation)) {
+                    saidBothWays.add(operation + " — " + question);
+                }
+            }
+        }
+        assertEquals(List.of(), saidBothWays,
+                "these answer a question with a rule and are also declared to say nothing under it,"
+                        + " so the silence beside the rule denies it");
+    }
+
+    /**
      * A question reads the declaration for what it asks about and no more. What an operation hands
      * its closure is a question about its arguments, so a declaration that leaves its result to its
      * body — which the library allows a helper with parameters to do — is still asked it. Nothing in

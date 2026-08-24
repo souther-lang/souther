@@ -605,14 +605,6 @@ final class Terms {
         if (written != null && written != n) {
             return affineOf(written, at);
         }
-        // An operation answering a number it was given is that number here, whatever type it
-        // answers it in: `Decimal.fromInt(n)` is `n`, so a guard about `n` is about the call as
-        // well. Read through rather than made an atom of its own, which would leave the two
-        // unrelated and the guard saying nothing about the construction.
-        Core answered = DischargeRules.answersItsArgument(n);
-        if (answered != null) {
-            return affineOf(answered, at);
-        }
         // A list written out has as many elements as it is written with, whatever they are.
         BigDecimal counted = writtenSize(n, at);
         if (counted != null) {

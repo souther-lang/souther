@@ -59,9 +59,9 @@ class WhatStoppedAComparisonIsReadOffWhatItIsTest {
     @Test
     void anOperationsAnswerIsARuleAboutAValueMadeFromThePosition() {
         assertEquals(List.of(UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE),
-                whyAt(guard("a: Date, b: Date", "Date.daysBetween(a, b) > 10"), "a"));
+                whyAt(guard("a: DateTime, b: DateTime", "DateTime.minutesBetween(a, b) > 10"), "a"));
         assertEquals(List.of(UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE),
-                whyAt(guard("a: Date, b: Date", "Date.daysBetween(a, b) > 10"), "b"));
+                whyAt(guard("a: DateTime, b: DateTime", "DateTime.minutesBetween(a, b) > 10"), "b"));
     }
 
     /**
@@ -85,7 +85,8 @@ class WhatStoppedAComparisonIsReadOffWhatItIsTest {
      */
     @Test
     void bothArgumentsOfAnOperationAreNamed() {
-        PartitionEvidence measured = guard("a: Date, b: Date", "Date.daysBetween(b, a) > 10");
+        PartitionEvidence measured =
+                guard("a: DateTime, b: DateTime", "DateTime.minutesBetween(b, a) > 10");
 
         assertEquals(List.of(UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE),
                 whyAt(measured, "a"));
@@ -116,7 +117,7 @@ class WhatStoppedAComparisonIsReadOffWhatItIsTest {
     @Test
     void anOperationThisDoesNotReadIsNamed() {
         assertEquals(List.of(UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE),
-                whyAt(guard("a: Date", "Date.daysBetween(a, a) > 10"), "a"));
+                whyAt(guard("a: DateTime", "DateTime.minutesBetween(a, a) > 10"), "a"));
     }
 
     /**
@@ -214,11 +215,11 @@ class WhatStoppedAComparisonIsReadOffWhatItIsTest {
      */
     @Test
     void arithmeticRoundAnOperationDoesNotChangeWhatStoppedTheReading() {
-        for (String condition : List.of("Date.daysBetween(a, b) <= 30",
-                "Int.add(Date.daysBetween(a, b), 1) <= 30",
-                "Int.add(1, Date.daysBetween(a, b)) <= 30")) {
+        for (String condition : List.of("DateTime.minutesBetween(a, b) <= 30",
+                "Int.add(DateTime.minutesBetween(a, b), 1) <= 30",
+                "Int.add(1, DateTime.minutesBetween(a, b)) <= 30")) {
             assertEquals(List.of(UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE),
-                    whyAt(guard("a: Date, b: Date", condition), "a"), condition);
+                    whyAt(guard("a: DateTime, b: DateTime", condition), "a"), condition);
         }
     }
 

@@ -5,8 +5,11 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.semantics.ArgumentRef;
 import souther.compiler.semantics.OperationFact;
 import souther.compiler.semantics.OperationFacts;
+import souther.compiler.semantics.ResultBound;
+import souther.compiler.numeric.NumericDomain.Rel;
 import souther.compiler.types.ValueName;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -56,7 +59,9 @@ class EverySemanticDeclarationIsHeldToTheLibraryTest {
                 new ArrayList<>(OperationFacts.declarations());
         gained.add(new OperationFacts.Declared(
                 new ValueName.Stdlib("Decimal", "fromInt"),
-                new OperationFact.AnswersItsArgument(new ArgumentRef.At(7))));
+                new OperationFact.AnswersAFormOfItsArguments(
+                        souther.compiler.numeric.NumericDomain.LinearForm.atom(
+                                new ArgumentRef.At(7)))));
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
                 () -> OperationFactBinder.bindAll(gained));
@@ -65,6 +70,63 @@ class EverySemanticDeclarationIsHeldToTheLibraryTest {
         assertTrue(refused.getMessage().contains("argument 8"),
                 "the argument the added fact names, which the operation does not take: "
                         + refused.getMessage());
+    }
+
+    /**
+     * What a fact says of the result is held to the library as well as what it says of an argument.
+     *
+     * <p>The half the tests above cannot see. Each of them adds a fact naming an argument the
+     * operation does not have, so what they show is that the argument side of a proposition is held.
+     * Only one primitive existed and it named an argument, so a fact about the result was held by
+     * whatever its own arm remembered to write — and a form is an equation between the two ends.
+     * {@code List.get(index, xs)} declared to answer the count of its first argument passes on the
+     * argument side, that argument being an {@code Int}, while what it answers is an
+     * {@code Option<'a>} and has no count for the equation to be about.
+     */
+    @Test
+    void whatAFactSaysOfTheResultIsHeldToTheLibraryToo() {
+        List<OperationFacts.Declared> gained =
+                new ArrayList<>(OperationFacts.declarations());
+        gained.add(new OperationFacts.Declared(
+                new ValueName.Stdlib("List", "get"),
+                new OperationFact.AnswersAFormOfItsArguments(
+                        souther.compiler.numeric.NumericDomain.LinearForm.atom(
+                                new ArgumentRef.At(0)))));
+
+        IllegalStateException refused = assertThrows(IllegalStateException.class,
+                () -> OperationFactBinder.bindAll(gained),
+                "a form is an equation between what an operation answers and what it was given, so"
+                        + " a result with no count is a result the equation is not about");
+
+        assertTrue(refused.getMessage().contains("List.get"), refused.getMessage());
+        assertTrue(refused.getMessage().contains("what"),
+                "what it answers is what is wrong, and the message says so: "
+                        + refused.getMessage());
+    }
+
+    /**
+     * And a fact stated of the result that names no argument at all.
+     *
+     * <p>Beside the above because nothing else in it reaches a signature. A bound with no argument
+     * to hold the result against names none, so its arm held the operation and stopped; a bound on
+     * what {@code List.get} answers went through it. Two kinds were in this position —
+     * {@code BoundsItsResult} and {@code IsDefinedByCases} — and both are stated of a number.
+     */
+    @Test
+    void aFactStatedOfTheResultAndNamingNoArgumentIsHeldToo() {
+        List<OperationFacts.Declared> gained =
+                new ArrayList<>(OperationFacts.declarations());
+        gained.add(new OperationFacts.Declared(
+                new ValueName.Stdlib("List", "get"),
+                new OperationFact.BoundsItsResult(new ResultBound(null, BigDecimal.ZERO,
+                        Rel.GE, new ResultBound.Provided.Always()))));
+
+        IllegalStateException refused = assertThrows(IllegalStateException.class,
+                () -> OperationFactBinder.bindAll(gained),
+                "a bound is stated of the number an operation answers, and List.get answers no"
+                        + " number");
+
+        assertTrue(refused.getMessage().contains("List.get"), refused.getMessage());
     }
 
     /**
@@ -110,7 +172,9 @@ class EverySemanticDeclarationIsHeldToTheLibraryTest {
                 new ArrayList<>(OperationFacts.declarations());
         gained.add(new OperationFacts.Declared(
                 new ValueName.Stdlib("Decimal", "fromNothingAtAll"),
-                new OperationFact.AnswersItsArgument(new ArgumentRef.At(0))));
+                new OperationFact.AnswersAFormOfItsArguments(
+                        souther.compiler.numeric.NumericDomain.LinearForm.atom(
+                                new ArgumentRef.At(0)))));
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
                 () -> OperationFactBinder.bindAll(gained));

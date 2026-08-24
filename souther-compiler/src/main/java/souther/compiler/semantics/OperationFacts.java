@@ -60,7 +60,23 @@ public final class OperationFacts {
 
     private static List<Declared> declared() {
         List<Declared> out = new ArrayList<>(List.of(
-            about("Decimal", "fromInt", new OperationFact.AnswersItsArgument(at(0))),
+            // What each answers, counted, in what its arguments are counted as. A date's count is
+            // its carrier's, so a difference of two of them is a number of days while neither is a
+            // number — which is the whole of why these can be said at all.
+            about("Decimal", "fromInt", answers(form(at(0), 1))),
+            about("Date", "daysBetween", answers(form(at(0), -1).plus(form(at(1), 1)))),
+            about("Date", "addDays", answers(form(at(0), 1).plus(form(at(1), 1)))),
+            // The same over the second the date-times count, which is the epoch second a local
+            // value stands at: a day is eighty-six thousand four hundred of them, exactly, because
+            // the value carries no zone for anything to shift it by.
+            about("DateTime", "addMinutes", answers(form(at(0), 60).plus(form(at(1), 1)))),
+            about("DateTime", "addHours", answers(form(at(0), 3600).plus(form(at(1), 1)))),
+            about("DateTime", "addDays", answers(form(at(0), 86400).plus(form(at(1), 1)))),
+            // And the one that puts two counts together: a date counts days from the epoch and a
+            // time counts seconds into its day, so the date-time they make counts the first at a
+            // day's worth of seconds and the second as it stands.
+            about("DateTime", "fromDateAndTime",
+                    answers(form(at(0), 86400).plus(form(at(1), 1)))),
 
             // The operations whose result is a number taken of the one value they are given.
             about("List", "length", new OperationFact.CountsWhatItIsGiven()),
@@ -287,17 +303,38 @@ public final class OperationFacts {
         out.addAll(saysNothing(OperationSubject.ORDER, op("Int", "add"), op("Int", "subtract"), op("Int", "multiply"),
                 op("Int", "min"), op("Int", "max"), op("Int", "floorMod"), op("DateTime", "minutesBetween")));
 
-        // They answer no number they were given. Arithmetic computes a new one from its operands;
-        // `compare` answers a sign, `floorMod` a remainder, `abs` a distance with the sign dropped,
-        // `toInt` a whole number, `round` a value at another scale — what such a result is bounded
-        // by is a different statement from its being a value that was already there; and `min`,
-        // `max` and `clamp` answer one of their arguments, which one depending on the arguments,
-        // and that is what their cases say.
-        out.addAll(saysNothing(OperationSubject.FORM, op("Int", "add"), op("Int", "subtract"), op("Int", "multiply"),
-                op("Decimal", "add"), op("Decimal", "subtract"), op("Decimal", "multiply"), op("Int", "compare"),
+        // What they answer is no form of what they were given, for three reasons.
+        //
+        // A product is one only where an operand is written down: `Int.multiply(a, b)` is
+        // arithmetic over `a` and `b` and is a form of neither, since what multiplies each is the
+        // other. A sum and a difference are not here at all — what they answer is a form of what
+        // they were given, and they say so by being the arithmetic they are — the operator a call
+        // to them is read as, which `ComputesANumber` records. A silence here would deny
+        // that, which is why the two cannot both be written: a name under a subject says nothing is
+        // true of it there.
+        //
+        // A number of their own: `compare` answers a sign, `floorMod` a remainder, `abs` a distance
+        // with the sign dropped, `toInt` a whole number, `round` a value at another scale. What such
+        // a result is bounded by is a different statement from its being a value that was already
+        // there; and `min`, `max` and `clamp` answer one of their arguments, which one depending on
+        // the arguments, and that is what their cases say.
+        //
+        // And, among the temporal ones, a count that is not arithmetic over the counts it was
+        // given. Months and years hold different numbers of days, so neither shift moves a date by
+        // any number of them. `DateTime.minutesBetween` counts whole minutes over a carrier
+        // counting seconds and drops the remainder toward zero, so it is not the difference of the
+        // two counts — which is why it is the operation an author of the next such fact would reach
+        // for, and why the refusal is written down beside the ones that are accepted. A component
+        // is read out of a count by dividing or by taking a remainder: the year a day falls in, the
+        // second within a minute, the day a second falls in, the second within a day.
+        out.addAll(saysNothing(OperationSubject.FORM, op("Int", "multiply"),
+                op("Decimal", "multiply"), op("Int", "compare"),
                 op("Decimal", "compare"), op("Int", "floorMod"), op("Int", "abs"), op("Decimal", "abs"), op("Decimal", "toInt"),
                 op("Decimal", "round"), op("Int", "min"), op("Int", "max"), op("Int", "clamp"), op("Decimal", "min"), op("Decimal", "max"),
-                op("Decimal", "clamp")));
+                op("Decimal", "clamp"), op("Date", "addMonths"), op("Date", "addYears"),
+                op("DateTime", "minutesBetween"), op("Date", "year"), op("Date", "month"),
+                op("Date", "day"), op("Time", "hour"), op("Time", "minute"), op("Time", "second"),
+                op("DateTime", "toDate"), op("DateTime", "toTime")));
         return List.copyOf(out);
     }
 
@@ -364,6 +401,18 @@ public final class OperationFacts {
                 new ElementLineage.ClosureResult(new ElementLineage.Source(source, 1)), size));
     }
 
+    /** {@code times} of what one argument is counted as. */
+    private static souther.compiler.numeric.NumericDomain.LinearForm<ArgumentRef> form(
+            ArgumentRef argument, long times) {
+        return souther.compiler.numeric.NumericDomain.LinearForm.<ArgumentRef>atom(argument)
+                .times(java.math.BigDecimal.valueOf(times));
+    }
+
+    private static OperationFact answers(
+            souther.compiler.numeric.NumericDomain.LinearForm<ArgumentRef> form) {
+        return new OperationFact.AnswersAFormOfItsArguments(form);
+    }
+
     private static OperationFact bounded(Rel rel, long n) {
         return bounded(rel, null, n, new ResultBound.Provided.Always());
     }
@@ -397,15 +446,16 @@ public final class OperationFacts {
         return DECLARED;
     }
 
-    /** The argument whose number {@code operation} answers, or null where it answers none of them
-     *  back. */
-    public static ArgumentRef answersItsArgument(ValueName operation) {
-        return Index.ANSWERS_ITS_ARGUMENT.get(operation);
+    /** What {@code operation} answers, counted, in what its arguments are counted as — or null
+     *  where it states no such form. */
+    public static souther.compiler.numeric.NumericDomain.LinearForm<ArgumentRef>
+            answersAFormOfItsArguments(ValueName operation) {
+        return Index.ANSWERS_A_FORM.get(operation);
     }
 
-    /** The operations declared to answer one of their arguments. */
-    public static java.util.Set<ValueName> answersItsArgument() {
-        return Index.ANSWERS_ITS_ARGUMENT.keySet();
+    /** The operations declared to answer a form of their arguments. */
+    public static java.util.Set<ValueName> answersAFormOfItsArguments() {
+        return Index.ANSWERS_A_FORM.keySet();
     }
 
     /** Which of {@code operation}'s two arguments a positive answer names as the greater, or null
@@ -537,9 +587,10 @@ public final class OperationFacts {
     /** The indexes, read off the declarations on the first ask. */
     private static final class Index {
 
-        private static final Map<ValueName, ArgumentRef> ANSWERS_ITS_ARGUMENT =
-                index(OperationFact.AnswersItsArgument.class,
-                        OperationFact.AnswersItsArgument::argument);
+        private static final Map<ValueName,
+                souther.compiler.numeric.NumericDomain.LinearForm<ArgumentRef>> ANSWERS_A_FORM =
+                index(OperationFact.AnswersAFormOfItsArguments.class,
+                        OperationFact.AnswersAFormOfItsArguments::form);
 
         private static final Map<ValueName, PositiveOrder> ORDERS =
                 index(OperationFact.StatesTheOrderOfItsArguments.class,

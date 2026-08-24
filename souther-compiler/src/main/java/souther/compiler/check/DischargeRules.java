@@ -170,15 +170,101 @@ final class DischargeRules {
         return Bound.statesTheOrder();
     }
 
+    /**
+     * The operations that answer, counted, some arithmetic over what they were given.
+     *
+     * <p>Two sources and one question. Most of them say so by declaring the form
+     * ({@link OperationFacts#answersAFormOfItsArguments}); a sum and a difference say it by being
+     * the arithmetic they are. Declaring the form for those as well would be the same statement
+     * twice, and leaving them out of the question altogether would be worse: the silence beside it
+     * says there is nothing true here, and of {@code Int.add} that is false.
+     *
+     * <p>Which of them are is {@link #operator} and not a reading of its own. What that answers is
+     * what a call to such an operation is read as where it stands ({@link Terms#asOperator}), so
+     * asking it here is what makes the two the same statement — a second reading agreeing with it
+     * today is a second reading to keep agreeing with it, and where they came apart this question
+     * would want a silence written for an operation the grammar reads as a {@code +}.
+     *
+     * <p>A product is left out because it is a form only where an operand is written down: what
+     * multiplies each is the other.
+     */
     static Set<ValueName> formOperations() {
-        return Bound.answersItsArgument();
+        Set<ValueName> answered = new LinkedHashSet<>(Bound.answersAFormOfItsArguments());
+        for (ValueName operation : Bound.computesANumber()) {
+            BinOp written = operator(operation);
+            if (written == BinOp.ADD || written == BinOp.SUB) {
+                answered.add(operation);
+            }
+        }
+        return answered;
+    }
+
+    /** What {@code operation} answers, counted, in what its arguments are counted as — or null
+     *  where it states no such form. */
+    static souther.compiler.numeric.NumericDomain.LinearForm<ArgumentRef> answersAFormOf(
+            ValueName operation) {
+        return Bound.answersAFormOfItsArguments(operation);
+    }
+
+    /**
+     * Those of them this check can carry, by name.
+     *
+     * <p>Every declaration is about the operation and not about a reader, so the ones here are a
+     * subset of what is declared: what an operation answers is stated over the counts of its
+     * arguments, and this check's arithmetic is over the numbers a model wrote. A date counts days
+     * and is no number, so {@code Date.daysBetween} states a form this reads and cannot carry — the
+     * partition can, since a position's count is what it works in.
+     *
+     * <p>Derived from what this side relates and not written as a list. A list is a second copy of
+     * a capability, wrong the day the capability changes; asked this way, the operations that arrive
+     * are exactly the ones an author could write a discharging program for.
+     */
+    private static Set<ValueName> formOperationsThisCarries() {
+        Set<ValueName> carried = new LinkedHashSet<>();
+        // Over the declared forms and not over everything that answers the question. A sum and a
+        // difference answer it by being the arithmetic they are, and what reads them is the
+        // grammar; a program firing one would be firing the operator.
+        for (ValueName operation : Bound.answersAFormOfItsArguments()) {
+            if (everyPartIsANumber(operation)) {
+                carried.add(operation);
+            }
+        }
+        return carried;
+    }
+
+    /**
+     * Whether the result and every argument the declared form names stand at a number this check
+     * relates.
+     *
+     * <p>Both ends, because the fact is an equation between them: what the operation answers,
+     * counted, and what it was given, counted. A form whose arguments this can carry and whose
+     * result it cannot is a form it cannot carry.
+     *
+     * <p>Asked with {@link Question#isANumber} where the binding asks
+     * {@link Question#countsToANumber}. That is the difference between what is true of the
+     * operation and what this check can do with it — a date counts and is no number, so
+     * {@code Date.daysBetween} is declared and is not carried here.
+     *
+     * <p>The library has the operation and the argument is one it takes, both of which
+     * {@link OperationFactBinder} held before any of this was asked. What is left to decide is what
+     * stands there.
+     */
+    private static boolean everyPartIsANumber(ValueName operation) {
+        Prelude.Signature signature =
+                Prelude.entry(((ValueName.Stdlib) operation).qualified()).signature();
+        if (!Question.isANumber(signature.result())) {
+            return false;
+        }
+        List<Type> params = signature.params();
+        return answersAFormOf(operation).coefs().keySet().stream().allMatch(argument ->
+                Question.isANumber(params.get(CallArguments.positionIn(argument, operation))));
     }
 
     /** Those of them the read-through table has, by name, for the test that holds each to a
      * construction it discharges. */
     static Set<String> formNames() {
         Set<String> names = new LinkedHashSet<>();
-        formOperations().forEach(operation -> names.add(operation.toString()));
+        formOperationsThisCarries().forEach(operation -> names.add(operation.toString()));
         return names;
     }
 
@@ -267,17 +353,6 @@ final class DischargeRules {
         return holding;
     }
 
-    /** The argument whose number {@code e} answers, or null where it is not a call this reads as one
-     * of its arguments. The value itself and not a term for it: what it is read as is the form the
-     * argument already has, which is the caller's to build. */
-    static Core answersItsArgument(Core e) {
-        if (!(e instanceof Core.PreservedCall call)) {
-            return null;
-        }
-        ArgumentRef reads = Bound.answersItsArgument(call.operation());
-        return reads == null ? null : CallArguments.of(reads, call);
-    }
-
     /** Those of them the building table has, by name, for the test that holds each to a construction
      * it discharges. */
     static Set<String> builtNames() {
@@ -362,14 +437,15 @@ final class DischargeRules {
          * declaration's; what asking through here adds is that it has been held to the library
          * first.
          */
-        private static ArgumentRef answersItsArgument(ValueName operation) {
-            return OperationFacts.answersItsArgument(operation);
+        private static souther.compiler.numeric.NumericDomain.LinearForm<ArgumentRef>
+                answersAFormOfItsArguments(ValueName operation) {
+            return OperationFacts.answersAFormOfItsArguments(operation);
         }
 
-        /** The operations declared to answer one of their arguments, for the checks that hold each
-         *  of them to firing. */
-        private static Set<ValueName> answersItsArgument() {
-            return OperationFacts.answersItsArgument();
+        /** The operations declared to answer a form of their arguments, for the checks that hold
+         *  each of them to firing. */
+        private static Set<ValueName> answersAFormOfItsArguments() {
+            return OperationFacts.answersAFormOfItsArguments();
         }
 
         private static Set<ValueName> statesTheOrder() {
@@ -438,12 +514,7 @@ final class DischargeRules {
      * anywhere. Held here, before any call is read.
      */
     static void holdNumericResult(ValueName operation, NumericResult rule) {
-        Prelude.PreludeEntry entry = Prelude.entry(((ValueName.Stdlib) operation).qualified());
-        if (entry == null) {
-            throw new IllegalStateException("a rule about what number it computes is written for "
-                    + operation + ", which the library does not declare");
-        }
-        Prelude.Signature signature = entry.signature();
+        Prelude.Signature signature = holdTheOperationToTheLibrary(operation).signature();
         Type answers = Question.numberAnsweredBy(signature.result());
         List<Arithmetic.Reads> reads = rule.computes().reads();
         if (signature.params().size() != reads.size()) {
@@ -458,13 +529,9 @@ final class DischargeRules {
             }
         }
         switch (rule.at()) {
-            case NumericResult.Answered.Directly ignored -> {
-                if (!Question.isANumber(signature.result())) {
-                    throw new IllegalStateException(operation + " answers "
-                            + Type.show(signature.result())
-                            + ", so the number it computes is not its result");
-                }
-            }
+            case NumericResult.Answered.Directly ignored ->
+                    holdTheResultToTheDeclaration(operation, Question::isANumber,
+                            "a number for the arithmetic it computes to be answered at");
             case NumericResult.Answered.InTheCaseCarrying(Type carried) -> {
                 if (!(signature.result() instanceof Type.Union(Set<TypeSymbol> members))) {
                     throw new IllegalStateException(operation + " answers "
@@ -515,7 +582,7 @@ final class DischargeRules {
             throw new IllegalStateException("the rule about " + operation + " counts through "
                     + shift.measure().qualified() + ", which the library does not declare");
         }
-        Prelude.PreludeEntry shifted = Prelude.entry(((ValueName.Stdlib) operation).qualified());
+        Prelude.PreludeEntry shifted = holdTheOperationToTheLibrary(operation);
         List<Type> counted = counts.signature().params();
         if (counted.size() != 2 || !Question.isANumber(counts.signature().result())
                 || !counted.get(0).equals(shifted.signature().result())
@@ -530,6 +597,8 @@ final class DischargeRules {
     /** As {@link #bind}, for the arguments a case names: the one it answers, and the two sides of
      * each condition it is reached under. */
     static void holdCase(ValueName operation, OperationFact.Case one) {
+        holdTheResultToTheDeclaration(operation, Question::isANumber,
+                "a number for a case of the definition to answer");
         List<ArgumentRef> named = new ArrayList<>();
         named.add(one.answers());
         one.given().forEach(stands -> {
@@ -543,6 +612,8 @@ final class DischargeRules {
     /** As {@link #bind}, for the arguments a bound names: the one the result is bounded against, and
      * the one a condition on the rule reads. Each is a separate claim about a separate argument. */
     static void holdBound(ValueName operation, ResultBound bound) {
+        holdTheResultToTheDeclaration(operation, Question::isANumber,
+                "a number for a bound on the result to hold of");
         List<ArgumentRef> named = new ArrayList<>();
         if (bound.against() != null) {
             named.add(bound.against());
@@ -605,6 +676,55 @@ final class DischargeRules {
                     + ", which the library does not declare");
         }
         return entry;
+    }
+
+    /**
+     * The library's declaration of {@code operation}, once what it answers is what a fact about its
+     * result is about.
+     *
+     * <p>Beside {@link #holdToTheDeclaration} and for the half it cannot reach. That one names an
+     * argument, so a fact whose proposition mentions the result had nothing to say it with, and
+     * each kind that needed the result said it its own way or not at all: {@code BoundsItsResult}
+     * and {@code IsDefinedByCases} are stated of a number and were held only of their arguments.
+     * Improvising a check per kind defaults to omitting it, which is how a fact naming no argument
+     * once went through an empty arm ({@link #holdTheOperationToTheLibrary}).
+     *
+     * <p>What is required is the caller's, since what a fact says of the result is the fact's. A
+     * form is about a count and a bound about a number, and the difference between those two is a
+     * difference between the propositions and not between two ways of holding one.
+     */
+    static void holdTheResultToTheDeclaration(ValueName operation, Predicate<Type> required,
+            String what) {
+        Type result = holdTheOperationToTheLibrary(operation).signature().result();
+        if (result == null || !required.test(result)) {
+            throw new IllegalStateException("what " + ((ValueName.Stdlib) operation).qualified()
+                    + " answers is " + (result == null ? "left to its body" : Type.show(result))
+                    + ", which is not " + what);
+        }
+    }
+
+    /**
+     * Holds a declared form to the library: what it answers counts, and so does every argument it
+     * is written over.
+     *
+     * <p>Both ends, because the fact is an equation between them —
+     * {@code count(result) = Σ cᵢ·count(argᵢ) + k}. Held of the arguments alone it was half a
+     * statement: {@code List.take(n, xs)} declared to answer the number of its first argument
+     * passed, that argument being an {@code Int}, while what it answers is a list and has no count
+     * for the equation to be about.
+     *
+     * <p>Counted rather than a number, because that is what the fact says. A date is no number and
+     * counts days; whether this check can then do anything with such a form is a different question
+     * and belongs to the check ({@link #formOperationsThisCarries}).
+     */
+    static void holdAFormOfItsArguments(ValueName operation,
+            souther.compiler.numeric.NumericDomain.LinearForm<ArgumentRef> form) {
+        holdTheResultToTheDeclaration(operation, Question::countsToANumber,
+                "a value with a count for a form of its arguments to be about");
+        for (ArgumentRef argument : form.coefs().keySet()) {
+            holdToTheDeclaration(operation, argument, null, Question::countsToANumber,
+                    "an argument the result is a form of");
+        }
     }
 
     /** The same, for one rule. Asked per rule so that whatever holds a whole declaration source can

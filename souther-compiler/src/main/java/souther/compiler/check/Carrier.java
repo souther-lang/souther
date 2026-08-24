@@ -139,6 +139,24 @@ public sealed interface Carrier {
     Carrier TEXT = new Text();
 
     /**
+     * The carrier of {@code type} where the type settles it without the declarations, and null where
+     * answering would need them or nothing orders it.
+     *
+     * <p>Beside {@link #ofValue} and not instead of it — the same table, asked where there are no
+     * declarations to hand. A primitive is what it is; a name is a declaration's question, since
+     * which sum places a case and what a newtype wraps are answers only the declarations have. So a
+     * name comes back unanswered here rather than guessed at.
+     *
+     * <p>So a question asked this way is not asked of an operation declared over a name, and what
+     * that costs is measurable: the names in the library's own signatures are its error unions and
+     * the sum a rounding mode is, and every operation carrying one carries a primitive beside it
+     * that answers. None of them falls out of range on this account.
+     */
+    static Carrier ofPrimitive(Type type) {
+        return type instanceof Type.Prim ? ofValue(type, null) : null;
+    }
+
+    /**
      * The carrier a location's own content is counted on, or null where nothing here orders it.
      *
      * <p>Asked of what the names wrap, so a newtype answers as the value it carries — which is what

@@ -157,12 +157,22 @@ public record FixtureTemplate(String text, Hir.Expr value) {
      * declaring it does not expose, which a value can be of and no author can write down. Every
      * other carrier writes a literal, which needs no name from anyone.
      *
+     * <p>Null too where no value of the order stands at {@code at}. A count is arithmetic and the
+     * order it is a count on may stop: a time of day counts seconds from midnight and has 86400 of
+     * them, so the count below its first is a count no time has. Asked of the order's own ends
+     * ({@link Carrier#extent()}) rather than restated here, since a second statement of where an
+     * order stops is a second thing to keep true. What such a point leaves is a point nothing
+     * composes a value at, which is what the callers already read a null as.
+     *
      * <p>Bare. How many names the value wears at the position it is going to is a different question
      * with its own answer ({@link Witnesses#wrapped}), which walks every layer; answered here as
      * well, it was answered one layer deep, and a value of a newtype over a newtype came back
      * missing the name in the middle.
      */
     public static FixtureTemplate on(Carrier carrier, Place at, TypeReachName.Naming naming) {
+        if (!carrier.extent().admits(at)) {
+            return null;
+        }
         return switch (carrier) {
             case Carrier.Whole _ -> integer(Count.number(at).at().longValueExact());
             case Carrier.Dense _ -> decimal(Count.number(at).at());
