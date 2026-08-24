@@ -73,6 +73,39 @@ class AnArmNoCombinationIsOverIsStillOfferedARowTest {
                 "and nothing says the body does not reach them: " + run.out());
     }
 
+    /** A fork inside a block, which runs where something applies it. */
+    private static final String IN_A_BLOCK = """
+            module example.block
+
+            data Flag = On | Off
+
+            behavior mark : (flags: List<Flag>) -> List<Int>
+
+            let mark (flags) = List.map(f ->
+                match f with
+                    | On -> 1
+                    | Off -> 0, flags)
+
+            example mark
+                | "one on" : ([On]) -> [1]
+            """;
+
+    /**
+     * An arm this compiler cannot state a way into says what is missing here.
+     *
+     * <p>Which is not that the body does not reach it. The block runs under whatever applies it, so
+     * what steers a row there is not a class of this behavior's inputs — and a reader who writes the
+     * row by hand has been told the truth about why nothing offered one (issue #643).
+     */
+    @Test
+    void anArmInsideABlockSaysWhatIsMissingRatherThanThatNothingReachesIt() throws Exception {
+        Run run = examples(IN_A_BLOCK, "--generate");
+
+        assertTrue(run.out().contains("no row goes through `case Off`"), run.out());
+        assertTrue(run.out().contains("nothing offers a row for `case Off` in `mark`: this arm is"
+                + " inside a block"), run.out());
+    }
+
     private record Run(int code, String out, String err) {}
 
     private static Run examples(String model, String... extraArgs) throws Exception {
