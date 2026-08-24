@@ -69,8 +69,7 @@ class ACaseIsBuiltAtItsPositionWithoutBeingNamedHereTest {
         Compilation compilation = Compilation.ofSources(List.of(DOMAIN, CONSUMER), ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        Map<String, Adequacy.Filling> all = compilation.db()
-                .ask(new Adequacy.Generated("consumer")).value();
+        Map<String, Adequacy.Filling> all = Adequacy.generatedOf(compilation.db(), "consumer");
         assertNotNull(all, "the model under test compiles");
         return all.get("judge").composed();
     }

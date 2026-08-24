@@ -129,6 +129,16 @@ public final class Analyzer {
      */
     private Adequacy.Asked measure = Adequacy.Asked.NOTHING;
 
+    /**
+     * Whether the client will come back for an action's edit.
+     *
+     * <p>False until the handshake says otherwise, which is the protocol's default. What it decides
+     * is when the rows are worked out and never whether they are offered: an offer that is worth
+     * making is worth making to every client, and one that a client would never resolve has to
+     * arrive with its edit or it does nothing.
+     */
+    private boolean resolvesActions;
+
     /** Whether anything is being measured, which is what decides if an offer can exist where there
      * is no diagnostic to fix. */
     public boolean measuring() {
@@ -142,6 +152,12 @@ public final class Analyzer {
             this.measure = asked;
             this.workspaceCompile = null;
         }
+    }
+
+    /** Whether this client comes back for an action's edit, which the handshake settles. Nothing is
+     * recompiled for it: it changes when the rows are worked out, not what they are. */
+    public void resolvesActions(boolean asked) {
+        this.resolvesActions = asked;
     }
 
     /** All diagnostics for a document: every syntax error, or — when there are none — the first
@@ -670,7 +686,8 @@ public final class Analyzer {
         }
         Range diagRange = rangeOfRegion(diagnosed);
         if (overlaps(diagRange, requested)) {
-            out.add(new CodeAction("Replace with '" + d.suggestion() + "'", uri, diagRange, d.suggestion()));
+            out.add(new CodeAction.Applied("Replace with '" + d.suggestion() + "'",
+                    new CodeAction.Edit(uri, diagRange, d.suggestion())));
         }
         return out;
     }
@@ -704,32 +721,110 @@ public final class Analyzer {
         }
         LineIndex lines = new LineIndex(text);
         for (Hir.BehaviorDef behavior : written.behaviors()) {
-            // The cursor is in this document, so a declaration written in another one is not what
-            // it is on, however the lines happen to line up.
-            if (!uri.equals(documentOf(behavior.pos(), null, graph))
+            if (!isWrittenIn(behavior, uri, graph)
                     || !overlaps(pointRange(lines, behavior.pos()), requested)) {
                 continue;
             }
-            // An id stands for itself here: a workspace compilation is keyed on the document URIs
-            // this server was given, so what identifies a source is already what this server calls
-            // it.
-            souther.compiler.report.GeneratedRows.Block block =
-                    souther.compiler.report.GeneratedRows.of(compilation, module,
-                            behavior.name(), true,
-                            souther.compiler.diag.SourceNameResolver.identity());
-            // Whether there is a row to write, asked of the generator. Read off the text, a block
-            // holding only the reason nothing was composed is not blank — so this offered to write
-            // rows for a behavior it had none for, and what it wrote into somebody's source was a
-            // comment (issue #955). A level that composes no value produces exactly that block.
-            if (block.rows() == 0) {
+            // Whether the model owes this behavior anything a row could answer. Asked of the
+            // findings, which the report beside this has already worked out, and not of the
+            // generator: composing a value costs a decoder run for each point it settles, and an
+            // editor asks what is available here every time the cursor moves.
+            if (!anythingARowCouldAnswer(compilation, module, behavior.name())) {
                 continue;
             }
-            Position end = new Position((int) text.lines().count(), 0);
-            return List.of(new CodeAction(
-                    "Write the rows `" + behavior.name() + "` does not cover", uri,
-                    new Range(end, end), System.lineSeparator() + block.text()));
+            CodeAction.Deferred offer = new CodeAction.Deferred(
+                    "Write the rows `" + behavior.name() + "` does not cover", uri, module,
+                    behavior.name());
+            // Where the client will not come back for it, the edit is worked out now. What the
+            // handshake settles is when this costs what it costs, and never whether the offer is
+            // made: an action a client would never resolve has to arrive with its edit or it does
+            // nothing at all.
+            if (resolvesActions) {
+                return List.of(offer);
+            }
+            CodeAction.Edit eager = resolve(offer, text, graph);
+            return eager == null ? List.of() : List.of(new CodeAction.Applied(offer.title(), eager));
         }
         return List.of();
+    }
+
+    /**
+     * Whether this behavior is written in this document.
+     *
+     * <p>The cursor is in one document, so a declaration written in another is not what it is on,
+     * however the lines happen to line up. Asked in one place because it is asked twice: an offer
+     * names the document it was made about, and taking it later has to find the behavior in that
+     * same document — a module can be renamed onto another source between the two, and a behavior
+     * of that name found somewhere else is not the one somebody was offered.
+     */
+    private boolean isWrittenIn(Hir.BehaviorDef behavior, String uri, ModuleGraph graph) {
+        return uri.equals(documentOf(behavior.pos(), null, graph));
+    }
+
+    /** Whether anything this behavior is short of is a thing writing a row could answer. */
+    private static boolean anythingARowCouldAnswer(Compilation compilation, String module,
+                                                   String behavior) {
+        Map<String, List<souther.compiler.query.Adequacy.Finding>> findings =
+                compilation.db().ask(new souther.compiler.query.Adequacy.Findings(module)).value();
+        if (findings == null) {
+            return false;
+        }
+        return findings.getOrDefault(behavior, List.of()).stream()
+                .anyMatch(each -> souther.compiler.query.Adequacy
+                        .whereNoRowCouldAnswer(each.about()) == null);
+    }
+
+    /**
+     * The rows themselves, for somebody who has taken the offer.
+     *
+     * <p>Worked out here rather than where the offer was made. This is what costs: the values are
+     * put through the module's own decoders, and an author taking the action is asking for that
+     * once, rather than on every cursor move.
+     *
+     * <p>The behavior is looked up in what the workspace holds now. A document is edited between an
+     * offer being shown and being taken, and rows built against the older text would be written into
+     * source they were not composed for.
+     *
+     * <p>Null where there is nothing to write. An offer to write rows has to write rows: a block
+     * holding only notes is not blank, so a caller reading the text for whether there is work would
+     * put a comment into somebody's source. What there is to write is the generator's answer, and it
+     * is the count that is asked.
+     */
+    public CodeAction.Edit resolve(CodeAction.Deferred offer, String text, ModuleGraph graph) {
+        if (graph == null || text == null) {
+            return null;
+        }
+        Compilation compilation = compileOf(graph);
+        // The whole of what the offer names, and not the part of it a module happens to answer. An
+        // offer is about a behavior of a module written in a document, and a document can be given
+        // another module's header while a behavior of that name goes on existing somewhere else —
+        // so a check that asked only whether the module still has the behavior would compose rows
+        // from one source and write them into another.
+        if (!offer.module().equals(moduleOf(compilation, graph, offer.uri()))) {
+            return null;
+        }
+        souther.compiler.check.Prepared written =
+                compilation.db().ask(new Shapes.Prepared(offer.module())).value();
+        if (written == null || written.behaviors().stream()
+                .noneMatch(each -> each.name().equals(offer.behavior())
+                        && isWrittenIn(each, offer.uri(), graph))) {
+            return null;   // what the offer was made about is not there any more
+        }
+        // An id stands for itself here: a workspace compilation is keyed on the document URIs this
+        // server was given, so what identifies a source is already what this server calls it.
+        souther.compiler.report.GeneratedRows.Block block =
+                souther.compiler.report.GeneratedRows.of(compilation, offer.module(),
+                        offer.behavior(), true,
+                        souther.compiler.diag.SourceNameResolver.identity());
+        if (block.rows() == 0) {
+            return null;
+        }
+        // Inserted at the end of the document. Where rows belong is the author's choice — this
+        // module's own source or an attached file — and moving a block is easier than finding out
+        // why one landed somewhere surprising.
+        Position end = new Position((int) text.lines().count(), 0);
+        return new CodeAction.Edit(offer.uri(), new Range(end, end),
+                System.lineSeparator() + block.text());
     }
 
     /** The first semantic error a self-contained compile turns up, as the structured compiler

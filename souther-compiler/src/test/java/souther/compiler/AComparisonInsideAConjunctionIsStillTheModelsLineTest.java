@@ -115,7 +115,7 @@ coverageAt("inAConjunction", "inAConjunction/r.cost", "100001").made().orElseThr
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, List<BorderAssessment>> boundaries =
-                compilation.db().ask(new Adequacy.Boundaries("example.repro")).value();
+                Adequacy.boundariesOf(compilation.db(), "example.repro");
         assertNotNull(boundaries, "the model under test compiles");
         return BorderAssessment.pointsOf(boundaries.get(behavior)).stream()
                 .filter(p -> p.role().againstTheLine()).filter(p -> p.owed() != null)

@@ -115,11 +115,12 @@ final class AReportOfOneBorder {
                 items.put(role, new ItemAssessment.NotOwed(not.reason()));
                 continue;
             }
+            // Proven by the rules, which is the one way of being writable that does not depend on
+            // what the coverage beside it says. Written as a verdict, this fixture could claim a row
+            // was at the point while handing in a coverage that says none is.
             items.put(role, new ItemAssessment.Owed(border.demand(role).criterion(),
-                    coverage.apply(role),
-                    new ItemAssessment.Writability.WitnessedByRow(),
-                    new ItemAssessment.Attempt.NotAttempted(
-                            ItemAssessment.Attempt.Reason.A_ROW_IS_ALREADY_THERE)));
+                    coverage.apply(role), true,
+                    null));
         }
         return new BorderAssessment(border, items);
     }

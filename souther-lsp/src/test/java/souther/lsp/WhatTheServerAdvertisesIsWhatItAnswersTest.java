@@ -228,7 +228,12 @@ class WhatTheServerAdvertisesIsWhatItAnswersTest {
             offered(LspMethod.REFERENCES, "textDocument/references", "referencesProvider"),
             new Protocol(LspMethod.COMPLETION, "textDocument/completion",
                     new Told.Capability("completionProvider", OPTIONS, "an options object")),
-            offered(LspMethod.CODE_ACTION, "textDocument/codeAction", "codeActionProvider"),
+            new Protocol(LspMethod.CODE_ACTION, "textDocument/codeAction",
+                    new Told.Capability("codeActionProvider", OPTIONS, "an options object")),
+            // Announced by a flag inside the capability above rather than by one of its own: a
+            // client learns that an action can be resolved from the method it completes.
+            new Protocol(LspMethod.CODE_ACTION_RESOLVE, "codeAction/resolve",
+                    new Told.Nothing(Advertisement.Reason.UNDER_ANOTHER_METHODS_CAPABILITY)),
             new Protocol(LspMethod.CODE_LENS, "textDocument/codeLens",
                     new Told.Capability("codeLensProvider", OPTIONS, "an options object")),
             offered(LspMethod.RENAME, "textDocument/rename", "renameProvider"),

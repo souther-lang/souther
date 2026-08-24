@@ -95,8 +95,10 @@ class ABoundaryRowWearsEveryNameThePositionDeclaresTest {
                 .ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get(spec.name());
         GuardThresholds.Guards guards =
                 GuardThresholds.of(spec.name(), body, plan, domain, symbols);
+        souther.compiler.inputs.Quantities reading = domain.quantities(symbols);
         Partitions.Partitioning p = Partitions.withThresholds(
                 Partitions.of(spec.name(), domain, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                reading,
                 guards.thresholds(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
 
         List<String> names = new ArrayList<>();
@@ -108,7 +110,7 @@ class ABoundaryRowWearsEveryNameThePositionDeclaresTest {
         List<String> out = new ArrayList<>();
         for (Axis axis : p.axes()) {
             for (Border border
-                    : Partitions.bordersOf(axis, symbols, p.quantities().runsBetween(axis.term()))) {
+                    : Partitions.bordersOf(axis, symbols, reading.runsBetween(axis.term()))) {
               for (PointRole role : List.of(PointRole.ON, PointRole.OFF)) {
                 if (!(border.demand(role).criterion()
                         instanceof Criterion.AtTheLevel each)) {

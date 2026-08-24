@@ -105,10 +105,9 @@ class APairIsOneElementInTwoClassesTest {
      */
     @Test
     void theSearchOffersNothingForACombinationNothingIsOwedFor() {
-        Map<String, Adequacy.Filling> generated = compiled("""
+        Map<String, Adequacy.Filling> generated = Adequacy.generatedOf(compiled("""
                 [ Person { age = 17, status = Active },
-                  Person { age = 20, status = Inactive } ]""").db()
-                .ask(new Adequacy.Generated(MODULE)).value();
+                  Person { age = 20, status = Inactive } ]""").db(), MODULE);
         assertNotNull(generated, "rows are offered");
 
         assertEquals(List.of(), generated.get("select").composed().rows().stream()

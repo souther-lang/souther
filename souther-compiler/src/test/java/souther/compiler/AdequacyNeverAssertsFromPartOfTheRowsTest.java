@@ -265,7 +265,7 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
             Compilation compilation = measured(model);
             String module = compilation.modules().get(0);
             Map<String, Adequacy.Filling> generated =
-                    compilation.db().ask(new Adequacy.Generated(module)).value();
+                    Adequacy.generatedOf(compilation.db(), module);
             assertNotNull(generated);
 
             String written = GeneratedRows.of(module, generated, Map.of(), true, SourceNameResolver.identity()).text();
@@ -323,7 +323,7 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
         assertFalse(compilation.db().ask(new Adequacy.BranchCoverage(module)).value()
                 .get("take").unreached().isEmpty(), "an arm nothing goes through");
         assertFalse(GeneratedRows.of(module,
-                compilation.db().ask(new Adequacy.Generated(module)).value(), Map.of(), true,
+                Adequacy.generatedOf(compilation.db(), module), Map.of(), true,
                 SourceNameResolver.identity()).text().isEmpty(),
                 "and rows offered for them");
     }

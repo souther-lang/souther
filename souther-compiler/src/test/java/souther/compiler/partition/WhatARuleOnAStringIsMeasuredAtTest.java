@@ -173,8 +173,12 @@ class WhatARuleOnAStringIsMeasuredAtTest {
         Core body = checked.behaviorBodies().get("f");
         GuardThresholds.Guards guards = GuardThresholds.of("f", body, plan,
                 compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("f"), symbols);
+        InputDomain read = InputDomain.of(spec, sigs.get("f"), symbols,
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        souther.compiler.inputs.Quantities reading = read.quantities(symbols);
         Partitions.Partitioning p = Partitions.withThresholds(
-                Partitions.of(spec.name(), InputDomain.of(spec, sigs.get("f"), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                Partitions.of(spec.name(), read, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                reading,
                 guards.thresholds(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES, List.of(), guards.singled());
 
         List<String> classes = new ArrayList<>();
@@ -189,7 +193,7 @@ class WhatARuleOnAStringIsMeasuredAtTest {
                         : made.stream().map(FixtureTemplate::text)
                                 .map(WhatARuleOnAStringIsMeasuredAtTest::bare).toList().toString());
             }
-            Partitions.bordersOf(axis, symbols, p.quantities().runsBetween(axis.term()))
+            Partitions.bordersOf(axis, symbols, reading.runsBetween(axis.term()))
                     .forEach(border -> java.util.stream.Stream.of(PointRole.ON, PointRole.OFF)
                             .filter(role -> border.demand(role).criterion() != null)
                             .forEach(role -> owed.add(role + " "

@@ -4,7 +4,6 @@ import souther.compiler.check.ReadingPolicy;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
-import souther.compiler.inputs.Membership;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.CountDomain;
@@ -197,13 +196,8 @@ final class Intervals {
             // The run's own answer about what is in it. Read off a range of the position's counts,
             // a class whose line falls at a place the position has no value for had no end to state
             // — so it held every value, and two such classes each held everything the other did.
-            Classifier is = v -> switch (of.read(v, carrier)) {
-                case NumericTerm.Reading.Number number -> Membership.of(
-                        run.holds(new Level.OnACarrier(carrier, number.value())));
-                case NumericTerm.Reading.Missing missing ->
-                        new Membership.Incomplete(missing.code());
-                case NumericTerm.Reading.NotNumber _ -> Membership.NO_MATCH;
-            };
+            Recognition is = new Recognition.OfACount(of, carrier,
+                    new Recognition.CountIs.InARun(run));
             if (inside == null) {
                 classes.add(PartitionClass.ungeneratable(id, label, is,
                         "no value this position can hold lies inside this range"));

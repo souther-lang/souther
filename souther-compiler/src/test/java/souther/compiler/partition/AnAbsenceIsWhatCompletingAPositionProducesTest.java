@@ -49,7 +49,7 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
 
     private static Axis measured() {
         return new Axis(ID, new NumericTerm.ValueOf(AT), Type.BOOL,
-                List.of(PartitionClass.of("true", "true", Classifier.none(),
+                List.of(PartitionClass.of("true", "true", new Recognition.Nothing(),
                         RepresentativeSource.of(FixtureTemplate.bool(true)))),
                 List.of());
     }

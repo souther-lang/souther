@@ -126,7 +126,7 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, List<BorderAssessment>> boundaries =
-                compilation.db().ask(new Adequacy.Boundaries("example.repro")).value();
+                Adequacy.boundariesOf(compilation.db(), "example.repro");
         assertNotNull(boundaries, "the model under test compiles");
         return boundaries.get(behavior);
     }

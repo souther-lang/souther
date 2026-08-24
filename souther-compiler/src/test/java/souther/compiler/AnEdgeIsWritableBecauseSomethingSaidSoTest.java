@@ -16,6 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -206,10 +207,10 @@ at.coverage().made().orElseThrow());
 at.coverage().made().orElseThrow());
         assertInstanceOf(ItemAssessment.Writability.WitnessedByRow.class, at.writability(),
                 "the row is the witness");
-        assertEquals(ItemAssessment.Attempt.Reason.A_ROW_IS_ALREADY_THERE,
-                assertInstanceOf(ItemAssessment.Attempt.NotAttempted.class, at.attempt())
-                        .reason(),
-                "and no candidate was built for a value that is already there");
+        assertFalse(at.worthSearching(),
+                "and a value that is already there is not worth building one for");
+        assertNull(at.attempt(),
+                "so nothing was searched for, which is said by there being no attempt");
     }
 
     /**
@@ -281,7 +282,7 @@ at.coverage().made().orElseThrow());
         compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
         compilation.answerEverything();
         Map<String, List<BorderAssessment>> boundaries =
-                compilation.db().ask(new Adequacy.Boundaries("example.waiting")).value();
+                Adequacy.boundariesOf(compilation.db(), "example.waiting");
 
         List<BorderAssessment.Point> guards =
                 BorderAssessment.pointsOf(boundaries.get("f")).stream()
@@ -292,9 +293,8 @@ at.coverage().made().orElseThrow());
             assertEquals(ItemAssessment.Coverage.NotAsked.ARMS_NOT_ASKED,
                     assertInstanceOf(Measurement.NotMeasured.class,
                             at.owed().coverage()).why(), at.label());
-            assertEquals(ItemAssessment.Attempt.Reason.NOT_MEASURED,
-                    assertInstanceOf(ItemAssessment.Attempt.NotAttempted.class,
-                            at.owed().attempt()).reason(), at.label());
+            assertFalse(at.owed().worthSearching(), at.label());
+            assertNull(at.owed().attempt(), at.label());
         }
     }
 
@@ -352,10 +352,11 @@ at.coverage().made().orElseThrow());
                 Adequacy.Level.WITNESS);
         assertInstanceOf(ItemAssessment.Writability.ProvenByProjection.class,
                 unbuilt.writability(), "and the rules prove it whether or not anything was built");
-        assertEquals(ItemAssessment.Attempt.Reason.VALUES_NOT_ASKED_FOR,
-                assertInstanceOf(ItemAssessment.Attempt.NotAttempted.class, unbuilt.attempt())
-                        .reason(),
-                "said as this build's doing and not as a refusal");
+        assertTrue(unbuilt.worthSearching(),
+                "a value here would have settled something, so the point is worth searching");
+        assertNull(unbuilt.attempt(),
+                "and nobody asked for one: said by there being no attempt, not by an attempt that"
+                        + " reports not having been asked for");
         assertInstanceOf(Measurement.Complete.class, unbuilt.coverage(),
                 "the rows were read all the same: what is missing is the value, not the reading");
         assertTrue(unbuilt.coverage().made().orElseThrow() instanceof ItemAssessment.Coverage.NoHit
@@ -373,8 +374,12 @@ at.coverage().made().orElseThrow());
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.reportOnly(level));
         compilation.answerEverything();
-        Map<String, List<BorderAssessment>> boundaries =
-                compilation.db().ask(new Adequacy.Boundaries(module)).value();
+        // Which question the build puts, which is what the level says. A build that composes values
+        // asks for the search; one that does not asks what the rows established and stops there, and
+        // the difference shows as there being no attempt rather than as an attempt saying so.
+        Map<String, List<BorderAssessment>> boundaries = level.composesValues()
+                ? Adequacy.searchedBoundariesOf(compilation.db(), module)
+                : Adequacy.boundariesOf(compilation.db(), module);
         assertNotNull(boundaries, "the model under test compiles");
         return BorderAssessment.pointsOf(boundaries.get(behavior));
     }

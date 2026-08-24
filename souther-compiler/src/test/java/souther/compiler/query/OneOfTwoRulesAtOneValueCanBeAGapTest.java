@@ -61,7 +61,7 @@ class OneOfTwoRulesAtOneValueCanBeAGapTest {
                         .getOrDefault("charge", java.util.List.of()).stream()
                         .anyMatch(each -> each.kind() == Adequacy.Kind.BOUNDARY_UNMET),
                 "the guard's line at a hundred is the gap this is about");
-        assertDoesNotThrow(() -> compilation.db().ask(new Adequacy.Generated(module)).value(),
+        assertDoesNotThrow(() -> Adequacy.generatedOf(compilation.db(), module),
                 "the two obligations at one value were read as contradicting each other");
     }
 }

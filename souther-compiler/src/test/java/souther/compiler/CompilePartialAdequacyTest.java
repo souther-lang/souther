@@ -252,8 +252,7 @@ class CompilePartialAdequacyTest {
     @Test
     void aClassNothingLookedForIsNotAClassASearchStoppedShortOf() {
         Compilation compilation = measured(budgetSpent(""));
-        Map<String, Adequacy.Filling> generated = compilation.db()
-                .ask(new Adequacy.Generated("example.budget")).value();
+        Map<String, Adequacy.Filling> generated = Adequacy.generatedOf(compilation.db(), "example.budget");
         assertNotNull(generated);
 
         List<Adequacy.GenerationDisposition> classes =
@@ -279,8 +278,7 @@ class CompilePartialAdequacyTest {
     @Test
     void nothingIsGeneratedForAPositionThatCouldNotBeRead() {
         Compilation compilation = measured(budgetSpent(""));
-        Map<String, Adequacy.Filling> generated = compilation.db()
-                .ask(new Adequacy.Generated("example.budget")).value();
+        Map<String, Adequacy.Filling> generated = Adequacy.generatedOf(compilation.db(), "example.budget");
         assertNotNull(generated);
 
         assertEquals(List.of(), generated.get("take").composed().rows(),
@@ -477,8 +475,7 @@ class CompilePartialAdequacyTest {
      */
     @Test
     void nothingIsGeneratedWhereSomeRowsWereNeverRead() {
-        Map<String, Adequacy.Filling> generated = split().db()
-                .ask(new Adequacy.Generated("example.split")).value();
+        Map<String, Adequacy.Filling> generated = Adequacy.generatedOf(split().db(), "example.split");
 
         assertEquals(List.of(), generated.get("take").composed().rows());
         assertEquals(List.of(), generated.get("take").boundaries().rows());

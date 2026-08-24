@@ -65,10 +65,17 @@ public sealed interface About {
     /**
      * A point of a border no row is at.
      *
-     * <p>The assessment's own item, which is what the count, the document, the rows a tool offers
-     * and this are four readings of. Held as the point rather than as the axis, the value, the rule
-     * and the role, which is what those four fields were: a copy of it, made where the finding was
-     * built, that a reader then matched back against the assessments to find the one it came from.
+     * <p>The assessment's own item, which is what the count, the document and this are three
+     * readings of. Held as the point rather than as the axis, the value, the rule and the role,
+     * which is what those four fields were: a copy that did not identify a point, since several
+     * rules can draw a line at one value.
+     *
+     * <p>What is here is what was measured, and a reader wanting more than that says so. A
+     * generation composes values at these lines whatever the build was measuring, so what it can do
+     * about a finding is read out of the search it asked for — the same point of the same line,
+     * found with the line itself ({@link BorderAssessment#owedAt}). This carries the measurement
+     * because that is what a finding is about: a search settles what can be written at the point and
+     * changes nothing about the point being missed.
      */
     record APointOfABorder(BorderAssessment.Point point) implements About {
         public APointOfABorder {

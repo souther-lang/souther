@@ -3,7 +3,6 @@ package souther.compiler.partition;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
-import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.Value;
@@ -41,7 +40,7 @@ final class ValueClasses {
                             + " value this cannot write; the two readings of one position disagree"
                             + " about what stands at it");
         }
-        Classifier is = Classifier.under(worn, Classifier.byShape(seen -> holds(seen, value)));
+        Recognition is = Recognition.Under.of(worn, new Recognition.AtAValue(value));
         FixtureTemplate stands = Witnesses.wrapped(view.declared(), bare, symbols);
         return (stands == null
                 // A name the position wears that nothing here writes. The class is the position's
@@ -80,36 +79,6 @@ final class ValueClasses {
         } catch (ArithmeticException e) {
             return null;
         }
-    }
-
-    /**
-     * Whether an observed value is the one this class is of.
-     *
-     * <p>Bare, without the names the position wears: a classifier that reads through names takes off
-     * the ones that are there and answers about the rest, so a value handed over as it stands is
-     * answered by the same classifier a row is.
-     */
-    private static boolean holds(ObservedValue seen, Value value) {
-        return switch (value) {
-            case Value.Text text ->
-                    seen instanceof ObservedValue.Text it && it.value().equals(text.value());
-            case Value.Truth truth ->
-                    seen instanceof ObservedValue.Bool it && it.value() == truth.value();
-            // Compared as numbers and not as writings of them. `1.0m` and `1.00m` are one value
-            // where they are written, and the reading that named this class already holds them as
-            // one (`Value.Number`).
-            case Value.Number number -> switch (seen) {
-                case ObservedValue.Integer it ->
-                        BigDecimal.valueOf(it.value()).compareTo(number.value()) == 0;
-                case ObservedValue.Decimal it -> it.value().compareTo(number.value()) == 0;
-                default -> false;
-            };
-            case Value.Case one -> switch (seen) {
-                case ObservedValue.Unit it -> one.data().equals(it.type());
-                case ObservedValue.Constructed it -> one.data().equals(it.type());
-                default -> false;
-            };
-        };
     }
 
     private ValueClasses() {}

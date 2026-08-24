@@ -47,27 +47,44 @@ import java.util.Set;
 final class Coverages {
 
     /**
+     * What the model divides one behavior into, and the reading of its declarations that produced
+     * it.
+     *
+     * <p>Two things and not one, because only the first is what the model says. The reading holds a
+     * way of asking the declarations reaching an input a further question, so it belongs to whoever
+     * is doing the asking and compares by which of them built it — kept inside the geometry, it made
+     * the geometry a thing no answer could hold.
+     *
+     * <p>Handed over together because they are produced together and reading is what costs: every
+     * rule of every parameter is read to arrive at either, and a caller that wanted both and asked
+     * twice would read them twice.
+     */
+    record Partitioned(Partitions.Partitioning geometry,
+                       souther.compiler.inputs.Quantities reading) {}
+
+    /**
      * The positions one behavior is measured at, with what its own comparisons divide them into.
      *
      * <p>Asked here rather than worked out again wherever it is needed. What a report says is not
      * covered and what a generator writes a row for have to be the same positions and the same classes,
      * and two derivations of them would be two chances to disagree.
      */
-    static Partitions.Partitioning partitioningOf(Hir.SpecBehavior behavior, InputDomain inputs,
-                                                  Sig sig, Symbols symbols, ReadingPolicy policy,
-                                                  Core body,
-                                                  souther.compiler.check.ElementBindings elements,
-                                                  CoverageSites.Plan plan,
-                                                  PathReachability.Answers arrives,
-                                                  souther.compiler.check.StatedContract stated) {
+    static Partitioned partitioningOf(Hir.SpecBehavior behavior, InputDomain inputs,
+                                      Sig sig, Symbols symbols, ReadingPolicy policy,
+                                      Core body,
+                                      souther.compiler.check.ElementBindings elements,
+                                      CoverageSites.Plan plan,
+                                      PathReachability.Answers arrives,
+                                      souther.compiler.check.StatedContract stated) {
         List<String> parameters = behavior.params().stream().map(Hir.Param::name).toList();
         // What a row's values are, where they sit and what they are written as, read together:
         // a field under a name is reached by taking the name off, and a walk given the paths
         // alone reaches nothing where the derivation reaches a field.
         BehaviorInputs where = new BehaviorInputs(parameters, sig.inputTypes(), symbols, policy);
-        // Read once for the three below. What it holds is a way of asking the declarations reaching
-        // this input a further question, and each of them asking for its own would read every rule
-        // of every parameter three times over to arrive at the same answers.
+        // Read once for the three below, and handed back beside what they produce. What it holds is
+        // a way of asking the declarations reaching this input a further question, and each of them
+        // asking for its own would read every rule of every parameter three times over to arrive at
+        // the same answers.
         souther.compiler.inputs.Quantities quantities = inputs.quantities(symbols);
         Partitions.Partitioning partitioning =
                 Partitions.of(behavior.name(), inputs, quantities, symbols, policy);
@@ -83,7 +100,7 @@ final class Coverages {
         // rules at one value are one cut and stay separate obligations, which is what the merge
         // below does — applied one producer at a time, a clause and a guard naming one number would
         // divide the position twice.
-        return Partitions.withThresholds(partitioning,
+        return new Partitioned(Partitions.withThresholds(partitioning, quantities,
                 both(clauses.thresholds(), guards.thresholds()), symbols, policy,
                 both(clauses.unread(), guards.unread()),
                 both(clauses.singled(), guards.singled()),
@@ -96,7 +113,7 @@ final class Coverages {
                 // What a row had to satisfy to arrive at each comparison, from the walk that
                 // assumed it. A clause of a declaration is not written at a place in a body and has
                 // nothing on the way to it, so only the guards have any of this.
-                guards.reaching());
+                guards.reaching()), quantities);
     }
 
     /** The two producers' lines, in one list. */
@@ -110,6 +127,10 @@ final class Coverages {
     }
 
     /**
+     * @param partitioning what the model divides this behavior into, made once by
+     *                   {@link souther.compiler.query.Adequacy.Divided} and read here. Worked out
+     *                   again on the way in, this and the boundaries beside it would be two
+     *                   derivations of one thing and two chances to disagree about it
      * @param boundaries what was established about every line this behavior's rules drew, made once
      *                   by {@link souther.compiler.query.Adequacy.Boundaries} and read here. Measuring
      *                   a line takes putting a value through the module's decoders, which is not
@@ -117,13 +138,11 @@ final class Coverages {
      *                   happen twice.
      */
     static PartitionEvidence of(Hir.SpecBehavior behavior, InputDomain inputs, Sig sig,
-                                Symbols symbols, ReadingPolicy policy, Core body,
-                                souther.compiler.check.ElementBindings elements,
-                                CoverageSites.Plan plan, souther.compiler.query.Adequacy.RowReading observed,
+                                Symbols symbols, ReadingPolicy policy,
+                                Partitions.Partitioning partitioning,
+                                souther.compiler.query.Adequacy.RowReading observed,
                                 souther.compiler.query.Adequacy.Level level,
                                 List<BorderAssessment> boundaries,
-                                PathReachability.Answers arrives,
-                                souther.compiler.check.StatedContract stated,
                                 souther.compiler.partition.AdequacyPolicy.OfTheMeasures budget) {
         List<RowOutcome> rows = observed.rowsSeen();
         List<String> parameters = behavior.params().stream().map(Hir.Param::name).toList();
@@ -131,9 +150,6 @@ final class Coverages {
         // a field under a name is reached by taking the name off, and a walk given the paths
         // alone reaches nothing where the derivation reaches a field.
         BehaviorInputs where = new BehaviorInputs(parameters, sig.inputTypes(), symbols, policy);
-        Partitions.Partitioning partitioning =
-                partitioningOf(behavior, inputs, sig, symbols, policy, body, elements, plan,
-                        arrives, stated);
 
         List<PartitionEvidence.AxisCoverage> axes = new ArrayList<>();
 
@@ -552,24 +568,53 @@ final class Coverages {
      *                  left short of what it is owed, and not that the region is idle here.
      */
     static List<BorderAssessment> assess(
-            Axis axis, BehaviorInputs where, souther.compiler.query.Adequacy.RowReading observed,
-            souther.compiler.query.Adequacy.Level level, boolean knownWritable, Probe probe,
-            souther.compiler.inputs.Quantities rules, ReachingCuts reaching,
-            souther.compiler.numeric.NumericDomain.Bounds within) {
+            List<Border> lines, BehaviorInputs where,
+            souther.compiler.query.Adequacy.RowReading observed,
+            souther.compiler.query.Adequacy.Level level, boolean knownWritable) {
         // Keyed by the line rather than by the reading of it. A guard inside a non-recursive helper
         // is read once per call of that helper, and the rows do not owe the same border twice for
         // having been offered it twice; what each reading saw is merged below.
         java.util.SequencedMap<BoundaryLine, BorderAssessment> out = new java.util.LinkedHashMap<>();
-        LevelRealizer realizer = new LevelRealizer();
-        for (Border each : Partitions.bordersOf(axis, where.symbols(), within)) {
-            out.merge(BoundaryLine.of(each),
-                    assessed(each, shapeOf(each, where, knownWritable, probe,
-                                    whenThereIsNoProbe(level), realizer,
-                                    regionFor(each, rules, reaching)),
+        for (Border each : lines) {
+            out.merge(BoundaryLine.of(each), assessed(each, reading(each, where, knownWritable),
                             observed, level),
                     Coverages::whicheverSawMore);
         }
         return List.copyOf(out.values());
+    }
+
+    /**
+     * The same lines, with what building a value at each point that is worth one came to.
+     *
+     * <p>Takes what was measured rather than measuring again. A search is evidence added to an
+     * assessment and never a second one: the border, what it demands, whether a row is at it and
+     * whether the rules prove it writable are all carried through untouched, and the only thing this
+     * puts in is the attempt at the points the measurement itself says are worth an attempt.
+     *
+     * <p>Which is what makes composing later safe to do. The verdict is read off the evidence, and
+     * nothing a search finds is evidence against a point — so this can add a witness and can never
+     * take one away, whenever it is run and however many points it is run over.
+     */
+    static List<BorderAssessment> searched(List<BorderAssessment> measured, BehaviorInputs where,
+                                           Probe probe, souther.compiler.inputs.Quantities rules,
+                                           ReachingCuts reaching) {
+        LevelRealizer realizer = new LevelRealizer();
+        List<BorderAssessment> out = new ArrayList<>();
+        for (BorderAssessment border : measured) {
+            OneSearchOfABorder search = searching(border.border(), where, probe, realizer,
+                    regionFor(border.border(), rules, reaching));
+            java.util.EnumMap<PointRole, ItemAssessment> items =
+                    new java.util.EnumMap<>(PointRole.class);
+            for (PointRole role : PointRole.values()) {
+                ItemAssessment item = border.at(role);
+                items.put(role, item instanceof ItemAssessment.Owed owed && owed.worthSearching()
+                        ? owed.settledBy(search.search(owed.criterion(),
+                                border.border().label(role)))
+                        : item);
+            }
+            out.add(new BorderAssessment(border.border(), items));
+        }
+        return List.copyOf(out);
     }
 
     /**
@@ -609,11 +654,17 @@ final class Coverages {
         /** Whether one of {@code rows} meets {@code criterion}, and whether that could be told. */
         Met met(Criterion criterion, List<RowOutcome> rows);
 
-        /** What building a row at it came to, asked only where one is worth building. */
-        ItemAssessment.Attempt search(Criterion criterion, String label);
-
         /** Whether the rules this reading took in prove a row can be written at this border. */
         boolean provenWritable();
+    }
+
+    /** What building a row at one point of a border comes to. Its own interface beside the reading
+     *  above, because searching is not measuring: one is what this compilation already established
+     *  and the other is work somebody asked for. */
+    private interface OneSearchOfABorder {
+
+        /** What building a row at it came to, asked only where one is worth building. */
+        ItemAssessment.Attempt search(Criterion criterion, String label);
     }
 
     /**
@@ -652,10 +703,12 @@ final class Coverages {
                     Measurement<ItemAssessment.Coverage> coverage = absent != null ? absent
                             : verdictOf(shape.met(owed.criterion(), observed.rowsSeen()), guard,
                                     border, observed);
-                    ItemAssessment.Attempt attempt = whereOneIsWorthBuilding(coverage,
-                            () -> shape.search(owed.criterion(), border.label(role)));
+                    // No attempt. Nothing was searched for here, and that is said by there being no
+                    // attempt rather than by an attempt saying nobody asked: whether a value was
+                    // composed is a fact about who asked for one, and a measurement that carried it
+                    // was answering a question it had not been put.
                     yield new ItemAssessment.Owed(owed.criterion(), coverage,
-                            writabilityOf(coverage, shape.provenWritable(), attempt), attempt);
+                            shape.provenWritable(), null);
                 }
             });
         }
@@ -671,11 +724,8 @@ final class Coverages {
      * asks which kind of line this is. Two readings written apart is what left a criterion about one
      * place reaching the reader of a pair as an {@code IllegalStateException}.
      */
-    private static OneShapeOfBorder shapeOf(Border border, BehaviorInputs where,
-                                            boolean knownWritable, Probe probe,
-                                            ItemAssessment.Attempt.Reason whenThereIsNoProbe,
-                                            LevelRealizer realizer,
-                                            souther.compiler.partition.RegionForARow within) {
+    private static OneShapeOfBorder reading(Border border, BehaviorInputs where,
+                                            boolean knownWritable) {
         BorderQuantity quantity = border.cut().of();
         java.util.Optional<souther.compiler.coverage.ComparisonOccurrence> site =
                 border.origin().comparisonAt();
@@ -687,12 +737,32 @@ final class Coverages {
             }
 
             @Override
+            public boolean provenWritable() {
+                return knownWritable;
+            }
+        };
+    }
+
+    /**
+     * How a row is looked for at one border, on whatever it was drawn on.
+     *
+     * <p>Beside {@link #reading} rather than inside it. Both are about one border and neither is the
+     * other: what the rows already established is read whatever anybody asked for, and building a
+     * value is work somebody asked for and pays for.
+     */
+    private static OneSearchOfABorder searching(Border border, BehaviorInputs where, Probe probe,
+                                                LevelRealizer realizer,
+                                                souther.compiler.partition.RegionForARow within) {
+        BorderQuantity quantity = border.cut().of();
+        return new OneSearchOfABorder() {
+
+            @Override
             public ItemAssessment.Attempt search(Criterion criterion, String label) {
-                // Which of the two nothings this is, said where the difference is known. A build
-                // that asked for no values and a run with nothing to build against both arrive here
-                // with no probe, and they license different sentences.
+                // Nothing to build against. Told apart from nobody having asked, which is not a
+                // state anything here can be in: this runs because somebody asked.
                 if (probe == null) {
-                    return new ItemAssessment.Attempt.NotAttempted(whenThereIsNoProbe);
+                    return new ItemAssessment.Attempt.Unavailable(
+                            ItemAssessment.Attempt.Reason.NO_CLASSES);
                 }
                 // Where a row would have to stand is asked of the quantity, and finding one there of
                 // the realizer. What it composes is a candidate and no part of the item: another row
@@ -720,11 +790,6 @@ final class Coverages {
                                                 .Reason.SEARCH_LIMIT), within);
                     };
                 };
-            }
-
-            @Override
-            public boolean provenWritable() {
-                return knownWritable;
             }
         };
     }
@@ -951,29 +1016,6 @@ final class Coverages {
         };
     }
 
-    /**
-     * What was tried at one point, where anything was worth trying at all.
-     *
-     * <p>The two gates in one place because they are one rule and there are three searches. A point
-     * a row already sits at needs no candidate, and one whose measurement never happened is not a
-     * piece of work to hand to anybody — offered anyway, both put a specific row in front of an
-     * author that may already be written. Written per search, the third one to be added skipped
-     * them and said a search had run and failed at points nothing had looked at.
-     */
-    private static ItemAssessment.Attempt whereOneIsWorthBuilding(
-            Measurement<ItemAssessment.Coverage> coverage,
-            java.util.function.Supplier<ItemAssessment.Attempt> search) {
-        if (ItemAssessment.Coverage.hit(coverage)) {
-            return new ItemAssessment.Attempt.NotAttempted(
-                    ItemAssessment.Attempt.Reason.A_ROW_IS_ALREADY_THERE);
-        }
-        if (!worthBuilding(coverage)) {
-            return new ItemAssessment.Attempt.NotAttempted(
-                    ItemAssessment.Attempt.Reason.NOT_MEASURED);
-        }
-        return search.get();
-    }
-
     /** A search that came to nothing at {@code subject}, which is what a point is written as. */
     private static ItemAssessment.Attempt nothingComposedOne(
             String subject, souther.compiler.partition.RegionForARow within) {
@@ -1030,20 +1072,15 @@ final class Coverages {
     static List<BorderAssessment> assessBetween(
             Partitions.Partitioning partitioning, BehaviorInputs where,
             souther.compiler.query.Adequacy.RowReading observed,
-            souther.compiler.query.Adequacy.Level level, Probe probe) {
+            souther.compiler.query.Adequacy.Level level) {
         // Keyed by the line the author drew, the way a line at a place is. A guard inside a
         // non-recursive helper is read once per call of that helper, and the rows do not owe the same
         // line twice for having been offered it twice — nor may one reading of it take back what
         // another established.
         java.util.SequencedMap<BoundaryLine, BorderAssessment> out = new LinkedHashMap<>();
-        LevelRealizer realizer = new LevelRealizer();
         for (Border each : partitioning.between()) {
             out.merge(BoundaryLine.of(each),
-                    assessed(each, shapeOf(each, where, false, probe, whenThereIsNoProbe(level),
-                                    realizer,
-                                    regionFor(each, partitioning.quantities(),
-                                            partitioning.reaching())), observed,
-                            level),
+                    assessed(each, reading(each, where, false), observed, level),
                     Coverages::whicheverSawMore);
         }
         return List.copyOf(out.values());
@@ -1085,50 +1122,6 @@ final class Coverages {
     }
 
     /**
-     * What says a row can be written at one boundary: the verdict, over the evidence there is.
-     *
-     * <p>The strongest evidence already in hand first. A row at the value went through the decoder,
-     * which is the whole of what writable means, and costs nothing to read. Then the value that was
-     * built, which went through the same decoder. Then the projection, which stands behind both rather
-     * than in front of them: where it read every rule it proves the edge inhabited whatever the search
-     * made of the particular candidates it tried.
-     *
-     * <p>Only the verdict is decided here. What was tried and what came of it is the attempt's to
-     * say, and it is kept whether or not it changed this answer — an edge the projection proves is one
-     * a search can still fail to reach, and a reader that had only this could not tell that it had.
-     */
-    private static ItemAssessment.Writability writabilityOf(
-            Measurement<ItemAssessment.Coverage> coverage, boolean knownWritable,
-            ItemAssessment.Attempt attempt) {
-        if (ItemAssessment.Coverage.hit(coverage)) {
-            return new ItemAssessment.Writability.WitnessedByRow();
-        }
-        if (attempt instanceof ItemAssessment.Attempt.Built) {
-            return new ItemAssessment.Writability.WitnessedByConstruction();
-        }
-        // A refusal and an attempt nobody made leave the same verdict, and a projection that read
-        // every rule proves what neither of them found. Which is where the asymmetry lives: nothing
-        // a search does can take a proof away, because nothing a search does is evidence against.
-        return knownWritable ? new ItemAssessment.Writability.ProvenByProjection()
-                : new ItemAssessment.Writability.Unknown();
-    }
-
-    /**
-     * Whether a candidate is worth building for this boundary.
-     *
-     * <p>A line nothing measured is not a line an author is behind on. Where the arms were not asked
-     * for, a guard's line has no answer at all, and where a row went unread the row that is at this
-     * value may be one of the rows nothing saw — building a candidate for either hands somebody a
-     * specific piece of work that may already be done.
-     */
-    private static boolean worthBuilding(Measurement<ItemAssessment.Coverage> coverage) {
-        return coverage instanceof Measurement.Complete<ItemAssessment.Coverage> whole
-                        && whole.value() instanceof ItemAssessment.Coverage.NoHit
-                || coverage instanceof Measurement.NotMeasured<ItemAssessment.Coverage> none
-                        && none.why() == ItemAssessment.Coverage.NotAsked.NO_ROWS;
-    }
-
-    /**
      * The first gate a {@code guard}'s line did not get through.
      *
      * <p>Its own path, because a guard's line and an invariant's are not measured the same way and so
@@ -1156,15 +1149,6 @@ final class Coverages {
                     ItemAssessment.Coverage.CouldNotAsk.ARMS_UNREADABLE, WeakeningSet.ofAll(by));
         }
         return whyNoInvariantLine(observed, level);
-    }
-
-    /** Why nothing was built, where nothing was: the level not asking for values comes before this
-     *  run having nothing to build against, because a build that asked for none never looked for
-     *  the classes. */
-    private static ItemAssessment.Attempt.Reason whenThereIsNoProbe(
-            souther.compiler.query.Adequacy.Level level) {
-        return level.buildsValues() ? ItemAssessment.Attempt.Reason.NO_CLASSES
-                : ItemAssessment.Attempt.Reason.VALUES_NOT_ASKED_FOR;
     }
 
     /** What every line of every kind says where the build asked for no measurement: the rules drew

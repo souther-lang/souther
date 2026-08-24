@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -658,7 +659,8 @@ class AnalyzerTest {
 
         assertEquals(1, actions.size(), actions.toString());
         assertEquals("Replace with 'value'", actions.get(0).title());
-        assertEquals("value", actions.get(0).newText());
+        assertEquals("value",
+                assertInstanceOf(CodeAction.Applied.class, actions.get(0)).edit().newText());
     }
 
     @Test

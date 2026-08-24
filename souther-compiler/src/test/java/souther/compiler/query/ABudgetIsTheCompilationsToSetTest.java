@@ -125,8 +125,8 @@ class ABudgetIsTheCompilationsToSetTest {
                         new AdequacyPolicy.OfTheGeneration(Budgets.generation().rows(), cells)));
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        Map<String, Adequacy.Filling> filling = compilation.db()
-                .ask(new Adequacy.Generated("example.two")).value();
+        Map<String, Adequacy.Filling> filling =
+                Adequacy.generatedOf(compilation.db(), "example.two");
         assertNotNull(filling, "the module was asked for rows");
         Adequacy.Filling shipping = filling.get("shippingFee");
         assertNotNull(shipping, "the behavior was asked for rows");

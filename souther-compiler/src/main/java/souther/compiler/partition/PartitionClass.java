@@ -14,10 +14,12 @@ import souther.compiler.values.ValueSet;
  *
  * @param id              a name stable within its axis, used to compare one run against another
  * @param label           what to call it in a report
- * @param classifier      whether a value the rows already carry is in this class
+ * @param recognises      what the class means, which is what says whether a value the rows already
+ *                        carry is in it. A value rather than a way of asking, so that a class can be
+ *                        compared with another and kept in an answer
  * @param representatives how a value standing for it is arrived at
  * @param denotes         the values this class holds, where they can be written out, and null
- *                        where they cannot. A fourth thing, and separate from {@link #classifier}
+ *                        where they cannot. A fourth thing, and separate from {@link #recognises}
  *                        for the reason the others are separate: a classifier answers about one
  *                        value, and a reader asking whether a rule refuses the whole class is
  *                        asking about all of them. A case holding a record has no end of values
@@ -38,20 +40,31 @@ import souther.compiler.values.ValueSet;
  *                        off a name is the same position answering differently depending on how it
  *                        was spelled
  */
-public record PartitionClass(String id, String label, Classifier classifier,
+public record PartitionClass(String id, String label, Recognition recognises,
                              RepresentativeSource representatives, ValueSet denotes,
                              Refinement selects) {
 
-    public static PartitionClass of(String id, String label, Classifier classifier,
+    public static PartitionClass of(String id, String label, Recognition recognises,
                                     RepresentativeSource representatives) {
-        return new PartitionClass(id, label, classifier, representatives, null, null);
+        return new PartitionClass(id, label, recognises, representatives, null, null);
     }
 
     /** A class nothing can produce a value for, and why. */
-    public static PartitionClass ungeneratable(String id, String label, Classifier classifier,
-                                               String why) {
-        return new PartitionClass(id, label, classifier,
+    public static PartitionClass ungeneratable(String id, String label,
+                                               Recognition recognises, String why) {
+        return new PartitionClass(id, label, recognises,
                 new RepresentativeSource.Ungeneratable(why), null, null);
+    }
+
+    /**
+     * This class as something to ask of a row.
+     *
+     * <p>Derived and not held. What the class means is {@link #recognises}, and a way of asking it
+     * is made from that wherever one is wanted — kept beside the meaning, a class would compare by
+     * which reader had built its reading, and could not be part of an answer at all.
+     */
+    public Classifier classifier() {
+        return Recognitions.reading(recognises);
     }
 
     /**
@@ -63,7 +76,7 @@ public record PartitionClass(String id, String label, Classifier classifier,
      * whole, which is the safe direction — the class stays.
      */
     public PartitionClass holding(ValueSet values) {
-        return new PartitionClass(id, label, classifier, representatives, values, selects);
+        return new PartitionClass(id, label, recognises, representatives, values, selects);
     }
 
     /**
@@ -74,7 +87,7 @@ public record PartitionClass(String id, String label, Classifier classifier,
      * requirements of its position and no more.
      */
     public PartitionClass selecting(Refinement refinement) {
-        return new PartitionClass(id, label, classifier, representatives, denotes, refinement);
+        return new PartitionClass(id, label, recognises, representatives, denotes, refinement);
     }
 
     /**

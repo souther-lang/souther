@@ -41,7 +41,10 @@ public enum LspMethod {
     REFERENCES("textDocument/references", new Advertisement.StaticCapability("referencesProvider", true)),
     // invoked completion; no trigger characters
     COMPLETION("textDocument/completion", new Advertisement.StaticCapability("completionProvider", Map.of())),
-    CODE_ACTION("textDocument/codeAction", new Advertisement.StaticCapability("codeActionProvider", true)),
+    CODE_ACTION("textDocument/codeAction",
+            new Advertisement.StaticCapability("codeActionProvider",
+                    Map.of("resolveProvider", true))),
+    CODE_ACTION_RESOLVE("codeAction/resolve", Announced.UNDER_CODE_ACTION),
     CODE_LENS("textDocument/codeLens",
             new Advertisement.StaticCapability("codeLensProvider", Map.of("resolveProvider", false))),
     RENAME("textDocument/rename", new Advertisement.StaticCapability("renameProvider", true)),
@@ -58,6 +61,9 @@ public enum LspMethod {
 
         static final Advertisement PROTOCOL_DEFINED =
                 new Advertisement.None(Advertisement.Reason.UNADVERTISED_PROTOCOL_METHOD);
+
+        static final Advertisement UNDER_CODE_ACTION =
+                new Advertisement.None(Advertisement.Reason.UNDER_ANOTHER_METHODS_CAPABILITY);
 
         /** 1 = full document sync. Opening, changing and closing a document are the three
          * notifications this one capability admits, and none of them names it. */

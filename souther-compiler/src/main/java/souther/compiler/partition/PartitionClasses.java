@@ -8,7 +8,6 @@ import souther.compiler.check.TypeView;
 import souther.compiler.inputs.Case;
 import souther.compiler.inputs.Distinctions;
 import souther.compiler.inputs.Refinement;
-import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeReachName;
@@ -87,7 +86,7 @@ final class PartitionClasses {
         for (PartitionClass each : of(cases,
                 new TypeView(view.declared(), List.of(), view.shape()), symbols, policy)) {
             out.add(PartitionClass.ungeneratable(each.id(), each.label(),
-                    Classifier.under(worn, each.classifier()), why)
+                    Recognition.Under.of(worn, each.recognises()), why)
                     .holding(each.denotes()).selecting(each.selects()));
         }
         return List.copyOf(out);
@@ -129,7 +128,7 @@ final class PartitionClasses {
         // be read as refusing the whole class.
         String said = Boolean.toString(value);
         return PartitionClass.of(said, said,
-                        Classifier.under(worn, Classifier.byShape(v -> isBool(v, value))),
+                        Recognition.Under.of(worn, new Recognition.Truth(value)),
                         RepresentativeSource.under(writes,
                                 RepresentativeSource.of(FixtureTemplate.bool(value))))
                 .holding(souther.compiler.values.ValueSet.just(
@@ -142,8 +141,7 @@ final class PartitionClasses {
                                             List<TypeReachName.Written> writes, Symbols symbols) {
         if (!present) {
             return PartitionClass.of("None", "None",
-                    Classifier.under(worn,
-                            Classifier.byShape(v -> v instanceof ObservedValue.Absent)),
+                    Recognition.Under.of(worn, new Recognition.Held(false)),
                     RepresentativeSource.under(writes,
                             RepresentativeSource.of(FixtureTemplate.none())));
         }
@@ -157,8 +155,7 @@ final class PartitionClasses {
         }
         Type element = optional.element();
         List<FixtureTemplate> some = Partitions.representativesOf(element, symbols, policy);
-        Classifier is = Classifier.under(worn,
-                Classifier.byShape(v -> !(v instanceof ObservedValue.Absent)));
+        Recognition is = Recognition.Under.of(worn, new Recognition.Held(true));
         return some.isEmpty()
                 ? PartitionClass.ungeneratable("Some", "Some", is,
                         "nothing here composed a value of " + Type.show(element))
@@ -195,11 +192,7 @@ final class PartitionClasses {
                                                ReadingPolicy policy,
                                                List<TypeReachName.Written> writes,
                                                Symbols symbols) {
-        Classifier is = Classifier.under(worn, Classifier.byShape(v -> switch (v) {
-            case ObservedValue.Unit u -> leaf.equals(u.type());
-            case ObservedValue.Constructed c -> leaf.equals(c.type());
-            default -> false;
-        }));
+        Recognition is = Recognition.Under.of(worn, new Recognition.OfCase(leaf));
         // A case whose module does not expose it: a value of the position all the same, and one no
         // author here can write down. Said as that, rather than offered under a spelling that
         // resolves to nothing wherever the row is pasted (issue #696).
@@ -227,10 +220,6 @@ final class PartitionClasses {
         // { id = 1 })`.
         return PartitionClass.of(idOfCase(leaf), leaf.name(), is,
                 RepresentativeSource.under(writes, new RepresentativeSource.Composed(leaf)));
-    }
-
-    private static boolean isBool(ObservedValue v, boolean expected) {
-        return v instanceof ObservedValue.Bool b && b.value() == expected;
     }
 
     private PartitionClasses() {}

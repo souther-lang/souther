@@ -52,7 +52,7 @@ class AThresholdOnAnElementIsMetByARowTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, List<BorderAssessment>> boundaries =
-                compilation.db().ask(new Adequacy.Boundaries(MODULE)).value();
+                Adequacy.boundariesOf(compilation.db(), MODULE);
         assertNotNull(boundaries, () -> "the model under test compiles: " + operator);
         List<BorderAssessment> lines = boundaries.get("countOverThreshold");
         assertNotNull(lines, "the behavior has lines");
@@ -123,8 +123,8 @@ at.get(0).owed().coverage().made().orElseThrow(),
                 .replace("Item { charge = 1000 }", "Item { charge = 21000 }"), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        List<BorderAssessment> lines = compilation.db().ask(new Adequacy.Boundaries(MODULE))
-                .value().get("countOverThreshold");
+        List<BorderAssessment> lines = compilation.db()
+                .ask(new Adequacy.Boundaries(MODULE, "countOverThreshold")).value();
         BorderAssessment.Point at = BorderAssessment.pointsOf(lines).stream()
                 .filter(point -> point.role().againstTheLine()).filter(point -> point.owed() != null)
                 .filter(point -> "21000".equals(point.against())).findFirst().orElseThrow();

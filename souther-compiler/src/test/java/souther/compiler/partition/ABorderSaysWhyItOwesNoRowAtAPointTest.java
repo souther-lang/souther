@@ -15,8 +15,8 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -291,7 +291,7 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
      *  offered for. */
     private static Map<String, String> offeredFor(String model) {
         Adequacy.Filling filling = compiled(model).db()
-                .ask(new Adequacy.Generated("example.owed")).value().get("cmp");
+                .ask(new Adequacy.Generated("example.owed", "cmp")).value();
         assertNotNull(filling, "the model under test compiles");
         Map<String, String> out = new java.util.LinkedHashMap<>();
         filling.boundaries().rows().forEach(row -> out.put(String.join(" x ", row.labels()),
@@ -356,11 +356,8 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
         assertTrue(ItemAssessment.Coverage.hit(line.owedAt(PointRole.IN).coverage()), "a row is well under the line");
         assertTrue(ItemAssessment.Coverage.hit(line.owedAt(PointRole.OUT).coverage()), "and one is well over it");
         for (PointRole role : List.of(PointRole.IN, PointRole.OUT)) {
-            assertEquals(souther.compiler.query.ItemAssessment.Attempt.Reason
-                            .A_ROW_IS_ALREADY_THERE,
-                    assertInstanceOf(souther.compiler.query.ItemAssessment.Attempt.NotAttempted.class,
-                            line.owedAt(role).attempt(), role.toString()).reason(),
-                    role.toString());
+            assertFalse(line.owedAt(role).worthSearching(), role.toString());
+            assertNull(line.owedAt(role).attempt(), role.toString());
         }
 
         // And the block an author reads says nothing about them, because nothing is owed there.
@@ -400,7 +397,7 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, List<BorderAssessment>> boundaries =
-                compilation.db().ask(new Adequacy.Boundaries("example.owed")).value();
+                Adequacy.boundariesOf(compilation.db(), "example.owed");
         assertNotNull(boundaries, "the model under test compiles");
         Map<String, BorderAssessment> out = new java.util.LinkedHashMap<>();
         boundaries.values().forEach(each -> each.forEach(b -> out.put(b.label(), b)));

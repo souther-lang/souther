@@ -75,7 +75,7 @@ class AGeneratedRowIsWrittenTheWayTheModuleReachesItTest {
      */
     private static List<String> rowsFor(String source) {
         Map<String, Adequacy.Filling> filling =
-                compiled(source).db().ask(new Adequacy.Generated("app")).value();
+                Adequacy.generatedOf(compiled(source).db(), "app");
         Adequacy.Filling f = filling.get("f");
         return java.util.stream.Stream
                 .concat(f.boundaries().rows().stream(), f.composed().rows().stream())

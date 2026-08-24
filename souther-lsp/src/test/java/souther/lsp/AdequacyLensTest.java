@@ -16,6 +16,9 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -80,8 +83,14 @@ class AdequacyLensTest {
     }
 
     private static Analyzer measuring(Adequacy.Level level) {
+        return measuring(level, true);
+    }
+
+    /** @param resolves what the client's handshake said about coming back for an action's edit */
+    private static Analyzer measuring(Adequacy.Level level, boolean resolves) {
         Analyzer analyzer = new Analyzer();
         analyzer.measure(Adequacy.Asked.reportOnly(level));
+        analyzer.resolvesActions(resolves);
         return analyzer;
     }
 
@@ -164,35 +173,100 @@ class AdequacyLensTest {
      */
     @Test
     void theRowsABehaviorDoesNotCoverCanBeWrittenIn() {
-        List<CodeAction> actions = measuring(Adequacy.Level.ALL)
-                .codeActions(MODULE, TRIP, on(9), graphOf(Map.of(MODULE, TRIP)));
+        Analyzer analyzer = measuring(Adequacy.Level.ALL);
+        ModuleGraph graph = graphOf(Map.of(MODULE, TRIP));
+        List<CodeAction> actions = analyzer.codeActions(MODULE, TRIP, on(9), graph);
 
         assertEquals(1, actions.size(), actions.toString());
         assertEquals("Write the rows `submit` does not cover", actions.get(0).title());
-        for (String line : actions.get(0).newText().lines().filter(l -> !l.isBlank()).toList()) {
+        // Offered without the rows, which is the point of offering it: what they cost is paid by
+        // somebody taking it.
+        CodeAction.Deferred offered =
+                assertInstanceOf(CodeAction.Deferred.class, actions.get(0));
+
+        CodeAction.Edit taken = analyzer.resolve(offered, TRIP, graph);
+        assertNotNull(taken, "and taking it writes rows");
+        for (String line : taken.newText().lines().filter(l -> !l.isBlank()).toList()) {
             assertTrue(line.startsWith("//"), "every line is a comment: " + line);
         }
-        assertTrue(actions.get(0).newText().contains("-> <?>"), actions.get(0).newText());
+        assertTrue(taken.newText().contains("-> <?>"), taken.newText());
     }
 
     /**
-     * And nothing is offered where no value was composed, whatever the notes say.
+     * A client that will not come back for the edit is handed it.
      *
-     * <p>An offer to write rows has to write rows. At {@code witness} nothing is composed — a
-     * candidate costs a decoder run for each point it settles, which is not what that level
-     * promises — so the block holds the reason and no row, and an editor reading the block for
-     * whether there is work would offer to write rows and put a comment in somebody's source
-     * (issue #955). What there is to write is the generator's answer.
+     * <p>What the handshake settles is when the rows are worked out, and never whether the offer is
+     * made. Deferring to a client that does not resolve would show an offer that does nothing when
+     * it is taken, which is the same source-with-no-rows the eager path was written against.
      */
     @Test
-    void nothingIsOfferedWhereNoValueWasComposed() {
+    void aClientThatDoesNotResolveIsHandedTheEditWithTheOffer() {
+        ModuleGraph graph = graphOf(Map.of(MODULE, TRIP));
+        List<CodeAction> actions = measuring(Adequacy.Level.ALL, false)
+                .codeActions(MODULE, TRIP, on(9), graph);
+
+        assertEquals(1, actions.size(), actions.toString());
+        CodeAction.Applied eager = assertInstanceOf(CodeAction.Applied.class, actions.get(0));
+
+        Analyzer resolving = measuring(Adequacy.Level.ALL, true);
+        CodeAction.Deferred offered = assertInstanceOf(CodeAction.Deferred.class,
+                resolving.codeActions(MODULE, TRIP, on(9), graph).get(0));
+        assertEquals(eager.edit().newText(), resolving.resolve(offered, TRIP, graph).newText(),
+                "and the rows are the same rows either way");
+    }
+
+    /**
+     * An offer names a behavior of a module written in a document, and taking it checks all three.
+     *
+     * <p>A document can be given another module's header while a behavior of that name goes on
+     * existing somewhere else. Checked only against the module, the rows would be composed from the
+     * source that still has the behavior and written into the one that no longer does.
+     */
+    @Test
+    void anOfferIsNotTakenWhereItsBehaviorHasMovedToAnotherDocument() {
+        String other = "file:///other.sou";
+        Analyzer analyzer = measuring(Adequacy.Level.ALL);
+        ModuleGraph before = graphOf(Map.of(MODULE, TRIP));
+        CodeAction.Deferred offered = assertInstanceOf(CodeAction.Deferred.class,
+                analyzer.codeActions(MODULE, TRIP, on(9), before).get(0));
+
+        // The document the offer was made about now declares something else, and what it was made
+        // about is written in the other one.
+        ModuleGraph after = graphOf(Map.of(
+                MODULE, TRIP.replaceFirst("module \\S+", "module example.moved"),
+                other, TRIP));
+        assertNull(analyzer.resolve(offered, TRIP, after),
+                "the behavior the offer names is not written in the document it names");
+    }
+
+    /**
+     * The rows at an edge are offered whatever the build was measuring.
+     *
+     * <p>What an author asked for by taking "write the rows this does not cover" is those rows.
+     * Composing a value costs a decoder run for each point it settles, which is not what a build at
+     * {@code witness} promises — so the measurement composes none, and a build is not slowed by
+     * values nobody asked to see. But taking the action is asking, and it is asked once rather than
+     * on every keystroke, so what it costs is paid where somebody wanted it.
+     *
+     * <p>The level does not decide it, because it is not about how much to measure. Read off the
+     * level, the editor offered to write rows at {@code witness} and put a comment in somebody's
+     * source, since the block held the reason nothing was composed and no rows.
+     *
+     * <p>An offer to write rows still has to write rows. What there is to write is the generator's
+     * answer either way, and the block is asked how many rows it holds rather than whether its text
+     * is blank.
+     */
+    @Test
+    void theRowsAtAnEdgeAreOfferedWhateverTheBuildMeasured() {
         assertEquals(1, measuring(Adequacy.Level.ALL)
                         .codeActions(EDGES, ONLY_EDGES, on(7),
                                 graphOf(Map.of(EDGES, ONLY_EDGES))).size(),
                 "at `all` the two lines are rows to write");
 
-        assertEquals(List.of(), measuring(Adequacy.Level.WITNESS)
-                .codeActions(EDGES, ONLY_EDGES, on(7), graphOf(Map.of(EDGES, ONLY_EDGES))));
+        assertEquals(1, measuring(Adequacy.Level.WITNESS)
+                        .codeActions(EDGES, ONLY_EDGES, on(7),
+                                graphOf(Map.of(EDGES, ONLY_EDGES))).size(),
+                "and at `witness` they are the same rows: taking the action is what asks for them");
     }
 
     /** With one document there is nothing to offer: the values a row writes are built through the

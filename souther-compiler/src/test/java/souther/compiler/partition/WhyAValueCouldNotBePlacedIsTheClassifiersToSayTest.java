@@ -88,8 +88,11 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
         CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
                 checked.supplied());
         List<String> parameters = spec.params().stream().map(Hir.Param::name).toList();
+        InputDomain read = InputDomain.of(spec, sigs.get("submit"), symbols,
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         Partitions.Partitioning partitioning = Partitions.withThresholds(
-                Partitions.of(spec.name(), InputDomain.of(spec, sigs.get("submit"), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                Partitions.of(spec.name(), read, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                read.quantities(symbols),
                 GuardThresholds.of("submit", body, plan,
                 compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("submit"), symbols).thresholds(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         Output.Examples.Of observed = compilation.db()
@@ -213,16 +216,22 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
 
     // --- what the contract says cannot happen ---------------------------------------------------
 
-    /** The same axis, with classes that answer however this asks them to. */
-    private static List<Axis> answering(Read read, String path, Classifier... classifiers) {
-        Axis real = read.axes().stream().filter(a -> a.path().toString().equals(path))
-                .findFirst().orElseThrow();
-        List<PartitionClass> classes = new java.util.ArrayList<>();
-        for (int i = 0; i < classifiers.length; i++) {
-            classes.add(PartitionClass.of("c" + i, "c" + i, classifiers[i],
-                    RepresentativeSource.of(FixtureTemplate.integer(i))));
+    /**
+     * The answers of an axis's classes, as {@link InputClassifications} reads them.
+     *
+     * <p>The answers and not classes that would give them. What a class recognises is a {@link
+     * Recognition} and every one of them reads a value the same way, so none of the three states
+     * below can be reached by building classes — which is the point of the rule and also why the
+     * rule has to be asked directly. Asked through classes instead, these would be tests of what
+     * this compiler can no longer produce rather than of what it does when handed it.
+     */
+    private static souther.compiler.observe.Classification answering(Membership... answers) {
+        List<String> ids = new java.util.ArrayList<>();
+        for (int i = 0; i < answers.length; i++) {
+            ids.add("c" + i);
         }
-        return List.of(new Axis(real.id(), real.term(), real.type(), classes, real.cuts()));
+        return InputClassifications.decided(new AxisId("submit", "request.plain"),
+                ids, List.of(answers), null);
     }
 
     /**
@@ -235,14 +244,10 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
      */
     @Test
     void aClassThatHoldsTheValueWinsOverOnesThatCouldNotReadIt() {
-        Read read = read();
-        List<Axis> axes = answering(read, "request.plain",
-                _ -> new Membership.Incomplete(Incompleteness.Code.VALUE_TRUNCATED),
-                _ -> new Membership.Incomplete(Incompleteness.Code.VALUE_UNREADABLE),
-                _ -> Membership.MATCH);
-
-        assertEquals(Classification.in("c2"),
-                InputClassifications.of(read.row().inputs(), read.inputs(), axes).values().iterator().next());
+        assertEquals(Classification.in("c2"), answering(
+                new Membership.Incomplete(Incompleteness.Code.VALUE_TRUNCATED),
+                new Membership.Incomplete(Incompleteness.Code.VALUE_UNREADABLE),
+                Membership.MATCH));
     }
 
     /**
@@ -255,12 +260,8 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
      */
     @Test
     void everyClassReadingTheValueAndNoneHoldingItIsNotAnAnswer() {
-        Read read = read();
-        List<Axis> axes = answering(read, "request.plain",
-                _ -> Membership.NO_MATCH, _ -> Membership.NO_MATCH);
-
         IllegalStateException thrown = assertThrows(IllegalStateException.class,
-                () -> InputClassifications.of(read.row().inputs(), read.inputs(), axes));
+                () -> answering(Membership.NO_MATCH, Membership.NO_MATCH));
         org.junit.jupiter.api.Assertions.assertTrue(
                 thrown.getMessage().contains("holds a value it read"), thrown.getMessage());
     }
@@ -274,13 +275,10 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
      */
     @Test
     void twoClassesDisagreeingAboutWhyIsNotAnAnswerEither() {
-        Read read = read();
-        List<Axis> axes = answering(read, "request.plain",
-                _ -> new Membership.Incomplete(Incompleteness.Code.VALUE_TRUNCATED),
-                _ -> new Membership.Incomplete(Incompleteness.Code.VALUE_UNREADABLE));
-
         IllegalStateException thrown = assertThrows(IllegalStateException.class,
-                () -> InputClassifications.of(read.row().inputs(), read.inputs(), axes));
+                () -> answering(
+                        new Membership.Incomplete(Incompleteness.Code.VALUE_TRUNCATED),
+                        new Membership.Incomplete(Incompleteness.Code.VALUE_UNREADABLE)));
         org.junit.jupiter.api.Assertions.assertTrue(
                 thrown.getMessage().contains("disagree about why"), thrown.getMessage());
     }

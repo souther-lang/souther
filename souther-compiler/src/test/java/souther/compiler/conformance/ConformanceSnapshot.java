@@ -9,6 +9,7 @@ import souther.compiler.diag.Region;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.diag.SourceProvenance;
 import souther.compiler.report.AdequacyReport;
+import souther.compiler.report.GeneratedRows;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -41,6 +42,33 @@ final class ConformanceSnapshot {
         SourceNameResolver names = analysed.corpus().names();
         return report.json(names).replace("\"" + report.compilerVersion() + "\"",
                 "\"" + VERSION_PLACEHOLDER + "\"") + System.lineSeparator();
+    }
+
+    /**
+     * The rows this compiler offers an author over the corpus, as {@code souther examples
+     * --generate} prints them.
+     *
+     * <p>Its own document beside the report, because the two are answers to different questions and
+     * move for different reasons. The report says what the rows cover; this says what work the
+     * compiler can hand somebody about what they do not, and a change that leaves every count where
+     * it was while composing a different value shows in neither the report nor a fixture written for
+     * one rule.
+     *
+     * <p>Both readings of the command, because the flag is what tells them apart. {@code --generate}
+     * alone offers the rows for what a combination of classes leaves uncovered; {@code --boundaries}
+     * adds the rows at the edges a rule draws, and those are the ones composed by putting a value
+     * through this module's own decoders. Written down apart, a change that moved one into the other
+     * would leave a document that still added up.
+     */
+    static String generated(ConformanceCorpus.Analysed analysed) {
+        SourceNameResolver names = analysed.corpus().names();
+        // Every module and every behavior, which is what the command does when it is told no
+        // narrower. Asked twice over the one compilation: the rows are read off answers it already
+        // holds, so the second reading costs what reading costs rather than what composing does.
+        return "// --generate" + System.lineSeparator()
+                + GeneratedRows.of(analysed.compilation(), null, null, false, names).text()
+                + "// --generate --boundaries" + System.lineSeparator()
+                + GeneratedRows.of(analysed.compilation(), null, null, true, names).text();
     }
 
     /**

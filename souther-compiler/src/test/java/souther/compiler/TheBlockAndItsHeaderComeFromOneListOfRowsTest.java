@@ -86,7 +86,7 @@ class TheBlockAndItsHeaderComeFromOneListOfRowsTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, Adequacy.Filling> generated =
-                compilation.db().ask(new Adequacy.Generated(module)).value();
+                Adequacy.generatedOf(compilation.db(), module);
         assertNotNull(generated, "the model under test compiles");
         return GeneratedRows.of(module, generated, Map.of(), true, SourceNameResolver.identity()).text();
     }

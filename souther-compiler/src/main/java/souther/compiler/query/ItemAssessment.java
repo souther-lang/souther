@@ -27,9 +27,82 @@ public sealed interface ItemAssessment {
     /** No row is owed here, and this is what settles it. */
     record NotOwed(NotOwedReason reason) implements ItemAssessment {}
 
-    /** A row is owed, and this is what became of it. */
-    record Owed(Criterion criterion, Measurement<Coverage> coverage, Writability writability,
-                Attempt attempt) implements ItemAssessment {}
+    /**
+     * A row is owed, and this is what became of it.
+     *
+     * @param provenByProjection whether the rules reaching the value this point sits in were read in
+     *                           full and leave the point inside what they admit. What the rules say
+     *                           on their own, so it is settled without building anything and stays
+     *                           true whatever a search afterwards makes of the point
+     * @param attempt            what building a value here came to, or null where nobody asked for
+     *                           one to be built. Null is the absence of the evidence and never a
+     *                           state of the point: whether a value was composed is a fact about who
+     *                           asked, and it used to be carried here as an attempt saying nobody
+     *                           had — a measurement answering a question it was not put (issue
+     *                           #1001)
+     */
+    record Owed(Criterion criterion, Measurement<Coverage> coverage, boolean provenByProjection,
+                Attempt attempt) implements ItemAssessment {
+
+        /**
+         * Whether building a value here would tell anybody anything.
+         *
+         * <p>The measurement's own answer and not the search's. A point a row already sits at needs
+         * no candidate, and one whose measurement never happened is not a piece of work to hand to
+         * anybody — offered anyway, both put a specific row in front of an author that may already
+         * be written.
+         *
+         * <p>Which is why the two used to be attempts and are not. "A row is already there" and
+         * "this was never measured" are things the measurement says, and a search that reported them
+         * was repeating what its own input already held.
+         */
+        public boolean worthSearching() {
+            if (Coverage.hit(coverage)) {
+                return false;
+            }
+            return coverage instanceof Measurement.Complete<Coverage> whole
+                            && whole.value() instanceof Coverage.NoHit
+                    || coverage instanceof Measurement.NotMeasured<Coverage> none
+                            && none.why() == Coverage.NotAsked.NO_ROWS;
+        }
+
+        /** The same point, with what a search of it came to. */
+        public Owed settledBy(Attempt searched) {
+            if (attempt != null) {
+                throw new IllegalStateException(
+                        "a point searched twice: " + criterion + " already has " + attempt);
+            }
+            return new Owed(criterion, coverage, provenByProjection, searched);
+        }
+
+        /**
+         * What says a row can be written here: the verdict, over the evidence there is.
+         *
+         * <p>Derived and not held. It was a field beside {@link #attempt}, and the two are not
+         * independent — {@code WitnessedByConstruction} is what {@code attempt instanceof Built}
+         * means — so they were one fact kept twice and a producer could set them apart.
+         *
+         * <p>The strongest evidence already in hand first. A row at the value went through the
+         * decoder, which is the whole of what writable means, and costs nothing to read. Then the
+         * value that was built, which went through the same decoder. Then the projection, which
+         * stands behind both rather than in front of them: where it read every rule it proves the
+         * edge inhabited whatever the search made of the particular candidates it tried.
+         *
+         * <p>Which is where the asymmetry lives. A refusal and an attempt nobody made leave the same
+         * verdict, because nothing a search does is evidence against — so composing later can add a
+         * witness and can never take one away.
+         */
+        public Writability writability() {
+            if (Coverage.hit(coverage)) {
+                return new Writability.WitnessedByRow();
+            }
+            if (attempt instanceof Attempt.Built) {
+                return new Writability.WitnessedByConstruction();
+            }
+            return provenByProjection ? new Writability.ProvenByProjection()
+                    : new Writability.Unknown();
+        }
+    }
 
     /**
      * Whether a row is at this point, and whether that could be told.
@@ -168,21 +241,22 @@ public sealed interface ItemAssessment {
         record Unresolved(Generator.UnresolvedCombination why,
                           souther.compiler.partition.RegionForARow region) implements Searched {}
 
-        /** Nothing was tried, and why not. Separate from a refusal because they license different
-         * sentences: one is a fact about values, the other is a fact about this run. */
-        record NotAttempted(Reason reason) implements Attempt {}
+        /**
+         * A search was asked for and there was nothing to run it against.
+         *
+         * <p>Separate from a refusal because they license different sentences: one is a fact about
+         * values, the other is a fact about this run.
+         *
+         * <p>What is not here is anybody not having asked. "A row is already there" and "this was
+         * never measured" were reasons and are the measurement's own answers ({@link
+         * Owed#worthSearching}); "the build composed no values" was a reason and is now the absence
+         * of an attempt, because a search reporting that nobody asked for it is a search that ran.
+         */
+        record Unavailable(Reason reason) implements Attempt {}
 
         enum Reason {
-            /** A row already sits at the point. There is nothing to find out and nothing to offer. */
-            A_ROW_IS_ALREADY_THERE,
-            /** The point was not measured against the rows, so no row here is owed to anybody yet. */
-            NOT_MEASURED,
             /** The module's classes were not there to build against. */
-            NO_CLASSES,
-            /** The build asked for no values to be composed. Told apart from the one above because
-             *  they license different sentences: one is this run having nothing to build against,
-             *  the other is nobody having asked it to build. */
-            VALUES_NOT_ASKED_FOR
+            NO_CLASSES
             // The decoders being out of reach was one of these and is not. It is found by running a
             // candidate, and a candidate is something a search of the region already produced — so
             // it is a search that came to nothing, which is `Unresolved`, and it says so in the
@@ -205,7 +279,7 @@ public sealed interface ItemAssessment {
          */
         default List<souther.compiler.partition.OnTheWay.Declined> unaccountedFor() {
             return switch (this) {
-                case Built _, NotAttempted _ -> List.of();
+                case Built _, Unavailable _ -> List.of();
                 case Unresolved left -> left.why().reason().provesInfeasible()
                         ? List.of() : left.region().declined();
             };

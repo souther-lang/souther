@@ -96,7 +96,7 @@ class EveryFindingHasAGenerationDispositionTest {
     private static Adequacy.Filling filling(Compilation compilation, String module,
                                             String behavior) {
         Map<String, Adequacy.Filling> generated =
-                compilation.db().ask(new Adequacy.Generated(module)).value();
+                Adequacy.generatedOf(compilation.db(), module);
         assertNotNull(generated, "the model under test compiles");
         return generated.get(behavior);
     }
@@ -467,7 +467,7 @@ class EveryFindingHasAGenerationDispositionTest {
     void anArmNoStrategyReachesIsNamedInTheBlock() {
         Compilation compilation = compiled(POLICY);
         Map<String, Adequacy.Filling> generated =
-                compilation.db().ask(new Adequacy.Generated("example.policy")).value();
+                Adequacy.generatedOf(compilation.db(), "example.policy");
         String block = GeneratedRows.of("example.policy", generated, Map.of(), true, SourceNameResolver.identity()).text();
 
         assertTrue(block.contains("`then`"),
