@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.stdlib.Stdlib;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Ast;
@@ -269,7 +270,7 @@ class NoPublicWayToTurnASpellingIntoATypeIdentityTest {
 
     private static Hir.Module resolved(String source) {
         Ast.Module parsed = CstFrontend.parse(source);
-        return Resolve.module(parsed, SyntaxSymbols.of(parsed));
+        return Resolve.module(parsed, SyntaxSymbols.of(parsed, souther.compiler.DefaultStdlib.get()));
     }
 
     private static Hir.Def declarationOf(String source, String name) {

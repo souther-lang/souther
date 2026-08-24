@@ -1,7 +1,7 @@
 package souther.compiler;
 
 import souther.compiler.ast.Hir;
-import souther.compiler.check.Prelude;
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.Type;
 
 import org.junit.jupiter.api.Test;
@@ -59,15 +59,15 @@ class ThePublishedSurfaceIsFixedTest {
         assertTrue(current.contains("List.fold("), "the `List.fold` sugar is part of the surface");
         assertFalse(current.contains("List.foldFrom"),
                 "a private declaration is not on the surface, so it is not in the snapshot");
-        assertEquals(Prelude.published().size(), current.lines().filter(l -> !l.isBlank()).count(),
+        assertEquals(souther.compiler.DefaultStdlib.get().published().size(), current.lines().filter(l -> !l.isBlank()).count(),
                 "one line per published name");
     }
 
     /** One line per published name, in qualifier then declaration order. */
     private static String render() {
         List<String> lines = new ArrayList<>();
-        for (String qualified : Prelude.published()) {
-            Prelude.PreludeEntry entry = Prelude.entry(qualified);
+        for (String qualified : souther.compiler.DefaultStdlib.get().published()) {
+            Stdlib.Entry entry = souther.compiler.DefaultStdlib.get().entry(qualified);
             if (entry == null) {
                 // `List.fold` is sugar: it is written and reached, and has no declaration of its own.
                 lines.add(qualified + "(step, seed, xs)");
@@ -79,7 +79,7 @@ class ThePublishedSurfaceIsFixedTest {
     }
 
     /** The parameters as the declaration writes them, and the return type where it states one. */
-    private static String signature(Prelude.PreludeEntry entry) {
+    private static String signature(Stdlib.Entry entry) {
         Hir.FnDef fn = entry.declaration();
         String result = entry.signature().result() == null ? ""
                 : " : " + Type.show(entry.signature().result());

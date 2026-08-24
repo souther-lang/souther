@@ -69,7 +69,7 @@ class WhatARepresentationKeepsIsTheRepresentationsToSayTest {
         // a body reaching a declaration's invariant reaches another tree, built by another question.
         // What it keeps is its own to say at its own entry; being reached from here is not a
         // representation having said anything.
-        CheckContext keeping = CheckContext.of(Symbols.none()).preserving(keeping(MAP, SIGNATURE));
+        CheckContext keeping = CheckContext.of(Symbols.none(souther.compiler.DefaultStdlib.get())).preserving(keeping(MAP, SIGNATURE));
 
         assertEquals(Preserved.NONE, keeping.inAnotherRepresentation().preserved());
         assertEquals(Preserved.NONE, keeping.inAnotherRepresentation().forData(null).preserved(),
@@ -80,7 +80,7 @@ class WhatARepresentationKeepsIsTheRepresentationsToSayTest {
     void whichDataIsBeingCheckedIsNotWhereARepresentationEnds() {
         // `forData` moves within one representation as well, so it must not quietly mean the
         // permission is gone
-        CheckContext keeping = CheckContext.of(Symbols.none()).preserving(keeping(MAP, SIGNATURE));
+        CheckContext keeping = CheckContext.of(Symbols.none(souther.compiler.DefaultStdlib.get())).preserving(keeping(MAP, SIGNATURE));
 
         assertEquals(keeping.preserved(), keeping.forData(null).preserved());
     }
@@ -97,6 +97,6 @@ class WhatARepresentationKeepsIsTheRepresentationsToSayTest {
 
     private static Core elaborate(Hir.Expr e, Preserved kept) {
         return Elaborator.elaborate(e, Scope.NONE,
-                CheckContext.of(Symbols.none()).preserving(kept));
+                CheckContext.of(Symbols.none(souther.compiler.DefaultStdlib.get())).preserving(kept));
     }
 }

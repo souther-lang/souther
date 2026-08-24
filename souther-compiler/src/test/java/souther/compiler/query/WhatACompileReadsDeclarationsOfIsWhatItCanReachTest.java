@@ -50,9 +50,9 @@ class WhatACompileReadsDeclarationsOfIsWhatItCanReachTest {
     void aModuleOnThePathIsAmongWhatThisCompileReadsDeclarationsOf() {
         PublishedClasses reads = declarationsOf(ROOT, Compiler.compile(SHARED));
 
-        assertInstanceOf(Readback.Ready.class, ModuleReadback.read("example.root", reads),
+        assertInstanceOf(Readback.Ready.class, ModuleReadback.read("example.root", reads, souther.compiler.DefaultStdlib.get().names()),
                 "the module being compiled here");
-        assertInstanceOf(Readback.Ready.class, ModuleReadback.read("example.shared", reads),
+        assertInstanceOf(Readback.Ready.class, ModuleReadback.read("example.shared", reads, souther.compiler.DefaultStdlib.get().names()),
                 "and the one it imports, which arrived compiled");
     }
 
@@ -67,7 +67,7 @@ class WhatACompileReadsDeclarationsOfIsWhatItCanReachTest {
         Map<String, byte[]> onThePath = Compiler.compile(SHARED);
 
         Agreement held = DeclarationAgreement.of("example.root", "rename",
-                declarationsOf(ROOT, onThePath), declarationsOf(ROOT, onThePath));
+                declarationsOf(ROOT, onThePath), declarationsOf(ROOT, onThePath), souther.compiler.DefaultStdlib.get());
 
         assertInstanceOf(Agreement.Agree.class, held,
                 "nothing a crossing depends on differs, and the imported module is read on both sides");

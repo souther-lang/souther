@@ -1,6 +1,6 @@
 package souther.compiler.codegen;
 
-import souther.compiler.check.Prelude;
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.Type;
 
 import org.junit.jupiter.api.Test;
@@ -27,7 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * <p>This holds that shape rather than the coincidence. A declared parameter whose boundary form
  * depends on which value arrives — a reference, a type variable, a union — may not be read off the
  * call, so the entry taking one belongs on the declaration-reading emitter. Registering a second
- * runtime-backed data ({@code Prelude}) and writing it into a kernel's parameters is the move that
+ * runtime-backed data ({@code jvm.SoutherJvmAbi.providedByTheRuntime}) and writing it into a kernel's parameters is the move that
  * reproduces #270, and this is what stops it.
  */
 class KernelDescriptorsComeFromDeclarationsTest {
@@ -39,7 +39,7 @@ class KernelDescriptorsComeFromDeclarationsTest {
             if (!(entry.getValue() instanceof Intrinsics.RuntimeStatic kernel)) {
                 continue;
             }
-            Prelude.Signature declared = Prelude.kernelSignature(entry.getKey());
+            Stdlib.Signature declared = souther.compiler.DefaultStdlib.get().intrinsic(entry.getKey()).signature();
             for (int i = 0; i < declared.params().size(); i++) {
                 // An erased slot is passed as Object whatever arrives, which is what the declared
                 // type would give too, so the observed type cannot disagree there.

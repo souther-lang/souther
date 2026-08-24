@@ -48,7 +48,7 @@ class WhatAValueCarriesBelongsToTheAtomTest {
     }
 
     private static Terms terms() {
-        return new Terms(Symbols.none(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        return new Terms(Symbols.none(souther.compiler.DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
     }
 
     private static Core.Read list(BindingId of) {

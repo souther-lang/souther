@@ -413,6 +413,12 @@ public final class Names {
         }
     }
 
+    /** The library this compilation resolves against, asked of the store rather than of the
+     *  process: what a name means is a question about this compilation. */
+    private static souther.compiler.stdlib.Stdlib library(Db db) {
+        return db.ask(new Front.Library()).value();
+    }
+
     /**
      * What names mean in a module, over the declaration world {@code registry} reads.
      *
@@ -428,7 +434,7 @@ public final class Names {
         if (!db.ask(new HasScope(name)).value()) {
             return Answer.absent();
         }
-        return Answer.of(Symbols.of(name, registry, asked(db, name)));
+        return Answer.of(Symbols.of(name, registry, asked(db, name), library(db)));
     }
 
     /**
@@ -539,7 +545,8 @@ public final class Names {
         if (!db.ask(new HasScope(name)).value()) {
             return Answer.absent();
         }
-        return Answer.of(SyntaxSymbols.of(name, writtenRegistry(db), asked(db, name)));
+        return Answer.of(SyntaxSymbols.of(name, writtenRegistry(db), asked(db, name),
+                library(db)));
     }
 
     /**
@@ -591,7 +598,8 @@ public final class Names {
             Resolve.Resolution resolution;
             try {
                 resolution = Resolve.resolving(available.value(),
-                        scoped.value().meanings().writtenSymbols(writtenRegistry(db)),
+                        scoped.value().meanings().writtenSymbols(writtenRegistry(db),
+                                library(db)),
                         scoped.value().values());
             } catch (CompileException e) {
                 return Answer.absent(e);

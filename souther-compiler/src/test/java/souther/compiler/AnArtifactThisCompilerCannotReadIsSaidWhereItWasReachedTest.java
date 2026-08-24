@@ -437,7 +437,7 @@ class AnArtifactThisCompilerCannotReadIsSaidWhereItWasReachedTest {
             throw new IllegalStateException("a defect in the reader");
         };
 
-        assertThrows(IllegalStateException.class, () -> ModuleReadback.read("lib.pub", broken),
+        assertThrows(IllegalStateException.class, () -> ModuleReadback.read("lib.pub", broken, souther.compiler.DefaultStdlib.get().names()),
                 "a fault is not a statement about the artifact");
     }
 
@@ -519,7 +519,7 @@ class AnArtifactThisCompilerCannotReadIsSaidWhereItWasReachedTest {
                 data Held = String
                 """);
         var readback = ModuleReadback.read("lib.ok",
-                ((ModulePath) built::get).declarations());
+                ((ModulePath) built::get).declarations(), souther.compiler.DefaultStdlib.get().names());
 
         assertEquals("lib.ok",
                 assertInstanceOf(ReadableModule.class,

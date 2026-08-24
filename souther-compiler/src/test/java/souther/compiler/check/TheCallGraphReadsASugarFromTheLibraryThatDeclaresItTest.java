@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.ConstructionOrigin;
@@ -55,19 +56,19 @@ class TheCallGraphReadsASugarFromTheLibraryThatDeclaresItTest {
 
     private static Set<String> callsIn(Hir.Expr e) {
         Set<String> out = new LinkedHashSet<>();
-        HelperInliner.helperCallsIn(e, Prelude.helpers(), out);
+        HelperInliner.helperCallsIn(souther.compiler.DefaultStdlib.get(), e, souther.compiler.DefaultStdlib.get().helpers(), out);
         return out;
     }
 
     @Test
     void theLibraryDeclaresAtLeastOneSugarForThisToBeAbout() {
-        assertFalse(Prelude.rewrites().isEmpty(),
+        assertFalse(souther.compiler.DefaultStdlib.get().rewrites().isEmpty(),
                 "a claim about every sugar says nothing where there are none");
     }
 
     @Test
     void aSugarWrittenWithWhatItStandsForReachesWhatItRewritesTo() {
-        Prelude.rewrites().forEach((sugar, rewrite) -> {
+        souther.compiler.DefaultStdlib.get().rewrites().forEach((sugar, rewrite) -> {
             Set<String> reached = callsIn(callTo(sugar, rewrite.keptArgs()));
 
             assertEquals(Set.of(rewrite.target().qualified()), reached,
@@ -78,7 +79,7 @@ class TheCallGraphReadsASugarFromTheLibraryThatDeclaresItTest {
 
     @Test
     void andOneWrittenWithAnotherNumberOfArgumentsReachesNothing() {
-        Prelude.rewrites().forEach((sugar, rewrite) -> {
+        souther.compiler.DefaultStdlib.get().rewrites().forEach((sugar, rewrite) -> {
             assertEquals(Set.of(), callsIn(callTo(sugar, rewrite.keptArgs() + 1)),
                     sugar + " written with one argument too many is not the call it stands for");
             if (rewrite.keptArgs() > 0) {
@@ -93,16 +94,16 @@ class TheCallGraphReadsASugarFromTheLibraryThatDeclaresItTest {
      * rewrites to a recursion, so a body that folds holds a call nothing can expand away and the
      * module holding it emits a method.
      *
-     * <p>Of that sugar and not of every sugar. Nothing in {@link Prelude.Rewrite} says a rewrite
+     * <p>Of that sugar and not of every sugar. Nothing in {@link Stdlib.Rewrite} says a rewrite
      * target recurses — one onto an ordinary helper would be a rewrite like any other — so a claim
      * made of all of them would refuse the next sugar for being unlike this one.
      */
     @Test
     void theFoldSugarRewritesToSomethingAModuleWouldHaveToEmit() {
         HelperTable table = HelperTable.of("probe", Map.of(), Map.of(), Map.of(),
-                InliningPolicy.FULL);
+                InliningPolicy.FULL, souther.compiler.DefaultStdlib.get());
         HelperGraph graph = HelperGraph.of(table);
-        Prelude.Rewrite fold = Prelude.rewriteOf("List.fold");
+        Stdlib.Rewrite fold = souther.compiler.DefaultStdlib.get().rewriteOf("List.fold");
 
         assertNotNull(fold, "`List.fold` is sugar for the fold the combinators are derived from");
         assertEquals("List.foldFrom", fold.target().qualified());

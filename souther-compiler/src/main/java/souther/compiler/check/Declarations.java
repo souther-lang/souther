@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
@@ -24,7 +25,7 @@ import java.util.Map;
  * them. Which rung a reader is at is which of these it was handed.
  *
  * <p>Two sources, kept apart. {@link Registry} is what this compilation declares, read one
- * declaration at a time; the language's own vocabulary — the prelude's runtime-backed data — is
+ * declaration at a time; the language's own vocabulary — the data the standard library declares — is
  * declared by no module of the compilation and is answered beside it. {@link #declaration} sees
  * both, because a name that denotes one types like a name that denotes the other;
  * {@link #declaredByCompilation} sees only the first, because a construction set is made of the
@@ -63,17 +64,18 @@ public final class Declarations<D> {
         /** Everything it declares, keyed by bare name. */
         Map<String, D> declaredIn();
 
-        /** The language's own vocabulary, as a resolved compilation reads it. */
-        static Vocabulary<Hir.Def> ofLanguage() {
+        /** The language's own vocabulary, as a resolved compilation reads it: what {@code stdlib}
+         *  declares of its own rather than through any module of the compilation. */
+        static Vocabulary<Hir.Def> of(Stdlib stdlib) {
             return new Vocabulary<>() {
                 @Override
                 public Hir.Def declaration(TypeKey address) {
-                    return Prelude.runtimeBackedDef(address);
+                    return stdlib.languageDeclaration(address);
                 }
 
                 @Override
                 public Map<String, Hir.Def> declaredIn() {
-                    return Prelude.runtimeBackedDefs();
+                    return stdlib.languageDeclarations();
                 }
             };
         }

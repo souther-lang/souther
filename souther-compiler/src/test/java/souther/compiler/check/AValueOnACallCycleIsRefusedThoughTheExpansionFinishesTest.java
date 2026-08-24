@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.source.SourceId;
 
 import souther.compiler.Compiler;
@@ -88,7 +89,7 @@ class AValueOnACallCycleIsRefusedThoughTheExpansionFinishesTest {
     @Test
     void theExpansionOfThatModuleFinishes() {
         Ast.Module parsed = CstFrontend.parse(CYCLE);
-        HelperInliner inliner = HelperInliner.forModule(Resolve.module(parsed, SyntaxSymbols.of(parsed)));
+        HelperInliner inliner = HelperInliner.forModule(Resolve.module(parsed, SyntaxSymbols.of(parsed, souther.compiler.DefaultStdlib.get())), souther.compiler.DefaultStdlib.get());
 
         Hir.Expr expanded = assertDoesNotThrow(() -> inliner.inline(
                 inliner.held().get("depth").writtenBody(), inliner.bodyOf("depth")));

@@ -1,6 +1,6 @@
 package souther.compiler.codegen;
 
-import souther.compiler.check.Prelude;
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.ast.Hir;
 
 import org.junit.jupiter.api.Test;
@@ -52,7 +52,7 @@ class EveryKernelIsDeclaredTest {
     /** The kernel keys the library's declarations name: the entries whose body is a kernel. */
     private static Set<String> declaredKeys() {
         Set<String> declared = new LinkedHashSet<>();
-        for (Prelude.PreludeEntry entry : Prelude.entries().values()) {
+        for (Stdlib.Entry entry : souther.compiler.DefaultStdlib.get().entries().values()) {
             if (entry.declaration().body() instanceof Hir.FnBody.Intrinsic kernel) {
                 declared.add(kernel.key());
             }

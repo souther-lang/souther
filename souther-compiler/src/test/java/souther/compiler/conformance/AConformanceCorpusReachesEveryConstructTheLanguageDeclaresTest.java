@@ -3,7 +3,7 @@ package souther.compiler.conformance;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.Reserved;
-import souther.compiler.check.Prelude;
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.cst.CstLexer;
 import souther.compiler.cst.CstParser;
 import souther.compiler.cst.SyntaxElement;
@@ -143,7 +143,7 @@ class AConformanceCorpusReachesEveryConstructTheLanguageDeclaresTest {
      * {@code souther.instant} is a module line and nothing else, there to give {@code Instant} a
      * type. Demanding a call there would demand something the library does not offer, so what is
      * asked of such a module is that its type is named. Which of the two applies is read from
-     * {@link Prelude#entries()} rather than decided here, so a module that grows its first operation
+     * {@link souther.compiler.stdlib.Stdlib#entries()} rather than decided here, so a module that grows its first operation
      * starts being held to the call without anything being rewritten.
      */
     @Test
@@ -164,7 +164,7 @@ class AConformanceCorpusReachesEveryConstructTheLanguageDeclaresTest {
         Set<String> missing = new TreeSet<>();
         for (Reserved.StdlibModule module : Reserved.MODULES) {
             String qualifier = module.qualifier();
-            boolean declaresOperations = Prelude.entries().keySet().stream()
+            boolean declaresOperations = souther.compiler.DefaultStdlib.get().entries().keySet().stream()
                     .anyMatch(qualified -> qualified.startsWith(qualifier + "."));
             if (declaresOperations ? !called.contains(qualifier) : !named.contains(qualifier)) {
                 missing.add(qualifier + " (" + module.moduleName()

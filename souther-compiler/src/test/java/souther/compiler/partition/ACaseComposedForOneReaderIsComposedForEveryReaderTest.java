@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.stdlib.Stdlib;
 import org.junit.jupiter.api.Test;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
@@ -51,11 +52,11 @@ class ACaseComposedForOneReaderIsComposedForEveryReaderTest {
             example recordCases | (Yen(5), Boxed { a = 1, b = 2 }) -> Ok { n = 5 }
             """;
 
-    private final Symbols symbols = Symbols.of(resolved());
+    private final Symbols symbols = Symbols.of(resolved(), souther.compiler.DefaultStdlib.get());
 
     private static Hir.Module resolved() {
         Ast.Module parsed = CstFrontend.parse(MODULE);
-        return Resolve.module(parsed, SyntaxSymbols.of(parsed));
+        return Resolve.module(parsed, SyntaxSymbols.of(parsed, souther.compiler.DefaultStdlib.get()));
     }
 
     private Type named(String name) {

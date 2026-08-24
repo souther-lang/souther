@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.diag.CompileException;
 import souther.compiler.types.Denotation;
 import souther.compiler.types.TypeKey;
@@ -22,15 +23,29 @@ public final class Symbols implements NameSense {
 
     private final TypeScope scope;
     private final Declarations<Hir.Def> declarations;
+    /** The library this module is compiled against. Held so that a reader already holding the
+     *  symbol table has it — what a library operation is declared to be is part of what names mean
+     *  here, and a reader that fetched its own could be reading a different library from the one
+     *  this module's names were resolved against. */
+    private final Stdlib stdlib;
 
-    private Symbols(String module, Registry<Hir.Def> registry, Denoting names) {
-        this.scope = new TypeScope(module, names, registry);
-        this.declarations = new Declarations<>(registry, Declarations.Vocabulary.ofLanguage());
+    private Symbols(String module, Registry<Hir.Def> registry, Denoting names, Stdlib stdlib) {
+        this.scope = new TypeScope(module, names, registry,
+                stdlib.languageDeclarations().keySet());
+        this.declarations = new Declarations<>(registry, Declarations.Vocabulary.of(stdlib));
+        this.stdlib = stdlib;
     }
 
-    /** No module at all — for signatures written over primitives and type variables only. */
-    public static Symbols none() {
-        return new Symbols("", Registry.empty(), Denoting.NONE);
+    /** No module at all — for signatures written over primitives and type variables only. The
+     *  library still arrives, because a signature over primitives may still name a library
+     *  operation, and a caller with none of its own has one to hand. */
+    public static Symbols none(Stdlib stdlib) {
+        return new Symbols("", Registry.empty(), Denoting.NONE, stdlib);
+    }
+
+    /** The library this module is compiled against. */
+    public Stdlib library() {
+        return stdlib;
     }
 
     /**
@@ -43,7 +58,7 @@ public final class Symbols implements NameSense {
      * as it was written. So the author holds the file, and what to do about it is the same thing
      * {@link SyntaxSymbols#of(souther.compiler.ast.Ast.Module)} says one representation earlier.
      */
-    public static Symbols of(Hir.Module m) {
+    public static Symbols of(Hir.Module m, Stdlib stdlib) {
         DeclaredNames.Index<Hir.Def> declared = Registry.indexed(m);
         if (!declared.refusals().isEmpty()) {
             throw CompileException.of(
@@ -56,7 +71,7 @@ public final class Symbols implements NameSense {
         return new Symbols(m.name(),
                 Registry.ofRead(Map.of(m.name(), new Registry.Declared<>(
                         declared.declarations(), Registry.baseNames(m.exposing())))),
-                Denoting.of(names, Map.of()));
+                Denoting.of(names, Map.of()), stdlib);
     }
 
     /** A module compiled over a registry that reads its declarations
@@ -68,8 +83,9 @@ public final class Symbols implements NameSense {
      * depended on every name in the module before reading one of them. The three that are one
      * assembly — the module, its meanings and its aliases — still arrive together, because a caller
      * free to pair them itself could pair parts of two. */
-    public static Symbols of(String module, Registry<Hir.Def> registry, Denoting names) {
-        return new Symbols(module, registry, names);
+    public static Symbols of(String module, Registry<Hir.Def> registry, Denoting names,
+                             Stdlib stdlib) {
+        return new Symbols(module, registry, names, stdlib);
     }
 
     /** What a name written here means. */

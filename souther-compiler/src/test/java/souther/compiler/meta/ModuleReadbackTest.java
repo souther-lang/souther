@@ -26,13 +26,13 @@ class ModuleReadbackTest {
 
     private static ReadableModule readBack(String moduleName, Map<String, byte[]> classes) {
         return assertInstanceOf(ReadableModule.class, assertInstanceOf(Readback.Ready.class,
-                ModuleReadback.read(moduleName, new ClassFileDeclarations(classes::get))).value());
+                ModuleReadback.read(moduleName, new ClassFileDeclarations(classes::get), souther.compiler.DefaultStdlib.get().names())).value());
     }
 
     /** Why a readback would not answer, as the arm rather than as a message it was raised with. */
     private static Readback.Failure refusalOf(String moduleName, PublishedClasses classes) {
         return assertInstanceOf(Readback.NotReady.Unreadable.class,
-                ModuleReadback.read(moduleName, classes)).why();
+                ModuleReadback.read(moduleName, classes, souther.compiler.DefaultStdlib.get().names())).why();
     }
 
     @Test
@@ -230,7 +230,7 @@ class ModuleReadbackTest {
     void aNameThatIsNotACompiledModuleReadsAsNothing() {
         assertInstanceOf(Readback.NotReady.SaysNothing.class,
                 ModuleReadback.read("shared.money", new ClassFileDeclarations(Map.<String,
-                        byte[]>of()::get)));
+                        byte[]>of()::get), souther.compiler.DefaultStdlib.get().names()));
     }
 
     /** A module built against a boundary this compiler does not share is refused, rather than read

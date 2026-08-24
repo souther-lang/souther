@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.CompileException;
@@ -37,7 +38,7 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
 
     private static Hir.Module resolved(String source) {
         Ast.Module parsed = CstFrontend.parse(source);
-        return Resolve.module(parsed, SyntaxSymbols.of(parsed));
+        return Resolve.module(parsed, SyntaxSymbols.of(parsed, souther.compiler.DefaultStdlib.get()));
     }
 
     /** {@code source} resolved with {@code imported} (bare name -> declaring module) reachable, which
@@ -47,7 +48,7 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
         Map<String, ValueName.Helper> helpers =
                 new LinkedHashMap<>(Resolve.Reachable.of(parsed).helpers());
         imported.forEach((bare, module) -> helpers.put(bare, new ValueName.Helper(module, bare)));
-        Resolve.Resolution answered = Resolve.resolving(parsed, SyntaxSymbols.of(parsed),
+        Resolve.Resolution answered = Resolve.resolving(parsed, SyntaxSymbols.of(parsed, souther.compiler.DefaultStdlib.get()),
                 new Resolve.Values(
                         new Resolve.Reachable(parsed.name(), helpers, Map.of(), java.util.Set.of(), true, Map.of(),
                                 java.util.Set.of()),
@@ -69,7 +70,7 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
     private static void check(String module, Map<String, Hir.FnDef> declared,
                               Map<String, Hir.FnDef> takenOn) {
         HelperTable table =
-                HelperTable.of(module, declared, takenOn, Map.of(), InliningPolicy.FULL);
+                HelperTable.of(module, declared, takenOn, Map.of(), InliningPolicy.FULL, souther.compiler.DefaultStdlib.get());
         TotalityChecker.check(HelperInliner.over(table, HelperGraph.of(table)));
     }
 
@@ -82,7 +83,7 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
     @Test
     void aQualifiedNameIsNotAnExemption() {
         Hir.FnDef own = spinOf("maths");
-        HelperInliner maths = HelperInliner.forHelpers("maths", Map.of("spin", own));
+        HelperInliner maths = HelperInliner.forHelpers("maths", Map.of("spin", own), souther.compiler.DefaultStdlib.get());
         Hir.FnDef closed = maths.closeAcross(own, "maths");
 
         assertEquals("maths.spin", closed.name());
@@ -131,7 +132,7 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
                 let wrapped (n: Int) : Int = spin(n)
                 """);
         Map<String, Hir.FnDef> declared = HelperInliner.helpersOf(maths);
-        HelperInliner from = HelperInliner.forHelpers("maths", declared);
+        HelperInliner from = HelperInliner.forHelpers("maths", declared, souther.compiler.DefaultStdlib.get());
         Hir.FnDef spin = from.closeAcross(declared.get("spin"), "maths");
         Hir.FnDef wrapped = from.closeAcross(declared.get("wrapped"), "maths");
 
@@ -147,7 +148,7 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
         takenOn.put(spin.name(), spin);
         takenOn.put(wrapped.name(), wrapped);
         HelperTable table = HelperTable.of("order", HelperInliner.helpersOf(order), takenOn,
-                Map.of(), InliningPolicy.FULL);
+                Map.of(), InliningPolicy.FULL, souther.compiler.DefaultStdlib.get());
         PartialReachability reachability =
                 PartialReachability.of(HelperInliner.over(table, HelperGraph.of(table)));
 
@@ -170,7 +171,7 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
      * turns up.
      *
      * <p>The body below is the declaration as its own module wrote it, which is the shape a reader
-     * meets a library helper in: those come from {@code Prelude.helpers()}, whose bodies were never
+     * meets a library helper in: those come from {@code souther.compiler.DefaultStdlib.get().helpers()}, whose bodies were never
      * closed. A body that <em>was</em> closed cannot carry this at all — the expansion eta-expands a
      * helper named where a value goes — so this rule and the one above meet a foreign declaration by
      * different routes and need the same scope either way.
@@ -185,7 +186,7 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
                 let hands (n: Int) : Int = loop(spin, n)
                 """);
         Map<String, Hir.FnDef> declared = HelperInliner.helpersOf(maths);
-        HelperInliner from = HelperInliner.forHelpers("maths", declared);
+        HelperInliner from = HelperInliner.forHelpers("maths", declared, souther.compiler.DefaultStdlib.get());
         Hir.FnDef spin = from.closeAcross(declared.get("spin"), "maths");
         Hir.FnDef written = declared.get("hands");
         // Taken on by `order` under the name it reaches it by, and its body read against `order`'s
@@ -202,7 +203,7 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
         takenOn.put(spin.name(), spin);
         takenOn.put(hands.name(), hands);
         HelperTable table = HelperTable.of("order", HelperInliner.helpersOf(order), takenOn,
-                Map.of(), InliningPolicy.FULL);
+                Map.of(), InliningPolicy.FULL, souther.compiler.DefaultStdlib.get());
         PartialReachability reachability =
                 PartialReachability.of(HelperInliner.over(table, HelperGraph.of(table)));
 
@@ -224,7 +225,7 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
      */
     @Test
     void theNameAHelperIsReachedByDoesNotHoldTheModuleThatWroteIt() {
-        Hir.FnDef foldFrom = Prelude.helpers().get("List.foldFrom");
+        Hir.FnDef foldFrom = souther.compiler.DefaultStdlib.get().helpers().get("List.foldFrom");
 
         assertEquals("souther.list", foldFrom.declaredIn());
         assertTrue(foldFrom.declaredIn().startsWith("souther."));

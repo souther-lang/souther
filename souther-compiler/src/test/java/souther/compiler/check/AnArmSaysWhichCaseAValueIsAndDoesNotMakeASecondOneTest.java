@@ -54,7 +54,7 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
 
     private final Hir.Binders binders = new Hir.Binders(OWNER);
     private final PathEngine engine =
-            new PathEngine(Symbols.none(), Map.of(), Terms.Of.THE_DISCHARGE_TREE, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+            new PathEngine(Symbols.none(souther.compiler.DefaultStdlib.get()), Map.of(), Terms.Of.THE_DISCHARGE_TREE, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
 
     @Test
     void anArmOverOneCaseIsAboutTheValueItOpened() {
@@ -184,7 +184,7 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
         Core answer = numericAnswer();
         Core.Binder x = CoreBinders.of(binders.binder("x", POS));
         Core.Binder y = CoreBinders.of(binders.binder("y", POS));
-        PathEngine reading = new PathEngine(Symbols.none(), Map.of(),
+        PathEngine reading = new PathEngine(Symbols.none(souther.compiler.DefaultStdlib.get()), Map.of(),
                 Map.of(FIND, statesThatTheIntIsPositive()), Terms.Of.THE_DISCHARGE_TREE, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
 
         Denotations outer = reading.enteringArm(
@@ -211,7 +211,7 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
         return new StatedContract(FIND, List.of(), Type.INT,
                 List.of(new StatedContract.StatedRule(new RuleId(FIND, 0, 0, AN_INT),
                         new Guard.Case(ResolvedCase.resolve(CaseSelector.direct(AN_INT),
-                                Symbols.none())), value,
+                                Symbols.none(souther.compiler.DefaultStdlib.get()))), value,
                         Optional.empty(),
                         List.of(new StatedContract.Conjunct(POS,
                                 new souther.compiler.check.TypedClause.Typed(states))))));
@@ -321,7 +321,7 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
         return TypeChecker.symbols(
                 souther.compiler.query.Compilation.ofDocuments(byId, java.util.Set.of(),
                                 souther.compiler.meta.ModulePath.EMPTY)
-                        .db().ask(new souther.compiler.query.Names.Resolved("demo")).value());
+                        .db().ask(new souther.compiler.query.Names.Resolved("demo")).value(), souther.compiler.DefaultStdlib.get());
     }
 
 }

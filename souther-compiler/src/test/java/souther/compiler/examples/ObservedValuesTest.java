@@ -28,7 +28,7 @@ class ObservedValuesTest {
     private static final Limits WIDE = new Limits(16, 10_000, 64, 1024);
 
     private static ObservedValue observe(Object live, Limits limits) {
-        Symbols symbols = Symbols.none();
+        Symbols symbols = Symbols.none(souther.compiler.DefaultStdlib.get());
         return ObservedValues.of(live, symbols, new NeutralForm(symbols), limits);
     }
 

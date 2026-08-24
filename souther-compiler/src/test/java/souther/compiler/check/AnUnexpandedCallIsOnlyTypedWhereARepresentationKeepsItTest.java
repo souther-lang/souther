@@ -30,7 +30,7 @@ class AnUnexpandedCallIsOnlyTypedWhereARepresentationKeepsItTest {
                 List.of(new Hir.IntLit(1, POS, null)), ConstructionOrigin.own(), POS, null);
 
         assertThrows(RuntimeException.class, () -> Elaborator.elaborate(call, Scope.NONE,
-                CheckContext.of(Symbols.none())));
+                CheckContext.of(Symbols.none(souther.compiler.DefaultStdlib.get()))));
     }
 
     @Test
@@ -43,6 +43,6 @@ class AnUnexpandedCallIsOnlyTypedWhereARepresentationKeepsItTest {
                 ConstructionOrigin.own(), POS, null);
 
         assertThrows(RuntimeException.class, () -> Elaborator.elaborate(call, Scope.NONE,
-                CheckContext.of(Symbols.none())));
+                CheckContext.of(Symbols.none(souther.compiler.DefaultStdlib.get()))));
     }
 }

@@ -1,6 +1,6 @@
 package souther.compiler.codegen;
 
-import souther.compiler.check.Prelude;
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.core.Core;
@@ -62,7 +62,7 @@ final class Intrinsics {
      */
     record DeclaredStatic(ClassDesc owner, String method) implements Emit {
         public Type emit(BodyGen g, String key, Core.Call call) {
-            Prelude.Signature declared = Prelude.kernelSignature(key);
+            Stdlib.Signature declared = g.library().intrinsic(key).signature();
             ClassDesc[] params = new ClassDesc[declared.params().size()];
             for (int i = 0; i < params.length; i++) {
                 params[i] = boundaryDesc(declared.params().get(i));
@@ -209,10 +209,13 @@ final class Intrinsics {
         if (t instanceof Type.OptionOf) {
             return CD_Option;
         }
-        // So is a name of the runtime namespace ({@code RoundingMode}): it is the real package of
-        // the classes souther-runtime ships (see TypeSymbol.RUNTIME), so a kernel taking one names it.
+        // So is a declaration the language itself gives ({@code RoundingMode}): a kernel taking one
+        // names its class, and what that class is called is the ABI's to say. Spelled from the
+        // identity here, this was the one route from a Souther name to a JVM one that did not go
+        // through `SoutherJvmAbi` — which is the place that exists to be the only one.
         if (t instanceof Type.Ref r && TypeSymbol.RUNTIME.equals(r.name().module())) {
-            return ClassDesc.of(r.name().qualified());
+            return souther.compiler.jvm.SoutherJvmAbi.nameOfLanguageDeclaration(r.name())
+                    .classDesc();
         }
         return CD_Object;   // Ref, Var, Tuple, Union, Nothing
     }

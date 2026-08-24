@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.frontend.CstFrontend;
@@ -38,7 +39,7 @@ class AValueIsReadUnderTheNameItIsReachedByTest {
         Map<String, ValueName.Helper> helpers =
                 new LinkedHashMap<>(Resolve.Reachable.of(parsed).helpers());
         imported.forEach((bare, module) -> helpers.put(bare, new ValueName.Helper(module, bare)));
-        Resolve.Resolution answered = Resolve.resolving(parsed, SyntaxSymbols.of(parsed),
+        Resolve.Resolution answered = Resolve.resolving(parsed, SyntaxSymbols.of(parsed, souther.compiler.DefaultStdlib.get()),
                 new Resolve.Values(
                         new Resolve.Reachable(parsed.name(), helpers, Map.of(), java.util.Set.of(), true, Map.of(),
                                 java.util.Set.of()),

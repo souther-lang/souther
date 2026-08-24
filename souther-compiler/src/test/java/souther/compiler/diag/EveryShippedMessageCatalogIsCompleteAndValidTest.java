@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.Ordering;
 import souther.compiler.Reserved;
-import souther.compiler.check.Prelude;
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.Type;
 
 import java.io.BufferedReader;
@@ -1034,7 +1034,7 @@ public class EveryShippedMessageCatalogIsCompleteAndValidTest {
                     continue;
                 }
                 String qualified = m.group(1) + "." + m.group(2);
-                if (!Prelude.published().contains(qualified)) {
+                if (!souther.compiler.DefaultStdlib.get().published().contains(qualified)) {
                     missing.add(qualified);
                 }
             }

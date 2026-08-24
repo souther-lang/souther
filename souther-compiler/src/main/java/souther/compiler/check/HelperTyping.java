@@ -56,7 +56,7 @@ public final class HelperTyping {
         Map<ValueName, Type> settledTypes = new HashMap<>();
         Map<ValueName, Object> settledConstants = new HashMap<>();
         Preserved standing = Preserved.valuesAlreadySettled(settledTypes::get);
-        for (Hir.FnDef h : valuesBeforeTheValuesThatNameThem(toCheck)) {
+        for (Hir.FnDef h : valuesBeforeTheValuesThatNameThem(symbols.library(), toCheck)) {
             boolean recursive = recursiveHelperFns.containsKey(h.name());
             // Where this definition stands, or null where it stands nowhere: the one thing every
             // rule below that is about a row's operand asks, read off the definition the rule is
@@ -244,14 +244,15 @@ public final class HelperTyping {
      * written, each copying the other, which is the answer this pass gave before there was an order
      * at all.
      */
-    private static List<Hir.FnDef> valuesBeforeTheValuesThatNameThem(Map<String, Hir.FnDef> held) {
+    private static List<Hir.FnDef> valuesBeforeTheValuesThatNameThem(
+            souther.compiler.stdlib.Stdlib stdlib, Map<String, Hir.FnDef> held) {
         Map<String, Set<String>> names = new LinkedHashMap<>();
         for (Map.Entry<String, Hir.FnDef> e : held.entrySet()) {
             if (!(e.getValue().body() instanceof Hir.FnBody.Written written)) {
                 continue;
             }
             Set<String> reached = new LinkedHashSet<>();
-            HelperInliner.helperCallsIn(written.expr(), held, reached);
+            HelperInliner.helperCallsIn(stdlib, written.expr(), held, reached);
             ValueCycles.valuesRead(written.expr(), held, reached);
             reached.retainAll(held.keySet());
             names.put(e.getKey(), reached);

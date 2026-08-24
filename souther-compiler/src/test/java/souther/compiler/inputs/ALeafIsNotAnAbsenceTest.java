@@ -1,5 +1,6 @@
 package souther.compiler.inputs;
 
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Resolve;
@@ -44,11 +45,11 @@ class ALeafIsNotAnAbsenceTest {
             data Decision = Approved | Rejected
             """;
 
-    private final Symbols symbols = Symbols.of(resolved());
+    private final Symbols symbols = Symbols.of(resolved(), souther.compiler.DefaultStdlib.get());
 
     private static Hir.Module resolved() {
         Ast.Module parsed = CstFrontend.parse(MODULE);
-        return Resolve.module(parsed, SyntaxSymbols.of(parsed));
+        return Resolve.module(parsed, SyntaxSymbols.of(parsed, souther.compiler.DefaultStdlib.get()));
     }
 
     private StructuralInspection under(Type type) {

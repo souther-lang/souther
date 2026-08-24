@@ -47,7 +47,7 @@ class OneCallSettlesOneSignatureTest {
     @Test
     void anExpectedResultPinsAnEmptyContainerBeforeThePreservedClosureIsTyped() {
         Core typed = Elaborator.elaborate(filterOverAnEmptyList(), Scope.NONE,
-                CheckContext.of(Symbols.none()).preserving(KEPT), Type.list(Type.INT));
+                CheckContext.of(Symbols.none(souther.compiler.DefaultStdlib.get())).preserving(KEPT), Type.list(Type.INT));
 
         Core.PreservedCall kept = assertInstanceOf(Core.PreservedCall.class, typed);
         assertEquals(Type.list(Type.INT), kept.type(),
@@ -57,7 +57,7 @@ class OneCallSettlesOneSignatureTest {
     @Test
     void andTheClosureIsTypedOverWhatWasPinnedRatherThanOverNothing() {
         Core typed = Elaborator.elaborate(filterOverAnEmptyList(), Scope.NONE,
-                CheckContext.of(Symbols.none()).preserving(KEPT), Type.list(Type.INT));
+                CheckContext.of(Symbols.none(souther.compiler.DefaultStdlib.get())).preserving(KEPT), Type.list(Type.INT));
 
         Core.PreservedCall kept = assertInstanceOf(Core.PreservedCall.class, typed);
         Core.Block predicate = assertInstanceOf(Core.Block.class, kept.args().get(0));
@@ -102,7 +102,7 @@ class OneCallSettlesOneSignatureTest {
                 Type.list(Type.INT), i -> {
                     reads[i]++;
                     return Type.list(Type.INT);
-                }, CheckContext.of(Symbols.none()));
+                }, CheckContext.of(Symbols.none(souther.compiler.DefaultStdlib.get())));
 
         assertEquals(0, reads[0], "a function argument is typed after the values, not here");
         assertEquals(1, reads[1], "and a value argument is read once, however it is ordered");
@@ -113,7 +113,7 @@ class OneCallSettlesOneSignatureTest {
         // The same guarantee where the answers come from: what a rule reasoned about and what reached
         // the tree are one elaboration of one argument.
         CallElaborator.CallArgs args = new CallElaborator.CallArgs(
-                List.of(new Hir.IntLit(1, POS, null)), Scope.NONE, CheckContext.of(Symbols.none()));
+                List.of(new Hir.IntLit(1, POS, null)), Scope.NONE, CheckContext.of(Symbols.none(souther.compiler.DefaultStdlib.get())));
 
         args.type(0);
         Core first = args.cores().get(0);
@@ -141,7 +141,7 @@ class OneCallSettlesOneSignatureTest {
                 ConstructionOrigin.own(), POS, null);
 
         Core typed = Elaborator.elaborate(call, Scope.NONE,
-                CheckContext.of(Symbols.none()).preserving(KEPT));
+                CheckContext.of(Symbols.none(souther.compiler.DefaultStdlib.get())).preserving(KEPT));
 
         assertEquals(Type.list(Type.INT), typed.type());
     }

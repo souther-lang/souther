@@ -1,7 +1,7 @@
 package souther.compiler.doc;
 
 import souther.compiler.Reserved;
-import souther.compiler.check.Prelude;
+import souther.compiler.stdlib.Stdlib;
 
 import org.junit.jupiter.api.Test;
 
@@ -98,7 +98,7 @@ class EveryOperationAModulePublishesIsListedInItsSectionTest {
     /** The published surface, split by the qualifier a caller writes it under. */
     private static Map<String, Set<String>> publishedByModule() {
         Map<String, Set<String>> byModule = new LinkedHashMap<>();
-        for (String qualified : Prelude.published()) {
+        for (String qualified : souther.compiler.DefaultStdlib.get().published()) {
             int dot = qualified.indexOf('.');
             byModule.computeIfAbsent(qualified.substring(0, dot), m -> new TreeSet<>())
                     .add(qualified.substring(dot + 1));

@@ -94,7 +94,13 @@ class EverythingAnAnswerHoldsIsAValueTest {
             // The reading of a behavior's input, held under an answer rather than asked for again.
             "souther.compiler.inputs.InputDomain",
             // And a database, which is a way of reading and not a value (`Db`'s own header).
-            "souther.compiler.query.Db");
+            "souther.compiler.query.Db",
+            // The standard library, which is a value and is here for a different reason from the
+            // three above: one is built per process and every answer of a compilation holds that
+            // one, so identity is the answer structural equality would give. Writing that equality
+            // out would walk every declaration the library has on every comparison, and writing
+            // "any library equals any other" would be true only while there is one of them.
+            "souther.compiler.stdlib.Stdlib");
 
     @Test
     void nothingUnderAnAnswerComparesByIdentity() {

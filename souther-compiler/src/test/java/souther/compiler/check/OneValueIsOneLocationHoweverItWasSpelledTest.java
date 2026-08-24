@@ -49,9 +49,9 @@ class OneValueIsOneLocationHoweverItWasSpelledTest {
         BindingId i = BINDERS.binder("i", POS).id();
         Location root = Location.of(i);
 
-        assertNotEquals(root, root.then(Type.INT, "n", Symbols.none()));
-        assertNotEquals(root.then(Type.INT, "n", Symbols.none()),
-                root.then(Type.INT, "m", Symbols.none()));
+        assertNotEquals(root, root.then(Type.INT, "n", Symbols.none(souther.compiler.DefaultStdlib.get())));
+        assertNotEquals(root.then(Type.INT, "n", Symbols.none(souther.compiler.DefaultStdlib.get())),
+                root.then(Type.INT, "m", Symbols.none(souther.compiler.DefaultStdlib.get())));
     }
 
     @Test
@@ -67,6 +67,6 @@ class OneValueIsOneLocationHoweverItWasSpelledTest {
     }
 
     private static Location of(Core e) {
-        return Location.of(e, Symbols.none(), Location::of);
+        return Location.of(e, Symbols.none(souther.compiler.DefaultStdlib.get()), Location::of);
     }
 }

@@ -1,5 +1,6 @@
 package souther.compiler.meta;
 
+import souther.compiler.stdlib.Stdlib;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Ast;
@@ -212,7 +213,7 @@ class EveryWayAnArtifactsImportLineCanFailIsNamedTest {
     /** Why {@code app.order} could not be read, as the universe answers it. */
     private static Readback.Failure refusalOf(PublishedClasses classes) {
         return assertInstanceOf(Readback.NotReady.Unreadable.class,
-                PublishedUniverse.of(classes).resolved("app.order"),
+                PublishedUniverse.of(classes, souther.compiler.DefaultStdlib.get()).resolved("app.order"),
                 "the module is carried and this compiler will not read it").why();
     }
 

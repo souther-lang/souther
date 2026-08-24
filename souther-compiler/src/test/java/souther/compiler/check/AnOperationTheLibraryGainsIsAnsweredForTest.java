@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
@@ -33,9 +34,9 @@ class AnOperationTheLibraryGainsIsAnsweredForTest {
     @Test
     void everyOperationInAQuestionsRangeAnswersIt() {
         List<String> unanswered = new ArrayList<>();
-        for (Map.Entry<String, Prelude.PreludeEntry> e : Prelude.entries().entrySet()) {
-            ValueName operation = Prelude.operation(e.getKey());
-            for (Question question : Question.askedOf(e.getValue().signature())) {
+        for (Map.Entry<String, Stdlib.Entry> e : souther.compiler.DefaultStdlib.get().entries().entrySet()) {
+            ValueName operation = souther.compiler.DefaultStdlib.get().operation(e.getKey());
+            for (Question question : Question.askedOf(souther.compiler.DefaultStdlib.get(), e.getValue().signature())) {
                 if (question.answeredFor(operation)
                         || question.nothingSaidOf().contains(operation)) {
                     continue;
@@ -61,12 +62,12 @@ class AnOperationTheLibraryGainsIsAnsweredForTest {
         List<String> unasked = new ArrayList<>();
         for (Question question : Question.values()) {
             for (ValueName operation : question.answeredOperations()) {
-                if (!question.asksOfOperation(operation.toString())) {
+                if (!question.asksOfOperation(souther.compiler.DefaultStdlib.get(), operation.toString())) {
                     unasked.add(operation + " — " + question + " (a rule)");
                 }
             }
             for (ValueName operation : question.nothingSaidOf()) {
-                if (!question.asksOfOperation(operation.toString())) {
+                if (!question.asksOfOperation(souther.compiler.DefaultStdlib.get(), operation.toString())) {
                     unasked.add(operation + " — " + question + " (nothing to say)");
                 }
             }
@@ -113,9 +114,9 @@ class AnOperationTheLibraryGainsIsAnsweredForTest {
      */
     @Test
     void aDeclarationThatWritesNoReturnTypeIsStillAskedWhatItHandsItsClosure() {
-        Prelude.Signature leavesItsResultToItsBody = new Prelude.Signature(
+        Stdlib.Signature leavesItsResultToItsBody = new Stdlib.Signature(
                 List.of(new Type.FnOf(List.of(Type.Prim.INT), Type.Prim.INT), Type.Prim.INT), null);
-        assertEquals(List.of(Question.COMBINATOR), Question.askedOf(leavesItsResultToItsBody),
+        assertEquals(List.of(Question.COMBINATOR), Question.askedOf(souther.compiler.DefaultStdlib.get(), leavesItsResultToItsBody),
                 "an operation that takes a function is asked what it hands it, whatever it leaves"
                         + " unsaid about what it answers");
     }

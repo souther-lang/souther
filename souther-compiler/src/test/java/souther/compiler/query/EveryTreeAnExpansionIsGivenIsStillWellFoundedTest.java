@@ -132,7 +132,7 @@ class EveryTreeAnExpansionIsGivenIsStillWellFoundedTest {
                 // module was written around is not passing by having nothing left to walk
                 assertTrue(HelperInliner.helpersOf(tree).containsKey(value),
                         "the " + stage + " tree of " + name + " no longer declares `" + value + "`");
-                assertDoesNotThrow(() -> ValueCycles.rejectIn(tree, published),
+                assertDoesNotThrow(() -> ValueCycles.rejectIn(tree, published, souther.compiler.DefaultStdlib.get()),
                         "the " + stage + " tree of " + name + " is expanded, and its values reach"
                                 + " themselves");
             });
@@ -170,6 +170,6 @@ class EveryTreeAnExpansionIsGivenIsStillWellFoundedTest {
         assertTrue(resolved.present(), "resolution answers; the refusal comes later");
 
         assertThrows(CompileException.class,
-                () -> ValueCycles.rejectIn(resolved.value(), Map.of()));
+                () -> ValueCycles.rejectIn(resolved.value(), Map.of(), souther.compiler.DefaultStdlib.get()));
     }
 }

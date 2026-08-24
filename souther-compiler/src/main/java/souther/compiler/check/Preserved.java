@@ -1,5 +1,7 @@
 package souther.compiler.check;
 
+import souther.compiler.DefaultStdlib;
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
@@ -105,13 +107,21 @@ public record Preserved(Map<ValueName, CompleteSignature> operations, SettledVal
      * discharge representation's demand the moment anything asked for no representation at all.
      */
     private static final class TheLanguagesOwn {
-        private static final Preserved OPERATIONS = readTheLibrary();
+        private static final Preserved OPERATIONS = readTheLibrary(DefaultStdlib.get());
     }
 
-    private static Preserved readTheLibrary() {
+    /* Derived from the shipped library and from nothing else, so it is a constant of this compiler
+     * rather than a fact about a compilation: the same rules under every compile and under any
+     * backend. The lifetime decision is {@link souther.compiler.DefaultStdlib}'s and the derivation
+     * below is a pure function of a {@link Stdlib}, so a test hands it one of its own.
+     *
+     * The loader that builds a Stdlib must not read this table: it would be asking for the library
+     * while the library is being read. Held by
+     * OnlyABoundaryOrAProcessConstantReadsTheDefaultLibraryTest. */
+    private static Preserved readTheLibrary(Stdlib stdlib) {
         Map<ValueName, CompleteSignature> operations = new LinkedHashMap<>();
-        Prelude.entries().forEach((qualified, entry) -> {
-            ValueName.Stdlib operation = Prelude.operation(qualified);
+        stdlib.entries().forEach((qualified, entry) -> {
+            ValueName.Stdlib operation = stdlib.operation(qualified);
             operations.put(operation, CompleteSignature.of(
                     operation, entry.signature().params(), entry.signature().result()));
         });

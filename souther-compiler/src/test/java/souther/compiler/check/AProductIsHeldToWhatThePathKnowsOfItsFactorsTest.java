@@ -75,7 +75,7 @@ class AProductIsHeldToWhatThePathKnowsOfItsFactorsTest {
      */
     @Test
     void aProductOfTwoFactorsThePathBoundsBelowIsBoundedBelow() {
-        Terms terms = new Terms(Symbols.none(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        Terms terms = new Terms(Symbols.none(souther.compiler.DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         BindingId a = binding(0);
         BindingId b = binding(1);
         Denotations at = Denotations.none().location(a, AsPlaces.of(a), AsPlaces.term(a)).location(b, AsPlaces.of(b), AsPlaces.term(b));
@@ -107,7 +107,7 @@ class AProductIsHeldToWhatThePathKnowsOfItsFactorsTest {
      */
     @Test
     void theSameProductIsBoundedByNothingWhereThePathAssumedNothing() {
-        Terms terms = new Terms(Symbols.none(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        Terms terms = new Terms(Symbols.none(souther.compiler.DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         BindingId a = binding(0);
         BindingId b = binding(1);
         Denotations at = Denotations.none().location(a, AsPlaces.of(a), AsPlaces.term(a)).location(b, AsPlaces.of(b), AsPlaces.term(b));
@@ -131,7 +131,7 @@ class AProductIsHeldToWhatThePathKnowsOfItsFactorsTest {
      */
     @Test
     void aQuotientByAWrittenConstantFollowsTheBoundOnItsNumerator() {
-        Terms terms = new Terms(Symbols.none(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        Terms terms = new Terms(Symbols.none(souther.compiler.DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         BindingId x = binding(0);
         Denotations at = Denotations.none().location(x, AsPlaces.of(x), AsPlaces.term(x));
         Core scaled = arithmetic(BinOp.MUL, read("x", x), new Core.Int(30, Type.INT, POS));
@@ -154,7 +154,7 @@ class AProductIsHeldToWhatThePathKnowsOfItsFactorsTest {
      */
     @Test
     void aQuotientOverAProductReadsWhatTheProductWasDerivedTo() {
-        Terms terms = new Terms(Symbols.none(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        Terms terms = new Terms(Symbols.none(souther.compiler.DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         BindingId a = binding(0);
         BindingId b = binding(1);
         Denotations at = Denotations.none().location(a, AsPlaces.of(a), AsPlaces.term(a)).location(b, AsPlaces.of(b), AsPlaces.term(b));
@@ -186,7 +186,7 @@ class AProductIsHeldToWhatThePathKnowsOfItsFactorsTest {
      * recorded once and the second reading agrees with the first. */
     @Test
     void oneProductWrittenTwiceIsRecordedOnce() {
-        Terms terms = new Terms(Symbols.none(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        Terms terms = new Terms(Symbols.none(souther.compiler.DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         BindingId a = binding(0);
         BindingId b = binding(1);
         Denotations at = Denotations.none().location(a, AsPlaces.of(a), AsPlaces.term(a)).location(b, AsPlaces.of(b), AsPlaces.term(b));
@@ -202,7 +202,7 @@ class AProductIsHeldToWhatThePathKnowsOfItsFactorsTest {
     /** A product of two whole numbers is a whole number, which is what the domain records it as. */
     @Test
     void aDerivedAtomKeepsTheSpacingOfTheNumberItIs() {
-        Terms terms = new Terms(Symbols.none(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        Terms terms = new Terms(Symbols.none(souther.compiler.DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         BindingId a = binding(0);
         BindingId b = binding(1);
         Denotations at = Denotations.none().location(a, AsPlaces.of(a), AsPlaces.term(a)).location(b, AsPlaces.of(b), AsPlaces.term(b));

@@ -25,7 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class ValueRenderingTest {
 
     private static ValueRendering rendering() {
-        Symbols symbols = Symbols.none();
+        Symbols symbols = Symbols.none(souther.compiler.DefaultStdlib.get());
         return new ValueRendering(new NeutralForm(symbols));
     }
 

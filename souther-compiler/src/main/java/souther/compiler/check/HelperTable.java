@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.ast.Hir;
 
 import java.util.Collection;
@@ -15,7 +16,7 @@ import java.util.Map;
  * than built per expansion, so the eleven questions that expand something in a compile are reading
  * one answer rather than eleven that have to agree.
  *
- * <p>Prelude helpers are keyed by their qualified name ({@code List.map}); a module's own helpers by
+ * <p>The library's helpers are keyed by their qualified name ({@code List.map}); a module's own helpers by
  * their bare name ({@code 対象明細}), and a definition another module publishes by the qualified name
  * it is reached by here. A qualified call resolves to whichever of the two declared it, a bare call
  * to the module's own — the standard library has no bare names (spec §stdlib).
@@ -54,9 +55,14 @@ public final class HelperTable {
     private final Map<String, Hir.FnDef> reached;
     private final Map<String, Hir.FnDef> declared;
     private final Map<String, Hir.FnDef> emits;
+    /** The library the table was built over — held so that a reader expanding against this table
+     *  asks the same library the helpers under it came from. */
+    private final Stdlib stdlib;
 
     private HelperTable(String module, InliningPolicy policy, Map<String, Hir.FnDef> reached,
-                        Map<String, Hir.FnDef> declared, Map<String, Hir.FnDef> emits) {
+                        Map<String, Hir.FnDef> declared, Map<String, Hir.FnDef> emits,
+                        Stdlib stdlib) {
+        this.stdlib = stdlib;
         this.module = module;
         this.policy = policy;
         this.reached = reached;
@@ -76,7 +82,8 @@ public final class HelperTable {
      */
     public static HelperTable of(String module, Map<String, Hir.FnDef> declared,
                                  Map<String, Hir.FnDef> takenOn,
-                                 Map<String, Hir.FnDef> imported, InliningPolicy policy) {
+                                 Map<String, Hir.FnDef> imported, InliningPolicy policy,
+                                 Stdlib stdlib) {
         // In the order they are written, so a module with two helpers to complain about complains
         // about the earlier one first.
         Map<String, Hir.FnDef> emits = new LinkedHashMap<>(declared);
@@ -85,19 +92,20 @@ public final class HelperTable {
         joined.putAll(emits);
         Map<String, Hir.FnDef> reached;
         if (policy == InliningPolicy.FULL) {
-            reached = new LinkedHashMap<>(Prelude.helpers());
+            reached = new LinkedHashMap<>(stdlib.helpers());
             reached.putAll(joined);
         } else {
             reached = joined;
         }
-        return new HelperTable(module, policy, reached, new LinkedHashMap<>(declared), emits);
+        return new HelperTable(module, policy, reached, new LinkedHashMap<>(declared), emits,
+                stdlib);
     }
 
     /** The same, reading the two components off the module rather than being handed them. */
     public static HelperTable of(Hir.Module module, Map<String, Hir.FnDef> imported,
-                                 InliningPolicy policy) {
+                                 InliningPolicy policy, Stdlib stdlib) {
         return of(module.name(), HelperInliner.helpersOf(module),
-                HelperInliner.takenOnBy(module), imported, policy);
+                HelperInliner.takenOnBy(module), imported, policy, stdlib);
     }
 
     /**
@@ -117,7 +125,12 @@ public final class HelperTable {
         for (String name : names) {
             any |= narrowed.remove(name) != null;
         }
-        return any ? new HelperTable(module, policy, narrowed, declared, emits) : this;
+        return any ? new HelperTable(module, policy, narrowed, declared, emits, stdlib) : this;
+    }
+
+    /** The library the table was built over. */
+    public Stdlib library() {
+        return stdlib;
     }
 
     /** The module whose body this expands into. */
@@ -172,12 +185,13 @@ public final class HelperTable {
         return other instanceof HelperTable t
                 && module.equals(t.module) && policy == t.policy
                 && reached.equals(t.reached) && declared.equals(t.declared)
-                && emits.equals(t.emits);
+                && emits.equals(t.emits) && stdlib == t.stdlib;
     }
 
     @Override
     public int hashCode() {
-        return java.util.Objects.hash(module, policy, reached, declared, emits);
+        return java.util.Objects.hash(module, policy, reached, declared, emits,
+                System.identityHashCode(stdlib));
     }
 
     @Override

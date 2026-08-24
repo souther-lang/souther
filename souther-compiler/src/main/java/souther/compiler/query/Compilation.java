@@ -53,6 +53,10 @@ public final class Compilation {
         // The one place a reading policy is made. Everything that reads a declaration is handed
         // this one, so a declaration read twice in one compilation is read the same way both times.
         db.set(new Front.Reading(), Front.Reading.STANDARD);
+        // And the one place this compilation's standard library is settled. Read here so that every
+        // name resolved for it is resolved against one library, rather than against whichever one
+        // each reader reached for.
+        db.set(new Front.Library(), souther.compiler.DefaultStdlib.get());
         // And the one place an adequacy budget is made. Every measure of one behavior is handed
         // this one, so a behavior measured twice in one compilation is measured under the same
         // limits both times.

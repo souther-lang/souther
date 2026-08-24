@@ -2,7 +2,7 @@ package souther.compiler.doc;
 
 import org.junit.jupiter.api.Test;
 import souther.compiler.Reserved;
-import souther.compiler.check.Prelude;
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.Type;
 
 import java.io.IOException;
@@ -295,7 +295,7 @@ class NoStandardLibraryCallTheSpecificationWritesContradictsItsSignatureTest {
     private static List<Finding> findings(String adoc) {
         NavigableMap<Integer, Declared> declared = declarationsByRegion(adoc);
         NavigableMap<Integer, String> anchors = anchorsByOffset(adoc);
-        Map<String, ApiCommand.Signature> surface = ApiCommand.surface();
+        Map<String, ApiCommand.Signature> surface = ApiCommand.surface(souther.compiler.DefaultStdlib.get());
         List<Finding> found = new ArrayList<>();
         for (Call call : callsIn(adoc)) {
             String anchor = anchors.floorEntry(call.at()) == null ? ""
@@ -305,7 +305,7 @@ class NoStandardLibraryCallTheSpecificationWritesContradictsItsSignatureTest {
                 found.add(call.saying(anchor, "names nothing the standard library publishes"));
                 continue;
             }
-            if (Prelude.isEmptyCollectionValue(call.name())) {
+            if (souther.compiler.DefaultStdlib.get().isEmptyCollectionValue(call.name())) {
                 found.add(call.saying(anchor, "is a value and takes no argument list"));
                 continue;
             }

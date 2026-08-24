@@ -45,7 +45,7 @@ class WhatWasWrittenIsFoundByFollowingWhatANameWasGivenTest {
 
     private final Hir.Binders binders = new Hir.Binders(OWNER);
     private final PathEngine engine =
-            new PathEngine(Symbols.none(), Map.of(), Terms.Of.THE_DISCHARGE_TREE, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+            new PathEngine(Symbols.none(souther.compiler.DefaultStdlib.get()), Map.of(), Terms.Of.THE_DISCHARGE_TREE, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
 
     @Test
     void aNameGivenTextIsThatText() {

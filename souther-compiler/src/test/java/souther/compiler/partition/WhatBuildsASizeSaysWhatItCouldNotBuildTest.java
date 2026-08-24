@@ -24,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class WhatBuildsASizeSaysWhatItCouldNotBuildTest {
 
-    private static final Symbols NONE = Symbols.none();
+    private static final Symbols NONE = Symbols.none(souther.compiler.DefaultStdlib.get());
 
     @Test
     void aStringOfTheSizeAskedForIsBuilt() {
