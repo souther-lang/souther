@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.Reserved;
 import souther.compiler.ast.Ast;
 import souther.compiler.types.ValueName;
 
@@ -125,7 +126,7 @@ public final class Exposing {
         List<Ast.Import> kept = new ArrayList<>();
         List<Refusal> refused = new ArrayList<>();
         for (Ast.Import imp : module.imports()) {
-            if (!Prelude.isQualifier(imp.module())) {
+            if (!Reserved.isQualifier(imp.module())) {
                 kept.add(imp);   // an ordinary user-module import — read where the universe is
                 continue;
             }

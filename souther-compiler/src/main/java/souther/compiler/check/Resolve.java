@@ -744,7 +744,7 @@ public final class Resolve {
         }
         String bare = written.substring(dot + 1);
         String qualifier = written.substring(0, dot);
-        if (Prelude.isQualifier(qualifier)) {
+        if (Reserved.isQualifier(qualifier)) {
             // a standard-library qualifier names a function, and a function is not a behavior
             return noBehavior(ref, unknown.report(ref, Set.of()));
         }
@@ -1403,7 +1403,7 @@ public final class Resolve {
         // values: the qualifier they typed and the operation they asked of it. Nothing downstream
         // splits it again — from here it is carried as the pair.
         int dot = written.lastIndexOf('.');
-        if (Prelude.isQualifier(dot < 0 ? written : written.substring(0, dot))) {
+        if (Reserved.isQualifier(dot < 0 ? written : written.substring(0, dot))) {
             if (Reserved.isNamespace(reachable.module()) || !Prelude.isPrivateMember(written)) {
                 return new Reach.Reaches(dot < 0 ? ValueName.Stdlib.namespace(written)
                         : new ValueName.Stdlib(written.substring(0, dot),
@@ -1556,7 +1556,7 @@ public final class Resolve {
     /** Whether {@code qualifier} names a namespace a member may be reached through: a
      *  standard-library one, or a module of this compilation (or an alias for one). */
     private boolean isNamespace(String qualifier) {
-        return Prelude.isQualifier(qualifier) || symbols.scope().moduleOfQualifier(qualifier) != null;
+        return Reserved.isQualifier(qualifier) || symbols.scope().moduleOfQualifier(qualifier) != null;
     }
 
     /** The name a chain of field reads is rooted at, or null where it is rooted at anything else —
@@ -1675,7 +1675,7 @@ public final class Resolve {
     private CompileException notALibraryMember(WrittenName written) {
         String name = written.canonical();
         int dot = name.lastIndexOf('.');
-        if (dot < 0 || !Prelude.isQualifier(name.substring(0, dot))) {
+        if (dot < 0 || !Reserved.isQualifier(name.substring(0, dot))) {
             return null;
         }
         return CompileException.of(Diagnostic

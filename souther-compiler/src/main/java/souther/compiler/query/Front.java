@@ -1,8 +1,8 @@
 package souther.compiler.query;
 
+import souther.compiler.Reserved;
 import souther.compiler.source.SourceId;
 
-import souther.compiler.check.Prelude;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.diag.CompileException;
@@ -570,7 +570,7 @@ public final class Front {
                     if (read.containsKey(needed) || refused.containsKey(needed)
                             || unreadable.containsKey(needed)
                             || layout.idOfModule().containsKey(needed)
-                            || Prelude.isQualifier(needed)) {
+                            || Reserved.isQualifier(needed)) {
                         continue;
                     }
                     reports.add(saidAbout(reaching.getKey(), needs(needed, reaching.getKey()),
@@ -1223,7 +1223,7 @@ public final class Front {
         // The short qualifiers are how the standard library is reached (`List.map`, `import
         // String`); a user module by one of these names would shadow the library and could not be
         // imported.
-        if (Prelude.isQualifier(name)) {
+        if (Reserved.isQualifier(name)) {
             return Diagnostic.say(new ModuleMessage.TheModuleTakesTheStandardLibraryQualifier(name));
         }
         return null;
