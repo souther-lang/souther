@@ -12,7 +12,6 @@ import souther.compiler.check.TypeView;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 import souther.compiler.values.AdmissibleSet;
 
@@ -268,7 +267,7 @@ public final class InputDomain {
      */
     private static void walk(TermPath path, Type type, int depth, Symbols symbols,
                              ReadingPolicy policy, PlacedRules placed, List<Position> found,
-                             List<RuleRoot> roots, java.util.Set<TypeSymbol> narrowed) {
+                             List<RuleRoot> roots, java.util.Set<Refinement> narrowed) {
         // The proof first, and before anything is read off the position. A shape a reading is not
         // made of is this compiler disagreeing with itself about what may stand at a position, and
         // it is refused here rather than arriving further down as a position nothing divides.
@@ -306,7 +305,7 @@ public final class InputDomain {
     private static void under(StructuralInspection.Continuation continuation, Position here,
                               TermPath path, int depth, Symbols symbols, ReadingPolicy policy,
                               PlacedRules placed, List<Position> found, List<RuleRoot> roots,
-                              java.util.Set<TypeSymbol> narrowed) {
+                              java.util.Set<Refinement> narrowed) {
         switch (continuation) {
             case StructuralInspection.Continuation.None _,
                  StructuralInspection.Continuation.Blocked _ -> { }
@@ -344,32 +343,39 @@ public final class InputDomain {
     private static void walkBranch(StructuralInspection.Branch branch, Position here, TermPath path,
                                    int depth, Symbols symbols, ReadingPolicy policy,
                                    List<Position> found, List<RuleRoot> roots,
-                                   java.util.Set<TypeSymbol> narrowed) {
+                                   java.util.Set<Refinement> narrowed) {
         // Nothing stands under a branch that is the whole of a value. A unit case is one, and a
         // position for it would be a report naming a place with nothing in it once per case.
         if (branch.under() == null || !owed(here, branch.refinement())) {
             return;
         }
-        // A sum reached through itself, which a declaration is refused for (DataChecker) and which
-        // this only has to come back from. Kept per branch of the walk rather than for the reading:
-        // a sum met under a field is a value of its own and has been taken apart nowhere.
-        if (!(branch.refinement() instanceof Refinement.SumCase one)
-                || narrowed.contains(one.leaf())) {
+        // A narrowing this chain has already taken, which is a value reached through itself — a
+        // declaration is refused for it (DataChecker) and this only has to come back from one.
+        // Asked of the narrowings and not of their cases, so that the guard is about the recursion
+        // and about nothing else: a test on which kind of narrowing it is would drop a kind it was
+        // never about. Kept per branch of the walk rather than for the reading, since a sum met
+        // under a field is a value of its own and has been taken apart nowhere.
+        if (narrowed.contains(branch.refinement())) {
             return;
         }
-        java.util.Set<TypeSymbol> deeper = new java.util.LinkedHashSet<>(narrowed);
-        deeper.add(one.leaf());
+        java.util.Set<Refinement> deeper = new java.util.LinkedHashSet<>(narrowed);
+        deeper.add(branch.refinement());
         TermPath at = path.refine(branch.refinement());
         roots.add(new RuleRoot(at, branch.under()));
         walk(at, branch.under(), depth, symbols, policy,
                 PlacedRules.of(at, branch.under(), symbols, policy), found, roots, deeper);
     }
 
-    /** Whether the reading of {@code position} still owes a row at this branch. */
+    /**
+     * Whether the reading of {@code position} still owes a row at this branch.
+     *
+     * <p>Asked in the words the obligations are in, through the one relating of the two
+     * ({@link Refinement#of}). Matched on the kind of distinction here, a branch of a kind this
+     * happened not to name would be a branch nothing owes and nothing walks.
+     */
     private static boolean owed(Position position, Refinement refinement) {
         for (Case each : position.obligationCases()) {
-            if (each instanceof Case.SumCase one
-                    && refinement.equals(new Refinement.SumCase(one.leaf()))) {
+            if (refinement.equals(Refinement.of(each))) {
                 return true;
             }
         }

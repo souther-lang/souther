@@ -150,16 +150,6 @@ public record TermPath(String head, List<Step> steps) {
         return false;
     }
 
-    /** Whether any step of this narrows which values stand at a position above it. */
-    public boolean underARefinement() {
-        for (Step step : steps) {
-            if (step instanceof Step.Refine) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     /**
      * Whether {@code other} is this path or a path below it.
      *
@@ -175,19 +165,49 @@ public record TermPath(String head, List<Step> steps) {
     }
 
     /**
-     * The steps of this below {@code root}, as a path rooted there, or null where this is not under
-     * it.
+     * The dotted field name the clauses of the value at {@code root} name this position by, or null
+     * where none of them can name it.
      *
-     * <p>What a reader holding the rules of one value asks a position by. The rules of a
-     * {@code GlobalQuery} are written about {@code tag}, and the position is {@code
-     * query@GlobalQuery.tag}: the translation belongs to whoever knows which value's rules are being
-     * read, and putting it in {@link #fieldKey} would make this path know that too.
+     * <p>{@link #fieldKey} asked of a value that is not the parameter. The rules of a
+     * {@code GlobalQuery} are written about {@code tag} and the position is
+     * {@code query@GlobalQuery.tag}: the translation belongs to whoever knows which value's rules
+     * are being read, and putting it in {@link #fieldKey} would make this path know that too.
+     *
+     * <p>Null for a position under no such value as readily as for one no clause can name. A
+     * reading of one value has nothing to say about a position in another, and answering with a
+     * name would be that value's rules read at somebody else's position.
      */
-    public TermPath relativeTo(TermPath root) {
-        if (!isAtOrUnder(root)) {
+    public String fieldKeyUnder(TermPath root) {
+        List<Step> below = below(root);
+        if (below == null) {
             return null;
         }
-        return new TermPath(root.toString(), steps.subList(root.steps.size(), steps.size()));
+        for (Step step : below) {
+            switch (step) {
+                case Step.Field _ -> { }
+                case Step.Element _, Step.Refine _ -> {
+                    return null;
+                }
+            }
+        }
+        return spelled(below);
+    }
+
+    /**
+     * The steps below {@code root} written out, or null where this is not under it.
+     *
+     * <p>{@link #stepsSpelled} asked of a value that is not the parameter, and what a table keyed by
+     * such names looks a position up by. {@link #fieldKeyUnder} is this where a clause of that value
+     * could name the position and null where none can.
+     */
+    public String stepsSpelledUnder(TermPath root) {
+        List<Step> below = below(root);
+        return below == null ? null : spelled(below);
+    }
+
+    /** The steps of this below {@code root}, or null where this is not under it. */
+    private List<Step> below(TermPath root) {
+        return isAtOrUnder(root) ? steps.subList(root.steps.size(), steps.size()) : null;
     }
 
     /**
@@ -244,15 +264,7 @@ public record TermPath(String head, List<Step> steps) {
      * this reading has nothing to say about the position, and not that nothing does.
      */
     public String fieldKey() {
-        for (Step step : steps) {
-            switch (step) {
-                case Step.Field _ -> { }
-                case Step.Element _, Step.Refine _ -> {
-                    return null;
-                }
-            }
-        }
-        return stepsSpelled();
+        return fieldKeyUnder(TermPath.of(head));
     }
 
     /**
@@ -269,6 +281,10 @@ public record TermPath(String head, List<Step> steps) {
      * for every position wants this.
      */
     public String stepsSpelled() {
+        return spelled(steps);
+    }
+
+    private static String spelled(List<Step> steps) {
         StringBuilder out = new StringBuilder();
         for (Step step : steps) {
             spell(out, step);

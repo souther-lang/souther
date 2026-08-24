@@ -28,12 +28,6 @@ public record Requirements(Map<TermPath, Refinement> refinements) {
         refinements = java.util.Collections.unmodifiableMap(new LinkedHashMap<>(refinements));
     }
 
-    /** What {@code path} requires of the value it is a position of, which is what its refinement
-     *  steps say and nothing else. */
-    public static Requirements of(TermPath path) {
-        return path.requirements();
-    }
-
     /** The same, with {@code refinement} required at {@code at} — which is what a class selecting
      *  one adds to what its position's path already required. */
     public Requirements and(TermPath at, Refinement refinement) {
@@ -48,10 +42,6 @@ public record Requirements(Map<TermPath, Refinement> refinements) {
     /** What is required at {@code at}, or null where nothing is. */
     public Refinement at(TermPath at) {
         return refinements.get(at);
-    }
-
-    public boolean isEmpty() {
-        return refinements.isEmpty();
     }
 
     /**

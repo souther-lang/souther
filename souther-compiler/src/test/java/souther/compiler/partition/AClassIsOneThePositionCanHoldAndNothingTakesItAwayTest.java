@@ -103,7 +103,8 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
      * record would be answered with a field's classes or with none.
      */
     private static List<String> classesOf(Partitions.Partitioning partitioning) {
-        return classesAt(partitioning, partitioning.axes().get(0).path().toString());
+        String parameter = partitioning.axes().get(0).path().head();
+        return classesAt(partitioning, parameter);
     }
 
     /** The classes of the position at {@code path}, where a behavior has more than one. */

@@ -2066,6 +2066,13 @@ public final class Generator {
                 where[i] = here.get(left % here.size());
                 left /= here.size();
             }
+            // Each position's classes counted off on its own, so the count reaches assignments no
+            // value has: a class under one case of a sum beside a class under another. Not one to
+            // try — a combination that cannot exist is not a candidate that failed, and offering it
+            // spends one of the few tries this combination gets on a row nobody could write.
+            if (!(requiredBy(axes, where) instanceof Requirements.Merge.Merged)) {
+                continue;
+            }
             if (!alreadyTried(tried, where)) {
                 return where;
             }
@@ -2149,8 +2156,13 @@ public final class Generator {
             // the model has at all — said here, and said as that: reported as a value nothing
             // composed, an author would go looking for a row that cannot exist.
             if (!(both instanceof Requirements.Merge.Merged merged)) {
+                // Which position, and which two it would have to be. The reason is the category a
+                // reader acts on and this is the sentence that says which case of it this was —
+                // without it an author is told a row is impossible and left to work out why.
+                Requirements.Merge.Conflict against = (Requirements.Merge.Conflict) both;
                 return new Attempt(null, UnresolvedCombination.Reason.ONE_POSITION_CANNOT_BE_BOTH,
-                        at, Optional.empty());
+                        at, Optional.of("`" + against.at() + "` would have to be both "
+                                + against.one().spelled() + " and " + against.other().spelled()));
             }
             required = merged.requirements();
             switch (axes.get(i).classes().get(where[i]).representatives().evaluate()) {
@@ -2718,7 +2730,7 @@ public final class Generator {
             if (!path.isAtOrUnder(root) || !(at instanceof Count number)) {
                 return;
             }
-            String field = path.relativeTo(root).fieldKey();
+            String field = path.fieldKeyUnder(root);
             // Where no clause of the parameter can name the position, nothing of this parameter's
             // rules is about it and there is nothing to settle. A position inside a sequence is one,
             // and so is one under a narrowing: the rules that name it are the narrowed value's.

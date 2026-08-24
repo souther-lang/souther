@@ -226,13 +226,19 @@ public sealed interface StructuralInspection {
     private static List<Branch> branchesOf(List<Case> declared) {
         List<Branch> out = new ArrayList<>();
         for (Case each : declared) {
-            // A sum states its cases and nothing else. Anything else in this list is the reading of
-            // distinctions and the reading of structure disagreeing about what a sum is, which is
-            // left to say itself rather than turned into a branch of some other kind.
-            if (each instanceof Case.SumCase one) {
-                out.add(new Branch(new Refinement.SumCase(one.leaf()),
-                        one.oneValue() ? null : Type.ref(one.leaf())));
+            Refinement narrowing = Refinement.of(each);
+            // A distinction that narrows no position is not a branch of one. A sum states its cases
+            // and nothing else, so nothing else reaches here — and where something did, it would be
+            // a distinction that puts nothing under the position rather than one quietly dropped.
+            if (narrowing == null) {
+                continue;
             }
+            // What the case carries, or nothing where the case is the whole of a value. Read off
+            // the distinction that already answered it, so that what a row is owed at the position
+            // and what stands under the case are crossed against one reading of the declaration.
+            out.add(new Branch(narrowing,
+                    each instanceof Case.SumCase one && !one.oneValue() ? Type.ref(one.leaf())
+                            : null));
         }
         return List.copyOf(out);
     }

@@ -21,6 +21,29 @@ public sealed interface Refinement {
     String spelled();
 
     /**
+     * The narrowing {@code one} is, or null where sitting in that distinction narrows no position.
+     *
+     * <p>The one place the two vocabularies are related. What a position divides into and what a
+     * position under it stands beneath are the same statement read twice — a row whose value is an
+     * {@code Approved} is a row at every position {@code Approved} declares — and a second relating
+     * of them would be the classes and the branches disagreeing about which is which.
+     *
+     * <p>Exhaustive over {@link Case}, with no {@code default}: a distinction the reading learns to
+     * make later stops this compiling rather than arriving as a branch that is quietly never walked.
+     *
+     * <p>Null for the two that divide a position without putting anything under it. A {@code Bool}
+     * is two values and holds no position; a value a rule singled out is one value of the position
+     * and is not a case of it.
+     */
+    static Refinement of(Case one) {
+        return switch (one) {
+            case Case.SumCase sum -> new SumCase(sum.leaf());
+            case Case.Presence presence -> new Presence(presence.present());
+            case Case.Truth _, Case.Named _ -> null;
+        };
+    }
+
+    /**
      * The value turned out to be this case of the sum standing at the position.
      *
      * @param leaf the case, folded to a leaf as {@link Distinctions} folds the cases it reads

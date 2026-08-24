@@ -284,8 +284,8 @@ final class ReadQuantities implements Quantities {
      *  from — the reading of a declaration, or a form a caller wrote. */
     private InputAtom.Named called(NumericTerm term) {
         TermPath root = rootOf(term.path());
-        return new InputAtom.Named(root.toString(), coordinateOf(root, term).path(),
-                coordinateOf(root, term).measured());
+        FieldDomains.Coordinate at = coordinateOf(root, term);
+        return new InputAtom.Named(root.toString(), at.path(), at.measured());
     }
 
     /**
@@ -530,7 +530,7 @@ final class ReadQuantities implements Quantities {
         // Written with the steps inside a sequence in it, so two positions never come to one name.
         // No clause is written at such a name, so a lookup finds nothing — which is what a clause
         // of the value says about a position inside a collection.
-        return new FieldDomains.Coordinate(term.path().relativeTo(root).stepsSpelled(),
+        return new FieldDomains.Coordinate(term.path().stepsSpelledUnder(root),
                 term instanceof NumericTerm.SizeOf);
     }
 

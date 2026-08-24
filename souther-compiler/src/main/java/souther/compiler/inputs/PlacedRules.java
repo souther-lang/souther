@@ -63,8 +63,7 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules) {
      * name would be this value's rules read at somebody else's position.
      */
     private String keyOf(TermPath path) {
-        TermPath under = path.relativeTo(root);
-        return under == null ? null : under.fieldKey();
+        return path.fieldKeyUnder(root);
     }
 
     /** What the rules leave the numbers, ends and narrowings of this value. */
