@@ -213,6 +213,30 @@ public sealed interface OperationFact {
     }
 
     /**
+     * The operation answers a number taken of the one value it is given: how long a string is, how
+     * many a container holds.
+     *
+     * <p>One list, because a reader that answers "does this rule bound a number" has to give the
+     * same answer wherever it is asked. The discharge procedure keys an atom on one of these over
+     * its argument's path and a partition draws a boundary on one — and where those two disagreed,
+     * a rule discharged in one place was reported in the other as a rule the model does not state.
+     */
+    record CountsWhatItIsGiven() implements OperationFact {}
+
+    /**
+     * Every count this operation could give is a count some value of the type has.
+     *
+     * <p>Only a string's length. A string of any length is written by repeating a character and a
+     * character is always to be had, so what the rules leave is what some value has.
+     *
+     * <p>Every other measure counts things that may not be there. A {@code Set<Bool>} is capped at
+     * two by how many booleans there are; a {@code List<T>} of one needs a {@code T}, and a
+     * {@code T} nothing inhabits has none. Whether such a value exists is a question about the
+     * element and not about the count.
+     */
+    record EveryCountItGivesIsACountSomeValueHas() implements OperationFact {}
+
+    /**
      * There is nothing to say of this operation under {@code subject}.
      *
      * <p>A decision and not a gap. An operation the library declares is in range of whatever its

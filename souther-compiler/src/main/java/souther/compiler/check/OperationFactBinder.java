@@ -91,7 +91,9 @@ final class OperationFactBinder {
                 // the subject is even about.
                 case OperationFact.StatesItsPredicateOfEveryElement _,
                      OperationFact.MeansTheSameAsASizeOfNought _,
-                     OperationFact.SaysNothingOf _ -> { }
+                     OperationFact.SaysNothingOf _,
+                     OperationFact.CountsWhatItIsGiven _,
+                     OperationFact.EveryCountItGivesIsACountSomeValueHas _ -> { }
                 case OperationFact.ComputesANumber computes ->
                         DischargeRules.holdNumericResult(each.operation(), computes.result());
                 case OperationFact.IsDefinedByCases defined ->

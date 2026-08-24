@@ -34,20 +34,14 @@ import java.util.Set;
  */
 public final class NumericMeasures {
 
-    private static final Set<ValueName> CALLS = Set.of(
-            ValueName.Stdlib.operation("List", "length"),
-            ValueName.Stdlib.operation("String", "length"),
-            ValueName.Stdlib.operation("Set", "size"),
-            ValueName.Stdlib.operation("Map", "size"));
-
     /** Every such operation. */
     public static Set<ValueName> calls() {
-        return CALLS;
+        return souther.compiler.semantics.OperationFacts.countsWhatItIsGiven();
     }
 
     /** Whether {@code operation} is one of them. */
     public static boolean isMeasure(ValueName operation) {
-        return CALLS.contains(operation);
+        return calls().contains(operation);
     }
 
     /** One of these applied to something: which measure, and what it is taken of. */
@@ -99,7 +93,8 @@ public final class NumericMeasures {
      * not a proof, and a row at that edge is settled by a value rather than by an argument.
      */
     public static boolean everyCountHasAValue(ValueName operation) {
-        return operation.equals(ValueName.Stdlib.operation("String", "length"));
+        return souther.compiler.semantics.OperationFacts
+                .everyCountItGivesIsACountSomeValueHas(operation);
     }
 
     /**

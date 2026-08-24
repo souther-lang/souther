@@ -62,6 +62,14 @@ public final class OperationFacts {
         List<Declared> out = new ArrayList<>(List.of(
             about("Decimal", "fromInt", new OperationFact.AnswersItsArgument(at(0))),
 
+            // The operations whose result is a number taken of the one value they are given.
+            about("List", "length", new OperationFact.CountsWhatItIsGiven()),
+            about("String", "length", new OperationFact.CountsWhatItIsGiven()),
+            about("Set", "size", new OperationFact.CountsWhatItIsGiven()),
+            about("Map", "size", new OperationFact.CountsWhatItIsGiven()),
+            about("String", "length",
+                    new OperationFact.EveryCountItGivesIsACountSomeValueHas()),
+
             // What holds of a result wherever the call is written. Each is a fact about the
             // operation, so it is stated at every call and not only where something was guarded:
             // `Int.abs(x)` is not negative whatever `x` is.
@@ -512,6 +520,16 @@ public final class OperationFacts {
         return Index.SILENCES.getOrDefault(subject, java.util.Set.of());
     }
 
+    /** The operations that answer a number taken of the one value they are given. */
+    public static java.util.Set<ValueName> countsWhatItIsGiven() {
+        return Index.COUNTS;
+    }
+
+    /** Whether every count {@code operation} could give is a count some value of the type has. */
+    public static boolean everyCountItGivesIsACountSomeValueHas(ValueName operation) {
+        return Index.EVERY_COUNT_HAS_A_VALUE.contains(operation);
+    }
+
     /** The indexes, read off the declarations on the first ask. */
     private static final class Index {
 
@@ -544,6 +562,13 @@ public final class OperationFacts {
 
         private static final java.util.Set<ValueName> QUANTIFIERS = java.util.Set.copyOf(
                 index(OperationFact.StatesItsPredicateOfEveryElement.class,
+                        fact -> fact).keySet());
+
+        private static final java.util.Set<ValueName> COUNTS = java.util.Set.copyOf(
+                index(OperationFact.CountsWhatItIsGiven.class, fact -> fact).keySet());
+
+        private static final java.util.Set<ValueName> EVERY_COUNT_HAS_A_VALUE = java.util.Set.copyOf(
+                index(OperationFact.EveryCountItGivesIsACountSomeValueHas.class,
                         fact -> fact).keySet());
 
         /** The silences, by what they are about. */
