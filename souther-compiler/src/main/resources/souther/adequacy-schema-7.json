@@ -362,7 +362,7 @@
                   "required": ["point"],
                   "additionalProperties": false,
                   "oneOf": [
-                    { "required": ["notOwed"], "not": { "anyOf": [{ "required": ["relation"] }, { "required": ["against"] }, { "required": ["hit"] }, { "required": ["knownWritable"] }, { "required": ["status"] }, { "required": ["reason"] }] } },
+                    { "required": ["notOwed"], "not": { "anyOf": [{ "required": ["relation"] }, { "required": ["against"] }, { "required": ["hit"] }, { "required": ["knownWritable"] }, { "required": ["writableBecause"] }, { "required": ["status"] }, { "required": ["reason"] }] } },
                     { "required": ["relation", "against", "knownWritable", "status"], "not": { "required": ["notOwed"] } }
                   ],
                   "if": { "required": ["status"], "properties": { "status": { "enum": ["complete", "partial"] } } },

@@ -4,7 +4,11 @@ import souther.compiler.partition.Criterion;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.NotOwedReason;
 
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Everything known about one of the four coverage items of a border.
@@ -17,8 +21,8 @@ import java.util.List;
  *
  * <p>Where a row is owed, three answers rather than one, because they are about three things and are
  * established by three different means. What the rows showed is read off what this compilation ran.
- * What is proven about a value existing there comes from the rules, or from a value that went through
- * the decoder. What the search did is what the search did — and it is kept even where it changed
+ * What the rules prove about a value existing there is read off the rules, whether or not anything
+ * was ever built. What the search did is what the search did — and it is kept even where it changed
  * neither of the others, because a point the rules already prove is still one a search can fail to
  * produce a row for, and the person who wanted that row is owed the reason.
  */
@@ -173,7 +177,7 @@ public sealed interface ItemAssessment {
      * an empty set is the absence of evidence and never evidence of absence. What says a point cannot
      * be written at is the border refusing to owe it at all.
      */
-    record WritabilityEvidence(java.util.Set<Ground> grounds) {
+    record WritabilityEvidence(Set<Ground> grounds) {
 
         /**
          * One thing that shows a row can be written at a point.
@@ -199,15 +203,17 @@ public sealed interface ItemAssessment {
         }
 
         public WritabilityEvidence {
-            grounds = grounds.isEmpty() ? java.util.Set.of()
-                    : java.util.Collections.unmodifiableSet(java.util.EnumSet.copyOf(grounds));
+            EnumSet<Ground> held = EnumSet.noneOf(Ground.class);
+            held.addAll(grounds);
+            grounds = Collections.unmodifiableSet(held);
         }
 
-        /** The grounds that hold, over the three facts that establish them. Every one of these is
-         *  made here, so no ground is ever in a set without the fact that establishes it. */
+        /** The grounds that hold, over the three facts that establish them. Where every one of these
+         *  comes from: a caller that assembled a set of its own would be deciding what the facts
+         *  beside it establish, which is this method's question and not a caller's. */
         public static WritabilityEvidence of(WritabilityProjection projection, boolean rowIsAtIt,
-                                      boolean valueWasBuilt) {
-            java.util.EnumSet<Ground> grounds = java.util.EnumSet.noneOf(Ground.class);
+                                             boolean valueWasBuilt) {
+            EnumSet<Ground> grounds = EnumSet.noneOf(Ground.class);
             if (projection.proves()) {
                 grounds.add(Ground.THE_RULES_PROVE_IT);
             }
@@ -235,7 +241,7 @@ public sealed interface ItemAssessment {
          *  set has none of its own, and a document whose array came out in whatever order a set
          *  iterated in would differ between two runs that found the same thing. */
         public List<Ground> inOrder() {
-            return java.util.Arrays.stream(Ground.values()).filter(grounds::contains).toList();
+            return Arrays.stream(Ground.values()).filter(grounds::contains).toList();
         }
     }
 

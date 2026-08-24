@@ -127,7 +127,7 @@ class EveryObjectThisWritesIsShapedTheWayTheSchemaSaysTest {
                 object.remove(key);
                 taken++;
             }
-            List<String> names = new java.util.ArrayList<>();
+            List<String> names = new ArrayList<>();
             object.propertyNames().forEach(names::add);
             for (String name : names) {
                 taken += strip(object.get(name), key);

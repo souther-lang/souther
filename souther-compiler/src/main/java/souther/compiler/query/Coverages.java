@@ -592,9 +592,9 @@ final class Coverages {
      * whether the rules prove it writable are all carried through untouched, and the only thing this
      * puts in is the attempt at the points the measurement itself says are worth an attempt.
      *
-     * <p>Which is what makes composing later safe to do. The verdict is read off the evidence, and
-     * nothing a search finds is evidence against a point — so this can add a witness and can never
-     * take one away, whenever it is run and however many points it is run over.
+     * <p>Which is what makes composing later safe to do. What shows a point writable is read off the
+     * evidence, and nothing a search finds is evidence against a point — so this can add a ground and
+     * can never take one away, whenever it is run and however many points it is run over.
      */
     static List<BorderAssessment> searched(List<BorderAssessment> measured, BehaviorInputs where,
                                            Probe probe, souther.compiler.inputs.Quantities rules,
