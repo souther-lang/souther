@@ -379,6 +379,32 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
     }
 
     /**
+     * And a bar that does ask is not satisfied by a build that measured nothing.
+     *
+     * <p>The other side of the one above, and what says the first is not a hole. A build that reads
+     * no rows is not held open on account of the rows themselves — nobody asked for them, and
+     * holding it open there would make every such build undetermined about every model, which is
+     * the answer #955 took out. So what holds it open has to be the measures the bar asks for, each
+     * of which says on its own account that it was not made.
+     *
+     * <p>Written because the exclusion is easy to state and easy to get wrong. Without this, "the
+     * reading does not hold the verdict open where nobody asked for it" rests on the measures over
+     * those rows all saying so — which is true and which nothing checked (issue #996).
+     */
+    @Test
+    void aBarThatAsksIsNotSatisfiedByABuildThatMeasuredNothing() {
+        Compilation compilation = Compilation.ofSource(ONE_CLASS_OF_TWO, "Main");
+        compilation.measure(new Adequacy.Asked(Adequacy.Level.OFF, false,
+                Adequacy.AdequacyBar.CLASSES));
+        compilation.answerEverything();
+        AdequacyReport report = AdequacyReport.of(compilation);
+
+        assertEquals(AdequacyReport.AdequacyStatus.UNDETERMINED, report.adequacy(),
+                () -> "the classes bar asks what the rows reach of this position and nothing read"
+                        + " them: " + report.human(SourceNameResolver.identity()));
+    }
+
+    /**
      * A body that forks nowhere is adequate at both levels, and the verdict says so.
      *
      * <p>The measure is inapplicable rather than unmeasured, and the difference is the whole of what
