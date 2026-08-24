@@ -376,6 +376,10 @@ final class CodecGen {
             code.aload(1);                                             // path
             code.loadConstant("invalid_format");
             code.loadConstant("not a case of " + sumName);
+            // A detail of the failure and not the sum's discriminator, which an enumeration does not
+            // have — this says which type the name was read against. The two are spelled alike and
+            // are not the same key: reading this one off `Boundary` would tie what a failure reports
+            // to how a value is written, and an enumeration has no key to read.
             code.loadConstant("type");
             code.loadConstant(sumName);
             code.invokestatic(CD_Map, "of", MethodTypeDesc.of(CD_Map, CD_Object, CD_Object), true);
