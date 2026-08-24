@@ -44,7 +44,9 @@ public final class InputPath {
      * binding a body gave it.
      */
     public static TermPath of(Core e, InputDomain read, Symbols symbols) {
-        return of(e, read.parameterReads(), Map.of(),
+        Map<BindingId, TermPath> roots = new java.util.LinkedHashMap<>();
+        read.parameterReads().forEach((binding, name) -> roots.put(binding, TermPath.of(name)));
+        return of(e, roots, Map.of(),
                 souther.compiler.check.ElementBindings.NONE, symbols, false);
     }
 
@@ -61,14 +63,17 @@ public final class InputPath {
      * value is a call is a value the rules of no position say anything about, and it answers
      * nothing here.
      *
-     * @param roots      which bindings name which parameter, in the tree being walked
+     * @param roots      which bindings name which position, in the tree being walked. A position
+     *                   and not a parameter: a name an arm binds stands for the scrutinee's
+     *                   position narrowed to the case that arm selects, which is a position of the
+     *                   input like any other
      * @param bound      what each binding on the way holds, in the order they were passed
      * @param callsStand whether this tree is one that keeps the operations the language defines the
      *                   meaning of standing. Where it is, such a call names no location and that is
      *                   the answer; where it is not, meeting one says the walk was handed a
      *                   representation it does not read
      */
-    public static TermPath of(Core e, Map<BindingId, String> roots, Map<BindingId, Core> bound,
+    public static TermPath of(Core e, Map<BindingId, TermPath> roots, Map<BindingId, Core> bound,
                               souther.compiler.check.ElementBindings elements, Symbols symbols,
                               boolean callsStand) {
         return of(e, roots, bound, elements, symbols, callsStand, 0, false);
@@ -87,7 +92,7 @@ public final class InputPath {
      * nothing at all — which reads as a model with no rule there rather than a rule this could not
      * follow.
      */
-    public static TermPath cameFrom(Core e, Map<BindingId, String> roots,
+    public static TermPath cameFrom(Core e, Map<BindingId, TermPath> roots,
                                     Map<BindingId, Core> bound,
                                     souther.compiler.check.ElementBindings elements,
                                     Symbols symbols, boolean callsStand) {
@@ -108,7 +113,7 @@ public final class InputPath {
      * at a position whose values are not the ones the rule is about, which an author cannot tell
      * from a line their model states.
      */
-    private static TermPath containerPath(Core e, Map<BindingId, String> roots,
+    private static TermPath containerPath(Core e, Map<BindingId, TermPath> roots,
                                           Map<BindingId, Core> bound,
                                           souther.compiler.check.ElementBindings elements,
                                           Symbols symbols, boolean callsStand, int through,
@@ -162,14 +167,14 @@ public final class InputPath {
      * the binding rather than of the container's expression: a container built by one operation and
      * handed to the next names no position of its own, and the elements are the same elements.
      */
-    public static TermPath elementAt(BindingId binding, Map<BindingId, String> roots,
+    public static TermPath elementAt(BindingId binding, Map<BindingId, TermPath> roots,
                                      Map<BindingId, Core> bound,
                                      souther.compiler.check.ElementBindings elements,
                                      Symbols symbols, boolean callsStand) {
         return elementOf(binding, roots, bound, elements, symbols, callsStand, 0, false);
     }
 
-    private static TermPath elementOf(BindingId binding, Map<BindingId, String> roots,
+    private static TermPath elementOf(BindingId binding, Map<BindingId, TermPath> roots,
                                       Map<BindingId, Core> bound,
                                       souther.compiler.check.ElementBindings elements,
                                       Symbols symbols, boolean callsStand, int through,
@@ -189,14 +194,14 @@ public final class InputPath {
     /** How many operations deep the elements of one container are followed. */
     private static final int FOLLOWED = 8;
 
-    private static TermPath of(Core e, Map<BindingId, String> roots, Map<BindingId, Core> bound,
+    private static TermPath of(Core e, Map<BindingId, TermPath> roots, Map<BindingId, Core> bound,
                                souther.compiler.check.ElementBindings elements, Symbols symbols,
                                boolean callsStand, int through, boolean made) {
         return switch (e) {
             case Core.Read r -> {
-                String parameter = roots.get(r.binding());
-                if (parameter != null) {
-                    yield TermPath.of(parameter);
+                TermPath stands = roots.get(r.binding());
+                if (stands != null) {
+                    yield stands;
                 }
                 // Three ways a name reaches a position and no more. It is a parameter; or it holds
                 // what something else was, which is followed; or an operation of the language handed
