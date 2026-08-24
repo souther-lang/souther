@@ -160,7 +160,54 @@ public sealed interface Required {
          * values, because what the clause bounds is on the other side of the behavior. An author
          * told the rule names no position would go looking for the name that is plainly there.
          */
-        IT_DEPENDS_ON_THE_ANSWER
+        IT_DEPENDS_ON_THE_ANSWER,
+
+        /**
+         * The rule singles a value out on a quantity that is a form over several positions, which
+         * singles one out of none of them.
+         *
+         * <p>{@code a == b} puts the whole of one arm on the place the two meet, and
+         * {@code a + b == 10} the whole of one arm on the place their sum reaches ten. Either way
+         * that arm is a row the branch measure already asks for. Not every rule over such a form:
+         * an order across one draws a line, and that is a question raised rather than one nobody
+         * has.
+         */
+        IT_SINGLES_ACROSS_POSITIONS,
+
+        /**
+         * The rule was read to the end and the quantity it cuts is nothing.
+         *
+         * <p>Told from {@link #IT_NAMES_NO_POSITION}, which says the rule mentions nowhere, and
+         * from {@link #IT_WAS_NOT_READ}, which says this compiler fell short. {@code a <= a}
+         * mentions a position, was read in full, and holds of every row.
+         */
+        IT_CUTS_NOTHING,
+
+        /**
+         * The rule cuts a quantity somewhere the quantity never reaches.
+         *
+         * <p>Three times a length is never negative, so a rule comparing one against a negative
+         * draws no border and divides the position into nothing. Understood rather than unread,
+         * which is why it is not {@link #IT_WAS_NOT_READ}.
+         */
+        IT_CUTS_WHERE_THE_QUANTITY_DOES_NOT_RUN,
+
+        /**
+         * The rule names a value on the quantity that the quantity does not hold.
+         *
+         * <p>{@code 2 * a == 9} takes the even numbers and nine is not one of them, so no whole
+         * number is put in a class of its own. The rule was read and what it says is that no row
+         * satisfies it.
+         */
+        IT_NAMES_NO_VALUE_THE_QUANTITY_HOLDS,
+
+        /**
+         * Nothing here turned the rule into a line, so what it raises is not known.
+         *
+         * <p>Which is why nothing is raised rather than the questions a line would raise. What such
+         * a rule divides, and into how many classes, is the part that was not read.
+         */
+        IT_WAS_NOT_READ
     }
 
     /** What every invariant clause raises about a position it is written about. */
@@ -230,53 +277,58 @@ public sealed interface Required {
      * @param claim what the comparison places, from the comparison alone
      * @param of    what it places it about, from the comparison alone as well
      */
-    public static Required ofComparison(ComparisonClaim claim, ComparisonSubject of) {
+    public static Required ofComparison(ComparisonSubject of) {
         // One switch and no `default`, for the reason {@link #ofInvariant} gives: a subject added
         // and not classified stops the build rather than arriving here as the arm that happens to be
-        // nearest. Written as a chain ending in "anything that is not an input", the arm added for
-        // issue #1013 could have been left out and every comparison reading the answer would have
-        // been reported as naming no position — the reason a reader is given, quietly wrong.
+        // nearest. Written as a chain ending in "anything that is not an input", the arm for a
+        // comparison reading the answer could have been left out and every such comparison would
+        // have been reported as naming no position — the reason a reader is given, quietly wrong.
         return switch (of) {
             // A rule this reading does not put on the input space at all. Before anything about the
             // two sides, because a comparison reading the answer is not a pair of inputs however
             // its sides are spelled: read as one, an order against the answer raised the line a pair
-            // of inputs raises and nothing could ever answer it (issue #1013).
+            // of inputs raises and nothing could ever answer it.
             case ComparisonSubject.AnswerDependent _ ->
                     new Irrelevant(Set.of(Because.IT_DEPENDS_ON_THE_ANSWER));
-            // An order between two things that move with the row is a line rows are owed at — the
-            // place they hold one count — and divides neither of them, so there is no class of one
-            // for a row to be owed in. Raised whether or not this compiler can find that place: a
-            // question decided by a reading is what #851 is about, and `a <= b` and `a <= b + 1`
-            // relate two positions alike (ADR-0090).
+            // A line on a quantity that is no position's own values is one rows are owed at — the
+            // place the positions of the form hold the count the rule wrote — and divides none of
+            // them, so there is no class of one for a row to be owed in.
             //
-            // An equality between them is not a line: it puts the whole of one arm on the place,
-            // and that arm is a row the branch measure already asks for (`ComparedTerms`).
-            case ComparisonSubject.Relation between -> claim instanceof ComparisonClaim.Cut
-                    ? new Some(new LinkedHashSet<>(java.util.List.of(
-                            new Owed(CoverageObligation.BOUNDARY, between.at()))))
-                    : new Irrelevant(Set.of(Because.IT_RELATES_TWO_POSITIONS));
+            // A value singled out on such a quantity is not a line: it puts the whole of one arm on
+            // the place, and that arm is a row the branch measure already asks for.
+            case ComparisonSubject.AcrossPositions between ->
+                    between.places() == Places.ACROSS_THE_VALUE
+                            ? new Some(new LinkedHashSet<>(java.util.List.of(
+                                    new Owed(CoverageObligation.BOUNDARY, between.at()))))
+                            : new Irrelevant(Set.of(Because.IT_SINGLES_ACROSS_POSITIONS));
             case ComparisonSubject.NoInput _ ->
                     new Irrelevant(Set.of(Because.IT_NAMES_NO_POSITION));
-            case ComparisonSubject.AnInput input -> ofAnInput(claim, input);
+            case ComparisonSubject.CutsNothing _ ->
+                    new Irrelevant(Set.of(Because.IT_CUTS_NOTHING));
+            case ComparisonSubject.OutsideTheDomain _ ->
+                    new Irrelevant(Set.of(Because.IT_CUTS_WHERE_THE_QUANTITY_DOES_NOT_RUN));
+            case ComparisonSubject.Unread _ ->
+                    new Irrelevant(Set.of(Because.IT_WAS_NOT_READ));
+            case ComparisonSubject.AnInput input -> ofAnInput(input);
         };
     }
 
     /** What a comparison measuring one input by a number of it raises about that input. */
-    private static Required ofAnInput(ComparisonClaim claim, ComparisonSubject.AnInput input) {
+    private static Required ofAnInput(ComparisonSubject.AnInput input) {
         Set<Owed> owed = new LinkedHashSet<>();
-        switch (claim) {
+        switch (input.places()) {
             // An order across the place it names, so rows are owed either side of it and the two
             // sides have roles. A singling names the same place and has neither: the values on both
             // sides of it are one class. Both are about the number the comparison measures the
             // position by.
-            case ComparisonClaim.Cut _ ->
-                    owed.add(new Owed(CoverageObligation.BOUNDARY, input.place()));
-            case ComparisonClaim.Singled _ ->
-                    owed.add(new Owed(CoverageObligation.SINGLETON, input.place()));
-            // Reached only by asking what an operator that compares nothing places. Every caller
-            // walks comparisons; one arriving here has read something else as one.
-            case ComparisonClaim.Nothing _ -> throw new IllegalArgumentException(
-                    "a comparison that places nothing is not one this raises questions about");
+            case ACROSS_THE_VALUE -> owed.add(new Owed(CoverageObligation.BOUNDARY, input.place()));
+            case AT_THE_VALUE -> owed.add(new Owed(CoverageObligation.SINGLETON, input.place()));
+            // A value the quantity does not hold: `2 * a == 9` divides the whole numbers nowhere,
+            // because there is no whole number the rule names. The position is not divided and no
+            // row can be written at the place, so neither question has anything to be about.
+            case AT_NO_VALUE -> {
+                return new Irrelevant(Set.of(Because.IT_NAMES_NO_VALUE_THE_QUANTITY_HOLDS));
+            }
         }
         // And the classes are the position's. A `String` bounded on its length draws its line on the
         // count and divides the strings, which is what {@link Owed} carries two subjects for.
@@ -312,34 +364,45 @@ public sealed interface Required {
     public sealed interface ComparisonSubject {
 
         /**
-         * One input, measured by the number on this side of the comparison.
+         * One input, measured by the number the canonical quantity is that position's own values
+         * of.
          *
-         * @param place    the number the comparison names, which is where a border or a singled
-         *                 value falls
+         * @param place    the number the rule cuts the position at, which is where a border or a
+         *                 singled value falls. The quantity's own, so a rule that wrote a multiple
+         *                 of the position names it where the position holds it
          * @param position the position it is a number of, which is what the classes are of
+         * @param places   what the comparison does to that number
          */
-        record AnInput(Owed.Subject place, Owed.Subject position) implements ComparisonSubject {
+        record AnInput(Owed.Subject place, Owed.Subject position, Places places)
+                implements ComparisonSubject {
 
             public AnInput {
-                if (place == null || position == null) {
+                if (place == null || position == null || places == null) {
                     throw new IllegalArgumentException("a comparison about an input names it");
                 }
             }
         }
 
         /**
-         * Both sides move with the row, so it is a rule about a pair.
+         * The quantity the rule cuts is a form over more than one position, so the line is on none
+         * of them.
          *
-         * <p>Carries where the line it draws falls, which is on neither side: {@code r.a <= r.b + 1}
-         * stops where the two hold one count. A marker alone would have left the question with
-         * nowhere to be about; a subject picked from one side would name a place that rule never
-         * stopped; and one written out would be as much of the place as this compiler can print.
+         * <p>Carries where the line falls, which is on no position: {@code r.a <= r.b + 1} stops
+         * where the two hold one count, and {@code a + b <= 10} where their sum reaches ten. A
+         * marker alone would have left the question with nowhere to be about; a subject picked from
+         * one position would name a place that rule never stopped; and one written out would be as
+         * much of the place as this compiler can print.
+         *
+         * <p>A distance and a general form together, because coverage asks one thing of both: no
+         * position is divided, and the place is the comparison's to name. Which of the two shapes
+         * the quantity is, is a fact about the quantity and is carried where quantities are.
          */
-        record Relation(Owed.Subject.OfComparison at) implements ComparisonSubject {
+        record AcrossPositions(Owed.Subject.OfComparison at, Places places)
+                implements ComparisonSubject {
 
-            public Relation {
-                if (at == null) {
-                    throw new IllegalArgumentException("a rule about a pair is about both");
+            public AcrossPositions {
+                if (at == null || places == null) {
+                    throw new IllegalArgumentException("a rule over a form is about the form");
                 }
             }
         }
@@ -349,9 +412,10 @@ public sealed interface Required {
          * input space.
          *
          * <p>Apart from {@link NoInput}, which the shape used to fall into where the other side was
-         * a constant, and apart from {@link Relation}, which it fell into where the other side was
-         * an input. Both were silent about a different thing than this is: one says the rule names
-         * no input, and {@code List.length(value.articles) <= query.limit.value} names one.
+         * a constant, and apart from {@link AcrossPositions}, which it fell into where the other
+         * side was an input. Both were silent about a different thing than this is: one says the
+         * rule names no input, and {@code List.length(value.articles) <= query.limit.value} names
+         * one.
          *
          * <p>Not a claim that no line exists. Eliminating the answer existentially can leave a
          * constraint on the input — a length is never negative, so {@code List.length(value.items)
@@ -364,46 +428,77 @@ public sealed interface Required {
         /**
          * Neither side is an input's, so it says nothing about one.
          *
-         * <p>Currently also where a side that does name an input falls when this classification
-         * cannot name a term for it. {@code a + 1 <= 10} draws a border at {@code a = 9} and
-         * arrives here, because the subject is taken from the operands as written while the line is
-         * cut from the canonical form — issue #1029, which is where that is settled. The sentence
-         * above is what this arm means; this paragraph goes when #1029 does.
+         * <p>{@code 20 <= 30} is one. Apart from {@link CutsNothing}, which names positions and
+         * cancels them, and apart from {@link Unread}, which names one this compiler could not
+         * read: all three raise nothing, and a reader told the wrong one goes looking for something
+         * that is not there.
          */
         record NoInput() implements ComparisonSubject {}
-    }
-
-    /**
-     * What a reading of a body's or a declaration's comparison came to.
-     *
-     * <p>Three answers and not a line-or-nothing. A comparison this could not read as a line on one
-     * position may still be one between two, and the second is a line rows are owed at while
-     * dividing neither position — told apart here so that what it answers and what it leaves
-     * standing are not the same set.
-     */
-    public sealed interface LineRead {
-
-        /** A line on the position, which is where the classes either side of it come from. */
-        record ALineOnThePosition() implements LineRead {}
-
-        /** A line where two positions hold one count, which divides neither of them. */
-        record ALineBetweenTwoPositions() implements LineRead {}
 
         /**
-         * Neither, and what would have to change first.
+         * The comparison was read to the end and the quantity it cuts is nothing.
+         *
+         * <p>{@code a <= a} and {@code a - a <= 0} name a position, and what they say about it is
+         * that every row satisfies them. Nothing is missing here and no reading fell short, which
+         * is what tells this from {@link Unread}: read as one, a tautology owed a row at a place it
+         * never stopped, and nothing could ever be written there.
+         */
+        record CutsNothing() implements ComparisonSubject {}
+
+        /**
+         * The comparison was read, the quantity and the line are both known, and the quantity does
+         * not run as far as the line.
+         *
+         * <p>A length is never negative, so {@code List.length(xs) <= -1} draws no border: there is
+         * no value either side for a row to be owed at, and no class the position is divided into.
+         * Read as a line this compiler could not take in, an author was sent after a limit that is
+         * not there; read as a line, a row was owed where the model has nothing.
+         */
+        record OutsideTheDomain() implements ComparisonSubject {}
+
+        /**
+         * The comparison names a position and nothing here turned it into a line.
          *
          * <p>In the words of the reading that turns a rule into a line, which is the same vocabulary
          * an invariant's own gives — a {@code guard}'s comparison and a newtype's bound are two
          * producers of one kind of evidence (spec §example-partition).
+         *
+         * <p>Raising nothing rather than raising the questions a line would have raised. What a
+         * comparison this could not read divides, and into how many classes, is exactly what is not
+         * known: {@code a * a <= 9} cuts the whole numbers twice, and the positions the walk names
+         * for filing include ones the arithmetic would have cancelled. An obligation built from
+         * those would be the operands read as written, one arm along.
          */
-        record NoLine(souther.compiler.inputs.BlockReason.AboutARule why) implements LineRead {
+        record Unread(souther.compiler.inputs.BlockReason.AboutARule why)
+                implements ComparisonSubject {
 
-            public NoLine {
+            public Unread {
                 if (why == null) {
                     throw new IllegalArgumentException("a reading that stopped says why");
                 }
             }
         }
+    }
+
+    /**
+     * What a comparison does to the quantity it cuts.
+     *
+     * <p>Read off the canonical quantity together with the operator, and read once. The operator
+     * alone does not answer it: {@code 2 * a == 8} names four and {@code 2 * a == 9} names no whole
+     * number at all, under one operator and one shape of rule.
+     */
+    public enum Places {
+
+        /** An order across the line, so rows are owed either side of it and the two sides have
+         *  roles. */
+        ACROSS_THE_VALUE,
+
+        /** One value put in a class of its own, which has no sides: the values either side of it
+         *  are one class. */
+        AT_THE_VALUE,
+
+        /** A value the quantity does not hold, which puts nothing in a class of its own. */
+        AT_NO_VALUE
     }
 
     /**

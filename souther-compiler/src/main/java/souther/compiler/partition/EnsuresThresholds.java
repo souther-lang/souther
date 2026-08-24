@@ -50,7 +50,7 @@ import java.util.Map;
  *
  * <p><b>And only about an input.</b> A comparison reading {@code value} is a line on the answer, and
  * a row cannot be written at one: what a row chooses is what the behavior is applied to. Such a
- * comparison is turned away by name rather than by drawing nothing — {@link ComparisonSubjects}
+ * comparison is turned away by name rather than by drawing nothing — {@link ComparisonAssessment}
  * answers that it is about the answer, and what it raises is nothing rather than a question about
  * an input. Left to fall out as an expression this could not place, the clause was read as a rule
  * about a pair of inputs, which owes a row where the two hold one count; nothing reaches that place,
@@ -185,109 +185,96 @@ public final class EnsuresThresholds {
                     reads, symbols, out.unread());
             return;
         }
-        // What the comparison cuts is read the same way wherever a comparison is written, which is
-        // what {@link Cutting} is for: a clause and a guard over one arithmetic form draw one line,
-        // and a reader that called two of the three readings read no form at all.
-        Cutting cutting = Cutting.of(out.behavior(), comparison, reads, symbols, quantities);
-        if (cutting == null) {
-            // The positions are named as unread, because what the partition could not read here it
-            // still could not read.
-            reportUnread(new RuleRef.Ensures(rule.id(), clause), comparison,
-                    rule.value(), reads, symbols, out.unread());
-            // Every position the comparison names, by the walk a body's conditions use. Asked of the
-            // narrower reading instead, a comparison this could not read had no position to be filed
-            // at — which is exactly the comparison whose questions stand, so the clause that most
-            // needs saying said nothing.
-            List<TermPath> named = GuardThresholds.mentionedIn(comparison, reads, symbols);
-            raises(out, rule, clause, comparison, rule.value(),
-                    named.isEmpty() ? null : named.get(0),
-                    GuardThresholds.comparedTerm(comparison, reads, symbols),
-                    ComparisonSubjects.of(comparison, reads, symbols, rule.value()),
-                    new Required.LineRead.NoLine(
-                            GuardThresholds.why(comparison, reads, symbols)));
-            return;
-        }
-        OriginRef.EnsuresOrigin origin = new OriginRef.EnsuresOrigin(
-                new RuleRef.Ensures(rule.id(), clause), cutting.valueBelongsBelow(),
-                cutting.holdsAtTheValue(), cutting.singles());
-        NumericTerm divided = cutting.dividedPosition();
-        if (divided == null) {
+        // What the comparison comes to is read the same way wherever a comparison is written, which
+        // is what {@link ComparisonAssessment} is for: a clause and a guard over one arithmetic form
+        // draw one line and raise one question, and neither is worked out beside the other.
+        ComparisonAssessment assessed = ComparisonAssessment.of(out.behavior(), comparison, reads,
+                symbols, quantities, rule.value());
+        raises(out, rule, clause, comparison, reads, symbols, assessed);
+        switch (assessed) {
+            // A line on one position's own values. The value the classes meet at was answered by the
+            // reading of the comparison; taken off the level the rule was written with, a rule that
+            // wrote a multiple of the position named a class at a number the position never holds.
+            case ComparisonAssessment.AtAPosition at -> {
+                OriginRef.EnsuresOrigin origin = originOf(rule, clause, at.cutting());
+                if (at.cutting().singles()) {
+                    // The value the rule names, for the reason a body's rule gets: where its line
+                    // falls and not the value beside it.
+                    if (at.value() != null) {
+                        out.singled().add(new GuardThresholds.Guards.Singled(
+                                at.position(), at.value(), origin));
+                    }
+                } else {
+                    out.thresholds().add(new Threshold(at.position(), at.cutting().seam(),
+                            at.cutting().valueBelongsBelow(), origin));
+                }
+                // And the line itself, where the position has no value beside it for a row to be
+                // owed at: the classes either side are what the model tells apart, and the border is
+                // drawn on the quantity the rule wrote, which can name where it falls.
+                if (at.value() == null) {
+                    out.between().add(new LineDrawn(at.cutting(), origin));
+                }
+            }
             // A line on something that is not one position's own values: it divides no position, so
             // it travels beside the partition rather than on an axis. Met by writing the values,
             // which is this reader's own answer and not the one the same shape of line gets from a
             // guard — a guard's is met by getting the comparison to answer, because what it is about
             // is a place in a body.
-            // The positions are named as ones nothing divides, which is what a rule over a quantity
-            // that is not one position's own values leaves them — the same note the same shape gets
-            // from a body's conditions, said by the same reader.
-            reportUnread(new RuleRef.Ensures(rule.id(), clause), comparison,
-                    rule.value(), reads, symbols, out.unread());
-            // Null where the quantity does not reach the line, which is the line and not one of its
-            // points. What a clause raises is answered by what came of reading it and never by which
-            // reading was tried: read off the branch, a rule that drew nothing reported a line.
+            //
             // Collected rather than turned into a border here, for the reason a body's lines are:
             // what a border owes away from its line is a run of the arrangement every rule about
             // that quantity makes together.
-            boolean made = Border.reaches(cutting.target(), cutting.within());
-            if (made) {
-                out.between().add(new LineDrawn(cutting, origin));
+            case ComparisonAssessment.AcrossPositions over -> {
+                // The positions are named as ones nothing divides, which is what a rule over a
+                // quantity that is not one position's own values leaves them.
+                reportUnread(new RuleRef.Ensures(rule.id(), clause), comparison,
+                        rule.value(), reads, symbols, out.unread());
+                out.between().add(new LineDrawn(over.cutting(),
+                        originOf(rule, clause, over.cutting())));
             }
-            List<TermPath> named = GuardThresholds.mentionedIn(comparison, reads, symbols);
-            raises(out, rule, clause, comparison, rule.value(),
-                    named.isEmpty() ? null : named.get(0),
-                    GuardThresholds.comparedTerm(comparison, reads, symbols),
-                    ComparisonSubjects.of(comparison, reads, symbols, rule.value()),
-                    made ? new Required.LineRead.ALineBetweenTwoPositions()
-                            : new Required.LineRead.NoLine(
-                                    GuardThresholds.why(comparison, reads, symbols)));
-            return;
+            // Nothing this reader draws. A comparison it could not read leaves the positions it
+            // names standing, and one it read to the end leaves nothing standing at all.
+            case ComparisonAssessment.Unread _ -> reportUnread(
+                    new RuleRef.Ensures(rule.id(), clause), comparison, rule.value(), reads,
+                    symbols, out.unread());
+            case ComparisonAssessment.AnswerDependent _, ComparisonAssessment.NoInput _,
+                 ComparisonAssessment.CutsNothing _,
+                 ComparisonAssessment.OutsideTheDomain _ -> { }
         }
-        raises(out, rule, clause, comparison, rule.value(), divided.path(), divided,
-                ComparisonSubjects.of(comparison, reads, symbols, rule.value()),
-                new Required.LineRead.ALineOnThePosition());
-        // And the line itself, where the position has no value beside it for a row to be owed at,
-        // for the reason a body's line is: the classes either side are what the model tells apart,
-        // and the border is drawn on the quantity the rule wrote, which can name where it falls.
-        if (cutting.dividedValue() == null
-                && Border.reaches(cutting.target(), cutting.within())) {
-            out.between().add(new LineDrawn(cutting, origin));
-        }
-        // The value the classes meet at, which the reading of the comparison already
-        // answered. Taken off the level the rule was written with, a rule that wrote a
-        // multiple of the position named a class at a number the position never holds.
-        souther.compiler.numeric.Place value = cutting.dividedValue();
-        if (cutting.singles()) {
-            // The value the rule names, for the reason a body's rule gets: where its line falls and
-            // not the value beside it.
-            souther.compiler.numeric.Place names = cutting.singledValue();
-            if (names != null) {
-                out.singled().add(new GuardThresholds.Guards.Singled(divided, names, origin));
-            }
-        } else {
-            out.thresholds().add(
-                    new Threshold(divided, cutting.seam(), cutting.valueBelongsBelow(), origin));
-        }
+    }
+
+    /** How a row meets a line this clause drew, which is the clause's own answer and no other
+     *  rule's. */
+    private static OriginRef.EnsuresOrigin originOf(StatedContract.StatedRule rule, String clause,
+                                                    Cutting cutting) {
+        return new OriginRef.EnsuresOrigin(new RuleRef.Ensures(rule.id(), clause),
+                cutting.valueBelongsBelow(), cutting.holdsAtTheValue(), cutting.singles());
     }
 
     /**
      * What one clause's comparison raises, and what the reading of it answered.
      *
-     * <p>Off the comparison and not off the lines that came back, for the reason a body's is: a
-     * comparison states where the values stop by being written that way, and one this could not
-     * read is exactly where nothing answers it.
+     * <p>Both from the one assessment. A comparison states where the values stop by being written
+     * that way, and what came of reading it is what answers that — so the two are projections of
+     * one value rather than two readings paired up by whoever called them.
+     *
+     * <p>Filed at the position the walk over the comparison names first, which is what tells a
+     * reader where to look. Not the subject of the question: a comparison over a form is filed at a
+     * position and is about the form.
      */
     private static void raises(Drawn out, StatedContract.StatedRule rule, String clause,
-                               Core.Binary comparison, BindingId answer, TermPath at,
-                               NumericTerm term,
-                               Required.ComparisonSubject of, Required.LineRead read) {
-        if (at == null) {
+                               Core.Binary comparison, InputReads reads, Symbols symbols,
+                               ComparisonAssessment assessed) {
+        List<TermPath> named = GuardThresholds.mentionedIn(comparison, reads, symbols);
+        if (named.isEmpty()) {
             return;   // about no position of the input, so it raises nothing about one
         }
-        RuleRef.Ensures named = new RuleRef.Ensures(rule.id(), clause);
-        out.accounting().add(new GuardThresholds.Guards.AtAPosition(at, term,
-                RuleAccounting.ofComparison(named, ComparisonClaim.of(comparison.op()), of, read,
+        RuleRef.Ensures rref = new RuleRef.Ensures(rule.id(), clause);
+        out.accounting().add(new GuardThresholds.Guards.AtAPosition(named.get(0),
+                GuardThresholds.comparedTerm(comparison, reads, symbols),
+                RuleAccounting.ofComparison(rref, assessed.subject(),
                         // A clause belongs to a behavior, so there is always something to call it.
-                        souther.compiler.check.RuleCitation.named(named))));
+                        souther.compiler.check.RuleCitation.named(rref))));
     }
 
     /**
@@ -310,7 +297,7 @@ public final class EnsuresThresholds {
      */
     private static void reportUnread(RuleRef.Ensures rule, Core statement, BindingId answer,
                                      InputReads reads, Symbols symbols, List<UnreadRule> unread) {
-        if (ComparisonSubjects.readsAnswer(statement, answer)) {
+        if (ComparisonAssessment.readsAnswer(statement, answer)) {
             return;
         }
         BlockReason.AboutARule why = statement instanceof Core.Binary comparison
@@ -318,12 +305,23 @@ public final class EnsuresThresholds {
                 : new BlockReason.UnreadComparisonForm();
         souther.compiler.check.RuleCitation cited =
                 souther.compiler.check.RuleCitation.named(rule);
-        for (TermPath named : GuardThresholds.mentionedIn(statement, reads, symbols)) {
+        for (UnreadRule.Coordinate named : filedAt(statement, reads, symbols)) {
             UnreadRule here = new UnreadRule(rule, cited, named, why);
             if (unread.stream().noneMatch(had -> had.sameAs(here))) {
                 unread.add(here);
             }
         }
+    }
+
+    /** Where a statement was read for, which is a comparison's own answer where it is one and the
+     *  positions the walk met where it is not. */
+    private static List<UnreadRule.Coordinate> filedAt(Core statement, InputReads reads,
+                                                       Symbols symbols) {
+        if (statement instanceof Core.Binary comparison) {
+            return GuardThresholds.filedAt(comparison, reads, symbols);
+        }
+        return GuardThresholds.mentionedIn(statement, reads, symbols).stream()
+                .map(UnreadRule.Coordinate::at).toList();
     }
 
     /**

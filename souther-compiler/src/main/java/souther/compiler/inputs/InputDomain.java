@@ -655,7 +655,8 @@ public final class InputDomain {
         List<UnreadRule> out = new ArrayList<>();
         for (FieldDomains.Placed each : stated) {
             UnreadRule said = new UnreadRule(each.from(),
-                    souther.compiler.check.RuleCitation.named(each.from()), path,
+                    souther.compiler.check.RuleCitation.named(each.from()),
+                    new UnreadRule.Coordinate(path, each.measured()),
                     new BlockReason.CompetingCoordinates());
             if (out.stream().noneMatch(had -> had.sameAs(said))) {
                 out.add(said);
@@ -714,7 +715,8 @@ public final class InputDomain {
             // The rule the reading of ends was holding when it gave up, carried rather than left
             // behind. It is a clause of an invariant, so it has a name and the handle is that name.
             UnreadRule said = new UnreadRule(each.from(),
-                    souther.compiler.check.RuleCitation.named(each.from()), path, each.why());
+                    souther.compiler.check.RuleCitation.named(each.from()),
+                    new UnreadRule.Coordinate(path, each.measured()), each.why());
             if (out.stream().noneMatch(had -> had.sameAs(said))) {
                 out.add(said);
             }

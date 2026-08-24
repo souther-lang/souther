@@ -36,7 +36,7 @@ import souther.compiler.check.RuleRef;
  *              terms. Which word a report writes for it is {@link ReportedReason}'s, so a
  *              capability gained here need not move a published vocabulary
  */
-public record UnreadRule(RuleRef rule, RuleCitation cited, TermPath at,
+public record UnreadRule(RuleRef rule, RuleCitation cited, Coordinate at,
                          BlockReason.AboutARule why) {
 
     public UnreadRule {
@@ -46,6 +46,47 @@ public record UnreadRule(RuleRef rule, RuleCitation cited, TermPath at,
         }
         if (at == null || why == null) {
             throw new IllegalArgumentException("a rule went unread somewhere, and for something");
+        }
+    }
+
+    /**
+     * Which number of the position the reading was after when it stopped.
+     *
+     * <p>A position and not only a path. A {@code String} is measured two ways — its own order and
+     * the length of it — and a rule about the length that nothing could read leaves the length
+     * short and the string alone. Carried as a path, the two came back as one, and a report either
+     * named the wrong one or fell short of both.
+     *
+     * <p><b>Where the reading was looking, and not what the rule is about.</b> What a rule this
+     * could not read says about the position is exactly the part that was not read, so nothing here
+     * may be promoted to the subject of an obligation: {@code a * a + b - b <= 9} is filed at both
+     * positions, and the arithmetic that would have cancelled {@code b} is what stopped.
+     *
+     * <p>{@code measured} rather than the term itself, which is what the producers of these can
+     * answer. An invariant's reading holds a path and whether it is a count, and the operation that
+     * answered the count is not among what it kept — so a term here would be one this compiler made
+     * up at the last moment for the shape of the type it is written in.
+     *
+     * @param path     where in the value it sits
+     * @param measured whether it is a count taken of the position rather than the position's own
+     *                 value
+     */
+    public record Coordinate(TermPath path, boolean measured) {
+
+        public Coordinate {
+            if (path == null) {
+                throw new IllegalArgumentException("a reading stopped somewhere in the value");
+            }
+        }
+
+        /** The position's own value, for a reading that was after it. */
+        public static Coordinate at(TermPath path) {
+            return new Coordinate(path, false);
+        }
+
+        @Override
+        public String toString() {
+            return measured ? "count of " + path : path.toString();
         }
     }
 

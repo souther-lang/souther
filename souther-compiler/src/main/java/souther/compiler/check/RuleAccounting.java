@@ -89,34 +89,42 @@ public final class RuleAccounting {
     }
 
     /**
-     * The accounting of one comparison, from what it places and what a reading made of it.
+     * The accounting of one comparison, from the one reading of it.
      *
-     * <p>The way in from outside this package, and it takes a reading rather than answers. What a
-     * caller has is what it managed with the comparison; which questions that answers is settled
-     * here, beside every other accounting, so a reader cannot pair a genuine {@link Required} with
-     * answers it wrote itself.
+     * <p>The way in from outside this package, and it takes the subject alone. What a comparison
+     * raises and what answered it used to arrive as two arguments, each worked out from its own
+     * reading of the same comparison — so a caller could hand over a question about a place between
+     * two positions beside an answer about a line on one, and the accounting recorded the second as
+     * having settled the first. One value cannot disagree with itself.
      */
-    public static RuleAccounting ofComparison(RuleRef rule, ComparisonClaim claim,
-                                              Required.ComparisonSubject of,
-                                              Required.LineRead read, RuleCitation cited) {
-        Required required = Required.ofComparison(claim, of);
-        return new RuleAccounting(rule, cited, required, answersOf(rule, required, read));
+    public static RuleAccounting ofComparison(RuleRef rule, Required.ComparisonSubject of,
+                                              RuleCitation cited) {
+        Required required = Required.ofComparison(of);
+        return new RuleAccounting(rule, cited, required, answersOf(rule, required, of));
     }
 
+    /**
+     * What answered each question the comparison raises.
+     *
+     * <p>Every arm that raises a question is one the reading reached a line on, so the reading
+     * answers it: the classes either side of the line are what it divided the position into, and
+     * the values it named are where the rows go. The arms that raise nothing have nothing to
+     * answer, and reaching this with a question would mean an arm raising one the reading never
+     * settled.
+     */
     private static Map<Owed, Outcome> answersOf(RuleRef rule, Required required,
-                                                Required.LineRead read) {
-        return answers(rule, required, _ -> switch (read) {
-            // The reading that draws the line answers both of the questions the line raises: the
-            // classes either side of it are what it divided the position into, and the values it
-            // named are where the rows go.
-            case Required.LineRead.ALineOnThePosition _,
-                 Required.LineRead.ALineBetweenTwoPositions _ ->
+                                                Required.ComparisonSubject of) {
+        return answers(rule, required, owed -> switch (of) {
+            case Required.ComparisonSubject.AnInput _,
+                 Required.ComparisonSubject.AcrossPositions _ ->
                     new Outcome.Accounted(Reader.THE_END_READING);
-            // And where it drew none, both stand. Which is the whole of why they are raised off the
-            // comparison: read off the lines that came back, a line nothing could read would be a
-            // rule the model never wrote.
-            case Required.LineRead.NoLine no ->
-                    new Outcome.Unaccounted(new Why.TheEndReadingSays(no.why()));
+            case Required.ComparisonSubject.AnswerDependent _,
+                 Required.ComparisonSubject.NoInput _,
+                 Required.ComparisonSubject.CutsNothing _,
+                 Required.ComparisonSubject.OutsideTheDomain _,
+                 Required.ComparisonSubject.Unread _ -> throw new IllegalStateException(
+                    "a comparison that raises nothing was asked what answered " + owed
+                            + " of " + rule);
         });
     }
 

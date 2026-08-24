@@ -76,6 +76,23 @@ public sealed interface BlockReason {
     }
 
     /**
+     * A rule a reading stopped on, which is the half of {@link AboutARule} that says this compiler
+     * fell short.
+     *
+     * <p>Told apart by the type because the two halves are opposite sentences and were one set. A
+     * reading that stopped leaves whatever the rule states unknown; a rule read to the end that
+     * divides no one position states what it states, and nothing is missing. Held alike, a rule
+     * about a pair of positions the carrier could not be read for was described as a rule that
+     * relates two positions — which is true of it, and says nothing fell short, and something did.
+     *
+     * <p>Which is why a reading's own answer for having stopped may only be one of these. What such
+     * a rule would have raised is exactly the part that was not read, so an obligation cannot be
+     * built from it; that the model is thereby short of something is what {@link #leavesShort} says
+     * instead, and only these arms answer it with anything.
+     */
+    sealed interface ReadingStopped extends AboutARule {}
+
+    /**
      * The reading did not get to the rules of the position, so there is no rule to name.
      *
      * <p>Not a rule read and found wanting. A depth, a shape nothing reaches into, a type that
@@ -154,11 +171,11 @@ public sealed interface BlockReason {
      * producers of one kind of evidence (spec §example-partition), and what stopped each of them is
      * the same fact about this compiler.
      */
-    record UnreadComparisonForm() implements AboutARule {}
+    record UnreadComparisonForm() implements ReadingStopped {}
 
     /** A comparison naming the position is against values no line is drawn on here — the carrier,
      *  asked of the carrier. */
-    record UnreadComparisonDomain() implements AboutARule {}
+    record UnreadComparisonDomain() implements ReadingStopped {}
 
     /**
      * A rule is written about a value that came from the position rather than about the position.
@@ -173,7 +190,7 @@ public sealed interface BlockReason {
      * is not the difficulty. It is here at all so that such a rule is not silent: read as nothing,
      * a model whose predicate this cannot follow is one that states no rule.
      */
-    record RuleAboutADerivedValue() implements AboutARule {}
+    record RuleAboutADerivedValue() implements ReadingStopped {}
 
     /**
      * A rule naming which values the position may hold is written in a form no reader here takes
@@ -185,7 +202,7 @@ public sealed interface BlockReason {
      * different work — one wants a wider fragment of comparison forms, and one wants a reading of
      * values that follows a rule into a shape it does not enter today.
      */
-    record UnreadValueRule() implements AboutARule {}
+    record UnreadValueRule() implements ReadingStopped {}
 
     /**
      * The reading of what the position may hold never reached the rules about it.
@@ -212,7 +229,7 @@ public sealed interface BlockReason {
      * not a reader for an expression but a rule for which coordinate wins, and an author told the
      * first would go looking for a syntax this compiler handles perfectly well.
      */
-    record CompetingCoordinates() implements AboutARule {}
+    record CompetingCoordinates() implements ReadingStopped {}
 
     /**
      * The comparison was read to the end and cuts no quantity at all.

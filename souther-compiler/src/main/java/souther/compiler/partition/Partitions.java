@@ -232,7 +232,12 @@ public final class Partitions {
         // Whether this phase left anything at the position unread, and not which limit it was.
         // A limit belongs to the rule it stopped, and the findings carry it there; taken as the
         // position's, the first rule of however many were stopped alike was the one a report named.
-        boolean anyUnread = rules.stream().anyMatch(one -> one.at().equals(axis.path()));
+        //
+        // The number and not the path. A `String` is measured two ways, and an axis is one of them:
+        // a rule about a length that nothing could read leaves the length blocked and says nothing
+        // about the string's own values. Matched by path alone, either axis answered for both.
+        boolean anyUnread = rules.stream().anyMatch(one -> one.at().path().equals(axis.path())
+                && one.at().measured() == (axis.term() instanceof NumericTerm.SizeOf));
         measured.add(new Measured(axis, anyUnread ? new BodyCutInspection.Blocked()
                 : new BodyCutInspection.Exhausted()));
     }

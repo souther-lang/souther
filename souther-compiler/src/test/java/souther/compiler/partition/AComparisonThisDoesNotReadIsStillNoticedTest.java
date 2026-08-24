@@ -311,7 +311,13 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
      * <p>Spelled out where every entry is about one rule and what is being read is the position and
      * the limit. Which rule it was has its own test, because it is its own question.
      */
-    private record Said(TermPath at, BlockReason why) {}
+    private record Said(UnreadRule.Coordinate at, BlockReason why) {
+
+        /** The same, where the reading was after the position's own values. */
+        Said(TermPath at, BlockReason why) {
+            this(UnreadRule.Coordinate.at(at), why);
+        }
+    }
 
     private static List<Said> said(List<UnreadRule> unread) {
         return unread.stream().map(each -> new Said(each.at(), each.why())).toList();

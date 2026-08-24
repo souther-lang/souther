@@ -161,11 +161,11 @@ public final class UnreadComparison {
                                                               ValueOrigin<K> right,
                                                               Quantity.NotRead<K> notRead,
                                                               Predicate<K> ordered) {
-        Set<K> named = new LinkedHashSet<>(left.positions());
-        named.addAll(right.positions());
-        if (!left.positions().isEmpty() && !right.positions().isEmpty() && named.size() > 1) {
-            return new BlockReason.ComparisonBetweenPositions();
-        }
+        // What the sides name says nothing about whether anything fell short, and here something
+        // did: the arithmetic stopped. A comparison naming two positions whose form was read is a
+        // rule that relates them and leaves nothing missing, and one whose form was not read is a
+        // rule nobody here has taken in — said alike, the second went out under a word that means
+        // no measure is short of anything, and a model missing a border came back complete.
         // The carrier, asked of the position and before the reading. Whether a line can be drawn on
         // what a position holds is settled by the position, and no reader of any form would change
         // it — so `s < Won` over a type with one value says that, wherever the reading stopped.
