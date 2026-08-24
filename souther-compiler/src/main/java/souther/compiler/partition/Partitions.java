@@ -52,10 +52,19 @@ public final class Partitions {
      * which reading had built it, and could not be an answer this compiler keeps. It is one now, and
      * the reading is handed to the few places that go on asking it further questions.
      *
-     * @param axes the positions this behavior is measured at, in parameter order. Every position
-     *             the model divides is one of them: what a behavior is measured at is settled by
-     *             what its types say and by what its body compares, and a count of positions is
-     *             not a measure of what any of that costs (see this package's documentation)
+     * <p><b>Every line, and not the makings of some of them.</b> A line between two positions was
+     * held here as a {@link Border} while a line on one position was held as the cuts it would be
+     * assembled from — so what borders a behavior has was settled by whoever assembled them, from a
+     * reading of the declarations made where the assembling happened. Two readers therefore had two
+     * chances to disagree about which lines exist, which is the thing this being one answer is for.
+     *
+     * @param axes    the positions this behavior is measured at, in parameter order. Every position
+     *                the model divides is one of them: what a behavior is measured at is settled by
+     *                what its types say and by what its body compares, and a count of positions is
+     *                not a measure of what any of that costs (see this package's documentation)
+     * @param between the lines drawn between two positions, which divide neither of them
+     * @param along   the lines drawn on one position, by the axis they are on. Every measurable axis
+     *                has an entry, and an axis that is not measurable has no lines to have one for
      */
     public record Partitioning(List<Axis> axes,
                                java.util.Set<NumericTerm> uncertain,
@@ -64,6 +73,7 @@ public final class Partitions {
                                List<souther.compiler.inputs.PositionReadingBlocked> blocked,
                                List<souther.compiler.inputs.PositionValuesNotSeparated> notSeparated,
                                List<Border> between,
+                               java.util.Map<AxisId, List<Border>> along,
                                List<GuardThresholds.Guards.AtAPosition> compared,
                                ReachingCuts reaching,
                                MeasureClosure.OfThePartition partitionClosure,
@@ -77,6 +87,9 @@ public final class Partitions {
             blocked = List.copyOf(blocked);
             notSeparated = List.copyOf(notSeparated);
             between = List.copyOf(between);
+            java.util.Map<AxisId, List<Border>> lines = new LinkedHashMap<>();
+            along.forEach((at, drawn) -> lines.put(at, List.copyOf(drawn)));
+            along = java.util.Collections.unmodifiableMap(lines);
             // Made where the reading is, never here. A closure this constructor could compute would
             // be one a caller assembling a `Partitioning` by hand could also have written, and
             // `Closed` is a conclusion about a reading rather than a shape of the lists beside it.
@@ -84,6 +97,17 @@ public final class Partitions {
                 throw new IllegalArgumentException(
                         "a partitioning with no account of what each measure's reading came to");
             }
+        }
+
+        /**
+         * The lines drawn on one position, which is what a measure of them is over.
+         *
+         * <p>Empty where the position has none, which is an answer: a position the rules part
+         * nowhere is measured at no line. Read here rather than assembled by the reader, so that
+         * what lines a behavior has is settled once by what the model says.
+         */
+        public List<Border> along(Axis axis) {
+            return along.getOrDefault(axis.id(), List.of());
         }
 
         /** Whether an edge of this term is a value some row could carry.
@@ -181,7 +205,8 @@ public final class Partitions {
         MeasureClosure.Both closed = MeasureClosure.of(kept, List.of(), unread);
         return new Partitioning(kept, uncertain, undividedIn(measured),
                 List.copyOf(unread), blockedIn(measured), List.copyOf(notSeparated),
-                List.of(), List.of(), ReachingCuts.NONE, closed.partition(), closed.border());
+                List.of(), linesAlong(kept, quantities, symbols), List.of(), ReachingCuts.NONE,
+                closed.partition(), closed.border());
     }
 
     /**
@@ -483,8 +508,31 @@ public final class Partitions {
                 // came from. A line that divides a position leaves its division on the axis and,
                 // where the position has no value beside it, its border over here — and the two
                 // sides of that border are runs of what all of them leave.
-                base.notSeparated(), Border.allOf(between, partedByQuantity(out)), compared,
+                base.notSeparated(), Border.allOf(between, partedByQuantity(out)),
+                linesAlong(out, reading, symbols), compared,
                 reaching, closed.partition(), closed.border());
+    }
+
+    /**
+     * The lines each position has, assembled where the reading of the declarations is.
+     *
+     * <p>Here and not at whoever measures them. Which lines a position has is what the model says,
+     * and a reader assembling them needs what the rules leave the term — so assembled at the reader,
+     * it takes a reading of its own and the set of lines becomes that reader's answer rather than
+     * the model's.
+     *
+     * <p>Only the positions there is anything to measure at. A position with no classes and no cuts
+     * has no line to draw, and an entry saying so would be a list of nothings per behavior.
+     */
+    private static java.util.Map<AxisId, List<Border>> linesAlong(
+            List<Axis> axes, souther.compiler.inputs.Quantities reading, Symbols symbols) {
+        Map<AxisId, List<Border>> out = new LinkedHashMap<>();
+        for (Axis axis : axes) {
+            if (axis.measurable()) {
+                out.put(axis.id(), bordersOf(axis, symbols, reading.runsBetween(axis.term())));
+            }
+        }
+        return out;
     }
 
     /**
@@ -683,9 +731,13 @@ public final class Partitions {
      * <p>Keeping a rule per cut means the same value can be owed three times. That is the point: an
      * invariant and two guards that name one value are three rules, and a row that meets one of them
      * has met one.
+     *
+     * <p>Not visible outside this package, so that what lines a behavior has is asked of the
+     * partitioning ({@link Partitioning#along}) and never assembled again. Assembling them takes
+     * what the rules leave the term, which is a reading of the declarations — so a caller that could
+     * assemble them would be deciding, from a reading of its own, which lines exist to be measured.
      */
-    public static List<Border> bordersOf(Axis axis, Symbols symbols,
-                                         NumericDomain.Bounds within) {
+    static List<Border> bordersOf(Axis axis, Symbols symbols, NumericDomain.Bounds within) {
         List<Border> out = new ArrayList<>();
         // Every place the rules part this position's values, collected before any border is built.
         // What each border owes away from its line is a run of the arrangement they make together,

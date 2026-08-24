@@ -129,6 +129,16 @@ public final class Analyzer {
      */
     private Adequacy.Asked measure = Adequacy.Asked.NOTHING;
 
+    /**
+     * Whether the client will come back for an action's edit.
+     *
+     * <p>False until the handshake says otherwise, which is the protocol's default. What it decides
+     * is when the rows are worked out and never whether they are offered: an offer that is worth
+     * making is worth making to every client, and one that a client would never resolve has to
+     * arrive with its edit or it does nothing.
+     */
+    private boolean resolvesActions;
+
     /** Whether anything is being measured, which is what decides if an offer can exist where there
      * is no diagnostic to fix. */
     public boolean measuring() {
@@ -142,6 +152,12 @@ public final class Analyzer {
             this.measure = asked;
             this.workspaceCompile = null;
         }
+    }
+
+    /** Whether this client comes back for an action's edit, which the handshake settles. Nothing is
+     * recompiled for it: it changes when the rows are worked out, not what they are. */
+    public void resolvesActions(boolean asked) {
+        this.resolvesActions = asked;
     }
 
     /** All diagnostics for a document: every syntax error, or — when there are none — the first
@@ -705,9 +721,7 @@ public final class Analyzer {
         }
         LineIndex lines = new LineIndex(text);
         for (Hir.BehaviorDef behavior : written.behaviors()) {
-            // The cursor is in this document, so a declaration written in another one is not what
-            // it is on, however the lines happen to line up.
-            if (!uri.equals(documentOf(behavior.pos(), null, graph))
+            if (!isWrittenIn(behavior, uri, graph)
                     || !overlaps(pointRange(lines, behavior.pos()), requested)) {
                 continue;
             }
@@ -718,11 +732,33 @@ public final class Analyzer {
             if (!anythingARowCouldAnswer(compilation, module, behavior.name())) {
                 continue;
             }
-            return List.of(new CodeAction.Deferred(
+            CodeAction.Deferred offer = new CodeAction.Deferred(
                     "Write the rows `" + behavior.name() + "` does not cover", uri, module,
-                    behavior.name()));
+                    behavior.name());
+            // Where the client will not come back for it, the edit is worked out now. What the
+            // handshake settles is when this costs what it costs, and never whether the offer is
+            // made: an action a client would never resolve has to arrive with its edit or it does
+            // nothing at all.
+            if (resolvesActions) {
+                return List.of(offer);
+            }
+            CodeAction.Applied eager = resolve(offer, text, graph);
+            return eager == null ? List.of() : List.of(eager);
         }
         return List.of();
+    }
+
+    /**
+     * Whether this behavior is written in this document.
+     *
+     * <p>The cursor is in one document, so a declaration written in another is not what it is on,
+     * however the lines happen to line up. Asked in one place because it is asked twice: an offer
+     * names the document it was made about, and taking it later has to find the behavior in that
+     * same document — a module can be renamed onto another source between the two, and a behavior
+     * of that name found somewhere else is not the one somebody was offered.
+     */
+    private boolean isWrittenIn(Hir.BehaviorDef behavior, String uri, ModuleGraph graph) {
+        return uri.equals(documentOf(behavior.pos(), null, graph));
     }
 
     /** Whether anything this behavior is short of is a thing writing a row could answer. */
@@ -759,11 +795,20 @@ public final class Analyzer {
             return null;
         }
         Compilation compilation = compileOf(graph);
+        // The whole of what the offer names, and not the part of it a module happens to answer. An
+        // offer is about a behavior of a module written in a document, and a document can be given
+        // another module's header while a behavior of that name goes on existing somewhere else —
+        // so a check that asked only whether the module still has the behavior would compose rows
+        // from one source and write them into another.
+        if (!offer.module().equals(moduleOf(compilation, graph, offer.uri()))) {
+            return null;
+        }
         souther.compiler.check.Prepared written =
                 compilation.db().ask(new Shapes.Prepared(offer.module())).value();
         if (written == null || written.behaviors().stream()
-                .noneMatch(each -> each.name().equals(offer.behavior()))) {
-            return null;   // the behavior the offer was made about is not there any more
+                .noneMatch(each -> each.name().equals(offer.behavior())
+                        && isWrittenIn(each, offer.uri(), graph))) {
+            return null;   // what the offer was made about is not there any more
         }
         // An id stands for itself here: a workspace compilation is keyed on the document URIs this
         // server was given, so what identifies a source is already what this server calls it.

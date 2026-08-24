@@ -568,14 +568,14 @@ final class Coverages {
      *                  left short of what it is owed, and not that the region is idle here.
      */
     static List<BorderAssessment> assess(
-            Axis axis, BehaviorInputs where, souther.compiler.query.Adequacy.RowReading observed,
-            souther.compiler.query.Adequacy.Level level, boolean knownWritable,
-            souther.compiler.numeric.NumericDomain.Bounds within) {
+            List<Border> lines, BehaviorInputs where,
+            souther.compiler.query.Adequacy.RowReading observed,
+            souther.compiler.query.Adequacy.Level level, boolean knownWritable) {
         // Keyed by the line rather than by the reading of it. A guard inside a non-recursive helper
         // is read once per call of that helper, and the rows do not owe the same border twice for
         // having been offered it twice; what each reading saw is merged below.
         java.util.SequencedMap<BoundaryLine, BorderAssessment> out = new java.util.LinkedHashMap<>();
-        for (Border each : Partitions.bordersOf(axis, where.symbols(), within)) {
+        for (Border each : lines) {
             out.merge(BoundaryLine.of(each), assessed(each, reading(each, where, knownWritable),
                             observed, level),
                     Coverages::whicheverSawMore);

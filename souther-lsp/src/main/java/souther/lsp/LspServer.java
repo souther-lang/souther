@@ -186,6 +186,47 @@ public final class LspServer {
         workspace.setRoots(roots);
         analyzer.measure(adequacyAsked(params));
         readsSnippets = snippetSupportAsked(params);
+        analyzer.resolvesActions(resolvesEditsAsked(params));
+    }
+
+    /**
+     * Whether the client said it will come back for an action's edit, from
+     * {@code capabilities.textDocument.codeAction.dataSupport} and {@code resolveSupport.properties}.
+     *
+     * <p>Both, because they are two halves of one thing. What identifies the work travels in the
+     * action's {@code data} and comes back on the resolve, and the property that is worked out then
+     * is the edit — a client that keeps the data and will not resolve the edit, or resolves the edit
+     * and drops the data, cannot be handed an action without one.
+     *
+     * <p>False unless it said so, which is the protocol's default and not a guess. A client that
+     * never resolves is handed the edit up front, which costs what it costs; handed an action with
+     * no edit, it would show an offer that does nothing.
+     */
+    private static boolean resolvesEditsAsked(JsonNode params) {
+        JsonNode at = params == null ? null : params.get("capabilities");
+        for (String field : List.of("textDocument", "codeAction")) {
+            if (at == null || at.isNull()) {
+                return false;
+            }
+            at = at.get(field);
+        }
+        if (at == null || at.isNull()) {
+            return false;
+        }
+        JsonNode data = at.get("dataSupport");
+        if (data == null || !data.isBoolean() || !data.asBoolean()) {
+            return false;
+        }
+        JsonNode properties = at.path("resolveSupport").get("properties");
+        if (properties == null || !properties.isArray()) {
+            return false;
+        }
+        for (JsonNode property : properties) {
+            if (property.isString() && "edit".equals(property.asString())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

@@ -1409,19 +1409,15 @@ public final class Adequacy {
                     new souther.compiler.partition.BehaviorInputs(parameters, sig.inputTypes(),
                             symbols, policy);
             souther.compiler.partition.Partitions.Partitioning partitioning = divided;
-            souther.compiler.inputs.Quantities reading = domain.quantities(symbols);
             // Two sources and not one. A line drawn at a count of a position comes off that position's
             // axis; a line drawn between two positions comes off the comparison and has no axis to come
             // off — the body of a behavior whose inputs are plain numbers nothing bounds draws lines
-            // while having no axis at all.
+            // while having no axis at all. Which lines there are of either kind is the reading of the
+            // model's, and this is handed both rather than assembling one of them.
             List<BorderAssessment> out = new ArrayList<>();
             for (Axis axis : partitioning.axes()) {
-                if (!axis.measurable()) {
-                    continue;
-                }
-                out.addAll(Coverages.assess(axis, inputs, observed, level,
-                        partitioning.edgeIsKnownWritable(axis.term()),
-                        reading.runsBetween(axis.term())));
+                out.addAll(Coverages.assess(partitioning.along(axis), inputs, observed, level,
+                        partitioning.edgeIsKnownWritable(axis.term())));
             }
             out.addAll(Coverages.assessBetween(partitioning, inputs, observed, level));
             return List.copyOf(out);

@@ -18,6 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -82,8 +83,14 @@ class AdequacyLensTest {
     }
 
     private static Analyzer measuring(Adequacy.Level level) {
+        return measuring(level, true);
+    }
+
+    /** @param resolves what the client's handshake said about coming back for an action's edit */
+    private static Analyzer measuring(Adequacy.Level level, boolean resolves) {
         Analyzer analyzer = new Analyzer();
         analyzer.measure(Adequacy.Asked.reportOnly(level));
+        analyzer.resolvesActions(resolves);
         return analyzer;
     }
 
@@ -183,6 +190,53 @@ class AdequacyLensTest {
             assertTrue(line.startsWith("//"), "every line is a comment: " + line);
         }
         assertTrue(taken.newText().contains("-> <?>"), taken.newText());
+    }
+
+    /**
+     * A client that will not come back for the edit is handed it.
+     *
+     * <p>What the handshake settles is when the rows are worked out, and never whether the offer is
+     * made. Deferring to a client that does not resolve would show an offer that does nothing when
+     * it is taken, which is the same source-with-no-rows the eager path was written against.
+     */
+    @Test
+    void aClientThatDoesNotResolveIsHandedTheEditWithTheOffer() {
+        ModuleGraph graph = graphOf(Map.of(MODULE, TRIP));
+        List<CodeAction> actions = measuring(Adequacy.Level.ALL, false)
+                .codeActions(MODULE, TRIP, on(9), graph);
+
+        assertEquals(1, actions.size(), actions.toString());
+        CodeAction.Applied eager = assertInstanceOf(CodeAction.Applied.class, actions.get(0));
+
+        Analyzer resolving = measuring(Adequacy.Level.ALL, true);
+        CodeAction.Deferred offered = assertInstanceOf(CodeAction.Deferred.class,
+                resolving.codeActions(MODULE, TRIP, on(9), graph).get(0));
+        assertEquals(eager.newText(), resolving.resolve(offered, TRIP, graph).newText(),
+                "and the rows are the same rows either way");
+    }
+
+    /**
+     * An offer names a behavior of a module written in a document, and taking it checks all three.
+     *
+     * <p>A document can be given another module's header while a behavior of that name goes on
+     * existing somewhere else. Checked only against the module, the rows would be composed from the
+     * source that still has the behavior and written into the one that no longer does.
+     */
+    @Test
+    void anOfferIsNotTakenWhereItsBehaviorHasMovedToAnotherDocument() {
+        String other = "file:///other.sou";
+        Analyzer analyzer = measuring(Adequacy.Level.ALL);
+        ModuleGraph before = graphOf(Map.of(MODULE, TRIP));
+        CodeAction.Deferred offered = assertInstanceOf(CodeAction.Deferred.class,
+                analyzer.codeActions(MODULE, TRIP, on(9), before).get(0));
+
+        // The document the offer was made about now declares something else, and what it was made
+        // about is written in the other one.
+        ModuleGraph after = graphOf(Map.of(
+                MODULE, TRIP.replaceFirst("module \\S+", "module example.moved"),
+                other, TRIP));
+        assertNull(analyzer.resolve(offered, TRIP, after),
+                "the behavior the offer names is not written in the document it names");
     }
 
     /**
