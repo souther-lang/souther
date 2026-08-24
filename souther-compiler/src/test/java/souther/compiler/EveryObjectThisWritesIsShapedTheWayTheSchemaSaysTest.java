@@ -98,6 +98,39 @@ class EveryObjectThisWritesIsShapedTheWayTheSchemaSaysTest {
     }
 
     /**
+     * A point owing no row is closed, rather than listing what it may not have.
+     *
+     * <p>The list was the keys of the owed side written a second time, with nothing holding the two
+     * in step, and it fell behind twice: `weakening` was never added to it, and `writableBecause`
+     * was added to the schema and not to it, so the schema took a document naming grounds for a
+     * point nobody is owed a row at. Closed, there is no list to fall behind — a key added to the
+     * item is forbidden here by not having been named.
+     *
+     * <p>Which is what this holds: not that some set of keys is forbidden, but that the branch is
+     * still the kind of thing that forbids by default. Written the other way round, the check would
+     * be the list a second time.
+     */
+    @Test
+    void aPointOwingNoRowIsClosedAndNotAListOfWhatItMayNotHave() {
+        JsonNode item = schema().get("$defs").get("partition").get("properties").get("boundaries")
+                .get("items").get("properties").get("items").get("items");
+        JsonNode notOwed = null;
+        for (JsonNode branch : item.get("oneOf")) {
+            if (branch.has("required") && branch.get("required").get(0).asString().equals("notOwed")) {
+                notOwed = branch;
+            }
+        }
+        assertNotNull(notOwed, "the item has a branch for a point owing no row");
+        assertTrue(notOwed.has("additionalProperties")
+                        && !notOwed.get("additionalProperties").asBoolean(),
+                "the branch forbids what it does not name, rather than naming what it forbids");
+        Set<String> named = new java.util.LinkedHashSet<>();
+        notOwed.get("properties").propertyNames().forEach(named::add);
+        assertEquals(Set.of("point", "notOwed"), named,
+                "and what it names is which point it is and why no row is owed there");
+    }
+
+    /**
      * A document written before a key was added is still a document of this version.
      *
      * <p>Held on the key added last, which is {@code writableBecause}. The preamble says a key added

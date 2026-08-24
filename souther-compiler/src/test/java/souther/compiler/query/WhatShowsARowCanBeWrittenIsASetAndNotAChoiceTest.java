@@ -9,7 +9,6 @@ import souther.compiler.report.AdequacyReport;
 import tools.jackson.databind.JsonNode;
 
 import java.util.ArrayList;
-import java.util.EnumSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -127,34 +126,24 @@ class WhatShowsARowCanBeWrittenIsASetAndNotAChoiceTest {
                         + " verdict reported as the row alone");
     }
 
-    /** The grounds come out in the order they are declared, whatever order they were put in. A set
-     *  has no order of its own, and a document written in whichever one a set iterated in would
-     *  differ between two runs that found the same thing. */
-    @Test
-    void theGroundsAreWrittenInOneOrderWhicheverOrderTheyArrivedIn() {
-        List<Ground> declared = List.of(Ground.values());
-        for (List<Ground> arriving : List.of(declared, declared.reversed())) {
-            EnumSet<Ground> putIn = EnumSet.noneOf(Ground.class);
-            arriving.forEach(putIn::add);
-            assertEquals(declared, new ItemAssessment.WritabilityEvidence(putIn).inOrder(),
-                    "the order the grounds went in is not an order the document has");
-        }
-    }
-
     /**
-     * Proofs of two positions are not a proof of the line between them.
+     * Nobody has put the question to a line between two positions.
      *
-     * <p>Both ends of this model are read in full, so each position on its own is proven writable.
-     * The line the body draws between them is a place both positions have to admit at once, and
-     * nothing here reads that — two ranges overlapping is not two positions holding a pair, and what
-     * refuses the pair need not be in either range.
+     * <p>What this holds is where the implementation stands, and it is meant to be deleted. A line
+     * between two positions is met by a place both positions admit at once; reading each position on
+     * its own does not answer that — two ranges overlapping is not two positions holding a pair, and
+     * what refuses the pair need not be in either range — so no reading of it is made and the state
+     * says so. When one is made, these lines come back {@code PROVEN} or {@code UNPROVEN} and this
+     * test goes, because what it is about will have happened.
      *
-     * <p>What is held is that no rules ground grows out of the endpoints. Not that such a line can
-     * never have one: a reading that establishes the pair would give it one, and this stays true when
-     * that arrives, because what it forbids is the inference and not the answer.
+     * <p>The property that outlives it is not here. That the grounds of a point come from that
+     * point's own projection and from nothing beside it is what forbids the endpoints being composed
+     * into an answer for the line, and it is held over every point by {@link
+     * #everyGroundIsReadOffTheAnswerThatEstablishesIt} — which goes on holding after a relational
+     * reading arrives, since it says where a ground comes from rather than what the reading found.
      */
     @Test
-    void aProofOfEachEndIsNotAProofOfTheLineBetweenThem() {
+    void theProjectionOfALineBetweenTwoPositionsIsNotComputedYet() {
         List<ItemAssessment.Owed> between = new ArrayList<>();
         for (BorderAssessment border : bordersOf(BETWEEN_TWO_PROVEN_POSITIONS,
                 "example.relational", "benefitOf")) {
@@ -180,7 +169,7 @@ class WhatShowsARowCanBeWrittenIsASetAndNotAChoiceTest {
                     "the question was not put to the line, which is not the same as having been put"
                             + " and come to nothing");
             assertFalse(owed.writabilityEvidence().has(Ground.THE_RULES_PROVE_IT),
-                    "so no rules ground grows out of the proofs of the two ends");
+                    "so nothing about the line is standing on the proofs of its two ends");
         }
     }
 
@@ -210,18 +199,13 @@ class WhatShowsARowCanBeWrittenIsASetAndNotAChoiceTest {
             assertEquals(item.has("hit") && item.get("hit").asBoolean(),
                     grounds.contains("a_row_is_at_it"),
                     "and the row ground is the `hit` this document already carries");
+            // As words and not as constants. What a consumer meets is the array, and an order read
+            // back off the type would agree with the writer however either of them moved.
+            assertEquals(List.of("the_rules_prove_it", "a_row_is_at_it", "a_value_was_built")
+                            .stream().filter(grounds::contains).toList(),
+                    List.copyOf(grounds), "the array is in the order the document promises");
         }
         assertTrue(owed > 0, "the model owes a row somewhere, or this asserts nothing");
-    }
-
-    /** Every word the writer can put in the field, which is the whole of what a consumer meets. */
-    @Test
-    void theGroundWordsAreWhatTheWriterCanWrite() {
-        Set<String> written = new LinkedHashSet<>();
-        for (Ground ground : Ground.values()) {
-            written.add(AdequacyReport.wire(ground));
-        }
-        assertEquals(Set.of("the_rules_prove_it", "a_row_is_at_it", "a_value_was_built"), written);
     }
 
     /** Every point a row is owed at, over models that reach the grounds in different combinations. */

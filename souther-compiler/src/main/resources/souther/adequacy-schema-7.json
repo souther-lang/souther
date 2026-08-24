@@ -362,12 +362,24 @@
                   "required": ["point"],
                   "additionalProperties": false,
                   "oneOf": [
-                    { "required": ["notOwed"], "not": { "anyOf": [{ "required": ["relation"] }, { "required": ["against"] }, { "required": ["hit"] }, { "required": ["knownWritable"] }, { "required": ["writableBecause"] }, { "required": ["status"] }, { "required": ["reason"] }] } },
+                    { "description": "A point no row is owed at carries which point it is and why, and nothing else. Closed rather than listing what it may not have: the list was the keys of the owed side written a second time, and a field added to that side was a field somebody had to remember to forbid here. Two went unforbidden that way — `weakening`, which no measurement of a point owing no row can produce, and `writableBecause`, which is evidence about a row nobody is owed.", "required": ["notOwed"], "properties": { "point": {}, "notOwed": {} }, "additionalProperties": false },
                     { "required": ["relation", "against", "knownWritable", "status"], "not": { "required": ["notOwed"] } }
                   ],
                   "if": { "required": ["status"], "properties": { "status": { "enum": ["complete", "partial"] } } },
                   "then": { "required": ["hit"] },
                   "else": { "not": { "required": ["hit"] } },
+                  "allOf": [
+                    {
+                      "description": "The verdict and the grounds are one answer written twice, so this says they cannot differ. Where the array is there and `knownWritable` is `true`, some ground is in it.",
+                      "if": { "required": ["knownWritable", "writableBecause"], "properties": { "knownWritable": { "const": true } } },
+                      "then": { "properties": { "writableBecause": { "minItems": 1 } } }
+                    },
+                    {
+                      "description": "And where it is there and `knownWritable` is `false`, none is. Both are conditional on the array being present, because an absent one is a producer that predates it rather than a point with no grounds.",
+                      "if": { "required": ["knownWritable", "writableBecause"], "properties": { "knownWritable": { "const": false } } },
+                      "then": { "properties": { "writableBecause": { "maxItems": 0 } } }
+                    }
+                  ],
                   "properties": {
                     "point": {
                       "enum": ["on", "off", "in", "out"],

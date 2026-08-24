@@ -1974,12 +1974,16 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                         // different sentences (issue #1036).
                         ItemAssessment.WritabilityEvidence evidence = owed.writabilityEvidence();
                         i.put("knownWritable", evidence.known());
-                        // In the order the grounds are declared and never the order a set iterated
-                        // in. There is no ranking to read off it: a document holding two grounds
-                        // holds both, and this is a spelling so that two runs that found the same
-                        // thing write the same bytes.
+                        // In this document's own order, which is why it is written down here and
+                        // not asked of the evidence. The grounds are a set and have none, so some
+                        // order has to be chosen for the array — and chosen where the array is, the
+                        // choice is not one an editor moving two constants apart can make.
                         ArrayNode because = i.putArray("writableBecause");
-                                        evidence.inOrder().forEach(ground -> because.add(wire(ground)));
+                        for (ItemAssessment.WritabilityEvidence.Ground ground : GROUND_ORDER) {
+                            if (evidence.has(ground)) {
+                                because.add(wire(ground));
+                            }
+                        }
                         // Inside it, because it is. `false` here is `NoHit` — what the rows this
                         // measurement read came to — and never a measurement that was not made.
                         measured(i, owed.coverage(), (node, coverage) ->
@@ -2344,6 +2348,23 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case NOT_APPLICABLE, NOT_MEASURED -> "unavailable";
         };
     }
+
+    /**
+     * The order this document writes the grounds of {@code writableBecause} in.
+     *
+     * <p>The document's and not the evidence's. The grounds are a set, so the array needs an order
+     * the set cannot supply — read off {@code values()} it was the order two constants happen to be
+     * declared in, and moving them apart would have moved the bytes of every document while a test
+     * comparing against {@code values()} went on seeing nothing.
+     *
+     * <p>Every ground is here, which {@code theDocumentWritesEveryGroundThereIs} holds. A ground
+     * added to the type and not to this list is one no document would carry, so the widening would
+     * be made and nothing would say it had not arrived.
+     */
+    static final List<ItemAssessment.WritabilityEvidence.Ground> GROUND_ORDER = List.of(
+            ItemAssessment.WritabilityEvidence.Ground.THE_RULES_PROVE_IT,
+            ItemAssessment.WritabilityEvidence.Ground.A_ROW_IS_AT_IT,
+            ItemAssessment.WritabilityEvidence.Ground.A_VALUE_WAS_BUILT);
 
     /** What a document calls a ground a row can be written at a point on. Written out for the same
      *  reason as the status above: widening what a consumer must handle is a decision about the

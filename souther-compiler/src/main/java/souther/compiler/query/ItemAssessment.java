@@ -4,7 +4,6 @@ import souther.compiler.partition.Criterion;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.NotOwedReason;
 
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
@@ -182,9 +181,9 @@ public sealed interface ItemAssessment {
         /**
          * One thing that shows a row can be written at a point.
          *
-         * <p>Declared in the order a document writes them, which is a spelling and not a ranking.
-         * There is nothing to rank: a set with two grounds in it holds both, and a reader wanting one
-         * of them asks for that one.
+         * <p>No order among them, here or anywhere. There is nothing to rank: a set with two grounds
+         * in it holds both, and a reader wanting one of them asks for that one. What order a document
+         * writes them in is the document's, and is settled where the document is written.
          */
         public enum Ground {
 
@@ -235,13 +234,6 @@ public sealed interface ItemAssessment {
         /** Whether this ground is among them. */
         public boolean has(Ground ground) {
             return grounds.contains(ground);
-        }
-
-        /** The grounds in the order they are declared, which is the order a document writes them. A
-         *  set has none of its own, and a document whose array came out in whatever order a set
-         *  iterated in would differ between two runs that found the same thing. */
-        public List<Ground> inOrder() {
-            return Arrays.stream(Ground.values()).filter(grounds::contains).toList();
         }
     }
 
