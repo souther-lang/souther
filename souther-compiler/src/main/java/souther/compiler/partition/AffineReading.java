@@ -273,8 +273,8 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
     }
 
     /**
-     * The order each of this form's positions is read and written back on, or null where the form
-     * adds up counts that do not mean the same thing.
+     * The order each of this form's positions is read and written back on, or null where some
+     * position has no order with counts under it.
      *
      * <p>Asked of each position and not of the operand it was written beside. Read off one
      * operand's type, every position of the form answered with that one's order and the check could

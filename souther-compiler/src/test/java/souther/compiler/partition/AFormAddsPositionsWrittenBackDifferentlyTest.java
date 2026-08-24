@@ -114,9 +114,9 @@ class AFormAddsPositionsWrittenBackDifferentlyTest {
                 .getMessage().contains("no number under it"));
     }
 
-    /** The form the whole of this is about: two positions, two orders, one unit. */
+    /** The form the whole of this is about: two positions on two orders. */
     @Test
-    void aFormOverTwoOrdersThatCountTheSameThingIsAQuantity() {
+    void aFormOverTwoDifferentOrdersIsAQuantity() {
         BorderQuantity.OverAForm over = new BorderQuantity.OverAForm("take",
                 aDecimalLessAnInt(),
                 Map.of(value("d"), Carrier.DENSE, value("n"), Carrier.WHOLE));
