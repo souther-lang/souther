@@ -175,33 +175,28 @@ final class DischargeRules {
      *
      * <p>Two sources and one question. Most of them say so by declaring the form
      * ({@link OperationFacts#answersAFormOfItsArguments}); a sum and a difference say it by being
-     * the arithmetic they are, which {@link OperationFact.ComputesANumber} already records and
-     * {@link Terms#asOperator} already reads. Declaring the form for those as well would be the
-     * same statement twice, and leaving them out of the question altogether would be worse: the
-     * silence beside it says there is nothing true here, and of {@code Int.add} that is false.
+     * the arithmetic they are. Declaring the form for those as well would be the same statement
+     * twice, and leaving them out of the question altogether would be worse: the silence beside it
+     * says there is nothing true here, and of {@code Int.add} that is false.
+     *
+     * <p>Which of them are is {@link #operator} and not a reading of its own. What that answers is
+     * what a call to such an operation is read as where it stands ({@link Terms#asOperator}), so
+     * asking it here is what makes the two the same statement — a second reading agreeing with it
+     * today is a second reading to keep agreeing with it, and where they came apart this question
+     * would want a silence written for an operation the grammar reads as a {@code +}.
+     *
+     * <p>A product is left out because it is a form only where an operand is written down: what
+     * multiplies each is the other.
      */
     static Set<ValueName> formOperations() {
         Set<ValueName> answered = new LinkedHashSet<>(Bound.answersAFormOfItsArguments());
         for (ValueName operation : Bound.computesANumber()) {
-            if (isASumOrADifference(Bound.computesANumber(operation))) {
+            BinOp written = operator(operation);
+            if (written == BinOp.ADD || written == BinOp.SUB) {
                 answered.add(operation);
             }
         }
         return answered;
-    }
-
-    /**
-     * Whether what it computes is a sum or a difference of what it was given, at every call.
-     *
-     * <p>All three conditions. A product is a form only where one operand is written down, so it is
-     * no form of its arguments; a quotient answers a case other than the number's where its divisor
-     * is nought, and a form that holds unless something is not a form.
-     */
-    private static boolean isASumOrADifference(NumericResult computed) {
-        return computed.unless() == null
-                && computed.at() instanceof NumericResult.Answered.Directly
-                && computed.computes() instanceof Arithmetic.TheOperator operator
-                && (operator.op() == BinOp.ADD || operator.op() == BinOp.SUB);
     }
 
     /** What {@code operation} answers, counted, in what its arguments are counted as — or null
@@ -698,16 +693,14 @@ final class DischargeRules {
      * form is about a count and a bound about a number, and the difference between those two is a
      * difference between the propositions and not between two ways of holding one.
      */
-    static Prelude.Signature holdTheResultToTheDeclaration(ValueName operation,
-            Predicate<Type> required, String what) {
-        Prelude.Signature signature = holdTheOperationToTheLibrary(operation).signature();
-        Type result = signature.result();
+    static void holdTheResultToTheDeclaration(ValueName operation, Predicate<Type> required,
+            String what) {
+        Type result = holdTheOperationToTheLibrary(operation).signature().result();
         if (result == null || !required.test(result)) {
             throw new IllegalStateException("what " + ((ValueName.Stdlib) operation).qualified()
                     + " answers is " + (result == null ? "left to its body" : Type.show(result))
                     + ", which is not " + what);
         }
-        return signature;
     }
 
     /**

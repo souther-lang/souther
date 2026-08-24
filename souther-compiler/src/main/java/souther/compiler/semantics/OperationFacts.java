@@ -308,8 +308,8 @@ public final class OperationFacts {
         // A product is one only where an operand is written down: `Int.multiply(a, b)` is
         // arithmetic over `a` and `b` and is a form of neither, since what multiplies each is the
         // other. A sum and a difference are not here at all — what they answer is a form of what
-        // they were given, and they say so by being the arithmetic they are
-        // (`ComputesANumber`, read by `DischargeRules.formOperations`). A silence here would deny
+        // they were given, and they say so by being the arithmetic they are — the operator a call
+        // to them is read as, which `ComputesANumber` records. A silence here would deny
         // that, which is why the two cannot both be written: a name under a subject says nothing is
         // true of it there.
         //
