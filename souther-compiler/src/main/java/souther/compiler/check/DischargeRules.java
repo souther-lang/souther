@@ -579,21 +579,40 @@ final class DischargeRules {
         return rules;
     }
 
+    /**
+     * The library's declaration of {@code operation}, or a build that does not start.
+     *
+     * <p>What every fact owes, whatever else it says. A fact is a proposition about an operation,
+     * so an operation the library does not have is a fact about nothing — and that is true of a
+     * fact naming no argument as much as of one that names three.
+     *
+     * <p>Its own step rather than the first half of {@link #holdToTheDeclaration}, because there it
+     * was reached only by a fact that had an argument to check. A fact naming none went through an
+     * arm with nothing in it and was never held to anything, so which declarations were bound
+     * depended on which kinds of fact happened to name an argument. A kind added later would have
+     * lost the same way, silently, on the day its arm was written empty.
+     */
+    static Prelude.PreludeEntry holdTheOperationToTheLibrary(ValueName operation) {
+        // Every fact is about an operation the library declares, so the operation says which
+        // library and which name rather than a spelling this would have to take apart.
+        if (!(operation instanceof ValueName.Stdlib library)) {
+            throw new IllegalStateException("a fact is declared of " + operation
+                    + ", which is not a library operation");
+        }
+        Prelude.PreludeEntry entry = Prelude.entry(library.qualified());
+        if (entry == null) {
+            throw new IllegalStateException("a fact is declared of " + library.qualified()
+                    + ", which the library does not declare");
+        }
+        return entry;
+    }
+
     /** The same, for one rule. Asked per rule so that whatever holds a whole declaration source can
      *  walk it and hold each of them, rather than reaching for a table of its own. */
     static void holdToTheDeclaration(ValueName operation, ArgumentRef at, ArgumentRef derived,
                                      Predicate<Type> required, String what) {
-        // Every row here is about an operation the library declares, so the key says which
-        // library and which operation rather than a spelling this would have to take apart.
-        if (!(operation instanceof ValueName.Stdlib library)) {
-            throw new IllegalStateException("a rule about " + what + " is written for "
-                    + operation + ", which is not a library operation");
-        }
-        Prelude.PreludeEntry entry = Prelude.entry(library.qualified());
-        if (entry == null) {
-            throw new IllegalStateException("a rule about " + what + " is written for "
-                    + library.qualified() + ", which the library does not declare");
-        }
+        Prelude.PreludeEntry entry = holdTheOperationToTheLibrary(operation);
+        ValueName.Stdlib library = (ValueName.Stdlib) operation;
         List<Type> params = entry.signature().params();
         int position = CallArguments.positionIn(at, operation);
         if (position < 0 || position >= params.size()) {

@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.semantics.ArgumentRef;
 import souther.compiler.semantics.OperationFact;
 import souther.compiler.semantics.OperationFacts;
+import souther.compiler.types.Type;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -21,6 +22,14 @@ import java.util.List;
  * declaration was validated depended on which consumers a compilation happened to have. This walks
  * the whole list, so a fact declared is a fact held to the library whether or not anything reads
  * it.
+ *
+ * <p><b>And bound, not merely visited.</b> A fact is not held to the library because its kind was
+ * reached: the operation it is declared of is resolved against the library for every declaration,
+ * outside the switch. Held inside it, the resolution was reached only by the kinds that name an
+ * argument — the ones whose arm calls {@link DischargeRules#holdToTheDeclaration} — so a kind that
+ * names none passed through an empty arm having been held to nothing. Whether a declaration was
+ * checked depended on what its fact happened to mention, and the next kind of fact would have lost
+ * the same way on the day its arm was written empty.
  *
  * <p>Here and not with the declarations, because holding them takes the library's signatures and
  * the questions this check asks of a type — which is this side's, and is what the declarations were
@@ -42,6 +51,11 @@ final class OperationFactBinder {
     static List<OperationFacts.Declared> bindAll(List<OperationFacts.Declared> declared) {
         List<OperationFacts.Declared> visited = new ArrayList<>();
         for (OperationFacts.Declared each : declared) {
+            // Before the switch and outside it, so that being declared is what holds a fact to the
+            // library rather than being a kind that happens to name an argument. An arm below with
+            // nothing in it then says what it means — there is nothing to check beyond the
+            // operation — instead of standing for a declaration nothing looked at.
+            DischargeRules.holdTheOperationToTheLibrary(each.operation());
             // No default. A kind of fact added is a kind this has to say how to hold, rather than
             // one that passes through unchecked because nothing here mentions it.
             switch (each.fact()) {
@@ -80,16 +94,12 @@ final class OperationFactBinder {
                 case OperationFact.IsStatedOverAProjection over ->
                         DischargeRules.holdToTheDeclaration(each.operation(), over.projection(),
                                 new ArgumentRef.TheClosure(),
-                                type -> type instanceof souther.compiler.types.Type.FnOf,
+                                type -> type instanceof Type.FnOf,
                                 "the projection a predicate is stated over");
-                // Neither names an argument, so there is nothing about one to hold to a signature.
-                // What holds them to the library is the question they answer for
-                // ({@link Question}), which asks of the declaration whether the operation is one
-                // the question is even about.
-                // Neither names an argument, and a silence names none by definition. What holds
-                // these to the library is the range of the subject they are about
-                // ({@link Question}), which asks of the declaration whether the operation is one
-                // the subject is even about.
+                // None of these names an argument — a silence names none by definition — so there
+                // is nothing about one to hold to a signature. Their operation is held above with
+                // every other, which is what makes this arm a statement about these facts rather
+                // than a gap.
                 case OperationFact.StatesItsPredicateOfEveryElement _,
                      OperationFact.MeansTheSameAsASizeOfNought _,
                      OperationFact.SaysNothingOf _,

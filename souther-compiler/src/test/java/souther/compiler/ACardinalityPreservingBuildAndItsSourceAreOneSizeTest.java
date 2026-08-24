@@ -1,6 +1,5 @@
 package souther.compiler;
 
-import souther.compiler.semantics.SizeAgainstItsSource;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Severity;
 

@@ -68,6 +68,37 @@ class EverySemanticDeclarationIsHeldToTheLibraryTest {
     }
 
     /**
+     * A fact that names no argument is held to the library too.
+     *
+     * <p>What the two tests below cannot show, and the hole they left. Both of them add a fact that
+     * names an argument, and holding an argument to a signature reads the library on the way — so
+     * what they were showing was that <em>that kind of fact</em> reaches the library, not that
+     * every declaration does. A fact naming no argument went through an arm with nothing in it and
+     * was bound to nothing at all.
+     *
+     * <p>{@code CountsWhatItIsGiven} is one of those, and it is declared here of an operation the
+     * library does not have. A binding that holds an operation only where a fact happens to name an
+     * argument accepts it.
+     */
+    @Test
+    void aFactNamingNoArgumentIsHeldToTheLibraryToo() {
+        List<OperationFacts.Declared> gained =
+                new ArrayList<>(OperationFacts.declarations());
+        gained.add(new OperationFacts.Declared(
+                new ValueName.Stdlib("List", "howManyThereAreNot"),
+                new OperationFact.CountsWhatItIsGiven()));
+
+        IllegalStateException refused = assertThrows(IllegalStateException.class,
+                () -> OperationFactBinder.bindAll(gained),
+                "a fact is bound because it is declared, and not because its kind names an"
+                        + " argument that happens to be read against a signature");
+
+        assertTrue(refused.getMessage().contains("List.howManyThereAreNot"), refused.getMessage());
+        assertTrue(refused.getMessage().contains("the library does not declare"),
+                refused.getMessage());
+    }
+
+    /**
      * And a fact about an operation the library does not declare at all.
      *
      * <p>Beside the above because it fails one question earlier: there is no signature to read the
