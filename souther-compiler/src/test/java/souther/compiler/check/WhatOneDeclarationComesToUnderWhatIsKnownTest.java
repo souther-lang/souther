@@ -188,7 +188,7 @@ class WhatOneDeclarationComesToUnderWhatIsKnownTest {
                             Hir.SumData sum = (Hir.SumData) def;
                             return new Hir.SumData(sum.written(), sum.declares(),
                                     java.util.List.of(sum.cases().get(0).unanswered(), sum.cases().get(1)),
-                                    sum.decoder(), sum.encoder(), sum.pos());
+                                    sum.pos());
                         },
                         "Left", Cardinality.atMost(1), "Right", NO_VALUE),
                 "one case nothing names, and the other with no value");

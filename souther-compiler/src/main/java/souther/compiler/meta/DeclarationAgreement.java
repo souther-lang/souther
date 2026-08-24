@@ -327,8 +327,11 @@ public final class DeclarationAgreement {
             // read and written.
             case Hir.Data d -> List.of(d.declares(), d.newtype(), d.includes(), named(d.fields()),
                     d.invariants(), d.decoder(), d.encoder());
-            // Which cases a union has, and how one is told from another.
-            case Hir.SumData s -> List.of(s.declares(), s.cases(), s.decoder(), s.encoder());
+            // Which cases a sum has. How one is told from another is derived from that and from
+            // what each case is (`check.Boundary`), and both are reached: a case is followed to its
+            // own declaration, where a unit and a product are compared as the different forms they
+            // are. Held here as well, it would be the same fact compared twice.
+            case Hir.SumData s -> List.of(s.declares(), s.cases());
             // A unit is the declaration it is, which is what it was looked up by.
             case Hir.UnitData u -> List.of(u.declares());
         };
