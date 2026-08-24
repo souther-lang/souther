@@ -959,6 +959,11 @@ public final class Generator {
             }
         }
 
+        // The values a row can be written against, resolved once for the behavior. Read per class,
+        // this was the same walk through the decoders for every class owed, for an answer that is a
+        // fact about the module rather than about the class asking.
+        List<ResolvedOrigin> origins = resolve(subject, axes, baselines, check);
+
         List<GeneratedRow> rows = new ArrayList<>();
         List<ClassAttempt> attempts = new ArrayList<>();
         List<ArmAttempt> arms = new ArrayList<>();
@@ -989,7 +994,7 @@ public final class Generator {
                 }
                 break;
             }
-            ClassAttempt attempt = rowFor(subject, axes, at[0], at[1], baselines, check);
+            ClassAttempt attempt = rowFor(subject, axes, at[0], at[1], origins, check);
             attempts.add(attempt);
             switch (attempt) {
                 case ClassAttempt.Built made -> rows.add(made.row());
@@ -1404,7 +1409,7 @@ public final class Generator {
      * ({@link Purpose.ForAClass}).
      */
     private static ClassAttempt rowFor(Subject subject, List<Axis> axes, int at, int cls,
-                                       List<Baseline> baselines, CandidateCheck check) {
+                                       List<ResolvedOrigin> origins, CandidateCheck check) {
         Axis axis = axes.get(at);
         String classId = axis.classes().get(cls).id();
         String label = label(axis, cls);
@@ -1414,12 +1419,12 @@ public final class Generator {
         // row of every behavior taking it — a change somewhere else in the file, answering a
         // question nobody asked it. What order they are walked in is
         // {@link #nearestFirst}'s to say.
-        Perturbations walk = nearestFirst(subject, axes, at, cls, baselines, check);
+        Perturbations walk = nearestFirst(axes, at, cls, origins);
         for (Candidate candidate : walk.candidates()) {
-            Map<String, FixtureTemplate> given = candidate.from().isEmpty() ? Map.of()
-                    : against(subject, axes, candidate.stands(), at, candidate.where(),
-                            candidate.from());
-            if (!candidate.from().isEmpty() && given.isEmpty()) {
+            Map<String, FixtureTemplate> given = candidate.from().composes() ? Map.of()
+                    : against(subject, axes, candidate.delta(), candidate.where(),
+                            candidate.from().baseline());
+            if (!candidate.from().composes() && given.isEmpty()) {
                 continue;   // nothing here can be written against the model's value
             }
             Attempt made = build(subject, axes, candidate.where(), check, given);
@@ -1449,15 +1454,95 @@ public final class Generator {
     }
 
     /**
+     * A value the module states, with where its own values already sit read off once.
+     *
+     * <p>Read once for the generation and never once per class. Where a baseline's values fall is a
+     * fact about the module, and asking it again for every class owed is the same walk through the
+     * decoders for the same answer.
+     *
+     * <p><b>Two origins standing alike are still two origins.</b> Where a row's values sit is what
+     * orders this search; what those values are is what the model builds and what a rule relating
+     * two of them accepts. So the same classes reached from two values of the module are two
+     * candidates and not one, and a search that dropped the second answered a class it could have
+     * written a row for.
+     *
+     * @param baseline what the module states, or a baseline naming nothing where the row is
+     *                 composed from the classes
+     * @param stands   where {@code baseline}'s own values already sit, which is what a move is
+     *                 measured against and what a spread writes over
+     * @param index    where this came in the order the origins were gathered, which is what orders
+     *                 two origins one distance away
+     */
+    private record ResolvedOrigin(Baseline baseline, int[] stands, int index) {
+
+        /** Whether this is the composition rather than a value the module states. */
+        boolean composes() {
+            return baseline.isEmpty();
+        }
+
+        /** Whether this states a value of {@code parameter}, which is the position a row is about
+         *  being one the origin says something of. */
+        boolean grounds(String parameter) {
+            return baseline.at().containsKey(parameter);
+        }
+    }
+
+    /**
+     * Where a row does not stand where its origin does.
+     *
+     * <p>One difference and two readers. How far a row is from what a reader recognises is the size
+     * of this, and which fields a spread writes over is this projected onto the parameters — so the
+     * order the search walks in and the row it writes come off one value. Counted two ways they
+     * were free to disagree, and two positions under one parameter are two differences and one
+     * field either way.
+     *
+     * <p>Read off the assignment and never off what the search reached for. A supporting position
+     * the row stands at no class of is one no assignment moves, and counted as moved it put a row
+     * one difference from its origin behind rows two away.
+     *
+     * @param at the positions, in the axes' own order
+     */
+    private record Delta(List<Integer> at) {
+
+        Delta {
+            at = List.copyOf(at);
+        }
+
+        /** Where {@code where} does not stand where {@code stands} does. */
+        static Delta between(int[] stands, int[] where) {
+            List<Integer> out = new ArrayList<>();
+            for (int i = 0; i < where.length; i++) {
+                if (i >= stands.length || where[i] != stands[i]) {
+                    out.add(i);
+                }
+            }
+            return new Delta(out);
+        }
+
+        /** How far the row is from its origin. */
+        int size() {
+            return at.size();
+        }
+
+        /** Which of these positions are under {@code parameter}, which is what a spread over that
+         *  parameter writes over. */
+        List<Integer> under(List<Axis> axes, String parameter) {
+            return at.stream().filter(i -> axes.get(i).path().head().equals(parameter)).toList();
+        }
+    }
+
+    /**
      * One assignment to try, and the origin it is a move away from.
      *
-     * @param from   the value the model states that this row is written against, or a baseline
-     *               naming nothing where the row is composed from the classes
-     * @param stands where {@code from}'s own values already sit, which is what the move is measured
-     *               against and what a spread writes over
-     * @param where  the classes this assignment puts every position at
+     * <p>The distance is a fact about the pair and travels with it. Worked out again where the row
+     * is written, the order the search went in and the row that came out of it were two readings of
+     * one thing.
+     *
+     * @param from  the origin this row is written against
+     * @param where the classes this assignment puts every position at
+     * @param delta where {@code where} does not stand where {@code from} does
      */
-    private record Candidate(Baseline from, int[] stands, int[] where) {}
+    private record Candidate(ResolvedOrigin from, int[] where, Delta delta) {}
 
     /**
      * The assignments a class was given to try, and whether they are all of them.
@@ -1508,65 +1593,109 @@ public final class Generator {
      * construction and says nothing about how far the row is from what a reader recognises. Put in
      * the same order, a row composed from the classes won against every baseline that needed one
      * supporting field — which is the objective read backwards.
+     *
+     * <p><b>Last, and reached whatever the baselines spent.</b> Behind the baselines' budget, a
+     * class the model can hold a row for came back saying the search had stopped, over a
+     * composition that would have built. The composition is not one of the values the model states
+     * and is not competing with them for their budget: it is what a row is when none of them can be
+     * written for it, so it has a budget of its own.
      */
-    private static Perturbations nearestFirst(Subject subject, List<Axis> axes, int at, int cls,
-                                              List<Baseline> baselines, CandidateCheck check) {
+    private static Perturbations nearestFirst(List<Axis> axes, int at, int cls,
+                                              List<ResolvedOrigin> origins) {
         List<Candidate> out = new ArrayList<>();
-        List<Baseline> stated = new ArrayList<>(baselines);
-        List<int[]> stand = new ArrayList<>();
-        for (Baseline baseline : stated) {
-            stand.add(stands(subject, axes, baseline, check));
-        }
-        // Set where an assignment was there to be taken and the budget was already full, which is
-        // the one place the two can be told apart. Read off the length instead, a list that filled
-        // the budget exactly and a space that had nothing more are the same list.
         boolean cutShort = false;
         // The position the row is about, which is what an origin either states a value of or does
         // not. Both kinds are walked and the grounding ones whole, at every distance, before any of
         // the others.
         String about = axes.get(at).path().head();
-        walk:
         for (boolean grounding : new boolean[] {true, false}) {
-            for (int moved = 0; moved < axes.size(); moved++) {
-                for (int origin = 0; origin < stated.size(); origin++) {
-                    if (stand.get(origin) == null) {
-                        continue;   // nothing built this origin's values, so nothing measures it
-                    }
-                    if (stated.get(origin).at().containsKey(about) != grounding) {
-                        continue;
-                    }
-                    for (int[] supporting : supportingSets(axes, at, moved)) {
-                        for (int[] where
-                                : assignmentsOver(axes, stand.get(origin), at, cls, supporting)) {
-                            if (out.size() >= MOST_REPAIRS) {
-                                cutShort = true;
-                                break walk;
-                            }
-                            out.add(new Candidate(stated.get(origin), stand.get(origin), where));
-                        }
-                    }
+            List<ResolvedOrigin> stated = new ArrayList<>();
+            for (ResolvedOrigin origin : origins) {
+                if (!origin.composes() && origin.grounds(about) == grounding) {
+                    stated.add(origin);
                 }
             }
+            cutShort |= gather(axes, at, cls, stated, out, MOST_REPAIRS);
         }
-        Baseline classes = new Baseline(Map.of());
-        int[] composed = composes(axes);
-        // Reached only where the baselines left room. A composition that builds sits behind a
-        // budget the baselines spent, and a caller told the baselines were all refused would go
-        // looking for a value the model cannot hold — so the fact that this was never reached is
-        // what {@code cutShort} carries.
-        composing:
-        for (int moved = 0; !cutShort && moved < axes.size(); moved++) {
-            for (int[] supporting : supportingSets(axes, at, moved)) {
-                for (int[] where : assignmentsOver(axes, composed, at, cls, supporting)) {
-                    if (out.size() >= MOST_REPAIRS) {
-                        cutShort = true;
-                        break composing;
-                    }
-                    out.add(new Candidate(classes, composed, where));
-                }
+        for (ResolvedOrigin origin : origins) {
+            if (origin.composes()) {
+                cutShort |= gather(axes, at, cls, List.of(origin), out, out.size() + MOST_REPAIRS);
             }
         }
         return new Perturbations(out, cutShort);
+    }
+
+    /**
+     * Every assignment these origins offer for one class, nearest first, onto the end of
+     * {@code out}.
+     *
+     * <p>Walked by the size of the supporting set and handed out by the distance the assignment
+     * came to, which are two numbers and not one. A set of {@code k} positions moves {@code k} of
+     * them; the pin may move more, where a class of the position the row is about cannot stand
+     * beside where the origin's own value does. So an assignment is never nearer than the set that
+     * produced it, and everything at one distance has been produced by the time the walk finishes
+     * the sets of that size — which is what lets this hand them out in distance order without
+     * holding the whole space to sort it.
+     *
+     * @param cut how large {@code out} may grow before this stops, which is a bound on the search
+     *            and not on the space
+     * @return whether the bound stopped this before the assignments ran out
+     */
+    private static boolean gather(List<Axis> axes, int at, int cls, List<ResolvedOrigin> origins,
+                                  List<Candidate> out, int cut) {
+        // Produced further away than the set that produced them, kept until the walk reaches that
+        // distance rather than handed out early.
+        Map<Integer, List<Candidate>> waiting = new LinkedHashMap<>();
+        for (int moved = 0; moved <= axes.size(); moved++) {
+            for (ResolvedOrigin origin : origins) {
+                // The class the row is about settled first, and the origin's own classes kept at
+                // every position that can keep them beside it.
+                int[] base = standing(axes, wanting(axes, origin.stands(), at, cls),
+                        new int[] {at});
+                if (base == null) {
+                    continue;   // a class that cannot stand at its own position is no assignment
+                }
+                for (int[] supporting : supportingSets(axes, at, moved, base)) {
+                    for (int[] where : assignmentsOver(axes, base, supporting)) {
+                        Candidate candidate = new Candidate(origin, where,
+                                Delta.between(origin.stands(), where));
+                        waiting.computeIfAbsent(candidate.delta().size(), _ -> new ArrayList<>())
+                                .add(candidate);
+                    }
+                }
+            }
+            // Everything this far and nearer. Asked of every distance up to this one rather than of
+            // this one alone: what is due is a fact about the distances, and a walk that read it off
+            // the size of the set it had just finished would leave a nearer assignment sitting in
+            // the map for as long as the set that produced it was larger than it.
+            for (int distance : new java.util.TreeSet<>(waiting.keySet())) {
+                if (distance > moved) {
+                    break;
+                }
+                // The origins in the order they were gathered, within the one distance. Sorted
+                // rather than generated that way, because an assignment reaches one distance from
+                // more than one size of supporting set.
+                List<Candidate> due = waiting.remove(distance);
+                due.sort(java.util.Comparator.comparingInt(candidate -> candidate.from().index()));
+                for (Candidate candidate : due) {
+                    if (out.size() >= cut) {
+                        return true;
+                    }
+                    out.add(candidate);
+                }
+            }
+        }
+        // What the pin moved beyond the largest set walked. Nothing generates at this distance any
+        // more, so it is handed out in order rather than dropped.
+        for (int distance : new java.util.TreeSet<>(waiting.keySet())) {
+            for (Candidate candidate : waiting.get(distance)) {
+                if (out.size() >= cut) {
+                    return true;
+                }
+                out.add(candidate);
+            }
+        }
+        return false;
     }
 
     /**
@@ -1574,45 +1703,51 @@ public final class Generator {
      *
      * <p>In the axes' own order and combinations of it, so two runs of one model walk the same
      * assignments in the same order and offer the same rows.
+     *
+     * <p><b>Only the positions the row stands somewhere at.</b> A position at no class of this row
+     * is one no assignment over it moves, so a set that names it moves fewer positions than it has
+     * members — and the walk over the sets is what tells the search how far a candidate is. Left in,
+     * a row one position from its origin was offered behind rows two away, and the number the budget
+     * was spent by counted what the search reached for rather than what it moved.
      */
-    private static List<int[]> supportingSets(List<Axis> axes, int at, int moved) {
+    private static List<int[]> supportingSets(List<Axis> axes, int at, int moved, int[] base) {
+        if (moved > axes.size()) {
+            return List.of();
+        }
         List<int[]> out = new ArrayList<>();
-        chooseSupporting(axes, at, moved, 0, new int[moved], 0, out);
+        chooseSupporting(axes, at, moved, 0, new int[moved], 0, out, base);
         return out;
     }
 
     private static void chooseSupporting(List<Axis> axes, int at, int moved, int from,
-                                         int[] taken, int filled, List<int[]> out) {
+                                         int[] taken, int filled, List<int[]> out, int[] base) {
         if (filled == moved) {
             out.add(taken.clone());
             return;
         }
         for (int i = from; i < axes.size(); i++) {
-            if (i == at) {
+            if (i == at || base[i] == NOT_HERE) {
                 continue;
             }
             taken[filled] = i;
-            chooseSupporting(axes, at, moved, i + 1, taken, filled + 1, out);
+            chooseSupporting(axes, at, moved, i + 1, taken, filled + 1, out, base);
         }
     }
 
     /**
-     * Every assignment that pins {@code at} to {@code cls} and moves the positions in
-     * {@code supporting}, each of the rest standing where a position a row is not about stands.
+     * Every assignment over {@code base} that moves the positions in {@code supporting}, each of the
+     * rest standing where {@code base} puts it.
      *
-     * <p>The supporting positions take each of their classes in turn, the first of them being where
-     * they would have stood anyway — so the first assignment of every set is the one that moves
-     * nothing beside the target, and a set larger than it is only reached once the smaller ones are
-     * spent.
+     * <p>The supporting positions take each of their classes in turn, and never the one they already
+     * stood at — so a set of {@code k} positions moves {@code k} of them, and the assignment that
+     * moves fewer is the one a smaller set already produced.
      */
-    private static List<int[]> assignmentsOver(List<Axis> axes, int[] from, int at, int cls,
-                                               int[] supporting) {
+    private static List<int[]> assignmentsOver(List<Axis> axes, int[] base, int[] supporting) {
         List<int[]> out = new ArrayList<>();
-        // What the row is about first, and the origin's own classes kept wherever they can be kept
-        // beside it. Cloned outright, a row about a class under one case of a sum would carry the
-        // classes of the positions under another, which is a row that has to be two things at once.
-        walkSupporting(axes, standing(axes, wanting(axes, from, at, cls), new int[] {at}),
-                supporting, 0, out);
+        // Cloned, because the walk settles the supporting positions in place and puts back what it
+        // found. A row about a class under one case of a sum would otherwise carry the classes of
+        // the positions under another, which is a row that has to be two things at once.
+        walkSupporting(axes, base.clone(), supporting, 0, out);
         return out;
     }
 
@@ -1662,6 +1797,34 @@ public final class Generator {
             }
         }
         return out;
+    }
+
+    /**
+     * The origins this generation has, in the order the search tries them.
+     *
+     * <p>Resolved once for the behavior. Where a baseline's own values sit is read through the same
+     * check every candidate goes through, and asking it again for each class owed is that walk done
+     * once per class for an answer that does not change with the class.
+     *
+     * <p>An origin nothing built is left out here, once. A distance measured from a baseline nothing
+     * looked at would be measured from a guess.
+     *
+     * <p>The composition last, and always there. It is not one of the values the model states —
+     * where it stands is where the classes put it, which the search itself named — so it is not
+     * ordered among them; and it is not a baseline that failed, so nothing the baselines spend takes
+     * it away.
+     */
+    private static List<ResolvedOrigin> resolve(Subject subject, List<Axis> axes,
+                                                List<Baseline> baselines, CandidateCheck check) {
+        List<ResolvedOrigin> out = new ArrayList<>();
+        for (Baseline baseline : baselines) {
+            int[] stands = stands(subject, axes, baseline, check);
+            if (stands != null) {
+                out.add(new ResolvedOrigin(baseline, stands, out.size()));
+            }
+        }
+        out.add(new ResolvedOrigin(new Baseline(Map.of()), composes(axes), out.size()));
+        return List.copyOf(out);
     }
 
     /** Whether {@code axis} is one of the positions an assignment is about. */
@@ -1746,6 +1909,13 @@ public final class Generator {
      * — the difference between it and what the model already says is what the row is for, and
      * everything else standing where the model puts it is what makes that readable (issue #967).
      *
+     * <p><b>Which fields those are is {@link Delta}'s to say and is not worked out again here.</b>
+     * How far a row is from its origin is what the search ordered itself by, and which fields a
+     * spread writes over is that same difference projected onto the parameters. Counted a second
+     * time here, the two were free to disagree: the position the row is about was written out even
+     * where the origin already stood in that class, so a row that is the model's own value came out
+     * as that value with a field set to what it already held.
+     *
      * <p>What a baseline cannot be written for is kept as it was composed, and silently: this is
      * how a row is written and not whether one could be. A position the baseline reaches through
      * more than one field, a class with no value to put there, a value the model refuses beside the
@@ -1753,7 +1923,7 @@ public final class Generator {
      * row that says the same thing in more words.
      */
     private static Map<String, FixtureTemplate> against(Subject subject, List<Axis> axes,
-                                                        int[] from, int target, int[] where,
+                                                        Delta delta, int[] where,
                                                         Baseline baseline) {
         Map<String, FixtureTemplate> out = new LinkedHashMap<>();
         for (int p = 0; p < subject.parameters().size() && p < subject.types().size(); p++) {
@@ -1763,9 +1933,9 @@ public final class Generator {
                 continue;
             }
             FixtureTemplate named = FixtureTemplate.named(at.module(), at.name());
-            FixtureTemplate written = movedUnder(axes, from, parameter, target, where).isEmpty()
-                    ? named
-                    : withFieldsMoved(subject, p, axes, from, parameter, target, where, named);
+            List<Integer> moved = delta.under(axes, parameter);
+            FixtureTemplate written = moved.isEmpty() ? named
+                    : withFieldsMoved(subject, p, axes, moved, where, named);
             // Left out where the baseline cannot be written for this assignment, which leaves that
             // parameter to be composed from its classes. How a row is written never decides
             // whether the model allows it — the check below asks that of every parameter alike.
@@ -1776,46 +1946,36 @@ public final class Generator {
         return Map.copyOf(out);
     }
 
-    /** Which axes this assignment moves under {@code parameter}: the one the row is about, and any
-     *  the search moved beside it to make the row buildable. */
-    private static List<Integer> movedUnder(List<Axis> axes, int[] from, String parameter,
-                                            int target, int[] where) {
-        List<Integer> moved = new ArrayList<>();
-        for (int i = 0; i < axes.size(); i++) {
-            if (!axes.get(i).path().head().equals(parameter)) {
-                continue;
-            }
-            // Moved against where the baseline's own value stands, which is what the spread writes
-            // over. Measured against a composition, a field the baseline already holds the right
-            // value in was written out again for no reason, and one it did not was left unwritten.
-            if (i == target || where[i] != from[i]) {
-                moved.add(i);
-            }
-        }
-        return moved;
-    }
-
     /**
-     * The baseline with the fields this assignment moves under {@code parameter} set to values of
-     * the classes it moves them to, or null where this cannot be written.
+     * The baseline with the fields this assignment moves under one parameter set to values of the
+     * classes it moves them to, or null where this cannot be written.
      *
      * <p>Each field reached in one step. A position further down is a record inside a record, and
      * writing it means spreading the value at every step on the way — which is a row that names
      * values this has not been asked whether it can name. Such a parameter keeps what the classes
      * composed for it, which says the same thing and says it in full.
+     *
+     * @param moved which axes under this parameter the row does not stand where the origin does,
+     *              read off the one difference the search ordered itself by
      */
     private static FixtureTemplate withFieldsMoved(Subject subject, int p, List<Axis> axes,
-                                                   int[] from, String parameter, int target,
-                                                   int[] where, FixtureTemplate baseline) {
+                                                   List<Integer> moved, int[] where,
+                                                   FixtureTemplate baseline) {
         if (!(subject.types().get(p) instanceof Type.Ref(TypeSymbol built))
                 || !(subject.symbols().scope().reach(built) instanceof TypeReachName.Written type)) {
             return null;
         }
-        Map<String, FixtureTemplate> moved = new LinkedHashMap<>();
-        for (int i : movedUnder(axes, from, parameter, target, where)) {
+        Map<String, FixtureTemplate> fields = new LinkedHashMap<>();
+        for (int i : moved) {
             Axis axis = axes.get(i);
             if (axis.path().steps().size() != 1
                     || !(axis.path().steps().get(0) instanceof TermPath.Step.Field field)) {
+                return null;
+            }
+            // A position the row stands at no class of. It differs from where the origin stands and
+            // there is no class to take a value from, so this parameter is one the baseline cannot
+            // be written for.
+            if (where[i] == NOT_HERE) {
                 return null;
             }
             // The class's own values, and only those: a class composed through a constructor is a
@@ -1825,9 +1985,9 @@ public final class Generator {
                     instanceof RepresentativeSource.Evaluation.Values values)) {
                 return null;
             }
-            moved.put(field.name(), values.written().get(0));
+            fields.put(field.name(), values.written().get(0));
         }
-        return moved.isEmpty() ? null : FixtureTemplate.spreading(type, baseline, moved);
+        return fields.isEmpty() ? null : FixtureTemplate.spreading(type, baseline, fields);
     }
 
     /**

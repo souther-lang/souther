@@ -5,34 +5,40 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
- * What a class comes to when the search for it ran out of room.
+ * What a class comes to when the values the model states ran out of room.
  *
  * <p>A class is looked for against every value the model states, each walked outward from the
- * target alone, and the walk is bounded. The bound is a fact about the search: past it there are
- * assignments nothing tried, and one of them may be the one that builds. Read off the end of the
- * list of what was tried, the two came out the same — a walk that ran out of assignments and one
- * that ran out of budget both end, and the last refusal was offered as the class's answer either
- * way.
+ * target alone, and that walk is bounded. Behind the same bound sat the row composed from the
+ * classes, which is not one of those values: where it stands is where the classes put it, and the
+ * classes are what the search itself named. So it was not competing with the stated values for
+ * their budget, and a model that stated enough of them took away the one row that needed none.
  *
- * <p>Which is a claim about the model made on the strength of a limit. "Every value tried was
- * refused" over a search that stopped one short of the value that builds sends a reader looking for
- * a rule to change; what they have is a search to widen.
+ * <p>What the reader was handed instead was the search saying it had stopped, over a class the
+ * model can hold a row for. That is a claim about the model made on the strength of a limit: it
+ * sends a person looking for a rule to change where what they have is a row somebody can write in
+ * a line.
+ *
+ * <p>The bound still says what it says. A walk that ran out of assignments and one that ran out of
+ * budget are different facts about the search, and the second is what {@code SEARCH_LIMIT} is for —
+ * it decides the class's answer where nothing else could be written for it, rather than in front of
+ * the composition.
  */
-class ASearchThatStoppedSaysSoRatherThanNamingItsLastRefusalTest {
+class TheCompositionIsNotBehindTheBaselinesBudgetTest {
 
     /**
      * A rule relating two fields, and more values of the type than the walk has room for.
      *
      * <p>Every one of them holds {@code lo} above the class {@code hi} is looked for in, so the
-     * target moved alone is refused at each — and the repair that works, moving {@code lo} beside
-     * it, sits one distance further out. The values are alike on purpose: what is being asked is
-     * what the search says when it stops, and a value that built would end the walk before it.
+     * target moved alone is refused at each, and there are more of them than the walk has room for.
+     * The values are alike on purpose: what is being asked is what is left once they are spent, and
+     * a value that built would end the walk before it.
      */
     private static String crowded() {
         StringBuilder lets = new StringBuilder();
@@ -65,23 +71,25 @@ class ASearchThatStoppedSaysSoRatherThanNamingItsLastRefusalTest {
     }
 
     /**
-     * The class the walk did not reach the repair for says the search stopped.
+     * The class every stated value was spent on is answered by the composition.
      *
      * <p>{@code hi} at the bottom of its lower class is under every stated {@code lo}, which the
-     * rule refuses, so each of the sixty-five values fails at the target alone. The repair — moving
-     * {@code lo} down beside it — is a distance further out and the budget is spent before the walk
-     * gets there, and so is the composition from the classes that sits behind them all.
+     * rule refuses, so each of the sixty-five values fails at the target alone and the walk over
+     * them ends where its bound is. The row composed from the classes puts both positions at the
+     * bottom of their own, which the rule allows — so there is a row here, and it is one the reader
+     * gets rather than a sentence about a search.
      */
     @Test
-    void aClassTheBudgetStoppedShortOfSaysTheSearchStopped() {
+    void theCompositionAnswersAClassEveryStatedValueWasSpentOn() {
         Adequacy.Filling filling = generated(crowded()).get("submit");
         assertNotNull(filling, "the behavior under test is generated for");
 
         Generator.ClassAttempt at = attemptAtTheLowerHi(filling);
-        assertEquals(Generator.UnresolvedCombination.Reason.SEARCH_LIMIT,
-                ((Generator.ClassAttempt.Unresolved) at).why().reason(),
-                "the search stopped, and what the last value it got to came to is that value's "
-                        + "news and not the class's: " + at);
+        assertEquals(List.of("Request { lo = Amount(0), hi = Amount(0) }"),
+                ((Generator.ClassAttempt.Built) at).row().inputs().stream()
+                        .map(FixtureTemplate::text).toList(),
+                "composed from the classes, which is what a row is where none of the values the "
+                        + "model states can be written for it: " + at);
     }
 
     /** What the search made of the class {@code hi} takes below the line the body draws. */
