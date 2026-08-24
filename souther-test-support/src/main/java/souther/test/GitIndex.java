@@ -3,6 +3,7 @@ package souther.test;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -85,34 +86,48 @@ public final class GitIndex {
     private static String run(Path root, String... arguments) {
         List<String> command = new ArrayList<>(List.of("git", "-C", root.toString()));
         command.addAll(List.of(arguments));
+        Path complaint;
         Process git;
         try {
-            git = new ProcessBuilder(command).redirectErrorStream(false).start();
+            // What git says about itself goes to a file rather than a pipe. Read from a pipe it
+            // would have to be read while the list is being read, and one reader cannot do both:
+            // git blocked writing a full stderr pipe never finishes writing the list this is
+            // blocked reading.
+            complaint = Files.createTempFile("git-ls-files", ".err");
+            git = new ProcessBuilder(command)
+                    .redirectError(ProcessBuilder.Redirect.to(complaint.toFile()))
+                    .start();
         } catch (IOException noGit) {
             throw new IllegalStateException("cannot run " + String.join(" ", command)
                     + ": this reads what the repository holds and git is what holds it", noGit);
         }
         byte[] out;
-        byte[] err;
+        String err;
         int status;
         try {
             out = git.getInputStream().readAllBytes();
-            err = git.getErrorStream().readAllBytes();
             if (!git.waitFor(2, TimeUnit.MINUTES)) {
                 git.destroyForcibly();
                 throw new IllegalStateException(String.join(" ", command) + " did not finish");
             }
             status = git.exitValue();
+            err = Files.readString(complaint, StandardCharsets.UTF_8).trim();
         } catch (IOException unreadable) {
             throw new UncheckedIOException(unreadable);
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException(String.join(" ", command) + " was interrupted",
                     interrupted);
+        } finally {
+            try {
+                Files.deleteIfExists(complaint);
+            } catch (IOException leftBehind) {
+                throw new UncheckedIOException(leftBehind);
+            }
         }
         if (status != 0) {
             throw new IllegalStateException(String.join(" ", command) + " exited " + status + ": "
-                    + new String(err, StandardCharsets.UTF_8).trim());
+                    + err);
         }
         return new String(out, StandardCharsets.UTF_8);
     }

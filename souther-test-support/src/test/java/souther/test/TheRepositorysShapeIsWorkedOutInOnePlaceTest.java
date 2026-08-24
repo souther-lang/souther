@@ -39,6 +39,10 @@ class TheRepositorysShapeIsWorkedOutInOnePlaceTest {
     /** A way the shape has been worked out before, and what to ask instead. */
     private record Rederivation(String written, String instead) {}
 
+    /** The two files that write these words because of what they are for. */
+    private static final List<String> QUOTE_THEM =
+            List.of("RepositoryLayout.java", "TheRepositorysShapeIsWorkedOutInOnePlaceTest.java");
+
     private static final List<Rederivation> REDERIVATIONS = List.of(
             new Rederivation("Path.of(\"\").toAbsolutePath()",
                     "RepositoryLayout.ofWorkingDirectory().root()"),
@@ -81,21 +85,20 @@ class TheRepositorysShapeIsWorkedOutInOnePlaceTest {
     }
 
     /**
-     * Every Java source but this module's own.
+     * Every Java source but the two that have to write these words.
      *
      * <p>{@link RepositoryLayout} works the shape out because that is what it is for, and this
-     * class quotes the derivations in order to refuse them.
+     * class quotes the derivations in order to refuse them. Named one file at a time rather than by
+     * leaving out the module they are in: the rest of this module is held to the rule like
+     * everything else.
      */
     private static List<Path> sourcesThatCouldRederive() {
-        Path mine = REPOSITORY.root().resolve("souther-test-support");
         List<Path> out = new ArrayList<>();
         for (Path tree : REPOSITORY.sourceTrees()) {
-            if (tree.startsWith(mine)) {
-                continue;
-            }
             try (Stream<Path> walk = Files.walk(tree)) {
                 walk.filter(Files::isRegularFile)
                         .filter(each -> each.getFileName().toString().endsWith(".java"))
+                        .filter(each -> !QUOTE_THEM.contains(each.getFileName().toString()))
                         .forEach(out::add);
             } catch (IOException unreadable) {
                 throw new UncheckedIOException(unreadable);
