@@ -118,13 +118,49 @@ public final class RepositoryLayout {
 
     /** The {@code src/main/java} of every module that has one. */
     public List<Path> mainJavaTrees() {
+        return mainTrees("java");
+    }
+
+    /**
+     * The {@code src/main/<kind>} of every module that has one, sorted.
+     *
+     * <p>{@code java} for the sources, {@code resources} for what ships beside them.
+     */
+    public List<Path> mainTrees(String kind) {
         List<Path> out = new ArrayList<>();
         for (Path module : modules) {
-            Path main = module.resolve("src").resolve("main").resolve("java");
-            if (Files.isDirectory(main)) {
-                out.add(main);
+            Path tree = module.resolve("src").resolve("main").resolve(kind);
+            if (Files.isDirectory(tree)) {
+                out.add(tree);
             }
         }
+        out.sort(Path::compareTo);
+        return List.copyOf(out);
+    }
+
+    /**
+     * Every {@code .java} this repository's main sources have, sorted.
+     *
+     * <p>What the checks that hold a rule over the compiler itself read. Held as one answer because
+     * six of them had worked it out for themselves, and a rule about where something may be written
+     * says nothing about a module its scan did not reach.
+     */
+    public List<Path> mainJavaSources() {
+        List<Path> out = new ArrayList<>();
+        for (Path tree : mainJavaTrees()) {
+            try (Stream<Path> walk = Files.walk(tree)) {
+                walk.filter(Files::isRegularFile)
+                        .filter(each -> each.getFileName().toString().endsWith(".java"))
+                        .forEach(out::add);
+            } catch (IOException unreadable) {
+                throw new UncheckedIOException(unreadable);
+            }
+        }
+        if (out.isEmpty()) {
+            throw new IllegalStateException("no Java sources under " + mainJavaTrees()
+                    + ": a scan of nothing holds a rule over nothing");
+        }
+        out.sort(Path::compareTo);
         return List.copyOf(out);
     }
 

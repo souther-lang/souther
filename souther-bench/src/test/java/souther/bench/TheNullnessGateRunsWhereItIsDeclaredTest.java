@@ -67,12 +67,12 @@ class TheNullnessGateRunsWhereItIsDeclaredTest {
         List<String> modules = Reactor.modules();
         Set<String> declared = new LinkedHashSet<>();
         Set<String> configured = new LinkedHashSet<>();
-        boolean rootGates = gateIsInTheBuildOf(repoRoot().resolve("pom.xml"));
+        boolean rootGates = gateIsInTheBuildOf(Reactor.root().resolve("pom.xml"));
         for (String module : modules) {
             if (declaresNullMarked(module)) {
                 declared.add(module);
             }
-            if (rootGates || gateIsInTheBuildOf(repoRoot().resolve(module).resolve("pom.xml"))) {
+            if (rootGates || gateIsInTheBuildOf(Reactor.root().resolve(module).resolve("pom.xml"))) {
                 configured.add(module);
             }
         }
@@ -100,7 +100,7 @@ class TheNullnessGateRunsWhereItIsDeclaredTest {
         if (!Reactor.hasMainSources(module)) {
             return false;   // nothing of its own to annotate
         }
-        Path classes = repoRoot().resolve(module).resolve("target/classes");
+        Path classes = Reactor.root().resolve(module).resolve("target/classes");
         assertTrue(Files.isDirectory(classes),
                 module + " has no built classes: this reads what has been built, so a module that has"
                         + " not been is a hole rather than a pass");
@@ -162,7 +162,7 @@ class TheNullnessGateRunsWhereItIsDeclaredTest {
     /** The root pom's {@code <properties>}, which is where the gate's options are named. */
     private static Map<String, String> rootProperties() {
         Map<String, String> properties = new LinkedHashMap<>();
-        for (Element block : childrenNamed(parse(repoRoot().resolve("pom.xml")), "properties")) {
+        for (Element block : childrenNamed(parse(Reactor.root().resolve("pom.xml")), "properties")) {
             NodeList children = block.getChildNodes();
             for (int i = 0; i < children.getLength(); i++) {
                 if (children.item(i) instanceof Element element) {
@@ -227,7 +227,4 @@ class TheNullnessGateRunsWhereItIsDeclaredTest {
      * check gives: a list of its own would say what was true when it was written.
      */
 
-    private static Path repoRoot() {
-        return Path.of("").toAbsolutePath().getParent();
-    }
 }

@@ -10,6 +10,8 @@ import souther.compiler.diag.msg.MessageValues;
 
 import org.junit.jupiter.api.Test;
 
+import souther.test.RepositoryLayout;
+
 import souther.compiler.check.Ordering;
 import souther.compiler.Reserved;
 import souther.compiler.types.Type;
@@ -969,19 +971,7 @@ public class EveryShippedMessageCatalogIsCompleteAndValidTest {
     /** Every module's {@code src/main/<kind>}, for the modules that have one. The test runs in its
      *  own module directory, so the repository root is that directory's parent. */
     private static List<Path> moduleDirectories(String kind) throws IOException {
-        Path module = Path.of("").toAbsolutePath();
-        Path repo = Files.isDirectory(module.resolve(Path.of("src", "main", "java")))
-                ? module.getParent() : module;
-        List<Path> directories = new ArrayList<>();
-        try (Stream<Path> modules = Files.list(repo)) {
-            for (Path candidate : modules.map(m -> m.resolve(Path.of("src", "main", kind))).toList()) {
-                if (Files.isDirectory(candidate)) {
-                    directories.add(candidate);
-                }
-            }
-        }
-        directories.sort(Path::compareTo);
-        return directories;
+        return RepositoryLayout.ofWorkingDirectory().mainTrees(kind);
     }
 
     private static Properties load(Path catalog) throws IOException {

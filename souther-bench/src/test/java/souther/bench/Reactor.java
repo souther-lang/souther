@@ -1,13 +1,12 @@
 package souther.bench;
 
+import souther.test.RepositoryLayout;
+
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -33,21 +32,11 @@ final class Reactor {
 
     private Reactor() {}
 
+    private static final RepositoryLayout REPOSITORY = RepositoryLayout.ofWorkingDirectory();
+
     /** The modules the root pom names. */
     static List<String> modules() {
-        String pom;
-        try {
-            pom = Files.readString(root().resolve("pom.xml"));
-        } catch (IOException unreadable) {
-            throw new UncheckedIOException(unreadable);
-        }
-        List<String> out = new ArrayList<>();
-        Matcher named = Pattern.compile("<module>([^<]+)</module>").matcher(pom);
-        while (named.find()) {
-            out.add(named.group(1));
-        }
-        assertTrue(out.size() > 1, () -> "the root pom names " + out);
-        return List.copyOf(out);
+        return REPOSITORY.modules().stream().map(module -> module.getFileName().toString()).toList();
     }
 
     /**
@@ -82,6 +71,6 @@ final class Reactor {
 
     /** The repository, from the module this runs in. */
     static Path root() {
-        return Path.of("").toAbsolutePath().getParent();
+        return REPOSITORY.root();
     }
 }

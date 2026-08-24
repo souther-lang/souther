@@ -80,7 +80,7 @@ class TheAbiIsSpelledInOnePlaceTest {
         List<String> modules = Reactor.modules();
         for (String module : modules) {
             for (String where : List.of("target/classes", "target/test-classes")) {
-                Path classes = repoRoot().resolve(module).resolve(where);
+                Path classes = Reactor.root().resolve(module).resolve(where);
                 if (where.endsWith("test-classes") && !Files.isDirectory(classes)) {
                     continue;   // a module with no tests of its own
                 }
@@ -139,7 +139,7 @@ class TheAbiIsSpelledInOnePlaceTest {
             if (!Reactor.hasMainSources(module)) {
                 continue;   // a module with no main sources of its own
             }
-            Path classes = repoRoot().resolve(module).resolve("target/classes");
+            Path classes = Reactor.root().resolve(module).resolve("target/classes");
             assertTrue(Files.isDirectory(classes), module + " has no built classes");
             walkFor(classes, callers, TheAbiIsSpelledInOnePlaceTest::capitalizes);
         }
@@ -282,7 +282,4 @@ class TheAbiIsSpelledInOnePlaceTest {
     }
 
     /** The tree this module sits in. */
-    private static Path repoRoot() {
-        return Path.of("").toAbsolutePath().getParent();
-    }
 }
