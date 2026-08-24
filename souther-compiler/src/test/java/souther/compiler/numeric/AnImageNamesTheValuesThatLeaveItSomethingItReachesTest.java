@@ -196,6 +196,38 @@ class AnImageNamesTheValuesThatLeaveItSomethingItReachesTest {
     }
 
     /**
+     * A position that fills, weighed against a residue that steps, answers in values the position
+     * holds.
+     *
+     * <p>Which decimals {@code x} leave {@code 1 - 3x} a whole multiple of two: one, three, five and
+     * so on. Solved over the rationals that set is {@code 1/3 + (2/3)k}, whose members at every odd
+     * {@code k} are exactly those — and neither of the two numbers it is written with is a decimal
+     * a model writes.
+     *
+     * <p>Handed over that way, the reader that cut it to the run read those two numbers, found
+     * neither writable, and answered that no value of the position is on the coset — which is a
+     * proof of emptiness over a set with witnesses in it, and the one direction a preimage may
+     * never err in.
+     */
+    @Test
+    void aPositionThatFillsIsAnsweredInValuesItHolds() {
+        AdditiveImage rest = new AdditiveImage.OverWholeNumbers(at(2));
+
+        AffinePreimage answer = rest.affinePreimage(at(3), Rational.ONE, Granularity.DENSE);
+
+        assertEquals(new AffinePreimage.Stepping(Rational.ONE, at(2), Granularity.DENSE), answer);
+        leavesSomethingReached(rest, at(3), Rational.ONE, answer);
+    }
+
+    /** And a progression whose members its position does not hold is refused where it is built. */
+    @Test
+    void aProgressionNamesValuesItsPositionHolds() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new AffinePreimage.Stepping(new Rational(BigInteger.ONE, BigInteger.valueOf(3)),
+                        new Rational(BigInteger.TWO, BigInteger.valueOf(3)), Granularity.DENSE));
+    }
+
+    /**
      * A position that steps, weighed against a residue that fills, and the congruence it is left
      * with.
      *

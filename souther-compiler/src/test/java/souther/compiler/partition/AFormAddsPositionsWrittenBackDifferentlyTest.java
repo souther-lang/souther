@@ -201,6 +201,35 @@ class AFormAddsPositionsWrittenBackDifferentlyTest {
                         + " no two whole numbers");
     }
 
+    /**
+     * And a form whose weights put the dense position on a coset, the whole way through.
+     *
+     * <p>{@code 3d + n} at one is met at {@code d = 0, n = 1}. What the search has to be handed for
+     * that level is which decimals {@code d} leave {@code n} a whole number — a progression whose
+     * two numbers are thirds and whose members are not. Read off those two numbers, the search was
+     * told no value of {@code d} is on the coset at all, and settled the level as one the rules
+     * leave nothing at.
+     *
+     * <p>The acceptance above does not reach it: {@code d - n} weighs {@code d} by one, so the
+     * progression it leaves is written in the numbers its members are.
+     */
+    @Test
+    void aFormThatPutsTheDensePositionOnACosetIsStillReached() {
+        NumericDomain.LinearForm<NumericTerm> thriceD = new NumericDomain.LinearForm<>(
+                BigDecimal.ZERO,
+                Map.of(value("d"), new BigDecimal("3"), value("n"), BigDecimal.ONE));
+        BorderQuantity.OverAForm over = new BorderQuantity.OverAForm("take", thriceD,
+                Map.of(value("d"), Carrier.DENSE, value("n"), Carrier.WHOLE));
+
+        Realization made = new LevelRealizer().realize(
+                over.standingAt(
+                        new Criterion.AtTheLevel(new Level.ACount(Count.of(BigDecimal.ONE)))),
+                region());
+
+        assertInstanceOf(Realization.Found.class, made,
+                "a level the rules leave a row at is not a level nothing stands at");
+    }
+
     private static SearchRegion region() {
         Compilation compilation = Compilation.ofSource(A_DECIMAL_AN_INT_AND_A_DATE, "Main");
         compilation.answerEverything();

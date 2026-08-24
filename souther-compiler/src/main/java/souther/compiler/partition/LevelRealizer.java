@@ -301,8 +301,7 @@ public final class LevelRealizer {
          * about a position — whether its values step, what its next value is, how far it may be
          * moved — and answering them from one order handed to the whole form walked a decimal
          * position over the whole numbers, or the other way about, wherever a form's positions were
-         * not written back the same way. What the form's positions do share is the unit their counts
-         * are in, and that is asked where the form is built rather than here.
+         * not written back the same way.
          */
         private final Carrier[] carriers;
         /** Where a row for the item being searched for may be written. */

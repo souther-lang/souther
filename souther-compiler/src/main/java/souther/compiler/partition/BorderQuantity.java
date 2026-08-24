@@ -289,13 +289,11 @@ public sealed interface BorderQuantity {
                         + " of them is read on one order: " + form.coefs().keySet() + " against "
                         + on.keySet());
             }
-            // And each of those orders has counts under it, which is what a sum adds. Not that they
-            // count the same thing: which positions may be added, and with which weights, is
-            // settled before a quantity is built — by an arithmetic the model wrote and the types
-            // admitted, or by what an operation states about its result. Asked again here it would
-            // be asked without the coefficients, and `b + a` over two dates is the same orders in
-            // the same numbers as `b - a - n`, which is a day count and is exactly what #949 is
-            // about.
+            // And each of those orders has counts under it, which is what a sum adds. Nothing
+            // more: whether these positions add up to anything is settled by whatever produced the
+            // form, and a rule here would be written without the coefficients. `b + a` over two
+            // dates is the same orders in the same numbers as `b - a - n`, and only the second is a
+            // count of days — which is the form issue #949 asks for.
             for (Carrier each : on.values()) {
                 if (!each.counts()) {
                     throw new IllegalArgumentException(
@@ -331,8 +329,8 @@ public sealed interface BorderQuantity {
          * How the sum steps, which is how its positions step together.
          *
          * <p>A sum steps only where every one of its terms does: a whole number added to a decimal
-         * lands wherever the decimal does. Read off one order while the form was held to one, this
-         * is now read off all of them — and a form of whole numbers still answers what it did.
+         * lands wherever the decimal does. Read off the one order a form was held to, this was
+         * whatever that order said; a form of whole numbers still answers what it did.
          */
         souther.compiler.numeric.Granularity spacing() {
             for (Carrier each : on.values()) {
@@ -432,10 +430,12 @@ public sealed interface BorderQuantity {
      *
      * <p>Asked per position rather than once. A quantity used to answer with the one order every
      * position under it was on, which a coordinate and a line between two positions can do because
-     * they have one — and a form was then held to the same, so a form whose positions were written
-     * back differently was refused whether or not their counts meant the same thing. What a form
-     * needs its positions to share is the unit its counts are in ({@link Carrier#counting}); what it
-     * reads and writes each of them on is that position's own.
+     * they have one — and a form was then held to the same, so a form over positions written back
+     * differently was no quantity at all.
+     *
+     * <p>Nothing is asked of the orders beyond each having counts under it. Which positions a form
+     * weighs, and with what, is settled by the arithmetic or the operation semantics that produced
+     * the form; this layer does not decide that again.
      */
     Carrier carrierOf(NumericTerm term);
 

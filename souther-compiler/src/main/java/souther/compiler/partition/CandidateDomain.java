@@ -99,13 +99,12 @@ sealed interface CandidateDomain {
      */
     private static CandidateDomain stepping(AffinePreimage.Stepping on,
                                             NumericDomain.Bounds within) {
+        // Both are values of the position, which {@link AffinePreimage.Stepping} requires of every
+        // member it names. Asked here instead, this read the progression's own two numbers and
+        // called a set with witnesses in it empty: `1/3 + (2/3)k` is one, three and five, and none
+        // of those is what either of its numbers is written as.
         BigDecimal from = on.from().asWrittenDecimal();
         BigDecimal by = on.by().asWrittenDecimal();
-        if (from == null || by == null) {
-            // A coset no decimal writes is one no value of a position takes, since a position holds
-            // what a model can write down.
-            return new None();
-        }
         BigDecimal least = stepsTo(within.min(), from, by, true);
         BigDecimal most = stepsTo(within.max(), from, by, false);
         if (least != null && most != null) {

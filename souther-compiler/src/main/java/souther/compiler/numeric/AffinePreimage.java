@@ -26,25 +26,32 @@ public sealed interface AffinePreimage {
     record None() implements AffinePreimage {}
 
     /**
-     * Every {@code from + by·k} for a whole {@code k}, through the values of a position spaced as
-     * {@code spacing} says.
+     * Every {@code from + by·k} for a whole {@code k}, and every one of them a value the position
+     * holds.
      *
      * <p><b>What steps is the set and not always the position.</b> A position whose values fill,
-     * weighed against a residue that steps, reaches exactly a progression through its own values —
+     * weighed against a residue that steps, reaches a progression through its own values —
      * {@code d - n} at two and a half is met by {@code d} at two and a half, three and a half, and
-     * no other. So a member need not be whole, and whether it may be is what the position's spacing
-     * says rather than something true of every progression.
+     * no other. So a member need not be whole. What it must be is a value the position takes, and
+     * which values those are is what the spacing says.
      *
-     * <p>Which is why the spacing comes with it. A coset of halves offered to a position that counts
-     * is a value it does not hold offered as one it does, and that is worth refusing; refusing it by
-     * requiring every progression to be written in whole numbers refused the dense position's answer
-     * along with it, and the reading that could not say that answer gave back every value the
-     * position has — which is safe and is nothing a search can use.
+     * <p><b>Members and not the equation's solutions.</b> The two came apart here. Solving over the
+     * rationals leaves a progression like {@code 1/3 + (2/3)k}, whose members at every odd
+     * {@code k} are one, three, five — all of them values a position that fills holds, none of them
+     * written in the two numbers the progression is written with. Handed over unreduced, a reader
+     * that asked whether the progression was written in decimals answered about the wrong thing and
+     * called a set with witnesses in it empty.
      *
-     * @param by      always positive. One is every whole number, which is what a position under no
-     *                congruence is left with
-     * @param spacing how the position's own values are spaced. Its members are values of that
-     *                position, so a position that counts takes a progression of whole numbers
+     * <p>So the intersection is the producer's, and it is required here rather than described: a
+     * progression that names values its position does not hold is refused where it is built, which
+     * is the only place that knows how to take the intersection. A reader may then take any member
+     * it likes.
+     *
+     * @param by      always positive. One is every value of the position, which is what a position
+     *                under no congruence is left with
+     * @param spacing how the position's own values are spaced. A position that counts takes a
+     *                progression of whole numbers; one whose values fill takes one written in
+     *                decimals a model can write
      */
     record Stepping(Rational from, Rational by, Granularity spacing) implements AffinePreimage {
 
@@ -64,6 +71,12 @@ public sealed interface AffinePreimage {
                 throw new IllegalArgumentException(
                         "a position whose values step takes whole numbers, so a progression of them"
                                 + " is written in whole numbers: " + from + " by " + by);
+            }
+            if (spacing == Granularity.DENSE
+                    && (from.asWrittenDecimal() == null || by.asWrittenDecimal() == null)) {
+                throw new IllegalArgumentException(
+                        "a progression names values of its position, and a position holds what a"
+                                + " model can write: " + from + " by " + by);
             }
             from = from.minus(by.times(Rational.of(from.dividedBy(by).floor())));
         }

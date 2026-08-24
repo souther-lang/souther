@@ -76,10 +76,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * is the case domain testing exists for — a partition defined by a condition over more than one
      * variable — and the four sides of the box its positions sit in are not it.
      *
-     * <p>Only where every position of the form is counted on one order. A form adds its positions
-     * together, and two orders whose counts mean different things have no sum: a day count and a
-     * number are not addable, and a rule that looked addable because both sides type-checked would
-     * put a border at a number nothing stands at.
+     * <p>Each position on the order it is written back on, which the reading answers per position.
+     * Only where every one of them has an order with counts under it: a position with no number is
+     * one a sum has nothing to add.
      */
     private static Cutting overAForm(String behavior, AffineReading read, InputReads reads,
                                      Symbols symbols,

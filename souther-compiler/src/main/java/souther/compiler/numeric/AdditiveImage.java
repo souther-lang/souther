@@ -59,11 +59,12 @@ public sealed interface AdditiveImage {
      * rejection leaves nothing; asked this way the same arithmetic names the values worth choosing.
      *
      * <p>What comes back is a coset of whatever the position is made of, which is why the spacing is
-     * an argument rather than read off this. An image over whole numbers is asked about by a position
-     * whose values fill wherever a form's positions are not all spaced alike — and the two mixed
-     * pairings are answered by the whole of the position's own values, which is wider than the truth
-     * and safe for the reason given on this interface. Every caller today weighs positions that share
-     * a carrier, so the mixed pairings are answered rather than refused and are not searched over.
+     * an argument rather than read off this. The mixed pairings — an image over whole numbers asked
+     * about by a position whose values fill, and the other way about — are what a form over
+     * positions written back differently reaches, and both are answered in the position's own
+     * values. Widening them to everything the position has was safe while nothing searched over
+     * them; a search handed that has nothing to go on, and one handed the unreduced solution set
+     * instead reads its two numbers and calls a set with witnesses in it empty.
      *
      * @param coefficient this position's weight in the form, never zero
      * @param target      what the positions from this one on still owe
@@ -141,6 +142,45 @@ public sealed interface AdditiveImage {
             return value.dividedBy(generator).isWhole();
         }
 
+        /**
+         * A position that fills, weighed against a residue that steps.
+         *
+         * <p>Solving over the rationals leaves {@code (t - g·k)/c}, which is
+         * {@code t/c + (g/c)·k}. That set is not the answer: a position holds what a model can
+         * write, so what it reaches is that progression met with the decimals — and the meeting is
+         * itself a progression, which is why it can be said at all. Over the generator two and the
+         * weight three, {@code 1/3 + (2/3)k} meets them at one, three, five, and the answer is
+         * {@code 1 + 2k}.
+         *
+         * <p>Taken here and not left to a reader. The reader that had it read the progression's own
+         * two numbers, found neither of them a decimal, and called a set with witnesses in it empty
+         * — which is the one direction {@link AffinePreimage} says a preimage may never err in.
+         * Where the two are apart the intersection is a congruence on the multiplier: over a common
+         * denominator {@code L} the members are {@code (A + B·k)/L}, and one is a decimal exactly
+         * where the part of {@code L} that is neither two nor five divides {@code A + B·k}.
+         */
+        private AffinePreimage fillingPreimage(Rational coefficient, Rational target) {
+            Rational from = target.dividedBy(coefficient);
+            Rational by = generator.dividedBy(coefficient);
+            java.math.BigInteger over = from.denominator().multiply(by.denominator());
+            java.math.BigInteger modulus = Rational.of(over).unitsRemoved().numerator();
+            if (modulus.equals(java.math.BigInteger.ONE)) {
+                return new AffinePreimage.Stepping(from, by.abs(), Granularity.DENSE);
+            }
+            java.math.BigInteger a = from.times(Rational.of(over)).numerator();
+            java.math.BigInteger b = by.times(Rational.of(over)).numerator();
+            java.math.BigInteger shared = b.gcd(modulus);
+            if (!a.mod(shared).equals(java.math.BigInteger.ZERO)) {
+                return new AffinePreimage.None();   // no multiplier lands the member on a decimal
+            }
+            java.math.BigInteger steps = modulus.divide(shared);
+            java.math.BigInteger at = a.negate().divide(shared).mod(steps)
+                    .multiply(b.divide(shared).mod(steps).modInverse(steps))
+                    .mod(steps);
+            return new AffinePreimage.Stepping(from.plus(by.times(Rational.of(at))),
+                    by.times(Rational.of(steps)).abs(), Granularity.DENSE);
+        }
+
         @Override
         public RationalCut tightenUpper(RationalCut cut) {
             Rational steps = cut.at().dividedBy(generator);
@@ -172,16 +212,7 @@ public sealed interface AdditiveImage {
         public AffinePreimage affinePreimage(Rational coefficient, Rational target,
                                              Granularity source) {
             if (source != Granularity.DISCRETE) {
-                // A position that fills, weighed against a residue that steps. What works out is
-                // `(t - g·k)/c` for whole `k`, which is a progression the position's values pass
-                // through — and it is a progression whether or not its members are whole. Answered
-                // before with every value the position has, on the ground that no caller weighed
-                // positions spaced differently; one that does is a search with nothing to go on.
-                //
-                // Wider than the truth only in that a member may be no decimal a model writes,
-                // which the position refuses when it is asked for that member.
-                return new AffinePreimage.Stepping(target.dividedBy(coefficient),
-                        generator.dividedBy(coefficient).abs(), source);
+                return fillingPreimage(coefficient, target);
             }
             Rational divisor = Rational.gcd(coefficient, generator);
             Rational steps = target.dividedBy(divisor);
