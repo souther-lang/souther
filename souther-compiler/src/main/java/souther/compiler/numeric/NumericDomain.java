@@ -719,6 +719,12 @@ public final class NumericDomain<A> {
     /** What an atom's values are known to lie between. A {@code null} end is unbounded there. */
     public record Bounds(Endpoint min, Endpoint max) {
 
+        /** Neither end written down, which is every value there is. Beside
+         * {@link OrderedInterval#OPEN} and the same thing said of this pair: a caller with nothing
+         * to say says it with this rather than with a {@code null} that a reader has to tell from
+         * one meaning something else. */
+        public static final Bounds OPEN = new Bounds(null, null);
+
         /**
          * Whether neither end was written down, which is a range of every value there is.
          *
