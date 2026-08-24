@@ -6,6 +6,7 @@ import souther.compiler.query.Scopes;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.Prepared;
+import souther.compiler.check.Required;
 import souther.compiler.check.StatedContract;
 import souther.compiler.check.Symbols;
 import souther.compiler.inputs.InputDomain;
@@ -17,6 +18,7 @@ import souther.compiler.query.Shapes;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -192,6 +194,12 @@ class WhatAClauseDrawsALineOnTest {
      * <p>The other half of the same decision, and the opposite mistake. {@code value.sku ==
      * item.sku} was read and understood, and it draws no line a row can be written at — reported as
      * one this compiler did not read, it sends an author after a limit that is not there.
+     *
+     * <p><b>And the reason it raises nothing is the answer.</b> An equality between two things that
+     * both move with the row raises nothing either, so this clause came back raising nothing while
+     * classified as a rule about a pair of inputs — right for the wrong reason, and the reason is
+     * what a reader is given. What the same shape written {@code <=} did is issue #1013 and the
+     * test below.
      */
     @Test
     void aRuleRelatingTheAnswerToAnInputIsNotNamedAsUnread() {
@@ -209,6 +217,58 @@ class WhatAClauseDrawsALineOnTest {
         assertEquals(List.of(), valuesOf(clauses));
         assertEquals(List.of(), clauses.unread(),
                 "this read the rule; what it draws no line at is a decision and not a limit");
+        assertEquals(1, clauses.accounting().size(),
+                () -> "the rule was read and filed at the position it names: "
+                        + clauses.accounting());
+        assertEquals(Set.of(Required.Because.IT_DEPENDS_ON_THE_ANSWER),
+                reasonOf(clauses.accounting().get(0)),
+                "and it raises nothing because it reads the answer, not because it relates a pair");
+    }
+
+    /**
+     * The same shape written as an order raises nothing either (issue #1013).
+     *
+     * <p>Which it did not. An equality between two moving things raises nothing whatever they are,
+     * so the clause above was silent while misclassified; an order between two of them is a line
+     * rows are owed at, and where one of the two is the answer that line is at a place no reading
+     * of the clause can reach. So the report named a rule nothing accounted for, about a behavior
+     * whose every rule was read.
+     *
+     * <p>Not an empty accounting. The rule was read and it names {@code query.limit} — a row does
+     * choose that — and what follows is that it asks nothing of a measure over the input's values.
+     * A reading that filed nothing would be saying it never looked.
+     */
+    @Test
+    void anOrderBetweenTheAnswerAndAnInputRaisesNothing() {
+        EnsuresThresholds.Clauses clauses = drawn("""
+                module g
+
+                data Limit = Int
+                data GlobalQuery = { limit: Limit }
+                data Page = { articles: List<String> }
+
+                behavior readArticles : (query: GlobalQuery) -> Page
+                    ensures List.length(value.articles) <= query.limit.value
+                """, "readArticles");
+
+        assertEquals(List.of(), valuesOf(clauses), "the line is on the answer, and a row has none");
+        assertEquals(List.of(), clauses.between(), "and it is not a line between two inputs");
+        assertEquals(List.of(), clauses.unread(),
+                "this read the rule; that it draws no line is a decision and not a limit");
+
+        assertEquals(1, clauses.accounting().size(),
+                () -> "filed at the position the rule names: " + clauses.accounting());
+        GuardThresholds.Guards.AtAPosition filed = clauses.accounting().get(0);
+        assertEquals("query.limit", filed.at().toString());
+        assertEquals(Set.of(Required.Because.IT_DEPENDS_ON_THE_ANSWER), reasonOf(filed));
+        assertEquals(List.of(), filed.accounting().unansweredQuestions(),
+                "nothing is owed here, so there is nothing for a report to say went unanswered");
+    }
+
+    /** Why one filed rule raises nothing, which is what a reader of the report is given. */
+    private static Set<Required.Because> reasonOf(GuardThresholds.Guards.AtAPosition filed) {
+        return assertInstanceOf(Required.Irrelevant.class, filed.accounting().required(),
+                () -> "raises nothing: " + filed.accounting().required()).because();
     }
 
     /**

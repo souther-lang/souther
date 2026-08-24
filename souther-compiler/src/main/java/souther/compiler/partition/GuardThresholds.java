@@ -2,7 +2,6 @@ package souther.compiler.partition;
 
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.Carrier;
-import souther.compiler.check.Owed;
 import souther.compiler.check.Required;
 import souther.compiler.check.RuleAccounting;
 import souther.compiler.check.RuleRef;
@@ -21,7 +20,6 @@ import souther.compiler.core.Core;
 import souther.compiler.coverage.ComparisonCatalog;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.diag.Citation;
-import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
@@ -518,7 +516,7 @@ public final class GuardThresholds {
             // would be read `on`. One comparison is one line however many positions it mentions.
             raises(accounting, behavior, plan.comparisons(), each, named.get(0),
                     comparedTerm(each, reads, symbols),
-                    subjectsOf(each, reads, symbols, null),
+                    ComparisonSubjects.of(each, reads, symbols, null),
                     new Required.LineRead.ALineBetweenTwoPositions());
             return;
         }
@@ -547,7 +545,7 @@ public final class GuardThresholds {
             between.add(new LineDrawn(cutting, origin));
         }
         raises(accounting, behavior, plan.comparisons(), each, divided.path(), divided,
-                subjectsOf(each, reads, symbols, null),
+                ComparisonSubjects.of(each, reads, symbols, null),
                 new Required.LineRead.ALineOnThePosition());
     }
 
@@ -563,78 +561,8 @@ public final class GuardThresholds {
         }
         raises(accounting, behavior, catalog, comparison, named.get(0),
                 comparedTerm(comparison, reads, symbols),
-                subjectsOf(comparison, reads, symbols, null),
+                ComparisonSubjects.of(comparison, reads, symbols, null),
                 new Required.LineRead.NoLine(why(comparison, reads, symbols)));
-    }
-
-    /**
-     * What the question is about, relative to the position it is filed at.
-     *
-     * <p>An invariant's subject is relative to the value its clause is on, and this is the same
-     * thing one frame out. Which of the two it is was settled by the reading that found the term: a
-     * {@code String} bounded on its length raises about the string and draws its line on the count,
-     * and a document promises both spellings.
-     */
-    static Owed.Subject.OfAPosition subjectOf(NumericTerm term) {
-        // A term that is a count says the line is on the count; anything else — a term over the
-        // position's own value, or no term at all — leaves it on the position.
-        return new Owed.Subject.OfAPosition("", term instanceof NumericTerm.SizeOf);
-    }
-
-    /**
-     * Whether the comparison is about one of the behavior's positions or about two.
-     *
-     * <p>Off the source, by the walk that names positions however they are written. The operator
-     * says what a comparison places and this says what it places it about, and neither is the
-     * other's: {@code x == 10} singles a value out and {@code x == y} is a rule about a pair, under
-     * one operator.
-     */
-    static Required.ComparisonSubject subjectsOf(Core.Binary comparison, InputReads reads,
-                                                 Symbols symbols, BindingId answer) {
-        boolean left = movesWithTheRow(comparison.left(), reads, symbols, answer);
-        boolean right = movesWithTheRow(comparison.right(), reads, symbols, answer);
-        if (left == right) {
-            // Both, which is a rule about a pair; or neither, which says nothing about an input.
-            // The place a relation's line falls is between the two sides, spelled as they are
-            // written — a reader meets them beside each other on the row owed there.
-            return left ? new Required.ComparisonSubject.Relation(
-                    new Owed.Subject.OfComparison(Citation.of(comparison.pos())))
-                    : new Required.ComparisonSubject.NoInput();
-        }
-        Core side = left ? comparison.left() : comparison.right();
-        NumericTerm term = termOf(side, reads, symbols);
-        if (term == null) {
-            // It moves with the row and is not a number this reads — the answer, or an input read a
-            // way the terms do not name. Nothing about an input's own values follows.
-            return new Required.ComparisonSubject.NoInput();
-        }
-        return new Required.ComparisonSubject.AnInput(subjectOf(term), Owed.Subject.at(""));
-    }
-
-    /**
-     * Whether what {@code e} comes to is chosen by the row.
-     *
-     * <p>An input's position is, and so is the answer a clause of an {@code ensures} names — what a
-     * row chooses is what the behavior is applied to, and the answer follows from it. Everything
-     * else is the same for every row, which is what makes the other side of a comparison a place
-     * rather than a second moving thing.
-     */
-    private static boolean movesWithTheRow(Core e, InputReads reads, Symbols symbols,
-                                           BindingId answer) {
-        if (!mentionedIn(e, reads, symbols).isEmpty()) {
-            return true;
-        }
-        return answer != null && reads(e, answer);
-    }
-
-    /** Whether anything in {@code e} reads the binding a rule calls the answer. */
-    private static boolean reads(Core e, BindingId answer) {
-        if (e instanceof Core.Read read && answer.equals(read.binding())) {
-            return true;
-        }
-        boolean[] found = {false};
-        Core.forEachChild(e, child -> found[0] |= reads(child, answer));
-        return found[0];
     }
 
     /** The number a comparison is about, from whichever side names one. */
