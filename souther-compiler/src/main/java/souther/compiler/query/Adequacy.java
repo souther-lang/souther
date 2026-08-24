@@ -2430,24 +2430,68 @@ public final class Adequacy {
          * an arm was told nothing composes an input for one. Both were true and they were about the
          * same rows.
          *
-         * <p>Nothing composed for it where no combination claims it. Which is the honest answer and
-         * not a shortfall of this run: an arm no combination of the body reaches is one nothing
-         * here is asked to compose an input for, and a row for it is still a row somebody can write
-         * by hand.
+         * <p>And where nothing was tried, what the reading of the body says about arriving at the
+         * arm — which is an answer about the arm and never an absence. An arm no combination
+         * claimed used to have no entry at all, and the sentence read off that absence said rows
+         * are composed for classes and combinations and nothing takes this arm, of a body two of
+         * whose own classes walk straight into it (issue #1009).
          */
         private static GenerationOutcome atArm(souther.compiler.coverage.CoverageSites.Site arm,
                                                Generator.GenerationResult composed) {
             return switch (composed.armAt(arm.index())) {
                 case Generator.ArmAttempt.Built built ->
                         new GenerationOutcome.Generated(List.of(built.row()));
-                // What every combination claiming it came to, all of it. They are not one fact and
-                // they do not order against each other: one the model refuses says the arm may be
-                // unreachable, one the search stopped at says nothing at all, and a reader handed
-                // whichever came first was handed the walk order of the cells.
+                // What every place a row was looked for came to, all of it. They are not one fact
+                // and they do not order against each other: one the model refuses says the arm may
+                // be unreachable, one the search stopped at says nothing at all, and a reader
+                // handed whichever came first was handed the order the search happened to walk.
                 case Generator.ArmAttempt.Unresolved none ->
                         new GenerationOutcome.CannotGenerate(none.why());
-                case null -> new GenerationOutcome.NotSupported(
-                        GenerationOutcome.NotSupported.Reason.NO_COMBINATION_REACHES_THIS_ARM);
+                case Generator.ArmAttempt.NoWayIn none -> nothingReaches(none.access());
+                // An arm this run was not asked about. Every finding's arm is asked about, so what
+                // is left here is a finding that reached this without one — which is a defect in
+                // what was handed in rather than anything about the model.
+                case null -> new GenerationOutcome.NotSupported(GenerationOutcome.NotSupported
+                        .Reason.THE_READING_DID_NOT_REACH_THIS_ARM);
+            };
+        }
+
+        /**
+         * What a reader is told about an arm nothing was composed for, from what the reading of the
+         * body says about arriving there.
+         *
+         * <p>Two kinds of news and the reading is what tells them apart. A run reaching the arm is
+         * something the model settles — no row changes it, and asking an author to write one sends
+         * them after a row that cannot exist. Everything else is this compiler falling short of
+         * saying what steers a row there, and a row for such an arm may be the easiest one in the
+         * file to write by hand.
+         */
+        private static GenerationOutcome nothingReaches(
+                souther.compiler.interaction.PathAccess access) {
+            return switch (access) {
+                case souther.compiler.interaction.PathAccess.Ways _ ->
+                        throw new IllegalStateException(
+                                "an arm with ways into it was somewhere a row was looked for");
+                case souther.compiler.interaction.PathAccess.Unreachable _ ->
+                        new GenerationOutcome.NotApplicable(
+                                GenerationOutcome.NotApplicable.Reason.A_FACT_ABOUT_THE_MODEL);
+                case souther.compiler.interaction.PathAccess.Unsupported(var why) ->
+                        new GenerationOutcome.NotSupported(switch (why) {
+                            case NO_WAY_IN_CAN_BE_NAMED -> GenerationOutcome.NotSupported.Reason
+                                    .NO_WAY_INTO_THIS_ARM_CAN_BE_NAMED;
+                            case WAYS_NOT_ENUMERABLE -> GenerationOutcome.NotSupported.Reason
+                                    .THE_WAYS_INTO_THIS_ARM_ARE_NOT_ENUMERABLE;
+                            case MORE_WAYS_IN_THAN_ARE_READ -> GenerationOutcome.NotSupported.Reason
+                                    .MORE_WAYS_IN_THAN_THE_READING_HOLDS;
+                            case RUNS_WHERE_SOMETHING_CALLS_IT ->
+                                    GenerationOutcome.NotSupported.Reason
+                                            .THE_ARM_RUNS_WHERE_SOMETHING_CALLS_IT;
+                            case THE_CONSTRUCTION_DECIDES_IT -> GenerationOutcome.NotSupported.Reason
+                                    .A_CONSTRUCTION_DECIDES_THIS_ARM;
+                            case THE_READING_DID_NOT_REACH_IT ->
+                                    GenerationOutcome.NotSupported.Reason
+                                            .THE_READING_DID_NOT_REACH_THIS_ARM;
+                        });
             };
         }
 
@@ -2893,7 +2937,7 @@ public final class Adequacy {
             }
             return Generator.fill(subject, existing, check,
                     souther.compiler.interaction.CoverageRead
-                            .of(spec.name(), body, plan, domain, symbols).interactions(),
+                            .of(spec.name(), body, plan, domain, symbols),
                     trial, baselines, classesOwed(evidence), armsOwed, budget);
         }
 

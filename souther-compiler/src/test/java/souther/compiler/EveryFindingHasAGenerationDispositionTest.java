@@ -383,10 +383,13 @@ class EveryFindingHasAGenerationDispositionTest {
      */
     @Test
     void eachReasonSaysWhatIsMissingHereRatherThanWhatCannotExist() {
-        assertEquals("rows here are composed for the classes a position divides into, for the"
-                        + " combinations this body settles together and for boundaries, and no"
-                        + " combination of them takes this arm",
-                GenerationOutcome.NotSupported.Reason.NO_COMBINATION_REACHES_THIS_ARM.said());
+        assertEquals("a row is steered into an arm by the decisions that hold on the way there, and"
+                        + " the fork this arm is of is one nothing could name a position for",
+                GenerationOutcome.NotSupported.Reason.NO_WAY_INTO_THIS_ARM_CAN_BE_NAMED.said());
+        assertEquals("the ways into this arm run past what one reading of the body holds at once,"
+                        + " so the reading stopped short of it rather than saying what steers a row"
+                        + " there",
+                GenerationOutcome.NotSupported.Reason.MORE_WAYS_IN_THAN_THE_READING_HOLDS.said());
         assertEquals("rows here are composed from what the input positions divide into, and nothing"
                         + " searches for one by the case it would answer with",
                 GenerationOutcome.NotSupported.Reason.NO_STRATEGY_FOR_AN_OUTPUT_CASE.said());

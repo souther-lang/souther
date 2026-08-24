@@ -7,6 +7,7 @@ import souther.compiler.check.FieldDomains;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.interaction.PathAccess;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
@@ -315,6 +316,15 @@ public final class Generator {
             ONE_POSITION_CANNOT_BE_BOTH,
             /** The module's classes were not there to build a candidate against. */
             NOTHING_TO_BUILD_AGAINST,
+            /**
+             * A way into the arm was read, and one of the decisions on it places at no class.
+             *
+             * <p>So there is nothing to steer a row by along that way: a row put at the classes the
+             * rest of it leaves may go the other way round that fork, and would be offered for an
+             * arm it never takes. A fact about what the partition divides this body's positions
+             * into, and not about whether a run reaches the arm.
+             */
+            THE_WAY_IN_PLACES_AT_NO_CLASS,
             /** The build asked for no values to be composed, so nothing was tried here. What such a
              *  point is owed is whatever it was owed; what is missing is a row to offer for it. */
             NO_VALUES_WERE_ASKED_FOR,
@@ -402,6 +412,7 @@ public final class Generator {
                          NOTHING_TO_BUILD_AGAINST, NO_VALUES_WERE_ASKED_FOR, LINKAGE_FAILED,
                          NO_CERTIFIED_WITNESS, THE_GROUP_WAS_NOT_OFFERED,
                          THE_POSITION_WAS_WITHHELD, THE_ROWS_WERE_NOT_READ,
+                         THE_WAY_IN_PLACES_AT_NO_CLASS,
                          NO_REASON_RECORDED -> false;
                 };
             }
@@ -526,6 +537,24 @@ public final class Generator {
 
         /** A row composed for a combination that takes this arm. */
         record Built(int probe, GeneratedRow row) implements ArmAttempt {}
+
+        /**
+         * Nothing was tried, because the reading of the body has no way into this arm to try.
+         *
+         * <p>Which is two pieces of news and the reading says which: no run reaches the arm at all,
+         * or this compiler cannot state what steers a row there. Neither is a search that failed,
+         * and carrying either as one would tell a reader a value was looked for.
+         */
+        record NoWayIn(int probe, souther.compiler.interaction.PathAccess access)
+                implements ArmAttempt {
+
+            public NoWayIn {
+                if (access instanceof souther.compiler.interaction.PathAccess.Ways) {
+                    throw new IllegalArgumentException(
+                            "an arm with ways into it is one this search had somewhere to look");
+                }
+            }
+        }
 
         /**
          * No row came of the combinations that would have taken it, and what each came to.
@@ -751,23 +780,24 @@ public final class Generator {
     public static GenerationResult fill(Subject subject, List<ObservedRow> existing,
                                         CandidateCheck check,
                                         AdequacyPolicy.OfTheGeneration budget) {
-        return fill(subject, existing, check, List.of(), budget);
+        return fill(subject, existing, check,
+                new souther.compiler.interaction.CoverageRead.Read(List.of(), Map.of()), budget);
     }
 
     /**
-     * The same, and a row through every arm the body's combinations take.
+     * The same, and a row through every arm the body has.
      *
      * <p>Two questions and one set of rows. A class is what the model divides a position into and is
-     * answerable with no body to read; an arm is a way through the body, and where a row through it
-     * is looked for is the combinations the decisions settle together. The classes go first: what
-     * each is owed is one row, and a budget the arms spent first left a class the report names with
+     * answerable with no body to read; an arm is a place in the body, and where a row through it is
+     * looked for is what the reading says it takes to arrive there. The classes go first: what each
+     * is owed is one row, and a budget the arms spent first left a class the report names with
      * nothing offered for it.
      */
     public static GenerationResult fill(Subject subject, List<ObservedRow> existing,
                                         CandidateCheck check,
-                                        List<souther.compiler.interaction.Interaction> groups,
+                                        souther.compiler.interaction.CoverageRead.Read read,
                                         AdequacyPolicy.OfTheGeneration budget) {
-        return fill(subject, existing, check, groups, Trial.NOTHING_RUNS, budget);
+        return fill(subject, existing, check, read, Trial.NOTHING_RUNS, budget);
     }
 
     /**
@@ -783,11 +813,10 @@ public final class Generator {
      */
     public static GenerationResult fill(Subject subject, List<ObservedRow> existing,
                                         CandidateCheck check,
-                                        List<souther.compiler.interaction.Interaction> groups,
+                                        souther.compiler.interaction.CoverageRead.Read read,
                                         Trial trial, AdequacyPolicy.OfTheGeneration budget) {
-        return fill(subject, existing, check, groups, trial, List.of(),
-                everyClassNoRowSitsIn(subject, existing),
-                everyArmACombinationMayTake(subject, groups, budget), budget);
+        return fill(subject, existing, check, read, trial, List.of(),
+                everyClassNoRowSitsIn(subject, existing), read.arms().keySet(), budget);
     }
 
     /**
@@ -884,7 +913,7 @@ public final class Generator {
      */
     public static GenerationResult fill(Subject subject, List<ObservedRow> existing,
                                         CandidateCheck check,
-                                        List<souther.compiler.interaction.Interaction> groups,
+                                        souther.compiler.interaction.CoverageRead.Read read,
                                         Trial trial, List<Baseline> baselines,
                                         Set<ClassOwed> classesOwed,
                                         Set<Integer> armsOwed,
@@ -968,12 +997,12 @@ public final class Generator {
                 case ClassAttempt.Unresolved none -> unresolved.add(none.why());
             }
         }
-        // And the arms this run was asked for, looked for among the combinations the body settles
-        // together. A combination is where a witness is found and is not itself owed a row: nothing
-        // reports one, so a search that composed for every combination was filling a space nobody
-        // asked about — which is what the pair space was, arriving a second time under another
-        // name. So a combination claiming no arm on the list is not searched, and one is dropped
-        // from the list as soon as a row goes through it.
+        // And the arms this run was asked for, one at a time and each from its own places to look.
+        // What it takes to arrive at an arm is what the reading of the body says, and that is where
+        // a row for one comes from. A combination the body settles together is a second place: a
+        // row found there arrives at the arm and exercises the combination at once, so it is looked
+        // in first — which is a preference between two answers and not one of them standing in for
+        // the other. An arm no combination is over is answered from its way in all the same.
         Set<Integer> left = new LinkedHashSet<>(armsOwed);
         Map<Integer, GeneratedRow> built = new LinkedHashMap<>();
         Map<Integer, List<UnresolvedCombination>> failed = new LinkedHashMap<>();
@@ -983,15 +1012,11 @@ public final class Generator {
         // are one silence, and a reader told the second where the first happened is told the model
         // settles something it does not.
         Set<Integer> cutOff = new LinkedHashSet<>();
-        // The arms this run ended up answering with a group nobody walked, collected as those
-        // answers are made rather than worked out again afterwards. What decides one is the order
-        // the three answers are asked in below; a set built here from `left`, `cutOff` and
-        // `notOffered` would be that order written a second time, free to stop agreeing with it.
-        Set<Integer> wentUnwalked = new LinkedHashSet<>();
         // And the arms behind a group nothing walked, which is a second silence with a different
         // cause. The one above is a budget that ran out with the arm still owed; this is a group
         // the offer never opened, and raising the budget does not reach it.
-        InteractionCells.Offered offered = InteractionCells.of(groups, axes, budget);
+        InteractionCells.Offered offered =
+                InteractionCells.of(read.interactions(), axes, budget);
         Set<Integer> notOffered = new LinkedHashSet<>();
         // Which arms each held-back group could have been searched at, kept per group so that the
         // summary at the end can be counted off the entries rather than worked out a second way.
@@ -1002,52 +1027,80 @@ public final class Generator {
             notOffered.addAll(behindIt);
         }
         boolean unconfirmed = false;
-        for (InteractionCells.Group group : offered.groups()) {
-            for (int index = 0; index < group.size() && !left.isEmpty(); index++) {
-                CellSelection selection = group.at(index);
-                if (selection == null) {
-                    // The factors this choice takes leave a position nothing, so it is not a
-                    // combination the body has a path to and there is nothing to look in.
-                    continue;
-                }
-                List<Integer> takes = new ArrayList<>(claimed(selection));
-                takes.retainAll(left);
-                if (takes.isEmpty()) {
-                    continue;   // no arm on the list is looked for here
-                }
-                if (rows.size() >= budget.rows()) {
-                    cutOff.addAll(takes);
-                    continue;
-                }
-                switch (witnessFor(subject, axes, selection, check, trial, takes)) {
-                    case Witness.None none -> {
-                        UnresolvedCombination why = new UnresolvedCombination(
-                                none.classes(), none.reason(), none.detail(), none.said());
-                        unresolved.add(why);
-                        takes.forEach(probe -> failed
-                                .computeIfAbsent(probe, _ -> new ArrayList<>()).add(why));
-                    }
-                    case Witness.Certified found -> {
-                        rows.add(found.row());
-                        takes.forEach(probe -> built.put(probe, found.row()));
-                        takes.forEach(left::remove);
-                    }
-                    case Witness.Unconfirmed offer -> {
-                        rows.add(offer.row());
-                        takes.forEach(probe -> built.put(probe, offer.row()));
-                        takes.forEach(left::remove);
-                        // Nothing watched it, so what it is offered for is what the reading says
-                        // and not what anything saw. Said once for the behavior: it is one fact
-                        // about this generation.
-                        unconfirmed = true;
-                    }
-                }
+        // What each set of values did when it was run, so that a row two arms were both composed
+        // the same values for is applied once.
+        Map<List<String>, Watched> ran = new LinkedHashMap<>();
+        for (int probe : armsOwed) {
+            if (!left.contains(probe)) {
+                // A row already composed was watched going through it, which is the one thing that
+                // says so. Nothing is composed a second time for what a run was seen doing.
+                continue;
             }
+            for (CellSelection selection : whereToLookFor(probe, read, offered, axes)) {
+                if (rows.size() >= budget.rows()) {
+                    cutOff.add(probe);
+                    break;
+                }
+                Witness found =
+                        witnessFor(subject, axes, selection, check, trial, ran, List.of(probe));
+                if (found instanceof Witness.None none) {
+                    UnresolvedCombination why = new UnresolvedCombination(
+                            none.classes(), none.reason(), none.detail(), none.said());
+                    unresolved.add(why);
+                    failed.computeIfAbsent(probe, _ -> new ArrayList<>()).add(why);
+                    continue;
+                }
+                GeneratedRow row = found instanceof Witness.Certified made ? made.row()
+                        : ((Witness.Unconfirmed) found).row();
+                if (found instanceof Witness.Unconfirmed) {
+                    // Nothing watched it, so what it is offered for is what the reading says and
+                    // not what anything saw. Said once for the behavior: it is one fact about this
+                    // generation.
+                    unconfirmed = true;
+                }
+                // What else this row goes through is what watching it says, and nothing else. A
+                // cell claims the arms a reading believes a row filling it takes, and discharging
+                // them on that belief is the reading certifying itself — so the arms that come off
+                // the list here are the ones the run was seen taking (issue #1009).
+                List<Integer> also = found instanceof Witness.Certified made
+                        ? alsoThrough(made.by().seen(), left, probe) : List.of();
+                List<Purpose> purposes = new ArrayList<>(row.purposes());
+                also.forEach(each -> purposes.add(new Purpose.ForAnArm(each)));
+                GeneratedRow offering = purposes.size() == row.purposes().size() ? row
+                        : new GeneratedRow(purposes, row.inputs());
+                GeneratedRow kept = keep(rows, offering);
+                // An arm answered by the row this merged into is answered by the merged one. The
+                // entries carry the row a reader is shown, and two of them for one set of values
+                // would be the same line under two names.
+                built.replaceAll((_, was) -> was.inputs().equals(kept.inputs()) ? kept : was);
+                built.put(probe, kept);
+                left.remove(probe);
+                also.forEach(each -> {
+                    built.put(each, kept);
+                    left.remove(each);
+                });
+                break;
+            }
+            if (built.containsKey(probe) || cutOff.contains(probe) || failed.containsKey(probe)
+                    || !(read.armAt(probe) instanceof PathAccess.Ways)) {
+                continue;
+            }
+            // A way in was read and nothing was tried along it. Which of two things that is, is
+            // said here rather than left to a reader of an empty list: a group the limit held back
+            // was the only place a combination would have been looked in, or every way in this
+            // reading has places at no class of any position.
+            UnresolvedCombination why = notOffered.contains(probe)
+                    ? new UnresolvedCombination(List.of(),
+                            UnresolvedCombination.Reason.THE_GROUP_WAS_NOT_OFFERED)
+                    : new UnresolvedCombination(List.of(),
+                            UnresolvedCombination.Reason.THE_WAY_IN_PLACES_AT_NO_CLASS);
+            unresolved.add(why);
+            failed.computeIfAbsent(probe, _ -> new ArrayList<>()).add(why);
         }
         // One entry per arm the run was asked about, in the order it was asked. An arm the limit
-        // cut off carries that beside whatever was tried before it: a combination the model refuses
-        // says nothing about the ones nobody got to, and an arm answered by the first alone was
-        // reported as settled by the model on the strength of a search that stopped.
+        // cut off carries that beside whatever was tried before it: a place the model refuses says
+        // nothing about the ones nobody got to, and an arm answered by the first alone was reported
+        // as settled by the model on the strength of a search that stopped.
         for (int probe : armsOwed) {
             GeneratedRow row = built.get(probe);
             List<UnresolvedCombination> why = new ArrayList<>(
@@ -1058,20 +1111,14 @@ public final class Generator {
                 why.add(new UnresolvedCombination(List.of(),
                         UnresolvedCombination.Reason.SEARCH_LIMIT));
                 arms.add(new ArmAttempt.Unresolved(probe, why));
-            } else if (notOffered.contains(probe)) {
-                // Asked after the two above, so an arm some offered group reached or the budget
-                // stopped at keeps that answer. What is left here is an arm whose only claim came
-                // from a group nothing walked, and the union a held-back group is named by is a
-                // superset — which is why this is the last of the three and not the first.
-                why.add(new UnresolvedCombination(List.of(),
-                        UnresolvedCombination.Reason.THE_GROUP_WAS_NOT_OFFERED));
-                arms.add(new ArmAttempt.Unresolved(probe, why));
-                wentUnwalked.add(probe);
             } else if (!why.isEmpty()) {
                 arms.add(new ArmAttempt.Unresolved(probe, why));
+            } else {
+                // Nothing was tried, and the reading says why: no run reaches the arm, or this
+                // compiler cannot state what steers a row there. Either way it is an answer about
+                // the arm and not an absence for a reader to make one of.
+                arms.add(new ArmAttempt.NoWayIn(probe, read.armAt(probe)));
             }
-            // And an arm with none of them is one no combination claims, which is the one thing an
-            // absent entry may mean.
         }
         // Said once, at the end, and about both searches. One that ran out on the classes stopped
         // whether or not the arms had anything left to do, and two limits reported apart would be
@@ -1083,27 +1130,25 @@ public final class Generator {
             reasons.add(new GenerationReason.SearchLimit(axes.get(0).id().behavior(),
                     classesLeft + cutOff.size()));
         }
-        // And the groups the limit held back that an arm was left waiting on. Counted off the
-        // entries just made and not off the obligation this run started with, because the two are
-        // different sets: an arm owed at the start may have been built from another group that was
-        // offered, or stopped at by the row budget, and either way the entry for it says so and the
-        // group is not what it is waiting on. `NotOffered`'s own contract is that what it names is
-        // read for "what is left owed after every offered group has been searched", which is
-        // available here and nowhere earlier.
+        // And the groups the limit held back that this run was asked about an arm behind. What it
+        // says is what the search did not do: none of that group's combinations was looked in, so
+        // nothing here exercises the decisions in it together. Whether the arms behind it got rows
+        // is a different question and their own entries answer it — a row through an arm comes from
+        // the way into it whether or not anything above it was walked.
         //
-        // Read off `wentUnwalked` rather than rebuilt from `left`, `cutOff` and `notOffered`. Those
-        // three would be the order the answers are asked in, written a second time beside the one
-        // that decides — and a summary that disagrees with the entries under it is worse than no
-        // summary, since a reader checks the number against them.
-        int heldBackAndWaitedOn = 0;
+        // Against what was asked for, and not against what was left owed at the end. Read off what
+        // was left, the line would come and go with whether the ways in happened to compose, which
+        // is not what the limit did; asked about nothing behind it, the group costs this run
+        // nothing and is not named (issue #967).
+        int heldBackAndAskedAbout = 0;
         for (List<Integer> behindIt : behindEachHeldGroup) {
-            if (behindIt.stream().anyMatch(wentUnwalked::contains)) {
-                heldBackAndWaitedOn++;
+            if (behindIt.stream().anyMatch(armsOwed::contains)) {
+                heldBackAndAskedAbout++;
             }
         }
-        if (heldBackAndWaitedOn > 0) {
+        if (heldBackAndAskedAbout > 0) {
             reasons.add(new GenerationReason.GroupsNotOffered(axes.get(0).id().behavior(),
-                    heldBackAndWaitedOn));
+                    heldBackAndAskedAbout));
         }
         if (unconfirmed) {
             reasons.add(new GenerationReason.RowsNotConfirmed(axes.get(0).id().behavior()));
@@ -1120,6 +1165,92 @@ public final class Generator {
      */
     private static List<Integer> claimed(CellSelection selection) {
         return armsIn(selection.claims());
+    }
+
+    /**
+     * Where a row through {@code probe} is looked for, in the order they are looked in.
+     *
+     * <p>Two sources and neither is the other's fallback. A combination the body settles together
+     * claiming this arm comes first, because a row found there answers the arm and exercises the
+     * combination at once; the ways into the arm come after, and answer it whether or not anything
+     * meets above it. Reversed, the same row would be composed twice over; left with only the
+     * first, an arm under a body whose decisions meet nowhere had nowhere to be looked for at all
+     * (issue #1009).
+     *
+     * <p>A way that places at no class is not somewhere to look. What comes back is where a row can
+     * be steered, and how many that is is what the caller reads to tell an arm nothing was tried
+     * for from one every attempt failed at.
+     */
+    private static List<CellSelection> whereToLookFor(
+            int probe, souther.compiler.interaction.CoverageRead.Read read,
+            InteractionCells.Offered offered, List<Axis> axes) {
+        List<CellSelection> out = new ArrayList<>();
+        for (InteractionCells.Group group : offered.groups()) {
+            for (int index = 0; index < group.size(); index++) {
+                CellSelection selection = group.at(index);
+                // A choice whose factors leave a position nothing is no combination the body has a
+                // path to, and there is nothing to look in.
+                if (selection != null && claimed(selection).contains(probe)) {
+                    out.add(selection);
+                }
+            }
+        }
+        if (read.armAt(probe) instanceof PathAccess.Ways ways) {
+            for (souther.compiler.interaction.WayIn way : ways.ways()) {
+                CellSelection at = InteractionCells.at(way, axes);
+                if (at != null) {
+                    out.add(at);
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Which other arms still owed a row this run was seen going through.
+     *
+     * <p>What a run did and not what a reading expects of it. One row can be a row through several
+     * arms — every arm on the way to the one it was composed for is one it takes — and the arm it
+     * was composed for is left out here because it is already answered.
+     */
+    private static List<Integer> alsoThrough(souther.compiler.coverage.Observation seen,
+                                             Set<Integer> left, int probe) {
+        List<Integer> out = new ArrayList<>();
+        for (int each : left) {
+            if (each != probe && seen.taken().contains(each)) {
+                out.add(each);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * The row as this generation offers it, which is the one already offering the same values where
+     * there is one.
+     *
+     * <p>Two arms searched for on their own can come to one row: what steers a row into an arm is a
+     * conjunction of decisions, and two arms of one body ask for values that agree everywhere the
+     * ways in agree. Written down twice, an author is handed the same line twice and told it
+     * answers two different things.
+     */
+    private static GeneratedRow keep(List<GeneratedRow> rows, GeneratedRow row) {
+        for (int i = 0; i < rows.size(); i++) {
+            GeneratedRow already = rows.get(i);
+            // Whatever the row beside it was composed for, and not the arms alone. One set of
+            // values is one line in the file: a class's row and an arm's row of the same values are
+            // one row that fills the class and goes through the arm, and written down twice the
+            // second was printed over the first and took its name away with it.
+            if (!already.inputs().equals(row.inputs())) {
+                continue;
+            }
+            List<Purpose> both = new ArrayList<>(already.purposes());
+            row.purposes().stream().filter(each -> !both.contains(each)).forEach(both::add);
+            GeneratedRow merged = new GeneratedRow(both, already.inputs());
+            rows.set(i, merged);
+            return merged;
+        }
+        rows.add(row);
+        return row;
     }
 
     /** The arms a list of claims names, by the numbers the plan gave them. Shared with the groups
@@ -2026,7 +2157,7 @@ public final class Generator {
      */
     private static Witness witnessFor(Subject subject, List<Axis> axes,
                                       CellSelection selection, CandidateCheck check, Trial trial,
-                                      List<Integer> takes) {
+                                      Map<List<String>, Watched> applied, List<Integer> takes) {
         InteractionCells.Cell cell = selection.cell();
         List<int[]> tried = new ArrayList<>();
         Attempt last = null;
@@ -2059,7 +2190,12 @@ public final class Generator {
             GeneratedRow named = new GeneratedRow(
                     takes.stream().map(Purpose.ForAnArm::new).map(Purpose.class::cast).toList(),
                     last.row().inputs());
-            switch (trial.run(named.inputs())) {
+            // Run once per set of values, however many places a row of them was looked for. What a
+            // run of one row did is one fact: two arms searched on their own can come to the same
+            // values, and running them again would be the same row applied twice and counted twice.
+            switch (applied.computeIfAbsent(
+                    named.inputs().stream().map(FixtureTemplate::text).toList(),
+                    _ -> trial.run(named.inputs()))) {
                 // Nothing can say where it went, so nothing certifies it and nothing refutes it.
                 // Offered as it was before anything ran, and said to be. Both of the ways that
                 // happens come here: nothing applied the row, or nothing was recording while it

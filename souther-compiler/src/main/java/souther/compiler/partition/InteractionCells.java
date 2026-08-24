@@ -233,6 +233,29 @@ public final class InteractionCells {
         }
     }
 
+    /**
+     * Where a row that comes one way may sit, and what a run that came it would be seen to do, or
+     * null where the way places at no class.
+     *
+     * <p>The same lookup a group's way in goes through, asked of one way on its own. A way in to an
+     * arm and the reach of a meeting are the same kind of thing — decisions that hold on the way
+     * somewhere — so what they leave open is read here once and not twice.
+     *
+     * <p>Null where any condition of the way narrows nothing, for the reason a group is dropped for
+     * it: what a cell is for is steering a row along the way, and a condition with no classes to
+     * put a row at leaves the row free to go the other way round that fork. Offered anyway, it would
+     * be a row for an arm it may never take.
+     */
+    public static CellSelection at(souther.compiler.interaction.WayIn way, List<Axis> axes) {
+        if (way.decisions().isEmpty()) {
+            // Nothing has to hold to get here, so there is nothing to steer a row by and nothing a
+            // run that arrived would be seen to have done. The body itself is reached this way.
+            return null;
+        }
+        Placed placed = placedBy(way.decisions(), axes);
+        return placed == null ? null : new CellSelection(placed.cell(), placed.claims());
+    }
+
     /** The groups worth offering, over the ordered {@code axes}, and the ones held back. */
     public static Offered of(List<Interaction> groups, List<Axis> axes,
                              AdequacyPolicy.OfTheGeneration budget) {

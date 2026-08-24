@@ -152,17 +152,34 @@ class AGeneratedRowIsNamedForWhatItWasComposedForTest {
                 "a name says which row it is, so no two rows share one: " + offered);
     }
 
+    /**
+     * A class stays offered when a row settles something else it also sat on.
+     *
+     * <p>Offered and not named, which are two things and only the first is what this is about. A
+     * row that answers one thing carries its name; one that answers two carries neither and says
+     * what it fills over itself — and the class over the ceiling is answered by the same values as
+     * the arm the guard sends a run down, so what it is offered under moves from the name to the
+     * line above it. What would be a defect is the class going unmentioned.
+     */
     @Test
-    void aRowKeepsItsNameWhenAnotherRowSettlesWhatItAlsoSatOn() {
+    void aRowKeepsWhatItIsOfferedForWhenAnotherRowSettlesWhatItAlsoSatOn() {
         String before = block(LIMIT, true);
         String after = block(AND_A_ROW, true);
 
         String over = "request.cost=100 < x";
-        assertTrue(names(before).contains(over),
-                "the class is owed before anything is written: " + names(before));
-        assertTrue(names(after).contains(over),
-                "the row is named for the class it was composed for, and the row written beside it "
-                        + "sits in another one: " + names(after));
+        assertTrue(offeredFor(before).contains(over),
+                "the class is owed before anything is written: " + before);
+        assertTrue(offeredFor(after).contains(over),
+                "and is still what a row is offered for, beside the row written by hand: " + after);
+    }
+
+    /** What the block says its rows are for, whether as a name or as a line over an unnamed row. */
+    private static List<String> offeredFor(String block) {
+        List<String> found = new ArrayList<>(names(block));
+        block.lines().filter(line -> line.contains("fills "))
+                .map(line -> line.substring(line.indexOf("fills ") + "fills ".length()))
+                .forEach(found::add);
+        return found;
     }
 
     /**

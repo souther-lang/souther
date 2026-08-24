@@ -130,12 +130,37 @@ public sealed interface GenerationOutcome {
          */
         public enum Reason {
 
-            /** No combination of the body's own decisions takes this arm, so nothing composed for
-             *  one composes an input that goes through it. */
-            NO_COMBINATION_REACHES_THIS_ARM(
-                    "rows here are composed for the classes a position divides into, for the"
-                            + " combinations this body settles together and for boundaries, and no"
-                            + " combination of them takes this arm"),
+            /** The fork this arm belongs to is one no position of the inputs could be named for. */
+            NO_WAY_INTO_THIS_ARM_CAN_BE_NAMED(
+                    "a row is steered into an arm by the decisions that hold on the way there, and"
+                            + " the fork this arm is of is one nothing could name a position for"),
+
+            /** The ways to the value that leads to this arm could not all be written down. */
+            THE_WAYS_INTO_THIS_ARM_ARE_NOT_ENUMERABLE(
+                    "a row is steered into an arm by the decisions that hold on the way there, and"
+                            + " the ways to this one could not all be written down — some of them"
+                            + " would say a row arrives where it may not"),
+
+            /** More ways into this arm than the reading of the body holds at once. */
+            MORE_WAYS_IN_THAN_THE_READING_HOLDS(
+                    "the ways into this arm run past what one reading of the body holds at once, so"
+                            + " the reading stopped short of it rather than saying what steers a row"
+                            + " there"),
+
+            /** The arm stands in a function value, whose body runs where something calls it. */
+            THE_ARM_RUNS_WHERE_SOMETHING_CALLS_IT(
+                    "this arm is inside a block, which runs under whatever the thing that applies it"
+                            + " is applied to — and that is not a class of this behavior's inputs"),
+
+            /** Which arm of an attempted construction is taken is whether the value's rules held. */
+            A_CONSTRUCTION_DECIDES_THIS_ARM(
+                    "which arm of an attempted construction is taken is whether making the value"
+                            + " held its own rules, and no class of an input names that"),
+
+            /** The reading of the body did not reach this arm at all. */
+            THE_READING_DID_NOT_REACH_THIS_ARM(
+                    "the reading of this body did not get to this arm, so nothing here knows what"
+                            + " it takes to arrive at it"),
 
             /** Nothing searches for an input by the output it produces. */
             NO_STRATEGY_FOR_AN_OUTPUT_CASE(
