@@ -31,7 +31,7 @@ public final class Symbols implements NameSense {
 
     private Symbols(String module, Registry<Hir.Def> registry, Denoting names, Stdlib stdlib) {
         this.scope = new TypeScope(module, names, registry,
-                stdlib.languageDeclarations().keySet());
+                stdlib.names().languageTypes());
         this.declarations = new Declarations<>(registry, Declarations.Vocabulary.of(stdlib));
         this.stdlib = stdlib;
     }
