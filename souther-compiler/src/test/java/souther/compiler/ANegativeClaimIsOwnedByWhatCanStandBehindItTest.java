@@ -1,6 +1,8 @@
-package souther.compiler.query;
+package souther.compiler;
 
 import org.junit.jupiter.api.Test;
+
+import souther.compiler.query.Adequacy;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
@@ -18,6 +20,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@code NoPublicWayToTurnASpellingIntoATypeIdentityTest} gives: the rule had been written down
  * before and was broken all the same. A sentence is kept by whoever reads it; a signature is kept by
  * everyone.
+ *
+ * <p>Written outside {@code souther.compiler.query} on purpose. What it says is what a reader
+ * outside the package can reach, and a check making that claim from inside would be standing where
+ * the claim does not apply.
  *
  * <p><b>What the rule is.</b> A query belongs to the type that can stand behind the answer, not to
  * the one that can work it out. {@code Arms} holds what was owed and what was seen, so the

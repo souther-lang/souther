@@ -581,6 +581,32 @@ class CompilePartialAdequacyTest {
     }
 
     /**
+     * And what the JSON suppresses, the human report suppresses — which nothing checked.
+     *
+     * <p>The test above has said since it was written that these two surfaces answer alike, and only
+     * one of them was ever rendered under a reading that did not finish. So the line a person reads
+     * here — the counts, the word qualifying them, and no arm named — was carried by nobody, while
+     * the measure behind it was moved twice (issues #955 and #997).
+     *
+     * <p>The two halves are the point. A count under a reading that did not finish is worth printing
+     * to a person, because there is room beside it for the word that says how far to trust it; an arm
+     * named as unreached is not, because no word beside it undoes the name. That is one surface
+     * making its own decision about what to show, over the same measure the JSON reads.
+     */
+    @Test
+    void theHumanReportPrintsTheCountsAndNamesNoArmUnderPartial() {
+        String human = AdequacyReport.of(measured("loop", TIMES_OUT,
+                        DoesNotComeBack.overrunningOn(DoesNotComeBack.everythingAboutRowsOf("go"))))
+                .human(SourceNameResolver.identity());
+
+        assertTrue(human.contains("branch      "), () -> "the counts are printed: " + human);
+        assertTrue(human.contains("(undecided: a row was not read)"),
+                () -> "and said to be over a reading that did not finish: " + human);
+        assertFalse(human.contains("no row goes through"),
+                () -> "no arm is named, the way the JSON writes no `unreached`: " + human);
+    }
+
+    /**
      * A combination an unread row may sit in has not been left untried by anybody.
      *
      * <p>The other measures each say whether their numbers are over all the rows or some of them; the

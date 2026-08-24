@@ -1208,9 +1208,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                             + " read over however many rules that is%n",
                     together.module()));
         }
-        if (!observed) {
-            return;
-        }
+        // Whatever findings there are, and no second opinion about whether there may be any. Which
+        // arms may be named is settled where they are collected, so a measure that cannot make the
+        // claim produces none of these — and a condition repeated here would be the same rule kept
+        // in two places, which is how the reading and the numbers came to disagree before.
         for (Adequacy.Finding f : behavior.findings()) {
             if (f.about() instanceof About.AnArmNoRowGoesThrough(var arm)) {
                 out.append(String.format("      %s no row goes through `%s` (%s)%n",
