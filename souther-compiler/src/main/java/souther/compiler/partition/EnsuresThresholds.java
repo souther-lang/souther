@@ -49,9 +49,12 @@ import java.util.Map;
  * is not a choice either, and stops at everything else.
  *
  * <p><b>And only about an input.</b> A comparison reading {@code value} is a line on the answer, and
- * a row cannot be written at one: what a row chooses is what the behavior is applied to. Nothing
- * turns such a comparison away — a term over the answer names no position of the input, so it draws
- * nothing, which is the same answer this gives any expression it cannot place.
+ * a row cannot be written at one: what a row chooses is what the behavior is applied to. Such a
+ * comparison is turned away by name rather than by drawing nothing — {@link ComparisonSubjects}
+ * answers that it is about the answer, and what it raises is nothing rather than a question about
+ * an input. Left to fall out as an expression this could not place, the clause was read as a rule
+ * about a pair of inputs, which owes a row where the two hold one count; nothing reaches that place,
+ * and the report named a rule unaccounted for that nothing could account for (issue #1013).
  *
  * <p>Two shapes of line, the two a body's conditions draw. One at a count of a position, which
  * divides it; one between two positions, which divides neither and is on neither — asked where the
@@ -199,7 +202,7 @@ public final class EnsuresThresholds {
             raises(out, rule, clause, comparison, rule.value(),
                     named.isEmpty() ? null : named.get(0),
                     GuardThresholds.comparedTerm(comparison, reads, symbols),
-                    GuardThresholds.subjectsOf(comparison, reads, symbols, rule.value()),
+                    ComparisonSubjects.of(comparison, reads, symbols, rule.value()),
                     new Required.LineRead.NoLine(
                             GuardThresholds.why(comparison, reads, symbols)));
             return;
@@ -233,14 +236,14 @@ public final class EnsuresThresholds {
             raises(out, rule, clause, comparison, rule.value(),
                     named.isEmpty() ? null : named.get(0),
                     GuardThresholds.comparedTerm(comparison, reads, symbols),
-                    GuardThresholds.subjectsOf(comparison, reads, symbols, rule.value()),
+                    ComparisonSubjects.of(comparison, reads, symbols, rule.value()),
                     made ? new Required.LineRead.ALineBetweenTwoPositions()
                             : new Required.LineRead.NoLine(
                                     GuardThresholds.why(comparison, reads, symbols)));
             return;
         }
         raises(out, rule, clause, comparison, rule.value(), divided.path(), divided,
-                GuardThresholds.subjectsOf(comparison, reads, symbols, rule.value()),
+                ComparisonSubjects.of(comparison, reads, symbols, rule.value()),
                 new Required.LineRead.ALineOnThePosition());
         // And the line itself, where the position has no value beside it for a row to be owed at,
         // for the reason a body's line is: the classes either side are what the model tells apart,
@@ -307,7 +310,7 @@ public final class EnsuresThresholds {
      */
     private static void reportUnread(RuleRef.Ensures rule, Core statement, BindingId answer,
                                      InputReads reads, Symbols symbols, List<UnreadRule> unread) {
-        if (readsTheAnswer(statement, answer)) {
+        if (ComparisonSubjects.readsAnswer(statement, answer)) {
             return;
         }
         BlockReason.AboutARule why = statement instanceof Core.Binary comparison
@@ -321,17 +324,6 @@ public final class EnsuresThresholds {
                 unread.add(here);
             }
         }
-    }
-
-    /** Whether anything in {@code e} reads what the rule calls the answer. */
-    private static boolean readsTheAnswer(Core e, BindingId answer) {
-        if (e instanceof Core.Read read && read.binding() != null
-                && read.binding().equals(answer)) {
-            return true;
-        }
-        boolean[] found = {false};
-        Core.forEachChild(e, child -> found[0] |= readsTheAnswer(child, answer));
-        return found[0];
     }
 
     /**

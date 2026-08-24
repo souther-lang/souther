@@ -148,7 +148,19 @@ public sealed interface Required {
          * position for anything to have read. A rule cannot cost a position it does not name, which
          * is what the reading of values says of its own failures for the same reason.
          */
-        IT_NAMES_NO_POSITION
+        IT_NAMES_NO_POSITION,
+
+        /**
+         * The rule reads what the behavior answers, and this reading does not project such a rule
+         * back onto the input space.
+         *
+         * <p>Told from {@link #IT_NAMES_NO_POSITION}, which is the reason a reader would otherwise
+         * be given. {@code List.length(value.articles) <= query.limit.value} does name a position —
+         * a row chooses {@code query.limit} — and what it raises nothing about is the input's own
+         * values, because what the clause bounds is on the other side of the behavior. An author
+         * told the rule names no position would go looking for the name that is plainly there.
+         */
+        IT_DEPENDS_ON_THE_ANSWER
     }
 
     /** What every invariant clause raises about a position it is written about. */
@@ -219,7 +231,18 @@ public sealed interface Required {
      * @param of    what it places it about, from the comparison alone as well
      */
     public static Required ofComparison(ComparisonClaim claim, ComparisonSubject of) {
-        if (of instanceof ComparisonSubject.Relation between) {
+        // One switch and no `default`, for the reason {@link #ofInvariant} gives: a subject added
+        // and not classified stops the build rather than arriving here as the arm that happens to be
+        // nearest. Written as a chain ending in "anything that is not an input", the arm added for
+        // issue #1013 could have been left out and every comparison reading the answer would have
+        // been reported as naming no position — the reason a reader is given, quietly wrong.
+        return switch (of) {
+            // A rule this reading does not put on the input space at all. Before anything about the
+            // two sides, because a comparison reading the answer is not a pair of inputs however
+            // its sides are spelled: read as one, an order against the answer raised the line a pair
+            // of inputs raises and nothing could ever answer it (issue #1013).
+            case ComparisonSubject.AnswerDependent _ ->
+                    new Irrelevant(Set.of(Because.IT_DEPENDS_ON_THE_ANSWER));
             // An order between two things that move with the row is a line rows are owed at — the
             // place they hold one count — and divides neither of them, so there is no class of one
             // for a row to be owed in. Raised whether or not this compiler can find that place: a
@@ -228,14 +251,18 @@ public sealed interface Required {
             //
             // An equality between them is not a line: it puts the whole of one arm on the place,
             // and that arm is a row the branch measure already asks for (`ComparedTerms`).
-            return claim instanceof ComparisonClaim.Cut
+            case ComparisonSubject.Relation between -> claim instanceof ComparisonClaim.Cut
                     ? new Some(new LinkedHashSet<>(java.util.List.of(
                             new Owed(CoverageObligation.BOUNDARY, between.at()))))
                     : new Irrelevant(Set.of(Because.IT_RELATES_TWO_POSITIONS));
-        }
-        if (!(of instanceof ComparisonSubject.AnInput input)) {
-            return new Irrelevant(Set.of(Because.IT_NAMES_NO_POSITION));
-        }
+            case ComparisonSubject.NoInput _ ->
+                    new Irrelevant(Set.of(Because.IT_NAMES_NO_POSITION));
+            case ComparisonSubject.AnInput input -> ofAnInput(claim, input);
+        };
+    }
+
+    /** What a comparison measuring one input by a number of it raises about that input. */
+    private static Required ofAnInput(ComparisonClaim claim, ComparisonSubject.AnInput input) {
         Set<Owed> owed = new LinkedHashSet<>();
         switch (claim) {
             // An order across the place it names, so rows are owed either side of it and the two
@@ -265,12 +292,18 @@ public sealed interface Required {
      * from the operator alone, {@code a == b} raised a question about a value singled out at
      * {@code a} that no rule wrote.
      *
-     * <p><b>Which of the two is decided by what moves with a row.</b> A comparison is about one
-     * position exactly where one side is a number taken of an input and the other side is the same
-     * for every row. Counted as positions named instead, {@code a <= a + 1} came back as one
-     * position's — one name, twice — and a clause comparing an answer to an input needed a rule of
-     * its own to be kept out. What a row chooses is the input; the answer moves with it, so a
-     * comparison against the answer is a relation like any other.
+     * <p><b>Which of them it is, is decided by what the two sides read.</b> A comparison is about
+     * one position exactly where one side is a number taken of an input and the other side is the
+     * same for every row. Counted as positions named instead, {@code a <= a + 1} came back as one
+     * position's — one name, twice.
+     *
+     * <p><b>And a comparison reading the answer is none of the three.</b> The answer does move with
+     * the row, which is what a clause of an {@code ensures} is written about; what does not follow
+     * is that two things moving with the row are one kind of subject here. Boundary coverage is over
+     * the values a row can choose, and those are the inputs — so an order between two inputs is a
+     * line rows are owed at, and an order between an input and the answer is not a line on the input
+     * space at all. Read as one, {@code List.length(value.articles) <= query.limit.value} raised a
+     * boundary obligation at a place no reading of the clause can reach (issue #1013).
      *
      * <p>Not read off what a reading managed. Whether this compiler could fold the other side is an
      * answer, and a question may not be decided by one (#851) — so {@code a == 10 * 2} is one
@@ -311,7 +344,32 @@ public sealed interface Required {
             }
         }
 
-        /** Neither side is an input's, so it says nothing about one. */
+        /**
+         * The comparison reads what the behavior answers, so this reading does not put it on the
+         * input space.
+         *
+         * <p>Apart from {@link NoInput}, which the shape used to fall into where the other side was
+         * a constant, and apart from {@link Relation}, which it fell into where the other side was
+         * an input. Both were silent about a different thing than this is: one says the rule names
+         * no input, and {@code List.length(value.articles) <= query.limit.value} names one.
+         *
+         * <p>Not a claim that no line exists. Eliminating the answer existentially can leave a
+         * constraint on the input — a length is never negative, so {@code List.length(value.items)
+         * <= n} has no satisfying answer below zero — and deriving that is constraint projection
+         * over several rules rather than the reading of one comparison. What this arm records is
+         * where the reading stops, so that adding the projection later contradicts nothing.
+         */
+        record AnswerDependent() implements ComparisonSubject {}
+
+        /**
+         * Neither side is an input's, so it says nothing about one.
+         *
+         * <p>Currently also where a side that does name an input falls when this classification
+         * cannot name a term for it. {@code a + 1 <= 10} draws a border at {@code a = 9} and
+         * arrives here, because the subject is taken from the operands as written while the line is
+         * cut from the canonical form — issue #1029, which is where that is settled. The sentence
+         * above is what this arm means; this paragraph goes when #1029 does.
+         */
         record NoInput() implements ComparisonSubject {}
     }
 
