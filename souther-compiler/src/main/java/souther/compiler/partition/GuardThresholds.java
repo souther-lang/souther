@@ -576,7 +576,7 @@ public final class GuardThresholds {
                 // tells apart — and the border is drawn on the quantity the rule wrote, which can
                 // name where the line falls. Left out, a rule that cuts at a third had its classes
                 // counted and nothing said about its line at all.
-                if (at.value() == null) {
+                if (at.value() == null && at.drawsABorder()) {
                     between.add(new LineDrawn(at.cutting(), origin));
                 }
             }
@@ -589,8 +589,15 @@ public final class GuardThresholds {
             // together, and a border built where its comparison was read knows only its own
             // line — so a second rule over one form left the first one's run going to the end
             // of the order, past it.
-            case ComparisonAssessment.AcrossPositions over -> between.add(new LineDrawn(
-                    over.cutting(), originOf(behavior, each, site, plan, over.cutting())));
+            case ComparisonAssessment.AcrossPositions over -> {
+                // A value singled out on such a quantity has no sides, so there is nothing for a
+                // border to owe a row away from: `a == b` puts the whole of one arm on the place
+                // the two meet, and that arm is a row the branch measure already asks for.
+                if (over.drawsABorder()) {
+                    between.add(new LineDrawn(over.cutting(),
+                            originOf(behavior, each, site, plan, over.cutting())));
+                }
+            }
             case ComparisonAssessment.AnswerDependent _, ComparisonAssessment.NoInput _,
                  ComparisonAssessment.CutsNothing _, ComparisonAssessment.OutsideTheDomain _,
                  ComparisonAssessment.Unread _ -> { }

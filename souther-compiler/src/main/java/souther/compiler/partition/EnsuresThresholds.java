@@ -211,7 +211,7 @@ public final class EnsuresThresholds {
                 // And the line itself, where the position has no value beside it for a row to be
                 // owed at: the classes either side are what the model tells apart, and the border is
                 // drawn on the quantity the rule wrote, which can name where it falls.
-                if (at.value() == null) {
+                if (at.value() == null && at.drawsABorder()) {
                     out.between().add(new LineDrawn(at.cutting(), origin));
                 }
             }
@@ -230,8 +230,12 @@ public final class EnsuresThresholds {
                 reportUnread(new RuleRef.Ensures(rule.id(), clause), comparison, rule.value(),
                         new BlockReason.ComparisonBetweenPositions(), reads, symbols,
                         out.unread());
-                out.between().add(new LineDrawn(over.cutting(),
-                        originOf(rule, clause, over.cutting())));
+                // A value singled out on such a quantity has no sides, so there is nothing for a
+                // border to owe a row away from.
+                if (over.drawsABorder()) {
+                    out.between().add(new LineDrawn(over.cutting(),
+                            originOf(rule, clause, over.cutting())));
+                }
             }
             // Nothing this reader draws. A comparison it could not read leaves the positions it
             // names standing, in the words the reading that stopped came to — worked out again

@@ -200,6 +200,21 @@ sealed interface ComparisonAssessment {
         return value == null ? Required.Places.AT_NO_VALUE : Required.Places.AT_THE_VALUE;
     }
 
+    /**
+     * Whether this line is one a border is built on.
+     *
+     * <p>Only where the rule orders the values around it. A value singled out has no sides — the
+     * values either side of it are one class — so there is nothing for a border to owe a row away
+     * from, and a rule that names a value the quantity does not hold names no place at all.
+     */
+    default boolean drawsABorder() {
+        return switch (this) {
+            case AtAPosition at -> at.places() == Required.Places.ACROSS_THE_VALUE;
+            case AcrossPositions over -> over.places() == Required.Places.ACROSS_THE_VALUE;
+            case AnswerDependent _, NoInput _, CutsNothing _, OutsideTheDomain _, Unread _ -> false;
+        };
+    }
+
     /** What this raises, as the accounting names it. */
     default Required.ComparisonSubject subject() {
         return switch (this) {
