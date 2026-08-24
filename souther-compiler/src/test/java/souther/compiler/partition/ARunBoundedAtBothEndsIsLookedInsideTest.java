@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import souther.compiler.query.ItemAssessment;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.numeric.Count;
