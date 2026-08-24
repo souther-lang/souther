@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.semantics.OperationFacts;
 import souther.compiler.core.Core;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
@@ -12,7 +13,7 @@ import java.util.Set;
  * The standard-library operations whose result is a number taken of a location.
  *
  * <p>Which they are is declared with the rest of what is true of the language's operations
- * ({@link souther.compiler.semantics.OperationFacts}) and read from there. This once held the list
+ * ({@link OperationFacts}) and read from there. This once held the list
  * itself, which is what made it the first fact promoted out of a check when a second reader wanted
  * it — two lists of the same operations disagreed, and a rule discharged in one place was reported
  * in the other as a rule the model does not state.
@@ -36,7 +37,7 @@ public final class NumericMeasures {
 
     /** Every such operation. */
     public static Set<ValueName> calls() {
-        return souther.compiler.semantics.OperationFacts.countsWhatItIsGiven();
+        return OperationFacts.countsWhatItIsGiven();
     }
 
     /** Whether {@code operation} is one of them. */
@@ -93,7 +94,7 @@ public final class NumericMeasures {
      * not a proof, and a row at that edge is settled by a value rather than by an argument.
      */
     public static boolean everyCountHasAValue(ValueName operation) {
-        return souther.compiler.semantics.OperationFacts
+        return OperationFacts
                 .everyCountItGivesIsACountSomeValueHas(operation);
     }
 

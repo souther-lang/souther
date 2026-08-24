@@ -1,5 +1,8 @@
 package souther.compiler.check;
 
+import souther.compiler.semantics.OperationFact;
+import souther.compiler.semantics.ResultBound;
+import souther.compiler.semantics.SizeAgainstItsSource;
 import souther.compiler.core.Core;
 import souther.compiler.numeric.NumericDomain.LinearForm;
 import souther.compiler.numeric.NumericDomain.Rel;
@@ -89,7 +92,7 @@ final class IntrinsicNumericFacts {
     /** How a size is stated of the two, or null where there is nothing to state: a construction of
      * the same size answers both with one atom ({@link DischargeRules#sizeSource}), so a relation
      * between them would say a name stands to itself. */
-    private static Rel relationOf(souther.compiler.semantics.Cardinality size) {
+    private static Rel relationOf(SizeAgainstItsSource size) {
         return switch (size) {
             case AT_MOST -> Rel.LE;
             case SAME -> null;
@@ -107,7 +110,7 @@ final class IntrinsicNumericFacts {
     static List<NumericConstraint> ofCall(Core.PreservedCall call, FactSubject atom, Denotations at,
                                           Terms terms) {
         List<NumericConstraint> out = new ArrayList<>();
-        for (souther.compiler.semantics.ResultBound bound
+        for (ResultBound bound
                 : DischargeRules.boundsOn(call, arg -> constantOf(arg, at, terms))) {
             LinearForm<FactSubject> against = bound.against() == null
                     ? LinearForm.constant(bound.offset())
@@ -142,7 +145,7 @@ final class IntrinsicNumericFacts {
                 instanceof Core.PreservedCall moved)) {
             return;
         }
-        souther.compiler.semantics.OperationFact.ShiftsBy shift = DischargeRules.shiftBy(moved);
+        OperationFact.ShiftsBy shift = DischargeRules.shiftBy(moved);
         if (shift == null || !shift.measure().equals(call.operation())
                 || !sameValue(CallArguments.of(shift.of(), moved), call.args().get(0), at, terms)) {
             return;

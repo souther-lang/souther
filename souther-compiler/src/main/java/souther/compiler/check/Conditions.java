@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.semantics.PositiveOrder;
 import souther.compiler.core.Core;
 import souther.compiler.numeric.NumericDomain.LinearForm;
 import souther.compiler.numeric.NumericDomain.Rel;
@@ -189,7 +190,7 @@ final class Conditions {
                 || !isZero(zero)) {
             return e;
         }
-        souther.compiler.semantics.PositiveOrder positive =
+        PositiveOrder positive =
                 DischargeRules.orderStatedBy(call.operation());
         if (positive == null
                 || terms.bodyKey(call.args().get(0), at) == null

@@ -113,25 +113,25 @@ public final class OperationFacts {
                             PositiveOrder.SECOND_ARGUMENT_GREATER)),
 
             // Where a construction's elements came from, and how many of them it answers.
-            about("List", "reverse", keeps(at(0), Cardinality.SAME)),
-            about("List", "sort", keeps(at(0), Cardinality.SAME)),
-            about("List", "sortBy", keeps(CONTAINER, Cardinality.SAME)),
-            about("List", "map", maps(CONTAINER, Cardinality.SAME)),
-            about("List", "mapIndexed", maps(CONTAINER, Cardinality.SAME)),
-            about("Map", "mapValues", maps(CONTAINER, Cardinality.SAME)),
-            about("List", "filter", keeps(CONTAINER, Cardinality.AT_MOST)),
-            about("List", "distinct", keeps(at(0), Cardinality.AT_MOST)),
-            about("List", "take", keeps(at(1), Cardinality.AT_MOST)),
-            about("List", "drop", keeps(at(1), Cardinality.AT_MOST)),
-            about("Set", "filter", keeps(CONTAINER, Cardinality.AT_MOST)),
-            about("Map", "filterEntries", keeps(CONTAINER, Cardinality.AT_MOST)),
-            about("List", "distinctBy", keeps(CONTAINER, Cardinality.AT_MOST)),
-            about("Map", "remove", keeps(at(1), Cardinality.AT_MOST)),
-            about("Set", "remove", keeps(at(1), Cardinality.AT_MOST)),
-            about("Map", "intersection", keeps(at(0), Cardinality.AT_MOST)),
-            about("Map", "difference", keeps(at(0), Cardinality.AT_MOST)),
-            about("Set", "intersection", keeps(at(0), Cardinality.AT_MOST)),
-            about("Set", "difference", keeps(at(0), Cardinality.AT_MOST)),
+            about("List", "reverse", keeps(at(0), SizeAgainstItsSource.SAME)),
+            about("List", "sort", keeps(at(0), SizeAgainstItsSource.SAME)),
+            about("List", "sortBy", keeps(CONTAINER, SizeAgainstItsSource.SAME)),
+            about("List", "map", maps(CONTAINER, SizeAgainstItsSource.SAME)),
+            about("List", "mapIndexed", maps(CONTAINER, SizeAgainstItsSource.SAME)),
+            about("Map", "mapValues", maps(CONTAINER, SizeAgainstItsSource.SAME)),
+            about("List", "filter", keeps(CONTAINER, SizeAgainstItsSource.AT_MOST)),
+            about("List", "distinct", keeps(at(0), SizeAgainstItsSource.AT_MOST)),
+            about("List", "take", keeps(at(1), SizeAgainstItsSource.AT_MOST)),
+            about("List", "drop", keeps(at(1), SizeAgainstItsSource.AT_MOST)),
+            about("Set", "filter", keeps(CONTAINER, SizeAgainstItsSource.AT_MOST)),
+            about("Map", "filterEntries", keeps(CONTAINER, SizeAgainstItsSource.AT_MOST)),
+            about("List", "distinctBy", keeps(CONTAINER, SizeAgainstItsSource.AT_MOST)),
+            about("Map", "remove", keeps(at(1), SizeAgainstItsSource.AT_MOST)),
+            about("Set", "remove", keeps(at(1), SizeAgainstItsSource.AT_MOST)),
+            about("Map", "intersection", keeps(at(0), SizeAgainstItsSource.AT_MOST)),
+            about("Map", "difference", keeps(at(0), SizeAgainstItsSource.AT_MOST)),
+            about("Set", "intersection", keeps(at(0), SizeAgainstItsSource.AT_MOST)),
+            about("Set", "difference", keeps(at(0), SizeAgainstItsSource.AT_MOST)),
             // Every value in the answer came from the map it was given: the one under the key is
             // what the closure made of it, and every other is the value that was there. Read as a
             // closure result alone, what is true of one value would be said of all of them.
@@ -140,14 +140,14 @@ public final class OperationFacts {
                             new ElementLineage.SameAs(new ElementLineage.Source(CONTAINER, 1)),
                             new ElementLineage.ClosureResult(
                                     new ElementLineage.Source(CONTAINER, 1)))),
-                    Cardinality.SAME))),
+                    SizeAgainstItsSource.SAME))),
             // Inside what the closure answered, which is an optional here and a list in a
             // `flatMap`. One lineage for the two, told apart by what the closure's own signature
             // says it answers with.
             about("List", "filterMap", new OperationFact.BuildsItsResultFrom(new BuiltFrom(
                     new ElementLineage.InsideClosureResult(
-                            new ElementLineage.Source(CONTAINER, 1)), Cardinality.AT_MOST))),
-            about("Set", "map", maps(CONTAINER, Cardinality.AT_MOST)),
+                            new ElementLineage.Source(CONTAINER, 1)), SizeAgainstItsSource.AT_MOST))),
+            about("Set", "map", maps(CONTAINER, SizeAgainstItsSource.AT_MOST)),
 
             // The containers a construction's result is never smaller than. A union answers one of
             // what both sides hold and an insert of something already there adds nothing, so
@@ -353,13 +353,13 @@ public final class OperationFacts {
     }
 
     /** The answer holds the very elements {@code source} held. */
-    private static OperationFact keeps(ArgumentRef source, Cardinality size) {
+    private static OperationFact keeps(ArgumentRef source, SizeAgainstItsSource size) {
         return new OperationFact.BuildsItsResultFrom(new BuiltFrom(
                 new ElementLineage.SameAs(new ElementLineage.Source(source, 1)), size));
     }
 
     /** The answer holds what a closure made of each of {@code source}'s elements. */
-    private static OperationFact maps(ArgumentRef source, Cardinality size) {
+    private static OperationFact maps(ArgumentRef source, SizeAgainstItsSource size) {
         return new OperationFact.BuildsItsResultFrom(new BuiltFrom(
                 new ElementLineage.ClosureResult(new ElementLineage.Source(source, 1)), size));
     }

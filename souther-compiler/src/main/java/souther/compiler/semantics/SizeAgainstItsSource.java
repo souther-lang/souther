@@ -9,6 +9,6 @@ package souther.compiler.semantics;
  * <li>{@code AT_MOST} — no more, and possibly fewer.
  * </ul>
  */
-public enum Cardinality {
+public enum SizeAgainstItsSource {
     SAME, AT_MOST
 }

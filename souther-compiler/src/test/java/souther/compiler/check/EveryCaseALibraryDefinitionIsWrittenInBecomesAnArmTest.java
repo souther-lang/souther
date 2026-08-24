@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.semantics.OperationFact;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
@@ -49,7 +50,7 @@ class EveryCaseALibraryDefinitionIsWrittenInBecomesAnArmTest {
                         + " that nothing was wrong");
         for (ValueName operation : DischargeRules.choosingOperations()) {
             Core.PreservedCall call = callTo(operation);
-            java.util.List<souther.compiler.semantics.OperationFact.Case> defined = DischargeRules.chosenBy(call);
+            java.util.List<OperationFact.Case> defined = DischargeRules.chosenBy(call);
             Choice choice = Choice.of(call);
 
             assertNotNull(choice, operation + " is defined in cases and answers no choice");
@@ -59,7 +60,7 @@ class EveryCaseALibraryDefinitionIsWrittenInBecomesAnArmTest {
                     operation + " has an arm per case it is defined in");
 
             for (int i = 0; i < defined.size(); i++) {
-                souther.compiler.semantics.OperationFact.Case row = defined.get(i);
+                OperationFact.Case row = defined.get(i);
                 Choice.Arm arm = choice.arms().get(i);
                 String where = operation + " case " + (i + 1);
 
@@ -87,10 +88,10 @@ class EveryCaseALibraryDefinitionIsWrittenInBecomesAnArmTest {
     }
 
     /** The relations the row names, written in the values this call was given. */
-    private static List<Choice.ArgumentRelation> expected(souther.compiler.semantics.OperationFact.Case row,
+    private static List<Choice.ArgumentRelation> expected(OperationFact.Case row,
                                                           Core.PreservedCall call) {
         List<Choice.ArgumentRelation> out = new ArrayList<>(row.given().size());
-        for (souther.compiler.semantics.OperationFact.ArgumentsStand stands : row.given()) {
+        for (OperationFact.ArgumentsStand stands : row.given()) {
             out.add(new Choice.ArgumentRelation(CallArguments.of(stands.left(), call), stands.rel(),
                     CallArguments.of(stands.right(), call)));
         }

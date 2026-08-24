@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.semantics.ArgumentRef;
 import souther.compiler.semantics.OperationFact;
 import souther.compiler.semantics.OperationFacts;
 
@@ -63,22 +64,22 @@ final class OperationFactBinder {
                 case OperationFact.BuildsItsResultFrom builds ->
                         DischargeRules.holdToTheDeclaration(each.operation(),
                                 builds.built().from(),
-                                new souther.compiler.semantics.ArgumentRef.TheContainer(),
+                                new ArgumentRef.TheContainer(),
                                 Question::holdsElements,
                                 "the container something is built from");
                 case OperationFact.ResultIsNoSmallerThan bounded ->
                         DischargeRules.holdToTheDeclaration(each.operation(), bounded.container(),
-                                new souther.compiler.semantics.ArgumentRef.TheContainer(),
+                                new ArgumentRef.TheContainer(),
                                 Question::holdsElements,
                                 "a container the result is no smaller than");
                 case OperationFact.ReadsItsContainer reads ->
                         DischargeRules.holdToTheDeclaration(each.operation(), reads.container(),
-                                new souther.compiler.semantics.ArgumentRef.TheContainer(),
+                                new ArgumentRef.TheContainer(),
                                 Question::holdsElements,
                                 "the container a predicate reads");
                 case OperationFact.IsStatedOverAProjection over ->
                         DischargeRules.holdToTheDeclaration(each.operation(), over.projection(),
-                                new souther.compiler.semantics.ArgumentRef.TheClosure(),
+                                new ArgumentRef.TheClosure(),
                                 type -> type instanceof souther.compiler.types.Type.FnOf,
                                 "the projection a predicate is stated over");
                 // Neither names an argument, so there is nothing about one to hold to a signature.

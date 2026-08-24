@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.semantics.NumericResult;
 import souther.compiler.core.Core;
 import souther.compiler.types.CoverageOrigin;
 import souther.compiler.types.Type;
@@ -10,7 +11,7 @@ import java.math.BigDecimal;
  * The condition a union-answering operation comes back as a case other than its number's under,
  * written as the comparison it is.
  *
- * <p>{@link souther.compiler.semantics.NumericResult.TheOtherCaseWhen} states it as a relation between an argument and a
+ * <p>{@link NumericResult.TheOtherCaseWhen} states it as a relation between an argument and a
  * number, which is what the table can say without knowing how a comparison is read. Turning that
  * into a condition is the one step between the table and every reader of it, and it is here so that
  * there is one such step: an arm asks what taking it settles, and a walk asks whether the other case
@@ -30,10 +31,10 @@ final class TheOtherCase {
      * @param called the call as the naming resolved it ({@link Terms#originating})
      */
     static Core conditionAt(Core called) {
-        souther.compiler.semantics.NumericResult result = called == null ? null
+        NumericResult result = called == null ? null
                 : DischargeRules.numericResult(Terms.operationOf(called));
         if (result == null || result.unless() == null
-                || !(result.at() instanceof souther.compiler.semantics.NumericResult.Answered.InTheCaseCarrying)) {
+                || !(result.at() instanceof NumericResult.Answered.InTheCaseCarrying)) {
             return null;
         }
         Core argument = Terms.argsOf(called)
@@ -46,10 +47,10 @@ final class TheOtherCase {
     /** The type the number's case carries, or null where {@code called} answers no number as a
      * case. Asked beside the condition because an arm is told apart by what it names. */
     static Type theCaseItAnswersIn(Core called) {
-        souther.compiler.semantics.NumericResult result = called == null ? null
+        NumericResult result = called == null ? null
                 : DischargeRules.numericResult(Terms.operationOf(called));
         return result != null
-                && result.at() instanceof souther.compiler.semantics.NumericResult.Answered.InTheCaseCarrying(Type answersIn)
+                && result.at() instanceof NumericResult.Answered.InTheCaseCarrying(Type answersIn)
                 ? answersIn : null;
     }
 

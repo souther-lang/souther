@@ -1,7 +1,6 @@
 package souther.compiler.check;
 
 import souther.compiler.semantics.Combinator;
-
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
 

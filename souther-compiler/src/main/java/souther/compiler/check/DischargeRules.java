@@ -1,8 +1,8 @@
 package souther.compiler.check;
 
 import souther.compiler.semantics.ArgumentRef;
+import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.BuiltFrom;
-import souther.compiler.semantics.Cardinality;
 import souther.compiler.semantics.ElementLineage;
 import souther.compiler.semantics.ElementShape;
 import souther.compiler.semantics.NumericResult;
@@ -10,11 +10,9 @@ import souther.compiler.semantics.OperationFact;
 import souther.compiler.semantics.OperationFacts;
 import souther.compiler.semantics.PositiveOrder;
 import souther.compiler.semantics.ResultBound;
-
+import souther.compiler.semantics.SizeAgainstItsSource;
 import souther.compiler.types.BinOp;
 import souther.compiler.core.Core;
-import souther.compiler.numeric.NumericDomain;
-import souther.compiler.numeric.NumericDomain.Rel;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
@@ -67,7 +65,7 @@ final class DischargeRules {
     }
 
     /** The container {@code call} built its result from, and what the building kept of it. */
-    record Source(Core container, ElementShape shape, Cardinality size) {}
+    record Source(Core container, ElementShape shape, SizeAgainstItsSource size) {}
 
 
 
@@ -110,7 +108,7 @@ final class DischargeRules {
     }
 
     static Set<ValueName> carryingOperations() {
-        return souther.compiler.semantics.OperationFacts.readsItsContainer();
+        return OperationFacts.readsItsContainer();
     }
 
     /**
@@ -214,7 +212,7 @@ final class DischargeRules {
 
     /** What {@code e} states through a measure, or null where it is not a shift this has a rule
      * about. */
-    static souther.compiler.semantics.OperationFact.ShiftsBy shiftBy(Core e) {
+    static OperationFact.ShiftsBy shiftBy(Core e) {
         return e instanceof Core.PreservedCall call ? Bound.shiftsBy(call.operation()) : null;
     }
 
@@ -227,7 +225,7 @@ final class DischargeRules {
 
     /** The cases {@code e} is defined in, or null where it is not a call to an operation that
      * answers one of the values it was given. */
-    static List<souther.compiler.semantics.OperationFact.Case> chosenBy(Core e) {
+    static List<OperationFact.Case> chosenBy(Core e) {
         return e instanceof Core.PreservedCall call ? Bound.isDefinedByCases(call.operation())
                 : List.of();
     }
@@ -256,12 +254,12 @@ final class DischargeRules {
      *                 caller because what a value is read as is the reading's answer and not a
      *                 property of the syntax at the call.
      */
-    static List<souther.compiler.semantics.ResultBound> boundsOn(Core.PreservedCall call,
+    static List<ResultBound> boundsOn(Core.PreservedCall call,
                                       Function<Core, BigDecimal> constant) {
-        List<souther.compiler.semantics.ResultBound> rows =
+        List<ResultBound> rows =
                 Bound.boundsOnTheResult(call.operation());
-        List<souther.compiler.semantics.ResultBound> holding = new ArrayList<>(rows.size());
-        for (souther.compiler.semantics.ResultBound row : rows) {
+        List<ResultBound> holding = new ArrayList<>(rows.size());
+        for (ResultBound row : rows) {
             if (CallArguments.holds(row.provided(), call, constant)) {
                 holding.add(row);
             }
@@ -311,49 +309,49 @@ final class DischargeRules {
     private static final class Bound {
 
         private static Set<ValueName> buildsItsResultFrom() {
-            return souther.compiler.semantics.OperationFacts.buildsItsResultFrom();
+            return OperationFacts.buildsItsResultFrom();
         }
 
         private static BuiltFrom buildsItsResultFrom(ValueName operation) {
-            return souther.compiler.semantics.OperationFacts.buildsItsResultFrom(operation);
+            return OperationFacts.buildsItsResultFrom(operation);
         }
-        private static souther.compiler.semantics.OperationFact.ReadsItsContainer readsItsContainer(
+        private static OperationFact.ReadsItsContainer readsItsContainer(
                 ValueName operation) {
-            return souther.compiler.semantics.OperationFacts.readsItsContainer(operation);
+            return OperationFacts.readsItsContainer(operation);
         }
 
         private static ArgumentRef isStatedOverAProjection(ValueName operation) {
-            return souther.compiler.semantics.OperationFacts.isStatedOverAProjection(operation);
+            return OperationFacts.isStatedOverAProjection(operation);
         }
 
         private static Set<ValueName> isStatedOverAProjection() {
-            return souther.compiler.semantics.OperationFacts.isStatedOverAProjection();
+            return OperationFacts.isStatedOverAProjection();
         }
 
         private static List<ArgumentRef> resultIsNoSmallerThan(ValueName operation) {
-            return souther.compiler.semantics.OperationFacts.resultIsNoSmallerThan(operation);
+            return OperationFacts.resultIsNoSmallerThan(operation);
         }
 
         private static boolean statesItsPredicateOfEveryElement(ValueName operation) {
-            return souther.compiler.semantics.OperationFacts
+            return OperationFacts
                     .statesItsPredicateOfEveryElement(operation);
         }
 
         private static Set<ValueName> statesItsPredicateOfEveryElement() {
-            return souther.compiler.semantics.OperationFacts.statesItsPredicateOfEveryElement();
+            return OperationFacts.statesItsPredicateOfEveryElement();
         }
 
         private static ValueName meansTheSameAsASizeOfNought(ValueName operation) {
-            return souther.compiler.semantics.OperationFacts
+            return OperationFacts
                     .meansTheSameAsASizeOfNought(operation);
         }
 
         private static Set<ValueName> meansTheSameAsASizeOfNought() {
-            return souther.compiler.semantics.OperationFacts.meansTheSameAsASizeOfNought();
+            return OperationFacts.meansTheSameAsASizeOfNought();
         }
         /** What the declarations came to, held to the library. The list is walked whole, so a fact
          *  nothing here looks up is one this has held all the same. */
-        private static final List<souther.compiler.semantics.OperationFacts.Declared> SEMANTICS =
+        private static final List<OperationFacts.Declared> SEMANTICS =
                 OperationFactBinder.bindAll();
 
         /**
@@ -365,32 +363,32 @@ final class DischargeRules {
          * first.
          */
         private static ArgumentRef answersItsArgument(ValueName operation) {
-            return souther.compiler.semantics.OperationFacts.answersItsArgument(operation);
+            return OperationFacts.answersItsArgument(operation);
         }
 
         /** The operations declared to answer one of their arguments, for the checks that hold each
          *  of them to firing. */
         private static Set<ValueName> answersItsArgument() {
-            return souther.compiler.semantics.OperationFacts.answersItsArgument();
+            return OperationFacts.answersItsArgument();
         }
 
         private static Set<ValueName> statesTheOrder() {
-            return souther.compiler.semantics.OperationFacts.statesTheOrderOfItsArguments();
+            return OperationFacts.statesTheOrderOfItsArguments();
         }
 
-        private static souther.compiler.semantics.PositiveOrder statesTheOrder(
+        private static PositiveOrder statesTheOrder(
                 ValueName operation) {
-            return souther.compiler.semantics.OperationFacts
+            return OperationFacts
                     .statesTheOrderOfItsArguments(operation);
         }
 
         private static Set<ValueName> shiftsBy() {
-            return souther.compiler.semantics.OperationFacts.shiftsBy();
+            return OperationFacts.shiftsBy();
         }
 
-        private static souther.compiler.semantics.OperationFact.ShiftsBy shiftsBy(
+        private static OperationFact.ShiftsBy shiftsBy(
                 ValueName operation) {
-            return souther.compiler.semantics.OperationFacts.shiftsBy(operation);
+            return OperationFacts.shiftsBy(operation);
         }
 
         /** The measures the shifts are stated through, read off those rather than listed again. A
@@ -403,29 +401,29 @@ final class DischargeRules {
         }
 
         private static Set<ValueName> boundsOnTheResult() {
-            return souther.compiler.semantics.OperationFacts.boundsOnTheResult();
+            return OperationFacts.boundsOnTheResult();
         }
 
-        private static List<souther.compiler.semantics.ResultBound> boundsOnTheResult(
+        private static List<ResultBound> boundsOnTheResult(
                 ValueName operation) {
-            return souther.compiler.semantics.OperationFacts.boundsOnTheResult(operation);
+            return OperationFacts.boundsOnTheResult(operation);
         }
         private static Set<ValueName> isDefinedByCases() {
-            return souther.compiler.semantics.OperationFacts.isDefinedByCases();
+            return OperationFacts.isDefinedByCases();
         }
 
-        private static List<souther.compiler.semantics.OperationFact.Case> isDefinedByCases(
+        private static List<OperationFact.Case> isDefinedByCases(
                 ValueName operation) {
-            return souther.compiler.semantics.OperationFacts.isDefinedByCases(operation);
+            return OperationFacts.isDefinedByCases(operation);
         }
 
         private static Set<ValueName> computesANumber() {
-            return souther.compiler.semantics.OperationFacts.computesANumber();
+            return OperationFacts.computesANumber();
         }
 
-        private static souther.compiler.semantics.NumericResult computesANumber(
+        private static NumericResult computesANumber(
                 ValueName operation) {
-            return souther.compiler.semantics.OperationFacts.computesANumber(operation);
+            return OperationFacts.computesANumber(operation);
         }
     }
 
@@ -447,7 +445,7 @@ final class DischargeRules {
         }
         Prelude.Signature signature = entry.signature();
         Type answers = Question.numberAnsweredBy(signature.result());
-        List<souther.compiler.semantics.Arithmetic.Reads> reads = rule.computes().reads();
+        List<Arithmetic.Reads> reads = rule.computes().reads();
         if (signature.params().size() != reads.size()) {
             throw new IllegalStateException(operation + " takes " + signature.params().size()
                     + " argument(s), and the arithmetic written for it reads " + reads.size());
@@ -460,14 +458,14 @@ final class DischargeRules {
             }
         }
         switch (rule.at()) {
-            case souther.compiler.semantics.NumericResult.Answered.Directly ignored -> {
+            case NumericResult.Answered.Directly ignored -> {
                 if (!Question.isANumber(signature.result())) {
                     throw new IllegalStateException(operation + " answers "
                             + Type.show(signature.result())
                             + ", so the number it computes is not its result");
                 }
             }
-            case souther.compiler.semantics.NumericResult.Answered.InTheCaseCarrying(Type carried) -> {
+            case NumericResult.Answered.InTheCaseCarrying(Type carried) -> {
                 if (!(signature.result() instanceof Type.Union(Set<TypeSymbol> members))) {
                     throw new IllegalStateException(operation + " answers "
                             + Type.show(signature.result())
@@ -508,7 +506,7 @@ final class DischargeRules {
      * operation answers. A rule pairing an operation with a measure of something else would state a
      * relation between two values that have none.
      */
-    static void holdShift(ValueName operation, souther.compiler.semantics.OperationFact.ShiftsBy
+    static void holdShift(ValueName operation, OperationFact.ShiftsBy
             shift) {
         holdToTheDeclaration(operation, shift.amount(), null, Question::isANumber,
                 "the amount a shift moves by");
@@ -531,7 +529,7 @@ final class DischargeRules {
 
     /** As {@link #bind}, for the arguments a case names: the one it answers, and the two sides of
      * each condition it is reached under. */
-    static void holdCase(ValueName operation, souther.compiler.semantics.OperationFact.Case one) {
+    static void holdCase(ValueName operation, OperationFact.Case one) {
         List<ArgumentRef> named = new ArrayList<>();
         named.add(one.answers());
         one.given().forEach(stands -> {
@@ -544,13 +542,13 @@ final class DischargeRules {
 
     /** As {@link #bind}, for the arguments a bound names: the one the result is bounded against, and
      * the one a condition on the rule reads. Each is a separate claim about a separate argument. */
-    static void holdBound(ValueName operation, souther.compiler.semantics.ResultBound bound) {
+    static void holdBound(ValueName operation, ResultBound bound) {
         List<ArgumentRef> named = new ArrayList<>();
         if (bound.against() != null) {
             named.add(bound.against());
         }
         if (bound.provided()
-                instanceof souther.compiler.semantics.ResultBound.Provided.ConstantAboveZero
+                instanceof ResultBound.Provided.ConstantAboveZero
                 constant) {
             named.add(constant.argument());
         }
@@ -675,7 +673,7 @@ final class DischargeRules {
     /** Where {@code call} reads the container it states its predicate of, or null where it is not a
      * predicate this carries anywhere. */
     static Carrying carried(Core.PreservedCall call) {
-        souther.compiler.semantics.OperationFact.ReadsItsContainer carried =
+        OperationFact.ReadsItsContainer carried =
                 Bound.readsItsContainer(call.operation());
         return carried == null ? null : new Carrying(call, carried.container(), carried.through());
     }
@@ -706,7 +704,7 @@ final class DischargeRules {
 
     /** What {@code operation} computes and where it answers it, or null where the table says
      * nothing of it. */
-    static souther.compiler.semantics.NumericResult numericResult(ValueName operation) {
+    static NumericResult numericResult(ValueName operation) {
         // An expression that calls nothing is asked this, and answering it is what says so. The
         // tables are immutable maps, which refuse a null key rather than answering for it, and a
         // reader that guarded the call itself would be one guard per reader.
@@ -716,17 +714,17 @@ final class DischargeRules {
     /** The operator {@code operation} is, where it answers one directly and the language writes it
      * as an operator too — else null. What a call to it is read as where it stands. */
     static BinOp operator(ValueName operation) {
-        souther.compiler.semantics.NumericResult result = numericResult(operation);
+        NumericResult result = numericResult(operation);
         return result != null
-                && result.at() instanceof souther.compiler.semantics.NumericResult.Answered.Directly
+                && result.at() instanceof NumericResult.Answered.Directly
                 && result.computes()
-                        instanceof souther.compiler.semantics.Arithmetic.TheOperator written
+                        instanceof Arithmetic.TheOperator written
                 ? written.op() : null;
     }
 
     /** Which argument a positive answer from {@code operation} names as the greater, or null where
      * its sign is not an order. */
-    static souther.compiler.semantics.PositiveOrder orderStatedBy(ValueName operation) {
+    static PositiveOrder orderStatedBy(ValueName operation) {
         return Bound.statesTheOrder(operation);
     }
 
@@ -757,7 +755,7 @@ final class DischargeRules {
     static Core sizeSource(Core e) {
         if (e instanceof Core.PreservedCall call) {
             Source built = builtFrom(call);
-            if (built != null && built.size() == Cardinality.SAME) {
+            if (built != null && built.size() == SizeAgainstItsSource.SAME) {
                 return sizeSource(built.container());
             }
         }

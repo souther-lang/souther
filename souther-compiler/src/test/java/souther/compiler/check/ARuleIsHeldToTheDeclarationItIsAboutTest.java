@@ -1,18 +1,15 @@
 package souther.compiler.check;
 
 import souther.compiler.semantics.ArgumentRef;
-import souther.compiler.semantics.ElementLineage;
-
 import souther.compiler.semantics.BuiltFrom;
-import souther.compiler.semantics.Cardinality;
-import souther.compiler.semantics.ElementShape;
+import souther.compiler.semantics.ElementLineage;
+import souther.compiler.semantics.SizeAgainstItsSource;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
-import java.util.Set;
 import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -46,7 +43,7 @@ class ARuleIsHeldToTheDeclarationItIsAboutTest {
     private static void bindBuilt(String operation, ArgumentRef from) {
         DischargeRules.holdToTheDeclaration(op(operation),
                 new BuiltFrom(new ElementLineage.SameAs(new ElementLineage.Source(from, 1)),
-                        Cardinality.AT_MOST).from(),
+                        SizeAgainstItsSource.AT_MOST).from(),
                 new ArgumentRef.TheContainer(), Question::holdsElements,
                 "the container something is built from");
     }

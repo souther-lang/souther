@@ -15,7 +15,7 @@ package souther.compiler.semantics;
  * <p>Named for what it is the shape of. A word this broad is one the next thing with a shape
  * collides with, and this package will hold more propositions than it holds today.
  *
- * <p>How many there are is {@link Cardinality} and is stated beside this, not read off it. The two
+ * <p>How many there are is {@link SizeAgainstItsSource} and is stated beside this, not read off it. The two
  * agree for every construction the library has — the same elements in another order is as many,
  * some of them is no more — and that agreement is what made one enum look like enough. It ends at a
  * construction given two containers: {@code List.append(a, b)} holds neither {@code a}'s elements

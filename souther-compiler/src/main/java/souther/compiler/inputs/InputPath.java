@@ -1,7 +1,7 @@
 package souther.compiler.inputs;
 
 import souther.compiler.semantics.ArgumentRef;
-
+import souther.compiler.semantics.ElementLineage;
 import souther.compiler.check.Location;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
@@ -147,7 +147,7 @@ public final class InputPath {
             return null;
         }
         ArgumentRef holds =
-                souther.compiler.semantics.ElementLineage.holdsTheElementsOf(reached.denotes());
+                ElementLineage.holdsTheElementsOf(reached.denotes());
         int argument = holds == null ? -1 : souther.compiler.check.CallArguments.positionIn(holds, reached.denotes());
         return argument < 0 || argument >= call.args().size() ? null
                 : containerPath(call.args().get(argument), roots, bound, elements, symbols,

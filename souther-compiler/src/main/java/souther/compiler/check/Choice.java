@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.semantics.OperationFact;
 import souther.compiler.core.Core;
 import souther.compiler.numeric.NumericDomain.Rel;
 
@@ -177,15 +178,15 @@ record Choice(Kind kind, List<Arm> arms) {
      * question about the library, and it is answered by the time an arm exists.
      */
     private static Choice defined(Core.PreservedCall call) {
-        List<souther.compiler.semantics.OperationFact.Case> defined =
+        List<OperationFact.Case> defined =
                 DischargeRules.chosenBy(call);
         if (defined.isEmpty()) {
             return null;
         }
         List<Arm> arms = new ArrayList<>(defined.size());
-        for (souther.compiler.semantics.OperationFact.Case one : defined) {
+        for (OperationFact.Case one : defined) {
             List<ArgumentRelation> relations = new ArrayList<>(one.given().size());
-            for (souther.compiler.semantics.OperationFact.ArgumentsStand stands : one.given()) {
+            for (OperationFact.ArgumentsStand stands : one.given()) {
                 relations.add(new ArgumentRelation(CallArguments.of(stands.left(), call), stands.rel(),
                         CallArguments.of(stands.right(), call)));
             }

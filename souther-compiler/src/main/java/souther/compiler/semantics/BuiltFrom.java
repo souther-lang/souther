@@ -15,7 +15,7 @@ import java.util.List;
  * {@link ElementLineage} and a reader that wants whether a property survives asks here, and neither
  * is recovering the other's answer.
  */
-public record BuiltFrom(List<ElementLineage.OutputLineage> outputs, Cardinality size) {
+public record BuiltFrom(List<ElementLineage.OutputLineage> outputs, SizeAgainstItsSource size) {
 
     public BuiltFrom {
         outputs = List.copyOf(outputs);
@@ -26,7 +26,7 @@ public record BuiltFrom(List<ElementLineage.OutputLineage> outputs, Cardinality 
     }
 
     /** The one place its elements stand, for a construction that answers one run of them. */
-    public BuiltFrom(ElementLineage lineage, Cardinality size) {
+    public BuiltFrom(ElementLineage lineage, SizeAgainstItsSource size) {
         this(List.of(new ElementLineage.OutputLineage(
                 ElementLineage.ResultPath.elements(), lineage)), size);
     }
@@ -61,7 +61,7 @@ public record BuiltFrom(List<ElementLineage.OutputLineage> outputs, Cardinality 
      * thing to keep in step with it.
      */
     public ElementShape shape() {
-        return wordFor(lineage(), size == Cardinality.SAME);
+        return wordFor(lineage(), size == SizeAgainstItsSource.SAME);
     }
 
     /**

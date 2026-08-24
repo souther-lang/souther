@@ -25,7 +25,7 @@ import java.util.List;
  * separate question asked of a separate answer, and a reader that took this for one would have
  * "the origin is known, so the value can be built" — which is true of nothing here.
  *
- * <p><b>And no count.</b> How many elements the result has is {@link Cardinality} and
+ * <p><b>And no count.</b> How many elements the result has is {@link SizeAgainstItsSource} and
  * is stated beside this. They are different algebras and they come apart: {@code List.map} and
  * {@code Set.map} have one lineage — the closure's answer on an element of the source — and
  * different counts, because two elements of a set may map onto one. Folded together, the count would

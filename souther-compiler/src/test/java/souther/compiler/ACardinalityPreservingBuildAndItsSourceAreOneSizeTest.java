@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.semantics.SizeAgainstItsSource;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Severity;
 
@@ -13,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * How many a build has and how many its source has are one value where the operation says so.
  *
  * <p>{@code List.reverse} and {@code List.map} answer exactly as many as they were given, which
- * {@code souther.compiler.semantics.Cardinality.SAME} states — and it is stated as a relation between the two
+ * {@code SizeAgainstItsSource.SAME} states — and it is stated as a relation between the two
  * values, not as a fact about either. So the size of the build and the size of the source are one
  * subject rather than two that have to be kept saying the same thing, and a guard written about
  * either is a guard about both.
