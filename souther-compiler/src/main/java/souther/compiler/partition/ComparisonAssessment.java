@@ -1,7 +1,5 @@
 package souther.compiler.partition;
 
-import souther.compiler.check.Owed;
-import souther.compiler.check.Required;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.diag.Citation;
@@ -28,8 +26,15 @@ import java.util.List;
  * stopped. A rule was measured by one reading and reported by the other.
  *
  * <p>So the subject is derived here, from the same value the line is, and the disagreement has
- * nowhere to live. Which positions the quantity is over decides both what is owed and where the
- * border goes, because both come off {@link Cutting#dividedPosition()} and it is asked once.
+ * nowhere to live. Which positions the quantity is over decides both what the rule is about and
+ * where the border goes, because both come off {@link Cutting#dividedPosition()} and it is asked
+ * once.
+ *
+ * <p><b>And what a read comparison owes is owed by having been read.</b> The rows at the value it
+ * singles out, and the rows in the classes its line makes, are asked for by the reading that found
+ * the line — there is no moment at which such a demand is outstanding. So they are the partition's
+ * geometry and not a coverage question standing against an answer: carried as both, one decision
+ * had two representations again, and the second had no reader once it could never go unanswered.
  *
  * <p><b>Five ways a comparison raises nothing, and they are five.</b> Read to the end and cutting
  * nothing, naming no position at all, reading the answer, cutting where the quantity does not run,
@@ -40,6 +45,27 @@ import java.util.List;
 sealed interface ComparisonAssessment {
 
     /**
+     * What a comparison does to the quantity it cuts.
+     *
+     * <p>Read off the canonical quantity together with the operator, and read once. The operator
+     * alone does not answer it: {@code 2 * a == 8} names four and {@code 2 * a == 9} names no whole
+     * number at all, under one operator and one shape of rule.
+     */
+    enum Places {
+
+        /** An order across the line, so rows are owed either side of it and the two sides have
+         *  roles. */
+        ACROSS_THE_VALUE,
+
+        /** One value put in a class of its own, which has no sides: the values either side of it
+         *  are one class. */
+        AT_THE_VALUE,
+
+        /** A value the quantity does not hold, which puts nothing in a class of its own. */
+        AT_NO_VALUE
+    }
+
+    /**
      * The comparison cuts one position's own values.
      *
      * @param cutting  the line, which is what a threshold and a border are read off
@@ -47,7 +73,7 @@ sealed interface ComparisonAssessment {
      * @param value    the value of the position the classes meet at, or null where the position
      *                 holds none there
      */
-    record AtAPosition(Cutting cutting, NumericTerm position, Place value, Required.Places places)
+    record AtAPosition(Cutting cutting, NumericTerm position, Place value, Places places)
             implements ComparisonAssessment {
 
         public AtAPosition {
@@ -64,7 +90,7 @@ sealed interface ComparisonAssessment {
      * position is divided, and the place is the comparison's to name — and which of the two shapes
      * the quantity is stays with the quantity.
      */
-    record AcrossPositions(Cutting cutting, Citation at, Required.Places places)
+    record AcrossPositions(Cutting cutting, Citation at, Places places)
             implements ComparisonAssessment {
 
         public AcrossPositions {
@@ -193,11 +219,11 @@ sealed interface ComparisonAssessment {
      * whole number at all, under one operator: whether the value the rule wrote is one the quantity
      * holds is the quantity's answer, and it is already given by the seam the line was read off.
      */
-    private static Required.Places places(Cutting cutting, Place value) {
+    private static Places places(Cutting cutting, Place value) {
         if (!cutting.singles()) {
-            return Required.Places.ACROSS_THE_VALUE;
+            return Places.ACROSS_THE_VALUE;
         }
-        return value == null ? Required.Places.AT_NO_VALUE : Required.Places.AT_THE_VALUE;
+        return value == null ? Places.AT_NO_VALUE : Places.AT_THE_VALUE;
     }
 
     /**
@@ -209,39 +235,10 @@ sealed interface ComparisonAssessment {
      */
     default boolean drawsABorder() {
         return switch (this) {
-            case AtAPosition at -> at.places() == Required.Places.ACROSS_THE_VALUE;
-            case AcrossPositions over -> over.places() == Required.Places.ACROSS_THE_VALUE;
+            case AtAPosition at -> at.places() == Places.ACROSS_THE_VALUE;
+            case AcrossPositions over -> over.places() == Places.ACROSS_THE_VALUE;
             case AnswerDependent _, NoInput _, CutsNothing _, OutsideTheDomain _, Unread _ -> false;
         };
-    }
-
-    /** What this raises, as the accounting names it. */
-    default Required.ComparisonSubject subject() {
-        return switch (this) {
-            case AtAPosition at -> new Required.ComparisonSubject.AnInput(
-                    subjectOf(at.position()), Owed.Subject.at(""), at.places());
-            case AcrossPositions over -> new Required.ComparisonSubject.AcrossPositions(
-                    new Owed.Subject.OfComparison(over.at()), over.places());
-            case AnswerDependent _ -> new Required.ComparisonSubject.AnswerDependent();
-            case NoInput _ -> new Required.ComparisonSubject.NoInput();
-            case CutsNothing _ -> new Required.ComparisonSubject.CutsNothing();
-            case OutsideTheDomain _ -> new Required.ComparisonSubject.OutsideTheDomain();
-            case Unread unread -> new Required.ComparisonSubject.Unread(unread.why());
-        };
-    }
-
-    /**
-     * What the question is about, relative to the position it is filed at.
-     *
-     * <p>An invariant's subject is relative to the value its clause is on, and this is the same
-     * thing one frame out. Which of the two it is was settled by the quantity that was cut: a
-     * {@code String} bounded on its length raises about the string and draws its line on the count,
-     * and a document promises both spellings.
-     */
-    private static Owed.Subject.OfAPosition subjectOf(NumericTerm term) {
-        // A term that is a count says the line is on the count; anything else — a term over the
-        // position's own value — leaves it on the position.
-        return new Owed.Subject.OfAPosition("", term instanceof NumericTerm.SizeOf);
     }
 
     /**

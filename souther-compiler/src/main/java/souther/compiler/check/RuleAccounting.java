@@ -75,40 +75,18 @@ public final class RuleAccounting {
      * How a reader finds a rule this way in can be about.
      *
      * <p>A clause, either kind, and never a comparison. What comes this way is a rule an author
-     * wrote a name beside; {@link #ofComparison} is the way in for one that is written rather than
-     * named, and it is handed the place because nothing here could work it out.
+     * wrote a name beside, and a comparison raises nothing this is made of.
      */
     private static RuleCitation citedAsAClause(RuleRef rule) {
         return switch (rule) {
             case RuleRef.Invariant it -> RuleCitation.named(it);
             case RuleRef.Ensures it -> RuleCitation.named(it);
+            // A comparison is written rather than named, and it does not come this way at all: what
+            // it raises is answered by the reading that raised it, so there is no accounting of one
+            // for anybody to build. What such a rule leaves is a finding about the position.
             case RuleRef.Comparison _ -> throw new IllegalArgumentException(
-                    "a comparison is written rather than named, so it is cited by where it is"
-                            + " written and not through this");
+                    "a comparison raises nothing an accounting is made of: " + rule);
         };
-    }
-
-    /**
-     * The accounting of one comparison, from the one reading of it.
-     *
-     * <p>The way in from outside this package, and it takes the subject alone. What a comparison
-     * raises and what answered it used to arrive as two arguments, each worked out from its own
-     * reading of the same comparison — so a caller could hand over a question about a place between
-     * two positions beside an answer about a line on one, and the accounting recorded the second as
-     * having settled the first. One value cannot disagree with itself.
-     */
-    public static RuleAccounting ofComparison(RuleRef rule, Required.ComparisonSubject of,
-                                              RuleCitation cited) {
-        Required required = Required.ofComparison(of);
-        // Every question a comparison raises is one the reading of it answered, which is what
-        // deriving both from the one reading comes to: an arm raises a question exactly where it
-        // reached a line, and the line is the answer — the classes either side of it are what it
-        // divided the position into, and the value it named is where the row goes. So a comparison
-        // whose question nothing settled is not a state this can be in, rather than one nothing
-        // happens to produce. Where the reading stopped, nothing is raised and what stopped it is
-        // recorded instead.
-        return new RuleAccounting(rule, cited, required,
-                answers(rule, required, _ -> new Outcome.Accounted(Reader.THE_END_READING)));
     }
 
     /** Which rule of the model, as everything that names a rule names it. */

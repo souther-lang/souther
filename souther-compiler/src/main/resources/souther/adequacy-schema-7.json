@@ -75,7 +75,7 @@
       }
     },
     "coverageQuestion": {
-      "description": "What a rule of the model raises that something has to answer. `admitted_values` is which values may stand at a position; `boundary` is a border rows are owed at, which has an order across it and a role for each side; `singleton` is a value a rule tells from every other, which has neither because the values either side of it are one class; `partition` is the classes a comparison makes, which both shapes raise where they leave values on both sides. Only the questions this compiler issues today: a question nothing raises is one every model answers by nobody having asked it, so a word arrives here in the same change that starts raising it.",
+      "description": "What a rule of the model raises that something has to answer. `admitted_values` is which values may stand at a position, and `boundary` is a border rows are owed at; those two are what this compiler issues, and a word arrives here in the same change that starts raising it. `singleton` and `partition` are retired: a comparison this compiler reads owes the row at the value it singles out and the rows in the classes its line makes, and it owes them by having been read — so they are carried as the partition's own geometry rather than as questions standing against an answer. They are kept because reports of this version carried them, and a reader of an older document still meets them.",
       "enum": ["admitted_values", "boundary", "singleton", "partition"]
     },
     "status": {

@@ -74,12 +74,10 @@ public final class Partitions {
                                List<souther.compiler.inputs.PositionValuesNotSeparated> notSeparated,
                                List<Border> between,
                                java.util.Map<AxisId, List<Border>> along,
-                               List<GuardThresholds.Guards.AtAPosition> compared,
                                ReachingCuts reaching,
                                MeasureClosure.OfThePartition partitionClosure,
                                MeasureClosure.OfTheBorder borderClosure) {
         public Partitioning {
-            compared = List.copyOf(compared);
             axes = List.copyOf(axes);
             uncertain = java.util.Set.copyOf(uncertain);
             undivided = List.copyOf(undivided);
@@ -205,7 +203,7 @@ public final class Partitions {
         MeasureClosure.Both closed = MeasureClosure.of(kept, unread);
         return new Partitioning(kept, uncertain, undividedIn(measured),
                 List.copyOf(unread), blockedIn(measured), List.copyOf(notSeparated),
-                List.of(), linesAlong(kept, quantities, symbols), List.of(), ReachingCuts.NONE,
+                List.of(), linesAlong(kept, quantities, symbols), ReachingCuts.NONE,
                 closed.partition(), closed.border());
     }
 
@@ -354,7 +352,7 @@ public final class Partitions {
                                               List<GuardThresholds.Guards.Singled> singled,
                                               List<LineDrawn> between) {
         return withThresholds(base, reading, thresholds, symbols, policy, unread, singled, between,
-                souther.compiler.check.PathReachability.Answers.NONE, List.of());
+                souther.compiler.check.PathReachability.Answers.NONE);
     }
 
     /**
@@ -379,10 +377,9 @@ public final class Partitions {
                                               List<GuardThresholds.Guards.Singled> singled,
                                               List<LineDrawn> between,
                                               souther.compiler.check.PathReachability.Answers
-                                                      arrives,
-                                              List<GuardThresholds.Guards.AtAPosition> compared) {
-        return withThresholds(base, reading, thresholds, symbols, policy, unread, singled, between, arrives,
-                compared, ReachingCuts.NONE);
+                                                      arrives) {
+        return withThresholds(base, reading, thresholds, symbols, policy, unread, singled, between,
+                arrives, ReachingCuts.NONE);
     }
 
     /**
@@ -402,7 +399,6 @@ public final class Partitions {
                                               List<LineDrawn> between,
                                               souther.compiler.check.PathReachability.Answers
                                                       arrives,
-                                              List<GuardThresholds.Guards.AtAPosition> compared,
                                               ReachingCuts reaching) {
         // Both producers of one kind of evidence. What a body compared and what a type's own rules
         // bound are read by different readers and answer the same question, so a position either of
@@ -514,7 +510,7 @@ public final class Partitions {
                 // where the position has no value beside it, its border over here — and the two
                 // sides of that border are runs of what all of them leave.
                 base.notSeparated(), Border.allOf(between, partedByQuantity(out)),
-                linesAlong(out, reading, symbols), compared,
+                linesAlong(out, reading, symbols),
                 reaching, closed.partition(), closed.border());
     }
 

@@ -6,7 +6,6 @@ import souther.compiler.query.Scopes;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.Prepared;
-import souther.compiler.check.Required;
 import souther.compiler.check.StatedContract;
 import souther.compiler.check.Symbols;
 import souther.compiler.inputs.InputDomain;
@@ -217,12 +216,9 @@ class WhatAClauseDrawsALineOnTest {
         assertEquals(List.of(), valuesOf(clauses));
         assertEquals(List.of(), clauses.unread(),
                 "this read the rule; what it draws no line at is a decision and not a limit");
-        assertEquals(1, clauses.accounting().size(),
-                () -> "the rule was read and filed at the position it names: "
-                        + clauses.accounting());
-        assertEquals(Set.of(Required.Because.IT_DEPENDS_ON_THE_ANSWER),
-                reasonOf(clauses.accounting().get(0)),
-                "and it raises nothing because it reads the answer, not because it relates a pair");
+        assertEquals(List.of(), clauses.between(),
+                "and it is not a line between two inputs either: what it relates is the answer,"
+                        + " which is what the classification says of it");
     }
 
     /**
@@ -234,9 +230,10 @@ class WhatAClauseDrawsALineOnTest {
      * of the clause can reach. So the report named a rule nothing accounted for, about a behavior
      * whose every rule was read.
      *
-     * <p>Not an empty accounting. The rule was read and it names {@code query.limit} — a row does
-     * choose that — and what follows is that it asks nothing of a measure over the input's values.
-     * A reading that filed nothing would be saying it never looked.
+     * <p>Nothing is left standing either. The rule was read and it names {@code query.limit} — a
+     * row does choose that — and what follows is that it asks nothing of a measure over the input's
+     * values. Which of the ways of asking nothing this is, is the classification's own answer and
+     * is fixed where the classification is.
      */
     @Test
     void anOrderBetweenTheAnswerAndAnInputRaisesNothing() {
@@ -256,19 +253,6 @@ class WhatAClauseDrawsALineOnTest {
         assertEquals(List.of(), clauses.unread(),
                 "this read the rule; that it draws no line is a decision and not a limit");
 
-        assertEquals(1, clauses.accounting().size(),
-                () -> "filed at the position the rule names: " + clauses.accounting());
-        GuardThresholds.Guards.AtAPosition filed = clauses.accounting().get(0);
-        assertEquals("query.limit", filed.at().toString());
-        assertEquals(Set.of(Required.Because.IT_DEPENDS_ON_THE_ANSWER), reasonOf(filed));
-        assertEquals(List.of(), filed.accounting().unansweredQuestions(),
-                "nothing is owed here, so there is nothing for a report to say went unanswered");
-    }
-
-    /** Why one filed rule raises nothing, which is what a reader of the report is given. */
-    private static Set<Required.Because> reasonOf(GuardThresholds.Guards.AtAPosition filed) {
-        return assertInstanceOf(Required.Irrelevant.class, filed.accounting().required(),
-                () -> "raises nothing: " + filed.accounting().required()).because();
     }
 
     /**

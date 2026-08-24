@@ -3,7 +3,6 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.BehaviorContract;
-import souther.compiler.check.Required;
 import souther.compiler.check.StatedContract;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
@@ -16,7 +15,6 @@ import souther.compiler.query.Scopes;
 import souther.compiler.types.BindingId;
 
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -145,13 +143,13 @@ class WhatAComparisonIsARuleAboutTest {
      */
     @Test
     void aSinglingIsReadOffTheQuantityAndMayNameNoValueItHolds() {
-        assertEquals(Required.Places.AT_THE_VALUE, places(about("a == 9")),
+        assertEquals(ComparisonAssessment.Places.AT_THE_VALUE, places(about("a == 9")),
                 "a position against a value it holds names that value");
-        assertEquals(Required.Places.AT_THE_VALUE, places(about("a /= 9")),
+        assertEquals(ComparisonAssessment.Places.AT_THE_VALUE, places(about("a /= 9")),
                 "and so does a rule refusing it, which puts the same value in a class of its own");
-        assertEquals(Required.Places.AT_THE_VALUE, places(about("2 * a == 8")),
+        assertEquals(ComparisonAssessment.Places.AT_THE_VALUE, places(about("2 * a == 8")),
                 "twice a position equal to eight names four");
-        assertEquals(Required.Places.AT_NO_VALUE, places(about("2 * a == 9")),
+        assertEquals(ComparisonAssessment.Places.AT_NO_VALUE, places(about("2 * a == 9")),
                 "and equal to nine names no whole number, which is not a reading that stopped");
         assertEquals("AcrossPositions", named(about("a == b")),
                 "an equality over two positions singles one out of neither");
@@ -197,58 +195,11 @@ class WhatAComparisonIsARuleAboutTest {
                 "and the same rule at a length it does reach cuts the position");
     }
 
-    /**
-     * And what each of them raises.
-     *
-     * <p>Beside the table rather than folded into it. What a comparison is about and what it asks
-     * of a measure of coverage are two questions with two answers, and a test that only read the
-     * second could not tell an arm that raises nothing from an arm that does not exist.
-     */
-    @Test
-    void everyArmThatRaisesNothingSaysSomethingDifferentAboutWhy() {
-        assertEquals(Required.Because.IT_DEPENDS_ON_THE_ANSWER, why(about("value.n <= a")),
-                "the answer, and not that the rule names no position — it names one");
-        assertEquals(Required.Because.IT_CUTS_NOTHING, why(about("a <= a")),
-                "read in full, and what it cuts is nothing");
-        assertEquals(Required.Because.IT_NAMES_NO_POSITION, why(about("20 <= 30")),
-                "nowhere to be about");
-        assertEquals(Required.Because.IT_WAS_NOT_READ, why(about("a * a <= 9")),
-                "the only one of these that is about a limit of this compiler");
-        assertEquals(Required.Because.IT_SINGLES_ACROSS_POSITIONS, why(about("a == b")),
-                "one arm put whole on a place, which the branch measure already asks a row for");
-        assertEquals(Required.Because.IT_NAMES_NO_VALUE_THE_QUANTITY_HOLDS,
-                why(about("2 * a == 9")),
-                "read in full, and the value it names is not one the quantity takes");
-        assertEquals(Required.Because.IT_CUTS_WHERE_THE_QUANTITY_DOES_NOT_RUN,
-                why(about("(xs: List<Int>)", "List.length(xs) <= -1")),
-                "read in full, and the line is outside where a length goes");
-    }
-
-    /** What a comparison that raises a question raises, which is a boundary and the classes it
-     *  divides the position into. */
-    @Test
-    void aLineOnAPositionRaisesABorderAndTheClassesEitherSideOfIt() {
-        Required required = Required.ofComparison(about("a + 1 <= 10").subject());
-
-        assertEquals(List.of("BOUNDARY", "PARTITION"),
-                required.obligations().stream().map(each -> each.obligation().name()).toList(),
-                "the border and the classes, from a rule the spelling used to hide");
-    }
-
-    /** The one reason a comparison raises nothing, where it raises nothing. */
-    private static Required.Because why(ComparisonAssessment of) {
-        Required required = Required.ofComparison(of.subject());
-        Required.Irrelevant irrelevant = assertInstanceOf(Required.Irrelevant.class, required,
-                () -> "raises nothing: " + required);
-        assertEquals(1, irrelevant.because().size(), "one comparison, one reason");
-        return irrelevant.because().iterator().next();
-    }
-
     /** What the rule does to the quantity it cuts. */
-    private static Required.Places places(ComparisonAssessment of) {
-        return switch (of.subject()) {
-            case Required.ComparisonSubject.AnInput input -> input.places();
-            case Required.ComparisonSubject.AcrossPositions over -> over.places();
+    private static ComparisonAssessment.Places places(ComparisonAssessment of) {
+        return switch (of) {
+            case ComparisonAssessment.AtAPosition at -> at.places();
+            case ComparisonAssessment.AcrossPositions over -> over.places();
             default -> throw new AssertionError("not a comparison that cuts: " + of);
         };
     }

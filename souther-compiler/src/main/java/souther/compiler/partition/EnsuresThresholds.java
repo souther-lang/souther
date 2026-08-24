@@ -2,7 +2,6 @@ package souther.compiler.partition;
 
 import souther.compiler.types.BinOp;
 import souther.compiler.check.BehaviorContract;
-import souther.compiler.check.RuleAccounting;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.StatedContract;
 import souther.compiler.check.Symbols;
@@ -10,7 +9,6 @@ import souther.compiler.core.Core;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
-import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.UnreadRule;
 import souther.compiler.types.BindingId;
 
@@ -74,18 +72,16 @@ public final class EnsuresThresholds {
      *                and the model says otherwise in its own declaration
      */
     public record Clauses(List<Threshold> thresholds, List<GuardThresholds.Guards.Singled> singled,
-                          List<LineDrawn> between, List<UnreadRule> unread,
-                          List<GuardThresholds.Guards.AtAPosition> accounting) {
+                          List<LineDrawn> between, List<UnreadRule> unread) {
 
         public static final Clauses NONE =
-                new Clauses(List.of(), List.of(), List.of(), List.of(), List.of());
+                new Clauses(List.of(), List.of(), List.of(), List.of());
 
         public Clauses {
             thresholds = List.copyOf(thresholds);
             singled = List.copyOf(singled);
             between = List.copyOf(between);
             unread = List.copyOf(unread);
-            accounting = List.copyOf(accounting);
         }
     }
 
@@ -120,7 +116,7 @@ public final class EnsuresThresholds {
         }
         InputReads reads = InputReads.ofWhatIsDeclared(inputs, rootsOf(stated.params()));
         Drawn drawn = new Drawn(stated.behavior().name(), new ArrayList<>(), new ArrayList<>(),
-                new ArrayList<>(), new ArrayList<>(), new ArrayList<>());
+                new ArrayList<>(), new ArrayList<>());
         for (StatedContract.StatedRule rule : stated.rules()) {
             String clause = labelOf(rule);
             for (StatedContract.Conjunct conjunct : rule.conjuncts()) {
@@ -132,16 +128,14 @@ public final class EnsuresThresholds {
                 }
             }
         }
-        return new Clauses(drawn.thresholds(), drawn.singled(), drawn.between(), drawn.unread(),
-                drawn.accounting());
+        return new Clauses(drawn.thresholds(), drawn.singled(), drawn.between(), drawn.unread());
     }
 
     /** What the walk has found so far, and the behavior a line between two positions is named
      *  after. Together because they are filled together and are one answer. */
     private record Drawn(String behavior, List<Threshold> thresholds,
                          List<GuardThresholds.Guards.Singled> singled,
-                         List<LineDrawn> between, List<UnreadRule> unread,
-                         List<GuardThresholds.Guards.AtAPosition> accounting) {}
+                         List<LineDrawn> between, List<UnreadRule> unread) {}
 
     /**
      * The comparisons a rule states outright: its own, and those of both sides of every {@code &&}
@@ -187,7 +181,6 @@ public final class EnsuresThresholds {
         // draw one line and raise one question, and neither is worked out beside the other.
         ComparisonAssessment assessed = ComparisonAssessment.of(out.behavior(), comparison, reads,
                 symbols, quantities, rule.value());
-        raises(out, rule, clause, comparison, reads, symbols, assessed);
         switch (assessed) {
             // A line on one position's own values. The value the classes meet at was answered by the
             // reading of the comparison; taken off the level the rule was written with, a rule that
@@ -262,32 +255,6 @@ public final class EnsuresThresholds {
                                                     Cutting cutting) {
         return new OriginRef.EnsuresOrigin(new RuleRef.Ensures(rule.id(), clause),
                 cutting.valueBelongsBelow(), cutting.holdsAtTheValue(), cutting.singles());
-    }
-
-    /**
-     * What one clause's comparison raises, and what the reading of it answered.
-     *
-     * <p>Both from the one assessment. A comparison states where the values stop by being written
-     * that way, and what came of reading it is what answers that — so the two are projections of
-     * one value rather than two readings paired up by whoever called them.
-     *
-     * <p>Filed at the position the walk over the comparison names first, which is what tells a
-     * reader where to look. Not the subject of the question: a comparison over a form is filed at a
-     * position and is about the form.
-     */
-    private static void raises(Drawn out, StatedContract.StatedRule rule, String clause,
-                               Core.Binary comparison, InputReads reads, Symbols symbols,
-                               ComparisonAssessment assessed) {
-        List<TermPath> named = GuardThresholds.mentionedIn(comparison, reads, symbols);
-        if (named.isEmpty()) {
-            return;   // about no position of the input, so it raises nothing about one
-        }
-        RuleRef.Ensures rref = new RuleRef.Ensures(rule.id(), clause);
-        out.accounting().add(new GuardThresholds.Guards.AtAPosition(named.get(0),
-                GuardThresholds.comparedTerm(comparison, reads, symbols),
-                RuleAccounting.ofComparison(rref, assessed.subject(),
-                        // A clause belongs to a behavior, so there is always something to call it.
-                        souther.compiler.check.RuleCitation.named(rref))));
     }
 
     /**

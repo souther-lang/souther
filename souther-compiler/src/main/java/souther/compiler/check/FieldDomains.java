@@ -696,17 +696,6 @@ public final class FieldDomains {
         return switch (owed.obligation()) {
             case ADMITTED_VALUES -> admissionAnswered(rule, where);
             case BOUNDARY -> boundaryAnswered(rule, where);
-            // A clause of a `data` raises none. Everything outside an invariant's bound is refused
-            // at construction, so there is no class on the far side of the line for a row to be
-            // owed in (ADR-0090) — and these are the questions of one value's clauses. Reached, the
-            // rule that raised it was not one of those.
-            case PARTITION -> throw new IllegalStateException(
-                    "an invariant's bound divides nothing, so " + rule + " raised no partition");
-            // Nor a value singled out. An invariant's ordering comparison is the only shape that
-            // reaches this accounting with a place in it; an equality of a `data`'s clause is a rule
-            // about which values may stand there and raises that alone.
-            case SINGLETON -> throw new IllegalStateException(
-                    "an invariant states which values stand, so " + rule + " singled nothing out");
         };
     }
 

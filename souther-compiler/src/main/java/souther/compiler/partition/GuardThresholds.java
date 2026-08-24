@@ -2,7 +2,6 @@ package souther.compiler.partition;
 
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.Carrier;
-import souther.compiler.check.RuleAccounting;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.UnreadComparison;
 import souther.compiler.check.ValueOrigin;
@@ -66,28 +65,10 @@ public final class GuardThresholds {
     public record Guards(List<Threshold> thresholds,
                          List<UnreadRule> unread, List<Singled> singled,
                          List<LineDrawn> between,
-                         List<AtAPosition> accounting,
                          ReachingCuts reaching) {
 
         public static final Guards NONE =
-                new Guards(List.of(), List.of(), List.of(), List.of(), List.of(),
-                        ReachingCuts.NONE);
-
-        /**
-         * One comparison's accounting, and the position a reader is sent to for it.
-         *
-         * <p>The position is beside the accounting rather than inside it. What a rule raises is
-         * about a subject of its own — the number a line falls on — and where in a behavior's inputs
-         * that number is read from is what a document keys the question by, which is a question
-         * about the walk that found it.
-         */
-        public record AtAPosition(TermPath at, NumericTerm term, RuleAccounting accounting) {
-            public AtAPosition {
-                if (at == null || accounting == null) {
-                    throw new IllegalArgumentException("an accounting is filed somewhere");
-                }
-            }
-        }
+                new Guards(List.of(), List.of(), List.of(), List.of(), ReachingCuts.NONE);
 
         /**
          * A value a body singles out rather than orders.
@@ -116,7 +97,6 @@ public final class GuardThresholds {
         public Guards {
             thresholds = List.copyOf(thresholds);
             unread = List.copyOf(unread);
-            accounting = List.copyOf(accounting);
             singled = List.copyOf(singled);
             between = List.copyOf(between);
         }
@@ -145,7 +125,6 @@ public final class GuardThresholds {
                             souther.compiler.check.ElementBindings elements) {
         List<Threshold> found = new ArrayList<>();
         List<UnreadRule> unread = new ArrayList<>();
-        List<Guards.AtAPosition> accounting = new ArrayList<>();
         List<Guards.Singled> singled = new ArrayList<>();
         List<LineDrawn> between = new ArrayList<>();
         // The comparisons this reader assessed, and not the positions they were about. A position
@@ -164,11 +143,11 @@ public final class GuardThresholds {
         ComparisonReadings read = ComparisonReadings.of(body, plan, InputReads.of(inputs, elements), symbols);
         for (ComparisonReadings.Reading each : read.drawn()) {
             lineAt(behavior, each.comparison(), plan, each.reads(), symbols, quantities, found,
-                    singled, between, accounting, assessed, unread);
+                    singled, between, assessed, unread);
         }
         // And every comparison the model states something by that this reader never saw.
         noticed(behavior, read, assessed, plan, symbols, unread);
-        return new Guards(found, unread, singled, between, accounting, read.reaching(plan));
+        return new Guards(found, unread, singled, between, read.reaching(plan));
     }
 
     /**
@@ -536,7 +515,7 @@ public final class GuardThresholds {
                                InputReads reads, Symbols symbols,
                                souther.compiler.inputs.Quantities quantities,
                                List<Threshold> out, List<Guards.Singled> singled,
-                               List<LineDrawn> between, List<Guards.AtAPosition> accounting,
+                               List<LineDrawn> between,
                                List<Core> assessed, List<UnreadRule> unread) {
         // The plan numbered every comparison of an instrumented condition before anything read a
         // line off one, so this is here. Required rather than looked up leniently: a line whose
@@ -550,7 +529,6 @@ public final class GuardThresholds {
         ComparisonAssessment read =
                 ComparisonAssessment.of(behavior, each, reads, symbols, quantities, null);
         assessed.add(each);
-        raises(accounting, behavior, plan.comparisons(), each, reads, symbols, read);
         publish(behavior, each, plan, reads, symbols, read, unread);
         switch (read) {
             case ComparisonAssessment.AtAPosition at -> {
@@ -669,36 +647,6 @@ public final class GuardThresholds {
     static NumericTerm comparedTerm(Core.Binary comparison, InputReads reads, Symbols symbols) {
         NumericTerm left = termOf(comparison.left(), reads, symbols);
         return left != null ? left : termOf(comparison.right(), reads, symbols);
-    }
-
-    /**
-     * What one comparison raises, and what the reading of it answered.
-     *
-     * <p>Both from the one assessment. A comparison states where the values stop by being written
-     * that way, and what came of reading it is what answers that — so the two are projections of one
-     * value rather than two readings paired up by whoever called them.
-     *
-     * <p>Filed at the position the walk over the comparison names first, which is the one a line
-     * between two would be read {@code on}. One comparison is one line however many positions it
-     * mentions, and where it is filed is not what the question is about.
-     */
-    private static void raises(List<Guards.AtAPosition> out, String behavior,
-                               ComparisonCatalog catalog, Core.Binary comparison,
-                               InputReads reads, Symbols symbols,
-                               ComparisonAssessment assessed) {
-        List<TermPath> named = new ArrayList<>();
-        mentioned(comparison.left(), reads, symbols, named);
-        mentioned(comparison.right(), reads, symbols, named);
-        if (named.isEmpty()) {
-            return;   // a comparison about no position of the input raises nothing about one
-        }
-        out.add(new Guards.AtAPosition(named.get(0),
-                comparedTerm(comparison, reads, symbols), RuleAccounting.ofComparison(
-                new RuleRef.Comparison(behavior, comparison.origin()), assessed.subject(),
-                // A comparison is written rather than named, so a reader is sent where the author
-                // wrote it — the comparison's own place and not the fork's. Two comparisons of one
-                // condition are two rules, and cited at the `if` they were one handle twice.
-                citationOf(comparison, catalog))));
     }
 
     /**

@@ -105,11 +105,6 @@ final class Coverages {
                 both(clauses.unread(), guards.unread()),
                 both(clauses.singled(), guards.singled()),
                 both(clauses.between(), guards.between()), arrives,
-                // What each comparison raised and what the reading of it answered, from both
-                // producers. Carried rather than derived from the lines that came back: a
-                // comparison this could not read draws no line, and that is when its questions
-                // stand.
-                both(clauses.accounting(), guards.accounting()),
                 // What a row had to satisfy to arrive at each comparison, from the walk that
                 // assumed it. A clause of a declaration is not written at a place in a body and has
                 // nothing on the way to it, so only the guards have any of this.
@@ -177,26 +172,6 @@ final class Coverages {
         //
         // By the rule and the question, which is what one occurrence of a question is. A comparison
         // inside a helper is read once per call and is one rule (`RuleRef`), so readings of it are
-        // one question raised once — walked as a list, a document says the same thing as many times
-        // as the walk met it, and a consumer cannot tell that from two rules asking alike. Keyed on
-        // the identity and not on everything an entry happens to carry, so a handle changing shape
-        // cannot quietly turn one question into two.
-        Set<java.util.Map.Entry<souther.compiler.check.RuleRef, souther.compiler.check.Owed>> asked =
-                new LinkedHashSet<>();
-        for (souther.compiler.partition.GuardThresholds.Guards.AtAPosition each
-                : partitioning.compared()) {
-            for (souther.compiler.check.RuleAccounting.Unanswered open
-                    : each.accounting().unansweredQuestions()) {
-                if (!asked.add(java.util.Map.entry(open.rule(), open.owed()))) {
-                    continue;
-                }
-                standing.add(new PartitionEvidence.Unanswered(open, each.at().toString(),
-                        // Spelled by the term itself, which is the one thing that spells a term. A
-                        // second spelling here is a second key for one subject, and a document
-                        // promises `String.length(code)` beside `code`.
-                        measureSaid(open.owed().subject(), each)));
-            }
-        }
         // Each measure asked its own closure, and neither told from the length of what came back.
         // What one of them is short of says nothing about the other: a rule whose line nothing
         // could read leaves the border measure short while the classes either side of it were read
@@ -440,22 +415,6 @@ final class Coverages {
                 .toList();
     }
 
-    /**
-     * What a comparison's question is about, as a report names it.
-     *
-     * <p>A place between two things names itself: it is on neither position, so nothing about the
-     * position it was filed at spells it. A position's own subject is relative to where it is filed,
-     * and the term it was measured by spells the rest.
-     */
-    private static String measureSaid(souther.compiler.check.Owed.Subject subject,
-                                      souther.compiler.partition.GuardThresholds.Guards.AtAPosition
-                                              filed) {
-        // The number the line falls on, where it falls on one. A place between two moving terms has
-        // none — writing one out is what naming it by its comparison exists not to do — and a
-        // position's own values are named by the position.
-        return subject instanceof souther.compiler.check.Owed.Subject.OfAPosition at
-                && at.measured() && filed.term() != null ? filed.term().toString() : null;
-    }
 
     private static PartitionEvidence.AxisCoverage coverageOf(Axis axis, Readings readings,
                                                              boolean asked) {
