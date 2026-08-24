@@ -367,7 +367,7 @@ class AnArmNothingReachesIsNotOwedARowTest {
                 measured.arms().all().stream().map(CoverageSites.Site::index).toList());
         assertEquals(Set.of(TAKEN), measured.arms().covered());
         assertTrue(measured.contradicted().isEmpty());
-        assertTrue(measured.arms().unreached().isEmpty());
+        assertTrue(measured.unreached().orElseThrow().isEmpty());
     }
 
     /**

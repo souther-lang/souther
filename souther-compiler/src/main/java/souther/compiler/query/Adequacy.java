@@ -1574,13 +1574,20 @@ public final class Adequacy {
              * not this case at all — its body is in a file the reader holds, and every copy keeps
              * its own positions.
              *
-             * <p>An answer this value can give and not one it can stand behind. Which arms no row
-             * reaches is a negative claim about every row there was, so it is worth reading only
-             * where every row could be read — which is the measurement's question rather than this
-             * value's, and is asked by {@link BranchEvidence#armsWereReadInFull()} before anything
-             * shows this.
+             * <p><b>How it is worked out, and not who may say it.</b> Which arms no row reaches is a
+             * negative claim about every row there was, and this value holds no row: it holds what
+             * was owed and what was seen, so the difference is computable here and is not assertable
+             * here. Whether every row could be read is the measurement's, so the claim is
+             * {@link BranchEvidence#unreached()}'s to make and this is the arithmetic under it.
+             *
+             * <p>Which is why this is not public. It was, with a sentence saying to ask the
+             * measurement first — and a query that needs a caller to remember what to ask before
+             * calling it is the shape this whole issue is about, one level up: the accessors #997
+             * removed answered with a manufactured empty where a caller forgot {@code made()}, and
+             * this answered with a real set where a caller forgot the reading. Both put the
+             * condition in the caller.
              */
-            public List<souther.compiler.coverage.CoverageSites.Site> unreached() {
+            List<souther.compiler.coverage.CoverageSites.Site> unreached() {
                 List<souther.compiler.coverage.CoverageSites.Site> out = new ArrayList<>();
                 for (Map.Entry<souther.compiler.coverage.CoverageSites.Obligation,
                         List<souther.compiler.coverage.CoverageSites.Site>> each
@@ -1801,24 +1808,30 @@ public final class Adequacy {
         }
 
         /**
-         * The arms, where what the rows went through was read in full and this analysis was not
-         * shown wrong — and nothing where it was not.
+         * The arms no row goes through, where this measure can say — and nothing where it cannot.
          *
-         * <p>Asked of the weakening rather than kept beside the measurement as a second status. Two
-         * things leave this measure short of complete and only one of them is about the rows: a row
-         * nothing could read leaves every arm undecided, while an obligation nothing can tell from
-         * its neighbour leaves that one obligation undecided and says nothing about the rest.
+         * <p><b>Here because this is what can stand behind it.</b> The arithmetic is
+         * {@link Arms#unreached()}'s: what was owed, less what was seen. The claim is that no row in
+         * the whole of what was observed goes through them, and only a measure knows whether the
+         * whole of it could be read. A query belongs to the type that can assert the answer rather
+         * than the one that can work it out, and putting it on the value left a protocol — ask the
+         * measure, then ask the value — that a caller had to be told about in prose (issue #997).
          *
-         * <p>Hands back the value rather than answering yes or no, because what it gates is a claim
-         * about every row there was — {@link Arms#unreached()} and the findings drawn from it — and
-         * a caller holding the answer separately from the value could draw that claim from the one
-         * without having asked the other. Availability of a value and the standing of a negative
-         * conclusion over it are two questions, and this is the second (issue #997).
+         * <p><b>Absent for either reason, because a reader can do nothing with the difference.</b>
+         * There is no claim where there is no value, and none where a row this measure reads did not
+         * come back; a document writes the field in neither case, and what it says instead is the
+         * status and the weakening. What is <em>not</em> a reason is an obligation nothing can tell
+         * from its neighbour: that leaves the one obligation undecided and says nothing about the
+         * rest, so those arms are left out where they are collected and the arms beside them are
+         * read as usual.
+         *
+         * <p>Empty and absent are different answers. Empty is this measure having read every row and
+         * found an arm for each; absent is it not being in a position to look.
          */
-        public Optional<Arms> armsReadInFull() {
+        public Optional<List<souther.compiler.coverage.CoverageSites.Site>> unreached() {
             return measured.weakening().causes().stream()
                     .allMatch(Weakening.ArmsUnsettled.class::isInstance)
-                    ? measured.made() : Optional.empty();
+                    ? measured.made().map(Arms::unreached) : Optional.empty();
         }
 
         /** The arms a row went through that this compiler had proven nothing arrives at. Read off
@@ -3500,24 +3513,22 @@ public final class Adequacy {
         private static void armFindings(Hir.BehaviorDef behavior, BranchEvidence branch,
                                         List<Finding> out) {
             // Asked of what was observed and not of the measurement as a whole. An obligation
-            // nothing can tell from its neighbour is undecidable on its own and is left out of
-            // Arms#unreached already; gating on the number that falls for it as well threw away
+            // nothing can tell from its neighbour is undecidable on its own and is left out of the
+            // arms this collects already; gating on the number that falls for it as well threw away
             // every arm the rows certainly do not reach.
             if (branch == null) {
                 return;
             }
-            Optional<BranchEvidence.Arms> read = branch.armsReadInFull();
-            if (read.isEmpty()) {
-                return;
-            }
-            for (souther.compiler.coverage.CoverageSites.Site arm : read.get().unreached()) {
-                // The arm itself and not words about it. What to call one differs between a report,
-                // which is written in one language, and a diagnostic, which is written in the
-                // reader's — and the two readings ask the same arm rather than one of them being
-                // handed the other's answer.
-                out.add(Finding.by(behavior.name(), branch.measured(), arm.at(),
-                        new About.AnArmNoRowGoesThrough(arm)));
-            }
+            branch.unreached().ifPresent(arms -> {
+                for (souther.compiler.coverage.CoverageSites.Site arm : arms) {
+                    // The arm itself and not words about it. What to call one differs between a
+                    // report, which is written in one language, and a diagnostic, which is written
+                    // in the reader's — and the two readings ask the same arm rather than one of
+                    // them being handed the other's answer.
+                    out.add(Finding.by(behavior.name(), branch.measured(), arm.at(),
+                            new About.AnArmNoRowGoesThrough(arm)));
+                }
+            });
         }
     }
 

@@ -56,7 +56,7 @@ class AnUnsettledDecisionIsUncertainHoweverManyPlacesItHasTest {
     /** And its arms are not judged, so nothing is owed a row over a rule that may not be one. */
     @Test
     void andItsArmsAreNotJudged() {
-        assertEquals(List.of(), over(DecidedBy.NOT_SAID).arms().unreached().stream()
+        assertEquals(List.of(), over(DecidedBy.NOT_SAID).unreached().orElseThrow().stream()
                         .map(each -> each.name().toString()).toList(),
                 "a row through one of them may or may not be a row through this obligation");
     }
@@ -64,7 +64,7 @@ class AnUnsettledDecisionIsUncertainHoweverManyPlacesItHasTest {
     /** Which is only worth saying beside what a settled one comes to over the same arms. */
     @Test
     void whileASettledOnesArmsAreOwedARow() {
-        assertEquals(2, over(DecidedBy.THE_DECLARATION).arms().unreached().size(),
+        assertEquals(2, over(DecidedBy.THE_DECLARATION).unreached().orElseThrow().size(),
                 "both arms of it, and no row goes through either");
     }
 

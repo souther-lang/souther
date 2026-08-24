@@ -232,8 +232,8 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
 
             Adequacy.BranchEvidence branch = compilation.db()
                     .ask(new Adequacy.BranchCoverage(module)).value().get("take");
-            if (branch.measured() instanceof Measurement.Complete<?> && !branch.arms().unreached().isEmpty()) {
-                wrong.add("branch: " + branch.arms().unreached().size() + " unreached");
+            if (branch.measured() instanceof Measurement.Complete<?> && !branch.unreached().orElseThrow().isEmpty()) {
+                wrong.add("branch: " + branch.unreached().orElseThrow().size() + " unreached");
             }
 
             assertEquals(List.of(), wrong, module + " asserted a gap over rows it did not read");
@@ -320,7 +320,7 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
                 "a boundary nothing is at");
         assertTrue(partition.pairs().counts().unknown() > 0, "a combination nothing reaches");
         assertFalse(compilation.db().ask(new Adequacy.BranchCoverage(module)).value()
-                .get("take").arms().unreached().isEmpty(), "an arm nothing goes through");
+                .get("take").unreached().orElseThrow().isEmpty(), "an arm nothing goes through");
         assertFalse(GeneratedRows.of(module,
                 Adequacy.generatedOf(compilation.db(), module), Map.of(), true,
                 SourceNameResolver.identity()).text().isEmpty(),

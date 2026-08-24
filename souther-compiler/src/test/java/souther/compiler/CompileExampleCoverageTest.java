@@ -57,7 +57,7 @@ class CompileExampleCoverageTest {
     }
 
     private static List<String> unreached(Adequacy.BranchEvidence branch) {
-        return branch.arms().unreached().stream()
+        return branch.unreached().orElseThrow().stream()
                 .map(souther.compiler.report.ArmVocabulary::label).toList();
     }
 
@@ -356,7 +356,7 @@ class CompileExampleCoverageTest {
         assertEquals(MeasurementStatus.NOT_MEASURED, AdequacyReport.statusOf(branch.measured()));
         // Silent, and that is the absence of a value rather than an empty answer. Which arms no row
         // reaches is a claim about the rows there were, and there were none to read.
-        assertTrue(branch.armsReadInFull().isEmpty(),
+        assertTrue(branch.unreached().isEmpty(),
                 () -> "nothing was measured, so no arm can be named unreached: "
                         + branch.measured());
     }

@@ -91,8 +91,8 @@ class WhoOwnsTheRuleAForkDecidesBySaysWhatOneObligationIsTest {
                 """, "both");
 
         assertEquals(List.of("ELSE"),
-                both.arms().unreached().stream().map(site -> site.name().toString()).toList(),
-                () -> "the body's own else, which the one row does not take: " + both.arms().unreached());
+                both.unreached().orElseThrow().stream().map(site -> site.name().toString()).toList(),
+                () -> "the body's own else, which the one row does not take: " + both.unreached().orElseThrow());
     }
 
     /** A value the call site specialises the helper with is not the rule either. */

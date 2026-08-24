@@ -67,7 +67,7 @@ class ARuleIsWhatItSaysAfterTheCallSiteHasSaidItsPartTest {
 
         assertEquals(4, twice.arms().obligations(), "two thresholds, two arms each");
         assertEquals(2, twice.arms().coveredObligations(),
-                () -> "and only the first threshold's: " + twice.arms().unreached());
+                () -> "and only the first threshold's: " + twice.unreached().orElseThrow());
     }
 
     /** A comparison a predicate binds to a name before answering with it is still what it decides. */
@@ -99,7 +99,7 @@ class ARuleIsWhatItSaysAfterTheCallSiteHasSaidItsPartTest {
 
         assertEquals(4, twice.arms().obligations(), "two predicates, two arms each");
         assertEquals(2, twice.arms().coveredObligations(),
-                () -> "and only the first's: " + twice.arms().unreached());
+                () -> "and only the first's: " + twice.unreached().orElseThrow());
     }
 
     /**

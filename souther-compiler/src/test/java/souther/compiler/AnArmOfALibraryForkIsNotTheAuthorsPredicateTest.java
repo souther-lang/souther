@@ -79,8 +79,8 @@ class AnArmOfALibraryForkIsNotTheAuthorsPredicateTest {
         Adequacy.BranchEvidence twice = armsOfTwice();
         assertEquals(2, twice.arms().coveredObligations(),
                 "the row reached the first call's two arms and no others");
-        assertEquals(2, twice.arms().unreached().size(),
-                () -> "and the second call's are named: " + twice.arms().unreached());
+        assertEquals(2, twice.unreached().orElseThrow().size(),
+                () -> "and the second call's are named: " + twice.unreached().orElseThrow());
     }
 
     /**

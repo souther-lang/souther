@@ -1181,7 +1181,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // about what to show: a person reading a line has room for a number and a word qualifying
         // it, so the counts are printed under a reading that did not finish and the qualification
         // is printed beside them. What is shared is where the numbers come from (issue #997).
-        boolean observed = branch.armsReadInFull().isPresent();
+        //
+        // Asked of the one thing that answers it. This surface prints the arms out of the findings,
+        // which carry the places to send a reader, so what it needs here is whether the claim stands
+        // at all — and that is the same question, put to the same measure, as the one whose answer
+        // the findings and the JSON are made of. A capability accessor beside the arms would be a
+        // second thing to keep in step with them.
+        boolean observed = branch.unreached().isPresent();
         Adequacy.BranchEvidence.Arms arms = measured.get();
         out.append(String.format("    branch      %d/%d%s%n", arms.coveredObligations(),
                 arms.obligations(), observed ? "" : "   (undecided: a row was not read)"));
@@ -2029,21 +2035,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             for (souther.compiler.types.CoverageOrigin each : branch.unsettledDecisions()) {
                 together.add(each.module());
             }
-            // A second gate, and not the same question as the first. The first is whether there is
-            // a value; this is whether a negative claim over it stands. `unreached` says no row in
-            // the whole of what was observed goes through these arms, so a run some of whose rows
-            // could not be read establishes no such thing — and the arms it would name are
-            // undecided rather than unreached.
+            // A second question, and the measure answers it rather than this deciding. The first is
+            // whether there is a value; this is whether a negative claim over it stands, and the
+            // measure hands the arms over only where it does. Written here as a condition on the
+            // value, this line would be a rule kept by whoever wrote the next surface.
             //
-            // Absent rather than empty where it does not stand. `[]` reads as "no arm goes
-            // unreached", which is a finding, and writing it for a reading that found nothing out
-            // is the same substitution as the counts this measure used to write for a measurement
-            // nobody made. A fork whose rule could not be worked out is the case this gate lets
-            // through: those arms are left out where they are collected, and the arms beside them
-            // are read as usual.
-            branch.armsReadInFull().ifPresent(read -> {
+            // Absent rather than empty where it does not. `[]` reads as "no arm goes unreached",
+            // which is a finding, and writing it for a reading that found nothing out is the same
+            // substitution as the counts this measure used to write for a measurement nobody made.
+            branch.unreached().ifPresent(missed -> {
                 ArrayNode unreached = node.putArray("unreached");
-                for (souther.compiler.coverage.CoverageSites.Site arm : read.unreached()) {
+                for (souther.compiler.coverage.CoverageSites.Site arm : missed) {
                     ObjectNode a = unreached.addObject();
                     a.put("label", ArmVocabulary.label(arm));
                     a.put("kind", word(arm.name()));
