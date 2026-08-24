@@ -1079,16 +1079,22 @@ public final class Generator {
                 GeneratedRow row;
                 List<Integer> also;
                 switch (place.tried) {
-                    case Witness.None none -> {
-                        UnresolvedCombination why = new UnresolvedCombination(
-                                none.classes(), none.reason(), none.detail(), none.said());
-                        // Said once for the cell and kept per arm. What a cell came to is one fact
-                        // about it, and a block printing it once per arm looked for there says the
-                        // same thing as many times as the body has arms.
-                        if (!unresolved.contains(why)) {
-                            unresolved.add(why);
-                        }
-                        failed.computeIfAbsent(probe, _ -> new ArrayList<>()).add(why);
+                    case Witness.NoCombination none -> {
+                        noRow(unresolved, failed, probe, new UnresolvedCombination(List.of(),
+                                UnresolvedCombination.Reason.ONE_POSITION_CANNOT_BE_BOTH, null,
+                                Optional.of(none.said())));
+                        continue;
+                    }
+                    case Witness.Exhausted none -> {
+                        noRow(unresolved, failed, probe, new UnresolvedCombination(
+                                none.classes(), none.reason(), none.detail(), none.said()));
+                        continue;
+                    }
+                    case Witness.Limited none -> {
+                        // The search stopped, which is this run's news and not the model's. Said as
+                        // that, whatever the candidates it did try came to.
+                        noRow(unresolved, failed, probe, new UnresolvedCombination(none.classes(),
+                                UnresolvedCombination.Reason.SEARCH_LIMIT));
                         continue;
                     }
                     case Witness.Certified made -> {
@@ -1314,6 +1320,23 @@ public final class Generator {
     }
 
     /**
+     * What one combination came to with no row, written down once for the cell and once per arm.
+     *
+     * <p>Said once for the cell, because what a cell came to is one fact about it and a block
+     * printing it once per arm looked for there says the same thing as many times as the body has
+     * arms. Kept per arm as well, because what an arm was owed and what it got is the arm's own
+     * account.
+     */
+    private static void noRow(List<UnresolvedCombination> unresolved,
+                              Map<Integer, List<UnresolvedCombination>> failed, int probe,
+                              UnresolvedCombination why) {
+        if (!unresolved.contains(why)) {
+            unresolved.add(why);
+        }
+        failed.computeIfAbsent(probe, _ -> new ArrayList<>()).add(why);
+    }
+
+    /**
      * Which other arms still owed a row this run was seen going through.
      *
      * <p>What a run did and not what a reading expects of it. One row can be a row through several
@@ -1460,16 +1483,32 @@ public final class Generator {
             return new ClassAttempt.Built(axis.id(), classId, new GeneratedRow(
                     new Purpose.ForAClass(axis.id(), classId, label), made.row().inputs()));
         }
-        // What the walk came to, and the budget first. A search that stopped says so whatever the
-        // last assignment it got to came to: the refusal of the sixty-fourth candidate is a fact
-        // about that candidate, and offered as the class's answer it stands for a space the search
-        // never entered — the value one place further on that builds, and the composition behind
-        // the baselines that was never reached.
-        UnresolvedCombination why = walk.cutShort() || last == null || last.row() != null
-                ? new UnresolvedCombination(List.of(label),
-                        UnresolvedCombination.Reason.SEARCH_LIMIT)
-                : new UnresolvedCombination(List.of(label), last.reason(), last.detail(),
-                        last.said());
+        // What the walk came to, added up the way a combination's readings are. A class has the
+        // one reading — its own class at its own position — so what is left to say is whether the
+        // walk over the origins reached the end of itself.
+        Completeness looked = walk.candidates().isEmpty()
+                ? Completeness.NOTHING_YET : Completeness.NOTHING_YET.searched();
+        if (walk.cutShort()) {
+            looked = looked.cutShort();
+        }
+        UnresolvedCombination why = switch (looked.found()) {
+            // Nothing to try: the class cannot stand at its own position beside what the position
+            // itself requires, under any origin. Which is the model not having this row rather than
+            // a search that failed to find it.
+            case Completeness.Nothing.NO_READING -> new UnresolvedCombination(List.of(label),
+                    UnresolvedCombination.Reason.ONE_POSITION_CANNOT_BE_BOTH, null,
+                    Optional.of("nothing this class can stand beside was left to try"));
+            // The search stopped. Said so whatever the last assignment it got to came to: the
+            // refusal of the sixty-fourth candidate is a fact about that candidate, and offered as
+            // the class's answer it stands for a space the search never entered.
+            case Completeness.Nothing.SEARCH_STOPPED -> new UnresolvedCombination(List.of(label),
+                    UnresolvedCombination.Reason.SEARCH_LIMIT);
+            case Completeness.Nothing.LOOKED_EVERYWHERE -> last == null
+                    ? new UnresolvedCombination(List.of(label),
+                            UnresolvedCombination.Reason.NO_REASON_RECORDED)
+                    : new UnresolvedCombination(List.of(label), last.reason(), last.detail(),
+                            last.said());
+        };
         return new ClassAttempt.Unresolved(axis.id(), classId, why);
     }
 
@@ -2337,11 +2376,18 @@ public final class Generator {
     /**
      * What the search for a row filling one combination came to.
      *
-     * <p>Three answers and not two, because a row seen filling the combination and a row offered
-     * because nothing could watch it are not the same thing to have found. They differ in what may
-     * afterwards be concluded from the row and in whether this generation may say its rows were
-     * confirmed, so which of them it is, is the answer — rather than something read back off an
-     * empty account of the run.
+     * <p>A row seen filling the combination and a row offered because nothing could watch it are
+     * not the same thing to have found. They differ in what may afterwards be concluded from the row
+     * and in whether this generation may say its rows were confirmed, so which of them it is, is the
+     * answer — rather than something read back off an empty account of the run.
+     *
+     * <p>And coming back with nothing is three answers rather than one. A combination the model does
+     * not have, a search that tried everything the combination leaves, and a search a bound stopped
+     * are three different pieces of news: the first takes the combination away, the second is about
+     * the model, and the third is about this search and says nothing about the model at all. Held as
+     * one value with a reason inside it, the third arrived wearing the second's clothes — the last
+     * candidate's refusal offered as the combination's answer, over candidates nothing tried
+     * ({@link Completeness}).
      */
     private sealed interface Witness {
 
@@ -2352,9 +2398,19 @@ public final class Generator {
         /** A row nothing could watch, offered on the strength of the reading alone. */
         record Unconfirmed(GeneratedRow row, int[] where) implements Witness {}
 
-        /** No row to offer, and why. Never a statement that none exists. */
-        record None(List<String> classes, UnresolvedCombination.Reason reason, String detail,
-                    Optional<String> said) implements Witness {}
+        /** No reading to look at: the model does not have this combination. Never a search that
+         *  failed. */
+        record NoCombination(String said) implements Witness {}
+
+        /** Every candidate of every reading was tried and none answered, and what the last of them
+         *  came to. Read as the combination's answer, that is what it is: nothing was left untried
+         *  behind it. */
+        record Exhausted(List<String> classes, UnresolvedCombination.Reason reason, String detail,
+                         Optional<String> said) implements Witness {}
+
+        /** A bound stopped the search with candidates it had not tried. What the ones it did try
+         *  came to is that candidate's news and not this combination's. */
+        record Limited(List<String> classes) implements Witness {}
     }
 
     /**
@@ -2382,14 +2438,16 @@ public final class Generator {
         Attempt last = null;
         int[] where = null;
         boolean missed = false;
-        boolean read = false;
+        // Whether this looked everywhere, added up as the readings answer rather than read off the
+        // state the loop happened to end in.
+        Completeness looked = Completeness.NOTHING_YET;
         for (Interpretation reading : readings) {
             int[] about = about(reading);
             int[] base = standing(axes, wanting(axes, reading, axes.size()), about, cell::admits);
             if (base == null) {
                 continue;   // this reading is not one value, and another of them may be
             }
-            read = true;
+            boolean stopped = false;
             int runs = 0;
             // Outward from where the reading leaves every other position: the reading alone first,
             // then one position beside it moved, then two. What the combination asks for is settled
@@ -2449,33 +2507,48 @@ public final class Generator {
                         // rules refuse a few compositions spend the reading's whole share on rows
                         // that never ran.
                         if (++runs >= MOST_RUNS_PER_INTERPRETATION) {
+                            stopped = true;
                             break walk;
                         }
                     }
                 }
             }
-        }
-        // A combination whose own positions cannot be in one value under any of its readings. Told
-        // apart from a search that tried what the combination leaves and came back with nothing:
-        // this is a combination the model does not have, and is not one this failed at.
-        if (!read) {
-            return new Witness.None(List.of(),
-                    UnresolvedCombination.Reason.ONE_POSITION_CANNOT_BE_BOTH, null,
-                    Optional.of("the positions this combination names are not in one value"));
+            // Stopped where the bound was reached, whether or not a candidate was left. Which of
+            // the two it was cannot be known without composing the next one, and of the two ways to
+            // be wrong only one of them is a claim about the model: said to have looked everywhere,
+            // a search that had not sends a person to change a rule over a row it never tried.
+            looked = stopped ? looked.cutShort() : looked.searched();
         }
         List<String> named = where == null ? List.of() : labels(axes, cell, where);
-        if (missed) {
-            return new Witness.None(named, UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS, null,
-                    Optional.empty());
-        }
-        if (last != null && last.row() == null) {
-            return new Witness.None(named, last.reason(), last.detail(), last.said());
-        }
-        // Nothing was composed and nothing was refused, which takes the combination leaving no
-        // assignment at all. Named rather than guessed at, the same way every other empty result
-        // here is.
-        return new Witness.None(named, UnresolvedCombination.Reason.NO_REASON_RECORDED, null,
-                Optional.empty());
+        return switch (looked.found()) {
+            // No reading to look at. Either the combination leaves a position nothing, or none of
+            // its readings is one value — and both are the model not having this combination rather
+            // than a search that failed at it.
+            case Completeness.Nothing.NO_READING -> new Witness.NoCombination(
+                    readings.isEmpty() ? "a position this combination names has nothing left at it"
+                            : "the positions this combination names are not in one value");
+            // A bound stopped one of the readings. Said whatever the candidates it did try came to:
+            // the refusal of the third of them is a fact about that candidate, and offered as the
+            // combination's answer it stands for a space this never entered.
+            case Completeness.Nothing.SEARCH_STOPPED -> new Witness.Limited(named);
+            case Completeness.Nothing.LOOKED_EVERYWHERE -> {
+                if (missed) {
+                    // Rows were composed and run, and went somewhere else. Which says they were not
+                    // witnesses, and not that the combination is unreachable.
+                    yield new Witness.Exhausted(named,
+                            UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS, null,
+                            Optional.empty());
+                }
+                if (last != null && last.row() == null) {
+                    yield new Witness.Exhausted(named, last.reason(), last.detail(), last.said());
+                }
+                // Nothing was composed and nothing was refused, which takes every reading leaving no
+                // assignment at all. Named rather than guessed at, the same way every other empty
+                // result here is.
+                yield new Witness.Exhausted(named, UnresolvedCombination.Reason.NO_REASON_RECORDED,
+                        null, Optional.empty());
+            }
+        };
     }
 
     /** The positions one reading is about, in the axes' own order. */
