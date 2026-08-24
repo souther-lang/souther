@@ -59,15 +59,35 @@ public final class Generator {
     private static final int MAX_TUPLES = 256;
 
     /**
-     * How many rows one combination is composed for before the search gives up on it.
+     * How many things one combination may be asking before the search gives up on it.
      *
-     * <p>What a combination leaves open is often several assignments, and the first of them is
-     * chosen for what else it covers rather than for reaching the meeting — so a second is worth
-     * trying where the first went somewhere else. What this bounds is how much of the search one
-     * combination may spend: a group whose reading is wrong misses at every assignment, and without
-     * a bound it would work its way through the whole space while every other group waited.
+     * <p>A combination is a class apiece at the positions it is about, and where it leaves a
+     * position more than one class it is asking more than one thing. What this bounds is how many of
+     * those a search may try: a group whose reading is wrong misses at every one of them, and
+     * without a bound it would work its way through the whole space while every other group waited.
+     *
+     * <p><b>Readings and not assignments.</b> Counted over whole assignments, most of what the bound
+     * was spent on differed only at positions the combination says nothing about — so three tries
+     * were three rows asking the same thing, and a combination's second meaning went untried however
+     * much of the bound was left ({@link Interpretation}).
      */
-    private static final int MOST_CANDIDATES = 3;
+    private static final int MOST_INTERPRETATIONS = 3;
+
+    /**
+     * How many rows one reading of a combination is run for before the search moves on.
+     *
+     * <p>Counted in runs, because a run is what this is protecting. Reaching the arm is what a row
+     * for a combination has to do and only the behavior can say whether it did, so every candidate
+     * that composes costs a run — while a candidate the model refuses costs nothing but the
+     * composing, and counting those would let a model whose rules refuse a few compositions spend a
+     * reading's whole share without ever asking the behavior anything.
+     *
+     * <p>Its own bound and not the class walk's. {@link #MOST_REPAIRS} bounds a walk whose every
+     * candidate is built and no more; this bounds one whose every candidate is run. The two are the
+     * same shape of search and are not the same cost, and one number over both would be set by
+     * whichever of them it hurt more.
+     */
+    private static final int MOST_RUNS_PER_INTERPRETATION = 3;
 
     /** The behavior a row would be written for: what its inputs are called, what they are, and where
      * the model divides them. */
@@ -1655,7 +1675,7 @@ public final class Generator {
                 if (base == null) {
                     continue;   // a class that cannot stand at its own position is no assignment
                 }
-                for (int[] supporting : supportingSets(axes, at, moved, base)) {
+                for (int[] supporting : supportingSets(axes, new int[] {at}, moved, base)) {
                     for (int[] where : assignmentsOver(axes, base, supporting)) {
                         Candidate candidate = new Candidate(origin, where,
                                 Delta.between(origin.stands(), where));
@@ -1699,7 +1719,7 @@ public final class Generator {
     }
 
     /**
-     * Which positions beside {@code at} a row may move, {@code moved} of them at a time.
+     * Which positions beside the ones a row is about it may move, {@code moved} at a time.
      *
      * <p>In the axes' own order and combinations of it, so two runs of one model walk the same
      * assignments in the same order and offer the same rows.
@@ -1710,27 +1730,27 @@ public final class Generator {
      * a row one position from its origin was offered behind rows two away, and the number the budget
      * was spent by counted what the search reached for rather than what it moved.
      */
-    private static List<int[]> supportingSets(List<Axis> axes, int at, int moved, int[] base) {
+    private static List<int[]> supportingSets(List<Axis> axes, int[] about, int moved, int[] base) {
         if (moved > axes.size()) {
             return List.of();
         }
         List<int[]> out = new ArrayList<>();
-        chooseSupporting(axes, at, moved, 0, new int[moved], 0, out, base);
+        chooseSupporting(axes, about, moved, 0, new int[moved], 0, out, base);
         return out;
     }
 
-    private static void chooseSupporting(List<Axis> axes, int at, int moved, int from,
+    private static void chooseSupporting(List<Axis> axes, int[] about, int moved, int from,
                                          int[] taken, int filled, List<int[]> out, int[] base) {
         if (filled == moved) {
             out.add(taken.clone());
             return;
         }
         for (int i = from; i < axes.size(); i++) {
-            if (i == at || base[i] == NOT_HERE) {
+            if (anchored(about, i) || base[i] == NOT_HERE) {
                 continue;
             }
             taken[filled] = i;
-            chooseSupporting(axes, at, moved, i + 1, taken, filled + 1, out, base);
+            chooseSupporting(axes, about, moved, i + 1, taken, filled + 1, out, base);
         }
     }
 
@@ -2281,64 +2301,8 @@ public final class Generator {
         return -1;
     }
 
-    /**
-    /**
-     * Every position at the first class {@code cell} admits it, which is the assignment a row for
-     * that cell is first tried at.
-     *
-     * <p>The positions the cell settles hold what it settles them at; the rest hold the first of
-     * what they may, because the row is not about them. A row that also moved the positions beside
-     * the combination would be several answers a person has to separate.
-     */
-    private static int[] firstAdmitted(List<Axis> axes, InteractionCells.Cell cell) {
-        int[] wanted = new int[axes.size()];
-        for (int i = 0; i < axes.size(); i++) {
-            int at = i;
-            wanted[i] = standingAt(axes.get(i), c -> cell.admits(at, c));
-        }
-        return standing(axes, wanted, narrowedBy(axes, cell), cell::admits);
-    }
 
-    /** The classes the cell admits at each position, or null where it admits none somewhere — which
-     *  is a position with nothing in it and so not a combination. */
-    private static List<List<Integer>> admittedBy(List<Axis> axes, InteractionCells.Cell cell) {
-        List<List<Integer>> admitted = new ArrayList<>();
-        for (int i = 0; i < axes.size(); i++) {
-            List<Integer> here = new ArrayList<>();
-            for (int c = 0; c < axes.get(i).classes().size(); c++) {
-                if (cell.admits(i, c)) {
-                    here.add(c);
-                }
-            }
-            if (here.isEmpty()) {
-                return null;
-            }
-            admitted.add(here);
-        }
-        return admitted;
-    }
 
-    /**
-     * Which positions a cell is about, which are the ones it narrows.
-     *
-     * <p>What an assignment for a cell keeps whatever else it has to give up. A cell says which
-     * classes each position may hold, and a position it says nothing about is one the row is free
-     * at — so a row that gave up a narrowed position to keep a free one would be a row for a
-     * combination the cell does not name.
-     */
-    private static int[] narrowedBy(List<Axis> axes, InteractionCells.Cell cell) {
-        List<Integer> out = new ArrayList<>();
-        for (int i = 0; i < axes.size(); i++) {
-            if (cell.narrows(i)) {
-                out.add(i);
-            }
-        }
-        int[] at = new int[out.size()];
-        for (int i = 0; i < out.size(); i++) {
-            at[i] = out.get(i);
-        }
-        return at;
-    }
 
     /** What a row is about, in the words the model uses. The class's label rather than its id: an id
      * is scoped by carrying its own path, and a description that carries the path already would say
@@ -2411,65 +2375,93 @@ public final class Generator {
                                       CellSelection selection, CandidateCheck check, Trial trial,
                                       Map<List<String>, Watched> applied, List<Integer> takes) {
         InteractionCells.Cell cell = selection.cell();
-        List<int[]> tried = new ArrayList<>();
+        // What the combination can be asking, worked out by the combination. A reading is a class
+        // apiece at the positions it is about; where a row stands anywhere else is this search's own
+        // choice, and counted as a reading it spent the bound on rows that ask the same thing.
+        List<Interpretation> readings = selection.interpretations(MOST_INTERPRETATIONS);
         Attempt last = null;
         int[] where = null;
         boolean missed = false;
-        // The first assignment, worked out once. A cell whose own positions cannot be in one value
-        // leaves none at all, and that is the one thing told apart from a search that has tried
-        // everything the cell leaves: a combination the model does not have is not one this failed
-        // at.
-        int[] first = firstAdmitted(axes, cell);
-        if (first == null) {
+        boolean read = false;
+        for (Interpretation reading : readings) {
+            int[] about = about(reading);
+            int[] base = standing(axes, wanting(axes, reading, axes.size()), about, cell::admits);
+            if (base == null) {
+                continue;   // this reading is not one value, and another of them may be
+            }
+            read = true;
+            int runs = 0;
+            // Outward from where the reading leaves every other position: the reading alone first,
+            // then one position beside it moved, then two. What the combination asks for is settled
+            // at every one of them, so each is a row for this reading and they differ in what else
+            // they cover.
+            walk:
+            for (int moved = 0; moved <= axes.size(); moved++) {
+                for (int[] supporting : supportingSets(axes, about, moved, base)) {
+                    for (int[] at : assignmentsOver(axes, base, supporting)) {
+                        where = at;
+                        last = build(subject, axes, at, check);
+                        if (last.row() == null) {
+                            continue;   // nothing composed here; another assignment may compose
+                        }
+                        // Composed for the arms it was looked for, and not for the combination it
+                        // was found at. The combination is where the search went; the arms are what
+                        // somebody is owed a row at. One row answering two of them is two answers
+                        // and not one composite thing.
+                        GeneratedRow named = new GeneratedRow(
+                                takes.stream().map(Purpose.ForAnArm::new).map(Purpose.class::cast)
+                                        .toList(),
+                                last.row().inputs());
+                        // Run once per set of values, however many places a row of them was looked
+                        // for. What a run of one row did is one fact: two arms searched on their own
+                        // can come to the same values, and running them again would be the same row
+                        // applied twice and counted twice.
+                        //
+                        // Keyed by what the row is written as. A template is the text and the
+                        // expression it stands for, and the second is a tree whose equality is its
+                        // own — so a pair of them makes no key, while the text is the whole of what
+                        // a row applied twice would be.
+                        Watched watched = applied.computeIfAbsent(
+                                named.inputs().stream().map(FixtureTemplate::text).toList(),
+                                _ -> trial.run(named.inputs()));
+                        switch (watched) {
+                            // Nothing can say where it went, so nothing certifies it and nothing
+                            // refutes it. Offered as it was before anything ran, and said to be.
+                            // Both of the ways that happens come here: nothing applied the row, or
+                            // nothing was recording while it was applied.
+                            case Watched.NoAccount _ -> {
+                                return new Witness.Unconfirmed(named, at);
+                            }
+                            case Watched.Ran ran -> {
+                                // Through the one thing that can say a row filled a combination,
+                                // which is the same thing a row already in the file is put through.
+                                Optional<CellSelection.CertifiedWitness> found =
+                                        selection.certifying(at, ran.seen());
+                                if (found.isPresent()) {
+                                    return new Witness.Certified(named, found.get());
+                                }
+                                missed = true;
+                            }
+                        }
+                        // Counted here and nowhere else. What this bounds is how much of a run
+                        // budget one reading may spend, and an assignment nothing composed put
+                        // nothing through the behavior — so counting it would let a model whose
+                        // rules refuse a few compositions spend the reading's whole share on rows
+                        // that never ran.
+                        if (++runs >= MOST_RUNS_PER_INTERPRETATION) {
+                            break walk;
+                        }
+                    }
+                }
+            }
+        }
+        // A combination whose own positions cannot be in one value under any of its readings. Told
+        // apart from a search that tried what the combination leaves and came back with nothing:
+        // this is a combination the model does not have, and is not one this failed at.
+        if (!read) {
             return new Witness.None(List.of(),
                     UnresolvedCombination.Reason.ONE_POSITION_CANNOT_BE_BOTH, null,
                     Optional.of("the positions this combination names are not in one value"));
-        }
-        for (int candidate = 0; candidate < MOST_CANDIDATES; candidate++) {
-            int[] at = candidate == 0 ? first : alternative(axes, cell, candidate, tried);
-            if (at == null) {
-                break;   // the combination leaves nothing this has not already tried
-            }
-            tried.add(at);
-            where = at;
-            last = build(subject, axes, at, check);
-            if (last.row() == null) {
-                continue;   // nothing composed here; another assignment may compose
-            }
-            // Composed for the arms it was looked for, and not for the combination it was found
-            // at. The combination is where the search went; the arms are what somebody is owed a
-            // row at. One row answering two of them is two answers and not one composite thing.
-            GeneratedRow named = new GeneratedRow(
-                    takes.stream().map(Purpose.ForAnArm::new).map(Purpose.class::cast).toList(),
-                    last.row().inputs());
-            // Run once per set of values, however many places a row of them was looked for. What a
-            // run of one row did is one fact: two arms searched on their own can come to the same
-            // values, and running them again would be the same row applied twice and counted twice.
-            //
-            // Keyed by what the row is written as. A template is the text and the expression it
-            // stands for, and the second is a tree whose equality is its own — so a pair of them
-            // makes no key, while the text is the whole of what a row applied twice would be.
-            switch (applied.computeIfAbsent(
-                    named.inputs().stream().map(FixtureTemplate::text).toList(),
-                    _ -> trial.run(named.inputs()))) {
-                // Nothing can say where it went, so nothing certifies it and nothing refutes it.
-                // Offered as it was before anything ran, and said to be. Both of the ways that
-                // happens come here: nothing applied the row, or nothing was recording while it
-                // was applied.
-                case Watched.NoAccount _ -> {
-                    return new Witness.Unconfirmed(named, at);
-                }
-                case Watched.Ran ran -> {
-                    // Through the one thing that can say a row filled a combination, which is the
-                    // same thing a row already in the file is put through.
-                    Optional<CellSelection.CertifiedWitness> found =
-                            selection.certifying(at, ran.seen());
-                    if (found.isPresent()) {
-                        return new Witness.Certified(named, found.get());
-                    }
-                    missed = true;
-                }
-            }
         }
         List<String> named = where == null ? List.of() : labels(axes, cell, where);
         if (missed) {
@@ -2486,54 +2478,23 @@ public final class Generator {
                 Optional.empty());
     }
 
-    /**
-     * An assignment for {@code cell} beside the first, or null where it leaves none this has not
-     * tried.
-     *
-     * <p>The first is {@link #firstAdmitted}: every position the combination does not settle at the
-     * first class the cell admits there, which is as much of the row as this is about. These are the
-     * others, counted off in order — a fixed order, so the same model offers the same rows twice.
-     *
-     * <p>Bounded by how many have been tried rather than by a walk over the space: at most
-     * {@link #MOST_CANDIDATES} assignments are ever tried, so one of the first that many is one
-     * that has not been.
-     */
-    private static int[] alternative(List<Axis> axes,
-                                     InteractionCells.Cell cell, int candidate, List<int[]> tried) {
-        List<List<Integer>> admitted = admittedBy(axes, cell);
-        if (admitted == null) {
-            return null;   // a position with nothing in it is not a combination
-        }
-        int[] anchors = narrowedBy(axes, cell);
-        for (int index = 0; index < MOST_CANDIDATES; index++) {
-            int[] wanted = new int[axes.size()];
-            int left = index;
-            for (int i = 0; i < axes.size(); i++) {
-                List<Integer> here = admitted.get(i);
-                wanted[i] = here.get(left % here.size());
-                left /= here.size();
-            }
-            // Each position's classes counted off on its own, which is what this assignment would
-            // like rather than one a value can be. Put through the same thing the first one is:
-            // counted off and taken as they came, the alternatives reach assignments no value has —
-            // a class under one case of a sum beside a class under another — and every one of them
-            // spends a try on a row nobody could write.
-            int[] where = standing(axes, wanted, anchors, cell::admits);
-            if (where != null && !alreadyTried(tried, where)) {
-                return where;
-            }
-        }
-        return null;
+    /** The positions one reading is about, in the axes' own order. */
+    private static int[] about(Interpretation reading) {
+        int[] out = reading.at().stream().mapToInt(Integer::intValue).sorted().toArray();
+        return out;
     }
 
-    private static boolean alreadyTried(List<int[]> tried, int[] where) {
-        for (int[] each : tried) {
-            if (java.util.Arrays.equals(each, where)) {
-                return true;
-            }
+    /** What a row for one reading starts from: the classes the reading pins, and nothing said
+     *  anywhere else. */
+    private static int[] wanting(List<Axis> axes, Interpretation reading, int size) {
+        int[] wanted = new int[size];
+        java.util.Arrays.fill(wanted, NOT_HERE);
+        for (Map.Entry<Integer, Integer> pin : reading.pins().entrySet()) {
+            wanted[pin.getKey()] = pin.getValue();
         }
-        return false;
+        return wanted;
     }
+
 
     // --- turning classes into a row -------------------------------------------------------------
 

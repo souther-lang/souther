@@ -57,6 +57,58 @@ public record CellSelection(InteractionCells.Cell cell, List<ControlClaim> claim
     }
 
     /**
+     * The readings of this combination a search may look for a row at, at most {@code most} of them.
+     *
+     * <p>What this asks of a row and nothing else: a class apiece at the positions it is about, and
+     * nothing said about the rest. Which positions those are, and how many readings the combination
+     * has, is answered here — a caller that worked it out from the classes each position admits
+     * would be reading this value's own shape, and would have to be rewritten the day a combination
+     * can say something about two positions together that it says about neither alone.
+     *
+     * <p>The first is every position at the first class it admits, and the rest are counted off from
+     * it in a fixed order, so one model offers the same rows twice.
+     *
+     * <p>None where a position this is about admits no class at all, which is not a reading that
+     * failed but a combination the model does not have.
+     */
+    public List<Interpretation> interpretations(int most) {
+        List<Integer> about = new java.util.ArrayList<>();
+        List<List<Integer>> admitted = new java.util.ArrayList<>();
+        for (int i = 0; i < cell.allowed().length; i++) {
+            if (!cell.narrows(i)) {
+                continue;
+            }
+            List<Integer> here = new java.util.ArrayList<>();
+            for (int c = 0; c < cell.allowed()[i].length; c++) {
+                if (cell.admits(i, c)) {
+                    here.add(c);
+                }
+            }
+            if (here.isEmpty()) {
+                return List.of();
+            }
+            about.add(i);
+            admitted.add(here);
+        }
+        List<Interpretation> out = new java.util.ArrayList<>();
+        for (int index = 0; index < most; index++) {
+            java.util.Map<Integer, Integer> pins = new java.util.LinkedHashMap<>();
+            int left = index;
+            for (int p = 0; p < about.size(); p++) {
+                List<Integer> here = admitted.get(p);
+                pins.put(about.get(p), here.get(left % here.size()));
+                left /= here.size();
+            }
+            Interpretation reading = new Interpretation(pins);
+            if (out.contains(reading)) {
+                break;   // the readings ran out before the bound did
+            }
+            out.add(reading);
+        }
+        return List.copyOf(out);
+    }
+
+    /**
      * Whether this asks for the same row as {@code other}: the same classes, held to the same run.
      *
      * <p>Asked rather than left to equality. A cell is a flag per class of each position, which is
