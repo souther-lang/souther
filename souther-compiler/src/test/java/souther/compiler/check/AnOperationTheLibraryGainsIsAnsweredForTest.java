@@ -62,7 +62,7 @@ class AnOperationTheLibraryGainsIsAnsweredForTest {
         for (Map.Entry<String, Stdlib.Entry> e : DefaultStdlib.get().entries().entrySet()) {
             ValueName operation = DefaultStdlib.get().operation(e.getKey());
             for (Question question : Question.askedOf(DefaultStdlib.get(), e.getValue().signature())) {
-                boolean answered = question.answeredFor(operation);
+                boolean answered = question.answeredFor(DefaultStdlib.get(), operation);
                 boolean silent = question.nothingSaidOf().contains(operation);
                 if (answered != silent) {
                     continue;

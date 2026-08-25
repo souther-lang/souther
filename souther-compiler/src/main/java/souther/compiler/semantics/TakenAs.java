@@ -75,6 +75,47 @@ public sealed interface TakenAs {
         }
     }
 
+    /**
+     * Which part of a date it is: the year it falls in, the month within that year, the day within
+     * that month.
+     *
+     * <p>Beside {@link PartOfTime} and not one arm with it. Both take a component out of a value the
+     * library counts, and there the likeness stops: the parts of a day are a fixed-radix system, so
+     * a division and a remainder answer any of them and the two directions are written once for the
+     * family. The parts of a date are the calendar's, and no arithmetic over the day count answers
+     * them — a month is not a number of days. One arm covering both would carry the account of two
+     * different things, and whichever of the two was written first would be the shape the other had
+     * to be squeezed into.
+     *
+     * <p>So the part is a name and carries no arithmetic, and what a year, a month and a day are is
+     * the calendar's to say where the count is turned into a date. Given a step and a modulus here,
+     * as the parts of a day have, the numbers would be wrong for eleven months in twelve.
+     */
+    record PartOfDate(DatePart part) implements TakenAs {
+
+        public PartOfDate {
+            java.util.Objects.requireNonNull(part, "this one says which part");
+        }
+
+        @Override
+        public boolean takenOf(Type source, Type answered) {
+            return source == Type.Prim.DATE && answered == Type.Prim.INT;
+        }
+    }
+
+    /** A part of a date, in the order the parts run. */
+    enum DatePart {
+
+        /** The year it falls in. */
+        YEAR,
+
+        /** The month within that year, counted from one. */
+        MONTH,
+
+        /** The day within that month, counted from one. */
+        DAY
+    }
+
     /** A part of a time of day, in the order the parts run. */
     enum TimePart {
 

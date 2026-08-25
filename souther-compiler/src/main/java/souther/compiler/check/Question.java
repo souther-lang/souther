@@ -47,7 +47,7 @@ enum Question {
         }
 
         @Override
-        boolean answeredFor(ValueName operation) {
+        boolean answeredFor(Stdlib stdlib, ValueName operation) {
             return Combinators.answered().contains(operation);
         }
 
@@ -95,7 +95,7 @@ enum Question {
         }
 
         @Override
-        boolean answeredFor(ValueName operation) {
+        boolean answeredFor(Stdlib stdlib, ValueName operation) {
             return Reductions.answered().contains(operation);
         }
 
@@ -137,7 +137,7 @@ enum Question {
         }
 
         @Override
-        boolean answeredFor(ValueName operation) {
+        boolean answeredFor(Stdlib stdlib, ValueName operation) {
             return Accumulations.of(operation) != null;
         }
 
@@ -163,7 +163,7 @@ enum Question {
         }
 
         @Override
-        boolean answeredFor(ValueName operation) {
+        boolean answeredFor(Stdlib stdlib, ValueName operation) {
             return DischargeRules.builtOperations().contains(operation);
         }
 
@@ -189,7 +189,7 @@ enum Question {
         }
 
         @Override
-        boolean answeredFor(ValueName operation) {
+        boolean answeredFor(Stdlib stdlib, ValueName operation) {
             return DischargeRules.carryingOperations().contains(operation);
         }
 
@@ -215,7 +215,7 @@ enum Question {
         }
 
         @Override
-        boolean answeredFor(ValueName operation) {
+        boolean answeredFor(Stdlib stdlib, ValueName operation) {
             return DischargeRules.sizeMeantBy(operation) != null;
         }
 
@@ -243,7 +243,7 @@ enum Question {
         }
 
         @Override
-        boolean answeredFor(ValueName operation) {
+        boolean answeredFor(Stdlib stdlib, ValueName operation) {
             return DischargeRules.isQuantifier(operation);
         }
 
@@ -272,7 +272,7 @@ enum Question {
         }
 
         @Override
-        boolean answeredFor(ValueName operation) {
+        boolean answeredFor(Stdlib stdlib, ValueName operation) {
             return DischargeRules.projections().contains(operation);
         }
 
@@ -296,7 +296,7 @@ enum Question {
         }
 
         @Override
-        boolean answeredFor(ValueName operation) {
+        boolean answeredFor(Stdlib stdlib, ValueName operation) {
             return DischargeRules.isSize(operation);
         }
 
@@ -325,7 +325,7 @@ enum Question {
         }
 
         @Override
-        boolean answeredFor(ValueName operation) {
+        boolean answeredFor(Stdlib stdlib, ValueName operation) {
             return DischargeRules.decidesOrder(operation);
         }
 
@@ -364,7 +364,7 @@ enum Question {
         }
 
         @Override
-        boolean answeredFor(ValueName operation) {
+        boolean answeredFor(Stdlib stdlib, ValueName operation) {
             return DischargeRules.boundedOperations().contains(operation);
         }
 
@@ -394,7 +394,7 @@ enum Question {
         }
 
         @Override
-        boolean answeredFor(ValueName operation) {
+        boolean answeredFor(Stdlib stdlib, ValueName operation) {
             return DischargeRules.shiftingOperations().contains(operation);
         }
 
@@ -422,7 +422,7 @@ enum Question {
         }
 
         @Override
-        boolean answeredFor(ValueName operation) {
+        boolean answeredFor(Stdlib stdlib, ValueName operation) {
             return DischargeRules.choosingOperations().contains(operation);
         }
 
@@ -456,7 +456,7 @@ enum Question {
         }
 
         @Override
-        boolean answeredFor(ValueName operation) {
+        boolean answeredFor(Stdlib stdlib, ValueName operation) {
             return DischargeRules.formOperations().contains(operation);
         }
 
@@ -493,7 +493,7 @@ enum Question {
         }
 
         @Override
-        boolean answeredFor(ValueName operation) {
+        boolean answeredFor(Stdlib stdlib, ValueName operation) {
             return DischargeRules.numericResult(operation) != null;
         }
 
@@ -506,6 +506,55 @@ enum Question {
         Set<ValueName> nothingSaidOf() {
             return OperationFacts.saysNothingOf(OperationSubject.NUMERIC_RESULT);
         }
+    },
+
+    /**
+     * Which representation understands the number it answers ({@link NumericReadings}). Asked of an
+     * operation given one value and answering a number.
+     *
+     * <p>Not "is this a term". That would put the answer in the range and make the question ask
+     * itself: {@code Decimal.fromInt} meets every condition here and is answered by the form it
+     * declares, so a range drawn where the terms are would leave it out for being answered.
+     *
+     * <p>Read off the signature and no further. Whether the language writes the operation's body out
+     * is how it is answered — the body is one of the representations — so a range that required an
+     * intrinsic would be a range drawn around one of its own answers, and {@code Int.abs} would have
+     * no reader named anywhere. Every unary operation answering a number is asked, and the four
+     * accounts between them say which reads it.
+     *
+     * <p>Counted at one case of a union too, as {@link #NUMERIC_RESULT} counts it: what the shape of
+     * a result says is which inputs an operation declines, not what it answers where it answers
+     * anything. {@code String.toInt} answers a number and is asked which representation reads it,
+     * and the answer is that none does.
+     *
+     * <p>Wider than what may be declared. A term is held to a result that is a bare number
+     * ({@link DischargeRules#holdTakenOf}), because what stands at the path a term names is the
+     * union and which case it is in is not something such an account has room for. The two ranges
+     * are different on purpose: an operation may be asked a question whose only available answer is
+     * that nothing reads it.
+     */
+    READING("which representation reads the number it answers") {
+        @Override
+        boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
+            return signature.params().size() == 1
+                    && NumericAnswers.in(signature.result()) != null;
+        }
+
+        @Override
+        boolean answeredFor(Stdlib stdlib, ValueName operation) {
+            return NumericReadings.resolve(stdlib, OperationFacts.declarations(), operation)
+                    instanceof NumericReadings.Resolution.One;
+        }
+
+        @Override
+        Set<ValueName> answeredOperations() {
+            return OperationFacts.answersANumberTakenOfItsArgument();
+        }
+
+        @Override
+        Set<ValueName> nothingSaidOf() {
+            return OperationFacts.saysNothingOf(OperationSubject.READING);
+        }
     };
 
     private final String asked;
@@ -517,8 +566,12 @@ enum Question {
     /** Whether an operation declared with {@code signature} is one this is asked of. */
     abstract boolean asksOf(Stdlib stdlib, Stdlib.Signature signature);
 
-    /** Whether {@code operation} has a rule answering this. */
-    abstract boolean answeredFor(ValueName operation);
+    /** Whether {@code operation} has a rule answering this.
+     *
+     * <p>The library comes with it, since what answers a question is not always a table keyed by the
+     * operation: it may be the declaration itself, read against what the library says the operation
+     * is. */
+    abstract boolean answeredFor(Stdlib stdlib, ValueName operation);
 
     /** The operations there is a rule about, for the check that a rule answers a question its
      * operation is asked — a rule under a name nothing asks is a rule nothing reaches. */

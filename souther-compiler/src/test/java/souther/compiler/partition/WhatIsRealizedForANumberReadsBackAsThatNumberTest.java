@@ -65,7 +65,7 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
      */
     private static List<Long> answerable(NumericTerm term) {
         List<Long> out = new ArrayList<>();
-        for (long each : new long[] {0, 1, 3, 7, 23}) {
+        for (long each : new long[] {0, 1, 3, 7, 12, 23, 28, 31}) {
             if (term.intrinsicBounds().admits(Count.of(each))) {
                 out.add(each);
             }
@@ -247,18 +247,67 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
     }
 
     /**
+     * The parts of a date, at the numbers a calendar is where the trouble is.
+     *
+     * <p>Beside the walk above and not instead of it. That one asks every account at a handful of
+     * numbers chosen to suit all of them, and the numbers a calendar goes wrong at are the calendar's
+     * own: the last day of the longest month, the day February has only every fourth year, the last
+     * month, a year either side of a leap one. A date offered for the thirty-first in a month with
+     * thirty days is not a date, and a walk that never asks for the thirty-first would not find out.
+     *
+     * <p>Read back and not compared to a date written here. Which date answers a year is the
+     * realizer's to choose, and naming one would make this a test of the choice rather than of the
+     * law it has to satisfy.
+     */
+    @Test
+    void everyPartOfADateReadsBackFromTheDateOfferedForIt() {
+        readsBackAt("Date.year", Type.Prim.DATE, 1999, 2000, 2001, 1, 0);
+        readsBackAt("Date.month", Type.Prim.DATE, 1, 2, 11, 12);
+        readsBackAt("Date.day", Type.Prim.DATE, 1, 28, 29, 30, 31);
+    }
+
+    /** Every one of those numbers has a value built for it, and it reads back as that number. */
+    private static void readsBackAt(String qualified, Type source, long... numbers) {
+        ValueName.Stdlib operation = DefaultStdlib.get().operation(qualified);
+        NumericTerm.TakenOf term = NumericTerm.TakenOf.of(operation, AT, source, SYMBOLS);
+        assertNotNull(term, qualified + " is taken of what its own signature says it takes");
+        souther.compiler.inputs.TermOrders orders = term.ordersAt(source, SYMBOLS);
+        for (long each : numbers) {
+            Place asked = Count.of(each);
+            TermRealizations.Realization made =
+                    TermRealizations.at(term, source, orders, asked, SYMBOLS, POLICY);
+            TermRealizations.Realization.Built built = assertInstanceOf(
+                    TermRealizations.Realization.Built.class, made,
+                    qualified + " answers " + each + " of some date, so there is one to offer");
+            for (FixtureTemplate value : built.values()) {
+                assertEquals(new NumericTerm.Reading.Number(asked),
+                        term.read(observed(value), orders),
+                        qualified + " built " + value.text() + " for " + each
+                                + ", and it does not read back as that");
+            }
+        }
+    }
+
+    /**
      * An operation the language gives no account of has no term.
      *
      * <p>Refused where the term is built rather than at whichever reader met it first. Every other
      * answer about such a term comes from the declaration, so one without a declaration is a term
      * read by whatever each reader's default happened to be.
+     *
+     * <p>Asked of an operation the language writes out, and not of one that has simply not been
+     * declared yet. {@code Int.abs} is an ordinary {@code let}, so a reading takes its body and a
+     * term standing for the call is refused where an account would be declared — which makes it an
+     * operation that cannot come to have one. Asked of a gap instead, this test would hold only
+     * until somebody filled the gap, and what it is about would leave with it.
      */
     @Test
     void aTermCannotBeBuiltForAnOperationThatDeclaresNoAccount() {
-        assertTrue(OperationFacts.takenAs(ValueName.Stdlib.operation("Date", "year")) == null,
-                "the premise: nothing is declared of it yet");
-        assertNull(NumericTerm.TakenOf.of(ValueName.Stdlib.operation("Date", "year"), AT,
-                        Type.Prim.DATE, SYMBOLS),
+        assertTrue(OperationFacts.takenAs(ValueName.Stdlib.operation("Int", "abs")) == null,
+                "the premise: what it answers is read by reading its body, so no account is"
+                        + " declared of it and none may be");
+        assertNull(NumericTerm.TakenOf.of(ValueName.Stdlib.operation("Int", "abs"), AT,
+                        Type.Prim.INT, SYMBOLS),
                 "so there is no term for what it answers");
     }
 

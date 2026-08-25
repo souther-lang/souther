@@ -29,7 +29,8 @@ public enum OperationSubject {
     MEASURE("what it states through the measure counting the two apart"),
     CHOICE("whether it answers one of its arguments, and in which cases"),
     FORM("what it answers, counted, in what its arguments are counted as"),
-    NUMERIC_RESULT("what number it computes, and where it answers it");
+    NUMERIC_RESULT("what number it computes, and where it answers it"),
+    READING("which representation reads the number it answers");
 
     private final String asked;
 

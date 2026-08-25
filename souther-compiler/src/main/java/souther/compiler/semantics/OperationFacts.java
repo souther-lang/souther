@@ -91,6 +91,11 @@ public final class OperationFacts {
             // standing for the call would be a second reading of the same call, which is what the
             // exclusivity below refuses.
             about("Time", "hour", takenAs(new TakenAs.PartOfTime(TakenAs.TimePart.HOUR))),
+            about("Time", "minute", takenAs(new TakenAs.PartOfTime(TakenAs.TimePart.MINUTE))),
+            about("Time", "second", takenAs(new TakenAs.PartOfTime(TakenAs.TimePart.SECOND))),
+            about("Date", "year", takenAs(new TakenAs.PartOfDate(TakenAs.DatePart.YEAR))),
+            about("Date", "month", takenAs(new TakenAs.PartOfDate(TakenAs.DatePart.MONTH))),
+            about("Date", "day", takenAs(new TakenAs.PartOfDate(TakenAs.DatePart.DAY))),
 
             // A count is never negative, and each of these says so itself. Derived from the arm
             // instead, the arm would be where a bound is really declared and every operation
@@ -109,6 +114,11 @@ public final class OperationFacts {
             about("String", "length",
                     new OperationFact.EveryAnswerItCanGiveHasASourceValue()),
             about("Time", "hour", new OperationFact.EveryAnswerItCanGiveHasASourceValue()),
+            about("Time", "minute", new OperationFact.EveryAnswerItCanGiveHasASourceValue()),
+            about("Time", "second", new OperationFact.EveryAnswerItCanGiveHasASourceValue()),
+            about("Date", "year", new OperationFact.EveryAnswerItCanGiveHasASourceValue()),
+            about("Date", "month", new OperationFact.EveryAnswerItCanGiveHasASourceValue()),
+            about("Date", "day", new OperationFact.EveryAnswerItCanGiveHasASourceValue()),
 
             // What holds of a result wherever the call is written. Each is a fact about the
             // operation, so it is stated at every call and not only where something was guarded:
@@ -405,9 +415,10 @@ public final class OperationFacts {
         // any number of them. `DateTime.minutesBetween` counts whole minutes over a carrier
         // counting seconds and drops the remainder toward zero, so it is not the difference of the
         // two counts — which is why it is the operation an author of the next such fact would reach
-        // for, and why the refusal is written down beside the ones that are accepted. A component
-        // is read out of a count by dividing or by taking a remainder: the year a day falls in, the
-        // second within a minute, the day a second falls in, the second within a day.
+        // for, and why the refusal is written down beside the ones that are accepted. A component of
+        // a value is no arithmetic over its count either, and is said as the representation that
+        // reads it rather than as a form: the parts of a day divide and take a remainder, and the
+        // parts of a date are the calendar's, which no step over a day count answers.
         out.addAll(saysNothing(OperationSubject.FORM, op("Int", "multiply"),
                 op("Decimal", "multiply"), op("Int", "compare"),
                 op("Decimal", "compare"), op("Int", "floorMod"), op("Int", "abs"), op("Decimal", "abs"), op("Decimal", "toInt"),
@@ -416,6 +427,18 @@ public final class OperationFacts {
                 op("DateTime", "minutesBetween"), op("Date", "year"), op("Date", "month"),
                 op("Date", "day"), op("Time", "hour"), op("Time", "minute"), op("Time", "second"),
                 op("DateTime", "toDate"), op("DateTime", "toTime")));
+
+        // The number each answers arrives at one case of what it answers, and the other case says
+        // the text named no number at all. So the number exists and no representation reads the
+        // call: what a reading is applied to is one location, and the value standing there is the
+        // union. Which case it is in is settled where the union is taken apart, and what stands at
+        // the arm is a value with a name of its own rather than something this operation answered.
+        //
+        // Not "no conversion is ever read". `Decimal.fromInt` is a conversion and answers a form of
+        // its argument, because what it answers is a number at every call. The difference is the
+        // union and nothing else.
+        out.addAll(saysNothing(OperationSubject.READING, op("String", "toInt"),
+                op("String", "toDecimal")));
         return List.copyOf(out);
     }
 

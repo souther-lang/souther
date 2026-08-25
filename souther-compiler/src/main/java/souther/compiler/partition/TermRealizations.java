@@ -8,6 +8,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.CountDomain;
+import souther.compiler.numeric.Dates;
 import souther.compiler.numeric.Place;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
@@ -82,8 +83,9 @@ final class TermRealizations {
             // The number is the value, so it is the one value there is.
             case NumericTerm.ValueOf _ -> true;
             case NumericTerm.TakenOf taken -> switch (taken.takenAs()) {
-                // Every container of that many answers it, and every time within that hour does.
-                case TakenAs.HowManyItHolds _, TakenAs.PartOfTime _ -> false;
+                // Every container of that many answers it, every time within that hour does, and
+                // every date in that year falls in it.
+                case TakenAs.HowManyItHolds _, TakenAs.PartOfTime _, TakenAs.PartOfDate _ -> false;
             };
         };
     }
@@ -138,6 +140,8 @@ final class TermRealizations {
             // travels this far and the arm takes the end (#1027).
             case TakenAs.PartOfTime taken ->
                     atThatPart(taken.part(), sourceType, orders.observed(), answer, symbols);
+            case TakenAs.PartOfDate taken ->
+                    onThatPart(taken.part(), sourceType, orders.observed(), answer, symbols);
         };
     }
 
@@ -199,6 +203,101 @@ final class TermRealizations {
                 ? new Realization.BuiltNone(
                         Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)
                 : new Realization.Built(List.of(standing), null);
+    }
+
+    /**
+     * A date whose given part stands at that number, with the parts beside it at the first they run
+     * from.
+     *
+     * <p>One of the many, as the time above offers one of the many. Every date in the year answers
+     * the same year, and what this owes is that what it offers reads back — not that it enumerates
+     * the dates that would. The first of January is the plain choice, and it is a choice about which
+     * value to write down rather than anything the model said.
+     *
+     * <p>A day of the month is offered in the longest month there is, so every day a date can fall
+     * on is a day of the one this writes. Offered in a short month, the last days of the long ones
+     * would be days no date has, and a rule about the thirty-first would have no witness for a
+     * reason that is about this choice rather than about the calendar.
+     *
+     * <p>Whether a date can have the part at all is asked of the calendar and not of the bound the
+     * operation declares. A bound is what the model may assume of an answer; what dates there are is
+     * what a witness can be built from, and reading the second off the first would make a bound
+     * loosened by hand into dates that cannot be written.
+     */
+    private static Realization onThatPart(TakenAs.DatePart part, Type sourceType, Carrier observed,
+                                          Place answer, Symbols symbols) {
+        if (observed == null || !(answer instanceof Count count) || !count.whole()) {
+            return new Realization.BuiltNone(
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+        }
+        java.time.LocalDate on = dateOn(part, count.at());
+        if (on == null) {
+            // Outside the parts a date has. Not this reader's to report as a refusal: a number no
+            // date answers is a number nothing composes one for.
+            return new Realization.BuiltNone(
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+        }
+        FixtureTemplate standing = Witnesses.wrapped(sourceType,
+                FixtureTemplate.on(observed, Dates.dayOf(on), symbols.scope()::reach), symbols);
+        return standing == null
+                ? new Realization.BuiltNone(
+                        Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)
+                : new Realization.Built(List.of(standing), null);
+    }
+
+    /**
+     * The date this offers for a part standing at {@code answer}, or null where no date has that
+     * part.
+     *
+     * <p>Asked of the calendar rather than tried and caught. What a year, a month and a day run
+     * between is something {@code java.time} answers, and building a date to find out whether one
+     * could be built is asking a question by reading the exception from the answer.
+     */
+    private static java.time.LocalDate dateOn(TakenAs.DatePart part, java.math.BigDecimal answer) {
+        return switch (part) {
+            case YEAR -> within(answer, java.time.LocalDate.MIN.getYear(),
+                    java.time.LocalDate.MAX.getYear())
+                    ? java.time.LocalDate.of(answer.intValueExact(), A_LONGEST_MONTH, FIRST_OF_THE_MONTH)
+                    : null;
+            case MONTH -> within(answer, java.time.temporal.ChronoField.MONTH_OF_YEAR)
+                    ? java.time.LocalDate.of(A_YEAR, answer.intValueExact(), FIRST_OF_THE_MONTH)
+                    : null;
+            case DAY -> dayOfTheMonthItIsOfferedIn(answer);
+        };
+    }
+
+    /**
+     * The date a day of the month is offered on, or null where that month has no such day.
+     *
+     * <p>How far the days run is asked of the month this offers them in, and not of how far a day of
+     * any month can run. The two agree only while that month is the longest there is, and a month
+     * chosen here that was not would leave the check admitting days the date cannot be built for —
+     * an answer that is refused rather than absent, at whichever value the two parted.
+     */
+    private static java.time.LocalDate dayOfTheMonthItIsOfferedIn(java.math.BigDecimal answer) {
+        java.time.YearMonth month = java.time.YearMonth.of(A_YEAR, A_LONGEST_MONTH);
+        return within(answer, 1, month.lengthOfMonth()) ? month.atDay(answer.intValueExact()) : null;
+    }
+
+    /** The year a month or a day is offered in. Every month is a month of every year, and the month
+     *  below is as long in any of them, so which year this is says nothing. */
+    private static final int A_YEAR = 2001;
+
+    /** January, which has as many days as any month has, so every day-of-month a date can fall on is
+     *  a day of this one. */
+    private static final int A_LONGEST_MONTH = 1;
+
+    /** The day a year or a month is offered on. */
+    private static final int FIRST_OF_THE_MONTH = 1;
+
+    private static boolean within(java.math.BigDecimal answer,
+                                  java.time.temporal.ChronoField field) {
+        return within(answer, field.range().getMinimum(), field.range().getMaximum());
+    }
+
+    private static boolean within(java.math.BigDecimal answer, long from, long to) {
+        return answer.compareTo(java.math.BigDecimal.valueOf(from)) >= 0
+                && answer.compareTo(java.math.BigDecimal.valueOf(to)) <= 0;
     }
 
     /** One value, wearing every name the position declares, or the reason there is none. */
