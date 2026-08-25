@@ -112,7 +112,10 @@ class OneDemandOverOnePositionIsOneRowHoweverItIsAskedTest {
                 continue;
             }
             List<Interpretation> readings = new ArrayList<>();
-            at.interpretations(reading -> readings.add(reading));
+            at.interpretations(reading -> {
+                readings.add(reading);
+                return Taking.Taken.AND_MORE;
+            });
             if (readings.size() == 1 && readings.get(0).pins().size() == 1) {
                 out.addAll(readings.get(0).pins().entrySet());
             }

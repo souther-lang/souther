@@ -60,15 +60,23 @@ class WhatACombinationAsksIsItsOwnToSayTest {
     void aWalkSaysWhetherAnyReadingWasLeft() {
         CellSelection selection = over(leaving(0, 1, 2, 3), leaving(0, 2), leaving(1));
 
-        assertEquals(Traversal.EXHAUSTED, selection.interpretations(_ -> true));
-        assertEquals(Traversal.STOPPED, selection.interpretations(_ -> false));
+        assertEquals(Traversal.EXHAUSTED,
+                selection.interpretations(_ -> Taking.Taken.AND_MORE));
+        assertEquals(Traversal.STOPPED,
+                selection.interpretations(_ -> Taking.Taken.NOT_TAKEN));
+        assertEquals(Traversal.SATISFIED,
+                selection.interpretations(_ -> Taking.Taken.AND_DONE),
+                "a consumer that has what it came for left nothing undone");
     }
 
     /** Every reading the combination has, for a test asking what they are rather than how many of
      *  them something looked at. */
     private static List<Interpretation> everythingAsked(CellSelection selection) {
         List<Interpretation> out = new java.util.ArrayList<>();
-        assertEquals(Traversal.EXHAUSTED, selection.interpretations(reading -> out.add(reading)),
+        assertEquals(Traversal.EXHAUSTED, selection.interpretations(reading -> {
+                    out.add(reading);
+                    return Taking.Taken.AND_MORE;
+                }),
                 "nothing here refuses a reading, so the walk runs out");
         return List.copyOf(out);
     }
@@ -104,6 +112,31 @@ class WhatACombinationAsksIsItsOwnToSayTest {
         assertTrue(everythingAsked(selection).stream()
                         .allMatch(reading -> reading.at().equals(java.util.Set.of(1, 2))),
                 "and both of them are about the same two positions");
+    }
+
+    /**
+     * A combination of more positions than a number can count is still walked one reading at a time.
+     *
+     * <p>Sixty-three positions of two classes apiece is more readings than fit in a machine word.
+     * Nobody needs that number: a search takes three readings and stops. Asked for it all the same,
+     * the count came back negative — so the walk handed nothing over and said it had run out, over a
+     * combination with more readings than anything will ever look at.
+     */
+    @Test
+    void aCombinationIsWalkedWithoutCountingHowManyReadingsItHas() {
+        boolean[][] wide = new boolean[63][];
+        for (int i = 0; i < wide.length; i++) {
+            wide[i] = leaving(0, 1);   // narrowed, and two of the four left open
+        }
+        int[] handed = {0};
+
+        Traversal walked = over(wide).interpretations(_ -> {
+            handed[0]++;
+            return Taking.Taken.NOT_TAKEN;
+        });
+
+        assertEquals(1, handed[0], "the first reading was handed over");
+        assertEquals(Traversal.STOPPED, walked, "and the rest of them are work nobody did");
     }
 
     /**

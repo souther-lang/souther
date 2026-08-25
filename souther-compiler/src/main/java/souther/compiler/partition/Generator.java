@@ -1467,13 +1467,13 @@ public final class Generator {
         // say; how many of them may be built is this class's own budget.
         Building building = new Building(subject, axes, at, classId, label, check, MOST_REPAIRS);
         Traversal stated = nearestFirst(axes, reading, origins, (_, _) -> true, building);
-        if (building.found != null) {
+        if (stated == Traversal.SATISFIED) {
             return new ClassAttempt.Built(axis.id(), classId, building.found);
         }
         // The composition, whatever the stated values spent, and with a budget of its own.
         Building composing = new Building(subject, axes, at, classId, label, check, MOST_REPAIRS);
         Traversal composed = composing(axes, reading, origins, (_, _) -> true, composing);
-        if (composing.found != null) {
+        if (composed == Traversal.SATISFIED) {
             return new ClassAttempt.Built(axis.id(), classId, composing.found);
         }
         // What the walks came to, added up the way a combination's readings are. A class has the
@@ -1520,6 +1520,10 @@ public final class Generator {
      */
     private static final class Building implements Taking<Candidate> {
 
+        // The row this walk was for, once one lands in the class. Read where the walk says it was
+        // satisfied and nowhere else: a walk that stopped and a walk that finished are two answers
+        // now, and reading a field to tell them apart is what having three of them is for.
+
         private final Subject subject;
 
         private final List<Axis> axes;
@@ -1555,30 +1559,30 @@ public final class Generator {
         }
 
         @Override
-        public boolean take(Candidate candidate) {
+        public Taken take(Candidate candidate) {
             Map<String, FixtureTemplate> given = candidate.from().composes() ? Map.of()
                     : against(subject, axes, candidate.delta(), candidate.where(),
                             candidate.from().baseline());
             if (!candidate.from().composes() && given.isEmpty()) {
-                return true;   // nothing here can be written against the model's value
+                return Taken.AND_MORE;   // nothing here can be written against the model's value
             }
             if (builds >= most) {
-                return false;   // this candidate is the work nobody did
+                return Taken.NOT_TAKEN;   // this candidate is the work nobody did
             }
             builds++;
             Attempt made = build(subject, axes, candidate.where(), check, given);
             if (made.row() == null) {
                 last = made;
-                return true;
+                return Taken.AND_MORE;
             }
             if (!inTheClass(subject, axes, at, classId, made.row().inputs(), check)) {
                 last = new Attempt(null, UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS, label,
                         Optional.empty());
-                return true;
+                return Taken.AND_MORE;
             }
             found = new GeneratedRow(new Purpose.ForAClass(axes.get(at).id(), classId, label),
                     made.row().inputs());
-            return false;
+            return Taken.AND_DONE;
         }
     }
 
@@ -1688,9 +1692,12 @@ public final class Generator {
                     here.add(origin);
                 }
             }
-            if (!here.isEmpty()
-                    && gather(axes, reading, about, here, admits, taking) == Traversal.STOPPED) {
-                return Traversal.STOPPED;
+            if (here.isEmpty()) {
+                continue;
+            }
+            Traversal walked = gather(axes, reading, about, here, admits, taking);
+            if (walked != Traversal.EXHAUSTED) {
+                return walked;
             }
         }
         return Traversal.EXHAUSTED;
@@ -1715,10 +1722,12 @@ public final class Generator {
                                        Taking<Candidate> taking) {
         int[] about = about(reading);
         for (ResolvedOrigin origin : origins) {
-            if (origin.composes()
-                    && gather(axes, reading, about, List.of(origin), admits, taking)
-                            == Traversal.STOPPED) {
-                return Traversal.STOPPED;
+            if (!origin.composes()) {
+                continue;
+            }
+            Traversal walked = gather(axes, reading, about, List.of(origin), admits, taking);
+            if (walked != Traversal.EXHAUSTED) {
+                return walked;
             }
         }
         return Traversal.EXHAUSTED;
@@ -1770,8 +1779,9 @@ public final class Generator {
             // this one alone: what is due is a fact about the distances, and a walk that read it off
             // the size of the set it had just finished would leave a nearer assignment sitting in
             // the map for as long as the set that produced it was larger than it.
-            if (handOut(waiting, moved, taking) == Traversal.STOPPED) {
-                return Traversal.STOPPED;
+            Traversal walked = handOut(waiting, moved, taking);
+            if (walked != Traversal.EXHAUSTED) {
+                return walked;
             }
         }
         // What the readings moved beyond the largest set walked. Nothing generates at these
@@ -1806,8 +1816,14 @@ public final class Generator {
                 return Traversal.EXHAUSTED;
             }
             for (Candidate candidate : sortedByOrigin(waiting.remove(distance))) {
-                if (!taking.take(candidate)) {
-                    return Traversal.STOPPED;
+                switch (taking.take(candidate)) {
+                    case NOT_TAKEN -> {
+                        return Traversal.STOPPED;
+                    }
+                    case AND_DONE -> {
+                        return Traversal.SATISFIED;
+                    }
+                    case AND_MORE -> { }
                 }
             }
         }
@@ -2512,7 +2528,7 @@ public final class Generator {
         Reading reading =
                 new Reading(subject, axes, selection, check, trial, applied, takes, origins);
         Traversal walked = selection.interpretations(reading);
-        return reading.found != null ? reading.found : reading.nothing(walked);
+        return walked == Traversal.SATISFIED ? reading.found : reading.nothing(walked);
     }
 
     /**
@@ -2584,7 +2600,7 @@ public final class Generator {
         }
 
         @Override
-        public boolean take(Interpretation reading) {
+        public Taken take(Interpretation reading) {
             offered = true;
             int[] about = about(reading);
             // Whether one value can hold what this reading asks, which is the model's answer and not
@@ -2592,31 +2608,30 @@ public final class Generator {
             // whichever value the row is written against, so this does not change with the origin.
             if (standing(axes, wanting(axes, null, reading), about, selection.cell()::admits)
                     == null) {
-                return true;   // not a reading, and so no part of what this search is allowed
+                // not a reading, and so no part of what this search is allowed
+                return Taken.AND_MORE;
             }
             if (searched >= MOST_INTERPRETATIONS) {
-                return false;   // a reading of this combination that nobody looked at
+                return Taken.NOT_TAKEN;   // a reading of this combination that nobody looked at
             }
             searched++;
             // The values the model states first, nearest first, and what they may spend counted in
             // runs. Then the composition, whatever they spent: it is not one of them and was not
             // competing with them for their share, and a caller told the stated values were all
             // refused would go looking for a value the model cannot hold.
-            Running stated = new Running(MOST_RUNS_PER_INTERPRETATION);
             Traversal walked = nearestFirst(axes, reading, origins, selection.cell()::admits,
-                    stated);
-            if (found != null) {
-                return false;
+                    new Running(MOST_RUNS_PER_INTERPRETATION));
+            if (walked == Traversal.SATISFIED) {
+                return Taken.AND_DONE;
             }
-            Running composed = new Running(MOST_RUNS_PER_INTERPRETATION);
-            Traversal composing = composing(axes, reading, origins, selection.cell()::admits,
-                    composed);
-            if (found != null) {
-                return false;
+            Traversal composed = composing(axes, reading, origins, selection.cell()::admits,
+                    new Running(MOST_RUNS_PER_INTERPRETATION));
+            if (composed == Traversal.SATISFIED) {
+                return Taken.AND_DONE;
             }
-            looked = walked == Traversal.STOPPED || composing == Traversal.STOPPED
+            looked = walked == Traversal.STOPPED || composed == Traversal.STOPPED
                     ? looked.cutShort() : looked.searched();
-            return true;
+            return Taken.AND_MORE;
         }
 
         /** What to say when no reading answered. */
@@ -2685,17 +2700,19 @@ public final class Generator {
             }
 
             @Override
-            public boolean take(Candidate candidate) {
+            public Taken take(Candidate candidate) {
                 Map<String, FixtureTemplate> given = candidate.from().composes() ? Map.of()
                         : against(subject, axes, candidate.delta(), candidate.where(),
                                 candidate.from().baseline());
                 if (!candidate.from().composes() && given.isEmpty()) {
-                    return true;   // nothing here can be written against the model's value
+                    // nothing here can be written against the model's value
+                    return Taken.AND_MORE;
                 }
                 where = candidate.where();
                 last = build(subject, axes, candidate.where(), check, given);
                 if (last.row() == null) {
-                    return true;   // nothing composed here; another assignment may compose
+                    // nothing composed here; another assignment may compose
+                    return Taken.AND_MORE;
                 }
                 // Composed for the arms it was looked for, and not for the combination it was found
                 // at. The combination is where the search went; the arms are what somebody is owed
@@ -2717,7 +2734,7 @@ public final class Generator {
                 Watched watched = applied.get(written);
                 if (watched == null) {
                     if (runs >= most) {
-                        return false;   // this candidate is the run nobody did
+                        return Taken.NOT_TAKEN;   // this candidate is the run nobody did
                     }
                     runs++;
                     watched = trial.run(named.inputs());
@@ -2730,7 +2747,7 @@ public final class Generator {
                     // while it was applied.
                     case Watched.NoAccount _ -> {
                         found = new Witness.Unconfirmed(named, candidate.where());
-                        return false;
+                        return Taken.AND_DONE;
                     }
                     case Watched.Ran ran -> {
                         // Through the one thing that can say a row filled a combination, which is
@@ -2739,12 +2756,12 @@ public final class Generator {
                                 selection.certifying(candidate.where(), ran.seen());
                         if (seen.isPresent()) {
                             found = new Witness.Certified(named, seen.get());
-                            return false;
+                            return Taken.AND_DONE;
                         }
                         missed = true;
                     }
                 }
-                return true;
+                return Taken.AND_MORE;
             }
         }
     }

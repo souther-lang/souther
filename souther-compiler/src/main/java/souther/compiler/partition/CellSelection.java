@@ -96,23 +96,39 @@ public record CellSelection(InteractionCells.Cell cell, List<ControlClaim> claim
             about.add(i);
             admitted.add(here);
         }
-        long many = 1;
-        for (List<Integer> here : admitted) {
-            many *= here.size();
-        }
-        for (long index = 0; index < many; index++) {
+        // Counted up one position at a time, and never counted out. How many readings there are is
+        // a number nobody here needs — a caller takes three of them and stops — and asking for it
+        // put the whole space inside a machine word: sixty-three positions of two classes apiece
+        // overflow it, and a walk that read the total back as a negative one handed nothing over and
+        // said it had run out.
+        int[] standing = new int[about.size()];
+        while (true) {
             java.util.Map<Integer, Integer> pins = new java.util.LinkedHashMap<>();
-            long left = index;
             for (int p = 0; p < about.size(); p++) {
-                List<Integer> here = admitted.get(p);
-                pins.put(about.get(p), here.get((int) (left % here.size())));
-                left /= here.size();
+                pins.put(about.get(p), admitted.get(p).get(standing[p]));
             }
-            if (!taking.take(new Interpretation(pins))) {
-                return Traversal.STOPPED;
+            switch (taking.take(new Interpretation(pins))) {
+                case NOT_TAKEN -> {
+                    return Traversal.STOPPED;
+                }
+                case AND_DONE -> {
+                    return Traversal.SATISFIED;
+                }
+                case AND_MORE -> { }
+            }
+            int carry = 0;
+            while (carry < about.size()) {
+                standing[carry]++;
+                if (standing[carry] < admitted.get(carry).size()) {
+                    break;
+                }
+                standing[carry] = 0;
+                carry++;
+            }
+            if (carry == about.size()) {
+                return Traversal.EXHAUSTED;   // the last position came back round to its first
             }
         }
-        return Traversal.EXHAUSTED;
     }
 
     /**
