@@ -1,7 +1,6 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.CoverageObligation;
-import souther.compiler.check.RuleAccounting;
 import souther.compiler.inputs.StructuralInspection;
 
 import java.util.Collections;
@@ -153,7 +152,8 @@ public final class MeasureClosure {
      *                and it is the rule's own reason that answers
      *                ({@link souther.compiler.inputs.BlockReason.AboutARule#leavesShort})
      */
-    static Both of(List<Axis> axes, List<souther.compiler.inputs.UnreadRule> refused) {
+    static Both of(List<Axis> axes, List<souther.compiler.inputs.StandingQuestion> asked,
+                   List<souther.compiler.inputs.UnreadRule> refused) {
         Set<ClosureGap> partition = new LinkedHashSet<>();
         Set<ClosureGap> border = new LinkedHashSet<>();
         for (souther.compiler.inputs.UnreadRule rule : refused) {
@@ -164,32 +164,37 @@ public final class MeasureClosure {
                 border.add(new ClosureGap.RuleUnread(rule));
             }
         }
+        // The positions a gap of their own already stands for. A position whose rules nothing
+        // enumerated, and one the walk could not reach into: neither raises a question, so neither
+        // can be short of one, and what is short there is said once for the position rather than
+        // once per question it never got as far as raising.
+        Set<souther.compiler.inputs.TermPath> unreached = new LinkedHashSet<>();
         for (Axis axis : axes) {
-            // A position whose rules nothing enumerated, and one the walk could not reach into.
-            // Neither raises a question, so neither can be short of one — which is why they are
-            // asked here and not among the questions.
-            boolean unreached = false;
             if (axis.rulesNotReached()) {
                 ClosureGap gap = new ClosureGap.RulesNotReached(axis.id());
                 partition.add(gap);
                 border.add(gap);
-                unreached = true;
+                unreached.add(axis.path());
             }
             if (axis.pending() instanceof StructuralInspection.Continuation.Blocked blocked) {
                 ClosureGap gap = new ClosureGap.PositionNotReachedInto(axis.id(), blocked.why());
                 partition.add(gap);
                 border.add(gap);
-                unreached = true;
+                unreached.add(axis.path());
             }
-            if (unreached) {
+        }
+        // Asked of the question and of the position it is about, and not of whichever axis it was
+        // found beside. One position can be measured at more than one number, and an axis is
+        // re-pointed at another term as a body's rules are read — so an axis is not what a question
+        // belongs to, and a suppression written per axis decided from whichever one the loop met.
+        for (souther.compiler.inputs.StandingQuestion each : asked) {
+            if (unreached.contains(each.asks().path())) {
                 continue;
             }
-            for (RuleAccounting.Unanswered each : axis.unanswered()) {
-                ClosureGap gap = new ClosureGap.QuestionUnanswered(axis.id(), each);
-                switch (each.owed().obligation().answeredBy()) {
-                    case PARTITION -> partition.add(gap);
-                    case BOUNDARY -> border.add(gap);
-                }
+            ClosureGap gap = new ClosureGap.QuestionUnanswered(each);
+            switch (each.obligation().answeredBy()) {
+                case PARTITION -> partition.add(gap);
+                case BOUNDARY -> border.add(gap);
             }
         }
         return new Both(

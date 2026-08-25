@@ -1,7 +1,6 @@
 package souther.compiler.partition;
 
 import souther.compiler.inputs.BlockReason;
-import souther.compiler.check.RuleAccounting;
 
 import java.util.List;
 
@@ -29,14 +28,8 @@ public sealed interface LocalPartition {
      * <p>Never neither. A value of this carrying no classes and no cuts would be an open position
      * dressed as a divided one, and the phase after this one would never be reached for it.
      *
-     * @param unanswered the questions the position's rules raise that nothing answered. Carried
-     *                   with the classes because it qualifies them: a rule nothing took in may yet
-     *                   refuse a value a class holds, so the classes are the model's own and are
-     *                   not known to be inhabited. Dropped here, the only thing left to read would
-     *                   be the classes, which say nothing about what was read to get them
      */
     record Divided(List<PartitionClass> classes, CutEvidence cuts,
-                   List<RuleAccounting.Unanswered> unanswered,
                    boolean rulesNotReached) implements LocalPartition {
 
         public Divided {
@@ -45,11 +38,6 @@ public sealed interface LocalPartition {
                 throw new IllegalArgumentException(
                         "nothing divides this position, which is a different answer");
             }
-            if (unanswered == null) {
-                throw new IllegalArgumentException(
-                        "classes with no account of what their rules leave standing");
-            }
-            unanswered = List.copyOf(unanswered);
         }
     }
 

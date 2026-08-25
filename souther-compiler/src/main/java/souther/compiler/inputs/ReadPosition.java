@@ -2,7 +2,6 @@ package souther.compiler.inputs;
 
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.ProjectionEvidence;
-import souther.compiler.check.RuleAccounting;
 import souther.compiler.check.TypeView;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.types.Type;
@@ -35,7 +34,7 @@ record ReadPosition(TermPath path, TypeView view, NumericTerm term,
                     ProjectionEvidence projection, List<Case> declared, ReadingResult reading,
                     ObligationDomain obligations, AdmissibleSet.Completeness completeness,
                     BlockReason valuesUnread, List<UnreadRule> unreadRules,
-                    List<RuleAccounting.Unanswered> unansweredQuestions, boolean rulesNotReached,
+                    List<StandingQuestion> unansweredQuestions, boolean rulesNotReached,
                     StructuralInspection structure) implements Position {
 
     ReadPosition {

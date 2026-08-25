@@ -157,15 +157,17 @@ public final class DeclaredBounds {
      * rules a type states rather than beside the reader of them, because an end is an end whichever
      * declaration wrote it and both come out as the same {@link Bounds}.
      *
-     * @param measured which of the position's coordinates these are wanted for — the count taken of
-     *                 it, or its value
+     * @param kind which of the position's numbers these are wanted for — its own value, or what
+     *             some operation answers of it. The operation and not a flag, since a path measured
+     *             two ways by two operations has two of these and a flag brings them to one. The
+     *             path is the caller's already, which is what {@code placed} is a list of
      */
-    public static Bounds placed(List<FieldDomains.Placed> placed, boolean measured,
-                                Carrier carrier) {
+    public static Bounds placed(List<FieldDomains.Placed> placed,
+                                FieldDomains.CoordinateKind kind, Carrier carrier) {
         End min = null;
         End max = null;
         for (FieldDomains.Placed each : placed) {
-            if (each.measured() != measured) {
+            if (!each.at().kind().equals(kind)) {
                 continue;
             }
             End end = new End(each.end(), List.of(each.from()));

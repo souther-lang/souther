@@ -57,7 +57,7 @@ final class LocalInspection {
         // that value can be refused, wherever in it the rule is written.
         CutEvidence drawn = cuts.isEmpty() ? new CutEvidence.None()
                 : new CutEvidence.Present(cuts, position.projection());
-        return new LocalPartition.Divided(classes, drawn, position.unansweredQuestions(),
+        return new LocalPartition.Divided(classes, drawn,
                 position.rulesNotReached());
     }
 

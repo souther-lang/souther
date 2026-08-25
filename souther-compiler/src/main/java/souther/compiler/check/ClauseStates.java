@@ -23,6 +23,13 @@ import java.util.Set;
  * <p>Each carries what it is about, taken from the same reading. Worked out again where the
  * questions are raised, the subject a question is filed under and the subject the reading found
  * would be two answers about one clause.
+ *
+ * <p><b>What a clause is about, and not the questions it raises.</b> A position it names is a path
+ * and a line it draws is a {@link FieldDomains.Coordinate}, which are what a reading of a clause
+ * has; which coverage question each of them becomes is {@link Required#ofInvariant}'s and is
+ * decided there. Written in the vocabulary of the questions instead, the positions were a set of
+ * subjects every member of which was the same arm with the same flag — a set of paths wearing the
+ * type of a set of subjects, so that a lookup by path read as a comparison of subjects.
  */
 sealed interface ClauseStates {
 
@@ -34,18 +41,23 @@ sealed interface ClauseStates {
      * at the end. A rule states where the values stop by being written that way; what this compiler
      * made of the number on the other side is what answers the question, not what raises it.
      *
-     * @param line  the number the end is on, which is the position's own value or a count taken of
-     *              it
-     * @param named the positions the clause is about, which is what a rule can cost. Never empty:
-     *              a clause bounding a coordinate names it
+     * @param line      the number the end is on, which is the position's own value or a number an
+     *                  operation answers of it. The operation itself, since two operations over one
+     *                  path are two lines and a flag saying one was taken cannot tell them apart
+     * @param positions the ones the clause is about, which is what a rule can cost. Never empty:
+     *                  a clause bounding a coordinate names the position it sits at
      */
-    record ABound(Owed.Subject line, Set<Owed.Subject> named) implements ClauseStates {
+    record ABound(FieldDomains.Coordinate line, Set<String> positions) implements ClauseStates {
 
         public ABound {
-            if (named.isEmpty()) {
+            if (line == null) {
+                throw new IllegalArgumentException("a bound is a line on some number");
+            }
+            if (positions.isEmpty()) {
                 throw new IllegalArgumentException("a bound is written about a position");
             }
-            named = java.util.Collections.unmodifiableSet(new java.util.LinkedHashSet<>(named));
+            positions = java.util.Collections.unmodifiableSet(
+                    new java.util.LinkedHashSet<>(positions));
         }
     }
 
@@ -75,7 +87,7 @@ sealed interface ClauseStates {
      *                  {@link Required#ofInvariant} makes of an empty set. Filed at the value
      *                  instead, {@code invariant t = 1 >= 0} was a rule nothing had accounted for
      */
-    record SomethingElse(Set<Owed.Subject> positions) implements ClauseStates {
+    record SomethingElse(Set<String> positions) implements ClauseStates {
 
         public SomethingElse {
             // Insertion order: `Set.of` and `Set.copyOf` iterate in an order salted once per JVM
@@ -84,15 +96,15 @@ sealed interface ClauseStates {
                     new java.util.LinkedHashSet<>(positions));
         }
 
-        static SomethingElse naming(List<Owed.Subject> found) {
+        static SomethingElse naming(List<String> found) {
             return new SomethingElse(new java.util.LinkedHashSet<>(found));
         }
     }
 
     /** The positions this clause is about, by which a rule can cost one. */
-    default Set<Owed.Subject> about() {
+    default Set<String> about() {
         return switch (this) {
-            case ABound bound -> bound.named();
+            case ABound bound -> bound.positions();
             case SomethingElse other -> other.positions();
             // A rule about a pair costs neither of them: what it says is not a set of one
             // position's values, so there is nothing about one for anything to have read.

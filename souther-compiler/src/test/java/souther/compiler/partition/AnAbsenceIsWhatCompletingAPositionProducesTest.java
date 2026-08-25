@@ -61,8 +61,7 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
     /** The same, with a rule about the position's own values that the local reading could not take
      *  in — which is a second way a position can be left unable to reach an absence. */
     private static Axis pending(StructuralInspection.Continuation found, BlockReason unread) {
-        return Axis.pendingAt(ID, new NumericTerm.ValueOf(AT), Type.BOOL,
-                java.util.List.of(), false, found, unread);
+        return Axis.pendingAt(ID, new NumericTerm.ValueOf(AT), Type.BOOL, false, found, unread);
     }
 
     /**

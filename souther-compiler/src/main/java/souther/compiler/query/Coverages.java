@@ -149,21 +149,15 @@ final class Coverages {
         List<PartitionEvidence.AxisCoverage> axes = new ArrayList<>();
 
         List<Axis> divided = new ArrayList<>();
-        List<PartitionEvidence.Unanswered> standing = new ArrayList<>();
         Readings readings = Readings.of(rows, where, partitioning.axes(),
                 observed.gaps().stream()
                         .filter(gap -> gap.code().leftNoRowRead()).toList());
         for (Axis axis : partitioning.axes()) {
-            // What the model asked about this position and nothing answered, said before anything
-            // here decides whether the position could be measured. The questions are the model's;
-            // `undivided` below explains why no evidence came back, which is a nothing of its own
-            // and carries no word about what was written there.
-            standing.addAll(unansweredAt(axis));
             if (!axis.measurable()) {
                 continue;   // said by `undivided`, which also says which kind of nothing it is
             }
             if (axis.derivable()) {
-                axes.add(coverageOf(axis, readings, level.readsRows()));
+                axes.add(coverageOf(axis, partitioning, readings, level.readsRows()));
                 divided.add(axis);
             }
         }
@@ -176,7 +170,11 @@ final class Coverages {
                 BoundaryDerivation.of(boundaries, partitioning.borderClosure()),
                 pairsOf(behavior.name(), divided, readings, level.readsRows(), budget),
                 partitioning.undivided(), partitioning.unread(), partitioning.blocked(),
-                partitioning.notSeparated(), List.copyOf(standing),
+                // What the model asked and nothing answered, taken whole and not gathered as the
+                // axes are walked. The questions are the model's; whether a position could be
+                // measured is the separate answer `undivided` beside them carries, and a position
+                // no axis came back for still has whatever was written about it.
+                partitioning.notSeparated(), unansweredIn(partitioning),
                 whyUnclassified(readings.byRow(),
                         partitioning.axes().stream().map(Axis::id).toList()));
     }
@@ -394,25 +392,42 @@ final class Coverages {
     }
 
     /**
-     * The questions the rules about one position raise that nothing answered, as a document says
-     * them.
+     * The questions the rules of this behavior's inputs raise that nothing answered, as a document
+     * says them.
      *
-     * <p>Read off the axis because that is what carries a position's accounting here, and not
-     * because an axis owns the questions: one that could not be measured has them all the same.
+     * <p>Once, off the partitioning, and not once per axis. The model raises them and an axis is
+     * one reader of them: a position no axis came back for still has whatever was written about it,
+     * and an axis is re-pointed at another number as a body's rules are read, so a question found
+     * beside one is not thereby a question about the number that axis ended up measuring.
      */
-    private static List<PartitionEvidence.Unanswered> unansweredAt(Axis axis) {
-        return axis.unanswered().stream()
-                .map(each -> new PartitionEvidence.Unanswered(each, axis.path().toString(),
-                        // The number the line falls on, where it falls on one. Which of the two the
-                        // question is about was settled where it was raised — not here, and not by
-                        // whatever a renderer has to hand.
-                        each.owed().subject().measured() ? axis.term().toString() : null))
+    private static List<PartitionEvidence.Unanswered> unansweredIn(
+            souther.compiler.partition.Partitions.Partitioning partitioning) {
+        return partitioning.unanswered().stream()
+                .map(PartitionEvidence.Unanswered::new)
                 .toList();
     }
 
+    /**
+     * Whether one standing question is one this axis is a reader of.
+     *
+     * <p>Applicability and not ownership. Both sides name what they are about in the same
+     * vocabulary and the comparison is between those two names — which is a different thing from
+     * recovering the question's subject from what the axis happens to be measured at.
+     */
+    private static boolean appliesTo(souther.compiler.inputs.StandingQuestion asked, Axis axis) {
+        return switch (asked.asks()) {
+            case souther.compiler.inputs.InputQuestion.AboutAPosition it ->
+                    it.path().equals(axis.path());
+            case souther.compiler.inputs.InputQuestion.AboutANumber it ->
+                    it.term().equals(axis.term());
+        };
+    }
 
-    private static PartitionEvidence.AxisCoverage coverageOf(Axis axis, Readings readings,
-                                                             boolean asked) {
+
+
+    private static PartitionEvidence.AxisCoverage coverageOf(Axis axis,
+            souther.compiler.partition.Partitions.Partitioning partitioning, Readings readings,
+            boolean asked) {
         List<String> classes = axis.classes().stream().map(PartitionClass::id).toList();
         // What the axis already says about which of this position's rules nothing accounted for,
         // each named. Read off the axis rather than worked out here, and in the questions' own
@@ -428,8 +443,10 @@ final class Coverages {
                 // falls is the border measure's question, and counting it here would put a number
                 // #869 separated back together. The questions themselves are beside the measures
                 // and are said there once.
-                axis.unanswered().stream().noneMatch(each -> each.owed().obligation()
-                        == souther.compiler.check.CoverageObligation.ADMITTED_VALUES));
+                partitioning.unanswered().stream()
+                        .filter(each -> appliesTo(each, axis))
+                        .noneMatch(each -> each.obligation()
+                                == souther.compiler.check.CoverageObligation.ADMITTED_VALUES));
         // Nothing a body claims is in scope here. What a row is owed at is counted first and on its
         // own, and what was declared about those positions is put beside it afterwards
         // ({@link ClaimReport}) — which is what keeps a claim from narrowing a denominator by being

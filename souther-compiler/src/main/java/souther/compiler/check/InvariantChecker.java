@@ -870,12 +870,13 @@ public final class InvariantChecker {
      *                 one value are two rules a row could be owed to, and held as declarations
      *                 they came back as one
      */
-    record Direct(String path, ValueName by, RuleRef.Invariant from,
+    record Direct(FieldDomains.Coordinate at, RuleRef.Invariant from,
                   InvariantBound bound, Core part) {
 
-        /** Whether it is a number taken of the position rather than its own values. */
-        boolean measured() {
-            return by != null;
+        /** Where in the value the end was placed. Never which end it is: one position carries more
+         *  than one number and {@link #at} is what says which of them this is. */
+        String path() {
+            return at.path();
         }
     }
 
@@ -1061,11 +1062,12 @@ public final class InvariantChecker {
      *                position no line is drawn on named nothing, and the reading that could say so
      *                had never heard of the position
      */
-    private record Coordinate(String path, ValueName by, Carrier carrier) {
+    private record Coordinate(FieldDomains.Coordinate at, Carrier carrier) {
 
-        /** Whether it is a number taken of the position rather than the position's own values. */
-        boolean measured() {
-            return by != null;
+        /** Where in the value it sits. Never what it is: two numbers can be taken at one path, and
+         *  {@link #at} is what tells them apart. */
+        String path() {
+            return at.path();
         }
     }
 
@@ -1102,10 +1104,10 @@ public final class InvariantChecker {
         Map<FactSubject, Coordinate> byName = new LinkedHashMap<>();
         keys.forEach((path, key) -> {
             Carrier carrier = Carrier.ofValue(typeAt.get(path), symbols);
-            byName.put(key, new Coordinate(path, null, carrier));
+            byName.put(key, new Coordinate(FieldDomains.Coordinate.value(path), carrier));
             FactSubject atom = atoms.get(path);
             if (atom != null) {
-                byName.put(atom, new Coordinate(path, null, carrier));
+                byName.put(atom, new Coordinate(FieldDomains.Coordinate.value(path), carrier));
             }
         });
         // A count is a whole number whatever it counts, so nothing about the container decides how
@@ -1113,7 +1115,8 @@ public final class InvariantChecker {
         // it: dropped here and rebuilt as "a number was taken", two operations over one path were
         // one coordinate and a report could not tell them apart.
         held.forEach((path, counted) -> byName.put(counted.atom(),
-                new Coordinate(path, counted.by(), Carrier.WHOLE)));
+                new Coordinate(FieldDomains.Coordinate.takenBy(path, counted.by()),
+                        Carrier.WHOLE)));
         List<Direct> out = new ArrayList<>();
         List<FieldDomains.Unread> unread = new ArrayList<>();
         Map<String, List<TypeSymbol>> narrowers = new LinkedHashMap<>();
@@ -1173,10 +1176,10 @@ public final class InvariantChecker {
         }
         // The positions this part is about, by every name each answers to, since a reading files a
         // clause under whichever name it recognised.
-        Set<Owed.Subject> named = states.about();
+        Set<String> named = states.about();
         Set<FactSubject> about = new LinkedHashSet<>();
         for (Map.Entry<FactSubject, Coordinate> each : byName.entrySet()) {
-            if (named.contains(Owed.Subject.at(each.getValue().path()))) {
+            if (named.contains(each.getValue().path())) {
                 about.add(each.getKey());
             }
         }
@@ -1279,12 +1282,14 @@ public final class InvariantChecker {
         if (about != null && InvariantBound.ordering(op)
                 && coordinatesIn(bound, at, byName).isEmpty()
                 && shape instanceof ClauseStates.SomethingElse named) {
-            Set<Owed.Subject> positions = new LinkedHashSet<>(named.positions());
-            // The coordinate the bound is on, which the walk over the comparison names anyway. Added
+            Set<String> positions = new LinkedHashSet<>(named.positions());
+            // The position the bound sits at, which the walk over the comparison names anyway. Added
             // so that the arm cannot be reached with nothing to be about.
-            positions.add(Owed.Subject.at(about.path()));
-            shape = new ClauseStates.ABound(
-                    new Owed.Subject.OfAPosition(about.path(), about.measured()), positions);
+            positions.add(about.path());
+            // And the number the line is on, which is the coordinate this reading already holds. Not
+            // rebuilt from the path: which of a position's numbers a line is on is what the operation
+            // beside it says, and a reader handed the path alone has to go and ask something else.
+            shape = new ClauseStates.ABound(about.at(), positions);
         }
         settle(bin, from, shape, end, at, byName, raised, took, typeAt, parts, raisedByPart);
         if (end instanceof InvariantBound.Read.NoEnd) {
@@ -1307,7 +1312,7 @@ public final class InvariantChecker {
             return;
         }
         if (end instanceof InvariantBound.Read.AnEnd placed) {
-            out.add(new Direct(found.path(), found.by(), from, placed.bound(), bin));
+            out.add(new Direct(found.at(), from, placed.bound(), bin));
         }
     }
 
@@ -1342,7 +1347,7 @@ public final class InvariantChecker {
         })) {
             return new ClauseStates.ARelation();
         }
-        List<Owed.Subject> found = new ArrayList<>();
+        List<String> found = new ArrayList<>();
         namedIn(clause, at, byName, found);
         return ClauseStates.SomethingElse.naming(found);
     }
@@ -1356,11 +1361,10 @@ public final class InvariantChecker {
      * it is a coordinate of its own.
      */
     private void namedIn(Core e, Denotations at, Map<FactSubject, Coordinate> byName,
-                         List<Owed.Subject> out) {
+                         List<String> out) {
         for (Coordinate each : coordinatesIn(e, at, byName)) {
-            Owed.Subject where = Owed.Subject.at(each.path());
-            if (!out.contains(where)) {
-                out.add(where);
+            if (!out.contains(each.path())) {
+                out.add(each.path());
             }
         }
     }
@@ -1481,7 +1485,7 @@ public final class InvariantChecker {
                 place -> carrierAt(place, left, right) != null);
         for (Coordinate each : coordinatesIn(comparison, at, byName)) {
             FieldDomains.Unread said =
-                    new FieldDomains.Unread(each.path(), each.by(), from, comparison, why);
+                    new FieldDomains.Unread(each.at(), from, comparison, why);
             if (!out.contains(said)) {
                 out.add(said);
             }

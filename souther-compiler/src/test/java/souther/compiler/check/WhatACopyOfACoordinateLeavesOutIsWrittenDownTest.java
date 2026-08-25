@@ -14,9 +14,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>{@code FieldDomains.Unread} is written from a coordinate the reading found, one field at a
  * time, because the coordinate is this class's own and the record crosses into {@code inputs}. Two
- * of its fields went in one round late apiece — first whether the position is a count, then which
- * conjunct the reason came from — each after something downstream turned out to need what the
- * producer already had, and each looked like an unrelated fix.
+ * of its fields went in one round late apiece — first which number of the position it is, then
+ * which conjunct the reason came from — each after something downstream turned out to need what the
+ * producer already had, and each looked like an unrelated fix. The first arrived twice: as a flag
+ * saying a number was taken, and then as the number itself, because the flag could not tell two
+ * operations over one path apart (#1050).
  *
  * <p>So what the copy leaves out is written down rather than discovered. A field added to the
  * coordinate fails here, which is the point: the answer may well be that the copy does not want it,
@@ -66,8 +68,10 @@ class WhatACopyOfACoordinateLeavesOutIsWrittenDownTest {
         added.removeAll(componentsOf(coordinate()));
 
         assertEquals(Set.of("from", "part", "why"), added);
-        assertTrue(componentsOf(FieldDomains.Unread.class).containsAll(Set.of("path", "by")),
-                "beside the two of the coordinate that a reader downstream turned out to need:"
-                        + " where it sits, and which operation takes the number if one does");
+        assertTrue(componentsOf(FieldDomains.Unread.class).contains("at"),
+                "beside the one of the coordinate that a reader downstream turned out to need:"
+                        + " which number of which position the end was to have been on. One"
+                        + " component and not a path beside a flag — a path measured by two"
+                        + " operations has two of these, and the flag brought them to one");
     }
 }

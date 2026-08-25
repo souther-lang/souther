@@ -122,15 +122,14 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
      *                cannot lose one. Which rule it is tells one question from another; the handle
      *                beside it is what a document shows and is not in step with that wherever a rule
      *                has no name
-     * @param at      the position it is about, spelled the way a report names it. The walk's and not
-     *                the accounting's: which position of a behavior's inputs a rule was filed at is
-     *                what the walk that found it says, and the subject is relative to it
-     * @param measure the number the position is measured by, where a border falls on one. Beside the
-     *                subject because it is the reading's spelling of it and this document promises
-     *                both
+     * <p><b>The question and nothing derived from it.</b> Everything a document writes about one of
+     * these is a projection of what the question says it is about, so it is projected here. Held
+     * beside the question as the strings a document wants, a value of this could name one position
+     * and be about another, and the two would agree only for as long as whoever wrote the one
+     * producer kept them agreeing — which is the arrangement this whole change exists to remove,
+     * left standing one layer from the document.
      */
-    public record Unanswered(souther.compiler.check.RuleAccounting.Unanswered asked, String at,
-                             String measure) {
+    public record Unanswered(souther.compiler.inputs.StandingQuestion asked) {
 
         /** Which rule of the model raised it, which is what tells one question from another. */
         public souther.compiler.check.RuleRef rule() {
@@ -144,18 +143,51 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
 
         /** What it asks. Which measure's section a reader meets it in follows from this. */
         public souther.compiler.check.CoverageObligation question() {
-            return asked.owed().obligation();
+            return asked.obligation();
         }
 
         /**
-         * And what it asks it about.
+         * The question itself, which is what it asks and what it asks it about, together.
          *
          * <p>As the reading that raised it named it, and not as words for it: a position, a number
-         * taken of one, and the comparison that drew a border between two moving terms are three
-         * things, and two of them cannot be told apart once they are one string.
+         * of one, and the comparison that drew a border between two moving terms are three things,
+         * and two of them cannot be told apart once they are one string.
          */
-        public souther.compiler.check.Owed.Subject subject() {
-            return asked.owed().subject();
+        public souther.compiler.inputs.InputQuestion asks() {
+            return asked.asks();
+        }
+
+        /**
+         * The position it is about, spelled the way a report names it.
+         *
+         * <p>The walk's and not the accounting's: which position of a behavior's inputs a rule was
+         * filed at is what the walk that found it says, which is what the question carries once it
+         * has crossed into this vocabulary.
+         */
+        public String at() {
+            return asked.asks().path().toString();
+        }
+
+        /**
+         * The number a border falls on, where it falls on one taken of the position, and null
+         * where the line is on what the position itself holds.
+         *
+         * <p>Both arms of each of the two types, and no {@code default} at either. What has no
+         * number is said by the arm that has none rather than by a test that any shape added later
+         * would also fail — which is how a question about a number nobody had classified would
+         * reach a document as one about no number at all.
+         */
+        public String measure() {
+            return switch (asked.asks()) {
+                case souther.compiler.inputs.InputQuestion.AboutAPosition _ -> null;
+                case souther.compiler.inputs.InputQuestion.AboutANumber it ->
+                        switch (it.term()) {
+                            // The position's own values, which the `path` beside this already says.
+                            case souther.compiler.inputs.NumericTerm.ValueOf _ -> null;
+                            case souther.compiler.inputs.NumericTerm.TakenOf taken ->
+                                    taken.toString();
+                        };
+            };
         }
     }
 

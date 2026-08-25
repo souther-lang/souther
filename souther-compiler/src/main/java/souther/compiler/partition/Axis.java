@@ -6,7 +6,6 @@ import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.StructuralInspection;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.types.Type;
-import souther.compiler.check.RuleAccounting;
 
 import java.util.List;
 
@@ -53,17 +52,6 @@ import java.util.List;
  *                 path is how a reason came to be recovered by string match. A reason travels with
  *                 the position or it is a reason about whatever the strings happened to pair it
  *                 with.
- * @param unanswered the questions the rules written about this position raise that nothing
- *                 answered, each naming the rule that raised it. Carried because it qualifies the
- *                 classes and nothing else says it: a rule nothing took in may yet refuse a value a
- *                 class holds, so {@link #classes} is the denominator the model states and not one
- *                 every class of which is known to be inhabited.
- *
- *                 <p>The questions and not a reading's account of itself. The reading that turns
- *                 clauses into sets of values has no word for a range and is short of the rules at
- *                 every numeric position an invariant bounds, while two other readings have those
- *                 rules whole — so a report written off that reading says a model was not read on
- *                 the strength of a fact about this compiler (issue #842)
  * @param rulesNotReached whether the walk reached the rules written about this position at all.
  *                 Beside the questions and not among them: a position whose rules were never
  *                 enumerated raises no question and is not one whose rules were all accounted for,
@@ -75,24 +63,18 @@ import java.util.List;
  *                 a rule about what is inside describes that same stop from the other end
  */
 public record Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> classes,
-                   List<Cut> cuts, List<Seam> parted, List<RuleAccounting.Unanswered> unanswered,
-                   boolean rulesNotReached,
+                   List<Cut> cuts, List<Seam> parted, boolean rulesNotReached,
                    StructuralInspection.Continuation pending, BlockReason unread) {
 
     public Axis {
         classes = List.copyOf(classes);
         cuts = List.copyOf(cuts);
         parted = List.copyOf(parted);
-        if (unanswered == null) {
-            throw new IllegalArgumentException(
-                    "a position with no account of what its rules leave standing");
-        }
-        unanswered = List.copyOf(unanswered);
     }
 
     public Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> classes,
                 List<Cut> cuts) {
-        this(id, term, type, classes, cuts, List.of(), List.of(), false, null, null);
+        this(id, term, type, classes, cuts, List.of(), false, null, null);
     }
 
     /**
@@ -102,11 +84,9 @@ public record Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> 
      * and only where none does is what was found here what a report says — an absence where every
      * reading ran to the end and found nothing, and what stopped one where it did not.
      */
-    public static Axis pendingAt(AxisId id, NumericTerm term, Type type,
-                                 List<RuleAccounting.Unanswered> unanswered,
-                                 boolean rulesNotReached,
+    public static Axis pendingAt(AxisId id, NumericTerm term, Type type, boolean rulesNotReached,
                                  StructuralInspection.Continuation found, BlockReason unread) {
-        return new Axis(id, term, type, List.of(), List.of(), List.of(), unanswered,
+        return new Axis(id, term, type, List.of(), List.of(), List.of(),
                 rulesNotReached, found, unread);
     }
 
@@ -121,14 +101,12 @@ public record Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> 
      * as one the model divides no way.
      */
     public Axis measuredAt(AxisId id, NumericTerm term) {
-        return new Axis(id, term, type, classes, cuts, parted, unanswered, rulesNotReached, pending,
-                unread);
+        return new Axis(id, term, type, classes, cuts, parted, rulesNotReached, pending, unread);
     }
 
     /** The same position, with what a body's rules divided it into and the lines they drew. */
     public Axis carrying(List<PartitionClass> classes, List<Cut> cuts, List<Seam> parted) {
-        return new Axis(id, term, type, classes, cuts, parted, unanswered, rulesNotReached, pending,
-                unread);
+        return new Axis(id, term, type, classes, cuts, parted, rulesNotReached, pending, unread);
     }
 
     /** Where the value this axis is about sits, which is where a row is walked to before the term is
