@@ -174,6 +174,11 @@ class EverySemanticDeclarationIsHeldToTheLibraryTest {
      * <p>Refused where the declaration is written and not by a list of operations to leave out. A
      * list would be a second account of which operations the language writes out, kept in step by
      * whoever remembered; the declaration itself already says.
+     *
+     * <p>What refuses it is the count and not a condition naming the body. The readings the
+     * operation has are listed and there are two of them, so this and the form below are one check
+     * seen at two pairs rather than one condition each — which is what makes a representation added
+     * exclusive with all four without being paired with any.
      */
     @Test
     void anOperationWrittenInTheLanguageCannotBeGivenATermOfWhatItAnswers() {
@@ -188,20 +193,22 @@ class EverySemanticDeclarationIsHeldToTheLibraryTest {
                 () -> OperationFactBinder.bindAll(DefaultStdlib.get(), gained));
 
         assertTrue(refused.getMessage().contains("Int.abs"), refused.getMessage());
-        assertTrue(refused.getMessage().contains("written in the language"),
-                "and says why, which is that its body is read where it is called: "
+        assertTrue(refused.getMessage().contains("the body the language writes out"),
+                "and names the reading that was already there, which is its body: "
                         + refused.getMessage());
     }
 
     /**
      * Nor can one whose result some other representation already reads.
      *
-     * <p>The other half of the same invariant, and the one a check on how the operation is written
-     * cannot make. {@code Decimal.fromInt} is an intrinsic and takes one number, so nothing about
-     * how it is declared keeps it out; what keeps it out is that a form already says what it answers
-     * in its argument's own count, which is more than a term standing for it can say. Read as both,
-     * a rule about {@code n} would settle a clause about {@code Decimal.fromInt(n)} for one reader
-     * and not for the other.
+     * <p>The same invariant at the other pair. {@code Decimal.fromInt} is an intrinsic and takes one
+     * number, so nothing about how it is written keeps it out; what keeps it out is that a form
+     * already says what it answers in its argument's own count, which is more than a term standing
+     * for it can say. Read as both, a rule about {@code n} would settle a clause about
+     * {@code Decimal.fromInt(n)} for one reader and not for the other.
+     *
+     * <p>Here because the pairs are what a reader wants to see and not because the check has two
+     * halves. Nothing between this and the one above names either representation.
      */
     @Test
     void anOperationWhoseResultAFormAlreadyReadsCannotBeGivenOneEither() {

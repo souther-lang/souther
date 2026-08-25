@@ -22,6 +22,11 @@ import java.util.Set;
  * reason. So the library gaining an operation is the library asking these questions, and each is
  * unanswered until someone answers it.
  *
+ * <p>One of the two and not either. A silence says that nothing is true under the subject, so it is
+ * the denial of a rule rather than a spare row beside one, and an operation carrying both is one
+ * where one of the two is wrong. Read as "a rule or a silence", a silence is only ever a filler, and
+ * one that has become false covers the range as well as anything and stays where it is.
+ *
  * <p>A range is read off the declaration and nothing else, so it holds an operation nobody thought
  * of. Where the answer too is read off the declaration the rule is derived rather than written
  * ({@link Combinators}), and the range is still stated here: a signature the derivation gets nothing
@@ -355,7 +360,7 @@ enum Question {
     BOUNDS("what bounds the number it answers") {
         @Override
         boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
-            return isANumber(signature.result());
+            return NumericAnswers.isANumber(signature.result());
         }
 
         @Override
@@ -382,9 +387,9 @@ enum Question {
     MEASURE("what it states through the measure counting the two apart") {
         @Override
         boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
-            return signature.result() != null && !isANumber(signature.result())
+            return signature.result() != null && !NumericAnswers.isANumber(signature.result())
                     && signature.params().contains(signature.result())
-                    && signature.params().stream().anyMatch(Question::isANumber)
+                    && signature.params().stream().anyMatch(NumericAnswers::isANumber)
                     && hasAMeasureCountingTwoApart(stdlib, signature.result());
         }
 
@@ -412,8 +417,8 @@ enum Question {
     CHOICE("whether it answers one of its arguments, and in which cases") {
         @Override
         boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
-            return isANumber(signature.result())
-                    && signature.params().stream().anyMatch(Question::isANumber);
+            return NumericAnswers.isANumber(signature.result())
+                    && signature.params().stream().anyMatch(NumericAnswers::isANumber);
         }
 
         @Override
@@ -481,7 +486,7 @@ enum Question {
     NUMERIC_RESULT("what number it computes, and where it answers it") {
         @Override
         boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
-            Type number = numberAnsweredBy(signature.result());
+            Type number = NumericAnswers.in(signature.result());
             return number != null && signature.params().size() >= 2
                     && number.equals(signature.params().get(0))
                     && number.equals(signature.params().get(1));
@@ -563,26 +568,20 @@ enum Question {
     private static boolean hasAMeasureCountingTwoApart(Stdlib stdlib, Type t) {
         return stdlib.entries().values().stream().anyMatch(entry -> {
             List<Type> counted = entry.signature().params();
-            return isANumber(entry.signature().result()) && counted.size() == 2
+            return NumericAnswers.isANumber(entry.signature().result()) && counted.size() == 2
                     && counted.get(0).equals(t) && counted.get(1).equals(t);
         });
-    }
-
-    /** Whether {@code t} is one of the kinds of number the domain relates arithmetically. Read where
-     * the numeric rules are bound as well: what such a rule may be written about is the same question
-     * as what puts an operation in range of one. */
-    static boolean isANumber(Type t) {
-        return t == Type.Prim.INT || t == Type.Prim.DECIMAL;
     }
 
     /**
      * Whether values of {@code t} count to a number.
      *
-     * <p>Wider than {@link #isANumber} and asked where the arithmetic is over counts rather than
-     * over numbers a model wrote: a date is not a number and counts days, so a difference of two of
-     * them is a number of days. Asked of {@link Carrier}, which is the one table saying which types
-     * have an order with counts under it — a second answer here would be a second table, and a type
-     * that is a carrier to one of them and not to the other is what that costs.
+     * <p>Wider than {@link NumericAnswers#isANumber} and asked where the arithmetic is over counts
+     * rather than over numbers a model wrote: a date is not a number and counts days, so a
+     * difference of two of them is a number of days. Asked of {@link Carrier}, which is the one
+     * table saying which types have an order with counts under it — a second answer here would be a
+     * second table, and a type that is a carrier to one of them and not to the other is what that
+     * costs.
      *
      * <p>Asked without the declarations, which is what a reading of the library's own signatures
      * has: {@link Carrier#ofPrimitive} answers where the type settles it and leaves a name
@@ -592,34 +591,6 @@ enum Question {
     static boolean countsToANumber(Type t) {
         Carrier carrier = Carrier.ofPrimitive(t);
         return carrier != null && carrier.counts();
-    }
-
-    /**
-     * The number a result of {@code t} answers — {@code t} itself where it is one, and the number a
-     * union carries where exactly one of its cases is a number.
-     *
-     * <p>Exactly one, and not the first found. A union carrying two numbers would answer its number
-     * at two cases, and which of them a rule about the operation was written for is a question the
-     * table has no column for — so it is out of range, and stays out until something says which.
-     */
-    static Type numberAnsweredBy(Type t) {
-        if (isANumber(t)) {
-            return t;
-        }
-        if (!(t instanceof Type.Union union)) {
-            return null;
-        }
-        Type found = null;
-        for (souther.compiler.types.TypeSymbol member : union.members()) {
-            Type.Prim prim = member.primitiveKind();
-            if (prim != null && isANumber(prim)) {
-                if (found != null) {
-                    return null;
-                }
-                found = prim;
-            }
-        }
-        return found;
     }
 
     /** Whether {@code t} is something the check can name the size of — a container, or a string. */
