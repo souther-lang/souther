@@ -2,6 +2,8 @@ package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.types.CaseSelector;
+import souther.compiler.types.Refinement;
+import souther.compiler.types.ResolvedCase;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
@@ -112,7 +114,8 @@ sealed interface CaseSpace {
             if (TypeSymbol.SOME.equals(name) || TypeSymbol.NONE.equals(name)) {
                 return null;   // an optional's carriers, which no subject with cases has
             }
-            ResolvedCase candidate = ResolvedCase.resolve(CaseSelector.direct(name), symbols);
+            ResolvedCase candidate =
+                    resolve(CaseSelector.direct(name), symbols);
             return !candidate.atoms().isEmpty()
                     && new LinkedHashSet<>(AtomSpace.subjectAtoms(subject, symbols))
                             .containsAll(candidate.atoms())
@@ -134,8 +137,8 @@ sealed interface CaseSpace {
             // element's own atoms are not what an arm over an optional answers for: `Some` is the
             // case, whatever it wraps.
             return new Optional(subject, List.of(
-                    ResolvedCase.resolve(CaseSelector.optionPresent(option.element()), symbols),
-                    ResolvedCase.resolve(CaseSelector.optionAbsent(), symbols)));
+                    resolve(CaseSelector.optionPresent(option.element()), symbols),
+                    resolve(CaseSelector.optionAbsent(), symbols)));
         }
         if (subject instanceof Type.Union union) {
             // Described from the members this lists and not by showing the union again. What a
@@ -226,8 +229,50 @@ sealed interface CaseSpace {
         }
         List<ResolvedCase> out = new ArrayList<>();
         for (TypeSymbol member : seen) {
-            out.add(ResolvedCase.resolve(CaseSelector.direct(member), symbols));
+            out.add(resolve(CaseSelector.direct(member), symbols));
         }
         return out;
+    }
+
+    /**
+     * {@code selector} resolved against the declarations {@code symbols} holds.
+     *
+     * <p>The one place what a case covers is worked out. A {@link ResolvedCase} is a selector and
+     * the atoms selecting it reaches, and the second half is a fact about the declarations this
+     * compile read — so it is answered here, where they are, and the value carries no way of asking
+     * again.
+     *
+     * <p>Also where a selector that came back from {@code Core} is made whole again. A pass reading
+     * an elaborated arm has the selector and not what it covers — {@code Core} carries nothing about
+     * the program around it — and asking here is that pass crossing back into this one rather than
+     * a second reading.
+     */
+    static ResolvedCase resolve(CaseSelector selector, Symbols symbols) {
+        return ResolvedCase.of(selector, covers(selector, symbols));
+    }
+
+    /**
+     * What selecting {@code selector} covers.
+     *
+     * <p>Read from the refinement and not from the name, because the two carriers that are not a
+     * case of a declaration are told apart by nothing else. An optional's carrier covers itself:
+     * what {@code Some} covers is {@code Some}, and taking the element's atoms would make an
+     * optional over a sum cover that sum's leaves, so the two arms of a {@code match} over it would
+     * be held against cases no optional has.
+     *
+     * <p>A case whose carrier is the value covers what it holds — one atom for a leaf, and the
+     * leaves under it for a case that is itself a sum. A name that denotes no type holds nothing to
+     * descend ({@code Raw}, which a stage may be unioned with and which no declaration takes apart)
+     * and covers no atom: the answer {@link AtomSpace} gives a type that names no case, said here
+     * because the type to ask it about is the one that is missing.
+     */
+    private static List<TypeSymbol> covers(CaseSelector selector, Symbols symbols) {
+        return switch (selector.refinement()) {
+            case Refinement.OptionPresent _ -> List.of(TypeSymbol.SOME);
+            case Refinement.OptionAbsent _ -> List.of(TypeSymbol.NONE);
+            case Refinement.Direct direct -> direct.bound() == null
+                    ? List.of()
+                    : AtomSpace.subjectAtoms(direct.bound(), symbols);
+        };
     }
 }

@@ -9,7 +9,7 @@ import souther.compiler.source.SourceId;
 
 import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.ast.Hir;
-import souther.compiler.check.BehaviorContract;
+import souther.compiler.core.Contract;
 import souther.compiler.check.Sig;
 import souther.compiler.check.BoundaryInput;
 import souther.compiler.check.BoundaryOutput;
@@ -84,7 +84,7 @@ public final class ExampleStatements {
     private ExampleStatements(souther.compiler.check.Prepared.Examples module, Symbols symbols, Map<String, Sig> sigs,
                               MemoryClassLoader loader, Map<String, Hir.FnDef> values,
                               Deadline deadline, EvaluationPolicy policy,
-                              Map<String, BehaviorContract> contracts) {
+                              Map<String, Contract> contracts) {
         this.ensures = new EnsuresChecks(module.name(), loader, contracts);
         this.module = module;
         this.symbols = symbols;
@@ -162,7 +162,7 @@ public final class ExampleStatements {
                                          Map<String, Sig> sigs, Map<String, byte[]> classes,
                                          ClassLoader parent, Map<String, Hir.FnDef> values,
                                          Deadline deadline, EvaluationPolicy policy,
-                                         Map<String, BehaviorContract> contracts) {
+                                         Map<String, Contract> contracts) {
         if (module.rows().isEmpty()) {
             return Readings.NONE;
         }
@@ -258,7 +258,7 @@ public final class ExampleStatements {
                                               ClassLoader parent, Map<String, Hir.FnDef> values,
                                               SourceId sourceId,
                                               Deadline deadline, EvaluationPolicy policy,
-                                              Map<String, BehaviorContract> contracts) {
+                                              Map<String, Contract> contracts) {
         List<souther.compiler.check.Prepared.FakeTable> building =
                 tablesBuiltIn(module, sigs, sourceId);
         if (building.isEmpty()) {

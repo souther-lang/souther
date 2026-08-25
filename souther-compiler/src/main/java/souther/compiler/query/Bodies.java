@@ -5,6 +5,8 @@ import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.BehaviorChecker;
 import souther.compiler.check.BehaviorContract;
+import souther.compiler.check.CheckedEnsures;
+import souther.compiler.core.EnsuresEnforcement;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.ClausesForDischarge;
 import souther.compiler.check.StatedContract;
@@ -31,8 +33,10 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.Unanswerable;
+import souther.compiler.core.Contract;
 import souther.compiler.core.Core;
 import souther.compiler.core.GrowingFold;
+import souther.compiler.core.ValueShape;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.types.BindingId;
@@ -384,14 +388,14 @@ public final class Bodies {
      * re-raises them: a reader asks for the contracts and what the reading found comes with them,
      * which is why the reading is not repeated at the reader that happens to be first.
      */
-    public record Contracts(String name) implements Key<Map<String, BehaviorContract>> {
+    public record Contracts(String name) implements Key<Map<String, CheckedEnsures>> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Map<String, BehaviorContract>> compute(Db db) {
+        public Answer<Map<String, CheckedEnsures>> compute(Db db) {
             Answer<Lower.Lowered> lowering = db.ask(new Lowering(name));
             Answer<Symbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<String, Sig>> signatures = db.ask(new Signatures(name));
@@ -400,7 +404,7 @@ public final class Bodies {
                     || !helpers.present()) {
                 return Answer.absent();
             }
-            Map<String, BehaviorContract> contracts = new LinkedHashMap<>();
+            Map<String, CheckedEnsures> contracts = new LinkedHashMap<>();
             List<Report> reports = new ArrayList<>();
             for (Hir.BehaviorDef behavior : lowering.value().settled().behaviors()) {
                 if (!(behavior instanceof Hir.SpecBehavior spec) || spec.ensures().isEmpty()) {
@@ -2027,6 +2031,13 @@ public final class Bodies {
                     || !calleeSigs.present() || !published.present()) {
                 return Answer.absent();
             }
+            // What must hold of a value of each declared data, elaborated once. The check reads it
+            // rather than asking a clause what it comes to a second time, and what it says about a
+            // clause it could not read is that the data is not in here — which is what the reading
+            // that decides a type has no value is gated on, and what says this module does not
+            // reach codegen.
+            Answer<Map<TypeSymbol.AtModule, ValueShape>> shapes =
+                    db.ask(new Shapes.ValueShapes(name));
             TypeChecker.Reported reported;
             try {
                 // The declarations that have a meaning to check, asked for one at a time. What has
@@ -2045,7 +2056,7 @@ public final class Bodies {
                         signatures.present() ? signatures.value() : null,
                         injected.value(), unwritten.value(), lowering.value().lowered(),
                         reqSigs.value(), calleeSigs.value(), sigs.value(), published.value(),
-                        settled);
+                        settled, shapes.present() ? shapes.value() : Map.of());
             } catch (CompileException e) {
                 return Answer.absent(e);
             }
@@ -2057,9 +2068,10 @@ public final class Bodies {
             // contracts and what reading them found. Asked here so that a module with a clause that
             // cannot be read is a module that does not reach codegen: the reports are that key's and
             // are not repeated, and what is read off them here is whether there was a refusal.
-            Answer<Map<String, BehaviorContract>> contracts = db.ask(new Contracts(name));
+            Answer<Map<String, CheckedEnsures>> contracts = db.ask(new Contracts(name));
             boolean sound = reported.errors().isEmpty() && reported.abandoned().isEmpty()
-                    && contracts.present() && !contracts.hasError();
+                    && contracts.present() && !contracts.hasError()
+                    && shapes.present() && !shapes.hasError();
             Map<String, Core> helperBodies = new LinkedHashMap<>();
             reported.emittedHelpers().forEach((h, core) -> helperBodies.put(h, GrowingFold.rewrite(core)));
             return Answer.of(new Of(helperBodies, sound, reported.stopped()), reports);
@@ -2279,6 +2291,55 @@ public final class Bodies {
                     new Elaborated(bodies, module.value().emittedHelpers(), claims, elements, read,
                             handed),
                     contradicted(db, name, claims));
+        }
+    }
+
+    /**
+     * Where each of this module's behaviors has its {@code ensures} checked.
+     *
+     * <p>A decision the language makes, answered once and read by everything that acts on it: the
+     * emitter, which puts the check where this says, and a checked program, which says what a
+     * behavior declares of its answer and where that is held to. Each reader making it from the
+     * contracts and the injected set would be two answers to one question, and the second of them
+     * would be made from a set the emitter goes on adding to — a behavior this module gives a body
+     * to but reaches as a dependency joins the injected ones, and a reader arriving afterwards
+     * finds a bodied behavior among them.
+     *
+     * <p>{@link souther.compiler.check.Requirements#injectedNames} is the set as the requirements pass answered it, which
+     * is the reading the decision is owed.
+     *
+     * <p>Every behavior this module declares is in here, which is what makes a miss an answer
+     * ({@link EnsuresEnforcement#in}) rather than a table that was not filled.
+     */
+    public record EnsuresChecks(String name) implements Key<Map<ValueName.Behavior,
+            EnsuresEnforcement>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<ValueName.Behavior, EnsuresEnforcement>> compute(Db db) {
+            Answer<Lower.Lowered> lowering = db.ask(new Lowering(name));
+            Answer<Set<ValueName.Behavior>> importedInjected = db.ask(new ImportedInjected(name));
+            Answer<Map<String, CheckedEnsures>> contracts = db.ask(new Contracts(name));
+            if (!lowering.present() || !importedInjected.present() || !contracts.present()) {
+                return Answer.absent();
+            }
+            Hir.Module lowered = lowering.value().lowered();
+            Set<ValueName.Behavior> injected =
+                    souther.compiler.check.Requirements.injectedNames(
+                            lowered, importedInjected.value());
+            // What runs, which is what a check is made from. Where each rule was written stays with
+            // the declaration; a reader given that as well would hold a value an unrelated edit
+            // moves.
+            Map<String, Contract> executable = CheckedEnsures.executable(contracts.value());
+            Map<ValueName.Behavior, EnsuresEnforcement> checks = new LinkedHashMap<>();
+            for (Hir.BehaviorDef behavior : lowered.behaviors()) {
+                ValueName.Behavior named = new ValueName.Behavior(lowered.name(), behavior.name());
+                checks.put(named, EnsuresEnforcement.of(named, executable, injected));
+            }
+            return Answer.of(Ordered.map(checks));
         }
     }
 }

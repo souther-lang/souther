@@ -2,16 +2,19 @@ package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.check.BehaviorContract.Clause;
-import souther.compiler.check.BehaviorContract.ContractParam;
-import souther.compiler.check.BehaviorContract.Guard;
 import souther.compiler.check.BehaviorContract.Rule;
 import souther.compiler.check.BehaviorContract.RuleId;
+import souther.compiler.core.Contract;
+import souther.compiler.core.Core;
+import souther.compiler.core.Contract.Guard;
+import souther.compiler.core.Contract.Param;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.DiagnosticRenderer;
 import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
+import souther.compiler.types.ResolvedCase;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
@@ -44,15 +47,19 @@ public final class BehaviorChecker {
      * {@code value} leaves every rule ambiguous about what it names, so reading the rules underneath
      * it would report one mistake as several.
      */
-    public static BehaviorContract contractOf(Hir.SpecBehavior behavior, String module, Sig sig,
+    public static CheckedEnsures contractOf(Hir.SpecBehavior behavior, String module, Sig sig,
                                        Symbols symbols, Map<String, Type> helpers) {
         Reading reading = read(behavior, module, sig, symbols);
         BehaviorContract contract = reading.contract();
         // The rules it did read, held to what a rule has to be. Two mistakes in one declaration are
         // two things for an author to fix, and this is the reading that reports them.
         List<Diagnostic> found = new ArrayList<>(reading.unread());
+        // What each rule comes to, kept. Typing a rule is elaborating it, and the reading that
+        // comes out is the one that runs — dropped here, it was made again by whatever had to run
+        // it (issue #1080).
+        List<Contract.Rule> checked = new ArrayList<>();
         for (Rule rule : contract.rules()) {
-            collect(found, () -> checkRule(behavior, contract, rule, helpers, symbols));
+            collect(found, () -> checked.add(checkRule(behavior, contract, rule, helpers, symbols)));
         }
         if (found.size() == 1) {
             throw CompileException.of(found.get(0));
@@ -60,7 +67,8 @@ public final class BehaviorChecker {
         if (!found.isEmpty()) {
             throw CompileException.ofAll(found, DiagnosticRenderer.legacyBody(found.get(0)));
         }
-        return contract;
+        return new CheckedEnsures(contract, new Contract(contract.behavior(), contract.params(),
+                contract.output(), checked));
     }
 
     /**
@@ -133,10 +141,10 @@ public final class BehaviorChecker {
         }
 
         BindingOwner owner = BehaviorContract.ownerOf(name);
-        List<ContractParam> params = new ArrayList<>();
+        List<Param> params = new ArrayList<>();
         for (int i = 0; i < behavior.params().size(); i++) {
-            params.add(new ContractParam(new BindingId(owner, i), behavior.params().get(i).name(),
-                    sig.inputTypes().get(i), i));
+            params.add(new Param(new BindingId(owner, i), behavior.params().get(i).name(),
+                    sig.inputTypes().get(i)));
         }
 
         // Which cases the answer can be, and what `value` is in each, come from the same place a
@@ -229,17 +237,30 @@ public final class BehaviorChecker {
         return rules;
     }
 
-    /** One rule: what its expression comes to, and that it states a relation. */
-    private static void checkRule(Hir.SpecBehavior behavior, BehaviorContract contract, Rule rule,
-                                  Map<String, Type> helpers, Symbols symbols) {
-        Type actual = Elaborator.typeOf(rule.statement(),
-                scopeOf(contract, rule).reaching(helpers), CheckContext.of(symbols));
-        if (actual != Type.BOOL) {
+    /**
+     * One rule: what its expression comes to, and that it states a relation.
+     *
+     * <p>Elaborated over the tree that runs, which is the written rule desugared the way a body is.
+     * The emitter used to do that again on its way to the same Core; what comes back from here is
+     * what runs, so there is one reading of the rule and this is where it is made.
+     *
+     * <p>Whether the rule reads the answer is asked of what was written and carried on what runs.
+     * It is what the declaration says of the rule (spec §example-ensures), so it does not move when
+     * the elaboration gets better at simplifying a term away.
+     */
+    private static Contract.Rule checkRule(Hir.SpecBehavior behavior, BehaviorContract contract,
+                                           Rule rule, Map<String, Type> helpers, Symbols symbols) {
+        Core condition = Elaborator.elaborate(Lower.desugarExpr(rule.statement()),
+                scopeOf(contract, rule).reaching(helpers),
+                CheckContext.executableEnsures(symbols));
+        if (condition.type() != Type.BOOL) {
             throw CompileException.of(Diagnostic.at(rule.statement().pos())
                     .say(new BehaviorMessage.AnEnsuresExpressionIsNotBool(
-                            behavior.name(), Type.show(actual))).build());
+                            behavior.name(), Type.show(condition.type()))).build());
         }
         requireBothSides(behavior, contract, rule);
+        return new Contract.Rule(rule.guard(), rule.value(), condition, rule.readsAnswer(),
+                contract.clauseOf(rule).name());
     }
 
     /**
@@ -252,7 +273,7 @@ public final class BehaviorChecker {
      */
     static Scope scopeOf(BehaviorContract contract, Rule rule) {
         Map<BindingId, Scope.Binding> bindings = new LinkedHashMap<>();
-        for (ContractParam param : contract.params()) {
+        for (Param param : contract.params()) {
             bindings.put(param.binding(), new Scope.Binding(param.name(), param.type()));
         }
         bindings.put(rule.value(), new Scope.Binding("value", rule.valueType(contract.output())));

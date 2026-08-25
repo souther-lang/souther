@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.check.CheckedEnsures;
 import souther.compiler.observe.WrittenStatements;
 import souther.compiler.diag.Primary;
 
@@ -461,7 +462,7 @@ class CompileFakeExampleDisagreementTest {
                 c.db().ask(new souther.compiler.query.Bodies.ModuleDefinitions(name)).value(),
                 Deadline.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis()),
                 EvaluationPolicy.DEFAULT,
-                c.db().ask(new souther.compiler.query.Bodies.Contracts(name)).value());
+                CheckedEnsures.executable(c.db().ask(new souther.compiler.query.Bodies.Contracts(name)).value()));
     }
 
     /** The warnings of a single-source compile that holds. */

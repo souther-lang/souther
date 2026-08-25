@@ -1,5 +1,6 @@
 package souther.compiler.program;
 
+import souther.compiler.core.ValueShape;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
@@ -29,11 +30,10 @@ import java.util.NoSuchElementException;
  * them what {@code Core.UnitValue} can carry, names something no module declared; it is not a
  * declaration this snapshot is missing.
  *
- * <p>{@link Product} and {@link Field} are classes and answer no {@code equals}. What a product is
- * known to be will grow — its invariant clauses, and the binding each field is read through — and a
- * record would fix both the constructor and what two of them are compared by before there is a
- * reader for either. {@link Sum} and {@link Unit} hold everything they will hold, so they are
- * records.
+ * <p>{@link Product} is a class and answers no {@code equals}. What a value of a product is made
+ * of is {@link ValueShape}, which the check answers and this hands over whole — the fields, the
+ * binding each is read through, and what must hold of a value built from them. {@link Sum} and
+ * {@link Unit} hold everything they will hold, so they are records.
  */
 public sealed interface CheckedData {
 
@@ -50,20 +50,19 @@ public sealed interface CheckedData {
      */
     final class Product implements CheckedData {
 
-        private final TypeSymbol.AtModule name;
-        private final List<Field> fields;
+        private final ValueShape shape;
 
-        Product(TypeSymbol.AtModule name, List<Field> fields) {
-            if (name == null) {
-                throw new IllegalArgumentException("a declared data is named");
+        Product(ValueShape shape) {
+            if (shape == null) {
+                throw new IllegalArgumentException(
+                        "a product is what a value of it is made of and what must hold of one");
             }
-            this.name = name;
-            this.fields = List.copyOf(fields);
+            this.shape = shape;
         }
 
         @Override
         public TypeSymbol.AtModule name() {
-            return name;
+            return shape.name();
         }
 
         /**
@@ -76,35 +75,44 @@ public sealed interface CheckedData {
          * {@link #positionOf} — rather than which value happens to stand at which index. The two
          * orders do agree, and that agreement is a property of the checked program worth holding
          * to; a reader that placed by it would be reading a position as an identity.
+         *
+         * <p>Each field carries the binding a clause reads it through, which is what makes
+         * {@link #invariants()} runnable: an output putting a value under that binding and emitting
+         * the clause is running what the checker decided, and one working the bindings out from the
+         * declarations would be deciding it a second time.
          */
-        public List<Field> fields() {
-            return fields;
+        public List<ValueShape.Field> fields() {
+            return shape.fields();
+        }
+
+        /**
+         * What must hold of a value of this, in the order a failure is decided in.
+         *
+         * <p>The clauses that apply and not the ones this declaration wrote: an include carries the
+         * clauses of what it takes in, and a value of this is held to those as much as to its own.
+         * Each is the condition as the checker elaborated it, over the bindings {@link #fields()}
+         * names — the same one the JVM's {@code __construct} refuses a value by.
+         *
+         * <p>Empty where nothing is stated, which is a data any value of its fields is one of.
+         */
+        public List<ValueShape.Invariant> invariants() {
+            return shape.invariants();
         }
 
         /**
          * Where the field called {@code field} lies among {@link #fields()}.
-         *
-         * <p>The one derivation of a position from a name, so that a reader emitting a load and a
-         * reader emitting a store cannot come to place the same field differently. Derived rather
-         * than held: a map beside the list would be the same fact twice, and the two would agree
-         * until one of them was rebuilt.
          *
          * @throws NoSuchElementException where this data has no such field — a name that is not a
          *     field of it is a mistake at the reader, and answering with a position that is not one
          *     would put the mistake in whatever it emitted
          */
         public int positionOf(String field) {
-            for (int i = 0; i < fields.size(); i++) {
-                if (fields.get(i).name().equals(field)) {
-                    return i;
-                }
-            }
-            throw new NoSuchElementException("`" + name + "` has no field `" + field + "`");
+            return shape.positionOf(field);
         }
 
         @Override
         public String toString() {
-            return name.toString();
+            return shape.name().toString();
         }
     }
 
@@ -140,37 +148,6 @@ public sealed interface CheckedData {
             if (name == null) {
                 throw new IllegalArgumentException("a declared data is named");
             }
-        }
-    }
-
-    /** One field: what it is called, and what is in it. */
-    final class Field {
-
-        private final String name;
-        private final Type type;
-
-        Field(String name, Type type) {
-            if (name == null || type == null) {
-                throw new IllegalArgumentException("a field is a name and what is in it: "
-                        + name + " " + type);
-            }
-            this.name = name;
-            this.type = type;
-        }
-
-        /** What the field is called — what a construction fills and a field access names. */
-        public String name() {
-            return name;
-        }
-
-        /** What is in it. */
-        public Type type() {
-            return type;
-        }
-
-        @Override
-        public String toString() {
-            return name + ": " + Type.show(type);
         }
     }
 }

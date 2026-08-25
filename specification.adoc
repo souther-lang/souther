@@ -4655,12 +4655,12 @@ Source -> Lexer -> Parser -> AST
   -> ClassFile Backend -> .class (direct bytecode generation)
 ----
 
-Behavior and `+let+` bodies are lowered — helper inlining and surface desugaring happen once here — and then typed. The type checker produces the Core IR as it types a body: every Core node carries the type decided for it, and the backend emits from that rather than inferring types a second time. Data definitions and derived decoders / encoders stay at the AST level, and their expressions are typed the same way where the backend emits them; there is no separate Domain IR / Decoder IR / Encoder IR. Type checking verifies construction authority, requirement sets, exhaustiveness, and invariants together: the surface checks read the AST, and the body check reads the lowered form. The backend generates `+.class+` with the Class-File API (`+java.lang.classfile+`) and does not go through javac.
+Behavior and `+let+` bodies are lowered — helper inlining and surface desugaring happen once here — and then typed. The type checker produces the Core IR as it types a body: every Core node carries the type decided for it, and the backend emits from that rather than inferring types a second time. A `+data+`'s `+invariant+` and a behavior's `+ensures+` are produced the same way and by the same checker, so what a construction is refused by and what an answer is held to are decided once and read by every backend. Data definitions and derived decoders / encoders otherwise stay at the AST level, and a decoder's and an encoder's expressions are typed where the backend emits them; there is no separate Domain IR / Decoder IR / Encoder IR. Type checking verifies construction authority, requirement sets, exhaustiveness, and invariants together: the surface checks read the AST, and the body check reads the lowered form. The backend generates `+.class+` with the Class-File API (`+java.lang.classfile+`) and does not go through javac.
 
 [#ast-tracking]
 == Information tracked by the AST and backend
 
-Apart from the typed Core IR the type checker produces for behavior and `+let+` bodies (<<compiler-pipeline>>), the compiler keeps no separate intermediate representation; the following is held as the AST and the type-check results.
+Apart from the typed Core IR the type checker produces for behavior and `+let+` bodies, for a `+data+`'s `+invariant+` and for a behavior's `+ensures+` (<<compiler-pipeline>>), the compiler keeps no separate intermediate representation; the following is held as the AST and the type-check results.
 
 [#ast-nodes]
 === AST definition nodes

@@ -1,5 +1,6 @@
 package souther.compiler.examples;
 
+import souther.compiler.check.CheckedEnsures;
 import souther.compiler.observe.Observations;
 import souther.compiler.observe.ArmObservation;
 import org.junit.jupiter.api.Test;
@@ -357,7 +358,7 @@ class ARecordedRowIsRunAgainstABoundImplementationTest {
                 // supplied for at all is `SoutherExamples.bind`'s rule; this is the seam below it.
                 Answering.bound(bound, java.util.Set.of("findTodo"),
                         c.db().ask(new Bodies.Signatures(name)).value()),
-                c.db().ask(new Bodies.Contracts(name)).value());
+                CheckedEnsures.executable(c.db().ask(new Bodies.Contracts(name)).value()));
     }
 
     /** What the module's rows are written for, as this compile emitted it. */

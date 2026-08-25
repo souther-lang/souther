@@ -14,10 +14,11 @@ import souther.compiler.ast.WrittenName;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.ReqSig;
 import souther.compiler.check.Requirements;
-import souther.compiler.check.BehaviorContract;
+import souther.compiler.core.Contract;
+import souther.compiler.core.ValueShape;
 import souther.compiler.check.Sig;
 import souther.compiler.check.SpecImplementation;
-import souther.compiler.check.EnsuresEnforcement;
+import souther.compiler.core.EnsuresEnforcement;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.check.TypeOps;
@@ -134,7 +135,10 @@ public final class Backend {
      * constructor binds it to; {@code checked} carries the type checker's elaborated bodies, which is what
      * the emitter reads instead of inferring types again (issue #81); {@code dischargeInvariants} carries
      * this module's invariant clauses in the representation the language's own operations survive in, which
-     * is what a derived decoder's constraint mapping reads (spec §decoder-error). */
+     * is what a derived decoder's constraint mapping reads (spec §decoder-error); {@code shapes} says
+     * what a value of each declared data is made of and what must hold of one, which is what a
+     * construction is refused by and is the checker's answer rather than this emitter's
+     * (issue #1080). */
     public static Emissions generate(Hir.Module module, Symbols symbols,
                                                Map<String, String> typePackage,
                                                Map<ValueName.Behavior, Sig> sigs,
@@ -145,11 +149,12 @@ public final class Backend {
                                                Bodies.Elaborated checked,
                                                Map<ValueName.Behavior, Composition> compositions,
                                                Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
+                                               Map<TypeSymbol.AtModule, ValueShape> shapes,
                                                Map<ValueName.Behavior, EnsuresEnforcement> checks,
                                                Map<String, Type> standingCalls) {
         return generate(module, symbols, typePackage, sigs, importedSigs, importedInjected, calleeSigs,
-                requirements, checked, compositions, dischargeInvariants, checks, standingCalls,
-                Instrumentation.NONE);
+                requirements, checked, compositions, dischargeInvariants, shapes, checks,
+                standingCalls, Instrumentation.NONE);
     }
 
     /**
@@ -175,13 +180,14 @@ public final class Backend {
                                                Bodies.Elaborated checked,
                                                Map<ValueName.Behavior, Composition> compositions,
                                                Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
+                                               Map<TypeSymbol.AtModule, ValueShape> shapes,
                                                Map<ValueName.Behavior, EnsuresEnforcement> checks,
                                                Map<String, Type> standingCalls,
                                                Instrumentation instrumentation) {
         try {
             return generating(module, symbols, typePackage, sigs, importedSigs, importedInjected,
-                    calleeSigs, requirements, checked, compositions, dischargeInvariants, checks,
-                    standingCalls, instrumentation);
+                    calleeSigs, requirements, checked, compositions, dischargeInvariants, shapes,
+                    checks, standingCalls, instrumentation);
         } catch (IllegalArgumentException e) {
             // Something the writer would not hold, from a member no definition here claimed — a
             // synthesised class, a shared one. It belongs to the module, which is as near as anything
@@ -200,6 +206,7 @@ public final class Backend {
                                                   Bodies.Elaborated checked,
                                                   Map<ValueName.Behavior, Composition> compositions,
                                                   Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
+                                                  Map<TypeSymbol.AtModule, ValueShape> shapes,
                                                   Map<ValueName.Behavior, EnsuresEnforcement> checks,
                                                   Map<String, Type> standingCalls,
                                                   Instrumentation instrumentation) {
@@ -232,6 +239,7 @@ public final class Backend {
         CodegenContext ctx = new CodegenContext(module.name(), symbols, caseToSums, typePackage,
                 module.exposing().isEmpty(), exposed, recHelpers, standingCalls);
         ctx.setDischargeInvariants(dischargeInvariants);
+        ctx.setValueShapes(shapes);
         ctx.setEnsuresChecks(checks);
         ctx.setCoveragePlan(instrumentation.coverage());
         ctx.setCounting(instrumentation.counting());
@@ -433,7 +441,7 @@ public final class Backend {
                 // caller's bytecode and calls this one, so the rule has one home and a caller has
                 // nothing of it to restate.
                 ValueName.Behavior named = new ValueName.Behavior(module.name(), bd.name());
-                BehaviorContract contract = b.checkOf(named).contract();
+                Contract contract = b.checkOf(named).contract();
                 if (contract != null) {
                     out.put(new GeneratedClass.Ensures(
                                     new GeneratedClass.BehaviorInterface(module.name(), bd.name())),
@@ -1278,7 +1286,7 @@ public final class Backend {
             // implements its public interface (which itself extends Behavior for a single-input one)
             cb.withInterfaceSymbols(cdBehavior(spec.name()));
             emitInjection(cb, cdB, injected);
-            if (where instanceof EnsuresEnforcement.AtTheCallee(BehaviorContract contract)) {
+            if (where instanceof EnsuresEnforcement.AtTheCallee(Contract contract)) {
                 emitCheckingApply(cb, cdB, spec, contract, mtdApply, n);
             }
             cb.withMethodBody(bodyMethod, mtdApply, bodyFlags, code -> {
@@ -1334,7 +1342,7 @@ public final class Backend {
      * this wrapper stands between a behavior and its own recursion.
      */
     private void emitCheckingApply(ClassBuilder cb, ClassDesc cdB, Hir.SpecBehavior spec,
-                                   BehaviorContract contract, MethodTypeDesc mtdApply, int n) {
+                                   Contract contract, MethodTypeDesc mtdApply, int n) {
         ClassDesc cdEnsures = ctx.cd(new GeneratedClass.Ensures(
                 new GeneratedClass.BehaviorInterface(ctx.pkg, spec.name())));
         List<TypeSymbol> bridged = ctx.bridgedMembers(successType(spec.ret()));

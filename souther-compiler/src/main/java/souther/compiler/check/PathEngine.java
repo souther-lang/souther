@@ -2,10 +2,12 @@ package souther.compiler.check;
 
 import souther.compiler.semantics.NumericResult;
 import souther.compiler.ast.Hir;
-import souther.compiler.check.BehaviorContract.Guard;
+import souther.compiler.core.Contract;
+import souther.compiler.core.Contract.Guard;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.CaseSelector;
+import souther.compiler.types.ResolvedCase;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
@@ -353,7 +355,7 @@ final class PathEngine {
      *
      * <p>{@code Core} carries the selector and not what it covers, so the arm's side is resolved
      * back here. That is this pass crossing into the one that resolves a case, and not a second
-     * reading of what a case means: {@link ResolvedCase#resolve} is where that is worked out, and
+     * reading of what a case means: {@link CaseSpace#resolve} is where that is worked out, and
      * the selector is what it is asked about — a carrier of an optional is not the case a name of
      * the same spelling would be.
      *
@@ -373,7 +375,7 @@ final class PathEngine {
         }
         Set<TypeSymbol> ruleCovers = new LinkedHashSet<>(selected.atoms());
         for (CaseSelector armCase : pattern.selectors()) {
-            if (!ruleCovers.containsAll(ResolvedCase.resolve(armCase, symbols).atoms())) {
+            if (!ruleCovers.containsAll(CaseSpace.resolve(armCase, symbols).atoms())) {
                 return false;
             }
         }
@@ -439,8 +441,11 @@ final class PathEngine {
             return null;
         }
         Map<BindingId, Core> given = new HashMap<>();
-        for (BehaviorContract.ContractParam param : answered.stated().params()) {
-            given.put(param.binding(), args.get(param.index()));
+        List<Contract.Param> params = answered.stated().params();
+        for (int i = 0; i < params.size(); i++) {
+            // Which parameter this is, is where it stands: a signature takes them in that order and
+            // a call hands its arguments over in it.
+            given.put(params.get(i).binding(), args.get(i));
         }
         given.put(rule.value(), answer);
         return given;

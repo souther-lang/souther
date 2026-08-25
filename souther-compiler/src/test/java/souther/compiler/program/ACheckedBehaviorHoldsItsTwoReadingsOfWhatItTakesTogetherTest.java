@@ -68,7 +68,8 @@ class ACheckedBehaviorHoldsItsTwoReadingsOfWhatItTakesTogetherTest {
 
     private static CheckedBehavior behavior(List<Type> takes, CheckedImplementation implementation) {
         return new CheckedBehavior(new ValueName.Behavior("demo", "combine"),
-                new CheckedSignature(takes, INT), implementation);
+                new CheckedSignature(takes, INT), implementation,
+                souther.compiler.core.EnsuresEnforcement.NoContract.INSTANCE);
     }
 
     private static CheckedImplementation.Body body(Core.Binder... parameters) {

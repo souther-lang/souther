@@ -16,25 +16,27 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * The Core IR (ADR-0021): the lowered form of a behavior body the backend emits from.
+ * The Core IR (ADR-0021): a checked executable expression, which is what every backend emits from.
  *
- * <p>Core is the surface expression AST after the {@link souther.compiler.check.Lower}
- * stage has inlined helpers and desugared surface-only forms. It differs from the AST in what it
- * makes explicit: a construct the backend used to re-detect and shape during emission becomes its
- * own node here, so the backend only emits.
+ * <p>Three things the language states reach a backend as this — a behavior's or a {@code let}'s
+ * body, a data's {@code invariant} condition, and the rule an {@code ensures} states — and each is
+ * the written expression with the helpers it names inlined and the surface-only forms desugared. It
+ * differs from the AST in what it makes explicit: a construct the backend used to re-detect and
+ * shape during emission becomes its own node here, so the backend only emits.
  *
  * <p>Every node carries {@link #type()}: the type the checker decided for it (issue #81). The
- * checker is the only producer of Core — it builds the tree as it types a body
- * ({@code Elaborator.elaborate}) — so the backend reads those decisions instead of inferring the
- * same types a second time.
+ * checker is the only producer of Core — it builds the tree as it types what was written
+ * ({@code Elaborator.elaborate}) — so the backend reads those decisions instead of deciding them a
+ * second time. A condition was the exception until #1080, and being the exception meant the last
+ * step of deciding what a clause meant sat inside a backend.
  *
  * <p>A name in a body is one of two nodes, not one: a read of something the body binds, and a unit
  * data written as its own value. They were one, and the emitter told them apart by looking the
  * spelling up in its slots and falling back when it found nothing — which is an answer about a
  * name, decided by its text.
  *
- * <p>A surface-only node (a list comprehension) never appears — the Lower stage has already
- * rewritten it.
+ * <p>A surface-only node (a list comprehension) never appears — it is desugared before the
+ * elaboration that produces this, whether what is being read is a body or a clause.
  */
 public sealed interface Core {
 

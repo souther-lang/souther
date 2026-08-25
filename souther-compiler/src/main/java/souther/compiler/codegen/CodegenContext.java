@@ -3,7 +3,8 @@ package souther.compiler.codegen;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.check.AtomSpace;
 import souther.compiler.check.ReqSig;
-import souther.compiler.check.EnsuresEnforcement;
+import souther.compiler.core.EnsuresEnforcement;
+import souther.compiler.core.ValueShape;
 import souther.compiler.check.Symbols;
 import souther.compiler.ast.Hir;
 import souther.compiler.types.Type;
@@ -122,6 +123,23 @@ final class CodegenContext {
 
     Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants() {
         return dischargeInvariants;
+    }
+
+    private Map<TypeSymbol.AtModule, ValueShape> shapes = Map.of();
+
+    void setValueShapes(Map<TypeSymbol.AtModule, ValueShape> shapes) {
+        this.shapes = shapes;
+    }
+
+    /**
+     * What a value of {@code named} is made of and what must hold of one, as the check answered it.
+     *
+     * <p>The fields and the clauses together, because binding a field and running a clause are two
+     * halves of one environment. Null for a data no module here declares — nothing asks, since a
+     * value class is emitted where its type is declared.
+     */
+    ValueShape shapeOf(TypeSymbol.AtModule named) {
+        return shapes.get(named);
     }
 
     /**

@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.Compiler;
 import souther.compiler.check.BehaviorContract;
+import souther.compiler.check.CheckedEnsures;
 import souther.compiler.diag.CompileException;
 import souther.compiler.meta.ModulePath;
 
@@ -52,18 +53,18 @@ class AContractIsOwnedWithWhatReadingItFoundTest {
         return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
     }
 
-    private static Answer<Map<String, BehaviorContract>> contracts(String source) {
+    private static Answer<Map<String, CheckedEnsures>> contracts(String source) {
         return compiled(source).db().ask(new Bodies.Contracts("m.a"));
     }
 
     @Test
     void theContractIsTheAnswerAndNotASideEffect() {
-        Answer<Map<String, BehaviorContract>> answered = contracts(HOLDS);
+        Answer<Map<String, CheckedEnsures>> answered = contracts(HOLDS);
 
         assertTrue(answered.present(), "a module whose clauses read has contracts to hand over");
         assertFalse(answered.hasError(), "and nothing to report about them");
 
-        BehaviorContract contract = answered.value().get("findIt");
+        BehaviorContract contract = answered.value().get("findIt").read();
         assertEquals(2, contract.rules().size(),
                 "one rule per case an arm names — the specialization is done once, here");
         assertEquals(1, contract.params().size(), "and the parameters a rule names come with it");
@@ -73,7 +74,7 @@ class AContractIsOwnedWithWhatReadingItFoundTest {
      *  check to emit", and an empty contract would be a second way to say it. */
     @Test
     void aBehaviorThatDeclaresNothingIsNotThere() {
-        Answer<Map<String, BehaviorContract>> answered = contracts("""
+        Answer<Map<String, CheckedEnsures>> answered = contracts("""
                 module m.a exposing ( Id, echo )
 
                 data Id = Int
@@ -95,7 +96,7 @@ class AContractIsOwnedWithWhatReadingItFoundTest {
      */
     @Test
     void aClauseThatCannotBeReadIsReportedByTheKeyThatReadsIt() {
-        Answer<Map<String, BehaviorContract>> answered = contracts(HOLDS
+        Answer<Map<String, CheckedEnsures>> answered = contracts(HOLDS
                 .replace("Found   -> value.id == id", "Found   -> value.id == value.id"));
 
         assertTrue(answered.hasError(),

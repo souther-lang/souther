@@ -1,6 +1,6 @@
 package souther.compiler.examples;
 
-import souther.compiler.check.BehaviorContract;
+import souther.compiler.core.Contract;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.GeneratedClasses;
 import souther.compiler.jvm.SoutherJvmAbi;
@@ -46,7 +46,7 @@ final class EnsuresChecks {
 
     /** The behaviors of the module being evaluated that state something, under the name a row and a
      *  fake write. */
-    private final Map<String, BehaviorContract> contracts;
+    private final Map<String, Contract> contracts;
 
     /** The module whose contracts these are, and whose classes carry their checks. */
     private final String module;
@@ -69,7 +69,7 @@ final class EnsuresChecks {
      *  unique. */
     private final Map<String, Method> foundForCase = new ConcurrentHashMap<>();
 
-    EnsuresChecks(String module, ClassLoader loader, Map<String, BehaviorContract> contracts) {
+    EnsuresChecks(String module, ClassLoader loader, Map<String, Contract> contracts) {
         this.module = module;
         this.loader = loader;
         this.contracts = contracts;
@@ -100,7 +100,7 @@ final class EnsuresChecks {
      *                               broken emission as an author's mistake
      */
     String notHeld(ValueName.Behavior behavior, Object[] args, Object answer) {
-        BehaviorContract contract = contractOf(behavior, args);
+        Contract contract = contractOf(behavior, args);
         if (contract == null) {
             return null;
         }
@@ -121,7 +121,7 @@ final class EnsuresChecks {
      * @throws IllegalStateException on the same terms as {@link #notHeld}
      */
     String notHeldForCase(ValueName.Behavior behavior, Object[] args, TypeSymbol answered) {
-        BehaviorContract contract = contractOf(behavior, args);
+        Contract contract = contractOf(behavior, args);
         if (contract == null) {
             return null;
         }
@@ -139,14 +139,14 @@ final class EnsuresChecks {
      * Being asked about another module's behavior is refused rather than answered with "declares
      * nothing" — see the note on this class.
      */
-    private BehaviorContract contractOf(ValueName.Behavior behavior, Object[] args) {
+    private Contract contractOf(ValueName.Behavior behavior, Object[] args) {
         if (!module.equals(behavior.module())) {
             throw new IllegalStateException("these are `" + module + "`'s contracts and `"
                     + behavior.module() + "." + behavior.name() + "` is not one of them; what a "
                     + "module other than the one being evaluated declares is checked with that "
                     + "module's contracts and its own class");
         }
-        BehaviorContract contract = contracts.get(behavior.name());
+        Contract contract = contracts.get(behavior.name());
         if (contract == null) {
             return null;
         }
@@ -204,13 +204,13 @@ final class EnsuresChecks {
     }
 
     /** {@code <module>.<behavior>$Ensures.check}, opened. */
-    private Method check(String behavior, BehaviorContract contract)
+    private Method check(String behavior, Contract contract)
             throws ReflectiveOperationException {
         return opened(found, behavior, "check", Object.class, contract);
     }
 
     /** {@code …$Ensures.checkCase}, opened. */
-    private Method checkForCase(String behavior, BehaviorContract contract)
+    private Method checkForCase(String behavior, Contract contract)
             throws ReflectiveOperationException {
         return opened(foundForCase, behavior, "checkCase", String.class, contract);
     }
@@ -224,7 +224,7 @@ final class EnsuresChecks {
      * cannot come to be reached in two ways.
      */
     private Method opened(Map<String, Method> cache, String behavior, String name, Class<?> last,
-                          BehaviorContract contract) throws ReflectiveOperationException {
+                          Contract contract) throws ReflectiveOperationException {
         Method known = cache.get(behavior);
         if (known != null) {
             return known;

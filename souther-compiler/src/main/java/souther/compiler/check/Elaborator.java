@@ -49,7 +49,9 @@ public final class Elaborator {
     }
 
     /** The type of {@code e}, discarding the Core the elaboration produced — for the checks that ask
-     * only whether an expression types (a decoder, an invariant, a helper's standalone check). */
+     * only whether an expression types (a decoder, a helper's standalone check). What a clause of a
+     * declaration comes to is not one of them: it is elaborated once and kept, because something
+     * runs it (issue #1080). */
     public static Type typeOf(Hir.Expr e, Scope env, CheckContext ctx, Type expected) {
         return elaborate(e, env, ctx, expected).type();
     }

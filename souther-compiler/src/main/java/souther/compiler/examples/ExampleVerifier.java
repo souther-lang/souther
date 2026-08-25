@@ -4,7 +4,7 @@ import souther.compiler.observe.Observations;
 import souther.compiler.generated.EvaluationArtifact;
 import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.check.AtomSpace;
-import souther.compiler.check.BehaviorContract;
+import souther.compiler.core.Contract;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.Symbols;
 import souther.compiler.ast.Hir;
@@ -146,7 +146,7 @@ public final class ExampleVerifier {
                                      ClassLoader parent, Map<String, Hir.FnDef> values,
                                      Deadline deadline, EvaluationPolicy policy,
                                      Answering answering,
-                                     Map<String, BehaviorContract> contracts) {
+                                     Map<String, Contract> contracts) {
         if (!artifact.implementations().module().equals(module.name())) {
             throw new IllegalArgumentException("the rows are `" + module.name()
                     + "`'s and the artifact is `" + artifact.implementations().module()
@@ -204,7 +204,7 @@ public final class ExampleVerifier {
                                       ClassLoader parent, Map<String, Hir.FnDef> values,
                                       Deadline deadline, EvaluationPolicy policy,
                                       Answering answering,
-                                      Map<String, BehaviorContract> contracts) {
+                                      Map<String, Contract> contracts) {
         MemoryClassLoader loader = new MemoryClassLoader(artifact.classes(), parent);
         return new ExampleVerifier(module, symbols, sigs, requirements, loader, values,
                 deadline, policy, answering.over(artifact.implementations(), loader), declared,
@@ -711,7 +711,7 @@ public final class ExampleVerifier {
                             MemoryClassLoader loader, Map<String, Hir.FnDef> values,
                             Deadline deadline, EvaluationPolicy policy, Answerer answerer,
                             Supplier<PublishedClasses> declared,
-                            Map<String, BehaviorContract> contracts) {
+                            Map<String, Contract> contracts) {
         this.ensures = new EnsuresChecks(module.name(), loader, contracts);
         this.module = module;
         this.symbols = symbols;

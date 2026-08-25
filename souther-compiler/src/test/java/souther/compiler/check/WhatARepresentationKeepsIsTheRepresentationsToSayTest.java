@@ -67,14 +67,19 @@ class WhatARepresentationKeepsIsTheRepresentationsToSayTest {
 
     @Test
     void aTreeThatBelongsToAnotherRepresentationDoesNotInheritThePermission() {
-        // a body reaching a declaration's invariant reaches another tree, built by another question.
-        // What it keeps is its own to say at its own entry; being reached from here is not a
+        // A body reaching a declaration's invariant reaches another tree, built by another question.
+        // What it keeps is its own to say at its own entry, and being reached from here is not a
         // representation having said anything.
-        CheckContext keeping = CheckContext.of(Symbols.none(DefaultStdlib.get())).preserving(keeping(MAP, SIGNATURE));
-
-        assertEquals(Preserved.NONE, keeping.inAnotherRepresentation().preserved());
-        assertEquals(Preserved.NONE, keeping.inAnotherRepresentation().forData(null).preserved(),
-                "and it stays left behind as that tree is walked");
+        //
+        // Held by there being nowhere to inherit it from: the contexts a clause is elaborated in are
+        // built rather than derived from whatever context reached them (issue #1080). This used to
+        // be a context you could carry across the boundary and a method that emptied it on the way.
+        assertEquals(Preserved.NONE,
+                CheckContext.executableInvariant(Symbols.none(DefaultStdlib.get()), null)
+                        .preserved());
+        assertEquals(Preserved.NONE,
+                CheckContext.executableEnsures(Symbols.none(DefaultStdlib.get())).preserved(),
+                "and a rule is read at an entry of its own, as a clause is");
     }
 
     @Test

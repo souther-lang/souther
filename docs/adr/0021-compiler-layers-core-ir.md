@@ -5,7 +5,8 @@ Status: Accepted; implemented (supersedes the MVP "no separate IR" stance record
 Implemented: the **Lower** stage (`check/Lower.java`) inlines each behavior body once —
 both the type checker's body check and the backend consume it, so the backend no longer
 inlines — and desugars list comprehensions. A **Core IR** (`core/Core.java`) carries the
-lowered behavior-body language, and the backend emits every expression from Core.
+checked executable expression language — behavior and `let` bodies, invariant conditions
+and `ensures` rules — and the backend emits every expression from Core.
 
 Core is **typed**: every node carries the type the checker decided for it. The type checker
 produces Core as it types a body (`TypeChecker.elaborate`), and it is the only producer —
@@ -26,8 +27,17 @@ the codec emitters, which are still AST-level, elaborate their expressions throu
 checker at the environment their slots hold, rather than translating them untyped.
 
 The normative specification (`[#compiler-pipeline]`, `[#ast-tracking]`) is revised with this
-change: Core is a typed lowering of behavior bodies, so "no separate IR" no longer describes
-the pipeline.
+change: Core is a typed lowering of the expressions the language states, so "no separate IR" no
+longer describes the pipeline.
+
+Issue #1080 is what made the scope above what it is. A data's `invariant` and a behavior's
+`ensures` were elaborated twice — once by the check, which asked for the type and dropped what it
+made, and once by the emitter that ran it — so the last step of deciding what a condition meant sat
+inside a backend. The rule this states is therefore about the entry and not about the node: what
+may turn a written expression into Core is the checker, once per thing written, and a Core-to-Core
+pass derives from what that produced rather than reading the tree again. The exception has an owner
+rather than a method in reach of the package (`CodecGen`, held by
+`OnlyTheCodecEmitterTurnsAnAstIntoCoreTest`).
 
 ## Context
 
@@ -54,9 +64,9 @@ The "no IR" stance has three costs that now bite:
 
 ## Decision
 
-The compiler is defined as an explicit layered pipeline with a **Core IR** for
-behavior bodies. (As implemented the Core IR is typed and the type checker produces it —
-see the implementation note above.)
+The compiler is defined as an explicit layered pipeline with a **Core IR** for the
+expressions the language states and something runs. (As implemented the Core IR is typed
+and the type checker produces it — see the implementation note above.)
 
 1. **Parse** — source to surface AST. Only concrete-syntax desugars that need no types.
 2. **Resolve** — import/`exposing` name resolution (today `Exposing`).
@@ -78,9 +88,12 @@ see the implementation note above.)
    already does well.
 7. **Codegen** — Core to ClassFile bytecode. The backend only emits; it never rewrites.
 
-**Scope.** Core covers the behavior/`let` body language — the expressions that become
-bytecode. Data definitions and derived codecs stay at AST level for now and may move to
-Core later, when a codec-level transformation needs them.
+**Scope.** Core covers the checked executable expressions — behavior and `let` bodies,
+a data's `invariant` conditions, and the rules an `ensures` states. Data definitions
+otherwise stay at AST level, and a derived decoder's and encoder's expressions are the
+named exception: they are still AST when they reach the backend, and one type there turns
+them into Core (`CodecGen`). They may move later, when a codec-level transformation needs
+them.
 
 **Invariants.** (1) All body-level lowering happens once, in Lower. (2) The backend
 emits from Core and never rewrites during emission. (3) The performance stance is to

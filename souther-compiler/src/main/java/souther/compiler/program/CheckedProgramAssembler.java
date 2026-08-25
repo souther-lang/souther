@@ -11,6 +11,8 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.core.Composition;
 import souther.compiler.core.Core;
+import souther.compiler.core.EnsuresEnforcement;
+import souther.compiler.core.ValueShape;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Acceptance;
 import souther.compiler.query.Bodies;
@@ -18,7 +20,9 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.Compositions;
 import souther.compiler.query.Db;
 import souther.compiler.query.Names;
+import souther.compiler.query.Shapes;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -66,6 +70,14 @@ final class CheckedProgramAssembler {
                 db.ask(new Bodies.Implementation(module)).value();
         Map<ValueName.Behavior, Composition> compositions =
                 db.ask(new Compositions.Of(module)).value();
+        // What a value of each declared data is made of and must satisfy, and where each behavior's
+        // clause is checked. Both are what the language decided and both are read here rather than
+        // worked out: the JVM is handed the same two answers, so an output reading this program and
+        // the bytecode beside it hold one another's decisions.
+        Map<TypeSymbol.AtModule, ValueShape> shapes =
+                db.ask(new Shapes.ValueShapes(module)).value();
+        Map<ValueName.Behavior, EnsuresEnforcement> checks =
+                db.ask(new Bodies.EnsuresChecks(module)).value();
         // What the module's names mean over the derived declarations, which is what a declaration's
         // fields and a sum's cases are read against. It is a way of reaching the compiler's answers
         // and not one of them: it holds a registry that asks `db` for each declaration, so it is
@@ -73,7 +85,7 @@ final class CheckedProgramAssembler {
         // made.
         Symbols symbols = Names.derivedSymbols(db, module).value();
         if (checked == null || lowering == null || signatures == null || implementations == null
-                || compositions == null || symbols == null) {
+                || compositions == null || symbols == null || shapes == null || checks == null) {
             // Not a report: the failure above is what a caller is told, and reaching here past it
             // means the two readings of whether this program checked have come apart.
             throw new IllegalStateException("`" + module + "` was taken as checked and is not");
@@ -90,10 +102,11 @@ final class CheckedProgramAssembler {
             ValueName.Behavior named = new ValueName.Behavior(module, declared.name());
             behaviors.add(new CheckedBehavior(named, signatureOf(signatures.get(declared.name())),
                     implementationOf(named, declared, bodies, implementations, checked,
-                            compositions)));
+                            compositions),
+                    EnsuresEnforcement.in(checks, module, named)));
         }
         return new CheckedModule(module, behaviors, helpersOf(module, bodies, checked),
-                dataOf(declarations, symbols));
+                dataOf(declarations, symbols, shapes));
     }
 
     /**
@@ -119,11 +132,12 @@ final class CheckedProgramAssembler {
      * {@link CheckedData.Product#fields} and {@link CheckedData.Sum#cases} — and those are the
      * ones said out loud.
      */
-    private static List<CheckedData> dataOf(Hir.Module declarations, Symbols symbols) {
+    private static List<CheckedData> dataOf(Hir.Module declarations, Symbols symbols,
+                                           Map<TypeSymbol.AtModule, ValueShape> shapes) {
         List<CheckedData> declared = new ArrayList<>();
         for (Hir.Def def : declarations.defs()) {
             declared.add(switch (def) {
-                case Hir.Data product -> productOf(product, symbols);
+                case Hir.Data product -> productOf(product, shapes);
                 case Hir.SumData sum -> new CheckedData.Sum(sum.declares(),
                         AtomSpace.subjectAtoms(Type.ref(sum.declares()), symbols));
                 case Hir.UnitData unit -> new CheckedData.Unit(unit.declares());
@@ -132,12 +146,25 @@ final class CheckedProgramAssembler {
         return declared;
     }
 
-    /** One product, its fields in the order {@link TypeOps#fieldTypes} lays them out. */
-    private static CheckedData productOf(Hir.Data product, Symbols symbols) {
-        List<CheckedData.Field> fields = new ArrayList<>();
-        TypeOps.fieldTypes(product, symbols)
-                .forEach((field, type) -> fields.add(new CheckedData.Field(field, type)));
-        return new CheckedData.Product(product.declares(), fields);
+    /**
+     * One product, as the check answered what a value of it is made of.
+     *
+     * <p>Handed over and not rebuilt. The fields, the binding each is read through and the clauses
+     * that must hold of a value are one answer of the checker's, and the JVM emits a construction
+     * from that same answer — so what an output outside this compiler reads and what the bytecode
+     * refuses a value by cannot come apart.
+     */
+    private static CheckedData productOf(Hir.Data product,
+                                         Map<TypeSymbol.AtModule, ValueShape> shapes) {
+        ValueShape shape = shapes.get(product.declares());
+        if (shape == null) {
+            // The module was taken as checked, and a declaration of it has no answer for what a
+            // value of it is. Handing over a product with no clauses would be saying that anything
+            // its fields admit is one of it, which is the opposite of what the author wrote.
+            throw new IllegalStateException("`" + product.declares() + "` was taken as checked and"
+                    + " the check said nothing about what a value of it is");
+        }
+        return new CheckedData.Product(shape);
     }
 
     /**

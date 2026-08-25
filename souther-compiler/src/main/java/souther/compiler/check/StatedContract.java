@@ -1,7 +1,7 @@
 package souther.compiler.check;
 
-import souther.compiler.check.BehaviorContract.ContractParam;
-import souther.compiler.check.BehaviorContract.Guard;
+import souther.compiler.core.Contract.Param;
+import souther.compiler.core.Contract.Guard;
 import souther.compiler.check.BehaviorContract.Rule;
 import souther.compiler.check.BehaviorContract.RuleId;
 import souther.compiler.core.Core;
@@ -28,7 +28,7 @@ import java.util.Optional;
  * <p>Every conjunct arrives placed and typed together ({@link Conjunct}). The rest of this package
  * has been got wrong twice by carrying those apart.
  */
-public record StatedContract(ValueName.Behavior behavior, List<ContractParam> params, Type output,
+public record StatedContract(ValueName.Behavior behavior, List<Param> params, Type output,
                              List<StatedRule> rules) {
 
     public StatedContract {

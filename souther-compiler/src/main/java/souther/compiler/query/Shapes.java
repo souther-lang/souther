@@ -5,8 +5,12 @@ import souther.compiler.check.ClauseDischarge;
 import souther.compiler.check.InvariantSettled;
 import souther.compiler.check.ClauseHelpers;
 import souther.compiler.check.ClausesForDischarge;
+import souther.compiler.check.ExecutableInvariants;
+import souther.compiler.check.InliningPolicy;
+import souther.compiler.check.Unanswerable;
 import souther.compiler.check.InvariantChecker;
 import souther.compiler.check.Symbols;
+import souther.compiler.core.ValueShape;
 import souther.compiler.diag.CompileException;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.TypeKey;
@@ -451,6 +455,59 @@ public final class Shapes {
             } catch (CompileException e) {
                 return Answer.absent(e);
             }
+        }
+    }
+
+    /**
+     * What a value of each of this module's declared data is made of, and what must hold of one.
+     *
+     * <p>The reading that runs, made where the check is. A clause is elaborated once here and read
+     * by the check that holds it to being a condition, by the emitter that refuses a construction
+     * with it, and by a checked program — none of which elaborates one of its own (issue #1080).
+     *
+     * <p>Both halves together ({@link ValueShape}): the fields a clause reads and the clauses that
+     * read them. Handed over apart, whoever ran a clause would work out where a field is read
+     * through, and that walk and this one would have to be kept answering alike.
+     *
+     * <p>Only the declarations that have a meaning. What could not be settled is not here and
+     * nothing here asks why — the same reading the module check makes of the same key, so a
+     * declaration with no meaning is not reported twice.
+     *
+     * <p>Clause by clause and declaration by declaration: two data each carrying a clause that is
+     * not a condition are two things for an author to fix.
+     */
+    public record ValueShapes(String name) implements Key<Map<TypeSymbol.AtModule, ValueShape>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<TypeSymbol.AtModule, ValueShape>> compute(Db db) {
+            Answer<Hir.Module> settled = db.ask(new Bodies.Settled(name));
+            Answer<Symbols> scope = Names.derivedSymbols(db, name);
+            Answer<Map<String, souther.compiler.types.Type>> helpers =
+                    db.ask(new Bodies.RecursiveCallSigs(name, InliningPolicy.FULL));
+            if (!settled.present() || !scope.present() || !helpers.present()) {
+                return Answer.absent();
+            }
+            Map<TypeSymbol.AtModule, ValueShape> shapes = new LinkedHashMap<>();
+            List<Report> reports = new ArrayList<>();
+            for (Hir.Def def : settled.value().defs()) {
+                if (!(def instanceof Hir.Data data)
+                        || !db.ask(new Names.Definition(def.declaredKey())).present()) {
+                    continue;
+                }
+                try {
+                    shapes.put(data.declares(),
+                            ExecutableInvariants.of(data, scope.value(), helpers.value()));
+                } catch (Unanswerable _) {
+                    // Rests on something already reported where it went wrong.
+                } catch (CompileException e) {
+                    reports.addAll(Report.of(e));
+                }
+            }
+            return Answer.of(Ordered.map(shapes), reports);
         }
     }
 }

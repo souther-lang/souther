@@ -9,9 +9,7 @@ import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.CheckContext;
-import souther.compiler.check.Elaborator;
 import souther.compiler.check.DataChecker;
-import souther.compiler.check.Lower;
 import souther.compiler.check.ReqSig;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.ReachName;
@@ -21,7 +19,7 @@ import souther.compiler.check.Ordering;
 import souther.compiler.core.Core;
 import souther.compiler.core.GrowingFold;
 
-import souther.compiler.check.EnsuresEnforcement;
+import souther.compiler.core.EnsuresEnforcement;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.types.Refinement;
 import souther.compiler.types.ValueName;
@@ -229,24 +227,16 @@ final class BodyGen {
         }
 
         /**
-         * Emits an AST expression: the codec emitters (decoder, encoder) and a data's invariant are
-         * AST-level, so their expressions are elaborated here, at the environment the slots hold,
-         * before they are emitted. The types come from the checker either way — a behavior body
-         * arrives already elaborated, and these are elaborated on the spot — so there is one
-         * implementation of inference and the emitter reads its decisions (issue #81).
+         * The environment this body's slots hold, as an expression is checked against it.
+         *
+         * <p>Answered and not used here. Elaborating an AST expression is the codec emitters' —
+         * they are the one AST-level path left in this backend (ADR-0021) — and what this emitter
+         * knows that they do not is which names are bound to which slots. So the environment
+         * crosses and the elaboration does not: a body, an invariant and a rule reach this emitter
+         * as the Core the checker made (issue #1080).
          */
-        Type expr(Hir.Expr e) {
-            return genExpr(elaborate(e, null));
-        }
-
-        /** Elaborates an AST expression at this body's environment — the codec emitters hold AST and
-         * build the Core nodes they pass back in. It is desugared first, by the same Lower rewrite a
-         * body gets, so a surface form with no Core node of its own (a comprehension) reaches the
-         * emitter in the shape it emits from. {@code expected} is the type the position wants, as the
-         * checker pushes a field's declared type into its initialiser. */
-        Core elaborate(Hir.Expr e, Type expected) {
-            return Elaborator.elaborate(Lower.desugarExpr(e), scope(),
-                    new CheckContext(symbols, data, reqSigs()), expected);
+        CheckContext context() {
+            return new CheckContext(symbols, data, reqSigs());
         }
 
         /**
@@ -1929,7 +1919,7 @@ final class BodyGen {
          * for, and there is no precedence to arrange. Arranged anyway, by removing the captured
          * spellings from these, a captured name that denoted a helper would have been deleted from
          * the only map it could have been found in. */
-        private Scope scope() {
+        Scope scope() {
             return bound().reaching(ctx.standingCalls);
         }
 
