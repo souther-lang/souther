@@ -2324,6 +2324,10 @@ public final class Generator {
             heldBack.put(at, edge.refused());
         }
         List<FixtureTemplate> inputs = new ArrayList<>();
+        // Whether a candidate was turned away for standing somewhere else, which is what tells a
+        // search that ran out of candidates from one that certified none of the ones it had.
+        boolean[] uncertified = {false};
+        CandidateCheck certified = certifying(check, subject, fixing, on, uncertified);
         for (int p = 0; p < subject.parameters().size() && p < subject.types().size(); p++) {
             String head = subject.parameters().get(p);
             Map<TermPath, List<FixtureTemplate>> here = new LinkedHashMap<>();
@@ -2332,7 +2336,7 @@ public final class Generator {
                     here.put(term.path(), decided.get(term.path()));
                 }
             }
-            Outcome tried = valueAt(subject, p, here, settled, Requirements.NONE, check);
+            Outcome tried = valueAt(subject, p, here, settled, Requirements.NONE, certified);
             if (tried.value() == null) {
                 // Where the refusal is of the values one edge offered, what that edge held back
                 // outranks it: values that were never built were not among the ones refused. Only
@@ -2341,6 +2345,13 @@ public final class Generator {
                 // something this knows. Taken from whichever came first, the reason named the wrong
                 // position's search.
                 UnresolvedCombination.Reason why = tried.reason();
+                // A search that offered candidates and certified none of them has not shown that
+                // every value the rules allow was refused: what it found out is that what it built
+                // did not stand where it was built for, which is its own answer.
+                if (uncertified[0]
+                        && why == UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED) {
+                    why = UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS;
+                }
                 if (here.size() == 1
                         && why == UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED) {
                     why = heldBack.getOrDefault(here.keySet().iterator().next(), why);
@@ -2352,6 +2363,108 @@ public final class Generator {
         }
         return new BoundaryAttempt.Built(
                 new GeneratedRow(new Purpose.ForAPoint(label), inputs));
+    }
+
+    /**
+     * {@code check}, refusing any candidate at this parameter that does not read back at the place
+     * it is being built for.
+     *
+     * <p><b>An acceptance condition and not an assertion.</b> A candidate that reads back somewhere
+     * else is one candidate the search has tried, and the search goes on to the next — the same
+     * shape a class's witness is certified with. Written as a throw, or as a refusal of the whole
+     * point, one candidate landing elsewhere would be reported as a point no row can be written at.
+     *
+     * <p>What it asks is the property {@code TermRealizations} states of itself: every value built
+     * there reads back as the number it was built for, and the way that would break is "a row
+     * offered at an edge it does not stand on". Asked through the reading a row's own values are
+     * read by, so nothing here is a second account of where a value stands.
+     *
+     * @param refused set where a candidate was turned away for this and nothing else, which is what
+     *                tells a search that ran out of candidates from one that certified none
+     */
+    private static CandidateCheck certifying(CandidateCheck check, Subject subject,
+                                             Map<NumericTerm, Place> fixing,
+                                             java.util.function.Function<NumericTerm, Carrier> on,
+                                             boolean[] refused) {
+        return (parameter, candidate) -> {
+            CandidateCheck.Built built = check.build(parameter, candidate);
+            // Nothing built it, so nothing here can say where it went, and the row is offered as it
+            // was composed.
+            if (!(built instanceof CandidateCheck.Built.Value(var observed))) {
+                return built;
+            }
+            List<souther.compiler.observe.ObservedValue> row = new ArrayList<>(
+                    java.util.Collections.nCopies(subject.parameters().size(), null));
+            row.set(parameter, observed);
+            for (Map.Entry<NumericTerm, Place> each : fixing.entrySet()) {
+                if (!subject.parameters().get(parameter).equals(each.getKey().path().head())) {
+                    continue;
+                }
+                String elsewhere = readsElsewhere(subject, row, each.getKey(), each.getValue(),
+                        on.apply(each.getKey()));
+                if (elsewhere != null) {
+                    refused[0] = true;
+                    return new CandidateCheck.Built.Refused(elsewhere);
+                }
+            }
+            return built;
+        };
+    }
+
+    /**
+     * Where the row reads at the term's position, said only where that is not {@code at}.
+     *
+     * <p>Null where nothing here can say. A term this cannot read the orders of, a position the row
+     * wrote no value at, a walk the value and the type disagree about — none of them is the row
+     * standing somewhere else, and refusing a candidate for one would turn what this compiler cannot
+     * see into a row the model does not have.
+     *
+     * <p>One occurrence is enough, as it is for a row that was written: a row stands at a point
+     * where one of its readings does.
+     */
+    private static String readsElsewhere(Subject subject,
+                                         List<souther.compiler.observe.ObservedValue> row,
+                                         NumericTerm term, Place at, Carrier answered) {
+        souther.compiler.inputs.TermOrders orders = ordersOf(subject, term, answered);
+        if (orders == null) {
+            return null;
+        }
+        List<souther.compiler.observe.ObservedValue> values =
+                subject.inputs().valuesAt(row, term.path());
+        if (values == null || values.isEmpty()) {
+            return null;
+        }
+        for (souther.compiler.observe.ObservedValue value : values) {
+            if (term.read(value, orders) instanceof NumericTerm.Reading.Number number
+                    && number.value().compareTo(at) == 0) {
+                return null;
+            }
+        }
+        return "it was composed to put " + term + " at " + at + " and does not stand there";
+    }
+
+    /**
+     * How the term at this position is read: the order its values are written on, and the order the
+     * number it answers is measured on.
+     *
+     * <p>Off the axis where the subject has one, and off the declared type where it has none, which
+     * is the same pair {@link #edgeAt} builds the value against. Null where neither answers, since a
+     * term nothing here reads is one nothing here can say the value stands away from.
+     */
+    private static souther.compiler.inputs.TermOrders ordersOf(Subject subject, NumericTerm term,
+                                                               Carrier answered) {
+        if (answered == null) {
+            return null;
+        }
+        for (Axis axis : subject.axes()) {
+            if (axis.term().equals(term)) {
+                return new souther.compiler.inputs.TermOrders(
+                        term.observedOn(axis.type(), subject.symbols()), answered);
+            }
+        }
+        Type declared = declaredAt(subject, term.path());
+        return declared == null ? null : new souther.compiler.inputs.TermOrders(
+                term.observedOn(declared, subject.symbols()), answered);
     }
 
     /**
