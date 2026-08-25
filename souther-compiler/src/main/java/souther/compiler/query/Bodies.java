@@ -33,8 +33,10 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.Unanswerable;
+import souther.compiler.core.Contract;
 import souther.compiler.core.Core;
 import souther.compiler.core.GrowingFold;
+import souther.compiler.core.ValueShape;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.types.BindingId;
@@ -2029,6 +2031,13 @@ public final class Bodies {
                     || !calleeSigs.present() || !published.present()) {
                 return Answer.absent();
             }
+            // What must hold of a value of each declared data, elaborated once. The check reads it
+            // rather than asking a clause what it comes to a second time, and what it says about a
+            // clause it could not read is that the data is not in here — which is what the reading
+            // that decides a type has no value is gated on, and what says this module does not
+            // reach codegen.
+            Answer<Map<TypeSymbol.AtModule, ValueShape>> shapes =
+                    db.ask(new Shapes.ValueShapes(name));
             TypeChecker.Reported reported;
             try {
                 // The declarations that have a meaning to check, asked for one at a time. What has
@@ -2042,12 +2051,6 @@ public final class Bodies {
                 }
                 Answer<souther.compiler.check.Prepared> prepared =
                         db.ask(new Shapes.Prepared(name));
-                // What must hold of a value of each declared data, elaborated once and read here
-                // for the same reason the check reads a body's Core: it is the answer, and asking
-                // for it again would be the second reading this stopped being.
-                Answer<Map<souther.compiler.types.TypeSymbol.AtModule,
-                        souther.compiler.core.ValueShape>> shapes =
-                        db.ask(new Shapes.ValueShapes(name));
                 reported = TypeChecker.checkModule(lowering.value().settled(), scope.value(),
                         db.ask(new Front.Reading()).value(),
                         signatures.present() ? signatures.value() : null,
@@ -2066,11 +2069,6 @@ public final class Bodies {
             // cannot be read is a module that does not reach codegen: the reports are that key's and
             // are not repeated, and what is read off them here is whether there was a refusal.
             Answer<Map<String, CheckedEnsures>> contracts = db.ask(new Contracts(name));
-            // And what must hold of a value of each declared data, for the same reason: elaborating
-            // a clause is what says it is a condition, and that elaboration is owned by the key that
-            // answers with it. A module whose clause cannot be read does not reach codegen.
-            Answer<Map<souther.compiler.types.TypeSymbol.AtModule, souther.compiler.core.ValueShape>>
-                    shapes = db.ask(new Shapes.ValueShapes(name));
             boolean sound = reported.errors().isEmpty() && reported.abandoned().isEmpty()
                     && contracts.present() && !contracts.hasError()
                     && shapes.present() && !shapes.hasError();
@@ -2335,8 +2333,7 @@ public final class Bodies {
             // What runs, which is what a check is made from. Where each rule was written stays with
             // the declaration; a reader given that as well would hold a value an unrelated edit
             // moves.
-            Map<String, souther.compiler.core.Contract> executable =
-                    CheckedEnsures.executable(contracts.value());
+            Map<String, Contract> executable = CheckedEnsures.executable(contracts.value());
             Map<ValueName.Behavior, EnsuresEnforcement> checks = new LinkedHashMap<>();
             for (Hir.BehaviorDef behavior : lowered.behaviors()) {
                 ValueName.Behavior named = new ValueName.Behavior(lowered.name(), behavior.name());

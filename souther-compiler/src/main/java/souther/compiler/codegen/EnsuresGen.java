@@ -137,9 +137,9 @@ final class EnsuresGen {
     /**
      * The parameters, then the rules the named case decides on its own.
      *
-     * <p>A rule is here where its guard is an arm the case satisfies and its statement does not read
+     * <p>A rule is here where its guard is an arm the case satisfies and its condition does not read
      * the answer. Both are settled here, where the declaration is: which cases an arm answers for is
-     * a question about the output's declarations, and whether a statement reads {@code value} is a
+     * a question about the output's declarations, and whether a rule reads {@code value} is a
      * question about the rule ({@link Rule#readsAnswer()}). A caller hands over the case it has and
      * is told what does not hold; it is not asked which rules follow from it.
      *
@@ -247,7 +247,7 @@ final class EnsuresGen {
     }
 
     /**
-     * The rule's statement, and the abort where it does not hold.
+     * The rule's condition, and the abort where it does not hold.
      *
      * <p>{@code fillAnswered} puts the case the answer is into {@code answered} and leaves nothing
      * on the stack. It is run only here — on the path that refuses — so what it costs is paid by a

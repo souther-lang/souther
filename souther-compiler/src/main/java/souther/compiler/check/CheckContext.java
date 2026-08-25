@@ -233,19 +233,4 @@ public record CheckContext(Symbols symbols, Hir.Data data, Map<ValueName.Behavio
         return preserving(Preserved.byTheLanguagesOwnOperations());
     }
 
-    /**
-     * The same context, starting a tree that belongs to another representation.
-     *
-     * <p>What a representation keeps standing does not travel to a tree that is not it. A body
-     * reaching a declaration's invariant reaches another tree, built by another question and holding
-     * whatever that question decided to keep — which is that representation's to say at its own
-     * entry, not something it receives by having been reached from here.
-     *
-     * <p>Named as the boundary rather than folded into {@link #forData}: which {@code data} is being
-     * checked changes within one representation too, and joining the two would make "a data is in
-     * scope" quietly mean "the permission is gone".
-     */
-    public CheckContext inAnotherRepresentation() {
-        return preserved == Preserved.NONE ? this : preserving(Preserved.NONE);
-    }
 }

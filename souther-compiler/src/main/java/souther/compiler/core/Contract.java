@@ -96,9 +96,4 @@ public record Contract(ValueName.Behavior behavior, List<Param> params, Type out
          */
         record Case(ResolvedCase selected) implements Guard {}
     }
-
-    /** Whether this behavior states anything at all. */
-    public boolean isEmpty() {
-        return rules.isEmpty();
-    }
 }

@@ -1,5 +1,6 @@
 package souther.compiler.examples;
 
+import souther.compiler.check.CheckedEnsures;
 import souther.compiler.observe.Observations;
 import souther.compiler.observe.ArmObservation;
 import org.junit.jupiter.api.Test;
@@ -318,7 +319,7 @@ class ARowIsNotHandedToAnAnswerFromAnotherBuildTest {
                 Deadline.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis()),
                 EvaluationPolicy.DEFAULT,
                 answering,
-                souther.compiler.check.CheckedEnsures.executable(c.db().ask(new Bodies.Contracts(name)).value()));
+                CheckedEnsures.executable(c.db().ask(new Bodies.Contracts(name)).value()));
     }
 
     /** The classes one build of {@code source} emits, read for what they were stamped with. */

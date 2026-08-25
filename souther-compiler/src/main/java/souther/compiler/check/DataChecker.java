@@ -564,8 +564,7 @@ public final class DataChecker {
         return FieldDomains.THE_VALUE.equals(path) ? "value" : path;
     }
 
-    static void checkData(CheckContext ctx,
-                                  Map<String, Type> recursiveHelperFns) {
+    static void checkData(CheckContext ctx) {
         Map<String, Type> fields = TypeOps.fieldTypes(ctx.data(), ctx.symbols());
 
         // A newtype wraps one value and takes its representation, so there is nothing for it to be

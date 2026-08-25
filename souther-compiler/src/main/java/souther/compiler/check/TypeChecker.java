@@ -304,7 +304,7 @@ public final class TypeChecker {
             collect(errors, abandoned, () -> {
                 switch (def) {
                     case Hir.Data data ->
-                            DataChecker.checkData(CheckContext.of(symbols).forData(data), recursiveHelperFns);
+                            DataChecker.checkData(CheckContext.of(symbols).forData(data));
                     case Hir.SumData sum -> DataChecker.checkSum(sum, symbols);
                     case Hir.UnitData _ -> { }
                 }

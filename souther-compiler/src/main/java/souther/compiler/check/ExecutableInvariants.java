@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.core.Core;
 import souther.compiler.core.ValueShape;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
@@ -56,8 +57,7 @@ public final class ExecutableInvariants {
             // Desugared first, the way a body is: a clause writing a comprehension states the same
             // condition as the `if` it is derived from, and one of the two reaching the check and
             // the other reaching what runs is the shape this exists to stop.
-            souther.compiler.core.Core condition =
-                    Elaborator.elaborate(Lower.desugarExpr(clause.expr()), reading, ctx);
+            Core condition = Elaborator.elaborate(Lower.desugarExpr(clause.expr()), reading, ctx);
             if (condition.type() != Type.BOOL) {
                 throw CompileException.of(Diagnostic.at(clause.expr().pos())
                         .say(new DeclarationMessage.AnInvariantExpressionIsBool(

@@ -6,8 +6,10 @@ import souther.compiler.diag.msg.DeclarationMessage;
 
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * A clause states a condition, and what says so is the elaboration of it.
@@ -22,30 +24,18 @@ class AnInvariantIsHeldToBeingAConditionTest {
 
     @Test
     void aClauseThatIsNotACondition() {
-        CompileException refused = org.junit.jupiter.api.Assertions.assertThrows(
-                CompileException.class, () -> Compiler.compile("""
-                        module demo
-                        data Amount = Int
-                            invariant value + 1
-                        """));
+        CompileException refused = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module demo
+                data Amount = Int
+                    invariant value + 1
+                """));
 
-        assertInstanceOf(DeclarationMessage.AnInvariantExpressionIsBool.class,
-                refused.diagnostics().get(0).said(),
-                "what the clause came to is what says it is not a condition");
-    }
-
-    /** And it is refused where the clause is written, not where a construction meets it. */
-    @Test
-    void andIsSaidAtTheClause() {
-        CompileException refused = org.junit.jupiter.api.Assertions.assertThrows(
-                CompileException.class, () -> Compiler.compile("""
-                        module demo
-                        data Amount = Int
-                            invariant value + 1
-                        """));
-
-        assertEquals(3, ((Primary.InSource) refused.diagnostics().get(0).primary())
-                        .place().region().start().line(),
-                "said at the clause, and not where a value is built");
+        assertAll(
+                () -> assertInstanceOf(DeclarationMessage.AnInvariantExpressionIsBool.class,
+                        refused.diagnostics().get(0).said(),
+                        "what the clause came to is what says it is not a condition"),
+                () -> assertEquals(3, ((Primary.InSource) refused.diagnostics().get(0).primary())
+                                .place().region().start().line(),
+                        "said at the clause, and not where a value is built"));
     }
 }

@@ -135,7 +135,10 @@ public final class Backend {
      * constructor binds it to; {@code checked} carries the type checker's elaborated bodies, which is what
      * the emitter reads instead of inferring types again (issue #81); {@code dischargeInvariants} carries
      * this module's invariant clauses in the representation the language's own operations survive in, which
-     * is what a derived decoder's constraint mapping reads (spec §decoder-error). */
+     * is what a derived decoder's constraint mapping reads (spec §decoder-error); {@code shapes} says
+     * what a value of each declared data is made of and what must hold of one, which is what a
+     * construction is refused by and is the checker's answer rather than this emitter's
+     * (issue #1080). */
     public static Emissions generate(Hir.Module module, Symbols symbols,
                                                Map<String, String> typePackage,
                                                Map<ValueName.Behavior, Sig> sigs,

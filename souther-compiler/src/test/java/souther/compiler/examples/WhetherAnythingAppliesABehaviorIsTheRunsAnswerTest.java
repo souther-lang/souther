@@ -1,5 +1,6 @@
 package souther.compiler.examples;
 
+import souther.compiler.check.CheckedEnsures;
 import souther.compiler.observe.Observations;
 import souther.compiler.observe.ArmObservation;
 import org.junit.jupiter.api.Test;
@@ -227,7 +228,7 @@ class WhetherAnythingAppliesABehaviorIsTheRunsAnswerTest {
                         Deadline.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis()),
                         EvaluationPolicy.DEFAULT,
                         Answering.generatedHere(),
-                        souther.compiler.check.CheckedEnsures.executable(
+                        CheckedEnsures.executable(
                                 mine.db().ask(new Bodies.Contracts(name)).value())));
 
         assertTrue(refused.getMessage().contains("example.applying")
@@ -322,7 +323,7 @@ class WhetherAnythingAppliesABehaviorIsTheRunsAnswerTest {
                 Deadline.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis()),
                 EvaluationPolicy.DEFAULT,
                 answering,
-                souther.compiler.check.CheckedEnsures.executable(c.db().ask(new Bodies.Contracts(name)).value()));
+                CheckedEnsures.executable(c.db().ask(new Bodies.Contracts(name)).value()));
     }
 
     private static Compilation compiled() {

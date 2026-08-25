@@ -1,5 +1,6 @@
 package souther.compiler.examples;
 
+import souther.compiler.check.CheckedEnsures;
 import souther.compiler.observe.Observations;
 import souther.compiler.observe.ArmObservation;
 import org.junit.jupiter.api.Test;
@@ -316,6 +317,6 @@ class WhereARowStopsIsDecidedByWhichHalfOfTheSeamItReachedTest {
                 Deadline.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis()),
                 EvaluationPolicy.DEFAULT,
                 (generated, compiled) -> answerer,
-                souther.compiler.check.CheckedEnsures.executable(c.db().ask(new Bodies.Contracts(name)).value()));
+                CheckedEnsures.executable(c.db().ask(new Bodies.Contracts(name)).value()));
     }
 }

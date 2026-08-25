@@ -14,11 +14,13 @@ import java.util.Map;
  * otherwise be asking two questions, and the second of them would be answered by whoever needed it
  * — which is where the second elaboration was (issue #1080).
  *
- * <p>Nothing joins a rule of one to a rule of the other, and nothing has to: what wants the places,
- * the arms and the clause a rule was written under reads {@link #read()}, and what has to decide
- * whether an answer keeps the declaration reads {@link #checked()}. They are held to being the same
- * declaration by there being one walk that makes both, and to nothing else — a rule numbered in one
- * and looked up in the other would be the alignment this deliberately does not offer.
+ * <p>Nothing joins a rule of one to a rule of the other, and nothing has to. Everything that runs a
+ * rule — the emitter, a row, a checked program — reads {@link #checked()}; {@link #read()} is where
+ * the rules were read from and what the refusals were reported against, and it is what a reader
+ * asking where a clause was written has (which is how a classification is held to sitting inside the
+ * clause it is about). They are held to being the same declaration by there being one walk that
+ * makes both, and to nothing else — a rule numbered in one and looked up in the other would be the
+ * alignment this deliberately does not offer.
  */
 public record CheckedEnsures(BehaviorContract read, Contract checked) {
 

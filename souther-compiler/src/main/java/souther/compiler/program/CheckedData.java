@@ -54,7 +54,8 @@ public sealed interface CheckedData {
 
         Product(ValueShape shape) {
             if (shape == null) {
-                throw new IllegalArgumentException("a declared data is named");
+                throw new IllegalArgumentException(
+                        "a product is what a value of it is made of and what must hold of one");
             }
             this.shape = shape;
         }

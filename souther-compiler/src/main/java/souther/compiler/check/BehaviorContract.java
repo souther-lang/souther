@@ -136,11 +136,6 @@ public record BehaviorContract(ValueName.Behavior behavior, List<Contract.Param>
         return clauses.get(rule.id().clause());
     }
 
-    /** Whether this behavior states anything at all. */
-    public boolean isEmpty() {
-        return clauses.isEmpty();
-    }
-
     /** The names a rule reads its parameters and its answer under. */
     public static BindingOwner ownerOf(ValueName.Behavior behavior) {
         return new BindingOwner.OfSignature(behavior);

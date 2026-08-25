@@ -4,6 +4,7 @@ import souther.compiler.stdlib.Stdlib;
 import souther.compiler.check.AtomSpace;
 import souther.compiler.check.ReqSig;
 import souther.compiler.core.EnsuresEnforcement;
+import souther.compiler.core.ValueShape;
 import souther.compiler.check.Symbols;
 import souther.compiler.ast.Hir;
 import souther.compiler.types.Type;
@@ -124,9 +125,9 @@ final class CodegenContext {
         return dischargeInvariants;
     }
 
-    private Map<TypeSymbol.AtModule, souther.compiler.core.ValueShape> shapes = Map.of();
+    private Map<TypeSymbol.AtModule, ValueShape> shapes = Map.of();
 
-    void setValueShapes(Map<TypeSymbol.AtModule, souther.compiler.core.ValueShape> shapes) {
+    void setValueShapes(Map<TypeSymbol.AtModule, ValueShape> shapes) {
         this.shapes = shapes;
     }
 
@@ -137,7 +138,7 @@ final class CodegenContext {
      * halves of one environment. Null for a data no module here declares — nothing asks, since a
      * value class is emitted where its type is declared.
      */
-    souther.compiler.core.ValueShape shapeOf(TypeSymbol.AtModule named) {
+    ValueShape shapeOf(TypeSymbol.AtModule named) {
         return shapes.get(named);
     }
 
