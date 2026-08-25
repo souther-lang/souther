@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.partition.GenerationOutcome;
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.BorderObligationAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.DeclarationResolution;
 import souther.compiler.query.DeclaredRows;
@@ -340,22 +341,86 @@ class EveryFindingHasAGenerationDispositionTest {
     }
 
     /**
-     * The two points against a line are searched apart.
+     * A behavior carrying the type twice is two readings of the line, and both are accounted for.
      *
-     * <p>A row at the line and a row beside it are two values and two pieces of work, so which
-     * reading can compose one says nothing about the other: {@code Narrow} takes three letters or
-     * more, which refuses the value at one end of {@code Code}'s range and takes the value at the
-     * other. Joined into one search, a line would be handed to an author as a single piece of work
-     * whose two halves are owed at different positions.
+     * <p>What a search of one position came to is a fact about that position — the rules reaching
+     * it, the values its decoder took — so a coverage keyed by the behavior holds one of the two
+     * answers and which one is whichever the search walked first. Which is the shape a debt-level
+     * answer exists to refuse, one level down: the terminal claim about the line is released on
+     * every reading having been walked, and a walk that recorded one of two positions has not
+     * walked them.
      */
     @Test
-    void thePointsAgainstALineAreSearchedApart() {
-        List<String> composers = composedBy(drawnBy(
-                resolved(compiled(EITHER_END), "example.ends", new GenerationScope.Module()),
-                "Code"));
+    void oneBehaviorCarryingTheTypeTwiceIsTwoReadings() {
+        List<SearchCoverage> coverage = drawnBy(
+                resolved(compiled(TWICE), "example.twice", new GenerationScope.Module()), "Code")
+                .stream()
+                .filter(each -> each instanceof DeclarationResolution.Unresolved)
+                .map(each -> ((DeclarationResolution.Unresolved) each).coverage()).toList();
 
-        assertTrue(composers.size() > 1,
-                "the points of the line were composed at different readings: " + composers);
+        assertFalse(coverage.isEmpty(), "the model under test composes nothing at the line");
+        for (SearchCoverage each : coverage) {
+            assertEquals(List.of(
+                            new BorderObligationAssessment.Reading("one", "String.length(x.a)"),
+                            new BorderObligationAssessment.Reading("one", "String.length(x.b)")),
+                    each.readings(),
+                    "both positions the behavior meets the line at");
+            assertEquals(List.of("String.length(x.a) = 1", "String.length(x.b) = 1"),
+                    each.attempted().stream()
+                            .map(souther.compiler.partition.Generator.UnresolvedCombination::subject)
+                            .toList(),
+                    "and what each of them said, in its own position's words");
+        }
+    }
+
+    /** One line, met twice by one behavior, and composable at neither position. */
+    private static final String TWICE = """
+            module example.twice
+
+            data Code = String
+                invariant nonempty = String.length(value) >= 1
+
+            data Both = { a: Code, b: Code }
+                invariant fixedA = String.matches("[a-z][a-z][a-z]+", a.value)
+                invariant fixedB = String.matches("[a-z][a-z][a-z]+", b.value)
+
+            data Ok
+
+            behavior one : (x: Both) -> Ok
+            let one (x) = Ok
+            """;
+
+    /**
+     * Two lines one clause drew are searched apart.
+     *
+     * <p>A clause with both ends draws two lines — {@code >= 1 && <= 3} is one at each — and they
+     * are two debts, not one thing with two sides (issue #1062). So which reading composes the row
+     * for one of them says nothing about the other: {@code Narrow} takes three letters or more,
+     * which refuses the value at the bottom of {@code Code}'s range and takes the one at the top.
+     * Resolved per clause, a line would be handed to an author as a single piece of work whose two
+     * ends are owed at different positions.
+     *
+     * <p>The point against a line and the point beside it are kept apart the same way, and there is
+     * nothing here to hold that with: a line a declaration drew is the type's own rule, so the value
+     * off it is not a value of the type at all and no row is owed there. Every model checked here
+     * answers {@code NotOwed} at that point, so a test of it would be asserting over an empty set.
+     */
+    @Test
+    void twoLinesOneClauseDrewAreSearchedApart() {
+        Map<souther.compiler.partition.Level, String> composers = new java.util.LinkedHashMap<>();
+        resolved(compiled(EITHER_END), "example.ends", new GenerationScope.Module()).resolved()
+                .forEach((at, answer) -> {
+                    if (answer.resolution() instanceof DeclarationResolution.Generated(var by, var _)
+                            && at.line().origin().owedToTheDeclaration()
+                                    .map(on -> on.name().equals("Code")).orElse(false)) {
+                        composers.put(at.line().at(), by);
+                    }
+                });
+
+        assertEquals(2, composers.size(),
+                "one clause drew two lines and a row stands at each: " + composers);
+        assertEquals(2, java.util.Set.copyOf(composers.values()).size(),
+                "and the two were composed at different readings: " + composers);
     }
 
     /** Which reading composed each row, in the order the points were resolved. */

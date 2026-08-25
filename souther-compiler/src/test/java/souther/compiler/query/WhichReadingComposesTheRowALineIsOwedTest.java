@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.partition.Criterion;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.Level;
+import souther.compiler.query.BorderObligationAssessment.Reading;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -45,9 +46,10 @@ class WhichReadingComposesTheRowALineIsOwedTest {
     void theFirstReadingThatComposedARowAnswers() {
         List<String> asked = new java.util.ArrayList<>();
         DeclarationResolution resolved = DeclarationResolver.resolveAt(SAID, owed(),
-                List.of("held", "anywhere", "further"), carrier -> {
-                    asked.add(carrier);
-                    return searched(carrier.equals("held") ? notComposed() : built(carrier));
+                List.of(at("held"), at("anywhere"), at("further")), reading -> {
+                    asked.add(reading.behavior());
+                    return searched(reading.behavior().equals("held")
+                            ? notComposed() : built(reading.behavior()));
                 });
 
         assertInstanceOf(DeclarationResolution.Generated.class, resolved);
@@ -62,10 +64,11 @@ class WhichReadingComposesTheRowALineIsOwedTest {
     @Test
     void theReadingsAreWalkedInTheOrderTheyWereGiven() {
         List<String> asked = new java.util.ArrayList<>();
-        DeclarationResolver.resolveAt(SAID, owed(), List.of("a", "b", "c"), carrier -> {
-            asked.add(carrier);
-            return searched(notComposed());
-        });
+        DeclarationResolver.resolveAt(SAID, owed(),
+                List.of(at("a"), at("b"), at("c")), reading -> {
+                    asked.add(reading.behavior());
+                    return searched(notComposed());
+                });
 
         assertEquals(List.of("a", "b", "c"), asked);
     }
@@ -80,17 +83,17 @@ class WhichReadingComposesTheRowALineIsOwedTest {
     @Test
     void aWalkThatComposedNothingAccountsForEveryReading() {
         DeclarationResolution resolved = DeclarationResolver.resolveAt(SAID, owed(),
-                List.of("here", "elsewhere"),
-                carrier -> carrier.equals("here") ? searched(notComposed())
+                List.of(at("here"), at("elsewhere")),
+                reading -> reading.behavior().equals("here") ? searched(notComposed())
                         : new DeclarationResolver.ReadingEvidence.OutOfScope());
 
         SearchCoverage coverage = assertInstanceOf(DeclarationResolution.Unresolved.class, resolved)
                 .coverage();
-        assertEquals(List.of("here", "elsewhere"), List.copyOf(coverage.readings().keySet()));
+        assertEquals(List.of(at("here"), at("elsewhere")), List.copyOf(coverage.came().keySet()));
         assertInstanceOf(SearchCoverage.ReadingSearch.Attempted.class,
-                coverage.readings().get("here"));
+                coverage.came().get(at("here")));
         assertInstanceOf(SearchCoverage.ReadingSearch.OutOfScope.class,
-                coverage.readings().get("elsewhere"));
+                coverage.came().get(at("elsewhere")));
     }
 
     /**
@@ -104,21 +107,21 @@ class WhichReadingComposesTheRowALineIsOwedTest {
     @Test
     void onlyAWalkThatSawEveryReadingSaysTheLineCannotBeWritten() {
         SearchCoverage everyOne = coverageOf(Map.of(
-                "here", new SearchCoverage.ReadingSearch.Attempted(nothingThere()),
-                "elsewhere", new SearchCoverage.ReadingSearch.Attempted(nothingThere())),
-                List.of("here", "elsewhere"));
+                at("here"), new SearchCoverage.ReadingSearch.Attempted(nothingThere()),
+                at("elsewhere"), new SearchCoverage.ReadingSearch.Attempted(nothingThere())),
+                List.of(at("here"), at("elsewhere")));
         SearchCoverage oneLeftOut = coverageOf(Map.of(
-                "here", new SearchCoverage.ReadingSearch.Attempted(nothingThere()),
-                "elsewhere", new SearchCoverage.ReadingSearch.OutOfScope()),
-                List.of("here", "elsewhere"));
+                at("here"), new SearchCoverage.ReadingSearch.Attempted(nothingThere()),
+                at("elsewhere"), new SearchCoverage.ReadingSearch.OutOfScope()),
+                List.of(at("here"), at("elsewhere")));
         SearchCoverage oneUnanswered = coverageOf(Map.of(
-                "here", new SearchCoverage.ReadingSearch.Attempted(nothingThere()),
-                "elsewhere", new SearchCoverage.ReadingSearch.Unavailable()),
-                List.of("here", "elsewhere"));
+                at("here"), new SearchCoverage.ReadingSearch.Attempted(nothingThere()),
+                at("elsewhere"), new SearchCoverage.ReadingSearch.Unavailable()),
+                List.of(at("here"), at("elsewhere")));
         SearchCoverage oneOfThemMerelyRefused = coverageOf(Map.of(
-                "here", new SearchCoverage.ReadingSearch.Attempted(nothingThere()),
-                "elsewhere", new SearchCoverage.ReadingSearch.Attempted(refused())),
-                List.of("here", "elsewhere"));
+                at("here"), new SearchCoverage.ReadingSearch.Attempted(nothingThere()),
+                at("elsewhere"), new SearchCoverage.ReadingSearch.Attempted(refused())),
+                List.of(at("here"), at("elsewhere")));
 
         assertTrue(everyOne.provesTheLineCannotBeWritten());
         assertFalse(oneLeftOut.provesTheLineCannotBeWritten(),
@@ -133,8 +136,8 @@ class WhichReadingComposesTheRowALineIsOwedTest {
     @Test
     void aLineWithOneReadingIsWalkedToTheEndByOneReading() {
         SearchCoverage alone = coverageOf(
-                Map.of("only", new SearchCoverage.ReadingSearch.Attempted(nothingThere())),
-                List.of("only"));
+                Map.of(at("only"), new SearchCoverage.ReadingSearch.Attempted(nothingThere())),
+                List.of(at("only")));
 
         assertTrue(alone.walkedEveryReading());
         assertTrue(alone.provesTheLineCannotBeWritten());
@@ -144,8 +147,8 @@ class WhichReadingComposesTheRowALineIsOwedTest {
     @Test
     void aCoverageShortOfAReadingIsRefused() {
         assertThrows(IllegalStateException.class, () -> coverageOf(
-                Map.of("here", new SearchCoverage.ReadingSearch.Attempted(refused())),
-                List.of("here", "elsewhere")));
+                Map.of(at("here"), new SearchCoverage.ReadingSearch.Attempted(refused())),
+                List.of(at("here"), at("elsewhere"))));
     }
 
     /**
@@ -160,7 +163,7 @@ class WhichReadingComposesTheRowALineIsOwedTest {
                 new ItemAssessment.Owed(new Criterion.AtTheLevel(Level.ACount.of(1)),
                         new Measurement.Complete<>(new ItemAssessment.Coverage.Hit()),
                         ItemAssessment.WritabilityProjection.PROVEN, null),
-                List.of("anywhere"), _ -> {
+                List.of(at("anywhere")), _ -> {
                     throw new AssertionError("nothing is searched at a point a row stands at");
                 });
 
@@ -168,15 +171,20 @@ class WhichReadingComposesTheRowALineIsOwedTest {
                 DeclarationResolution.Cause.A_ROW_ALREADY_STANDS), resolved);
     }
 
-    private static SearchCoverage coverageOf(Map<String, SearchCoverage.ReadingSearch> readings,
-                                             List<String> carriers) {
-        SequencedMap<String, SearchCoverage.ReadingSearch> ordered = new LinkedHashMap<>();
-        carriers.forEach(carrier -> {
-            if (readings.containsKey(carrier)) {
-                ordered.put(carrier, readings.get(carrier));
+    private static SearchCoverage coverageOf(Map<Reading, SearchCoverage.ReadingSearch> came,
+                                             List<Reading> readings) {
+        SequencedMap<Reading, SearchCoverage.ReadingSearch> ordered = new LinkedHashMap<>();
+        readings.forEach(reading -> {
+            if (came.containsKey(reading)) {
+                ordered.put(reading, came.get(reading));
             }
         });
-        return new SearchCoverage(carriers, ordered);
+        return new SearchCoverage(readings, ordered);
+    }
+
+    /** A reading of the line: one behavior at its one position carrying the type. */
+    private static Reading at(String behavior) {
+        return new Reading(behavior, behavior + ".value");
     }
 
     /** A point a row is owed at, measured and missed, so a search of it would tell somebody

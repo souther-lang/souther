@@ -175,7 +175,8 @@ public final class GeneratedRows {
         for (Map.Entry<String, Adequacy.Filling> behavior : generated.entrySet()) {
             asked.add(Map.entry(behavior.getKey(),
                     new Composed(behavior.getValue().composed().rows(),
-                            boundaries ? atTheLines(behavior.getValue(), owed.get(behavior.getKey()))
+                            boundaries ? atTheLines(behavior.getValue().boundaries().rows(),
+                                    owed.get(behavior.getKey()))
                                     : List.of(),
                             armNames(behavior.getValue()))));
         }
@@ -315,13 +316,17 @@ public final class GeneratedRows {
      * and what tells them apart is who owes the line rather than anything a reader of the block
      * would act on. Where they coincide the block offers one row, which is what it already does for
      * two of a behavior's own lines that meet.
+     *
+     * <p>Public because it is a question and not a step of the layout: what is offered at one
+     * behavior's lines is what a reader of the block beside that behavior sees, and it is asked
+     * elsewhere. Written twice, the two would come apart the day either half of the join moved.
      */
-    private static List<Generator.GeneratedRow> atTheLines(Adequacy.Filling filling,
-                                                           List<Generator.GeneratedRow> owed) {
+    public static List<Generator.GeneratedRow> atTheLines(List<Generator.GeneratedRow> own,
+                                                          List<Generator.GeneratedRow> owed) {
         if (owed == null || owed.isEmpty()) {
-            return filling.boundaries().rows();
+            return own;
         }
-        List<Generator.GeneratedRow> out = new ArrayList<>(filling.boundaries().rows());
+        List<Generator.GeneratedRow> out = new ArrayList<>(own);
         out.addAll(owed);
         return List.copyOf(out);
     }

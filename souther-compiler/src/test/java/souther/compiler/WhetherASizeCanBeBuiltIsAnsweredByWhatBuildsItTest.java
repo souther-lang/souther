@@ -47,7 +47,14 @@ class WhetherASizeCanBeBuiltIsAnsweredByWhatBuildsItTest {
                 """.formatted(declaration, written);
     }
 
-    /** What the generator answers for the lines that behavior draws and no row sits on. */
+    /**
+     * What the generator answers at the lines this behavior's values are held to and no row sits on.
+     *
+     * <p>Both authorities. The lines here are an {@code invariant}'s, so the two points against each
+     * of them are the declaration's and are resolved once for the module (issue #1076); the regions
+     * either side are this reading's. What a person reading the block beside {@code label} sees is
+     * both, and that is what this asks for.
+     */
     private static Generator.GenerationResult boundaries(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());

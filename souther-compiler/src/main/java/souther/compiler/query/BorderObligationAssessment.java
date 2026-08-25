@@ -50,8 +50,37 @@ import java.util.Map;
 public record BorderObligationAssessment(BorderObligationId id, String axis,
                                          Map<PointRole, Demand> demands,
                                          Map<PointRole, ItemAssessment> items,
-                                         List<BorderAssessment> readings,
-                                         List<String> carriedBy) {
+                                         java.util.SequencedMap<Reading, BorderAssessment> met) {
+
+    /**
+     * One reading of the line: which behavior met it, and at which of that behavior's positions.
+     *
+     * <p><b>The position and not the behavior alone.</b> One behavior can carry the type at more
+     * than one position — {@code { a: Code, b: Code }} is two readings of {@code Code}'s line in
+     * whichever behavior takes that record — and what a search of one of them comes to is a fact
+     * about that position: the rules reaching it, and the values its decoder took. Told apart by
+     * the behavior alone, the second position's answer was dropped and which one survived was
+     * whichever the search walked first.
+     *
+     * <p>{@code at} is the bare term a row at the position is labelled with — {@code
+     * String.length(x.a)} — and two readings of one line in one behavior are two positions, so it
+     * tells them apart. The behavior-qualified spelling is not used here because it would say the
+     * behavior twice; where the pair would not tell two readings apart, {@link #across} refuses
+     * rather than keeping one of them.
+     */
+    public record Reading(String behavior, String at) {
+
+        public Reading {
+            if (behavior == null || at == null) {
+                throw new IllegalArgumentException("a reading is some behavior's, somewhere in it");
+            }
+        }
+
+        @Override
+        public String toString() {
+            return behavior + "/" + at;
+        }
+    }
 
     /**
      * The roles a debt answers for: the two the line names a value at.
@@ -66,7 +95,7 @@ public record BorderObligationAssessment(BorderObligationId id, String axis,
         if (id == null) {
             throw new IllegalArgumentException("a debt is some authored line's");
         }
-        if (readings == null || readings.isEmpty()) {
+        if (met == null || met.isEmpty()) {
             throw new IllegalArgumentException(
                     "a debt is what its readings came to, and this is none of them: " + id);
         }
@@ -79,8 +108,7 @@ public record BorderObligationAssessment(BorderObligationId id, String axis,
         if (axis == null) {
             throw new IllegalArgumentException("a line is a line on something: " + id);
         }
-        readings = List.copyOf(readings);
-        carriedBy = List.copyOf(carriedBy);
+        met = java.util.Collections.unmodifiableSequencedMap(new LinkedHashMap<>(met));
         demands = java.util.Collections.unmodifiableMap(new EnumMap<>(demands));
         items = java.util.Collections.unmodifiableMap(new EnumMap<>(items));
     }
@@ -96,18 +124,26 @@ public record BorderObligationAssessment(BorderObligationId id, String axis,
     public static List<BorderObligationAssessment> across(
             Map<String, List<BorderAssessment>> byBehavior,
             java.util.function.Function<BorderObligationId, String> named) {
-        Map<BorderObligationId, List<BorderAssessment>> byDebt = new LinkedHashMap<>();
-        Map<BorderObligationId, java.util.LinkedHashSet<String>> carriers = new LinkedHashMap<>();
+        Map<BorderObligationId, java.util.SequencedMap<Reading, BorderAssessment>> byDebt =
+                new LinkedHashMap<>();
         byBehavior.forEach((behavior, readings) -> {
             for (BorderAssessment reading : readings) {
                 BorderObligationId id = reading.border().obligation();
-                byDebt.computeIfAbsent(id, _ -> new ArrayList<>()).add(reading);
-                carriers.computeIfAbsent(id, _ -> new java.util.LinkedHashSet<>()).add(behavior);
+                Reading where = new Reading(behavior, reading.border().cut().left());
+                BorderAssessment already = byDebt
+                        .computeIfAbsent(id, _ -> new LinkedHashMap<>()).put(where, reading);
+                if (already != null) {
+                    // Two readings this cannot tell apart, which is not two readings: what a search
+                    // of one of them came to would stand for the other, chosen by the order the
+                    // walk took. Refused rather than kept, for the reason `owedAt` refuses one
+                    // behavior's lines holding one line twice.
+                    throw new IllegalStateException("one behavior reads " + id + " twice at "
+                            + where + ", so the two readings of it are one");
+                }
             }
         });
         List<BorderObligationAssessment> out = new ArrayList<>();
-        byDebt.forEach((id, of) ->
-                out.add(of(id, named.apply(id), of, List.copyOf(carriers.get(id)))));
+        byDebt.forEach((id, met) -> out.add(of(id, named.apply(id), met)));
         return List.copyOf(out);
     }
 
@@ -121,15 +157,21 @@ public record BorderObligationAssessment(BorderObligationId id, String axis,
      * declaration ({@link souther.compiler.check.DeclaredBorders}).
      */
     public static BorderObligationAssessment of(BorderObligationId id, String axis,
-                                                List<BorderAssessment> readings,
-                                                List<String> carriedBy) {
+                                                java.util.SequencedMap<Reading, BorderAssessment>
+                                                        met) {
+        List<BorderAssessment> readings = List.copyOf(met.values());
         Map<PointRole, Demand> demands = new EnumMap<>(PointRole.class);
         Map<PointRole, ItemAssessment> items = new EnumMap<>(PointRole.class);
         for (PointRole role : AGAINST_THE_LINE) {
             demands.put(role, asked(id, role, readings));
             items.put(role, at(role, readings, demands.get(role)));
         }
-        return new BorderObligationAssessment(id, axis, demands, items, readings, carriedBy);
+        return new BorderObligationAssessment(id, axis, demands, items, met);
+    }
+
+    /** Every reading of the line, in the order they were made. */
+    public List<BorderAssessment> readings() {
+        return List.copyOf(met.values());
     }
 
     /**
@@ -234,7 +276,13 @@ public record BorderObligationAssessment(BorderObligationId id, String axis,
      * was a line the declaration is owed (issue #1062).
      */
     public boolean carriedBy(String behavior) {
-        return carriedBy.contains(behavior);
+        return met.keySet().stream().anyMatch(each -> each.behavior().equals(behavior));
+    }
+
+    /** The same, as the list of them. Distinct, because a behavior reading one line at two
+     *  positions carries it once. */
+    public List<String> carriedBy() {
+        return met.keySet().stream().map(Reading::behavior).distinct().toList();
     }
 
     /** The rule that drew the line, as the readings met it. */
@@ -272,6 +320,7 @@ public record BorderObligationAssessment(BorderObligationId id, String axis,
      */
     public String against(PointRole role) {
         souther.compiler.partition.Criterion criterion = demands.get(role).criterion();
-        return criterion == null ? null : criterion.written(readings.get(0).border().cut().of());
+        return criterion == null ? null
+                : criterion.written(met.firstEntry().getValue().border().cut().of());
     }
 }

@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import souther.compiler.partition.Generator;
+import souther.compiler.query.BorderObligationAssessment.Reading;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -28,12 +29,18 @@ import java.util.SequencedMap;
  * say something about readings nobody had any reason to look at. Which is also why this being total
  * costs nothing: it is built where the walk reached the end.
  *
- * @param carriers the readings the line has, in the order the module declares them. Named rather
+ * <p>A reading is a behavior at one of its positions and not a behavior. One behavior can carry the
+ * type at more than one position, and what a search of one of them came to is a fact about that
+ * position — so a coverage keyed by the behavior holds one of the two answers, chosen by the order
+ * the walk took, which is the thing this value exists to refuse.
+ *
+ * @param readings the readings the line has, in the order the module declares them. Named rather
  *                 than left as whatever the map happens to hold, because it is what the map is
  *                 checked against — the universe is a fact about the line, and a coverage built
  *                 from its own keys could not be short of anything
+ * @param came     what became of each of them
  */
-public record SearchCoverage(List<String> carriers, SequencedMap<String, ReadingSearch> readings) {
+public record SearchCoverage(List<Reading> readings, SequencedMap<Reading, ReadingSearch> came) {
 
     /** What became of one reading. */
     public sealed interface ReadingSearch {
@@ -73,17 +80,17 @@ public record SearchCoverage(List<String> carriers, SequencedMap<String, Reading
     }
 
     public SearchCoverage {
-        carriers = List.copyOf(carriers);
-        if (carriers.isEmpty()) {
+        readings = List.copyOf(readings);
+        if (readings.isEmpty()) {
             // A line is what its readings came to and a line with none is not one. Allowed, a walk
             // over nothing would come back having proven whatever it was asked to prove.
             throw new IllegalArgumentException("a line nothing reads is not a line");
         }
-        readings = java.util.Collections.unmodifiableSequencedMap(new LinkedHashMap<>(readings));
-        if (!readings.keySet().equals(new LinkedHashSet<>(carriers))) {
+        came = java.util.Collections.unmodifiableSequencedMap(new LinkedHashMap<>(came));
+        if (!came.keySet().equals(new LinkedHashSet<>(readings))) {
             throw new IllegalStateException(
-                    "a coverage of a line that leaves one of its readings out: " + carriers
-                            + " against " + readings.keySet());
+                    "a coverage of a line that leaves one of its readings out: " + readings
+                            + " against " + came.keySet());
         }
     }
 
@@ -95,13 +102,13 @@ public record SearchCoverage(List<String> carriers, SequencedMap<String, Reading
      * that asked which scope this was would refuse it the answer its own evidence supports.
      */
     public boolean walkedEveryReading() {
-        return readings.values().stream().allMatch(ReadingSearch.Attempted.class::isInstance);
+        return came.values().stream().allMatch(ReadingSearch.Attempted.class::isInstance);
     }
 
     /** What each reading that was walked came to, in the order they were walked. */
     public List<Generator.UnresolvedCombination> attempted() {
         List<Generator.UnresolvedCombination> out = new ArrayList<>();
-        for (ReadingSearch each : readings.values()) {
+        for (ReadingSearch each : came.values()) {
             if (each instanceof ReadingSearch.Attempted(var why)) {
                 out.add(why);
             }

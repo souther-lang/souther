@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import souther.compiler.partition.Generator;
+import souther.compiler.query.BorderObligationAssessment.Reading;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -76,12 +77,14 @@ public final class DeclarationResolver {
      * @param owed     what the line came to at this point, over all of its readings. What decides
      *                 whether there is anything to look for, which is the measurement's answer and
      *                 not the search's
-     * @param carriers the readings, in the order the module declares them
-     * @param reading  what each of them holds, asked in that order and only as far as the walk gets
+     * @param readings the readings, in the order the module declares them. A reading is a behavior
+     *                 at one of its positions: one behavior carrying the type twice is two of them,
+     *                 and what a search of each came to is a fact about that position
+     * @param held     what each of them holds, asked in that order and only as far as the walk gets
      */
     public static DeclarationResolution resolveAt(String said, ItemAssessment.Owed owed,
-                                                  List<String> carriers,
-                                                  Function<String, ReadingEvidence> reading) {
+                                                  List<Reading> readings,
+                                                  Function<Reading, ReadingEvidence> held) {
         if (!owed.worthSearching()) {
             // The measurement's own answer and not a search that came back empty. A point a row
             // already stands at is work that is done, and one nothing measured is not known to be
@@ -90,27 +93,28 @@ public final class DeclarationResolver {
                     ? DeclarationResolution.Cause.A_ROW_ALREADY_STANDS
                     : DeclarationResolution.Cause.NOTHING_MEASURED);
         }
-        SequencedMap<String, SearchCoverage.ReadingSearch> walked = new LinkedHashMap<>();
-        for (String carrier : carriers) {
-            switch (reading.apply(carrier)) {
+        SequencedMap<Reading, SearchCoverage.ReadingSearch> walked = new LinkedHashMap<>();
+        for (Reading reading : readings) {
+            switch (held.apply(reading)) {
                 case ReadingEvidence.OutOfScope _ ->
-                        walked.put(carrier, new SearchCoverage.ReadingSearch.OutOfScope());
+                        walked.put(reading, new SearchCoverage.ReadingSearch.OutOfScope());
                 case ReadingEvidence.NoAnswer _ ->
-                        walked.put(carrier, new SearchCoverage.ReadingSearch.Unavailable());
+                        walked.put(reading, new SearchCoverage.ReadingSearch.Unavailable());
                 case ReadingEvidence.Searched(ItemAssessment.Attempt attempt) -> {
                     switch (attempt) {
                         case ItemAssessment.Attempt.Built(var row, var _) ->
                                 // The line is answered. Which reading answered it is where the row
                                 // goes and not what the answer is.
-                                { return new DeclarationResolution.Generated(carrier, row); }
+                                { return new DeclarationResolution.Generated(
+                                        reading.behavior(), row); }
                         case ItemAssessment.Attempt.Unresolved(var why, var _) ->
-                                walked.put(carrier,
+                                walked.put(reading,
                                         new SearchCoverage.ReadingSearch.Attempted(why));
                         // A search that ran with nothing to run against. Said in the words the
                         // generator says it in, as the reading's own outcome: it is a fact about
                         // this run, and one of the reasons a reader may not act on — so a line
                         // holding one of these is not one the model settles.
-                        case ItemAssessment.Attempt.Unavailable _ -> walked.put(carrier,
+                        case ItemAssessment.Attempt.Unavailable _ -> walked.put(reading,
                                 new SearchCoverage.ReadingSearch.Attempted(
                                         new Generator.UnresolvedCombination(List.of(said),
                                                 Generator.UnresolvedCombination.Reason
@@ -119,7 +123,7 @@ public final class DeclarationResolver {
                 }
             }
         }
-        return new DeclarationResolution.Unresolved(new SearchCoverage(carriers, walked));
+        return new DeclarationResolution.Unresolved(new SearchCoverage(readings, walked));
     }
 
     private DeclarationResolver() {}

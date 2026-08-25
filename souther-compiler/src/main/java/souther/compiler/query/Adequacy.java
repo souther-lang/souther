@@ -1520,14 +1520,20 @@ public final class Adequacy {
                     : BorderObligationAssessment.AGAINST_THE_LINE) {
                 ItemAssessment.Owed at = debt.owedAt(role);
                 if (at == null) {
-                    continue;   // no row is owed at this point of the line
+                    // No row is owed at this point. A line a declaration drew is the type's own
+                    // rule, so the value off it is not a value of the type and the point beside the
+                    // line is refused — which is why the walk below is, in practice, over the point
+                    // on it. Written for both because that is what a line owes and not what these
+                    // models happen to answer.
+                    continue;
                 }
                 String said = debt.said(role);
                 resolved.put(new souther.compiler.partition.BorderObligationPoint(debt.id(), role),
                         new DeclaredRows.Answer(said, owed.declaration().name(),
-                                DeclarationResolver.resolveAt(said, at, debt.carriedBy(),
-                                        carrier -> readingOf(db, module, scope, debt, role,
-                                                carrier))));
+                                DeclarationResolver.resolveAt(said, at,
+                                        List.copyOf(debt.met().keySet()),
+                                        reading -> readingOf(db, module, scope, debt, role,
+                                                reading))));
             }
         }
         return new DeclaredRows(scope, resolved);
@@ -1545,56 +1551,41 @@ public final class Adequacy {
      * <p>Asked only where the scope admits the behavior, so a request about one behavior spends
      * nothing on the rest — which is what a search per reading was costing an editor.
      *
-     * <p>A behavior can meet one line at more than one position, and those are readings too: the
-     * first of them that composed a row answers, since a row standing at any of them stands at the
-     * line. Where none did, the first outcome stands for the behavior — they are its readings, and
-     * what each of them came to is the search's to have recorded.
+     * <p>One reading and never a behavior's. A behavior carrying the type at two positions meets
+     * the line twice, and what a search of one of them came to is a fact about that position — the
+     * rules reaching it, the values its decoder took. Folded to one answer per behavior, the second
+     * position's was dropped and which one survived was whichever the search walked first.
      */
     private static DeclarationResolver.ReadingEvidence readingOf(
             Db db, String module, GenerationScope scope, BorderObligationAssessment debt,
-            souther.compiler.partition.PointRole role, String carrier) {
-        if (!scope.admits(carrier)) {
+            souther.compiler.partition.PointRole role,
+            BorderObligationAssessment.Reading reading) {
+        if (!scope.admits(reading.behavior())) {
             return new DeclarationResolver.ReadingEvidence.OutOfScope();
         }
-        List<BorderAssessment> searched = db.ask(new BoundarySearch(module, carrier)).value();
+        List<BorderAssessment> searched =
+                db.ask(new BoundarySearch(module, reading.behavior())).value();
         if (searched == null) {
             return new DeclarationResolver.ReadingEvidence.NoAnswer();
         }
-        ItemAssessment.Attempt first = null;
-        boolean met = false;
-        for (BorderAssessment line : searched) {
-            if (!line.border().obligation().equals(debt.id())) {
-                continue;
-            }
-            met = true;
-            ItemAssessment.Owed here = line.owedAt(role);
-            if (here == null) {
-                throw new IllegalStateException("a reading owing nothing at a point its line owes"
-                        + " one at: " + debt.id() + " " + role + " in `" + carrier + "`");
-            }
-            if (here.attempt() == null) {
-                // The search answered about this behavior and looked for nothing here, at a point
-                // the line says is worth searching. That is the search and the debt disagreeing
-                // about one point rather than evidence of anything, and a state read as either
-                // would report our own bookkeeping as an answer about the line.
-                throw new IllegalStateException("nothing was searched for at " + debt.said(role)
-                        + ", which the line says is worth searching, in `" + carrier + "`");
-            }
-            if (here.attempt() instanceof ItemAssessment.Attempt.Built) {
-                return new DeclarationResolver.ReadingEvidence.Searched(here.attempt());
-            }
-            if (first == null) {
-                first = here.attempt();
-            }
+        // The same line, found in the search's own reading of this behavior by the line itself. A
+        // border is a value, so this is the reading the debt was made from and not one that happens
+        // to look like it — and where a behavior holds the line twice `owedAt` refuses rather than
+        // choosing, which is the same refusal the debt's own readings are built under.
+        souther.compiler.partition.Border line = debt.met().get(reading).border();
+        if (!(BorderAssessment.owedAt(searched, line, role) instanceof ItemAssessment.Owed here)) {
+            throw new IllegalStateException("a reading owing nothing at a point its line owes one"
+                    + " at: " + debt.id() + " " + role + " at " + reading);
         }
-        if (!met) {
-            // The behavior carries the line and its own search does not hold it. The two are made
-            // from one reading of one module and cannot honestly differ, so this is a defect here
-            // rather than a reading with nothing to say.
-            throw new IllegalStateException("a behavior carrying a line whose search does not hold"
-                    + " it: " + debt.id() + " in `" + carrier + "`");
+        if (here.attempt() == null) {
+            // The search answered about this behavior and looked for nothing here, at a point the
+            // line says is worth searching. That is the search and the debt disagreeing about one
+            // point rather than evidence of anything, and a state read as either would report our
+            // own bookkeeping as an answer about the line.
+            throw new IllegalStateException("nothing was searched for at " + debt.said(role)
+                    + ", which the line says is worth searching, at " + reading);
         }
-        return new DeclarationResolver.ReadingEvidence.Searched(first);
+        return new DeclarationResolver.ReadingEvidence.Searched(here.attempt());
     }
 
     /** The same, with a value composed at every point worth one — which is a request, and costs what
