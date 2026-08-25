@@ -28,6 +28,14 @@ import souther.compiler.source.SourceId;
  * that is what the walk over this boundary refuses, and refusing it in the answers alone would
  * leave half of it standing.
  *
+ * <p>Two shapes of answer, and which one a question takes is not a matter of taste. A question
+ * about what happened answers with what happened, and says in its own type that it was not done
+ * here — {@code Holds}, {@code NotRunHere}, {@code NotBuiltHere} — because "nothing was wrong" and
+ * "nothing was tried" are the two a caller must never read as one. A question asking for a way to
+ * go on asking answers with that way, or with nothing: there is no outcome to report yet, and the
+ * absence is that there is no operation to ask. {@link #values} and {@link #trials} are the second
+ * kind and answer null; the other four are the first.
+ *
  * <p>It does not say which implementation runs. ADR-0032 does, and today the answer is the
  * generated JVM program. If that is ever re-opened, what it takes is a second implementation of
  * this rather than taking the example subsystem apart; and if it never is, the arrangement still
