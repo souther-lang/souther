@@ -6,6 +6,7 @@ import souther.compiler.execute.ConstantOutcome;
 import souther.compiler.execute.ProgramExecution;
 import souther.compiler.execute.WrittenValue;
 import souther.compiler.examples.Answering;
+import souther.compiler.examples.ExampleStatements;
 import souther.compiler.examples.ExampleVerifier;
 import souther.compiler.execute.ExampleExecution;
 import souther.compiler.jvm.GeneratedClass;
@@ -13,6 +14,8 @@ import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.observe.ArmObservation;
 import souther.compiler.observe.Observations;
 import souther.compiler.observe.RowRun;
+import souther.compiler.observe.StatementReading;
+import souther.compiler.observe.TableBuild;
 import souther.compiler.source.SourceId;
 
 import java.math.BigDecimal;
@@ -54,6 +57,30 @@ public final class JvmProgramExecution implements ProgramExecution {
                 // the same seam and brings its own classes.
                 Answering.generatedHere(), asked.contracts());
         return new RowRun.Ran(observed);
+    }
+
+    @Override
+    public TableBuild fakeTables(ExampleExecution asked, SourceId source) {
+        JvmProgramImage image = images.evaluating(asked.module(), ArmObservation.OMIT);
+        if (image == null) {
+            return new TableBuild.NotBuiltHere();
+        }
+        // The classes alone. Nothing here applies a behavior, so what the compile implemented is not
+        // a question this asks.
+        return new TableBuild.Built(ExampleStatements.fakeTables(asked.rows(), asked.symbols(),
+                asked.signatures(), image.program().classes(), image.around(), asked.definitions(),
+                source, asked.deadline(), asked.policy(), asked.contracts()));
+    }
+
+    @Override
+    public StatementReading statements(ExampleExecution asked) {
+        JvmProgramImage image = images.evaluating(asked.module(), ArmObservation.OMIT);
+        if (image == null) {
+            return new StatementReading.NotReadHere();
+        }
+        return new StatementReading.Read(ExampleStatements.disagreements(asked.rows(),
+                asked.symbols(), asked.signatures(), image.program().classes(), image.around(),
+                asked.definitions(), asked.deadline(), asked.policy(), asked.contracts()));
     }
 
     @Override

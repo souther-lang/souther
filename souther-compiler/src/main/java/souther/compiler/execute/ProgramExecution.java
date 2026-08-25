@@ -2,6 +2,8 @@ package souther.compiler.execute;
 
 import souther.compiler.observe.ArmObservation;
 import souther.compiler.observe.RowRun;
+import souther.compiler.observe.StatementReading;
+import souther.compiler.observe.TableBuild;
 import souther.compiler.source.SourceId;
 
 /**
@@ -56,4 +58,23 @@ public interface ProgramExecution {
      * classes those are is not a fact about the program.
      */
     RowRun run(ExampleExecution asked, SourceId source, ArmObservation arms);
+
+    /**
+     * What building the tables the {@code fake} rows of {@code source} state says about them.
+     *
+     * <p>No behavior is applied. A fake states what stands in for one while some other behavior's
+     * row runs, and building the value it names runs the decoders the module's types derive and the
+     * definitions its rows reach — which are classes a compile produced, which is why this is asked
+     * here at all. It is not a run of the model.
+     */
+    TableBuild fakeTables(ExampleExecution asked, SourceId source);
+
+    /**
+     * What the module's written statements about one behavior say about each other.
+     *
+     * <p>No behavior is applied here either, and asked of the module rather than of a source: a
+     * module's fakes are what its attached files' rows are recorded against and the other way round,
+     * so the two sides of one disagreement need not be written in one file.
+     */
+    StatementReading statements(ExampleExecution asked);
 }

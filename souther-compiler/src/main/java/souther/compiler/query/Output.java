@@ -746,17 +746,11 @@ public final class Output {
             if (asked == null) {
                 return Answer.absent();
             }
-            // The classes alone: nothing here applies a behavior, so what the compile implemented is
-            // not a question this asks.
-            EvaluationArtifact artifact =
-                    db.ask(new EvaluationLinked(name, ArmObservation.OMIT)).value();
-            if (artifact == null) {
-                return Answer.absent();
+            if (!(db.execution().statements(asked)
+                    instanceof souther.compiler.observe.StatementReading.Read(var said))) {
+                return Answer.absent();   // nothing was read, so nothing is said
             }
-            return Answer.of(souther.compiler.examples.ExampleStatements.disagreements(
-                    asked.rows(),
-                    asked.symbols(), asked.signatures(), artifact.classes(), evaluationLoader(db),
-                    asked.definitions(), asked.deadline(), asked.policy(), asked.contracts()));
+            return Answer.of(said);
         }
     }
 
@@ -960,17 +954,13 @@ public final class Output {
             if (asked == null) {
                 return List.of();   // nothing here can have a value built with yet
             }
-            // Building a table applies no behavior, so only the classes are read.
-            EvaluationArtifact artifact =
-                    db.ask(new EvaluationLinked(name, ArmObservation.OMIT)).value();
-            if (artifact == null) {
-                return List.of();
-            }
-            return souther.compiler.examples.ExampleStatements.fakeTables(
-                    asked.rows(), asked.symbols(),
-                    asked.signatures(), artifact.classes(), evaluationLoader(db),
-                    asked.definitions(), sourceId,
-                    asked.deadline(), asked.policy(), asked.contracts());
+            // Nothing to say where nothing was built, and nothing is lost by saying nothing: what
+            // could not build a table could not run a row either, so the answer this is added to has
+            // already gone absent. Which of the two happened is readable now rather than guessed
+            // from an empty list.
+            return db.execution().fakeTables(asked, sourceId)
+                    instanceof souther.compiler.observe.TableBuild.Built(List<Diagnostic> wrong)
+                    ? wrong : List.of();
         }
 
         /**
