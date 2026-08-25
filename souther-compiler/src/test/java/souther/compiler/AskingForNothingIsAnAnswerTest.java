@@ -68,9 +68,9 @@ class AskingForNothingIsAnAnswerTest {
                 "and its parts say it themselves, since a document writes them on their own");
         // The position that is a sum. The one beside it is not, which is the measure's own answer
         // and comes before this one: no build asking for anything would have counted it.
-        assertEquals(NothingWasAsked.NOT_ASKED, signature.inputs().get(0).cases().why());
+        assertEquals(NothingWasAsked.NOT_ASKED, signature.positions().get(0).cases().why());
         assertEquals(souther.compiler.query.InputCaseEvidence.NotASum.NOT_A_SUM,
-                signature.inputs().get(1).cases().why());
+                signature.positions().get(1).cases().why());
 
         PartitionEvidence partition = measured.partitions().get("submit");
         for (PartitionEvidence.AxisCoverage axis : partition.axes()) {

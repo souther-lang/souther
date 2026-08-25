@@ -12,6 +12,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -179,19 +180,19 @@ class AnAbsentDerivationIsNotAProofAboutTheModelTest {
     }
 
     /**
-     * The coverage answers for every behavior of the module it was asked about, bar compositions.
+     * The coverage answers for every behavior of the module it was asked about, compositions
+     * included.
      *
-     * <p>A characterization of the contract as it stands, written because a reader depends on it.
-     * {@code PartitionEvidence.NONE} says the model holds no subject for these measures, and the
-     * two readers of this map reach it by a key being missing — so what a missing key means is part
-     * of the answer, and it is written down nowhere the producer can be held to.
+     * <p>A key carried part of the answer, and the two readers of this map read it two ways: one
+     * as a composition with no subject, one as this compiler disagreeing with itself. Neither is
+     * right about a behavior whose boundary did not work out, which is a third thing a key cannot
+     * say and which the front end does produce — so the report stopped on it.
      *
-     * <p>Which is the state of it and not the intent. The map is total over what it answers for
-     * once the coverage answers for compositions itself, and this test inverts then: the reading
-     * moves into the producer and the key stops carrying it (issue #996, stage 3).
+     * <p>So a composition's answer is {@code NONE} and it is the producer that says so, from the
+     * declarations it is holding anyway. What a reader does with this map is look a name up.
      */
     @Test
-    void theCoverageOmitsOnlyCompositions() {
+    void theCoverageAnswersForEveryBehavior() {
         Compilation compilation = measured("""
                 module example.mixed
 
@@ -221,10 +222,22 @@ class AnAbsentDerivationIsNotAProofAboutTheModelTest {
 
         souther.compiler.check.Prepared module =
                 compilation.db().ask(new Shapes.Prepared("example.mixed")).value();
+        assertEquals(module.behaviors().stream()
+                        .map(souther.compiler.ast.Hir.BehaviorDef::name).toList(),
+                List.copyOf(answered.keySet()),
+                "the coverage answers for every behavior the module declares");
         for (souther.compiler.ast.Hir.BehaviorDef behavior : module.behaviors()) {
-            assertEquals(!module.isComposition(behavior), answered.containsKey(behavior.name()),
-                    () -> "a behavior is in the coverage exactly when it is not a composition: "
-                            + behavior.name() + " in " + answered.keySet());
+            PartitionEvidence found = answered.get(behavior.name());
+            assertNotNull(found, () -> "an answer for " + behavior.name());
+            // And a composition's answer is the one that says the model holds no subject here,
+            // which is what a reader used to work out for itself from the key not being there.
+            if (module.isComposition(behavior)) {
+                assertEquals(PartitionEvidence.NONE, found,
+                        () -> behavior.name() + " is measured at its stages");
+            } else {
+                assertNotEquals(PartitionEvidence.NONE, found,
+                        () -> behavior.name() + " is measured here");
+            }
         }
     }
 

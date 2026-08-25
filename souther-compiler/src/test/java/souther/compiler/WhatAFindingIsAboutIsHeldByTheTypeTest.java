@@ -88,7 +88,7 @@ class WhatAFindingIsAboutIsHeldByTheTypeTest {
         Adequacy.SignatureEvidence signature =
                 signature(List.of(InputCaseEvidence.none(0), InputCaseEvidence.none(1)));
 
-        assertEquals(List.of(0, 1), signature.inputs().stream().map(InputCaseEvidence::at).toList());
+        assertEquals(List.of(0, 1), signature.positions().stream().map(InputCaseEvidence::at).toList());
     }
 
     /** A position that is not one is not a position an input can be at. */

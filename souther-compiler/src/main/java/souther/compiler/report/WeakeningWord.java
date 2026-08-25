@@ -44,6 +44,11 @@ public enum WeakeningWord {
     /** The bodies of the module were not elaborated, so what is inside them was not read. */
     BODIES_NOT_ELABORATED,
 
+    /** The boundary of the behavior could not be worked out, so no measure that reads one could be
+     *  finished. Every one of them was asked for and started, which is what tells this from a
+     *  measure nobody asked for. */
+    BEHAVIOR_BOUNDARY_NOT_DERIVED,
+
 
     /** The space of combinations was too large to walk to the end of. */
     PAIR_SPACE_TRUNCATED,

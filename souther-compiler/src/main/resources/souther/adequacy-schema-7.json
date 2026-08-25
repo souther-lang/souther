@@ -46,6 +46,7 @@
                  "output_cases_unreadable", "input_cases_unreadable", "row_did_not_finish",
                  "border_value_unreadable", "rule_unread", "position_not_read",
                  "question_unanswered", "rules_not_reached", "bodies_not_elaborated",
+                 "behavior_boundary_not_derived",
                  "pair_space_truncated", "proof_contradicted", "arms_unsettled"]
       }
     },
@@ -227,7 +228,7 @@
     },
     "partition": {
       "type": "object",
-      "description": "How much of what the model distinguishes about this behavior's inputs the rows reach.",
+      "description": "How much of what the model distinguishes about this behavior's inputs the rows reach. Absent where there were no positions to write: the positions here are the ones the model divides, worked out from the behavior's boundary and the rules written about it, and no declaration gives them — so a boundary that did not work out leaves nothing to divide and an empty `axes` would say the model divides none of them. Said as `behavior_boundary_not_derived` in the behavior's `weakening`. A `>->` composition is not this — it is measured at its stages and carries a section saying so.",
       "required": ["axes", "boundaries", "pairs", "notDerivable"],
       "additionalProperties": false,
       "properties": {
@@ -525,7 +526,7 @@
     },
     "signature": {
       "type": "object",
-      "description": "What the rows establish about the cases of the behavior's inputs and its output. Absent where the behavior has no signature to read.",
+      "description": "What the rows establish about the cases of the behavior's inputs and its output. Absent where the behavior has no signature to read, which includes a declaration resting on a name that resolved to nothing. There is no section in that case whether or not the positions themselves are known: a declared behavior's are its parameters and are known from the declaration, but without a boundary nothing was read of the cases at any of them, and a `>->` composition takes what its first stage takes and so has no known layout either. What that left unmeasured is the behavior's `weakening`, as `behavior_boundary_not_derived`; which name went unresolved is a compile error reported where it was written.",
       "required": ["status", "output", "inputs"],
       "additionalProperties": false,
       "properties": {

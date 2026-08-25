@@ -96,7 +96,7 @@ class AFindingCarriesWhatTheMeasureThatFoundItWentWithoutTest {
                 case About.ACaseNoRowExpects _, About.ACaseNothingWasSeenToProduce _ ->
                         signature.output().cases().weakening();
                 case About.ACaseNoRowAppliesItTo(var at, var _) ->
-                        signature.inputs().get(at.at()).cases().weakening();
+                        signature.positions().get(at.at()).cases().weakening();
                 default -> null;
             };
             if (owed == null) {

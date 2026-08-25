@@ -403,6 +403,39 @@ public final class Adequacy {
     }
 
     /**
+     * One answer for every behavior a module declares, which is what a measure of a module answers.
+     *
+     * <p><b>The key set is the producer's and there is nowhere to drop one.</b> A measure whose
+     * question a behavior cannot be asked answers that it could not be asked, and a measure that
+     * skipped the behavior instead published a map with a hole in it — one its own readers then
+     * read three ways: as a composition with nothing to measure, as the whole query not having
+     * answered, and as this compiler disagreeing with itself. Two of those are wrong about a
+     * behavior whose declaration rests on a name nothing resolved, and the third stops the report.
+     *
+     * <p>So the loop is here and the caller writes what one behavior comes to. It is handed a
+     * declaration and owes a value: a mapper that answered {@code null} would be the skip again,
+     * written as a return.
+     *
+     * <p>Two behaviors of one name would be one entry, which is why what went in is counted against
+     * what came out. Nothing produces that today — a module's declarations are settled before this
+     * — and a key set alone cannot tell it from an answer that was overwritten.
+     */
+    static <T> Answer<Map<String, T>> answerEveryBehavior(
+            souther.compiler.check.Prepared prepared,
+            java.util.function.Function<Hir.BehaviorDef, T> answer) {
+        Map<String, T> out = new LinkedHashMap<>();
+        for (Hir.BehaviorDef behavior : prepared.behaviors()) {
+            out.put(behavior.name(), java.util.Objects.requireNonNull(answer.apply(behavior),
+                    () -> "no answer for `" + behavior.name() + "` of `" + prepared.name() + "`"));
+        }
+        if (out.size() != prepared.behaviors().size()) {
+            throw new IllegalStateException("`" + prepared.name() + "` declares "
+                    + prepared.behaviors().size() + " behaviors and answered for " + out.size());
+        }
+        return Answer.of(Ordered.map(out));
+    }
+
+    /**
      * What the rows say about one behavior's signature.
      *
      * <p>An aggregate and not a number of its own: the numbers are the output's and the inputs'.
@@ -410,10 +443,27 @@ public final class Adequacy {
      * what it went without is the union of what its parts went without and what the signature
      * measure itself could not see.
      */
-    public record SignatureEvidence(OutputCaseEvidence output, List<InputCaseEvidence> inputs,
+    public record SignatureEvidence(OutputCaseEvidence output,
+                                    Measure<List<InputCaseEvidence>> inputs,
                                     Measure<Counted> counted) {
 
-        /** That the signature's cases were counted. */
+        /**
+         * That the signature's cases were counted.
+         *
+         * <p><b>Whether the positions are known is not whether the boundary was worked out.</b> They
+         * are two questions and this measure exists because they are: a declared behavior writes its
+         * parameters, so its layout is known off the declaration whatever the boundary did, and only
+         * the cases at each position go unread. A {@code >->} writes none — it takes what its first
+         * stage takes — so a composition is the one shape whose layout has nowhere else to come
+         * from, and the one whose positions can be unknown.
+         *
+         * <p><b>Which is why they are inside a measure and not a bare list.</b> Held as a list, an
+         * unknown layout is an empty one — the same bytes as a behavior that takes nothing — and a
+         * reader counting the entries would answer "no positions" to a question nobody could
+         * answer. The same reason the positions of the partition measure are inside one
+         * ({@code PartitionEvidence.partitioned}), which answers a different question about a
+         * different set: what the model divides, which no declaration gives.
+         */
         public record Counted() {}
 
         /** Why the signature has no numbers. */
@@ -433,14 +483,58 @@ public final class Adequacy {
 
         public static SignatureEvidence notASum(OutputCaseEvidence output,
                                                 List<InputCaseEvidence> inputs) {
-            return new SignatureEvidence(output, inputs,
+            return new SignatureEvidence(output, at(inputs),
                     new Measure.NotApplicable<>(NotASum.NOT_A_SUM));
         }
 
         public static SignatureEvidence noRows(OutputCaseEvidence output,
                                                List<InputCaseEvidence> inputs) {
-            return new SignatureEvidence(output, inputs,
+            return new SignatureEvidence(output, at(inputs),
                     new Measurement.NotMeasured<>(NoRows.NO_ROWS));
+        }
+
+        /**
+         * The boundary this measures was not worked out, so no case of it was read.
+         *
+         * <p><b>The positions are answered for where the declaration says how many there are, and
+         * not otherwise.</b> A declared behavior writes its parameters, so they are known and each
+         * of them says its own cases were not read. A {@code >->} composition writes none: it takes
+         * what its first stage takes, and that is what could not be worked out — so how many
+         * positions it has is unknown, and the measure says so rather than answering nought.
+         *
+         * <p>Which is the whole of why this measure holds a measurement and not a list. The two
+         * states are a behavior that takes nothing and a behavior nobody could count the positions
+         * of, and as a list they are the same empty one.
+         */
+        public static SignatureEvidence boundaryNotDerived(Hir.BehaviorDef behavior) {
+            String name = behavior.name();
+            // The positions themselves, where the declaration writes them. They are read off the
+            // declaration and nothing about them went short — what could not be read is the cases
+            // at each of them, which is each position's own answer. A measurement of the list that
+            // said it was weakened would be a shortfall in a thing that has none, and the same two
+            // states this measure exists to tell apart would be three.
+            Measure<List<InputCaseEvidence>> positions =
+                    behavior instanceof Hir.SpecBehavior spec
+                            ? at(declaredPositions(name, spec))
+                            : BoundaryForMeasurement.failed(name);
+            return new SignatureEvidence(OutputCaseEvidence.boundaryNotDerived(name), positions,
+                    BoundaryForMeasurement.failed(name));
+        }
+
+        /** One entry per parameter the declaration writes, each saying its cases were not read. */
+        private static List<InputCaseEvidence> declaredPositions(String behavior,
+                                                                 Hir.SpecBehavior spec) {
+            List<InputCaseEvidence> out = new ArrayList<>(spec.params().size());
+            for (int at = 0; at < spec.params().size(); at++) {
+                out.add(InputCaseEvidence.boundaryNotDerived(at, behavior));
+            }
+            return out;
+        }
+
+        /** The positions, where something wrote them down — the boundary, or the declaration the
+         *  boundary was to have been built from. Every one of them, whatever was read at each. */
+        static Measure<List<InputCaseEvidence>> at(List<InputCaseEvidence> inputs) {
+            return new Measurement.Complete<>(List.copyOf(inputs));
         }
 
         /** Nobody asked for a measurement, so neither this nor anything under it was made. Its
@@ -449,7 +543,7 @@ public final class Adequacy {
          *  assembled that way over unmeasured parts would come out complete. */
         public static SignatureEvidence notAsked(OutputCaseEvidence output,
                                                  List<InputCaseEvidence> inputs) {
-            return new SignatureEvidence(output, inputs,
+            return new SignatureEvidence(output, at(inputs),
                     new Measurement.NotMeasured<>(NothingWasAsked.NOT_ASKED));
         }
 
@@ -463,7 +557,7 @@ public final class Adequacy {
             for (InputCaseEvidence each : inputs) {
                 by = by.union(each.cases().weakening());
             }
-            return new SignatureEvidence(output, inputs, by.isEmpty()
+            return new SignatureEvidence(output, at(inputs), by.isEmpty()
                     ? new Measurement.Complete<>(new Counted())
                     : new Measurement.Partial<>(new Counted(), by));
         }
@@ -473,18 +567,46 @@ public final class Adequacy {
             return counted.weakening();
         }
 
+        /** Whether this is what a behavior whose boundary could not be worked out comes to. */
+        public boolean boundaryNotDerived() {
+            return BoundaryForMeasurement.wasNotDerived(counted);
+        }
+
+        /**
+         * The positions, where anything said how many there are.
+         *
+         * <p>Which is not the same as the boundary having been worked out: a declared behavior's
+         * are its parameters, and they are here whatever became of the boundary — each of them
+         * saying for itself what was read of its cases. What has none is a composition whose first
+         * stage's boundary did not work out, which is the one shape with nowhere else to take a
+         * layout from.
+         *
+         * <p>Throws there, the way {@link OutputCaseEvidence#seen()} and {@code PairSpace.counts()}
+         * do. An accessor that answered an empty list instead would be the thing the measure around
+         * it was introduced to remove: a reader would get an answer and no sign that nobody counted.
+         */
+        public List<InputCaseEvidence> positions() {
+            return inputs.made().orElseThrow(() -> new IllegalStateException(
+                    "a signature whose boundary was not read was asked for its positions"));
+        }
+
         public SignatureEvidence {
-            inputs = List.copyOf(inputs);
             // And each of them where it says it is. Two things say which input a piece of evidence
             // is about — where it sits in this list, which is what the document publishes as the
             // order of `signature.inputs`, and what the evidence answers, which is what a finding
             // names a position by. They are read by different surfaces, so a list assembled out of
             // step would publish an array whose first entry called itself the second, and each
             // surface would go on being right about the one it reads.
-            for (int i = 0; i < inputs.size(); i++) {
-                if (inputs.get(i).at() != i) {
-                    throw new IllegalArgumentException("the evidence at input " + i
-                            + " says it is input " + inputs.get(i).at());
+            //
+            // Asked of the positions where there are any. A measure that could not count them has
+            // none to be out of step with, which is not the same as having none.
+            List<InputCaseEvidence> at = inputs.made().orElse(null);
+            if (at != null) {
+                for (int i = 0; i < at.size(); i++) {
+                    if (at.get(i).at() != i) {
+                        throw new IllegalArgumentException("the evidence at input " + i
+                                + " says it is input " + at.get(i).at());
+                    }
                 }
             }
         }
@@ -949,23 +1071,28 @@ public final class Adequacy {
                                     : checkedBodies.decisions(),
                             checkedBodies == null ? souther.compiler.coverage.SuppliedRules.NONE : checkedBodies.supplied());
             Map<String, souther.compiler.check.PathReachability.Answers.AsRun> reachableArms = db.ask(new Arrived(name)).value();
-            Map<String, SignatureEvidence> out = new LinkedHashMap<>();
-            for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
-                Sig sig = sigs.value().get(behavior.name());
-                if (sig == null) {
-                    continue;   // a behavior whose signature did not work out has nothing to measure
-                }
-                out.put(behavior.name(), evidenceOf(behavior.name(), sig, scope.value(), asked,
-                        Rows.readingFor(byTarget, behavior.name()),
-                        behavior instanceof Hir.SpecBehavior spec ? spec.params().stream()
-                                .map(Hir.Param::name).toList() : List.of(),
-                        readInputs == null ? InputDomain.NONE
-                                : readInputs.getOrDefault(behavior.name(), InputDomain.NONE),
-                        producing.get(behavior.name()), producingPlan,
-                        reachableArms == null ? NOTHING_PROVEN
-                                : reachableArms.getOrDefault(behavior.name(), NOTHING_PROVEN)));
-            }
-            return Answer.of(Ordered.map(out));
+            return answerEveryBehavior(prepared.value(), behavior ->
+                    // What this measure works from, or the fact that it has none. A behavior left
+                    // out of this map reads as a measure nobody asked for, and a measure nobody
+                    // asked for goes without nothing — so a behavior nothing could be established
+                    // about would be held to no bar at all, and say nothing about it.
+                    switch (BoundaryForMeasurement.of(sigs.value(), behavior.name())) {
+                        case BoundaryForMeasurement.NotDerived _ ->
+                                SignatureEvidence.boundaryNotDerived(behavior);
+                        case BoundaryForMeasurement.Derived(Sig sig) ->
+                                evidenceOf(behavior.name(), sig, scope.value(), asked,
+                                        Rows.readingFor(byTarget, behavior.name()),
+                                        behavior instanceof Hir.SpecBehavior spec
+                                                ? spec.params().stream().map(Hir.Param::name).toList()
+                                                : List.of(),
+                                        readInputs == null ? InputDomain.NONE
+                                                : readInputs.getOrDefault(behavior.name(),
+                                                        InputDomain.NONE),
+                                        producing.get(behavior.name()), producingPlan,
+                                        reachableArms == null ? NOTHING_PROVEN
+                                                : reachableArms.getOrDefault(behavior.name(),
+                                                        NOTHING_PROVEN));
+                    });
         }
 
     }
@@ -1019,48 +1146,62 @@ public final class Adequacy {
             Map<String, souther.compiler.check.StatedContract> declared =
                     db.ask(new Bodies.StatedContracts(name)).value();
 
-            Map<String, PartitionEvidence> out = new LinkedHashMap<>();
-            for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
+            // Whether there is a subject first, and what could be read of it second. The two
+            // questions are asked in that order because a measure that does not apply is owed no
+            // input: a composition is measured at its stages whether or not its own signature
+            // worked out, and answering "the boundary was not derived" for one would be this
+            // measure reporting a prerequisite it never had.
+            return answerEveryBehavior(prepared.value(), behavior -> {
                 if (!(behavior instanceof Hir.SpecBehavior spec)) {
-                    continue;   // a composition's inputs are its first stage's, measured there
+                    return PartitionEvidence.NONE;   // measured at its stages, not here
                 }
-                Sig sig = sigs.value().get(spec.name());
-                if (sig == null) {
-                    continue;
-                }
-                // A behavior with a signature is one the model divides somewhere or nowhere, and
-                // either is an answer. Nothing is a compile that stopped after this loop had already
-                // read the signature, which is the two disagreeing rather than a behavior to skip.
-                souther.compiler.partition.Partitions.Partitioning divided =
-                        db.ask(new Divided(name, spec.name())).value();
-                if (divided == null) {
-                    throw new IllegalStateException("`" + spec.name() + "` has a signature and no"
-                            + " reading of what the model divides it into");
-                }
-                RowReading seen = Rows.readingFor(byTarget, spec.name());
-                // Counted with nothing a body claims in scope. What was claimed travels beside the
-                // numbers rather than into them ({@link Claimed}), and the two meet where a report
-                // is written.
-                // Whether the values are composed is the build's to ask for, and it is asked here
-                // rather than inside either key. A level says how much work to do; what a search
-                // does when it is asked is not a thing it may decide, which is the reading that put
-                // the composing inside the measurement in the first place.
-                List<BorderAssessment> edges = level.composesValues()
-                        ? db.ask(new BoundarySearch(name, spec.name())).value()
-                        : db.ask(new Boundaries(name, spec.name())).value();
-                if (edges == null) {
-                    // Nothing came back about this behavior's lines, from a question that has
-                    // everything it needs to answer. Read as no lines, a behavior whose measure
-                    // stopped would be counted as one the model draws nothing about.
-                    throw new IllegalStateException("`" + spec.name() + "` has a signature and a"
-                            + " reading of what the model divides it into, and no answer about the"
-                            + " lines that reading drew");
-                }
-                out.put(spec.name(), Coverages.of(spec, domainOf(readInputs, spec), sig,
-                        scope.value(), db.ask(new Front.Reading()).value(), divided, seen,
-                        level, edges, db.ask(new Front.Adequacy()).value().measures()));
+                return switch (BoundaryForMeasurement.of(sigs.value(), spec.name())) {
+                    case BoundaryForMeasurement.NotDerived _ ->
+                            PartitionEvidence.boundaryNotDerived(spec.name());
+                    case BoundaryForMeasurement.Derived(Sig sig) ->
+                            measured(db, name, spec, sig, level, scope.value(), readInputs,
+                                    byTarget);
+                };
+            });
+        }
+
+        /** What one behavior whose boundary was worked out reaches of what its model divides it
+         *  into. */
+        private PartitionEvidence measured(Db db, String name, Hir.SpecBehavior spec, Sig sig,
+                                           Level level, Symbols scope,
+                                           Map<String, InputDomain> readInputs,
+                                           Map<String, RowReading> byTarget) {
+            // A behavior with a signature is one the model divides somewhere or nowhere, and
+            // either is an answer. Nothing is a compile that stopped after this had already
+            // read the signature, which is the two disagreeing rather than a behavior to skip.
+            souther.compiler.partition.Partitions.Partitioning divided =
+                    db.ask(new Divided(name, spec.name())).value();
+            if (divided == null) {
+                throw new IllegalStateException("`" + spec.name() + "` has a signature and no"
+                        + " reading of what the model divides it into");
             }
-            return Answer.of(Ordered.map(out));
+            RowReading seen = Rows.readingFor(byTarget, spec.name());
+            // Counted with nothing a body claims in scope. What was claimed travels beside the
+            // numbers rather than into them ({@link Claimed}), and the two meet where a report
+            // is written.
+            // Whether the values are composed is the build's to ask for, and it is asked here
+            // rather than inside either key. A level says how much work to do; what a search
+            // does when it is asked is not a thing it may decide, which is the reading that put
+            // the composing inside the measurement in the first place.
+            List<BorderAssessment> edges = level.composesValues()
+                    ? db.ask(new BoundarySearch(name, spec.name())).value()
+                    : db.ask(new Boundaries(name, spec.name())).value();
+            if (edges == null) {
+                // Nothing came back about this behavior's lines, from a question that has
+                // everything it needs to answer. Read as no lines, a behavior whose measure
+                // stopped would be counted as one the model draws nothing about.
+                throw new IllegalStateException("`" + spec.name() + "` has a signature and a"
+                        + " reading of what the model divides it into, and no answer about the"
+                        + " lines that reading drew");
+            }
+            return Coverages.of(spec, domainOf(readInputs, spec), sig, scope,
+                    db.ask(new Front.Reading()).value(), divided, seen, level, edges,
+                    db.ask(new Front.Adequacy()).value().measures());
         }
     }
 
@@ -1865,8 +2006,7 @@ public final class Adequacy {
 
             Map<String, souther.compiler.check.PathReachability.Answers.AsRun> reachable = db.ask(new Arrived(name)).value();
 
-            Map<String, BranchEvidence> out = new LinkedHashMap<>();
-            for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
+            return answerEveryBehavior(prepared.value(), behavior -> {
                 // The arms, and not every site of the behavior. A comparison of a guard's condition
                 // has a site of its own and is not a fork a row is in or out of, so counting it here
                 // would report an arm the body does not have.
@@ -1879,16 +2019,14 @@ public final class Adequacy {
                 BranchEvidence absent = whyNoArms(name, prepared.value().writesItsOwnBody(behavior),
                         bodiesRead, arms, arrives, instrumented, observed);
                 if (absent != null) {
-                    out.put(behavior.name(), absent);
-                    continue;
+                    return absent;
                 }
                 Set<Integer> covered = new LinkedHashSet<>(lit);
                 covered.retainAll(arms.stream()
                         .map(souther.compiler.coverage.CoverageSites.Site::index).toList());
-                out.put(behavior.name(), BranchEvidence.measured(behavior.name(), arms, covered,
-                        arrives, rowsBehind(observed)));
-            }
-            return Answer.of(Ordered.map(out));
+                return BranchEvidence.measured(behavior.name(), arms, covered,
+                        arrives, rowsBehind(observed));
+            });
         }
 
         /**
@@ -2339,7 +2477,7 @@ public final class Adequacy {
             // stop it. Every way out of the generation below holds this same list.
             souther.compiler.partition.GenerationPlan asked = planFor(spec, sig, symbols,
                     db.ask(new Front.Reading()).value(), divided, domain, owed,
-                    PartitionEvidence.answeredFor(partitions, prepared.value(), spec));
+                    partitions.get(behavior));
             souther.compiler.partition.FillResult composed;
             try {
                 composed = rowsFor(spec, sig, symbols, asked,
@@ -3391,7 +3529,15 @@ public final class Adequacy {
             }
             // Walked as the evidence rather than by index: which input this is, is the evidence's
             // own answer now, so a finding is not handed a number worked out beside the list.
-            for (InputCaseEvidence input : signature.inputs()) {
+            //
+            // Over the positions there are, and asked rather than defaulted. A measure that did not
+            // reach the boundary has no position for a gap to be at; standing in an empty list for
+            // one would walk it and find nothing, which reads the same as a behavior every position
+            // of which is covered.
+            if (signature.inputs().made().isEmpty()) {
+                return;
+            }
+            for (InputCaseEvidence input : signature.positions()) {
                 for (TypeSymbol missing : input.unspecified()) {
                     // This input's own measurement. One position whose rows could not be classified
                     // says nothing about the position beside it, and a finding handed the signature's

@@ -3,7 +3,6 @@ package souther.compiler.query;
 import souther.compiler.observe.Incompleteness;
 
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 /**
@@ -64,40 +63,34 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
             List.of(), List.of());
 
     /**
-     * What a coverage that came back says about one behavior.
+     * What the model divides a behavior into, where its boundary could not be worked out.
      *
-     * <p><b>{@link #NONE} is an answer and not a default.</b> It says the model holds no subject
-     * for either of these measures, which is true of a {@code >->} composition and of nothing else
-     * — so it may be handed out where the declarations say that, and nowhere else. Both readers of
-     * this map used to reach it with {@code getOrDefault}, which says it whenever a key is missing
-     * for any reason at all; one of them said it for the whole map being absent, which is the
-     * coverage query not having answered (issue #996).
+     * <p>Not {@link #NONE}. That says the model holds no subject for either measure and no row would
+     * change it, which is a claim about the model; this is a measure that was asked for, started and
+     * could not be finished, and what it went without is beside it. The two used to be one absent
+     * key, which is how a behavior whose parameter named an unresolved type reached a reader with
+     * nothing to read and nothing saying why.
      *
-     * <p>The absence of the map is the caller's to carry and is never a value here: a caller that
-     * cannot say "there is no coverage" has to stop rather than say "there is nothing to cover".
+     * <p>Nothing here has a declaration to fall back on. The positions this measure is about are the
+     * ones the model divides, worked out from the boundary and from the rules written about it —
+     * unlike the positions of the signature measure, which a declared behavior writes down and which
+     * are known there whatever the boundary did. So both measures come back short and only one of
+     * them still knows how many places it was to have counted at.
      *
-     * <p>Missing for anything else is this map's contract broken. The coverage answers for every
-     * behavior it is asked about except compositions, so there is no reading for such a key that is
-     * not a guess — and a guess is what this exists to stop. It is fenced rather than given a
-     * measurement of its own: nothing produces the state today, and inventing what it would mean
-     * would be a consumer settling a producer's business.
-     *
-     * @throws IllegalStateException where {@code answered} omits a behavior that is not a
-     *                               composition
+     * <p>The pair space is sized at nought for the same reason: a size is a product over those
+     * positions. Nothing reads the number — the measurement beside it says none could be finished,
+     * and a document leaves the whole section out rather than writing a size nobody worked out.
      */
-    public static PartitionEvidence answeredFor(Map<String, PartitionEvidence> answered,
-                                                souther.compiler.check.Prepared module,
-                                                souther.compiler.ast.Hir.BehaviorDef behavior) {
-        PartitionEvidence found = answered.get(behavior.name());
-        if (found != null) {
-            return found;
-        }
-        if (module.isComposition(behavior)) {
-            return NONE;
-        }
-        throw new IllegalStateException("the coverage of `" + module.name()
-                + "` answered for " + answered.keySet() + " and left out `" + behavior.name()
-                + "`, which is not a composition");
+    public static PartitionEvidence boundaryNotDerived(String behavior) {
+        return new PartitionEvidence(
+                BoundaryForMeasurement.failed(behavior), BoundaryForMeasurement.failed(behavior),
+                PairSpace.boundaryNotDerived(behavior), List.of(), List.of(), List.of(), List.of(),
+                List.of(), List.of());
+    }
+
+    /** Whether this is what a behavior whose boundary could not be worked out comes to. */
+    public boolean boundaryNotDerived() {
+        return BoundaryForMeasurement.wasNotDerived(partitioned);
     }
 
     public PartitionEvidence {
@@ -360,6 +353,12 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
         /** The same, where nobody asked for a measurement at all. */
         public static PairSpace notAsked(int total) {
             return new PairSpace(total, new Measurement.NotMeasured<>(NothingWasAsked.NOT_ASKED));
+        }
+
+        /** A space whose size was never worked out, because the positions it is a product over
+         *  were not. What it is short of is what every measure of that behavior is short of. */
+        public static PairSpace boundaryNotDerived(String behavior) {
+            return new PairSpace(0, BoundaryForMeasurement.failed(behavior));
         }
 
         /** A space too large to walk to the end of. What it is measured in part by is the fact that

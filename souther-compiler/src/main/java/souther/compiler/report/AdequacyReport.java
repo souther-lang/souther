@@ -296,10 +296,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             Adequacy.SignatureEvidence signature =
                     signatures == null ? null : signatures.get(behavior.name());
             // Null where the coverage did not answer at all, which is the compile not having got
-            // that far and is not this behavior having nothing to cover. `NONE` is the second of
-            // those and is reached only where the declarations say so.
+            // that far and is not this behavior having nothing to cover. Read and never worked out:
+            // a coverage that answered answers for every behavior of the module, so what a key is
+            // for is what the measure said about it — this used to reach `NONE` for a composition
+            // by asking the declarations again, which is a reader settling what a measure means.
             PartitionEvidence partition = partitions == null ? null
-                    : PartitionEvidence.answeredFor(partitions, module, behavior);
+                    : partitions.get(behavior.name());
             // Null where the compile did not get far enough to be asked, which is not a measure that
             // came back with nothing. Every measure that did run says why it has no number.
             Adequacy.BranchEvidence branch =
@@ -660,8 +662,29 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             String why = switch (counted.reason()) {
                 case Adequacy.SignatureEvidence.NotASum _ ->
                         "not applicable (this behavior's output is not a sum)";
+                case Adequacy.SignatureEvidence.NoRows _ ->
+                        "not measured (no row names this behavior)";
+                // What was read of the declaration is not said here. Which name resolved to nothing
+                // is reported where it was written, on the line the author edits.
+                case souther.compiler.query.BoundaryForMeasurement.NotDerived _ ->
+                        "not measured (this behavior's signature could not be read)";
                 case souther.compiler.query.NothingWasAsked _ -> null;
-                default -> "not measured (no row names this behavior)";
+                // Not a word for whatever is left. This measure carries one of the four reason
+                // types above and nothing else, so a fifth arriving here is a reason nobody decided
+                // a word for — and given the word of one of the others it would be printed as a
+                // state it is not. A word standing in for every reason added after it was written
+                // is the same defect as a key standing in for every way a measure can have no
+                // answer, one surface further out.
+                //
+                // A throw and not exhaustiveness the compiler checks. What is switched on is a
+                // `MeasureReason`, which is a plain interface because two of the reasons here
+                // belong to no measure in particular — nobody asked is one fact about the run, and
+                // a boundary that could not be worked out is one fact about the behavior, each
+                // read by several measures. Sealing a reason type per measure would make those
+                // name every measure that reads them, which is the dependency the other way round.
+                // Worth revisiting only if the reasons stop being shared.
+                default -> throw new IllegalStateException(
+                        "the signature measure has no word for " + counted.reason());
             };
             if (why != null) {
                 out.append(String.format("    signature   %s%n", why));
@@ -691,7 +714,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 }
             }
         }
-        for (InputCaseEvidence input : signature.inputs()) {
+        // The positions where the measure counted them. This section is reached only where the
+        // signature measure has a number, and a measure with one has read the boundary its
+        // positions come off — so there is nothing here that a measure short of one would print,
+        // and nothing to stand in for it either.
+        for (InputCaseEvidence input : signature.positions()) {
             // Under the same condition as the output line above it, which is the whole of why it is
             // spelled here. It asked its measurement for a number and took a nought where there was
             // none, so an input nobody measured printed `specified 0/3` — a measurement, made by
@@ -1792,6 +1819,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         if (signature == null) {
             return;
         }
+        // A behavior with no signature to read has no section, which is what this document has
+        // always said the absence of one means. Written out instead, the section would owe an
+        // `inputs` array of the positions — and how many there are is read off the very boundary
+        // that was not worked out, so a `>->` composition would publish an empty one and say that
+        // it takes nothing. Which behavior it happened to and what it cost is the behavior's
+        // `weakening`, where it is one fact rather than one per measure that went without it.
+        if (signature.boundaryNotDerived()) {
+            return;
+        }
         ObjectNode out = behavior.putObject("signature");
         measured(out, signature.counted());
         ObjectNode output = out.putObject("output");
@@ -1807,7 +1843,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             node.put("unclassifiedRows", cases.unclassifiedRows());
         });
         ArrayNode inputs = out.putArray("inputs");
-        for (InputCaseEvidence input : signature.inputs()) {
+        // Every position, and this section is written only where they were counted. The one state
+        // that has none to write is the one that returns above.
+        for (InputCaseEvidence input : signature.positions()) {
             ObjectNode in = inputs.addObject();
             names(in.putArray("declared"), input.declared());
             names(in.putArray("excluded"), input.excluded());
@@ -1823,6 +1861,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     private void partition(ObjectNode behavior, PartitionEvidence partition,
                                   ClaimAnnotations claimed, DocumentSources sources) {
         if (partition == null) {
+            return;
+        }
+        // And no section where the boundary the positions come off was not worked out, for the
+        // reason the signature section is left out: what this section owes is the positions, the
+        // lines and the size of the space they make, and every one of those is a product over
+        // positions nobody could count. Said here as the behavior's `weakening`, once.
+        if (partition.boundaryNotDerived()) {
             return;
         }
         ObjectNode out = behavior.putObject("partition");
@@ -2333,6 +2378,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                         WeakeningWord.RULES_NOT_REACHED;
             };
             case Weakening.BodiesNotElaborated _ -> WeakeningWord.BODIES_NOT_ELABORATED;
+            case Weakening.BoundaryNotDerived _ -> WeakeningWord.BEHAVIOR_BOUNDARY_NOT_DERIVED;
             case Weakening.PairSpaceTruncated _ -> WeakeningWord.PAIR_SPACE_TRUNCATED;
             case Weakening.ProofContradicted _ -> WeakeningWord.PROOF_CONTRADICTED;
             case Weakening.ArmsUnsettled _ -> WeakeningWord.ARMS_UNSETTLED;

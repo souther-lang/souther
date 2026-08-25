@@ -574,8 +574,12 @@ class AMeasureWithNoNumberSaysWhyTest {
         for (Map.Entry<String, Adequacy.SignatureEvidence> each : signatures().entrySet()) {
             measures.add(new Object[] {"signature " + each.getKey(), each.getValue().counted()});
             measures.add(new Object[] {"out " + each.getKey(), each.getValue().output().cases()});
-            each.getValue().inputs().forEach(in -> measures.add(
-                    new Object[] {"in " + each.getKey(), in.cases()}));
+            // The positions are a measure of their own: how many there are is read off the
+            // boundary, so a behavior whose boundary did not work out has a count nobody could
+            // arrive at.
+            measures.add(new Object[] {"positions " + each.getKey(), each.getValue().inputs()});
+            each.getValue().inputs().made().ifPresent(at -> at.forEach(in -> measures.add(
+                    new Object[] {"in " + each.getKey(), in.cases()})));
         }
         for (Map.Entry<String, PartitionEvidence> each : partitions().entrySet()) {
             PartitionEvidence partition = each.getValue();
