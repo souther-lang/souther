@@ -473,7 +473,7 @@ public final class SpecChecker {
             if (sig == null) {
                 continue;
             }
-            TypeSymbol[] clash = TypeOps.ambiguousMembers(sig.outputType(), symbols);
+            TypeSymbol.AtModule[] clash = TypeOps.ambiguousMembers(sig.outputType(), symbols);
             if (clash == null) {
                 continue;
             }
@@ -515,7 +515,7 @@ public final class SpecChecker {
 
     /** Whether a name resolves to a unit data of this compilation or of a module it reads. */
     private static boolean isUnitData(TypeSymbol type, Symbols symbols) {
-        return symbols.declarations().declaration(type.key()) instanceof Hir.UnitData;
+        return symbols.declarations().declaration(type) instanceof Hir.UnitData;
     }
 
     /**

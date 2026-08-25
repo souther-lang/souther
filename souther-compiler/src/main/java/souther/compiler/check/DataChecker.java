@@ -46,7 +46,8 @@ public final class DataChecker {
      * {@code type} says which module declared it — the check runs that module's generated class, not
      * one named after the module the construction is written in. {@code typeName} is what was
      * written, which is what the message quotes. */
-    public record ConstCheck(String typeName, TypeSymbol type, Object value, SourcePos pos) {}
+    public record ConstCheck(String typeName, TypeSymbol.AtModule type, Object value,
+                             SourcePos pos) {}
 
     /**
      * Every {@code 金額(constant)} in the module: a newtype construction whose argument folds to a
@@ -71,16 +72,17 @@ public final class DataChecker {
     private static void collectConstChecks(Hir.Expr e, Symbols symbols, List<ConstCheck> out) {
         if (e instanceof Hir.NewData nd
                 && nd.typeName().answered() instanceof Hir.Name.Denoting built
-                && symbols.declarations().declaration(built.type().key()) instanceof Hir.Data nt
-                && nt.newtype() && isInvariantBearing(built.type(), symbols)) {
+                && built.type() instanceof TypeSymbol.AtModule constructed
+                && symbols.declarations().declaration(constructed) instanceof Hir.Data nt
+                && nt.newtype() && isInvariantBearing(constructed, symbols)) {
             CallElaborator.newtypeConstantArg(nd).ifPresent(v ->
-                    out.add(new ConstCheck(nd.typeName().written(), built.type(), v, nd.pos())));
+                    out.add(new ConstCheck(nd.typeName().written(), constructed, v, nd.pos())));
         }
         TypeChecker.forEachChild(e, c -> collectConstChecks(c, symbols, out));
     }
 
     public static boolean isInvariantBearing(TypeSymbol typeName, Symbols symbols) {
-        return typeName != null && symbols.declarations().declaration(typeName.key()) instanceof Hir.Data d
+        return typeName != null && symbols.declarations().declaration(typeName) instanceof Hir.Data d
                 && !TypeOps.effectiveInvariants(d, symbols).isEmpty();
     }
 
@@ -175,7 +177,7 @@ public final class DataChecker {
     }
 
     /** Whether {@code nd} arrived here already made, rather than being written here. */
-    private static boolean carried(Hir.NewData nd, TypeSymbol built) {
+    private static boolean carried(Hir.NewData nd, TypeSymbol.AtModule built) {
         return nd.origin().carried(built);
     }
 
@@ -208,8 +210,9 @@ public final class DataChecker {
                 // A construction naming nothing builds no type to record; it is reported where the
                 // name is written, and the fields written under it are still walked.
                 if (nd.typeName().answered() instanceof Hir.Name.Denoting built) {
-                    Map<TypeSymbol, String> side = carried(nd, built.type())
-                            ? out.carried() : out.originated();
+                    Map<TypeSymbol, String> side =
+                            built.type() instanceof TypeSymbol.AtModule made && carried(nd, made)
+                                    ? out.carried() : out.originated();
                     side.putIfAbsent(built.type(), nd.typeName().name().quoted());
                 }
                 for (Hir.FieldInit init : nd.inits()) {
@@ -343,7 +346,7 @@ public final class DataChecker {
     private static List<String> sumCycle(TypeSymbol target, Symbols symbols,
                                          LinkedHashSet<TypeSymbol> path) {
         if (!(symbols.declarations().declaration(
-                path.isEmpty() ? target.key() : last(path).key()) instanceof Hir.SumData s)) {
+                path.isEmpty() ? target : last(path)) instanceof Hir.SumData s)) {
             return null;
         }
         for (Hir.Name caseName : s.cases()) {
@@ -360,7 +363,7 @@ public final class DataChecker {
                 out.add(caseName.written());
                 return out;
             }
-            if (symbols.declarations().declaration(names.type().key()) instanceof Hir.SumData
+            if (symbols.declarations().declaration(names.type()) instanceof Hir.SumData
                     && path.add(names.type())) {
                 List<String> found = sumCycle(target, symbols, path);
                 if (found != null) {
@@ -402,11 +405,13 @@ public final class DataChecker {
         // being a member: no value satisfies the type and an exhaustive switch over it has no arms
         // (ADR-0057, the declared-sum counterpart of E1606).
         for (Hir.Name c : sum.cases()) {
-            if (symbols.scope().isForeign(names(c))) {
+            // A case the language gives is declared by no module and so by none of this one's;
+            // the module a case is declared in is what the message is about, and it has one.
+            if (names(c) instanceof TypeSymbol.AtModule at && symbols.scope().isForeign(at)) {
                 throw CompileException.of(Diagnostic
                                 .at(c.name().reportedAt())
                                 
-                                .hint(new BehaviorMessage.ASumsCasesAreDeclaredWithIt(c.written())).say(new BehaviorMessage.ACaseIsDeclaredInAnotherModule(c.written(), sum.name(), names(c).module())).build());
+                                .hint(new BehaviorMessage.ASumsCasesAreDeclaredWithIt(c.written())).say(new BehaviorMessage.ACaseIsDeclaredInAnotherModule(c.written(), sum.name(), at.module())).build());
             }
         }
         List<String> cycle = sumCycle(sum.declares(), symbols, new LinkedHashSet<>());
@@ -466,7 +471,7 @@ public final class DataChecker {
         }
         List<CompileException> found = new ArrayList<>();
         for (UninhabitableTypes.UninhabitableGroup group : groups) {
-            Hir.Def at = symbols.declarations().declaration(group.reportedAt().key());
+            Hir.Def at = symbols.declarations().declaration(group.reportedAt());
             found.add(CompileException.of(told(Diagnostic.at(at.pos()), at.name(),
                     FieldDomains.THE_VALUE, group.why(),
                     lacks.get(group.reportedAt()) == 1).build()));
@@ -634,7 +639,7 @@ public final class DataChecker {
      * bound where it was written, so that is what the scope offers, and the clause carried in with the
      * declaration finds the very bindings it names.
      */
-    static Scope fieldScope(TypeSymbol declared, Hir.Data data, Symbols symbols) {
+    static Scope fieldScope(TypeSymbol.AtModule declared, Hir.Data data, Symbols symbols) {
         Map<String, Type> types = TypeOps.fieldTypes(data, symbols);
         Map<BindingId, Scope.Binding> bindings = new LinkedHashMap<>();
         TypeOps.fieldBindings(declared, data, symbols).forEach((name, binding) ->
@@ -709,7 +714,7 @@ public final class DataChecker {
             case Hir.SetDecRef s -> Type.set(decRefType(s.element(), symbols));
             case Hir.PrimDecRef p -> TypeOps.primType(p.kind());
             case Hir.DataDecRef d -> {
-                if (!hasDecoder(symbols.declarations().declaration(names(d.typeName()).key()))) {
+                if (!hasDecoder(symbols.declarations().declaration(names(d.typeName())))) {
                     throw CompileException.of(Diagnostic.at(d.pos())
                             .say(new CodecMessage.HasNoDecoder(d.typeName().written()))
                             .build());
@@ -799,11 +804,11 @@ public final class DataChecker {
             String sp = read.name();
             Type bound = env.typeOf(read.binding());
             if (bound instanceof Type.Ref ref
-                    && ctx.symbols().declarations().declaration(ref.name().key()) instanceof Hir.SumData sum) {
+                    && ctx.symbols().declarations().declaration(ref.name()) instanceof Hir.SumData sum) {
                 fromSums.add(Type.show(bound));
                 spread.add(new Spread(read, spreadOfSum(sp, sum, bound, pos, ctx)));
             } else if (bound instanceof Type.Ref ref
-                    && ctx.symbols().declarations().declaration(ref.name().key()) instanceof Hir.Data sd) {
+                    && ctx.symbols().declarations().declaration(ref.name()) instanceof Hir.Data sd) {
                 spread.add(new Spread(read, TypeOps.fieldTypes(sd, ctx.symbols())));
             } else {
                 Diagnostic.Builder d = Diagnostic.at(pos)
@@ -941,7 +946,7 @@ public final class DataChecker {
             }
             case Hir.EncodeRaw e -> {
                 if (!hasEncoder(ctx.symbols().declarations()
-                        .declaration(names(e.typeName()).key()))) {
+                        .declaration(names(e.typeName())))) {
                     throw CompileException.of(Diagnostic.at(e.pos())
                             .say(new CodecMessage.HasNoEncoder(e.typeName().written()))
                             .build());
@@ -989,7 +994,7 @@ public final class DataChecker {
             }
             case Hir.DataEnc d -> {
                 // the element may be a product or a sum: `List<事前承認理由>` holds a sum (spec §encoder-derivation)
-                Hir.Def def = symbols.declarations().declaration(names(d.typeName()).key());
+                Hir.Def def = symbols.declarations().declaration(names(d.typeName()));
                 boolean hasEncoder = (def instanceof Hir.Data dd && dd.encoder().isPresent())
                         || def instanceof Hir.SumData;
                 if (!elemType.equals(Type.ref(names(d.typeName()))) || !hasEncoder) {

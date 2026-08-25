@@ -40,7 +40,7 @@ public final class OccurrenceValues {
     }
 
     /** What {@code data}, declared as {@code named}, leaves the values at each of its positions. */
-    public static OccurrenceValues of(TypeSymbol named, Hir.Data data, Symbols symbols,
+    public static OccurrenceValues of(TypeSymbol.AtModule named, Hir.Data data, Symbols symbols,
                                        ReadingPolicy policy) {
         return of(named, data, symbols, policy, _ -> false);
     }
@@ -52,7 +52,7 @@ public final class OccurrenceValues {
      * rules are what say it has none — its own, and the ones under whatever it wraps — so supposing
      * it has a value is not reading it at all.
      */
-    static OccurrenceValues of(TypeSymbol named, Hir.Data data, Symbols symbols,
+    static OccurrenceValues of(TypeSymbol.AtModule named, Hir.Data data, Symbols symbols,
                                  ReadingPolicy policy,
                                  java.util.function.Predicate<TypeSymbol> granted) {
         return new OccurrenceValues(

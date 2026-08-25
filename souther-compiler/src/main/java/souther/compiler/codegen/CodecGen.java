@@ -9,6 +9,7 @@ import souther.compiler.types.CaseShape;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.TemporalRule;
 import souther.compiler.types.Type;
+import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.check.TypeOps;
 import souther.compiler.core.Core;
@@ -188,7 +189,8 @@ final class CodecGen {
      *  cannot collide with a data whose name is {@code Date}. */
     private static String rekeyMethod(MapKeyRepresentation key) {
         return switch (key) {
-            case MapKeyRepresentation.NamedKey n -> "__rekey$" + n.name().qualified().replace('.', '$');
+            case MapKeyRepresentation.NamedKey n -> "__rekey$"
+                    + SoutherJvmAbi.nameOf(new GeneratedClass.Value(n.name())).binaryName().replace('.', '$');
             case MapKeyRepresentation.Lexical l -> "__rekey$$" + l.leaf();
         };
     }
@@ -240,7 +242,7 @@ final class CodecGen {
     }
 
     private void invokeCodec(CodeBuilder code, TypeSymbol type, String method, MethodTypeDesc mtd) {
-        code.invokestatic(cd(type), method, mtd, symbols.declarations().declaration(type.key()) instanceof Hir.SumData);
+        code.invokestatic(cd(type), method, mtd, symbols.declarations().declaration(type) instanceof Hir.SumData);
     }
 
     byte[] generateSumEncoder(Hir.SumData sum, Boundary.Alternatives alternatives) {
@@ -540,7 +542,7 @@ final class CodecGen {
             }
             for (Hir.Name written : sum.cases()) {
                 TypeSymbol caseName = Backend.names(written);
-                Hir.Def caseDef = symbols.declarations().declaration(caseName.key());
+                Hir.Def caseDef = symbols.declarations().declaration(caseName);
                 if (caseDef instanceof Hir.UnitData) continue;   // the discriminator alone, no column
                 if (!(caseDef instanceof Hir.Data d)) return false;   // a nested sum is not a row
                 // A case wearing the envelope reads the column the sum's decoder hands it, so it is a
@@ -570,7 +572,7 @@ final class CodecGen {
         if (t instanceof Type.ListOf || t instanceof Type.MapOf || t instanceof Type.SetOf
                 || t instanceof Type.Union) return false;
         if (t instanceof Type.Ref r) {
-            return symbols.declarations().declaration(r.name().key()) instanceof Hir.Data d
+            return symbols.declarations().declaration(r.name()) instanceof Hir.Data d
                     && d.decoder().orElse(null) instanceof Hir.PrimDecoder;   // newtype column only
         }
         return true;   // primitive scalar
@@ -858,7 +860,7 @@ final class CodecGen {
     }
 
     boolean isMapInput(TypeSymbol type) {
-        return isMapInputOf(symbols.declarations().declaration(type.key()));
+        return isMapInputOf(symbols.declarations().declaration(type));
     }
 
     /**

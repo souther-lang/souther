@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.types.Denotation;
 import souther.compiler.types.TypeKey;
+import souther.compiler.types.LanguageCaseId;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeReachName;
 
@@ -54,13 +55,14 @@ public final class TypeScope {
      *  <p>Both callers hand over the set the library froze, so the copy below is the no-op
      *  {@code Set.copyOf} makes of an immutable set. One of them used to pass a map's key view
      *  instead, and copied it again for every module of every compilation. */
-    private final Set<String> languageNames;
+    private final Map<String, TypeSymbol> languageNames;
 
-    TypeScope(String module, Denoting names, Registry<?> registry, Set<String> languageNames) {
+    TypeScope(String module, Denoting names, Registry<?> registry,
+              Map<String, TypeSymbol> languageNames) {
         this.module = module;
         this.names = names;
         this.registry = registry;
-        this.languageNames = Set.copyOf(languageNames);
+        this.languageNames = Map.copyOf(languageNames);
     }
 
     /** The module being compiled. */
@@ -79,7 +81,8 @@ public final class TypeScope {
             case "Int", "String", "Bool", "Decimal", "Date", "Time", "DateTime", "Instant", "Raw" ->
                     new Denotation.Denotes(TypeSymbol.primitive(written.canonical()));
             case "DivisionByZero", "NotANumber", "NotADate", "NotATime" ->
-                    new Denotation.Denotes(TypeSymbol.runtime(written.canonical()));
+                    new Denotation.Denotes(new TypeSymbol.LanguageCase(
+                            LanguageCaseId.named(written.canonical())));
             default -> resolve(written);
         };
     }
@@ -105,9 +108,11 @@ public final class TypeScope {
                 return name;
             }
             // What the language declares is nameable everywhere, on the lowest rung: a module's own
-            // declaration or import of the same name is what the name means there.
-            return languageNames.contains(written)
-                    ? new Denotation.Denotes(TypeSymbol.runtime(written)) : Denotation.NOT_IN_SCOPE;
+            // declaration or import of the same name is what the name means there. Which
+            // declaration a spelling reaches is the library's answer and not one worked out here.
+            TypeSymbol language = languageNames.get(written);
+            return language != null
+                    ? new Denotation.Denotes(language) : Denotation.NOT_IN_SCOPE;
         }
         String target = moduleOfQualifier(written.substring(0, dot));
         if (target == null) {
@@ -121,9 +126,10 @@ public final class TypeScope {
                 ? new Denotation.Denotes(denoted) : Denotation.NOT_IN_SCOPE;
     }
 
-    /** Whether {@code name} is declared in another module (spec §modules). */
+    /** Whether {@code name} is declared in another module (spec §modules). What the language gives
+     *  is declared by no module of any compilation, so it is not this one's. */
     public boolean isForeign(TypeSymbol name) {
-        return !name.module().equals(module);
+        return !(name instanceof TypeSymbol.AtModule at) || !at.module().equals(module);
     }
 
     /**
@@ -166,28 +172,41 @@ public final class TypeScope {
      * nothing wherever it was put.
      */
     public TypeReachName reach(TypeSymbol type) {
-        if (type.isPrimitive() || type.equals(names.of(type.name()) instanceof Denotation.Denotes d
-                ? d.type() : null)) {
+        // A primitive's spelling, which nothing may take: `Int` is written `Int` everywhere. And
+        // any type whose bare spelling means this very declaration here.
+        if (type instanceof TypeSymbol.Primitive
+                || type.equals(names.of(type.name()) instanceof Denotation.Denotes d
+                        ? d.type() : null)) {
             return new TypeReachName.Bare(type);
         }
-        if (TypeSymbol.RUNTIME.equals(type.module())) {
-            // Reached bare, and only while nothing else here is: the runtime namespace is not a
-            // module a qualifier names, so a module declaring the spelling leaves it with no name.
+        // What the language and its library declare is written bare and only bare, and only while
+        // nothing else here is: the module that writes one is not a qualifier a source names it by,
+        // so a module declaring the spelling leaves it with no name at all. Asked of the library
+        // rather than read off the identity's module — that a declaration is the library's is one
+        // fact, and how a source may write it is another, and reading the second off the first is
+        // what tied a naming rule to a spelling.
+        //
+        // One branch for both kinds. `Some` and `None` were answered a second time above, bare
+        // whatever else was in scope, which is the same answer everywhere a module may not take
+        // the spelling and the wrong one anywhere it may.
+        if (type instanceof TypeSymbol.LanguageCase
+                || type.equals(languageNames.get(type.name()))) {
             return inScope(type.name()) ? new TypeReachName.Unnameable(type)
                     : new TypeReachName.Bare(type);
         }
-        if (!exposes(type.module(), type.name())) {
+        // What is left is reached through the module that declares it, so what is left has one.
+        if (!(type instanceof TypeSymbol.AtModule at) || !exposes(at.module(), at.name())) {
             return new TypeReachName.Unnameable(type);
         }
         String alias = null;
         for (String each : names.aliases()) {
-            if (type.module().equals(names.moduleOfAlias(each))
+            if (at.module().equals(names.moduleOfAlias(each))
                     && (alias == null || each.compareTo(alias) < 0)) {
                 alias = each;
             }
         }
-        return alias != null ? new TypeReachName.ViaAlias(alias, type)
-                : new TypeReachName.ViaModule(type);
+        return alias != null ? new TypeReachName.ViaAlias(alias, at)
+                : new TypeReachName.ViaModule(at);
     }
 
     /**
@@ -270,7 +289,15 @@ public final class TypeScope {
 
     /** Whether the module that declares {@code name} exposes it — its own names always count. */
     public boolean isExposed(TypeSymbol name) {
-        return exposes(name.module(), name.name());
+        // What the language and its library give is reachable from everywhere and kept from nobody.
+        // The library's modules write no `exposing` line, and a rule about what a module keeps to
+        // itself is a rule about a module of the compilation — asking it of `souther.decimal` reads
+        // an empty answer as a decision that module made.
+        if (!(name instanceof TypeSymbol.AtModule at)
+                || name.equals(languageNames.get(name.name()))) {
+            return true;
+        }
+        return exposes(at.module(), at.name());
     }
 
     /** Whether {@code moduleName} exposes {@code name} (dropping any {@code .decoder} member). */

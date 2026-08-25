@@ -126,7 +126,7 @@ final class ObservedValues {
         if (type == null) {
             return new ObservedValue.Unknown("`" + name + "` is not a type this module can name");
         }
-        if (!(symbols.declarations().declaration(type.key()) instanceof Hir.Data data)) {
+        if (!(symbols.declarations().declaration(type) instanceof Hir.Data data)) {
             return new ObservedValue.Unit(type);   // a case that carries nothing
         }
         Map<String, ObservedValue> fields = ObservedValue.fields();

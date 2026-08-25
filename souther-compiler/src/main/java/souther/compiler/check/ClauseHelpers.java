@@ -82,7 +82,7 @@ public final class ClauseHelpers {
         Map<TypeSymbol, List<Hir.InvariantClause>> out = new LinkedHashMap<>();
         for (Hir.Def def : settled.defs()) {
             if (def instanceof Hir.Data d && !d.invariants().isEmpty()) {
-                TypeSymbol declared = d.declares();
+                TypeSymbol.AtModule declared = d.declares();
                 out.put(declared, Hir.mapClauses(d.invariants(),
                         clause -> inliner.inline(clause, new BindingOwner.OfData(declared))));
             }

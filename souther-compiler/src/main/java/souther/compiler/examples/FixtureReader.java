@@ -14,6 +14,8 @@ import souther.compiler.check.BoundaryInput;
 import souther.compiler.check.BoundaryOutput;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.Type;
+import souther.compiler.jvm.GeneratedClass;
+import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 import souther.runtime.Sets;
@@ -372,9 +374,14 @@ public final class FixtureReader {
             default -> null;
         };
         String is = value.getClass().getName();
-        return candidate.isPrimitive()
-                ? carried != null && carried.equals(is)
-                : is.equals(candidate.qualified());
+        if (candidate instanceof TypeSymbol.Primitive) {
+            return carried != null && carried.equals(is);
+        }
+        // What class a declaration is is the backend's answer and not the identity's spelling.
+        // `Some` and `None` are named by no class at all, so no live value's class is theirs.
+        return (candidate instanceof TypeSymbol.AtModule
+                        || SoutherJvmAbi.providedByTheRuntime(candidate))
+                && is.equals(SoutherJvmAbi.nameOf(new GeneratedClass.Value(candidate)).binaryName());
     }
 
     /**
@@ -516,7 +523,7 @@ public final class FixtureReader {
     }
 
     private Hir.Data declared(TypeSymbol name) {
-        return symbols.declarations().declaration(name.key()) instanceof Hir.Data data ? data : null;
+        return symbols.declarations().declaration(name) instanceof Hir.Data data ? data : null;
     }
 
     /**
@@ -706,7 +713,7 @@ public final class FixtureReader {
         // applies may be one another module published, and what it answered with is that module's
         // type however this module spells the same name.
         TypeSymbol type = typeOf(live);
-        if (type != null && symbols.declarations().declaration(type.key()) instanceof Hir.Data data) {
+        if (type != null && symbols.declarations().declaration(type) instanceof Hir.Data data) {
             Map<String, Asserted> fields = new LinkedHashMap<>();
             if (data.newtype()) {
                 fields.put("value", assertedLive(ObservedValues.readOrNull(live, "value")));
@@ -889,7 +896,7 @@ public final class FixtureReader {
      * is not one a module declares and so has no derived codec to reach. The type names the class
      * whether or not the reader spells it the way its module does. */
     private Object encodedOrNull(Object result, TypeSymbol type) {
-        return type == null ? null : encoded(result, type.qualified());
+        return type == null ? null : encoded(result, SoutherJvmAbi.nameOf(new GeneratedClass.Value(type)).binaryName());
     }
 
     private Object encoded(Object result, String className) {
@@ -1478,7 +1485,7 @@ public final class FixtureReader {
         List<String> forms = new ArrayList<>();
         for (TypeSymbol name : admits) {
             forms.add(neutral.isNewtype(name) ? "`" + name.name() + "(...)`"
-                    : symbols.declarations().declaration(name.key()) instanceof Hir.Data ? "`" + name.name() + " { ... }`"
+                    : symbols.declarations().declaration(name) instanceof Hir.Data ? "`" + name.name() + " { ... }`"
                     : "`" + name.name() + "`");
         }
         return admits.size() == 1 ? forms.get(0) : "as one of " + String.join(", ", forms);
@@ -1514,7 +1521,7 @@ public final class FixtureReader {
             // (spec §absence-is-written-as-null, absent/null -> None), the same as omitting a `T?` field
             case ValueName.Builtin b when b.name().equals("None") -> null;
             case ValueName.OfType named
-                    when symbols.declarations().declaration(named.type().key()) instanceof Hir.UnitData ->
+                    when symbols.declarations().declaration(named.type()) instanceof Hir.UnitData ->
                     unitInput(named.type(), at);
             case ValueName.Local local -> {
                 Hir.Expr held = bindings.get(local.id());
@@ -1878,10 +1885,11 @@ public final class FixtureReader {
             // program the author would find nothing wrong with.
             case FixtureShape.Nominal n -> {
                 try {
-                    Class<?> c = loader.loadClass(n.name().qualified());
+                    Class<?> c = loader.loadClass(SoutherJvmAbi.nameOf(new GeneratedClass.Value(n.name())).binaryName());
                     yield (Decoder<Object, ?>) staticCodec(c, "decoder");
                 } catch (ReflectiveOperationException e) {
-                    throw new IllegalStateException("`" + n.name().qualified() + "` was admitted as a"
+                    throw new IllegalStateException("`" + SoutherJvmAbi.nameOf(new GeneratedClass.Value(n.name())).binaryName()
+                            + "` was admitted as a"
                             + " type a fixture builds through its derived decoder, and it has none", e);
                 }
             }

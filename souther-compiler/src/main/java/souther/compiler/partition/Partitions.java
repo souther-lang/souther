@@ -987,20 +987,21 @@ public final class Partitions {
         // the same words a class of a sum says it in. Left out, a position holding one was a
         // position nothing could write a value at, which is what a case of a sum narrows to.
         if (type instanceof Type.Ref unit
-                && symbols.declarations().declaration(unit.name().key()) instanceof Hir.UnitData) {
+                && symbols.declarations().declaration(unit.name()) instanceof Hir.UnitData) {
             return symbols.scope().reach(unit.name()) instanceof TypeReachName.Written written
                     ? List.of(FixtureTemplate.unitCase(written)) : List.of();
         }
         // A newtype the model only bounds has no classes — everything outside the bound is refused at
         // construction — but it does have values, and the edge of the bound is one that builds.
-        if (type instanceof Type.Ref ref && symbols.declarations().declaration(ref.name().key()) instanceof Hir.Data data) {
+        if (type instanceof Type.Ref(TypeSymbol.AtModule named)
+                && symbols.declarations().declaration(named) instanceof Hir.Data data) {
             if (!data.newtype()) {
-                return composed(ref.name(), symbols, policy, expanding);
+                return composed(named, symbols, policy, expanding);
             }
             // A newtype nothing here names has no value anything here can write: the name goes on
             // the value as it is written, and there is none to put on.
-            return symbols.scope().reach(ref.name()) instanceof TypeReachName.Written written
-                    ? insideTheNewtype(ref.name(), symbols, policy, within, expanding).stream()
+            return symbols.scope().reach(named) instanceof TypeReachName.Written written
+                    ? insideTheNewtype(named, symbols, policy, within, expanding).stream()
                             .map(t -> FixtureTemplate.newtype(written, t)).toList()
                     : List.of();
         }
@@ -1047,10 +1048,10 @@ public final class Partitions {
      * one position at a time. Whether the values may be held together is the decoder's answer — the
      * same answer every other candidate this offers is put through.
      */
-    private static List<FixtureTemplate> composed(TypeSymbol record, Symbols symbols,
+    private static List<FixtureTemplate> composed(TypeSymbol.AtModule record, Symbols symbols,
                                                   ReadingPolicy policy,
                                                   java.util.Set<TypeSymbol> expanding) {
-        if (expanding.contains(record) || !(symbols.declarations().declaration(record.key()) instanceof Hir.Data data)) {
+        if (expanding.contains(record) || !(symbols.declarations().declaration(record) instanceof Hir.Data data)) {
             return List.of();
         }
         Map<String, Type> fields = TypeOps.fieldTypes(data, symbols);
@@ -1305,7 +1306,7 @@ public final class Partitions {
         if (at != null) {
             candidates.add(at);
         }
-        if (base == Type.STRING && symbols.declarations().declaration(newtype.key()) instanceof Hir.Data data) {
+        if (base == Type.STRING && symbols.declarations().declaration(newtype) instanceof Hir.Data data) {
             for (Hir.InvariantClause clause : TypeOps.effectiveInvariants(data, symbols)) {
                 for (Hir.Expr each : ClauseHelpers.conjunctsOf(clause.expr())) {
                     if (InvariantConstraints.of(each, base).orElse(null)
@@ -1364,7 +1365,7 @@ public final class Partitions {
      */
     static List<FixtureTemplate> inReserve(Type type, Symbols symbols, ReadingPolicy policy,
                                            NumericDomain.Bounds within) {
-        if (!(type instanceof Type.Ref ref) || !(symbols.declarations().declaration(ref.name().key()) instanceof Hir.Data data)
+        if (!(type instanceof Type.Ref ref) || !(symbols.declarations().declaration(ref.name()) instanceof Hir.Data data)
                 || !data.newtype()) {
             return List.of();
         }

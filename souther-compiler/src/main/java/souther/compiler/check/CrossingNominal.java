@@ -44,23 +44,27 @@ public final class CrossingNominal {
     /**
      * The name where a model declares it, and null everywhere else.
      *
-     * <p>The language's own namespace answers null throughout, and not only for the names that stand
-     * for something. A primitive's name is not a declaration to admit: it is how a scalar sits in a
+     * <p>What the language declares answers null throughout, and not only the cases that stand for
+     * something. A primitive's name is not a declaration to admit: it is how a scalar sits in a
      * union ({@code Int | DivisionByZero}), and a position that can meet one admits it as the scalar
      * it is — which is also where {@code Raw} is refused, having no scalar to be. {@code Some} and
-     * {@code None} live in that namespace and stand for no primitive at all, and any spelling can be
-     * minted into it, so admitting the namespace would put this type's domain wider than the rule it
-     * is named for.
+     * {@code None} stand for no primitive at all, and neither do the error cases beside them, so
+     * admitting any of them would put this type's domain wider than the rule it is named for.
+     *
+     * <p>Asked of the identity and not of a module name it was filed under. That the language
+     * declares this is what {@link TypeSymbol.OfLanguage} is, so the sentence above is true of the
+     * type rather than of a string comparison that happened to cover the primitives and not the
+     * error cases beside them.
      *
      * <p>A name outside it is asked of the declaration world, which tells a module's declarations
      * from the language's: the prelude's runtime-backed data resolves and types like any other and
      * belongs to no module here.
      */
     public static CrossingNominal admitted(TypeSymbol name, Symbols symbols) {
-        if (name.isPrimitive()) {
+        if (name instanceof TypeSymbol.OfLanguage) {
             return null;
         }
-        return symbols.declarations().declaredByCompilation(name.key())
+        return symbols.declarations().declaredByCompilation(name)
                 ? new CrossingNominal(name)
                 : null;
     }

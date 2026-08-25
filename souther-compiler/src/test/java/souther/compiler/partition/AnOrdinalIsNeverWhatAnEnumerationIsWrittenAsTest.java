@@ -33,7 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AnOrdinalIsNeverWhatAnEnumerationIsWrittenAsTest {
 
-    private static final TypeSymbol STAGE = TypeSymbols.declared(new TypeKey("example.stage", "Stage"));
+    private static final TypeSymbol.AtModule STAGE = TypeSymbols.declared(new TypeKey("example.stage", "Stage"));
 
     private static Carrier.Ordinal carrier() {
         return new Carrier.Ordinal(STAGE, List.of(

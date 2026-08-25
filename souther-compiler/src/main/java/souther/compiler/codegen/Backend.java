@@ -348,7 +348,7 @@ public final class Backend {
                 List<TypeSymbol> unitCases = new ArrayList<>();
                 for (Hir.TypeTerm term : spec.ret().cases()) {
                     if (term instanceof Hir.TypeRef t && t.denotes() instanceof Type.Ref r
-                            && b.symbols.declarations().declaration(r.name().key()) instanceof Hir.UnitData) {
+                            && b.symbols.declarations().declaration(r.name()) instanceof Hir.UnitData) {
                         unitCases.add(r.name());
                     }
                 }
@@ -358,7 +358,7 @@ public final class Backend {
                     for (Hir.Name tn : spec.constructs()) {
                         // a field-bearing data or newtype; de-duplicated so a repeated `constructs`
                         // entry does not emit the factory method twice (a duplicate-method class file)
-                        if (b.symbols.declarations().declaration(names(tn).key()) instanceof Hir.Data
+                        if (b.symbols.declarations().declaration(names(tn)) instanceof Hir.Data
                                 && seenConstruct.add(names(tn))) {
                             dataConstructs.add(names(tn));
                         }
@@ -794,7 +794,7 @@ public final class Backend {
     private void emitDataFactory(ClassBuilder cb, TypeSymbol construct) {
         // The type as the `constructs` clause resolved it: an entry there may name a type another
         // module declares, and the class of one is that module's.
-        Hir.Data data = (Hir.Data) symbols.declarations().declaration(construct.key());
+        Hir.Data data = (Hir.Data) symbols.declarations().declaration(construct);
         ClassDesc cdType = ctx.cd(construct);
         Map<String, Type> fields = ctx.fieldTypes(data);
         ClassDesc[] fieldDs = fieldDescs(fields, ctx);
@@ -973,7 +973,11 @@ public final class Backend {
             String what = owner.name();
             TypeSymbol sameName = byBridgeName.put(cls, member);
             if (sameName != null) {
-                throw CompileException.of(Diagnostic.say(new ModuleMessage.TwoMembersJoinThroughOneCaseClass(sameName.qualified(), member.qualified(), bridge))
+                // Each written as the identity it is: a module's with its module, and a primitive
+                // as itself. Which is what tells the two members apart, and what a reader has to
+                // see to know which pair collided — the class name they share is the third part.
+                // Not `Type.show`, which writes a simple name and would print one name twice.
+                throw CompileException.of(Diagnostic.say(new ModuleMessage.TwoMembersJoinThroughOneCaseClass(String.valueOf(sameName), String.valueOf(member), bridge))
                                 .at(pos)
                                 .hint(new ModuleMessage.AMemberGoesByItsOwnNameWithCaseAfterIt()).build());
             }

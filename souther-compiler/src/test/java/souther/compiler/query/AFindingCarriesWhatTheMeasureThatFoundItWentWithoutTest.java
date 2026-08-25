@@ -2,6 +2,8 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
@@ -198,7 +200,7 @@ class AFindingCarriesWhatTheMeasureThatFoundItWentWithoutTest {
 
     /** A case, named. What it is a case of is nothing this rule turns on. */
     private static TypeSymbol symbol(String name) {
-        return TypeSymbol.runtime(name);
+        return TypeSymbols.declared(new TypeKey("souther.decimal", name));
     }
 
     /** Somewhere for a finding to be about, which every finding needs and this one does not read. */

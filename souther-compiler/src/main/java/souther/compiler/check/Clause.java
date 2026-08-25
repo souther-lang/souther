@@ -104,7 +104,7 @@ public record Clause(Id id, Optional<ClauseName> name, DiagnosticPlace at) {
      * separately under one key and reports one of them. Two spreads bringing one clause in twice
      * answer with one of these, which is what makes them one clause again.
      */
-    public record Id(TypeSymbol declaredOn, int ordinal) {
+    public record Id(TypeSymbol.AtModule declaredOn, int ordinal) {
 
         public Id {
             Objects.requireNonNull(declaredOn, "a clause is written on a declaration");

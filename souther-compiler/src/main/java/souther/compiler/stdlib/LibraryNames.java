@@ -1,5 +1,7 @@
 package souther.compiler.stdlib;
 
+import souther.compiler.types.TypeSymbol;
+
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -20,14 +22,31 @@ import java.util.Set;
  * value, so the resolver asks the same question of the library's sources as of anyone else's and
  * gets an answer that is true rather than one that is never reached.
  */
-public record LibraryNames(Set<String> languageTypes, Set<String> privateOperations,
+public record LibraryNames(Map<String, TypeSymbol> languageTypes, Set<String> privateOperations,
                            Set<String> operations, Map<String, List<String>> candidates) {
 
     public LibraryNames {
-        languageTypes = Set.copyOf(languageTypes);
+        languageTypes = Map.copyOf(languageTypes);
         privateOperations = Set.copyOf(privateOperations);
         operations = Set.copyOf(operations);
         candidates = Map.copyOf(candidates);
+    }
+
+    /**
+     * What the language declares under the bare spelling {@code bare}, or null where it declares
+     * nothing under it.
+     *
+     * <p>The bare spelling and the identity, held together. What the library declares is written in
+     * one of its modules and carries that module in its identity; what a source may write it as is a
+     * bare name and nothing else, because the module that declares it is not a qualifier a source
+     * names it by. Those are two facts and this is where the second is answered — a reader that
+     * worked one out from the other would be reading a naming rule off an identity.
+     *
+     * <p>Partial, and a function. Two of the library's modules declaring one bare spelling is
+     * refused where the library is loaded, so a spelling reaches at most one declaration here.
+     */
+    public TypeSymbol identityOf(String bare) {
+        return languageTypes.get(bare);
     }
 
     /** Whether {@code qualifiedName} is a standard-library function — a declared one, or a sugar
@@ -61,7 +80,7 @@ public record LibraryNames(Set<String> languageTypes, Set<String> privateOperati
      *  them, because every module being resolved is inside the reserved namespace; no name is a
      *  library function yet, because that is what is being read; and there is no published surface
      *  to offer a bare spelling as a candidate from. */
-    public static LibraryNames ofTheLibraryBeingLoaded(Set<String> languageTypes) {
+    public static LibraryNames ofTheLibraryBeingLoaded(Map<String, TypeSymbol> languageTypes) {
         return new LibraryNames(languageTypes, Set.of(), Set.of(), Map.of());
     }
 }

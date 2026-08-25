@@ -1521,7 +1521,7 @@ public final class ExampleVerifier {
             TypeSymbol only = fixtures.caseOnly(row.expected());
             expected = only != null ? null : fixtures.assertedExpected(row.expected(), sig.out());
             evidence = only == null ? new Evidence.Answer(expected.live())
-                    : symbols.declarations().declaration(only.key()) instanceof Hir.UnitData
+                    : symbols.declarations().declaration(only) instanceof Hir.UnitData
                             ? new Evidence.Answer(fixtures.buildFixture(row.expected(), sig.out()).value())
                             : new Evidence.Case(only);
         } catch (FixtureException fe) {
@@ -1680,7 +1680,9 @@ public final class ExampleVerifier {
             return result;
         }
         for (TypeSymbol member : AtomSpace.subjectAtoms(out, symbols)) {
-            if (!member.isDeclaredByLanguage() && member.module().equals(module.name())) {
+            if (!member.isDeclaredByLanguage()
+                    && member instanceof TypeSymbol.AtModule at
+                    && at.module().equals(module.name())) {
                 continue;
             }
             if (SoutherJvmAbi.nameOf(new GeneratedClass.BridgeCase(module.name(), member)).is(result.getClass())) {

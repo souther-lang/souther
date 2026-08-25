@@ -320,7 +320,8 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
     @Test
     void whatASettlingLeavesIsWhatReadingItInWouldLeave() {
         Read read = read(SOURCE, "take");
-        souther.compiler.types.TypeSymbol name = souther.compiler.types.TypeSymbols.declared(
+        souther.compiler.types.TypeSymbol.AtModule name =
+                souther.compiler.types.TypeSymbols.declared(
                 new souther.compiler.types.TypeKey(read.symbols().module(), "P"));
         Hir.Data data = (Hir.Data) read.symbols().declarations().declaration(name.key());
         souther.compiler.check.FieldDomains whole = souther.compiler.check.FieldDomains.of(

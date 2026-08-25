@@ -193,10 +193,11 @@ public final class JsonBoundary {
         try {
             @SuppressWarnings("unchecked")
             Decoder<I, ?> decoder = (Decoder<I, ?>)
-                    loader.loadClass(type.qualified()).getMethod(factory).invoke(null);
+                    loader.loadClass(SoutherJvmAbi.nameOf(new GeneratedClass.Value(type)).binaryName()).getMethod(factory).invoke(null);
             return decoder;
         } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException("`" + type.qualified() + "` has no `" + factory + "()`", e);
+            throw new IllegalStateException("`" + SoutherJvmAbi.nameOf(new GeneratedClass.Value(type)).binaryName()
+                    + "` has no `" + factory + "()`", e);
         }
     }
 
@@ -272,7 +273,7 @@ public final class JsonBoundary {
                 yield Representations.sortedObject(encoded);
             }
             case BoundaryOutput.Nominal n ->
-                    encodeThrough(loader, n.name().qualified(), result);
+                    encodeThrough(loader, SoutherJvmAbi.nameOf(new GeneratedClass.Value(n.name())).binaryName(), result);
             // A union nobody named is generated as the behavior's result type, which is where its
             // encoder is (spec §jvm-anonymous-union). It is the only output with no name in the source, so it is the
             // behavior that says which class to reach for.
@@ -290,7 +291,8 @@ public final class JsonBoundary {
     private static String encodeKey(ClassLoader loader, CrossingMapKey key, Object value) {
         return (String) switch (key.representation()) {
             case MapKeyRepresentation.Lexical l -> encodeLeaf(l.leaf(), value);
-            case MapKeyRepresentation.NamedKey n -> encodeThrough(loader, n.name().qualified(), value);
+            case MapKeyRepresentation.NamedKey n ->
+                    encodeThrough(loader, SoutherJvmAbi.nameOf(new GeneratedClass.Value(n.name())).binaryName(), value);
         };
     }
 

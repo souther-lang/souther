@@ -39,20 +39,20 @@ class WhatTheLanguageDeclaresIsNotWhatTheCompilationDeclaresTest {
     /** The language's own data is there to be read. */
     @Test
     void aRuntimeBackedDeclarationIsAnswered() {
-        assertNotNull(declarations().declaration(TypeSymbol.runtime("RoundingMode").key()));
-        assertTrue(declarations().contains(TypeSymbol.runtime("RoundingMode").key()));
+        assertNotNull(declarations().declaration(TypeSymbols.declared(new TypeKey("souther.decimal", "RoundingMode")).key()));
+        assertTrue(declarations().contains(TypeSymbols.declared(new TypeKey("souther.decimal", "RoundingMode")).key()));
     }
 
     /** And is declared by no module here. */
     @Test
     void andIsNotDeclaredByThisCompilation() {
-        assertFalse(declarations().declaredByCompilation(TypeSymbol.runtime("RoundingMode").key()));
+        assertFalse(declarations().declaredByCompilation(TypeSymbols.declared(new TypeKey("souther.decimal", "RoundingMode")).key()));
     }
 
     /** While what the compilation writes answers yes to both. */
     @Test
     void aDeclarationOfThisCompilationAnswersBoth() {
-        TypeSymbol note = TypeSymbols.declared(new TypeKey("app", "Note"));
+        TypeSymbol.AtModule note = TypeSymbols.declared(new TypeKey("app", "Note"));
 
         assertNotNull(declarations().declaration(note.key()));
         assertTrue(declarations().declaredByCompilation(note.key()));
@@ -61,7 +61,7 @@ class WhatTheLanguageDeclaresIsNotWhatTheCompilationDeclaresTest {
     /** And a name neither of them declares is answered by neither. */
     @Test
     void aNameNothingDeclaresIsAnsweredByNeither() {
-        TypeSymbol nothing = TypeSymbols.declared(new TypeKey("app", "Missing"));
+        TypeSymbol.AtModule nothing = TypeSymbols.declared(new TypeKey("app", "Missing"));
 
         assertNull(declarations().declaration(nothing.key()));
         assertFalse(declarations().declaredByCompilation(nothing.key()));

@@ -76,7 +76,8 @@ public sealed interface RepresentativeSource {
          * value under, outermost first — a fact about the position rather than about the
          * constructor.
          */
-        record Compose(TypeSymbol through, List<TypeReachName.Written> worn) implements Evaluation {
+        record Compose(TypeSymbol.AtModule through, List<TypeReachName.Written> worn)
+                implements Evaluation {
 
             public Compose {
                 worn = List.copyOf(worn);
@@ -137,7 +138,7 @@ public sealed interface RepresentativeSource {
 
     /** A class whose values are composed through {@code through}, field by field, by the walk that
      *  composes every other record. */
-    record Composed(TypeSymbol through) implements RepresentativeSource {
+    record Composed(TypeSymbol.AtModule through) implements RepresentativeSource {
 
         @Override
         public Evaluation evaluate() {

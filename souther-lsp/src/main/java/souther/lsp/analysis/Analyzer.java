@@ -1100,8 +1100,13 @@ public final class Analyzer {
         // instead — leaving both modules uncompilable.
         Compilation compilation = compileOf(graph);
         TypeSymbol type = typeUnderCursor(compilation, uri, pos);
+        // What the language gives is exposed by no module and imported by nobody, so there is no
+        // `exposing` line and no `import` line naming it to edit.
+        if (type instanceof TypeSymbol.AtModule at) {
+            addExposingAndImportSites(compilation, at.name(), at.module(), graph, byUri);
+            return byUri;
+        }
         if (type != null) {
-            addExposingAndImportSites(compilation, type.name(), type.module(), graph, byUri);
             return byUri;
         }
         ValueName value = valueUnderCursor(compilation, uri, pos);
@@ -1234,10 +1239,15 @@ public final class Analyzer {
     /** Where a type is declared, as the compiler answers it. */
     private Optional<Location> declarationOf(Compilation compilation, TypeSymbol target,
                                              ModuleGraph graph) {
+        // Nothing the language gives is written in a source anyone can be sent to: there is no
+        // `.sou` that declares `Int`, and the library's own are not this project's.
+        if (!(target instanceof TypeSymbol.AtModule declared)) {
+            return Optional.empty();
+        }
         // Which module, which name and where it was written is the compiler's answer — the part a
         // spelling match gets wrong.
-        WrittenName at = compilation.db().ask(new Names.DeclaredAt(target)).value();
-        return nameAt(at, uriOf(compilation.sourceIdOf(target.module())), graph);
+        WrittenName at = compilation.db().ask(new Names.DeclaredAt(declared)).value();
+        return nameAt(at, uriOf(compilation.sourceIdOf(declared.module())), graph);
     }
 
     /**

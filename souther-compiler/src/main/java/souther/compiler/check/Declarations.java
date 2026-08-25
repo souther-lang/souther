@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.Reserved;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.stdlib.Stdlib;
@@ -61,8 +62,8 @@ public final class Declarations<D> {
         /** The declaration this identity names, or null where the language declares none. */
         D declaration(TypeKey address);
 
-        /** Everything it declares, keyed by bare name. */
-        Map<String, D> declaredIn();
+        /** What it declares in {@code moduleName}, keyed by the name written there. */
+        Map<String, D> declaredIn(String moduleName);
 
         /** The language's own vocabulary, as a resolved compilation reads it: what {@code stdlib}
          *  declares of its own rather than through any module of the compilation. */
@@ -74,8 +75,8 @@ public final class Declarations<D> {
                 }
 
                 @Override
-                public Map<String, Hir.Def> declaredIn() {
-                    return stdlib.languageDeclarations();
+                public Map<String, Hir.Def> declaredIn(String moduleName) {
+                    return stdlib.languageDeclarationsIn(moduleName);
                 }
             };
         }
@@ -89,14 +90,30 @@ public final class Declarations<D> {
                 }
 
                 @Override
-                public Map<String, Ast.Def> declaredIn() {
+                public Map<String, Ast.Def> declaredIn(String moduleName) {
                     return Map.of();
                 }
             };
         }
     }
 
-    /** The declaration {@code name} names, or null when nothing declares it. */
+    /**
+     * The declaration {@code name} is, or null where the language gives it and nothing declares one.
+     *
+     * <p>Asked with the identity, which is what a reader holding one has. Taking its address apart
+     * to look it up is that reader assembling an address again, and the address-taking method below
+     * is for a reader whose address really did come from outside — a name read off a class file.
+     *
+     * <p>What the language gives answers null, and answers it without an address being made for it.
+     * There is no source that declares {@code Int}, and none that declares the cases beside it
+     * either; a reader asking what one of them is a declaration of is asking about something that
+     * is not a declaration, and the answer is the same as for a name nothing declares.
+     */
+    public D declaration(TypeSymbol name) {
+        return name instanceof TypeSymbol.AtModule at ? declaration(at.key()) : null;
+    }
+
+    /** The declaration at {@code address}, or null when nothing declares one there. */
     public D declaration(TypeKey address) {
         D def = registry.declaration(address);
         return def != null ? def : language.declaration(address);
@@ -121,19 +138,33 @@ public final class Declarations<D> {
     }
 
     /** Whether {@code name} is declared by a module of this compilation — as opposed to a
-     * declaration the language gives (the prelude's runtime-backed data), which resolves and types
-     * like any other but belongs to no module here. The construction discipline asks this: a
-     * construction set holds data a compilation declares, and never the language's vocabulary. */
+     * declaration the language gives, which resolves and types like any other but belongs to no
+     * module here. The construction discipline asks this: a construction set holds data a
+     * compilation declares, and never the language's vocabulary. */
+    public boolean declaredByCompilation(TypeSymbol name) {
+        return name instanceof TypeSymbol.AtModule at && declaredByCompilation(at.key());
+    }
+
+    /** The same, of an address. */
     public boolean declaredByCompilation(TypeKey address) {
         return registry.declaration(address) != null;
     }
 
-    /** Every definition of one module, keyed by the name written there. The runtime namespace
-     * answers with the prelude's runtime-backed data. */
+    /**
+     * Every definition of one module, keyed by the name written there.
+     *
+     * <p>Both worlds, because a standard-library module is a module: {@code souther.decimal}
+     * declares {@code RoundingMode}, and a reader asking what that module declares is asking about
+     * a declaration no compilation of it made.
+     *
+     * <p>Which world by the name and not by which answered something. The reserved namespace is the
+     * library's and nothing of a compilation is in it (ADR-0028), so this is a decision about who
+     * owns the name rather than a first world tried and a second fallen back to — a module of the
+     * compilation that declares no types would reach the fallback and be answered for by whatever
+     * happened to be under its name.
+     */
     public Map<String, D> declaredIn(String moduleName) {
-        if (souther.compiler.types.TypeSymbol.RUNTIME.equals(moduleName)) {
-            return language.declaredIn();
-        }
-        return registry.declaredIn(moduleName);
+        return Reserved.isNamespace(moduleName)
+                ? language.declaredIn(moduleName) : registry.declaredIn(moduleName);
     }
 }

@@ -117,11 +117,11 @@ record UniversalElementFacts(Map<String, Bounds> byPath) {
      * the container's elements.
      */
     static Map<String, Bounds> guaranteed(Type type, Symbols symbols, ReadingPolicy policy) {
-        if (!(type instanceof Type.Ref ref)
-                || !(symbols.declarations().declaration(ref.name().key()) instanceof Hir.Data data)) {
+        if (!(type instanceof Type.Ref(TypeSymbol.AtModule named))
+                || !(symbols.declarations().declaration(named) instanceof Hir.Data data)) {
             return Map.of();
         }
-        InvariantChecker.Seeded seeded = seededOf(ref.name(), data, symbols, policy);
+        InvariantChecker.Seeded seeded = seededOf(named, data, symbols, policy);
         if (seeded == null) {
             return Map.of();
         }
@@ -138,7 +138,7 @@ record UniversalElementFacts(Map<String, Bounds> byPath) {
     /** The reading of {@code named}, or null where it fell over. A reading that fell over is one
      * this says nothing from, which leaves an element unbounded rather than bounded by half of what
      * a declaration says. */
-    private static InvariantChecker.Seeded seededOf(TypeSymbol named, Hir.Data data,
+    private static InvariantChecker.Seeded seededOf(TypeSymbol.AtModule named, Hir.Data data,
                                                     Symbols symbols, ReadingPolicy policy) {
         InvariantChecker.Seeded seeded = InvariantChecker.seedFields(named, data, symbols, policy);
         return seeded.everyClauseRead() && !seeded.constraints().isBottom() ? seeded : null;

@@ -418,7 +418,8 @@ final class CodegenContext {
      * itself. What the language declares never is — no module emits a primitive or the prelude's
      * data — nor is a type another module emitted. */
     boolean isLocalMember(TypeSymbol member) {
-        return !member.isDeclaredByLanguage() && member.module().equals(pkg);
+        return !member.isDeclaredByLanguage()
+                && member instanceof TypeSymbol.AtModule at && at.module().equals(pkg);
     }
 
     /** The members of {@code out} that reach their union through a bridge case, in the order the
@@ -441,7 +442,9 @@ final class CodegenContext {
         }
         List<TypeSymbol> bridged = new ArrayList<>();
         for (TypeSymbol member : AtomSpace.subjectAtoms(out, symbols)) {
-            if (member.isDeclaredByLanguage() || !member.module().equals(module)) {
+            if (member.isDeclaredByLanguage()
+                    || !(member instanceof TypeSymbol.AtModule at)
+                    || !at.module().equals(module)) {
                 bridged.add(member);
             }
         }

@@ -6,6 +6,8 @@ import souther.compiler.check.BehaviorContract.ContractParam;
 import souther.compiler.check.BehaviorContract.Guard;
 import souther.compiler.check.BehaviorContract.Rule;
 import souther.compiler.jvm.GeneratedClass;
+import souther.compiler.jvm.RuntimeCaseToken;
+import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.types.Refinement;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -164,7 +166,7 @@ final class EnsuresGen {
             for (TypeSymbol leaf : answersFor) {
                 // The constant is the receiver, so a case nothing was handed for is a comparison
                 // that answers no rather than one that throws.
-                code.ldc(leaf.qualified());
+                code.ldc(SoutherJvmAbi.caseTokenOf(leaf).qualified());
                 code.aload(named);
                 code.invokevirtual(CD_String, "equals", MTD_equalsObject);
                 Label notThis = code.newLabel();
@@ -286,13 +288,16 @@ final class EnsuresGen {
         code.athrow();
     }
 
-    /** {@code new DeclaredCase(module, name)}: the case as Souther identifies it, which is the pair
-     *  and not the name — two modules may each declare a {@code Denied}. */
+    /** {@code new DeclaredCase(namespace, name)}: the case as it is named between a generated class
+     *  and the runtime, which is the pair and not the name — two modules may each declare a
+     *  {@code Denied}. The same answer the comparison above is written against, so the two cannot
+     *  come to disagree about what a case is called. */
     private static void pushDeclaredCase(CodeBuilder code, TypeSymbol declared) {
+        RuntimeCaseToken token = SoutherJvmAbi.caseTokenOf(declared);
         code.new_(CD_DeclaredCase);
         code.dup();
-        code.ldc(declared.module());
-        code.ldc(declared.name());
+        code.ldc(token.namespace());
+        code.ldc(token.name());
         code.invokespecial(CD_DeclaredCase, ConstantDescs.INIT_NAME, MTD_declaredCase);
     }
 

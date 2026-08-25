@@ -37,7 +37,7 @@ public record ConstructionOrigin(String publishedBy, boolean viaValueReference) 
      * Whether the body holding this construction of {@code built} was handed it rather than making
      * it, and so answers for none of it.
      */
-    public boolean carried(TypeSymbol built) {
+    public boolean carried(TypeSymbol.AtModule built) {
         return viaValueReference || (publishedBy != null && publishedBy.equals(built.module()));
     }
 }

@@ -98,11 +98,15 @@ class NoPublicWayToTurnASpellingIntoATypeIdentityTest {
      * An identity is named from a spelling only for what the language declares, and every one of
      * those is here by name.
      *
-     * <p>{@code Int} and {@code DivisionByZero} are declared by no module, so nothing indexes them
-     * and there is nothing to look one up in — naming them is how they are reached, and the module
-     * they belong to is the language's own rather than anything a caller supplies. What must not
-     * join them is a spelling paired with a module of the compilation: an identity for a declaration
-     * that address may not name, arrived at without the declaration world having said it does.
+     * <p>{@code Int} and {@code Some} are declared by no module, so nothing indexes them and there
+     * is nothing to look one up in — naming them is how they are reached, and what comes back is a
+     * case of a closed set rather than a pair of strings a caller supplied. What must not join them
+     * is a spelling paired with a module: an identity for a declaration that address may not name,
+     * arrived at without the declaration world having said it does.
+     *
+     * <p>{@code runtime} used to be here, and what it minted was a spelling paired with a module
+     * name no module has. The library's declarations are addressed by the module that writes them
+     * now, and the cases beside them are a closed set, so there is nothing left for it to do.
      */
     @Test
     void aSpellingNamesAnIdentityOnlyForWhatTheLanguageDeclares() {
@@ -114,7 +118,7 @@ class NoPublicWayToTurnASpellingIntoATypeIdentityTest {
                 naming.add(m.getName());
             }
         }
-        assertEquals(Set.of("primitive", "runtime", "optionCase"), naming,
+        assertEquals(Set.of("primitive", "optionCase"), naming,
                 "a spelling and a module of the compilation do not make an identity between them");
     }
 
@@ -135,15 +139,27 @@ class NoPublicWayToTurnASpellingIntoATypeIdentityTest {
     void anAddressBecomesAnIdentityInOnePlace() {
         Set<String> exchanging = new java.util.LinkedHashSet<>();
         Set<String> asking = new java.util.LinkedHashSet<>();
-        for (Class<?> c : List.of(TypeSymbol.class, souther.compiler.types.TypeSymbols.class,
+        // The cases of TypeSymbol are read as well as the type itself. One of them holds a key, and
+        // a public constructor on it would be this door standing open in a place the list above
+        // does not look — which is what a record would have made it, its canonical constructor being
+        // as public as the record.
+        List<Class<?>> read = new java.util.ArrayList<>(List.of(TypeSymbol.class,
+                souther.compiler.types.TypeSymbols.class,
                 souther.compiler.check.Declarations.class, souther.compiler.check.TypeScope.class,
-                souther.compiler.check.Registry.class, Symbols.class, Hir.Def.class)) {
+                souther.compiler.check.Registry.class, Symbols.class, Hir.Def.class));
+        java.util.Collections.addAll(read, TypeSymbol.class.getPermittedSubclasses());
+        java.util.Collections.addAll(read,
+                TypeSymbol.OfLanguage.class.getPermittedSubclasses());
+        for (Class<?> c : read) {
             for (Method m : c.getMethods()) {
                 if (!List.of(m.getParameterTypes()).contains(souther.compiler.types.TypeKey.class)) {
                     continue;
                 }
                 String named = c.getSimpleName() + "." + m.getName();
-                (TypeSymbol.class.equals(m.getReturnType()) ? exchanging : asking).add(named);
+                // Any of the sum's cases counts as handing back an identity: what is being held
+                // is that an address was exchanged for one, not which case came out.
+                (TypeSymbol.class.isAssignableFrom(m.getReturnType()) ? exchanging : asking)
+                        .add(named);
             }
             for (java.lang.reflect.Constructor<?> k : c.getConstructors()) {
                 if (List.of(k.getParameterTypes()).contains(souther.compiler.types.TypeKey.class)) {
@@ -192,9 +208,15 @@ class NoPublicWayToTurnASpellingIntoATypeIdentityTest {
                         "Scoping.java: own.declaredKey()",
                         "Scoping.java: declared.declaredKey()",
                         "ModuleMetadata.java: def.declaredKey()",
+                        // The library's own declarations, each under the module of the library that
+                        // writes it. `souther.decimal` declares `RoundingMode`, and that is the
+                        // identity — what a source may write it as is a separate answer, and
+                        // `LibraryNames` is where that one is.
+                        "StdlibLoader.java: def.declaredKey()",
                         // The address a declaration world has just been asked about and answered for.
                         "Registry.java: address",
-                        "Declarations.java: address"),
+                        "Declarations.java: address",
+                        "Stdlib.java: address"),
                 handed,
                 "an identity is exchanged for a declaration, or for an address one was found at");
     }

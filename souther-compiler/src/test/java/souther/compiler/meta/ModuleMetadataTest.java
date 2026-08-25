@@ -237,8 +237,10 @@ class ModuleMetadataTest {
                 behavior checkout = quote >-> place
                 """));
 
-        assertEquals("behavior checkout : (in0: shop.pricing.Cart) -> shop.checkout.Done",
-                string(annotation(classes, "shop.checkout.Checkout", "SoutherBehavior"), "signature"));
+        assertEquals("behavior checkout : (in0: Cart) -> Done",
+                string(annotation(classes, "shop.checkout.Checkout", "SoutherBehavior"), "signature"),
+                "written in the names shop.checkout has: Cart came in on its import line and Done is"
+                        + " its own");
     }
 
     private static Annotation annotation(Map<String, byte[]> classes, String binaryName,

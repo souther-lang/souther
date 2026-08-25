@@ -37,7 +37,7 @@ class AReasonBelongsToTheConjunctItCameFromTest {
         compilation.answerEverything();
         String module = compilation.modules().get(0);
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
-        TypeSymbol named = TypeSymbols.declared(new TypeKey(module, "Pair"));
+        TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, "Pair"));
         Hir.Data data = (Hir.Data) symbols.declarations().declaration(named.key());
 
         return FieldDomains.of(named, data, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES).accounting().values().stream()

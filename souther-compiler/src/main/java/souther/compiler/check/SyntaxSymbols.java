@@ -115,16 +115,18 @@ public final class SyntaxSymbols implements NameSense {
      * the module declares. A source declaration the module does not have is not one of these, so
      * nothing here has an identity to be resolved under that nothing else would answer with.
      */
-    public Map<TypeSymbol, Ast.Def> declaredHere() {
-        Map<TypeSymbol, Ast.Def> declared = new LinkedHashMap<>();
+    public Map<TypeSymbol.AtModule, Ast.Def> declaredHere() {
+        Map<TypeSymbol.AtModule, Ast.Def> declared = new LinkedHashMap<>();
         for (Ast.Def def : registry.declaredIn(module()).values()) {
-            if (!(scope.resolve(def.written()) instanceof Denotation.Denotes denotes)) {
+            if (!(scope.resolve(def.written())
+                    instanceof Denotation.Denotes(TypeSymbol.AtModule at))) {
                 // The scope is built from these same declarations, so a module that declares a name
-                // and cannot say what it denotes is two answers to one question.
+                // and cannot say what it denotes — or says it denotes something no module declares —
+                // is two answers to one question.
                 throw new IllegalStateException("`" + module() + "` declares `" + def.name()
                         + "`, and the scope it is resolved against does not say what it denotes");
             }
-            declared.put(denotes.type(), def);
+            declared.put(at, def);
         }
         return declared;
     }

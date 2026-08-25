@@ -65,7 +65,7 @@ class ADeclarationTheModuleDoesNotHaveGetsNoIdentityTest {
             data Some = { b: Amount }
             """;
 
-    private static final TypeSymbol AMOUNT = TypeSymbols.declared(new TypeKey("m", "Amount"));
+    private static final TypeSymbol.AtModule AMOUNT = TypeSymbols.declared(new TypeKey("m", "Amount"));
 
     private static Db db(String source) {
         Map<String, String> byId = new LinkedHashMap<>();

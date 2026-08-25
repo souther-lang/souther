@@ -51,7 +51,7 @@ class AQuestionIsAnsweredByWhicheverReadingTookTheRuleInTest {
         String module = compilation.modules().get(0);
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(symbols);
-        TypeSymbol named = TypeSymbols.declared(new TypeKey(module, type));
+        TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, type));
         Hir.Data data = (Hir.Data) symbols.declarations().declaration(named.key());
         assertNotNull(data, "no `" + type + "` declared");
         return FieldDomains.of(named, data, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES).accounting();
@@ -134,7 +134,7 @@ class AQuestionIsAnsweredByWhicheverReadingTookTheRuleInTest {
         compilation.answerEverything();
         String module = compilation.modules().get(0);
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
-        TypeSymbol holder = TypeSymbols.declared(new TypeKey(module, "Holder"));
+        TypeSymbol.AtModule holder = TypeSymbols.declared(new TypeKey(module, "Holder"));
         return FieldDomains.of(holder,
                         (Hir.Data) symbols.declarations().declaration(holder.key()), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES)
                 .at("len").min().at().toString();
@@ -355,7 +355,7 @@ class AQuestionIsAnsweredByWhicheverReadingTookTheRuleInTest {
         compilation.answerEverything();
         String module = compilation.modules().get(0);
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
-        TypeSymbol named = TypeSymbols.declared(new TypeKey(module, "Length"));
+        TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, "Length"));
         FieldDomains read = FieldDomains.of(named,
                 (Hir.Data) symbols.declarations().declaration(named.key()), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
 

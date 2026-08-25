@@ -516,7 +516,8 @@ class EverySchemaWordIsAccountedForTest {
      */
     @Test
     void theFourthFieldWithNoEnumBehindItIsWrittenFromWhichKindOfRuleItIs() {
-        souther.compiler.types.TypeSymbol on = souther.compiler.types.TypeSymbols.declared(
+        souther.compiler.types.TypeSymbol.AtModule on =
+                souther.compiler.types.TypeSymbols.declared(
                 new souther.compiler.types.TypeKey("m", "L"));
         assertEquals(Set.of(
                         AdequacyReport.schemaRuleKind(new souther.compiler.check.RuleRef.Invariant(

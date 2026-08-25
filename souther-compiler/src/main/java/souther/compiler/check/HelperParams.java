@@ -1027,7 +1027,7 @@ final class HelperParams {
         /** Each field of a construction, asked for the type that field holds. */
         private void visitInits(Hir.NewData nd, Scope env, BindingId target) {
             Hir.Data data = nd.typeName().answered() instanceof Hir.Name.Denoting names
-                    && symbols.declarations().declaration(names.type().key()) instanceof Hir.Data d
+                    && symbols.declarations().declaration(names.type()) instanceof Hir.Data d
                     ? d : null;
             for (Hir.FieldInit init : nd.inits()) {
                 visit(init.value(), env, target,

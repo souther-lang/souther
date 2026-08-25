@@ -65,7 +65,7 @@ public final class MatchElaborator {
         String caseName = written.written();
         String otherSum = null;
         for (TypeSymbol name : symbols.scope().visibleNames()) {
-            if (!(symbols.declarations().declaration(name.key()) instanceof Hir.SumData sum)) {
+            if (!(symbols.declarations().declaration(name) instanceof Hir.SumData sum)) {
                 continue;
             }
             List<TypeSymbol> others = TypeOps.caseNames(sum);

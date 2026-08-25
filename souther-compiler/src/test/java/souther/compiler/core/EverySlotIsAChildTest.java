@@ -46,7 +46,7 @@ class EverySlotIsAChildTest {
     private static Core.Binder binder(String name) {
         return CoreBinders.of(BINDERS.binder(name, POS));
     }
-    private static final TypeSymbol PERSON = TypeSymbols.declared(new TypeKey("demo", "Person"));
+    private static final TypeSymbol.AtModule PERSON = TypeSymbols.declared(new TypeKey("demo", "Person"));
 
     private static Core.Read read(String name, int ordinal) {
         return new Core.Read(name, new BindingId(OWNER, ordinal), Type.INT, POS);

@@ -38,7 +38,7 @@ class AFieldsFloorIsTheRecordsRuleAboutWhatItHoldsTest {
         String module = compilation.modules().get(0);
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(symbols, "the model did not compile");
-        TypeSymbol named = TypeSymbols.declared(new TypeKey(module, type));
+        TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, type));
         Hir.Data data = (Hir.Data) symbols.declarations().declaration(named.key());
         assertNotNull(data, "no `" + type + "` in " + module);
         return FieldDomains.of(named, data, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES, settled);

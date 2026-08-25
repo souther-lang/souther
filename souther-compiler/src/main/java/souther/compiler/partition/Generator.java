@@ -2154,7 +2154,7 @@ public final class Generator {
      * spread would drop the included ones with it.
      */
     private static List<String> fieldsOf(Subject subject, TypeSymbol built) {
-        return subject.symbols().declarations().declaration(built.key()) instanceof Hir.Data data
+        return subject.symbols().declarations().declaration(built) instanceof Hir.Data data
                 && !data.newtype()
                 ? List.copyOf(TypeOps.fieldTypes(data, subject.symbols()).keySet())
                 : null;
@@ -3444,9 +3444,10 @@ public final class Generator {
      */
     private static FieldDomains rulesOf(Type type, Symbols symbols, ReadingPolicy policy,
                                         Map<String, Count> settled) {
-        return type instanceof Type.Ref ref
-                && symbols.declarations().declaration(ref.name().key()) instanceof Hir.Data data && !data.newtype()
-                ? FieldDomains.of(ref.name(), data, symbols, policy, settled) : FieldDomains.NONE;
+        return type instanceof Type.Ref(TypeSymbol.AtModule named)
+                && symbols.declarations().declaration(named) instanceof Hir.Data data
+                && !data.newtype()
+                ? FieldDomains.of(named, data, symbols, policy, settled) : FieldDomains.NONE;
     }
 
     /** What a position under a parameter is called where the parameter's own rules name it, or null

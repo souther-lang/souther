@@ -33,11 +33,12 @@ final class Clauses {
     private final Symbols symbols;
     private final Map<TypeSymbol, List<Hir.InvariantClause>> inTheAnalysisRepresentation;
     private final Map<Hir.Data, Map<String, Type>> fields = new HashMap<>();
-    private final Map<TypeSymbol, Map<String, BindingId>> bindings = new HashMap<>();
+    private final Map<TypeSymbol.AtModule, Map<String, BindingId>> bindings =
+            new HashMap<>();
     /** Remembered per declaration, not per clause: a clause an include brings in is one expression
      * reached under two names, and what it types to is read against the fields of the one asking. */
     private final Map<TypeSymbol, Map<Hir.Expr, TypedClause>> typed = new HashMap<>();
-    private final Map<TypeSymbol, List<Hir.InvariantClause>> effective = new HashMap<>();
+    private final Map<TypeSymbol.AtModule, List<Hir.InvariantClause>> effective = new HashMap<>();
     /** Which of a declaration's own fields each typed clause reads — what a construction has to have
      * filled for the clause to be read at all. */
     private final Map<Core, Set<BindingId>> readsFields = new IdentityHashMap<>();
@@ -58,12 +59,13 @@ final class Clauses {
 
     /** Every invariant that applies to {@code named}, each in the analysis representation where this
      * module declares it. */
-    List<Hir.InvariantClause> of(TypeSymbol named, Hir.Data data) {
+    List<Hir.InvariantClause> of(TypeSymbol.AtModule named, Hir.Data data) {
         return effective.computeIfAbsent(named, name ->
                 TypeOps.effectiveInvariants(name, data, symbols, inTheAnalysisRepresentation::get));
     }
 
-    private final Map<TypeSymbol, List<TypeOps.Declared>> declaredClauses = new HashMap<>();
+    private final Map<TypeSymbol.AtModule, List<TypeOps.Declared>> declaredClauses =
+            new HashMap<>();
 
     /** What {@code data}'s fields are. */
     Map<String, Type> fieldsOf(Hir.Data data) {
@@ -78,7 +80,7 @@ final class Clauses {
      * of: two modules may declare one spelling, and a reader with both in sight would otherwise have
      * them answer alike.
      */
-    Map<String, BindingId> bindingsOf(TypeSymbol named, Hir.Data data) {
+    Map<String, BindingId> bindingsOf(TypeSymbol.AtModule named, Hir.Data data) {
         return bindings.computeIfAbsent(named, name -> TypeOps.fieldBindings(name, data, symbols));
     }
 
@@ -91,7 +93,7 @@ final class Clauses {
      * not, and it never was — the elaborator does not answer null of its own accord, so every one of
      * those was an exception caught here and dropped.
      */
-    TypedClause typed(Hir.Expr clause, TypeSymbol named, Hir.Data data) {
+    TypedClause typed(Hir.Expr clause, TypeSymbol.AtModule named, Hir.Data data) {
         return typed.computeIfAbsent(named, _ -> new IdentityHashMap<>())
                 .computeIfAbsent(clause, written -> {
                     try {
@@ -117,7 +119,7 @@ final class Clauses {
      * that is not there, and the clause is left to the run-time check rather than read against
      * nothing.
      */
-    Core statedAt(Hir.Expr clause, TypeSymbol named, Hir.Data data, Map<BindingId, Core> given) {
+    Core statedAt(Hir.Expr clause, TypeSymbol.AtModule named, Hir.Data data, Map<BindingId, Core> given) {
         // Fail-open: a clause with no form leaves its run-time check standing, whichever way the
         // form went missing. Which of the two it was matters to a reader that publishes a sentence
         // about the clause, and this is not one.
@@ -137,7 +139,7 @@ final class Clauses {
      * it owes where one is being built are the same clauses read the same way, and they differ only
      * in what the fields are given — a read of each field, or the value each is being handed.
      */
-    StatedClauses statedAt(TypeSymbol named, Hir.Data data, Map<BindingId, Core> given) {
+    StatedClauses statedAt(TypeSymbol.AtModule named, Hir.Data data, Map<BindingId, Core> given) {
         List<Stated> stated = new ArrayList<>();
         int declared = 0;
         for (TypeOps.Declared inv : declared(named, data)) {
@@ -181,14 +183,14 @@ final class Clauses {
     record Stated(Clause clause, Core expr) {}
 
     /** Every clause of {@code named}, each with the declaration that wrote it. */
-    List<TypeOps.Declared> declared(TypeSymbol named, Hir.Data data) {
+    List<TypeOps.Declared> declared(TypeSymbol.AtModule named, Hir.Data data) {
         return declaredClauses.computeIfAbsent(named, name ->
                 TypeOps.declaredInvariants(name, data, symbols, inTheAnalysisRepresentation::get));
     }
 
     /** Which of {@code data}'s own fields {@code clause} reads, remembered: a clause is read at every
      * construction of its type, and what it reads does not change between them. */
-    private Set<BindingId> fieldsRead(Core clause, TypeSymbol named, Hir.Data data) {
+    private Set<BindingId> fieldsRead(Core clause, TypeSymbol.AtModule named, Hir.Data data) {
         return readsFields.computeIfAbsent(clause, read -> {
             Set<BindingId> declared = new HashSet<>(bindingsOf(named, data).values());
             Set<BindingId> found = new HashSet<>();

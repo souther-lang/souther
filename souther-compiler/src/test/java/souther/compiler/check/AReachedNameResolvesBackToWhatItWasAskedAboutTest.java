@@ -9,6 +9,7 @@ import souther.compiler.ast.WrittenName;
 import souther.compiler.types.Denotation;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
+import souther.compiler.types.LanguageCaseId;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeReachName;
 
@@ -83,7 +84,7 @@ class AReachedNameResolvesBackToWhatItWasAskedAboutTest {
         for (String each : List.of("Own", "RoundingMode", "In")) {
             named.add(TypeSymbols.declared(new TypeKey("app", each)));
         }
-        named.add(TypeSymbol.runtime("RoundingMode"));
+        named.add(TypeSymbols.declared(new TypeKey("souther.decimal", "RoundingMode")));
         return named;
     }
 
@@ -117,11 +118,18 @@ class AReachedNameResolvesBackToWhatItWasAskedAboutTest {
             }
         }
 
-        assertEquals(List.of(TypeSymbols.declared(new TypeKey("lib", "Hidden")), TypeSymbol.runtime("RoundingMode")),
+        assertEquals(List.of(TypeSymbols.declared(new TypeKey("lib", "Hidden")),
+                        TypeSymbols.declared(new TypeKey("souther.decimal", "RoundingMode"))),
                 unnameable, "one its module keeps to itself, one this module took the spelling of");
         for (TypeSymbol type : unnameable) {
-            for (String spelling : List.of(type.name(), type.qualified(),
-                    "up." + type.name(), "lib." + type.name())) {
+            // Its own module's name among them where there is one to write. A cast would say the
+            // same thing by failing, and say it as a class cast rather than as this test's subject.
+            List<String> spellings = new ArrayList<>(List.of(type.name(),
+                    "up." + type.name(), "lib." + type.name()));
+            if (type instanceof TypeSymbol.AtModule at) {
+                spellings.add(at.key().qualified());
+            }
+            for (String spelling : spellings) {
                 assertFalse(type.equals(symbols.scope().resolve(spelled(spelling)).type()),
                         "`" + spelling + "` reaches " + type + " after all");
             }
@@ -135,7 +143,7 @@ class AReachedNameResolvesBackToWhatItWasAskedAboutTest {
      */
     @Test
     void aRuntimeBackedTypeThisModuleTookTheSpellingOfHasNoNameHere() {
-        TypeSymbol language = TypeSymbol.runtime("RoundingMode");
+        TypeSymbol language = TypeSymbols.declared(new TypeKey("souther.decimal", "RoundingMode"));
 
         assertInstanceOf(TypeReachName.Unnameable.class, scopeOf("app", LIB, APP).scope().reach(language));
         assertEquals(TypeSymbols.declared(new TypeKey("app", "RoundingMode")),
@@ -146,7 +154,7 @@ class AReachedNameResolvesBackToWhatItWasAskedAboutTest {
     @Test
     void aRuntimeBackedTypeNothingHereShadowsIsWrittenBare() {
         Symbols symbols = scopeOf("lib", LIB, APP);
-        TypeSymbol language = TypeSymbol.runtime("RoundingMode");
+        TypeSymbol language = TypeSymbols.declared(new TypeKey("souther.decimal", "RoundingMode"));
 
         assertEquals("RoundingMode", assertInstanceOf(TypeReachName.Written.class,
                 symbols.scope().reach(language)).rendered());
@@ -167,7 +175,7 @@ class AReachedNameResolvesBackToWhatItWasAskedAboutTest {
         Symbols symbols = scopeOf("app", LIB, APP);
 
         for (TypeSymbol vocabulary : List.of(TypeSymbol.primitive("Int"),
-                TypeSymbol.runtime("DivisionByZero"))) {
+                new TypeSymbol.LanguageCase(LanguageCaseId.DIVISION_BY_ZERO))) {
             TypeReachName.Written written = assertInstanceOf(TypeReachName.Written.class,
                     symbols.scope().reach(vocabulary), vocabulary.toString());
 
@@ -176,6 +184,30 @@ class AReachedNameResolvesBackToWhatItWasAskedAboutTest {
                     "the reader of the position a case name stands at");
             assertEquals(Denotation.NOT_IN_SCOPE, symbols.scope().resolve(spelled(written.rendered())),
                     "and not this one, which answers for declarations");
+        }
+    }
+
+    /**
+     * And {@code Some} and {@code None} are written as themselves too, which no loop above covers.
+     *
+     * <p>Their own test because {@code resolveCase} is not their reader — an {@code Option} arm is
+     * answered where the match is resolved ({@code Resolve}, through
+     * {@link TypeSymbol#optionCase}) — so what is held of them here is only how they are written.
+     *
+     * <p>They were filed beside the primitives under a module name nothing declares, so a reader
+     * that asked "is this a primitive" got them for free. Asked of the identity that is two
+     * questions, and this is the one nothing else here was asking: the loop above reads the
+     * primitives and an error case, and neither is these.
+     */
+    @Test
+    void optionsTwoCasesAreWrittenAsThemselvesToo() {
+        Symbols symbols = scopeOf("app", LIB, APP);
+
+        for (TypeSymbol option : List.of(TypeSymbol.SOME, TypeSymbol.NONE)) {
+            TypeReachName.Written written = assertInstanceOf(TypeReachName.Written.class,
+                    symbols.scope().reach(option), option.toString());
+
+            assertEquals(option.name(), written.rendered());
         }
     }
 

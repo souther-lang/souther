@@ -313,7 +313,10 @@ public final class DeclarationAgreement {
 
             @Override
             public String module() {
-                return type.module();
+                // What the language declares has no module of a compilation to name, and `reach`
+                // has already left it out; answering null says the same thing twice rather than
+                // making up a module for it.
+                return type instanceof TypeSymbol.AtModule at ? at.module() : null;
             }
 
             @Override

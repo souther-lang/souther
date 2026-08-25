@@ -43,10 +43,19 @@ class AnIdentitySaysWhetherTheLanguageDeclaresItTest {
     /** The other half of the namespace, which {@code isPrimitive()} does not answer for. */
     @Test
     void soIsABuiltInErrorCase() {
-        TypeSymbol error = TypeSymbol.runtime("DivisionByZero");
+        TypeSymbol error = new TypeSymbol.LanguageCase(LanguageCaseId.DIVISION_BY_ZERO);
 
         assertTrue(error.isDeclaredByLanguage());
         assertFalse(error.isPrimitive(), "which is not the same question");
+    }
+
+    /** And so is what the standard library declares, which is a module's declaration and no
+     *  compilation's: {@code souther.decimal} writes {@code RoundingMode} and nothing here does. */
+    @Test
+    void soIsWhatTheStandardLibraryDeclares() {
+        assertTrue(TypeSymbols.declared(new TypeKey("souther.decimal", "RoundingMode"))
+                .isDeclaredByLanguage());
+        assertFalse(TypeSymbols.declared(new TypeKey("demo", "Quote")).isDeclaredByLanguage());
     }
 
     @Test
@@ -70,12 +79,19 @@ class AnIdentitySaysWhetherTheLanguageDeclaresItTest {
         assertTrue(new ValueName.Helper("souther.option", "withDefault").isDeclaredByLanguage());
     }
 
-    /** How the question was got wrong: two identities equal to each other answering differently is
-     *  what a provenance kept from the factory would have allowed. */
+    /**
+     * How the question was got wrong: two identities equal to each other answering differently is
+     * what a provenance kept from the factory would have allowed.
+     *
+     * <p>There is one way to an address's identity now, so the two sides of this are the same
+     * expression written twice. It is left standing because what it holds is that they are: an
+     * identity is its address and carries nothing about how it was reached.
+     */
     @Test
     void twoIdentitiesOfOneAddressAnswerAlike() {
-        TypeSymbol minted = TypeSymbol.runtime("RoundingMode");
-        TypeSymbol identified = TypeSymbols.declared(minted.key());
+        TypeKey address = new TypeKey("souther.decimal", "RoundingMode");
+        TypeSymbol minted = TypeSymbols.declared(address);
+        TypeSymbol identified = TypeSymbols.declared(address);
 
         assertEquals(minted, identified);
         assertEquals(minted.isDeclaredByLanguage(), identified.isDeclaredByLanguage());

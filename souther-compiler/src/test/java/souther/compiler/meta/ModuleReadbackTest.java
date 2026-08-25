@@ -132,8 +132,11 @@ class ModuleReadbackTest {
         assertEquals(Set.of("audited"), read.unwrittenBehaviors());
     }
 
-    /** A composition declares stages; what comes back is the signature it computes to, with every
-     * name written out, because nothing is known here about what the reading module imports. */
+    /** A composition declares stages; what comes back is the signature it computes to, written in
+     * the names the module that published it has. It is read back as that module's own source, under
+     * the import lines that travelled with it, so {@code Cart} here means what it meant there —
+     * which is why it is not written out with its module
+     * (spec {@code [#a-published-signature-is-written-in-names-its-module-has]}). */
     @Test
     void aCompositionComesBackAsASignature() {
         Map<String, byte[]> classes = Compiler.compileModules(List.of("""
@@ -155,8 +158,9 @@ class ModuleReadbackTest {
 
         Ast.SpecBehavior checkout = (Ast.SpecBehavior) read.module().behaviors().stream()
                 .filter(b -> b.name().equals("checkout")).findFirst().orElseThrow();
-        assertEquals("shop.pricing.Cart", refName(checkout.params().get(0).type()));
-        assertEquals("shop.checkout.Done", refName(checkout.ret()));
+        assertEquals("Cart", refName(checkout.params().get(0).type()),
+                "imported bare there, so bare here");
+        assertEquals("Done", refName(checkout.ret()), "the module's own declaration");
     }
 
     /** The name of a written type's single reference case. */

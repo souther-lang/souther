@@ -368,7 +368,7 @@ public sealed interface Core {
      * reader asking what this builds asks {@code values}, and the order it asks in is the order the
      * fields are evaluated.
      */
-    record Construct(TypeSymbol typeName, List<FieldValue> values, Type type,
+    record Construct(TypeSymbol.AtModule typeName, List<FieldValue> values, Type type,
                      SourcePos pos) implements Core {}
 
     /**

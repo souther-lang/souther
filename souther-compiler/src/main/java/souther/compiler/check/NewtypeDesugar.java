@@ -97,7 +97,7 @@ public final class NewtypeDesugar {
                 TypeSymbol built = call.answered() != null
                         && call.answered().denotes() instanceof ValueName.OfType named
                         ? named.type() : null;
-                if (built != null && symbols.declarations().declaration(built.key()) instanceof Hir.Data nt && nt.newtype()) {
+                if (built != null && symbols.declarations().declaration(built) instanceof Hir.Data nt && nt.newtype()) {
                     if (args.size() != 1) {
                         throw CompileException.of(Diagnostic
                                         .at(call.appliedAt())

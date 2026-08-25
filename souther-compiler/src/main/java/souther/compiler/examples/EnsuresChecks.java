@@ -3,6 +3,7 @@ package souther.compiler.examples;
 import souther.compiler.check.BehaviorContract;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.GeneratedClasses;
+import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
@@ -125,7 +126,7 @@ final class EnsuresChecks {
             return null;
         }
         Object[] handed = Arrays.copyOf(args, args.length + 1);
-        handed[args.length] = answered.qualified();
+        handed[args.length] = SoutherJvmAbi.caseTokenOf(answered).qualified();
         return said(behavior.name(),
                 () -> checkForCase(behavior.name(), contract).invoke(null, handed));
     }

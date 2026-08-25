@@ -298,7 +298,7 @@ public final class TypeCardinality {
         }
         while (!left.isEmpty()) {
             TypeSymbol name = left.remove(left.size() - 1);
-            if (declared.containsKey(name) || !(symbols.declarations().declaration(name.key()) instanceof Hir.Def def)) {
+            if (declared.containsKey(name) || !(symbols.declarations().declaration(name) instanceof Hir.Def def)) {
                 continue;
             }
             declared.put(name, def);
@@ -359,10 +359,12 @@ public final class TypeCardinality {
                                    ReadingPolicy policy) {
         Set<Long> counts = new HashSet<>();
         declared.forEach((name, def) -> {
-            if (!(def instanceof Hir.Data data)) {
+            // A data is a declaration a module wrote, so the second half never decides anything;
+            // it is how the name says so rather than a reader assuming it.
+            if (!(def instanceof Hir.Data data) || !(name instanceof TypeSymbol.AtModule at)) {
                 return;
             }
-            OccurrenceCounts held = OccurrenceCounts.of(name, data, symbols, policy);
+            OccurrenceCounts held = OccurrenceCounts.of(at, data, symbols, policy);
             for (String path : data.newtype() ? Set.of(FieldDomains.THE_VALUE)
                     : TypeOps.fieldTypes(data, symbols).keySet()) {
                 long least = held.leastHeldAt(path);

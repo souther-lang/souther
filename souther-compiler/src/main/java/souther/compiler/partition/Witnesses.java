@@ -447,7 +447,7 @@ final class Witnesses {
      */
     static FixtureTemplate wrapped(Type type, FixtureTemplate bare, Symbols symbols) {
         if (bare == null || !(type instanceof Type.Ref ref)
-                || !(symbols.declarations().declaration(ref.name().key()) instanceof Hir.Data data) || !data.newtype()) {
+                || !(symbols.declarations().declaration(ref.name()) instanceof Hir.Data data) || !data.newtype()) {
             return bare;
         }
         TypeSymbol name = ref.name();

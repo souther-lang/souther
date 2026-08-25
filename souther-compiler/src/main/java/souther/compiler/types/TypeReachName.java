@@ -83,11 +83,11 @@ public sealed interface TypeReachName {
 
     /** A type reached under the name of the module that declares it — what is left where the module
      * neither declares it, imports it, nor aliases the module it comes from. */
-    record ViaModule(TypeSymbol denotes) implements Written {
+    record ViaModule(TypeSymbol.AtModule denotes) implements Written {
 
         @Override
         public String rendered() {
-            return denotes.qualified();
+            return denotes.key().qualified();
         }
 
         @Override

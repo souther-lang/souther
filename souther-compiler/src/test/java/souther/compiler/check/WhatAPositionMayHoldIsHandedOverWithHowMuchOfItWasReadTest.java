@@ -57,7 +57,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
                 .map(each -> each.diagnostic().code())
                 .toList(), "the model this reads has to be one somebody could write");
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
-        TypeSymbol name = TypeSymbols.declared(new TypeKey(symbols.module(), named));
+        TypeSymbol.AtModule name = TypeSymbols.declared(new TypeKey(symbols.module(), named));
         return new Read(FieldDomains.of(name,
                 (Hir.Data) symbols.declarations().declaration(name.key()), symbols, policy), symbols);
     }
@@ -81,7 +81,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
         assertFalse(compilation.diagnostics().values().stream().flatMap(List::stream).toList()
                 .isEmpty(), "this model is meant to be refused");
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
-        TypeSymbol name = TypeSymbols.declared(new TypeKey(symbols.module(), named));
+        TypeSymbol.AtModule name = TypeSymbols.declared(new TypeKey(symbols.module(), named));
         return FieldDomains.of(name,
                 (Hir.Data) symbols.declarations().declaration(name.key()), symbols,
                 ReadAs.THE_COMPILATION_DOES);

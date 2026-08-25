@@ -6,6 +6,8 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.HelperInliner;
 import souther.compiler.check.Sig;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeReachName;
+import souther.compiler.types.TypeSpelling;
 import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.ValueName;
 import souther.compiler.codegen.Backend;
@@ -88,7 +90,8 @@ public final class ModuleMetadata {
      */
     public static void stamp(Emissions out, Ast.Module module, Hir.Module resolved,
                              CstFrontend.Slices slices, Map<String, Sig> sigs,
-                             Map<String, BehaviorImplementation> implementations) {
+                             Map<String, BehaviorImplementation> implementations,
+                             TypeReachName.Naming naming) {
         List<String> types = new ArrayList<>();
         for (Ast.Def def : module.defs()) {
             types.add(def.name());
@@ -98,7 +101,7 @@ public final class ModuleMetadata {
         }
         List<String> behaviors = new ArrayList<>();
         for (Ast.BehaviorDef b : module.behaviors()) {
-            String signature = signatureOf(b, slices, sigs);
+            String signature = signatureOf(b, slices, sigs, naming);
             if (signature == null) {
                 continue;
             }
@@ -117,9 +120,12 @@ public final class ModuleMetadata {
      * What the importing module reads as this behavior's signature. A declared one is the
      * declaration as written. A composition declares its stages, not a signature, so the computed
      * one is written out — the stages are the module's own business and are not carried.
+     *
+     * <p>Null where the behavior has no signature to publish, and only there. A composition whose
+     * stage names nothing computes none, and nothing is carried for it.
      */
     private static String signatureOf(Ast.BehaviorDef b, CstFrontend.Slices slices,
-                                      Map<String, Sig> sigs) {
+                                      Map<String, Sig> sigs, TypeReachName.Naming naming) {
         if (b instanceof Ast.SpecBehavior) {
             return slices.behaviors().get(b.name());
         }
@@ -130,9 +136,36 @@ public final class ModuleMetadata {
         StringBuilder params = new StringBuilder();
         for (int i = 0; i < sig.inputTypes().size(); i++) {
             params.append(i == 0 ? "" : ", ").append("in").append(i).append(": ")
-                    .append(Type.showQualified(sig.inputTypes().get(i)));
+                    .append(computed(b.name(), sig.inputTypes().get(i), naming));
         }
-        return "behavior " + b.name() + " : (" + params + ") -> " + Type.showQualified(sig.outputType());
+        return "behavior " + b.name() + " : (" + params + ") -> "
+                + computed(b.name(), sig.outputType(), naming);
+    }
+
+    /**
+     * One type of a computed signature, written the way the module publishing it writes types.
+     *
+     * <p>What is published is source, read back by the same front end that read the module. So the
+     * names in it are this module's names, asked of the module rather than taken off the type's own
+     * spelling: an identity says which declaration it is, and never how the module that mentions it
+     * writes it down — a bare name here, an alias there, the declaring module's name where the
+     * module has neither. This is what {@link TypeReachName.Naming} exists to be asked, and this is
+     * a writer of a reference it did not read.
+     *
+     * <p>A type this module cannot name at all does not reach here. What a computed signature is
+     * made of is what its stages were declared with, and a declared signature carries neither the
+     * language's own vocabulary (E1325) nor a type its module keeps to itself (E1611) — so by the
+     * time a composition has one, every type in it is one the module has a word for. That is a
+     * compilation this compiler failed to refuse rather than a program anyone can write, so it is
+     * said as one: no code, no position, nothing for an author to do about it.
+     */
+    static String computed(String behavior, Type type, TypeReachName.Naming naming) {
+        return switch (TypeSpelling.of(type, naming)) {
+            case TypeSpelling.Spelled(String rendered) -> rendered;
+            case TypeSpelling.Unnameable(var denotes) -> throw new IllegalStateException(
+                    "`" + behavior + "` reached metadata publication with `" + denotes
+                            + "`, which has no name in the module publishing it");
+        };
     }
 
     /**
