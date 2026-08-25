@@ -220,12 +220,13 @@ class ABehaviorWithNoBoundaryIsMeasuredAsOneNobodyCouldMeasureTest {
         assertTrue(behaviorOf(report, "receipt").has("signature"),
                 "and the behavior whose boundary did work out is written in full");
 
-        // The three states apart, in the document. `issue` has no section because its positions
-        // were not derived and an empty array of them would say it takes nothing; `whole` has one
-        // saying the measure has no subject, which is true of a composition whatever else is wrong
-        // with it; `receipt` has one with numbers in it.
+        // The three states apart, in the document. `issue` has no section because nothing derived
+        // what the model divides it into — the axes come off the boundary and no declaration gives
+        // them, so an empty array would say the model divides none of its positions; `whole` has
+        // one saying the measure has no subject, which is true of a composition whatever else is
+        // wrong with it; `receipt` has one with numbers in it.
         assertFalse(behaviorOf(report, "issue").has("partition"),
-                "no section where the positions were not derived");
+                "no section where nothing derived what the model divides it into");
         assertEquals("no_subject", behaviorOf(report, "whole")
                         .get("partition").get("axesMeasure").get("reason").asString(),
                 "a composition is measured at its stages, and the document says so");

@@ -450,12 +450,19 @@ public final class Adequacy {
         /**
          * That the signature's cases were counted.
          *
-         * <p><b>Why the positions are inside a measure and not a bare list.</b> How many positions
-         * a behavior has is read off its boundary, so a behavior whose boundary was not worked out
-         * has a number of positions nobody knows. Held as a list, that state is an empty one — the
-         * same bytes as a behavior that takes nothing — and a reader counting the entries would
-         * answer "no positions" to a question nobody could answer. The same reason the positions of
-         * the partition measure are inside one ({@code PartitionEvidence.partitioned}).
+         * <p><b>Whether the positions are known is not whether the boundary was worked out.</b> They
+         * are two questions and this measure exists because they are: a declared behavior writes its
+         * parameters, so its layout is known off the declaration whatever the boundary did, and only
+         * the cases at each position go unread. A {@code >->} writes none — it takes what its first
+         * stage takes — so a composition is the one shape whose layout has nowhere else to come
+         * from, and the one whose positions can be unknown.
+         *
+         * <p><b>Which is why they are inside a measure and not a bare list.</b> Held as a list, an
+         * unknown layout is an empty one — the same bytes as a behavior that takes nothing — and a
+         * reader counting the entries would answer "no positions" to a question nobody could
+         * answer. The same reason the positions of the partition measure are inside one
+         * ({@code PartitionEvidence.partitioned}), which answers a different question about a
+         * different set: what the model divides, which no declaration gives.
          */
         public record Counted() {}
 
@@ -524,7 +531,8 @@ public final class Adequacy {
             return out;
         }
 
-        /** The positions of a signature that was read, which is every one of them. */
+        /** The positions, where something wrote them down — the boundary, or the declaration the
+         *  boundary was to have been built from. Every one of them, whatever was read at each. */
         static Measure<List<InputCaseEvidence>> at(List<InputCaseEvidence> inputs) {
             return new Measurement.Complete<>(List.copyOf(inputs));
         }
@@ -565,12 +573,17 @@ public final class Adequacy {
         }
 
         /**
-         * The positions, where the boundary they are read off was worked out.
+         * The positions, where anything said how many there are.
          *
-         * <p>Throws where it was not, the way {@link OutputCaseEvidence#seen()} and
-         * {@code PairSpace.counts()} do. An accessor that answered an empty list instead would be
-         * the thing the measure around it was introduced to remove: a reader would get an answer
-         * and no sign that nobody counted.
+         * <p>Which is not the same as the boundary having been worked out: a declared behavior's
+         * are its parameters, and they are here whatever became of the boundary — each of them
+         * saying for itself what was read of its cases. What has none is a composition whose first
+         * stage's boundary did not work out, which is the one shape with nowhere else to take a
+         * layout from.
+         *
+         * <p>Throws there, the way {@link OutputCaseEvidence#seen()} and {@code PairSpace.counts()}
+         * do. An accessor that answered an empty list instead would be the thing the measure around
+         * it was introduced to remove: a reader would get an answer and no sign that nobody counted.
          */
         public List<InputCaseEvidence> positions() {
             return inputs.made().orElseThrow(() -> new IllegalStateException(

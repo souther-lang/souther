@@ -71,10 +71,15 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
      * key, which is how a behavior whose parameter named an unresolved type reached a reader with
      * nothing to read and nothing saying why.
      *
-     * <p>The pair space is sized at nought because a size is a product over the positions, and the
-     * positions are what was not derived. Nothing reads the number: the measurement beside it says
-     * none could be finished, and a document leaves the whole section out rather than writing a
-     * size nobody worked out.
+     * <p>Nothing here has a declaration to fall back on. The positions this measure is about are the
+     * ones the model divides, worked out from the boundary and from the rules written about it —
+     * unlike the positions of the signature measure, which a declared behavior writes down and which
+     * are known there whatever the boundary did. So both measures come back short and only one of
+     * them still knows how many places it was to have counted at.
+     *
+     * <p>The pair space is sized at nought for the same reason: a size is a product over those
+     * positions. Nothing reads the number — the measurement beside it says none could be finished,
+     * and a document leaves the whole section out rather than writing a size nobody worked out.
      */
     public static PartitionEvidence boundaryNotDerived(String behavior) {
         return new PartitionEvidence(
