@@ -7,8 +7,12 @@ import souther.compiler.execute.ProgramExecution;
 import souther.compiler.execute.WrittenValue;
 import souther.compiler.examples.Answering;
 import souther.compiler.examples.ExampleStatements;
+import souther.compiler.examples.FixtureReader;
 import souther.compiler.examples.ExampleVerifier;
+import souther.compiler.examples.RowTrial;
+import souther.compiler.execute.BoundaryValues;
 import souther.compiler.execute.ExampleExecution;
+import souther.compiler.execute.RowTrials;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.observe.ArmObservation;
@@ -81,6 +85,33 @@ public final class JvmProgramExecution implements ProgramExecution {
         return new StatementReading.Read(ExampleStatements.disagreements(asked.rows(),
                 asked.symbols(), asked.signatures(), image.program().classes(), image.around(),
                 asked.definitions(), asked.deadline(), asked.policy(), asked.contracts()));
+    }
+
+    @Override
+    public BoundaryValues values(ExampleExecution asked) {
+        // The classes alone: building a value applies no behavior, so what the compile implemented
+        // is not a question this asks.
+        //
+        // And uncounted, said outright rather than taken from what the build happens to be
+        // measuring. Which arms a row goes through is recorded by instrumenting the bodies, and a
+        // value is built by the decoders without one of them running — so asking for the recorded
+        // classes here would make composing a value fail wherever the plan and the bodies do not
+        // line up, which is a fault in a measurement nothing here is making.
+        JvmProgramImage image = images.evaluating(asked.module(), ArmObservation.OMIT);
+        return image == null ? null
+                : FixtureReader.constructing(asked.rows(), asked.symbols(),
+                        image.program().classes(), image.around(), asked.definitions());
+    }
+
+    @Override
+    public RowTrials trials(ExampleExecution asked, ArmObservation arms) {
+        JvmProgramImage image = images.evaluating(asked.module(), arms);
+        if (image == null || image.program().implementations() == null) {
+            return null;
+        }
+        return RowTrial.over(asked.rows(), asked.symbols(), image.program().classes(),
+                image.around(), asked.definitions(), image.program().implementations(),
+                asked.policy());
     }
 
     @Override

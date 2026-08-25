@@ -77,4 +77,25 @@ public interface ProgramExecution {
      * so the two sides of one disagreement need not be written in one file.
      */
     StatementReading statements(ExampleExecution asked);
+
+    /**
+     * A way to build the values a row would carry at this module's boundary, or none where there is
+     * nothing to build them against.
+     *
+     * <p>Not part of deciding whether the language accepts the program. What asks this is the search
+     * that offers a row for a gap nothing covers: which values a type admits together is the derived
+     * decoder's answer, so a candidate has to go through the decoder a written row's fixture goes
+     * through or it is a guess.
+     */
+    BoundaryValues values(ExampleExecution asked);
+
+    /**
+     * A way to run rows nobody wrote and see where they went, or none where nothing records it.
+     *
+     * <p>{@code arms} is what the run is to record, as it is for {@link #run}. A trial exists to
+     * find out which arms a candidate reaches, so a run recording nothing answers a search with
+     * every candidate having reached nothing — which reads as a row that missed rather than as a
+     * measurement that was not made.
+     */
+    RowTrials trials(ExampleExecution asked, ArmObservation arms);
 }

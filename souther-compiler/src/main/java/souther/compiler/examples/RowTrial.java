@@ -1,5 +1,6 @@
 package souther.compiler.examples;
 
+import souther.compiler.execute.RowTrials;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.BoundaryInput;
 import souther.compiler.check.Sig;
@@ -38,27 +39,6 @@ import java.util.Optional;
  */
 public final class RowTrial {
 
-    /**
-     * A way to run one row's inputs and see what it did.
-     *
-     * <p>Empty is an ordinary answer and not a failure. Nothing having run a row leaves every
-     * combination as untried as it was; a row that ran and reached nothing is a row that missed, and
-     * the two must not come back as one value.
-     */
-    @FunctionalInterface
-    public interface Application {
-
-        /** What running {@code inputs} was seen doing, or empty where nothing could run them. */
-        Optional<Observation> run(List<Hir.Expr> inputs);
-    }
-
-    /** A way to run rows of any behavior of one module. */
-    @FunctionalInterface
-    public interface Trials {
-
-        /** A way to run rows of {@code behavior}. */
-        Application forBehavior(String behavior, Sig sig);
-    }
 
     /**
      * A way to run rows against one module's generated classes.
@@ -77,7 +57,7 @@ public final class RowTrial {
      *              A composed row is not a row anyone wrote, so a model that loops on it is this
      *              search's problem to stop rather than an author's to be told about
      */
-    public static Trials over(souther.compiler.check.Prepared.Examples module,
+    public static RowTrials over(souther.compiler.check.Prepared.Examples module,
                               Symbols symbols, Map<String, byte[]> classes, ClassLoader parent,
                               Map<String, Hir.FnDef> values, GeneratedImplementations generated,
                               EvaluationPolicy steps) {
