@@ -152,12 +152,16 @@ class AQuestionAboutANumberNamesTheNumberTest {
     }
 
     /**
-     * Two operations over one path are two questions, at every layer that carries one.
+     * Two operations over one path are two questions.
+     *
+     * <p>The identities and nothing that reads them, which is the half a record answers for. What
+     * reads them is asked in
+     * {@code check.AskingForOneNumbersEndsDoesNotAnswerWithAnothersTest}: these being two values is
+     * no use if the selector beside them tells them apart by whether a number was taken, and that
+     * is the reading that regressed before.
      *
      * <p>The language declares one number taken of a {@code List} today, so this is asked of the
-     * identities rather than of a model: told apart by a flag saying that a number was taken, these
-     * would be one at every layer, and the day a second operation is declared for a shape is the day
-     * a rule about one comes back filed at the other with nothing failing.
+     * identities rather than of a model.
      */
     @Test
     void twoNumbersAtOnePathStayTwo() {
@@ -175,18 +179,26 @@ class AQuestionAboutANumberNamesTheNumberTest {
                 "and a question about a number is not the question about the position");
     }
 
-    /** And the same the other side of the crossing, where a term is what names the number. */
+    /**
+     * And the other side of the crossing keeps the two questions one position raises apart.
+     *
+     * <p>Which values may stand at a position and where a line on a number of it falls are two
+     * questions at one path, and a reader matching an axis compares what each says it is about. Both
+     * say where they sit, so a reader that wanted only the path could have neither told apart —
+     * which is why what each asks is the arm rather than something carried beside it.
+     */
     @Test
-    void andTwoTermsAtOnePathStayTwoOnceTheyHaveCrossed() {
+    void thePositionsTwoQuestionsAreTwoAtOnePath() {
         TermPath at = TermPath.of("t").then("names");
+        InputQuestion aLine = new InputQuestion.AboutANumber(new NumericTerm.ValueOf(at));
+        InputQuestion itsValues = new InputQuestion.AboutAPosition(at);
 
-        assertNotEquals(new InputQuestion.AboutANumber(new NumericTerm.ValueOf(at)),
-                new InputQuestion.AboutAPosition(at),
+        assertNotEquals(aLine, itsValues,
                 "where a line falls on a position's own values is not which values may stand there");
-        assertEquals(at, new InputQuestion.AboutANumber(new NumericTerm.ValueOf(at)).path(),
+        assertEquals(at, aLine.path(),
                 "and both say where they sit, which is what an axis is matched on");
-        assertNotEquals(new InputQuestion.AboutANumber(new NumericTerm.ValueOf(at)).obligation(),
-                new InputQuestion.AboutAPosition(at).obligation(),
+        assertEquals(at, itsValues.path());
+        assertNotEquals(aLine.obligation(), itsValues.obligation(),
                 "what each asks follows from which it is, and is not carried beside it");
     }
 }

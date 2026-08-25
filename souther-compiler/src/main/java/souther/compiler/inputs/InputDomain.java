@@ -756,19 +756,31 @@ public final class InputDomain {
      * would be free to differ by a round of edits, and what they disagreed about would be which
      * number a rule is about.
      *
-     * <p>No falling back to the position. A coordinate with an operation on it is about that
-     * operation's number, so a term that cannot be built from the two is the reading of the clause
-     * and the reading of the position disagreeing about what stands here — which is this compiler
-     * contradicting itself rather than something the model left out.
+     * <p><b>One arm per kind of coordinate, and no falling back to the position.</b> A coordinate
+     * this does not classify is not one measured by its own values; written as a test for the
+     * operation with the position as the other answer, a kind added later would arrive here as a
+     * term about something the model never wrote, and the reading of it would be applied to
+     * whatever stood at the path.
      */
     private static NumericTerm termAt(TermPath path,
                                       souther.compiler.check.FieldDomains.Coordinate at,
                                       Type type, Symbols symbols) {
-        if (!(at.kind() instanceof souther.compiler.check.FieldDomains.CoordinateKind
-                .OfWhatAnOperationAnswers answered)) {
-            return new NumericTerm.ValueOf(path);
-        }
-        ValueName by = answered.operation();
+        return switch (at.kind()) {
+            case souther.compiler.check.FieldDomains.CoordinateKind.OfItsOwnValue _ ->
+                    new NumericTerm.ValueOf(path);
+            case souther.compiler.check.FieldDomains.CoordinateKind
+                    .OfWhatAnOperationAnswers answered -> takenBy(answered.operation(), path, type,
+                            symbols);
+        };
+    }
+
+    /**
+     * The term for what {@code by} answers of what stands at {@code path}.
+     *
+     * <p>Both refusals are this compiler contradicting itself rather than something the model left
+     * out, which is why neither is an answer a caller can act on.
+     */
+    private static NumericTerm takenBy(ValueName by, TermPath path, Type type, Symbols symbols) {
         // The operation a count is taken by is one the library declares, which is what the reading
         // that recorded the count went to. Anything else here is that reading and this one holding
         // different ideas of what an operation is.

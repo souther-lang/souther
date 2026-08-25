@@ -738,9 +738,13 @@ public final class FieldDomains {
         // half beside it. The parts each say what they raised, and an end says which part placed it.
         for (Map.Entry<Core, Required> part : raisedByPart
                 .getOrDefault(rule, Map.of()).entrySet()) {
+            // One arm each, so that a question added later is decided about rather than answered
+            // "not this one" by a test it also fails.
             boolean asked = part.getValue().obligations().stream()
-                    .anyMatch(owed -> owed instanceof Owed.Boundary line
-                            && line.on().equals(where));
+                    .anyMatch(owed -> switch (owed) {
+                        case Owed.Boundary line -> line.on().equals(where);
+                        case Owed.AdmittedValues _ -> false;
+                    });
             if (!asked) {
                 continue;
             }

@@ -403,8 +403,7 @@ final class Coverages {
     private static List<PartitionEvidence.Unanswered> unansweredIn(
             souther.compiler.partition.Partitions.Partitioning partitioning) {
         return partitioning.unanswered().stream()
-                .map(each -> new PartitionEvidence.Unanswered(each,
-                        each.asks().path().toString(), measureOf(each)))
+                .map(PartitionEvidence.Unanswered::new)
                 .toList();
     }
 
@@ -424,22 +423,6 @@ final class Coverages {
         };
     }
 
-    /**
-     * The number a question's line falls on, where it falls on one taken of the position.
-     *
-     * <p>Off the question, which names it. Read off the axis standing beside it, the spelling was
-     * whatever that axis happened to be measured at — and an axis is re-pointed at a term a body's
-     * rules draw while the questions the declarations raised are carried across unchanged, so the
-     * two are not the same number and nothing said when they came apart.
-     *
-     * <p>Nothing for a line on the position's own values, which is what the field says: it is the
-     * count beside a path and not a second spelling of the path.
-     */
-    private static String measureOf(souther.compiler.inputs.StandingQuestion asked) {
-        return asked.asks() instanceof souther.compiler.inputs.InputQuestion.AboutANumber it
-                && it.term() instanceof souther.compiler.inputs.NumericTerm.TakenOf taken
-                ? taken.toString() : null;
-    }
 
 
     private static PartitionEvidence.AxisCoverage coverageOf(Axis axis,
