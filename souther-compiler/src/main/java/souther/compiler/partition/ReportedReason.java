@@ -50,6 +50,13 @@ public final class ReportedReason {
                     UndividedPosition.Reason.COMPETING_COORDINATES;
             case BlockReason.ComparisonBetweenPositions _ ->
                     UndividedPosition.Reason.UNSUPPORTED_PARTITION_SHAPE;
+            // The same word, from the other reading of the same rule. What a document promises its
+            // reader is which kind of thing stopped the derivation, and a relation between two
+            // positions is one kind of thing whether the reading that met it was drawing a line or
+            // gathering values — so the split this compiler needs between the two is a split it
+            // keeps to itself, and the two vocabularies still come to one word for one rule.
+            case BlockReason.ValueRuleRelatingTwoPositions _ ->
+                    UndividedPosition.Reason.UNSUPPORTED_PARTITION_SHAPE;
             // Its own word and not the one above. Both are rules this read to the end that divide
             // nothing, and what a reader may go on to do about them differs: one is waiting on a
             // class about two positions, and the other has nothing to wait for.

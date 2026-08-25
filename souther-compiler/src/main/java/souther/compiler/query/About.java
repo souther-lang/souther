@@ -98,12 +98,17 @@ public sealed interface About {
     }
 
     /**
-     * A finding about something this reading did not read, whichever authority answered.
+     * A finding the document writes as {@code partition_not_read}, whichever authority answered.
      *
      * <p>Both shapes carry a limit, and a reader acts on it: which one is in the way is the thing
      * either finding was added to say. Asked here rather than matched against the kinds that have
      * one, for the reason {@link OfARule} is: a shape added and not listed writes no limit, and one
      * rule's findings at one position come out identical wherever it stopped for two of them.
+     *
+     * <p>Named after the kind these are written under, and it is wider than its own word — a rule
+     * read from end to end that draws no line is one of them. Which is a decision about the
+     * schema's vocabulary rather than about this grouping, and it is written down beside
+     * {@link PartitionEvidence.NotRead}, where the document's shape is.
      */
     sealed interface OfSomethingNotRead extends About {
 
@@ -127,9 +132,9 @@ public sealed interface About {
      * unread and left them to work out which rule — which the accounting was made to say and this
      * measure beside it was not.
      */
-    record ARuleThisCouldNotRead(PartitionEvidence.NotRead.ARule finding)
+    record ARuleWithoutALine(PartitionEvidence.NotRead.ARule finding)
             implements OfARule, OfSomethingNotRead {
-        public ARuleThisCouldNotRead {
+        public ARuleWithoutALine {
             java.util.Objects.requireNonNull(finding, "a finding is about something");
         }
 

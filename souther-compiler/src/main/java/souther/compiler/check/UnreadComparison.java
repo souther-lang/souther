@@ -128,7 +128,7 @@ public final class UnreadComparison {
      *                Asked of the reader because a position is looked up there, and asked at all
      *                only about a side that is one
      */
-    public static <K> BlockReason.AboutARule why(ValueOrigin<K> left, ValueOrigin<K> right,
+    public static <K> BlockReason.RuleWithoutLineReason why(ValueOrigin<K> left, ValueOrigin<K> right,
                                                  Quantity<K> quantity, Predicate<K> ordered) {
         // What the rule cuts, where the arithmetic could be read at all. A quantity over
         // more than one position divides none of them — which values of one are on which
@@ -157,7 +157,7 @@ public final class UnreadComparison {
      * <p>Only here. Where the canonical form was read it has already said what the rule cuts, and a
      * spelling saying otherwise is the spelling being wrong about the rule.
      */
-    private static <K> BlockReason.AboutARule whatTheSidesSay(ValueOrigin<K> left,
+    private static <K> BlockReason.RuleWithoutLineReason whatTheSidesSay(ValueOrigin<K> left,
                                                               ValueOrigin<K> right,
                                                               Quantity.NotRead<K> notRead,
                                                               Predicate<K> ordered) {
@@ -201,7 +201,7 @@ public final class UnreadComparison {
     }
 
     /** What one side leaves to say. */
-    private static <K> BlockReason.AboutARule whatThisSideSays(ValueOrigin<K> side,
+    private static <K> BlockReason.RuleWithoutLineReason whatThisSideSays(ValueOrigin<K> side,
                                                                Predicate<K> ordered) {
         return switch (side) {
             // The position itself against something no end came out of. The carrier, asked of the

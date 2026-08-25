@@ -565,7 +565,7 @@ public final class InputDomain {
         // dropped and from the list that still holds them, because this is the one place that knows
         // which rules they were — recovered afterwards from a position with no axis, the finding
         // could name the position and nothing else, which is what it is for.
-        List<UnreadRule> competing = List.of();
+        List<RuleWithoutALine> competing = List.of();
         if (undecidable(ofType, valueOfType, stated, taken, carried)) {
             competing = competingCoordinates(stated, path, type, symbols);
             stated = List.of();
@@ -599,9 +599,11 @@ public final class InputDomain {
         // own type draws a line, because a clause relating two fields is not a partition of one.
         NumericDomain.Bounds admissible = nothingExists ? null
                 : TypeBounds.admissible(own, projected, term);
-        List<UnreadRule> unread = unreadRulesAt(placed, path, type, symbols, competing);
+        List<RuleWithoutALine> withoutALine =
+                rulesWithoutALineAt(placed, path, type, symbols, competing);
 
-        ReadingResult reading = crossed(declared, view, admissible, admitted, symbols, unread,
+        ReadingResult reading = crossed(declared, view, admissible, admitted, symbols,
+                withoutALine,
                 nothingExists, type);
         return new ReadPosition(path, view, term, admissible, own, projected,
                 // Where the position actually stops, which the ends as written do not say: a clause
@@ -612,7 +614,7 @@ public final class InputDomain {
                 placed.projection(), declared, reading,
                 ObligationDomain.of(reading, declared), admitted.completeness(),
                 admitted.whyPartial() == null ? null : Crossing.stopped(admitted.whyPartial()),
-                unread,
+                withoutALine,
                 // What the rules of this position raise that nothing answered. Asked of the
                 // accounting rather than read off the completeness beside it: one reading being
                 // short of a position's rules is that reading's business, and a rule another
@@ -640,13 +642,14 @@ public final class InputDomain {
      */
     private static ReadingResult crossed(List<Case> declared, TypeView view,
                                          NumericDomain.Bounds admissible, AdmissibleSet admitted,
-                                         Symbols symbols, List<UnreadRule> unread,
+                                         Symbols symbols,
+                                         List<RuleWithoutALine> withoutALine,
                                          boolean nothingExists, Type type) {
-        BlockReason unreadable = Distinctions.unreadableAt(view);
+        BlockReason.AboutThePosition unreadable = Distinctions.unreadableAt(view);
         if (unreadable != null) {
             return new ReadingResult.Unsupported(unreadable);
         }
-        BlockReason here = unread.isEmpty() ? null : unread.get(0).why();
+        BlockReason.RuleReadingStopped here = stoppedOn(withoutALine);
         if (!declared.isEmpty()) {
             return Crossing.of(declared, view, admissible, admitted, symbols, here);
         }
@@ -656,14 +659,38 @@ public final class InputDomain {
         // value of it for a rule to have named.
         List<Case> named = nothingExists ? List.of()
                 : Distinctions.ofValues(admitted.approximation(), type, symbols);
-        BlockReason why = admitted.whyPartial() != null ? Crossing.stopped(admitted.whyPartial())
-                : here;
+        BlockReason.ReadingStopReason why = admitted.whyPartial() != null
+                ? Crossing.stopped(admitted.whyPartial()) : here;
         if (why != null) {
             return new ReadingResult.Partial(named, List.of(), why);
         }
         return admitted.alternativesNotSeparated()
                 ? new ReadingResult.NotSeparated(named, List.of())
                 : new ReadingResult.Complete(named, List.of());
+    }
+
+    /**
+     * A rule at this position that this compiler got partway through, or null where there is none.
+     *
+     * <p>What such a rule costs the reading is everything it would have said, so a position holding
+     * one has values this cannot claim are what the rules leave. That is what a caller does with
+     * this, and it is why the rules read from end to end are not here: a rule that placed no line
+     * because it relates two positions, or because its quantity is empty, was taken in whole and
+     * takes nothing back. Handed one of those, the reading called itself partial over a position
+     * nothing had been short of, and every claim about its cases came back unsettled because a rule
+     * went unread.
+     *
+     * <p>The first, and the rest say the same thing. Any one of them costs the reading the same —
+     * the values are an upper bound and there is no more or less of that — and which rule to go and
+     * look at is the finding's to say, one per rule, where they are all named.
+     */
+    private static BlockReason.RuleReadingStopped stoppedOn(List<RuleWithoutALine> rules) {
+        for (RuleWithoutALine each : rules) {
+            if (each.why() instanceof BlockReason.RuleReadingStopped stopped) {
+                return stopped;
+            }
+        }
+        return null;
     }
 
     /**
@@ -699,12 +726,12 @@ public final class InputDomain {
      * their clauses are in the way. A rule placing two ends is one rule and one finding, which is
      * what the key settles.
      */
-    private static List<UnreadRule> competingCoordinates(List<FieldDomains.Placed> stated,
+    private static List<RuleWithoutALine> competingCoordinates(List<FieldDomains.Placed> stated,
                                                          TermPath path, Type type,
                                                          Symbols symbols) {
-        List<UnreadRule> out = new ArrayList<>();
+        List<RuleWithoutALine> out = new ArrayList<>();
         for (FieldDomains.Placed each : stated) {
-            UnreadRule said = new UnreadRule(each.from(),
+            RuleWithoutALine said = new RuleWithoutALine(each.from(),
                     souther.compiler.check.RuleCitation.named(each.from()),
                     // Each rule at the coordinate that rule is about, which is what makes the two
                     // two. What is undecided is which of them the position is measured at, and that
@@ -853,7 +880,7 @@ public final class InputDomain {
      * saying so — a bound it dropped left the position looking like one no rule bounds, which is
      * what the declaration above it denies.
      *
-     * <p>Read off the one reading that draws lines from clauses ({@link FieldDomains#unreadAt}) and
+     * <p>Read off the one reading that draws lines from clauses ({@link FieldDomains#noLineAt}) and
      * not walked again here. A second walk over the position's own type answered for the clauses
      * written on it and knew nothing of the clauses written on the value it sits in, so a record's
      * rule about one of its fields was dropped in silence; and where both had something to say
@@ -864,17 +891,17 @@ public final class InputDomain {
      * to rewrite is what an author acts on, and a position is not it. Kept per reason, the second
      * of them was dropped as a repeat of the first.
      */
-    private static List<UnreadRule> unreadRulesAt(PlacedRules placed, TermPath path, Type type,
-                                                  Symbols symbols, List<UnreadRule> competing) {
-        List<UnreadRule> out = new ArrayList<>(competing);
-        for (FieldDomains.Unread each : placed.unreadAt(path)) {
+    private static List<RuleWithoutALine> rulesWithoutALineAt(PlacedRules placed, TermPath path, Type type,
+                                                  Symbols symbols, List<RuleWithoutALine> competing) {
+        List<RuleWithoutALine> out = new ArrayList<>(competing);
+        for (FieldDomains.NoLine each : placed.noLineAt(path)) {
             // The rule the reading of ends was holding when it gave up, carried rather than left
             // behind. It is a clause of an invariant, so it has a name and the handle is that name.
             //
             // At the number that rule is about, which the rule itself says. Nothing is missing here
             // for the position to stand in for: a clause was read far enough to be about one number
             // or the other, and it is only the line that nothing came of.
-            UnreadRule said = new UnreadRule(each.from(),
+            RuleWithoutALine said = new RuleWithoutALine(each.from(),
                     souther.compiler.check.RuleCitation.named(each.from()),
                     filedAt(path, each.at(), type, symbols),
                     each.why());

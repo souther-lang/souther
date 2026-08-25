@@ -42,7 +42,8 @@ public sealed interface ReadingResult {
      * not the same claim: {@code refused} is what the rules proved empty, and {@code kept} is what
      * this reading has no reason to remove — which a rule that went unread may yet remove.
      */
-    record Partial(List<Case> kept, List<Case> refused, BlockReason why) implements ReadingResult {
+    record Partial(List<Case> kept, List<Case> refused, BlockReason.ReadingStopReason why)
+            implements ReadingResult {
 
         public Partial {
             kept = List.copyOf(kept);
@@ -78,7 +79,7 @@ public sealed interface ReadingResult {
      * {@link Complete} with every distinction kept, and says so about the model; this says nothing
      * about the model at all.
      */
-    record Unsupported(BlockReason why) implements ReadingResult {
+    record Unsupported(BlockReason.ReadingStopReason why) implements ReadingResult {
 
         public Unsupported {
             if (why == null) {

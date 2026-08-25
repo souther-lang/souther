@@ -12,7 +12,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.FilingCoordinate;
-import souther.compiler.inputs.UnreadRule;
+import souther.compiler.inputs.RuleWithoutALine;
 import souther.compiler.numeric.Place;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
@@ -64,7 +64,7 @@ public final class GuardThresholds {
      * operator is still in hand, and which values arrive is asked of the reading of the whole body.
      */
     public record Guards(List<Threshold> thresholds,
-                         List<UnreadRule> unread, List<Singled> singled,
+                         List<RuleWithoutALine> rulesWithoutALine, List<Singled> singled,
                          List<LineDrawn> between,
                          ReachingCuts reaching) {
 
@@ -97,7 +97,7 @@ public final class GuardThresholds {
 
         public Guards {
             thresholds = List.copyOf(thresholds);
-            unread = List.copyOf(unread);
+            rulesWithoutALine = List.copyOf(rulesWithoutALine);
             singled = List.copyOf(singled);
             between = List.copyOf(between);
         }
@@ -125,7 +125,7 @@ public final class GuardThresholds {
                             Symbols symbols,
                             souther.compiler.check.ElementBindings elements) {
         List<Threshold> found = new ArrayList<>();
-        List<UnreadRule> unread = new ArrayList<>();
+        List<RuleWithoutALine> withoutALine = new ArrayList<>();
         List<Guards.Singled> singled = new ArrayList<>();
         List<LineDrawn> between = new ArrayList<>();
         // The comparisons this reader assessed, and not the positions they were about. A position
@@ -144,11 +144,11 @@ public final class GuardThresholds {
         ComparisonReadings read = ComparisonReadings.of(body, plan, InputReads.of(inputs, elements), symbols);
         for (ComparisonReadings.Reading each : read.drawn()) {
             lineAt(behavior, each.comparison(), plan, each.reads(), symbols, quantities, found,
-                    singled, between, assessed, unread);
+                    singled, between, assessed, withoutALine);
         }
         // And every comparison the model states something by that this reader never saw.
-        noticed(behavior, read, assessed, plan, symbols, unread);
-        return new Guards(found, unread, singled, between, read.reaching(plan));
+        noticed(behavior, read, assessed, plan, symbols, withoutALine);
+        return new Guards(found, withoutALine, singled, between, read.reaching(plan));
     }
 
     /**
@@ -178,7 +178,7 @@ public final class GuardThresholds {
      * unread would put a statement into the report that the behavior does not make.
      */
     private static void noticed(String behavior, ComparisonReadings read, List<Core> assessed,
-                                CoverageSites.Plan plan, Symbols symbols, List<UnreadRule> out) {
+                                CoverageSites.Plan plan, Symbols symbols, List<RuleWithoutALine> out) {
         for (ComparisonReadings.Reading reading : read.all()) {
             if (reading.standing() instanceof BoundaryPolicy.Standing.DrawsNone none
                     && none.why() == NotABoundary.NOTHING_READS_IT) {
@@ -200,7 +200,7 @@ public final class GuardThresholds {
             }
             InputReads reads = reading.reads();
             List<FilingCoordinate> named = filedAt(binary, reads, symbols);
-            final BlockReason.AboutARule why = why(binary, reads, symbols);
+            final BlockReason.RuleWithoutLineReason why = why(binary, reads, symbols);
             // The rule the author wrote, read off the source. Which comparison it is is the
             // behavior and the construct the source wrote; where a reader is sent is where it is
             // written. Neither comes from the plan: a comparison in a fork both of whose arms can
@@ -221,7 +221,7 @@ public final class GuardThresholds {
                 // well as the place. Kept by position alone, the second comparison of one condition
                 // about one position was dropped as a repeat of the first — which is the defect this
                 // finding is about, one level in.
-                UnreadRule said = new UnreadRule(rule, cited, each, why);
+                RuleWithoutALine said = new RuleWithoutALine(rule, cited, each, why);
                 if (out.stream().noneMatch(had -> had.sameAs(said))) {
                     out.add(said);
                 }
@@ -366,7 +366,7 @@ public final class GuardThresholds {
      * a body's read of a parameter is what names one here, and a coordinate of a value is what
      * names one over there.
      */
-    static BlockReason.AboutARule why(Core.Binary comparison, InputReads reads,
+    static BlockReason.RuleWithoutLineReason why(Core.Binary comparison, InputReads reads,
                            Symbols symbols) {
         return said(comparison, AffineReading.read(comparison, reads, symbols), reads, symbols);
     }
@@ -378,14 +378,14 @@ public final class GuardThresholds {
      * describes. Reading it again to say why it stopped is the comparison read twice, and the
      * second read is free to answer about a shape the first one had already got past.
      */
-    static BlockReason.ReadingStopped whyItStopped(Core.Binary comparison,
+    static BlockReason.RuleReadingStopped whyItStopped(Core.Binary comparison,
                                                    AffineReading.OfAComparison canonical,
                                                    InputReads reads, Symbols symbols) {
-        BlockReason.AboutARule said = said(comparison, canonical, reads, symbols);
+        BlockReason.RuleWithoutLineReason said = said(comparison, canonical, reads, symbols);
         // What this reader is asked for is why it stopped, and the words for a rule read to the end
         // are not answers to that. Reached with one, the caller has met an absence this reading did
         // not produce — so it is refused rather than passed on as a reason nothing fell short.
-        if (said instanceof BlockReason.ReadingStopped stopped) {
+        if (said instanceof BlockReason.RuleReadingStopped stopped) {
             return stopped;
         }
         throw new IllegalStateException(
@@ -393,7 +393,7 @@ public final class GuardThresholds {
     }
 
     /** What stopped a reading of this comparison, in whatever words its own answer comes in. */
-    private static BlockReason.AboutARule said(Core.Binary comparison,
+    private static BlockReason.RuleWithoutLineReason said(Core.Binary comparison,
                                                AffineReading.OfAComparison canonical,
                                                InputReads reads, Symbols symbols) {
         Names left = namesIn(comparison.left(), reads, symbols);
@@ -520,7 +520,7 @@ public final class GuardThresholds {
                                souther.compiler.inputs.Quantities quantities,
                                List<Threshold> out, List<Guards.Singled> singled,
                                List<LineDrawn> between,
-                               List<Core> assessed, List<UnreadRule> unread) {
+                               List<Core> assessed, List<RuleWithoutALine> withoutALine) {
         // The plan numbered every comparison of an instrumented condition before anything read a
         // line off one, so this is here. Required rather than looked up leniently: a line whose
         // comparison has no site is this reader and the plan disagreeing about what a condition
@@ -533,7 +533,7 @@ public final class GuardThresholds {
         ComparisonAssessment read =
                 ComparisonAssessment.of(behavior, each, reads, symbols, quantities, null);
         assessed.add(each);
-        publish(behavior, each, plan, reads, symbols, read, unread);
+        publish(behavior, each, plan, reads, symbols, read, withoutALine);
         switch (read) {
             case ComparisonAssessment.AtAPosition at -> {
                 OriginRef.ComparisonOrigin origin = originOf(behavior, each, site, plan,
@@ -593,33 +593,29 @@ public final class GuardThresholds {
      * says as much. A reading that stopped leaves whatever the rule states unknown, and its own
      * reason for stopping is what says which measures are thereby short of something.
      *
-     * <p>The rest leave nothing. A line on a position divides it; a rule read to the end that cuts
-     * no quantity states that every row satisfies it; a line the quantity never reaches divides the
-     * position into nothing and was understood; and a comparison about no position of the input, or
-     * about what the behavior answers, was never about a position for anything to be left at.
+     * <p>The rest leave nothing. A line on a position divides it; and a comparison about no position
+     * of the input, or about what the behavior answers, was never about a position for anything to
+     * be left at.
      *
-     * <p>Here rather than worked out afterwards from the comparison. Read again by the walk that
-     * collects what nothing turned into a line, a comparison whose carrier stopped the reading came
-     * back described as one that relates two positions — a sentence that says no measure is short
-     * of anything, over a model missing a border.
+     * <p>Which of them it is, is {@link ComparisonAssessment#whyTheLineReadingDrewNone}'s and not
+     * this reader's. The same table stood here and in the clause reader, so a case added to an
+     * assessment had to be answered twice; and worked out from the comparison afterwards rather
+     * than where the reading stopped, one whose carrier stopped the reading came back as a rule
+     * relating two positions — a sentence saying no measure is short of anything, over a model
+     * missing a border.
      */
     private static void publish(String behavior, Core.Binary comparison, CoverageSites.Plan plan,
                                 InputReads reads, Symbols symbols, ComparisonAssessment read,
-                                List<UnreadRule> out) {
-        BlockReason.AboutARule why = switch (read) {
-            case ComparisonAssessment.AcrossPositions _ ->
-                    new BlockReason.ComparisonBetweenPositions();
-            case ComparisonAssessment.CutsNothing _ ->
-                    new BlockReason.ComparisonCuttingNothing();
-            case ComparisonAssessment.OutsideTheDomain _ ->
-                    new BlockReason.ComparisonCuttingOutsideDomain();
-            case ComparisonAssessment.Unread unread -> unread.why();
-            case ComparisonAssessment.AtAPosition _, ComparisonAssessment.NoInput _,
-                 ComparisonAssessment.AnswerDependent _ -> null;
-        };
-        if (why == null) {
-            return;
-        }
+                                List<RuleWithoutALine> out) {
+        read.whyTheLineReadingDrewNone().ifPresent(why ->
+                publish(behavior, comparison, plan, reads, symbols, read, out, why));
+    }
+
+    /** The same, once there is something to say. */
+    private static void publish(String behavior, Core.Binary comparison, CoverageSites.Plan plan,
+                                InputReads reads, Symbols symbols, ComparisonAssessment read,
+                                List<RuleWithoutALine> out,
+                                BlockReason.RuleWithoutLineReason why) {
         RuleRef.Comparison rule = new RuleRef.Comparison(behavior, comparison.origin());
         souther.compiler.check.RuleCitation cited = citationOf(comparison, plan.comparisons());
         // Whose positions these are is the assessment's answer, not this reader's: a rule that was
@@ -627,7 +623,7 @@ public final class GuardThresholds {
         // walk met.
         List<FilingCoordinate> named = read.filedAt(comparison, reads, symbols);
         for (FilingCoordinate at : named) {
-            UnreadRule said = new UnreadRule(rule, cited, at, why);
+            RuleWithoutALine said = new RuleWithoutALine(rule, cited, at, why);
             if (out.stream().noneMatch(had -> had.sameAs(said))) {
                 out.add(said);
             }

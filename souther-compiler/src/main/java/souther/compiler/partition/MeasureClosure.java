@@ -40,7 +40,7 @@ import java.util.Set;
  * <p>Which measures each of the two costs is each one's own answer, and they do not agree. A
  * position whose rules were never enumerated and one the walk could not reach into leave both short,
  * because what is not known about them is not known for either. And a rule set aside answers
- * through its own reason ({@link souther.compiler.inputs.BlockReason.AboutARule#leavesShort}),
+ * through its own reason ({@link souther.compiler.inputs.BlockReason.RuleWithoutLineReason#leavesShort}),
  * which for a comparison relating two positions is neither measure.
  *
  * <p><b>A clause's question may stand and a comparison's may not.</b> A comparison raises a question
@@ -150,13 +150,13 @@ public final class MeasureClosure {
      *                Asked which measures it leaves short rather than counted: a comparison relating
      *                two positions is set aside by what it says and not by anything missing here,
      *                and it is the rule's own reason that answers
-     *                ({@link souther.compiler.inputs.BlockReason.AboutARule#leavesShort})
+     *                ({@link souther.compiler.inputs.BlockReason.RuleWithoutLineReason#leavesShort})
      */
     static Both of(List<Axis> axes, List<souther.compiler.inputs.StandingQuestion> asked,
-                   List<souther.compiler.inputs.UnreadRule> refused) {
+                   List<souther.compiler.inputs.RuleWithoutALine> refused) {
         Set<ClosureGap> partition = new LinkedHashSet<>();
         Set<ClosureGap> border = new LinkedHashSet<>();
-        for (souther.compiler.inputs.UnreadRule rule : refused) {
+        for (souther.compiler.inputs.RuleWithoutALine rule : refused) {
             if (rule.why().leavesShort(CoverageObligation.Measure.PARTITION)) {
                 partition.add(new ClosureGap.RuleUnread(rule));
             }

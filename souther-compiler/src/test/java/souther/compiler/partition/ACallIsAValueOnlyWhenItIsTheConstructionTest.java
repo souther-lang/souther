@@ -9,7 +9,7 @@ import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.inputs.UnreadRule;
+import souther.compiler.inputs.RuleWithoutALine;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
@@ -83,9 +83,9 @@ class ACallIsAValueOnlyWhenItIsTheConstructionTest {
 
             assertEquals(List.of(), guards.thresholds(),
                     each[0] + ": an implementation nothing here has read draws no line");
-            assertEquals(1, guards.unread().size(),
+            assertEquals(1, guards.rulesWithoutALine().size(),
                     each[0] + ": and the position says a rule about it went unread");
-            UnreadRule said = guards.unread().getFirst();
+            RuleWithoutALine said = guards.rulesWithoutALine().getFirst();
             assertEquals(souther.compiler.inputs.FilingCoordinate.of(
                             new souther.compiler.inputs.NumericTerm.ValueOf(TermPath.of("t"))),
                     said.at(),

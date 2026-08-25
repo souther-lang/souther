@@ -513,8 +513,8 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
             assertNotNull(evidence, behavior + " was measured");
             // Through the projection a report goes through, which is what this table is of: what
             // this compiler could not do is recorded in its own words and said in the document's.
-            UndividedPosition.Reason unread = evidence.unread().isEmpty() ? null
-                    : ReportedReason.of(evidence.unread().get(0).why());
+            UndividedPosition.Reason unread = evidence.rulesWithoutALine().isEmpty() ? null
+                    : ReportedReason.of(evidence.rulesWithoutALine().get(0).why());
             // The points a row is owed at against a line, and not the borders. Which carriers name a
             // value one step over is what this table is about, and a border is one whether or not
             // its second point exists — counted as borders, every carrier answers alike.

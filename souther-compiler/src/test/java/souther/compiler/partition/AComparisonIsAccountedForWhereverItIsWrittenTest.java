@@ -65,6 +65,6 @@ class AComparisonIsAccountedForWhereverItIsWrittenTest {
         GuardThresholds.Guards guards = read("Int.multiply(p.x, p.x) < 10");
 
         assertEquals(List.of(), guards.thresholds());
-        assertEquals(1, guards.unread().size(), guards.unread().toString());
+        assertEquals(1, guards.rulesWithoutALine().size(), guards.rulesWithoutALine().toString());
     }
 }

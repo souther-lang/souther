@@ -10,7 +10,7 @@ import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.FilingCoordinate;
-import souther.compiler.inputs.UnreadRule;
+import souther.compiler.inputs.RuleWithoutALine;
 import souther.compiler.types.BindingId;
 
 import java.util.ArrayList;
@@ -66,14 +66,14 @@ public final class EnsuresThresholds {
      *                them and so have no axis to come off. Already obligations rather than
      *                thresholds: a line between two positions divides neither, so there is no class
      *                for a partition to be told about
-     * @param unread  the positions a rule states something about that nothing here turned into a
-     *                line. Carried rather than left out: a position a clause compares is not a
+     * @param rulesWithoutALine  the positions a rule states something about that this drew no
+     *                line at. Carried rather than left out: a position a clause compares is not a
      *                position the model draws no line through, and a reading that answered with its
      *                lines alone would have that said of it — which is a sentence about the model,
      *                and the model says otherwise in its own declaration
      */
     public record Clauses(List<Threshold> thresholds, List<GuardThresholds.Guards.Singled> singled,
-                          List<LineDrawn> between, List<UnreadRule> unread) {
+                          List<LineDrawn> between, List<RuleWithoutALine> rulesWithoutALine) {
 
         public static final Clauses NONE =
                 new Clauses(List.of(), List.of(), List.of(), List.of());
@@ -82,7 +82,7 @@ public final class EnsuresThresholds {
             thresholds = List.copyOf(thresholds);
             singled = List.copyOf(singled);
             between = List.copyOf(between);
-            unread = List.copyOf(unread);
+            rulesWithoutALine = List.copyOf(rulesWithoutALine);
         }
     }
 
@@ -129,14 +129,14 @@ public final class EnsuresThresholds {
                 }
             }
         }
-        return new Clauses(drawn.thresholds(), drawn.singled(), drawn.between(), drawn.unread());
+        return new Clauses(drawn.thresholds(), drawn.singled(), drawn.between(), drawn.rulesWithoutALine());
     }
 
     /** What the walk has found so far, and the behavior a line between two positions is named
      *  after. Together because they are filled together and are one answer. */
     private record Drawn(String behavior, List<Threshold> thresholds,
                          List<GuardThresholds.Guards.Singled> singled,
-                         List<LineDrawn> between, List<UnreadRule> unread) {}
+                         List<LineDrawn> between, List<RuleWithoutALine> rulesWithoutALine) {}
 
     /**
      * The comparisons a rule states outright: its own, and those of both sides of every {@code &&}
@@ -176,11 +176,11 @@ public final class EnsuresThresholds {
             // A statement that is not a comparison was not assessed as one, so what stopped this
             // is the form it is written in — the one of the reasons that does not turn on what two
             // sides name — and the positions the walk met are all there is to file it at.
-            reportUnread(new RuleRef.Ensures(rule.id(), clause), e, rule.value(),
+            reportRuleWithoutLine(new RuleRef.Ensures(rule.id(), clause), e, rule.value(),
                     new BlockReason.UnreadComparisonForm(),
                     GuardThresholds.mentionedIn(e, reads, symbols).stream()
                             .map(FilingCoordinate::at).toList(),
-                    out.unread());
+                    out.rulesWithoutALine());
             return;
         }
         // What the comparison comes to is read the same way wherever a comparison is written, which
@@ -188,6 +188,14 @@ public final class EnsuresThresholds {
         // draw one line and raise one question, and neither is worked out beside the other.
         ComparisonAssessment assessed = ComparisonAssessment.of(out.behavior(), comparison, reads,
                 symbols, quantities, rule.value());
+        // What the positions this names are left with, where the reading of lines drew none. Asked
+        // of the assessment and not worked out per arm here: the same table stood in the guard
+        // reader, and a case added to an assessment had to be answered in both.
+        assessed.whyTheLineReadingDrewNone().ifPresent(why ->
+                reportRuleWithoutLine(new RuleRef.Ensures(rule.id(), clause), comparison, rule.value(), why,
+                        assessed.filedAt(comparison, reads, symbols), out.rulesWithoutALine()));
+        // And the geometry, which is this reader's own. Only the two arms that draw something have
+        // anything to add here.
         switch (assessed) {
             // A line on one position's own values. The value the classes meet at was answered by the
             // reading of the comparison; taken off the level the rule was written with, a rule that
@@ -222,11 +230,6 @@ public final class EnsuresThresholds {
             // what a border owes away from its line is a run of the arrangement every rule about
             // that quantity makes together.
             case ComparisonAssessment.AcrossPositions over -> {
-                // The positions are named as ones nothing divides, which is what a rule over a
-                // quantity that is not one position's own values leaves them.
-                reportUnread(new RuleRef.Ensures(rule.id(), clause), comparison, rule.value(),
-                        new BlockReason.ComparisonBetweenPositions(),
-                        over.filedAt(comparison, reads, symbols), out.unread());
                 // A value singled out on such a quantity has no sides, so there is nothing for a
                 // border to owe a row away from.
                 if (over.drawsABorder()) {
@@ -234,26 +237,11 @@ public final class EnsuresThresholds {
                             originOf(rule, clause, over.cutting())));
                 }
             }
-            // Nothing this reader draws. A comparison it could not read leaves the positions it
-            // names standing, in the words the reading that stopped came to — worked out again
-            // here, a comparison whose carrier stopped it would come back as one that relates two
-            // positions, which says no measure is short of anything.
-            case ComparisonAssessment.Unread unread -> reportUnread(
-                    new RuleRef.Ensures(rule.id(), clause), comparison, rule.value(), unread.why(),
-                    unread.filedAt(comparison, reads, symbols), out.unread());
-            // Read to the end, and the positions are left with no class of their own from this
-            // rule. Which of the two it was is worth saying: the quantity was empty, or the line
-            // falls where the quantity never runs. Neither leaves a measure short of anything, and
-            // both are things the model states at a position a report is asked about.
-            case ComparisonAssessment.CutsNothing nothing -> reportUnread(
-                    new RuleRef.Ensures(rule.id(), clause), comparison, rule.value(),
-                    new BlockReason.ComparisonCuttingNothing(),
-                    nothing.filedAt(comparison, reads, symbols), out.unread());
-            case ComparisonAssessment.OutsideTheDomain outside -> reportUnread(
-                    new RuleRef.Ensures(rule.id(), clause), comparison, rule.value(),
-                    new BlockReason.ComparisonCuttingOutsideDomain(),
-                    outside.filedAt(comparison, reads, symbols), out.unread());
-            case ComparisonAssessment.AnswerDependent _, ComparisonAssessment.NoInput _ -> { }
+            // Nothing this reader draws at any of them. What each leaves the positions is said
+            // above, in the one place that answers it for both readers of a comparison.
+            case ComparisonAssessment.Unread _, ComparisonAssessment.CutsNothing _,
+                 ComparisonAssessment.OutsideTheDomain _,
+                 ComparisonAssessment.AnswerDependent _, ComparisonAssessment.NoInput _ -> { }
         }
     }
 
@@ -266,8 +254,9 @@ public final class EnsuresThresholds {
     }
 
     /**
-     * The positions a statement names that nothing turned into a line, where that is a limit of
-     * this compiler.
+     * The positions a statement names that it draws no line at, for whichever of the two reasons
+     * there are: this reading got partway through the rule, or it read the rule whole and there is
+     * no line in it.
      *
      * <p>Named rather than passed over, because a position left out of every answer is reported as
      * one the model draws no line through — a sentence about the model, and the model says otherwise
@@ -279,23 +268,23 @@ public final class EnsuresThresholds {
      * behavior is applied to. Reported as unread it sends an author after a limit of this compiler
      * that is not there, which is the opposite mistake to the one above and just as wrong.
      *
-     * <p>Why it could not be read is a comparison's own answer where the statement is one. Where it
-     * is not — a rule stated in some other form — what stopped this is the form, which is the one
-     * of the three reasons that does not turn on what two sides name.
+     * <p>Why there is no line is a comparison's own answer where the statement is one. Where it is
+     * not — a rule stated in some other form — this reading did not take it apart at all, and the
+     * form is what stopped it: the one reason that does not turn on what two sides name.
      */
-    private static void reportUnread(RuleRef.Ensures rule, Core statement, BindingId answer,
-                                     BlockReason.AboutARule why,
+    private static void reportRuleWithoutLine(RuleRef.Ensures rule, Core statement, BindingId answer,
+                                     BlockReason.RuleWithoutLineReason why,
                                      List<FilingCoordinate> at,
-                                     List<UnreadRule> unread) {
+                                     List<RuleWithoutALine> withoutALine) {
         if (ComparisonAssessment.readsAnswer(statement, answer)) {
             return;
         }
         souther.compiler.check.RuleCitation cited =
                 souther.compiler.check.RuleCitation.named(rule);
         for (FilingCoordinate named : at) {
-            UnreadRule here = new UnreadRule(rule, cited, named, why);
-            if (unread.stream().noneMatch(had -> had.sameAs(here))) {
-                unread.add(here);
+            RuleWithoutALine here = new RuleWithoutALine(rule, cited, named, why);
+            if (withoutALine.stream().noneMatch(had -> had.sameAs(here))) {
+                withoutALine.add(here);
             }
         }
     }

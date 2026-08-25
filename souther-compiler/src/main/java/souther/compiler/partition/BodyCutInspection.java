@@ -15,8 +15,8 @@ package souther.compiler.partition;
  * front of it says.
  *
  * <p><b>Whichever rule wrote it.</b> A {@code guard}'s comparison and a newtype's invariant are two
- * producers of one kind of evidence (spec §example-partition), so {@link Blocked} is what either
- * of them was left unread as. The reader is told the same thing about both and does not have to
+ * producers of one kind of evidence (spec §example-partition), so {@link NoLine} is what either of
+ * them left the position with. The reader is told the same thing about both and does not have to
  * know which wrote it.
  */
 public sealed interface BodyCutInspection {
@@ -29,24 +29,41 @@ public sealed interface BodyCutInspection {
      * it.
      *
      * <p>What was read, and not what could be written. A rule in a form no reader here takes apart
-     * is {@link Blocked} and says so; a rule nothing looks for at all is neither, and no case of
+     * is {@link NoLine} and says so; a rule nothing looks for at all is neither, and no case of
      * this could say it. So this is a producer's answer about its own reading, which is what
      * anything reading it may say — never that no line exists at the position.
      */
     record Exhausted() implements BodyCutInspection {}
 
     /**
-     * A rule was written about the position and nothing here turned it into a line.
+     * A rule was written about the position and this phase turned it into no line.
      *
      * <p>Not a verdict on the position. Something else may still answer for it, and what this
      * settles is only that this phase did not.
      *
-     * <p>It carries no reason, and the reason is not lost. A rule this phase read and could not use
-     * is an {@link souther.compiler.inputs.UnreadRule} made by the reader that read it, naming
+     * <p><b>Which of the two ways that happened travels with it.</b> A reading that stopped and a
+     * rule read from end to end that draws no line are opposite sentences about this compiler, and
+     * this phase used to answer with neither — it said only that something was left, and the
+     * verdict read that as a derivation this compiler could not make. So a {@code guard} relating
+     * two positions, understood completely, came out as a position something is written at that
+     * nothing read.
+     *
+     * <p>{@link LeftAtThePosition} and not a reason, because that is the same value the reading
+     * before this one hands over: the two phases answer about one position, and a verdict has to
+     * put their answers together without either being able to say more than it knows.
+     *
+     * <p>Which rule it was is not here, and is not lost. A rule this phase could not use is a
+     * {@link souther.compiler.inputs.RuleWithoutALine} made by the reader that read it, naming
      * which rule; carried through here as well, one limit at one position stood for however many
-     * rules were stopped by it, and the first of them was the one a report printed.
-     * What this phase owes the verdict is whether it drew anything, which is the whole of what
-     * three cases say.
+     * rules were stopped by it and the first of them was the one a report printed.
      */
-    record Blocked() implements BodyCutInspection {}
+    record NoLine(LeftAtThePosition left) implements BodyCutInspection {
+
+        public NoLine {
+            if (left == null) {
+                throw new IllegalArgumentException(
+                        "a position left with nothing is what Exhausted says");
+            }
+        }
+    }
 }

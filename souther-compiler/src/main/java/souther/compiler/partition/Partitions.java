@@ -9,14 +9,13 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.codegen.InvariantConstraints;
-import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.Position;
 import souther.compiler.inputs.StructuralInspection;
 import souther.compiler.inputs.TypeBounds;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.inputs.UnreadRule;
+import souther.compiler.inputs.RuleWithoutALine;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Granularity;
@@ -75,7 +74,7 @@ public final class Partitions {
                                List<souther.compiler.inputs.StandingQuestion> unanswered,
                                java.util.Set<NumericTerm> uncertain,
                                List<UndividedPosition> undivided,
-                               List<UnreadRule> unread,
+                               List<RuleWithoutALine> rulesWithoutALine,
                                List<souther.compiler.inputs.PositionReadingBlocked> blocked,
                                List<souther.compiler.inputs.PositionValuesNotSeparated> notSeparated,
                                List<Border> between,
@@ -88,7 +87,7 @@ public final class Partitions {
             unanswered = List.copyOf(unanswered);
             uncertain = java.util.Set.copyOf(uncertain);
             undivided = List.copyOf(undivided);
-            unread = List.copyOf(unread);
+            rulesWithoutALine = List.copyOf(rulesWithoutALine);
             blocked = List.copyOf(blocked);
             notSeparated = List.copyOf(notSeparated);
             between = List.copyOf(between);
@@ -182,7 +181,7 @@ public final class Partitions {
                                   ReadingPolicy policy) {
         List<Axis> found = new ArrayList<>();
         java.util.Set<NumericTerm> uncertain = new java.util.LinkedHashSet<>();
-        List<UnreadRule> unread = new ArrayList<>();
+        List<RuleWithoutALine> rulesWithoutALine = new ArrayList<>();
         // What the reading could not hold together, asked of every position it read rather than of
         // the ones left pending. This qualifies the classes and does not stand in for them: a
         // position with classes read from a product wider than the rules admit is exactly where it
@@ -200,7 +199,7 @@ public final class Partitions {
                 notSeparated.add(
                         new souther.compiler.inputs.PositionValuesNotSeparated(position.path()));
             }
-            axisOf(behavior, position, symbols, policy, found, uncertain, unread);
+            axisOf(behavior, position, symbols, policy, found, uncertain, rulesWithoutALine);
             // What the rules of this position raise that nothing answered, gathered from the
             // reading that found it. Once per position and not once per axis: a question is the
             // model's, and which axis is standing beside it is this compiler's business.
@@ -220,17 +219,18 @@ public final class Partitions {
         // a selection made now would be made where the least is known about what it selects
         // (see this package's documentation).
         List<Axis> kept = new ArrayList<>(found);
-        // A position undivided because a rule about it went unread says that here, without waiting
+        // A position undivided because a rule about it drew no line says that here, without waiting
         // for a body: a type bounded by a rule this cannot read is one whether or not any behavior
-        // compares it. Nothing has compared anything yet, so what the rules came to is whether one
-        // of them was left unread — settled beside each axis, as it is once a body has spoken.
+        // compares it, and so is one bounded by a rule read to the end that divides nothing. What
+        // the rules came to is whether either happened, and which of the two it was — settled
+        // beside each axis, as it is once a body has spoken.
         List<Measured> measured = new ArrayList<>();
         for (Axis axis : kept) {
-            keep(new ArrayList<>(), measured, axis, null, unread);
+            keep(new ArrayList<>(), measured, axis, null, rulesWithoutALine);
         }
-        MeasureClosure.Both closed = MeasureClosure.of(kept, standing, unread);
+        MeasureClosure.Both closed = MeasureClosure.of(kept, standing, rulesWithoutALine);
         return new Partitioning(kept, standing, uncertain, undividedIn(measured),
-                List.copyOf(unread), blockedIn(measured), List.copyOf(notSeparated),
+                List.copyOf(rulesWithoutALine), blockedIn(measured), List.copyOf(notSeparated),
                 List.of(), linesAlong(kept, quantities, symbols), ReachingCuts.NONE,
                 closed.partition(), closed.border());
     }
@@ -246,16 +246,16 @@ public final class Partitions {
     private record Measured(Axis axis, BodyCutInspection body) {}
 
     /** The axis, and the body's answer about it — a line it drew, nothing, or a rule about it that
-     *  went unread. Kept beside the axis rather than looked up afterwards by how its path is
-     *  spelled. */
+     *  it drew no line from, with which of the two ways that happened. Kept beside the axis rather
+     *  than looked up afterwards by how its path is spelled. */
     private static void keep(List<Axis> out, List<Measured> measured, Axis axis,
-                             BodyCutInspection drew, List<UnreadRule> rules) {
+                             BodyCutInspection drew, List<RuleWithoutALine> rules) {
         out.add(axis);
         if (drew != null) {
             measured.add(new Measured(axis, drew));
             return;
         }
-        // Whether this phase left anything at the position unread, and not which limit it was.
+        // Whether this phase left anything at the position with no line, and not which limit it was.
         // A limit belongs to the rule it stopped, and the findings carry it there; taken as the
         // position's, the first rule of however many were stopped alike was the one a report named.
         //
@@ -267,14 +267,18 @@ public final class Partitions {
         // A finding the reading did not name a number for is at the position, and answers for every
         // axis on it: what number it was about is what was not read, so an axis cannot be excused by
         // it naming another.
-        boolean anyUnread = rules.stream().anyMatch(one -> switch (one.at()) {
+        LeftAtThePosition left = LeftAtThePosition.of(rules.stream().filter(one -> switch (one.at()) {
             case souther.compiler.inputs.FilingCoordinate.OfTerm it ->
                     it.term().equals(axis.term());
             case souther.compiler.inputs.FilingCoordinate.AtPosition it ->
                     it.path().equals(axis.path());
-        });
-        measured.add(new Measured(axis, anyUnread ? new BodyCutInspection.Blocked()
-                : new BodyCutInspection.Exhausted()));
+        }).toList());
+        // Which of the two this phase was left with, and not merely that it was left with
+        // something. The verdict below tells a reading that stopped from a rule read to the end,
+        // and answered here with one word it read every rule this phase understood as one it could
+        // not read.
+        measured.add(new Measured(axis, left == null ? new BodyCutInspection.Exhausted()
+                : new BodyCutInspection.NoLine(left)));
     }
 
     /**
@@ -351,8 +355,8 @@ public final class Partitions {
                                               souther.compiler.inputs.Quantities reading,
                                               List<Threshold> thresholds,
                                               Symbols symbols, ReadingPolicy policy,
-                                              List<UnreadRule> unread) {
-        return withThresholds(base, reading, thresholds, symbols, policy, unread, List.of());
+                                              List<RuleWithoutALine> rulesWithoutALine) {
+        return withThresholds(base, reading, thresholds, symbols, policy, rulesWithoutALine, List.of());
     }
 
     /**
@@ -368,9 +372,9 @@ public final class Partitions {
                                               souther.compiler.inputs.Quantities reading,
                                               List<Threshold> thresholds,
                                               Symbols symbols, ReadingPolicy policy,
-                                              List<UnreadRule> unread,
+                                              List<RuleWithoutALine> rulesWithoutALine,
                                               List<GuardThresholds.Guards.Singled> singled) {
-        return withThresholds(base, reading, thresholds, symbols, policy, unread, singled, List.of());
+        return withThresholds(base, reading, thresholds, symbols, policy, rulesWithoutALine, singled, List.of());
     }
 
     /**
@@ -385,10 +389,10 @@ public final class Partitions {
                                               souther.compiler.inputs.Quantities reading,
                                               List<Threshold> thresholds,
                                               Symbols symbols, ReadingPolicy policy,
-                                              List<UnreadRule> unread,
+                                              List<RuleWithoutALine> rulesWithoutALine,
                                               List<GuardThresholds.Guards.Singled> singled,
                                               List<LineDrawn> between) {
-        return withThresholds(base, reading, thresholds, symbols, policy, unread, singled, between,
+        return withThresholds(base, reading, thresholds, symbols, policy, rulesWithoutALine, singled, between,
                 souther.compiler.check.PathReachability.Answers.NONE);
     }
 
@@ -410,12 +414,12 @@ public final class Partitions {
                                               souther.compiler.inputs.Quantities reading,
                                               List<Threshold> thresholds,
                                               Symbols symbols, ReadingPolicy policy,
-                                              List<UnreadRule> unread,
+                                              List<RuleWithoutALine> rulesWithoutALine,
                                               List<GuardThresholds.Guards.Singled> singled,
                                               List<LineDrawn> between,
                                               souther.compiler.check.PathReachability.Answers
                                                       arrives) {
-        return withThresholds(base, reading, thresholds, symbols, policy, unread, singled, between,
+        return withThresholds(base, reading, thresholds, symbols, policy, rulesWithoutALine, singled, between,
                 arrives, ReachingCuts.NONE);
     }
 
@@ -431,7 +435,7 @@ public final class Partitions {
                                               souther.compiler.inputs.Quantities reading,
                                               List<Threshold> thresholds,
                                               Symbols symbols, ReadingPolicy policy,
-                                              List<UnreadRule> unread,
+                                              List<RuleWithoutALine> rulesWithoutALine,
                                               List<GuardThresholds.Guards.Singled> singled,
                                               List<LineDrawn> between,
                                               souther.compiler.check.PathReachability.Answers
@@ -440,8 +444,8 @@ public final class Partitions {
         // Both producers of one kind of evidence. What a body compared and what a type's own rules
         // bound are read by different readers and answer the same question, so a position either of
         // them wrote about and neither could turn into a line is named once, whichever wrote it.
-        List<UnreadRule> rules = new ArrayList<>(base.unread());
-        for (UnreadRule each : unread) {
+        List<RuleWithoutALine> rules = new ArrayList<>(base.rulesWithoutALine());
+        for (RuleWithoutALine each : rulesWithoutALine) {
             if (rules.stream().noneMatch(had -> had.sameAs(each))) {
                 rules.add(each);
             }
@@ -517,8 +521,8 @@ public final class Partitions {
             //
             // A rule read and left outside what the position holds divided nothing, and it is not
             // a rule that went unread either: what it says was understood. So the answer there is
-            // that the rules were exhausted, which is what keeps `Blocked` meaning that a
-            // comparison could not be interpreted rather than everything that came to nothing.
+            // that the rules were exhausted, which is what keeps `NoLine` meaning that a rule was
+            // written about the position rather than everything that came to nothing.
             NumericDomain.Bounds within = domain;
             NumericTerm measuredAt = term;
             Axis read = axis;
@@ -847,10 +851,10 @@ public final class Partitions {
     private static void axisOf(String behavior, Position position, Symbols symbols,
                                ReadingPolicy policy,
                                List<Axis> out, java.util.Set<NumericTerm> uncertain,
-                               List<UnreadRule> unread) {
-        for (UnreadRule each : position.unreadRules()) {
-            if (unread.stream().noneMatch(had -> had.sameAs(each))) {
-                unread.add(each);
+                               List<RuleWithoutALine> rulesWithoutALine) {
+        for (RuleWithoutALine each : position.rulesWithoutALine()) {
+            if (rulesWithoutALine.stream().noneMatch(had -> had.sameAs(each))) {
+                rulesWithoutALine.add(each);
             }
         }
         NumericTerm term = position.term();
@@ -887,7 +891,7 @@ public final class Partitions {
                     case StructuralInspection.Retained retained ->
                             out.add(Axis.pendingAt(id, term, position.type(),
                                     position.rulesNotReached(),
-                                    retained.continuation(), leftUnread(position)));
+                                    retained.continuation(), leftAt(position)));
                 }
             }
         }
@@ -905,11 +909,22 @@ public final class Partitions {
      * for a range at all — so it names one limit while the report's own line names another, and one
      * position came back with two causes for one clause.
      *
-     * <p>The first, as a comparison's is. What a reader has to lift is the first limit in the way.
+     * <p><b>A stop ahead of a rule read to the end, and not the first of the list.</b> Either keeps
+     * the position from completing as one the model draws no line through, and they are not alike
+     * in anything else: one is a limit somebody can lift and the other is what the model says. Taken
+     * in the order the rules happen to be in, which of the two a position came out under turned on
+     * which clause its author wrote first.
+     *
+     * <p>Which of the two it is travels with it, so nothing downstream works it out again. That is
+     * what {@link LeftAtThePosition} is for: the same distinction is drawn by a verdict, by a
+     * generation's account of why no row could answer, and by the words a claim is annotated with,
+     * and each of them used to read it off where the evidence had come from.
      */
-    private static BlockReason leftUnread(Position position) {
-        return position.unreadRules().isEmpty() ? position.valuesUnread()
-                : position.unreadRules().getFirst().why();
+    private static LeftAtThePosition leftAt(Position position) {
+        return LeftAtThePosition.outranking(
+                LeftAtThePosition.of(position.rulesWithoutALine()),
+                position.valuesUnread() == null ? null
+                        : new LeftAtThePosition.AReadingStopped(position.valuesUnread()));
     }
 
     // --- small helpers ----------------------------------------------------------------------------

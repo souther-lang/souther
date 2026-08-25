@@ -75,8 +75,8 @@ public final class FieldDomains {
      * leave — see {@link #placedAt}. */
     private final List<InvariantChecker.Direct> directs;
     /** The rules saying where a coordinate's values stop that no end came out of — see
-     * {@link #unreadAt}. */
-    private final List<Unread> unread;
+     * {@link #noLineAt}. */
+    private final List<NoLine> noLines;
     /** What each clause reaching this value raises, keyed on the rule it is. */
     private final Map<RuleRef, Required> raised;
     /** The same per part of each clause. A reader that found one conjunct wanting names what that
@@ -143,7 +143,7 @@ public final class FieldDomains {
                          Map<String, ValueSet> admittedByField,
                          Map<String, UnreadReason> unreadByField,
                          Set<String> notSeparatedByField,
-                         List<InvariantChecker.Direct> directs, List<Unread> unread,
+                         List<InvariantChecker.Direct> directs, List<NoLine> noLines,
                          Map<RuleRef, Required> raised,
                          Map<RuleRef, Map<Core, Required>> raisedByPart, ReadingEvidence took,
                          Map<String, List<TypeSymbol>> narrowers,
@@ -162,7 +162,7 @@ public final class FieldDomains {
         this.unreadByField = unreadByField;
         this.notSeparatedByField = notSeparatedByField;
         this.directs = directs;
-        this.unread = unread;
+        this.noLines = noLines;
         this.raised = raised;
         this.raisedByPart = raisedByPart;
         this.took = took;
@@ -374,7 +374,7 @@ public final class FieldDomains {
         positions.forEach(field ->
                 named(seeded, field).forEach(term -> placeOf.putIfAbsent(term, field)));
         return new FieldDomains(Map.copyOf(out), Map.copyOf(holds), Map.copyOf(admitted),
-                Map.copyOf(unread), Set.copyOf(notSeparated), seeded.reading().directs(), seeded.reading().unread(),
+                Map.copyOf(unread), Set.copyOf(notSeparated), seeded.reading().directs(), seeded.reading().noLines(),
                 seeded.reading().raised(), seeded.reading().raisedByPart(), seeded.took(),
                 seeded.reading().narrowers(),
                 seeded.notGathered(), placeOf,
@@ -437,8 +437,8 @@ public final class FieldDomains {
      * @param why  what would have to change before this rule could be a line, in this compiler's
      *             own terms
      */
-    public record Unread(Coordinate at, RuleRef.Invariant from,
-                         Core part, souther.compiler.inputs.BlockReason.AboutARule why) {
+    public record NoLine(Coordinate at, RuleRef.Invariant from,
+                         Core part, souther.compiler.inputs.BlockReason.RuleWithoutLineReason why) {
 
         /** Where in the value the end was to have been placed. */
         public String path() {
@@ -719,7 +719,7 @@ public final class FieldDomains {
      * What answered "where does the line fall" for one rule at one position.
      *
      * <p>The reading that turns a clause into an end, asked for its own account. It keeps one where
-     * a rule says where the values stop and no end came of it ({@link Unread}), so the absence of
+     * a rule says where the values stop and no end came of it ({@link NoLine}), so the absence of
      * one is the reading having got there: either it placed the end, or it read the rule to the end
      * and found the order stops past where the rule points. The second is the line understood and
      * not a reading that fell short — whether a value can be written at it is a question about
@@ -756,13 +756,28 @@ public final class FieldDomains {
         return new RuleAccounting.Outcome.Accounted(RuleAccounting.Reader.THE_END_READING);
     }
 
-    /** What the reading of ends said about the rule at this position, where it said anything. */
+    /**
+     * What the reading of ends said about the rule at this position, where it said anything.
+     *
+     * <p>Unanswered only where that reading stopped. A rule it read from end to end and drew no
+     * line from has answered the question that reading answers: the rule places no line, so there
+     * is none to be owed at, and a reader sent after it would be looking for a limit of this
+     * compiler that is not there.
+     *
+     * <p>Which is the second of two places that has to hold. A rule read to the end raises no such
+     * question in the first place ({@link ClauseStates.NoRestriction},
+     * {@link ClauseStates.ARelation}), so nothing reaches here to be answered this way — and the
+     * question being unaskable is what makes the answer unreachable rather than the other way
+     * about. Both are written, because the day one of them slips the other is what is left.
+     */
     private RuleAccounting.Outcome unreadAnswerFor(RuleRef rule, Core part, Coordinate where) {
-        for (Unread said : unread) {
+        for (NoLine said : noLines) {
             if (said.from().equals(rule) && said.part() == part
-                    && said.at().equals(where)) {
+                    && said.at().equals(where)
+                    && said.why() instanceof souther.compiler.inputs.BlockReason
+                            .RuleReadingStopped stopped) {
                 return new RuleAccounting.Outcome.Unaccounted(
-                        new RuleAccounting.Why.TheEndReadingSays(said.why()));
+                        new RuleAccounting.Why.TheEndReadingSays(stopped));
             }
         }
         return new RuleAccounting.Outcome.Accounted(RuleAccounting.Reader.THE_END_READING);
@@ -832,8 +847,8 @@ public final class FieldDomains {
      * and an end there says nothing about this — read as one answer, a bound on a field's own type
      * silenced the record's clause about the same field.
      */
-    public List<Unread> unreadAt(String path) {
-        return unread.stream().filter(each -> each.path().equals(path)).toList();
+    public List<NoLine> noLineAt(String path) {
+        return noLines.stream().filter(each -> each.path().equals(path)).toList();
     }
 
     /**

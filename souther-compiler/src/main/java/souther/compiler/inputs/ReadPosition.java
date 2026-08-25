@@ -33,7 +33,8 @@ record ReadPosition(TermPath path, TypeView view, NumericTerm term,
                     List<TypeSymbol> narrowedUpper, boolean nothingExists,
                     ProjectionEvidence projection, List<Case> declared, ReadingResult reading,
                     ObligationDomain obligations, AdmissibleSet.Completeness completeness,
-                    BlockReason valuesUnread, List<UnreadRule> unreadRules,
+                    BlockReason.ReadingStopReason valuesUnread,
+                    List<RuleWithoutALine> rulesWithoutALine,
                     List<StandingQuestion> unansweredQuestions, boolean rulesNotReached,
                     StructuralInspection structure) implements Position {
 
@@ -41,7 +42,7 @@ record ReadPosition(TermPath path, TypeView view, NumericTerm term,
         narrowedLower = List.copyOf(narrowedLower);
         narrowedUpper = List.copyOf(narrowedUpper);
         declared = List.copyOf(declared);
-        unreadRules = List.copyOf(unreadRules);
+        rulesWithoutALine = List.copyOf(rulesWithoutALine);
         unansweredQuestions = List.copyOf(unansweredQuestions);
     }
 

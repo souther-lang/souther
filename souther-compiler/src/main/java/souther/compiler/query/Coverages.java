@@ -102,7 +102,7 @@ final class Coverages {
         // divide the position twice.
         return new Partitioned(Partitions.withThresholds(partitioning, quantities,
                 both(clauses.thresholds(), guards.thresholds()), symbols, policy,
-                both(clauses.unread(), guards.unread()),
+                both(clauses.rulesWithoutALine(), guards.rulesWithoutALine()),
                 both(clauses.singled(), guards.singled()),
                 both(clauses.between(), guards.between()), arrives,
                 // What a row had to satisfy to arrive at each comparison, from the walk that
@@ -169,7 +169,7 @@ final class Coverages {
                 PartitionDerivation.of(axes, partitioning.partitionClosure()),
                 BoundaryDerivation.of(boundaries, partitioning.borderClosure()),
                 pairsOf(behavior.name(), divided, readings, level.readsRows(), budget),
-                partitioning.undivided(), partitioning.unread(), partitioning.blocked(),
+                partitioning.undivided(), partitioning.rulesWithoutALine(), partitioning.blocked(),
                 // What the model asked and nothing answered, taken whole and not gathered as the
                 // axes are walked. The questions are the model's; whether a position could be
                 // measured is the separate answer `undivided` beside them carries, and a position

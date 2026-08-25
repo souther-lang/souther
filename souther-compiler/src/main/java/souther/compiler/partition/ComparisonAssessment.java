@@ -12,6 +12,7 @@ import souther.compiler.numeric.Place;
 import souther.compiler.types.BindingId;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * What one comparison comes to on the input space: one reading, and everything read off it.
@@ -130,7 +131,7 @@ sealed interface ComparisonAssessment {
      * @param filedAt where the reading was looking, which is a diagnostic position and never the
      *                subject of a question. What such a rule is about is the part that was not read
      */
-    record Unread(BlockReason.ReadingStopped why, List<FilingCoordinate> filedAt)
+    record Unread(BlockReason.RuleReadingStopped why, List<FilingCoordinate> filedAt)
             implements ComparisonAssessment {
 
         public Unread {
@@ -256,6 +257,44 @@ sealed interface ComparisonAssessment {
             case Unread unread -> unread.filedAt();
             case CutsNothing _ -> GuardThresholds.filedAt(comparison, reads, symbols);
             case AtAPosition _, AnswerDependent _, NoInput _ -> List.of();
+        };
+    }
+
+    /**
+     * Why the reading of lines drew none from this comparison, or empty where it drew one.
+     *
+     * <p><b>Named for the reading it is the answer of, and not for the assessment it is read
+     * off.</b> What a comparison comes to is one decision; what a reading makes of it is that
+     * reading's own, and the two do not agree even about one comparison — a rule relating two
+     * positions is read here from end to end and places no line, and the reading that turns clauses
+     * into sets of values gets nothing it can hold from the same rule. A name saying only that a
+     * reason was read off an assessment would be reached for by that reader too, and the answer it
+     * would take is the one that says nothing fell short.
+     *
+     * <p>Answered once, here. Both producers of this evidence — a clause of an {@code ensures} and a
+     * {@code guard}'s comparison — worked the same table out separately, so a case added to
+     * {@link ComparisonAssessment} had to be answered twice and the two could disagree about one
+     * comparison. That is the shape this whole type was made to have none of.
+     *
+     * <p>Empty rather than null, and no {@code default} on the switch. A comparison that drew a
+     * line, one about no position of the input, and one about what the behavior answers each leave
+     * nothing for a reader to be told, and saying so with an absent value made the absence a
+     * sentinel one caller had to remember to test for. An arm added is a compile error in this
+     * method and in the value reading's own beside it, which is the point of neither having a
+     * default.
+     */
+    default Optional<BlockReason.RuleWithoutLineReason> whyTheLineReadingDrewNone() {
+        return switch (this) {
+            case AcrossPositions _ -> Optional.of(new BlockReason.ComparisonBetweenPositions());
+            case CutsNothing _ -> Optional.of(new BlockReason.ComparisonCuttingNothing());
+            case OutsideTheDomain _ ->
+                    Optional.of(new BlockReason.ComparisonCuttingOutsideDomain());
+            // Its own answer for having stopped, decided where it stopped. Worked out again from
+            // the comparison afterwards, one whose carrier stopped the reading came back as a rule
+            // that relates two positions — a sentence saying no measure is short of anything, over
+            // a model missing a border.
+            case Unread unread -> Optional.of(unread.why());
+            case AtAPosition _, NoInput _, AnswerDependent _ -> Optional.empty();
         };
     }
 

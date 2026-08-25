@@ -146,6 +146,36 @@ class WhatARuleRaisesIsAskedOfTheRuleTest {
     }
 
     /**
+     * A rule about a position that restricts no value of it raises nothing either, under its own
+     * word.
+     *
+     * <p>{@code value - value >= 0} holds of every row: the position cancels against itself, so the
+     * quantity the rule cuts is empty and there is no value anywhere it admits or refuses. Counted
+     * off the sides it is a rule about {@code value} — the name is written twice — and it raised
+     * the questions a rule about a position raises. Neither of them is anything the rule states, so
+     * nothing could answer either, and a clause read from end to end went out as a question nobody
+     * had answered.
+     *
+     * <p>Which the quantity settles and the spelling cannot. What a rule restricts is what its
+     * canonical form cuts, which is the rule {@link UnreadComparison#why} is written around one
+     * layer down — and this classification was still counting the sides.
+     */
+    @Test
+    void aRuleRestrictingNoValueRaisesNothing() {
+        Required.Irrelevant said = assertInstanceOf(Required.Irrelevant.class,
+                only(raisedBy("""
+                        module example.rooms
+
+                        data Length = Int
+                            invariant floor = value >= 1
+                            invariant always = value - value >= 0
+                        """, "Length"), "always"));
+
+        assertEquals(Set.of(Required.Because.IT_CONSTRAINS_NO_VALUE), said.because());
+        assertEquals(Set.of(), said.obligations());
+    }
+
+    /**
      * A rule relating two positions raises nothing, and says what settled that.
      *
      * <p>The conclusion, not an empty result. Both sides were recognised, and a partition is of one

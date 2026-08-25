@@ -19,6 +19,7 @@ import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -61,7 +62,8 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
     /** The same, with a rule about the position's own values that the local reading could not take
      *  in — which is a second way a position can be left unable to reach an absence. */
     private static Axis pending(StructuralInspection.Continuation found, BlockReason unread) {
-        return Axis.pendingAt(ID, new NumericTerm.ValueOf(AT), Type.BOOL, false, found, unread);
+        return Axis.pendingAt(ID, new NumericTerm.ValueOf(AT), Type.BOOL, false, found,
+                unread == null ? null : LeftAtThePosition.of(unread));
     }
 
     /**
@@ -88,6 +90,26 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
     }
 
     /**
+     * And a leaf carrying a rule read from end to end completes as neither of the two above.
+     *
+     * <p>Not an absence: the model states something at this position. Not a derivation this
+     * compiler could not make either — the reading ran to the end, and a reader sent after a limit
+     * would be looking for one that is not there. Held as the same state a stop puts a position in,
+     * every consumer of this chain went on saying the first of those about the second.
+     */
+    @Test
+    void aLeafCarryingARuleReadToTheEndSaysNeitherOfThose() {
+        BlockReason read = new BlockReason.ComparisonBetweenPositions();
+
+        UndividedPosition said = PendingPosition.of(
+                        pending(new StructuralInspection.Continuation.None(), read))
+                .complete(new BodyCutInspection.Exhausted());
+
+        assertFalse(said.isAbsent(), said.toString());
+        assertInstanceOf(UndividedPosition.Why.StatedWithoutALine.class, said.why(), said.toString());
+    }
+
+    /**
      * Neither of two rules becomes the position's account, where a body's comparison came to
      * nothing as well.
      *
@@ -102,7 +124,8 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
         PendingPosition pending = PendingPosition.of(pending(new StructuralInspection.Continuation.None(),
                 new BlockReason.UnreadValueRule()));
 
-        assertFalse(pending.complete(new BodyCutInspection.Blocked()).isAbsent());
+        assertFalse(pending.complete(new BodyCutInspection.NoLine(new LeftAtThePosition.AReadingStopped(
+                        new BlockReason.UnreadValueRule()))).isAbsent());
         assertNull(pending.reportable(), "each rule is said with its rule, not as this position");
     }
 
@@ -148,10 +171,46 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
     /** A rule about the position that went unread is what it is left with, and not an absence. */
     @Test
     void aLeafWhoseRuleWentUnreadSaysThat() {
-        UndividedPosition done = new PendingPosition.Leaf(AT)
-                .complete(new BodyCutInspection.Blocked());
+        UndividedPosition done = new PendingPosition.Leaf(AT).complete(new BodyCutInspection.NoLine(new LeftAtThePosition.AReadingStopped(
+                        new BlockReason.UnreadValueRule())));
 
         assertFalse(done.isAbsent());
+        assertEquals(new UndividedPosition.Why.CannotDerive(), done.why());
+    }
+
+    /**
+     * And a rule the body read from end to end says the other thing, as the same rule does where
+     * the declaration wrote it.
+     *
+     * <p>The phase a rule was written in is no part of what it says. This one used to be the only
+     * answer the body could give — that something was left — and a verdict read it as the position
+     * having rules nothing looked at, over a {@code guard} this compiler understood completely.
+     */
+    @Test
+    void aLeafWhoseBodyRuleWasReadToTheEndSaysTheOtherThing() {
+        UndividedPosition done = new PendingPosition.Leaf(AT).complete(
+                new BodyCutInspection.NoLine(new LeftAtThePosition.ARuleWithNoLine(
+                        new BlockReason.ComparisonBetweenPositions())));
+
+        assertFalse(done.isAbsent());
+        assertEquals(new UndividedPosition.Why.StatedWithoutALine(), done.why());
+    }
+
+    /**
+     * A stop in the body outranks a rule the declaration read to the end.
+     *
+     * <p>Both phases answer about one position and the verdict is one. Read off the first phase
+     * alone, a rule read to the end at the declaration hid a reading that stopped two lines into
+     * the body — and a position nothing had read came back as one the model states something at.
+     */
+    @Test
+    void aStopInTheBodyOutranksARuleTheDeclarationReadToTheEnd() {
+        PendingPosition stated = new PendingPosition.ARuleWithNoLine(AT,
+                new BlockReason.ComparisonBetweenPositions());
+
+        UndividedPosition done = stated.complete(new BodyCutInspection.NoLine(
+                new LeftAtThePosition.AReadingStopped(new BlockReason.UnreadValueRule())));
+
         assertEquals(new UndividedPosition.Why.CannotDerive(), done.why());
     }
 
@@ -170,7 +229,8 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
         UndividedPosition.Why expected = new UndividedPosition.Why.CannotDerive();
 
         assertEquals(expected, blocked.complete(new BodyCutInspection.Exhausted()).why());
-        assertEquals(expected, blocked.complete(new BodyCutInspection.Blocked()).why());
+        assertEquals(expected, blocked.complete(new BodyCutInspection.NoLine(new LeftAtThePosition.AReadingStopped(
+                        new BlockReason.UnreadValueRule()))).why());
         // And the finding is the stop, whatever the rules came to: a rule naming something inside a
         // position the walk could not enter describes that same stop from the other end.
         assertEquals(new souther.compiler.inputs.PositionReadingBlocked(AT,

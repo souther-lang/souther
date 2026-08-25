@@ -145,7 +145,20 @@ public sealed interface Required {
          * position for anything to have read. A rule cannot cost a position it does not name, which
          * is what the reading of values says of its own failures for the same reason.
          */
-        IT_NAMES_NO_POSITION
+        IT_NAMES_NO_POSITION,
+
+        /**
+         * The rule names a position and restricts no value of it.
+         *
+         * <p>{@code lo - lo >= 0} holds of every row: the quantity it cuts is empty, so there is no
+         * value it admits or refuses anywhere and no question a measure of coverage could answer.
+         *
+         * <p>Its own word beside {@link #IT_NAMES_NO_POSITION}, which is a rule about nothing here
+         * at all. This one is written about a position — an author looking for why it costs the
+         * measurement nothing would not find it under a word saying their clause mentions no field
+         * of the value it is declared on.
+         */
+        IT_CONSTRAINS_NO_VALUE
     }
 
     /** What every invariant clause raises about a position it is written about. */
@@ -191,6 +204,8 @@ public sealed interface Required {
                             .map(Owed.AdmittedValues::new).collect(java.util.stream.Collectors
                                     .toCollection(LinkedHashSet::new)));
             case ClauseStates.ARelation _ -> new Irrelevant(Set.of(Because.IT_RELATES_TWO_POSITIONS));
+            case ClauseStates.NoRestriction _ ->
+                    new Irrelevant(Set.of(Because.IT_CONSTRAINS_NO_VALUE));
         };
     }
 

@@ -3,7 +3,7 @@ package souther.compiler.inputs;
 /**
  * A position whose reading stopped before it got to what is written about it.
  *
- * <p>The other half of {@link UnreadRule}, and told apart from it by which authority answers. There
+ * <p>The other half of {@link RuleWithoutALine}, and told apart from it by which authority answers. There
  * a rule was read and could not be used, and the finding names it; here nothing about any one rule
  * is known â a depth, a shape this does not reach into, a type that could not be worked out, a
  * gathering that stopped â and what there is to say is the position and the limit. Carrying a rule

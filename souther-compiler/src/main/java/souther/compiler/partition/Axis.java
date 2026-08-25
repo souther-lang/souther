@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.StructuralInspection;
@@ -56,15 +55,17 @@ import java.util.List;
  *                 Beside the questions and not among them: a position whose rules were never
  *                 enumerated raises no question and is not one whose rules were all accounted for,
  *                 and an empty list says the second (issue #791)
- * @param unread   a rule about this position's own values that the local reading did not take in,
- *                 or null where it read them all. Carried for the same reason {@link #pending} is,
- *                 and kept apart from it because the two are lifted by different work and one
- *                 outranks the other: where the walk could not reach into what the position holds,
- *                 a rule about what is inside describes that same stop from the other end
+ * @param leftWith what the position is left with where the local reading gave it no axis, or null
+ *                 where nothing is. Which of the two it is comes with it: a reading stopped, or a
+ *                 rule was read to the end and draws no line. Carried for the same reason
+ *                 {@link #pending} is, and kept apart from it because the two are lifted by
+ *                 different work and one outranks the other — where the walk could not reach into
+ *                 what the position holds, a rule about what is inside describes that same stop
+ *                 from the other end
  */
 public record Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> classes,
                    List<Cut> cuts, List<Seam> parted, boolean rulesNotReached,
-                   StructuralInspection.Continuation pending, BlockReason unread) {
+                   StructuralInspection.Continuation pending, LeftAtThePosition leftWith) {
 
     public Axis {
         classes = List.copyOf(classes);
@@ -85,9 +86,10 @@ public record Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> 
      * reading ran to the end and found nothing, and what stopped one where it did not.
      */
     public static Axis pendingAt(AxisId id, NumericTerm term, Type type, boolean rulesNotReached,
-                                 StructuralInspection.Continuation found, BlockReason unread) {
+                                 StructuralInspection.Continuation found,
+                                 LeftAtThePosition leftWith) {
         return new Axis(id, term, type, List.of(), List.of(), List.of(),
-                rulesNotReached, found, unread);
+                rulesNotReached, found, leftWith);
     }
 
     /**
@@ -101,12 +103,12 @@ public record Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> 
      * as one the model divides no way.
      */
     public Axis measuredAt(AxisId id, NumericTerm term) {
-        return new Axis(id, term, type, classes, cuts, parted, rulesNotReached, pending, unread);
+        return new Axis(id, term, type, classes, cuts, parted, rulesNotReached, pending, leftWith);
     }
 
     /** The same position, with what a body's rules divided it into and the lines they drew. */
     public Axis carrying(List<PartitionClass> classes, List<Cut> cuts, List<Seam> parted) {
-        return new Axis(id, term, type, classes, cuts, parted, rulesNotReached, pending, unread);
+        return new Axis(id, term, type, classes, cuts, parted, rulesNotReached, pending, leftWith);
     }
 
     /** Where the value this axis is about sits, which is where a row is walked to before the term is

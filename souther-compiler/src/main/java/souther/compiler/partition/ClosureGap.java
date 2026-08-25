@@ -1,7 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.inputs.BlockReason;
-import souther.compiler.inputs.UnreadRule;
+import souther.compiler.inputs.RuleWithoutALine;
 
 /**
  * One thing that stopped a measure's reading of the model from running out.
@@ -23,9 +23,25 @@ import souther.compiler.inputs.UnreadRule;
  */
 public sealed interface ClosureGap {
 
-    /** A rule of the model that a reader set aside. The rule says which measures that costs
-     *  ({@link BlockReason.AboutARule#leavesShort}). */
-    record RuleUnread(UnreadRule rule) implements ClosureGap {}
+    /**
+     * A rule of the model a reader stopped on. The rule says which measures that costs
+     * ({@link BlockReason.RuleWithoutLineReason#leavesShort}).
+     *
+     * <p>Only a rule this compiler got partway through. A rule read from end to end that draws no
+     * line leaves no measure short of anything — that is what its half of the reasons answers, for
+     * every one of them and not case by case — so it is not a gap in what was measured and there is
+     * nothing here for it to be counted as. `MeasureClosure` asks the reason before building one of
+     * these, and this refuses what that question would have had to let through.
+     */
+    record RuleUnread(RuleWithoutALine rule) implements ClosureGap {
+
+        public RuleUnread {
+            if (!(rule.why() instanceof BlockReason.RuleReadingStopped)) {
+                throw new IllegalArgumentException(
+                        "a rule read to the end leaves no measure short: " + rule.why());
+            }
+        }
+    }
 
     /**
      * A question the rules written about one position raise that nothing answered.

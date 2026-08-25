@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * A record built by copying fields out of another says which it left behind.
  *
- * <p>{@code FieldDomains.Unread} is written from a coordinate the reading found, one field at a
+ * <p>{@code FieldDomains.NoLine} is written from a coordinate the reading found, one field at a
  * time, because the coordinate is this class's own and the record crosses into {@code inputs}. Two
  * of its fields went in one round late apiece — first which number of the position it is, then
  * which conjunct the reason came from — each after something downstream turned out to need what the
@@ -55,7 +55,7 @@ class WhatACopyOfACoordinateLeavesOutIsWrittenDownTest {
     @Test
     void theCopyCarriesEveryFieldOfTheCoordinateButTheCarrier() {
         Set<String> left = new LinkedHashSet<>(componentsOf(coordinate()));
-        left.removeAll(componentsOf(FieldDomains.Unread.class));
+        left.removeAll(componentsOf(FieldDomains.NoLine.class));
 
         assertEquals(Set.of("carrier"), left,
                 "a field of the coordinate that the copy does not carry, and nobody decided to");
@@ -64,11 +64,11 @@ class WhatACopyOfACoordinateLeavesOutIsWrittenDownTest {
     /** And what it adds is what the copy is for: whose rule it is, and which conjunct. */
     @Test
     void andWhatItAddsIsWhatTheCopyIsFor() {
-        Set<String> added = new LinkedHashSet<>(componentsOf(FieldDomains.Unread.class));
+        Set<String> added = new LinkedHashSet<>(componentsOf(FieldDomains.NoLine.class));
         added.removeAll(componentsOf(coordinate()));
 
         assertEquals(Set.of("from", "part", "why"), added);
-        assertTrue(componentsOf(FieldDomains.Unread.class).contains("at"),
+        assertTrue(componentsOf(FieldDomains.NoLine.class).contains("at"),
                 "beside the one of the coordinate that a reader downstream turned out to need:"
                         + " which number of which position the end was to have been on. One"
                         + " component and not a path beside a flag — a path measured by two"
