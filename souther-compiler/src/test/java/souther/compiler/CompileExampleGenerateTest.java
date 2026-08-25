@@ -853,14 +853,65 @@ class CompileExampleGenerateTest {
         assertEquals(List.of(
                         // The target and one supporting field: `hi` at the bottom of its lower
                         // class is under `mid`'s `lo`, which the rule refuses, so `lo` moves too.
-                        "Request { ...mid, hi = Amount(0), lo = Amount(0) }",
-                        "Request { ...mid, hi = Amount(61) }",
+                        // Which is every field `Request` has, so the row is written out.
+                        "Request { lo = Amount(0), hi = Amount(0) }",
+                        // `mid` is already in the upper class of `hi`, so the row is `mid`.
+                        "mid",
                         "Request { ...mid, lo = Amount(0) }",
-                        "Request { ...mid, lo = Amount(51) }"),
+                        // And already in the upper class of `lo`.
+                        "mid"),
                 filling.composed().rows().stream()
                         .map(CompileExampleGenerateTest::inputsOf).toList());
         assertEquals(List.of(), filling.composed().unresolved(),
                 "every class is written for, which composing them could not do");
+    }
+
+    /**
+     * A class the stated value already sits in is answered by that value, written out as it stands.
+     *
+     * <p>How far a row is from what a reader recognises is what the search minimises, and a value of
+     * the module already in the class is no distance from it. The position the row is about used to
+     * be written over whatever it held — the walk counted it as moved for being the target rather
+     * than for the row differing there — so a class {@code mid} answers came out as {@code mid} with
+     * {@code lo} set to a value of the class it already stood in.
+     *
+     * <p>Which says less than the value it was written from. A reader is told to write
+     * {@code Request &#123;...mid, lo = Amount(51)&#125;} where {@code mid} covers the class, and
+     * has to compare two numbers against a range to see the spread changes nothing.
+     */
+    @Test
+    void aClassTheStatedValueIsAlreadyInIsWrittenAsThatValue() {
+        List<String> rows = generated(CORRELATED).get("submit").composed().rows().stream()
+                .map(CompileExampleGenerateTest::inputsOf).toList();
+
+        assertEquals(2, rows.stream().filter("mid"::equals).count(),
+                "`mid` is in the upper class of both positions: " + rows);
+    }
+
+    /**
+     * A row that moves every field of a value is written out rather than spread over it.
+     *
+     * <p>The spread is what says the row is a value the reader recognises with something changed.
+     * Where the row changes the whole record, the value it spreads contributes nothing to what is
+     * built — {@code Request &#123;...mid, hi = Amount(0), lo = Amount(0)&#125;} names {@code mid}
+     * and keeps none of it — and a reader comparing the row against the file finds every field
+     * different.
+     *
+     * <p>Written out, and not composed again. The values are the ones the search built and offered
+     * from {@code mid}: a rule relating {@code lo} and {@code hi} refuses the pair the classes name
+     * while the model's own value builds, so composing this parameter a second time would be a
+     * different row wearing this one's answer.
+     */
+    @Test
+    void aRowThatMovesEveryFieldIsWrittenOutRatherThanSpread() {
+        List<String> rows = generated(CORRELATED).get("submit").composed().rows().stream()
+                .map(CompileExampleGenerateTest::inputsOf).toList();
+
+        assertTrue(rows.contains("Request { lo = Amount(0), hi = Amount(0) }"),
+                "the row for the lower class of `hi` moves both fields: " + rows);
+        assertTrue(rows.stream().noneMatch(row -> row.startsWith("Request { ...mid, hi =")
+                        && row.contains("lo =")),
+                "and nothing is spread over a value it writes over entirely: " + rows);
     }
 
     /**
@@ -881,44 +932,56 @@ class CompileExampleGenerateTest {
                         let mid = Request { lo = Amount(60), hi = Amount(70) }
                         let wide = Request { lo = Amount(0), hi = Amount(200) }""");
 
-        assertTrue(generated(twice).get("submit").composed().rows().stream()
-                        .allMatch(row -> inputsOf(row).contains("...")),
-                "every row is still written against a value the model states: "
-                        + generated(twice).get("submit").composed().rows().stream()
-                                .map(CompileExampleGenerateTest::inputsOf).toList());
+        List<String> rows = generated(twice).get("submit").composed().rows().stream()
+                .map(CompileExampleGenerateTest::inputsOf).toList();
+
+        // Named outright where the value is already in the class, and spread where the row moves
+        // away from it. Both are the row written against what the module states; which of the two
+        // it is, is how far the row had to move.
+        assertTrue(rows.stream().allMatch(row -> row.equals("mid") || row.equals("wide")
+                        || row.contains("...mid") || row.contains("...wide")),
+                "every row is still written against a value the model states: " + rows);
     }
 
     /**
-     * The value a row already names comes before the ones only the module states.
+     * Between two values one distance away, the one a row already names comes first.
      *
      * <p>A row of the author's is what they reached for at this behavior, and it names its
      * positions together — which is more than this can say of one value chosen per position on its
      * own. So it is the first origin, and the rows offered beside it are written against the same
      * value the row beside them is.
+     *
+     * <p>Asked where the two are the same distance from the class, because distance is what this
+     * search minimises and provenance orders the origins within one distance. The two values here
+     * sit in the same classes as each other, so which is used is the order they were gathered in
+     * and nothing else.
      */
     @Test
     void theValueARowAlreadyNamesIsTheFirstOrigin() {
         String written = CORRELATED.replace("let mid = Request { lo = Amount(60), hi = Amount(70) }",
                 """
                         let mid = Request { lo = Amount(60), hi = Amount(70) }
-                        let wide = Request { lo = Amount(0), hi = Amount(200) }""")
+                        let near = Request { lo = Amount(62), hi = Amount(72) }""")
                 + """
 
                         example submit
-                            | "a wide one" : (wide) -> Accepted { at = "now" }
+                            | "a near one" : (near) -> Accepted { at = "now" }
                         """;
 
-        // The rows composed for a class. A row through an arm is composed from the classes a way
-        // into it leaves and against no stated value — the origins are the class search's, and
-        // nothing here says an arm's row should be written the same way. Included, this would be
-        // asserting that of a search that was never given them.
+        // Every row offered, whatever it was composed for. A row through an arm is written against
+        // a value the model states the way a row for a class is, so a filter here would be leaving
+        // out the rows this used to be unable to say anything about (issue #1034).
         List<String> rows = generated(written).get("submit").composed().rows().stream()
-                .filter(row -> row.purposes().stream()
-                        .anyMatch(Generator.Purpose.ForAClass.class::isInstance))
                 .map(CompileExampleGenerateTest::inputsOf).toList();
         assertFalse(rows.isEmpty(), "there are classes the written row is not in");
-        assertTrue(rows.stream().allMatch(row -> row.contains("...wide")),
-                "written against the value the author's own row names: " + rows);
+        // Where a row keeps any of the value it was written from, that value is the author's own.
+        // The row that keeps none of it moves every field, and is written out rather than spread
+        // over a value it contributes nothing to — which is a fact about how it reads and not about
+        // which value it came from.
+        assertTrue(rows.stream().anyMatch(row -> row.contains("...near")),
+                "the author's own value is what the rows are written from: " + rows);
+        assertTrue(rows.stream().noneMatch(row -> row.contains("...") && !row.contains("...near")),
+                "and no row is written from any other: " + rows);
     }
 
     /** Each named for the one class it is about, whatever it took to write one. */

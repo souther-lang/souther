@@ -57,6 +57,81 @@ public record CellSelection(InteractionCells.Cell cell, List<ControlClaim> claim
     }
 
     /**
+     * The readings of this combination a search may look for a row at, one at a time.
+     *
+     * <p>What this asks of a row and nothing else: a class apiece at the positions it is about, and
+     * nothing said about the rest. Which positions those are, and what the readings of the
+     * combination are, is answered here — a caller that worked it out from the classes each position
+     * admits would be reading this value's own shape, and would have to be rewritten the day a
+     * combination can say something about two positions together that it says about neither alone.
+     *
+     * <p>The first is every position at the first class it admits, and the rest are counted off from
+     * it in a fixed order, so one model offers the same rows twice.
+     *
+     * <p><b>No bound here.</b> How many readings a search may look at is a fact about that search,
+     * and which of these are readings at all is the model's answer rather than this value's: a class
+     * apiece that no one value can hold is a combination of names and not a reading. Counted off
+     * here, the bound was spent on those before anything asked, and a combination whose first few
+     * names cannot be in one value went unanswered with its readings untried.
+     *
+     * <p>None handed over where a position this is about admits no class at all, which is not a
+     * reading that failed but a combination the model does not have.
+     */
+    public Traversal interpretations(Taking<Interpretation> taking) {
+        List<Integer> about = new java.util.ArrayList<>();
+        List<List<Integer>> admitted = new java.util.ArrayList<>();
+        for (int i = 0; i < cell.allowed().length; i++) {
+            if (!cell.narrows(i)) {
+                continue;
+            }
+            List<Integer> here = new java.util.ArrayList<>();
+            for (int c = 0; c < cell.allowed()[i].length; c++) {
+                if (cell.admits(i, c)) {
+                    here.add(c);
+                }
+            }
+            if (here.isEmpty()) {
+                return Traversal.EXHAUSTED;
+            }
+            about.add(i);
+            admitted.add(here);
+        }
+        // Counted up one position at a time, and never counted out. How many readings there are is
+        // a number nobody here needs — a caller takes three of them and stops — and asking for it
+        // put the whole space inside a machine word: sixty-three positions of two classes apiece
+        // overflow it, and a walk that read the total back as a negative one handed nothing over and
+        // said it had run out.
+        int[] standing = new int[about.size()];
+        while (true) {
+            java.util.Map<Integer, Integer> pins = new java.util.LinkedHashMap<>();
+            for (int p = 0; p < about.size(); p++) {
+                pins.put(about.get(p), admitted.get(p).get(standing[p]));
+            }
+            switch (taking.take(new Interpretation(pins))) {
+                case NOT_TAKEN -> {
+                    return Traversal.STOPPED;
+                }
+                case AND_DONE -> {
+                    return Traversal.SATISFIED;
+                }
+                case AND_MORE -> { }
+            }
+            int carry = 0;
+            while (carry < about.size()) {
+                standing[carry]++;
+                if (standing[carry] < admitted.get(carry).size()) {
+                    break;
+                }
+                standing[carry] = 0;
+                carry++;
+            }
+            if (carry == about.size()) {
+                return Traversal.EXHAUSTED;   // the last position came back round to its first
+            }
+        }
+    }
+
+    /**
      * Whether this asks for the same row as {@code other}: the same classes, held to the same run.
      *
      * <p>Asked rather than left to equality. A cell is a flag per class of each position, which is
