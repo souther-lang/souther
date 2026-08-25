@@ -9,6 +9,7 @@ import souther.compiler.types.CaseShape;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.TemporalRule;
 import souther.compiler.types.Type;
+import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.check.TypeOps;
 import souther.compiler.core.Core;
@@ -188,7 +189,8 @@ final class CodecGen {
      *  cannot collide with a data whose name is {@code Date}. */
     private static String rekeyMethod(MapKeyRepresentation key) {
         return switch (key) {
-            case MapKeyRepresentation.NamedKey n -> "__rekey$" + n.name().qualified().replace('.', '$');
+            case MapKeyRepresentation.NamedKey n -> "__rekey$"
+                    + SoutherJvmAbi.nameOf(new GeneratedClass.Value(n.name())).binaryName().replace('.', '$');
             case MapKeyRepresentation.Lexical l -> "__rekey$$" + l.leaf();
         };
     }

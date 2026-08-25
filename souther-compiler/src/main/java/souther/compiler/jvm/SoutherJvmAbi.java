@@ -5,8 +5,17 @@ import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeKey;
 
 /**
- * How a {@link GeneratedClass} is spelled on the JVM. The one place that maps a Souther identity to a
- * physical one, and the one place the suffixes and the capitalization exist.
+ * The JVM backend's physical representation of a Souther identity: what a class is called, and what
+ * a case is called where a generated class and souther-runtime pass one between them. The one place
+ * that maps a Souther identity to a physical one, and the one place the suffixes and the
+ * capitalization exist.
+ *
+ * <p>Two answers and not one. {@link #nameOf} says what a class is called; {@link #caseTokenOf} says
+ * what a case is called on the wire between generated code and the runtime. They are different
+ * questions and may give different answers for one identity — a declaration the runtime ships an
+ * implementation for is a class in the package that ships it, while what it is a case *of* is the
+ * declaration itself. Written as two methods so that neither can be reached for in place of the
+ * other.
  *
  * <p>{@link #nameOf} is a switch expression over a sealed interface with no default, so a generated
  * class this ABI has no answer for is a compile error rather than a name assembled somewhere else.
@@ -58,6 +67,34 @@ public final class SoutherJvmAbi {
                     + "` is not a declaration the language gives");
         }
         return new JvmClassName(name.qualified());
+    }
+
+    /**
+     * What {@code type} is called where a generated class and souther-runtime name a case to each
+     * other: the constant an emitted comparison is written against, and the pair a
+     * {@code DeclaredCase} is built from.
+     *
+     * <p>One answer for both, so that a comparison and the case it decides cannot come to disagree.
+     * They used to be spelled at their own call sites — one from {@code qualified()} and one from
+     * {@code module()} beside {@code name()} — which is two switches over the same question and two
+     * places for a case added later to be handled differently.
+     *
+     * <p>The namespaces here are this backend's protocol and are what old jars were compiled
+     * against. A case the language gives has no module, and the pair still has to say something: it
+     * says what it has always said. That is a compatibility table and it lives here, which is why
+     * the compiler's own model of an identity no longer carries either string.
+     */
+    public static RuntimeCaseToken caseTokenOf(TypeSymbol type) {
+        return switch (type) {
+            case TypeSymbol.AtModule at ->
+                    new RuntimeCaseToken(at.key().module(), at.key().name());
+            case TypeSymbol.Primitive p -> new RuntimeCaseToken("souther", p.name());
+            case TypeSymbol.LanguageCase c -> switch (c.id()) {
+                case SOME, NONE -> new RuntimeCaseToken("souther", c.name());
+                case DIVISION_BY_ZERO, NOT_A_NUMBER, NOT_A_DATE, NOT_A_TIME ->
+                        new RuntimeCaseToken("souther.runtime", c.name());
+            };
+        };
     }
 
     /** What {@code generated} is called on the JVM. */

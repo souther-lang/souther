@@ -14,6 +14,8 @@ import souther.compiler.check.BoundaryInput;
 import souther.compiler.check.BoundaryOutput;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.Type;
+import souther.compiler.jvm.GeneratedClass;
+import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 import souther.runtime.Sets;
@@ -889,7 +891,7 @@ public final class FixtureReader {
      * is not one a module declares and so has no derived codec to reach. The type names the class
      * whether or not the reader spells it the way its module does. */
     private Object encodedOrNull(Object result, TypeSymbol type) {
-        return type == null ? null : encoded(result, type.qualified());
+        return type == null ? null : encoded(result, SoutherJvmAbi.nameOf(new GeneratedClass.Value(type)).binaryName());
     }
 
     private Object encoded(Object result, String className) {
@@ -1878,10 +1880,11 @@ public final class FixtureReader {
             // program the author would find nothing wrong with.
             case FixtureShape.Nominal n -> {
                 try {
-                    Class<?> c = loader.loadClass(n.name().qualified());
+                    Class<?> c = loader.loadClass(SoutherJvmAbi.nameOf(new GeneratedClass.Value(n.name())).binaryName());
                     yield (Decoder<Object, ?>) staticCodec(c, "decoder");
                 } catch (ReflectiveOperationException e) {
-                    throw new IllegalStateException("`" + n.name().qualified() + "` was admitted as a"
+                    throw new IllegalStateException("`" + SoutherJvmAbi.nameOf(new GeneratedClass.Value(n.name())).binaryName()
+                            + "` was admitted as a"
                             + " type a fixture builds through its derived decoder, and it has none", e);
                 }
             }
