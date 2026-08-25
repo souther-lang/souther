@@ -112,7 +112,7 @@ final class OperationFactBinder {
                                 Question::isANumber,
                                 "a number for every answer of it to have a value");
                 case OperationFact.AnswersANumberTakenOfTheOneValueItIsGiven taken ->
-                        DischargeRules.holdTakenOf(stdlib, each.operation(), taken.how());
+                        DischargeRules.holdTakenOf(stdlib, declared, each.operation(), taken.how());
                 case OperationFact.ComputesANumber computes ->
                         DischargeRules.holdNumericResult(stdlib, each.operation(), computes.result());
                 case OperationFact.IsDefinedByCases defined ->

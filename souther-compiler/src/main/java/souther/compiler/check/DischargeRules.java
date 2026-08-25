@@ -10,7 +10,6 @@ import souther.compiler.semantics.ElementLineage;
 import souther.compiler.semantics.ElementShape;
 import souther.compiler.semantics.NumericResult;
 import souther.compiler.semantics.OperationFact;
-import souther.compiler.ast.Hir;
 import souther.compiler.semantics.OperationFacts;
 import souther.compiler.semantics.PositiveOrder;
 import souther.compiler.semantics.ResultBound;
@@ -784,52 +783,62 @@ final class DischargeRules {
     /**
      * Holds a declared account of what an operation takes of the one value it is given.
      *
-     * <p>Three things at once, because a term of this kind rests on all three and none of them is
-     * checked anywhere else. The operation takes exactly one value, since what such a term is read
-     * off is one location and a term names one path. It answers a number, since a boundary is drawn
-     * on one. And what it takes it of is the shape the account is written for — a count is taken of
-     * something that holds things, a magnitude of the operation's own kind of number.
+     * <p>Two different things, and they are kept apart. The first three are the declaration and the
+     * signature agreeing: the operation takes exactly one value, since what such a term is read off
+     * is one location and a term names one path; it answers a number, since a boundary is drawn on
+     * one; and what it takes it of is the shape the account is written for — a count is taken of
+     * something that holds things, a part of a time of a time. None of the three is checked
+     * anywhere else, and each is about this fact and this declaration.
+     *
+     * <p>The last is not about this fact at all. It is that the number the operation answers is read
+     * by one representation, which is a property of the operation and holds whichever of the
+     * accounts was declared last. Asked as "is there already a form, an arithmetic, a body" it was
+     * three conditions naming the three representations there were, so a fourth would have had to be
+     * named in each of them and in whatever the next such procedure turned out to be. Asked as how
+     * many readings the operation has ({@link NumericReadings}), a representation added is refused
+     * against every existing one without being paired with any of them.
+     *
+     * <p>Counted over the declarations being held and not over a table read from elsewhere, so the
+     * answer does not depend on the order the facts were declared in or on whether they have
+     * reached a table yet. What is required is that the count comes to one and that the one is this
+     * account — a term found beside a form fails the same way whether the term or the form was
+     * written first.
      *
      * <p>Held here rather than trusted at the reader. The reader applies the account to whatever
      * observation stands at the path, so an account declared of an operation it is not the shape of
      * is a row read as a number nobody named, with nothing about it looking like a failure (#1027).
      * Refused where the declaration is written, that reading cannot be reached.
      */
-    static void holdTakenOf(Stdlib stdlib, ValueName operation,
-            souther.compiler.semantics.TakenAs how) {
+    static void holdTakenOf(Stdlib stdlib, List<OperationFacts.Declared> declared,
+            ValueName operation, souther.compiler.semantics.TakenAs how) {
         Stdlib.Entry entry = holdTheOperationToTheLibrary(stdlib, operation);
         Stdlib.Signature signature = entry.signature();
         String named = ((ValueName.Stdlib) operation).qualified();
-        // A call the reading expands is a call the reading already understands. `Int.abs` is an
-        // ordinary `let` over `<` and `-`, so a body reading takes the comparison inside it and
-        // draws the line the definition draws; a term standing for the call would be a second
-        // reading of the same call, and which of the two a report showed would be whichever reader
-        // arrived. Refused here, so the exclusivity is a property of what can be declared rather
-        // than of which operations somebody thought to leave out (#1027).
-        if (!(entry.declaration().body() instanceof Hir.FnBody.Intrinsic)) {
-            throw new IllegalStateException(named + " is written in the language, so its body is"
-                    + " read where it is called and a term of what it answers would be a second"
-                    + " reading of the same call");
-        }
-        // And a call some other representation already reads is one this must not read too. A form
-        // says what the result is in the arguments' own counts, which is more than a term standing
-        // for it can say; declared as both, `Decimal.fromInt(n)` would be `n` to one reader and an
-        // opaque number to another.
-        if (OperationFacts.answersAFormOfItsArguments(operation) != null) {
-            throw new IllegalStateException(named + " already answers a form of its arguments, which"
-                    + " says more about what it answers than a term standing for it can");
-        }
-        if (OperationFacts.computesANumber(operation) != null) {
-            throw new IllegalStateException(named + " already computes an arithmetic this reads,"
-                    + " which says more about what it answers than a term standing for it can");
-        }
         if (signature.params().size() != 1) {
             throw new IllegalStateException(named + " takes " + signature.params().size()
                     + " arguments, and a number taken of the one value an operation is given is"
                     + " taken of one");
         }
+        // A number and not a number at one case of a union. A term names one path and stands for
+        // what the operation answered there, and what an operation answering `Int | NotANumber`
+        // answers at that path is the union — which case it is in is a question this account has no
+        // room for. Narrower than the range of whatever asks for such an account, and deliberately:
+        // what may be declared and what is asked about are two ranges.
         holdTheResultToTheDeclaration(stdlib, operation, Question::isANumber,
                 "a number for a term of what it answers to be about");
+        // Before the shape below, because it is the operation that is being asked about and not
+        // this fact. An account that does not fit the operation is still an account of a number
+        // some other representation may already read, and asked the other way round the exclusivity
+        // would be reachable only through arms that happen to fit.
+        NumericReadings.Resolution read = NumericReadings.resolve(stdlib, declared, operation);
+        if (!(read instanceof NumericReadings.Resolution.One(
+                NumericReading.AsATermTakenOfItsArgument(souther.compiler.semantics.TakenAs held)))
+                || !held.equals(how)) {
+            throw new IllegalStateException("the number " + named + " answers is read as "
+                    + NumericReadings.describe(read) + ", and one numeric call is read by one"
+                    + " representation — which of them a report showed would be whichever reader"
+                    + " arrived");
+        }
         Type source = signature.params().get(0);
         Type answered = signature.result();
         if (!how.takenOf(source, answered)) {
