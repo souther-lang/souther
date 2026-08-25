@@ -23,12 +23,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * question added to {@link ProgramExecution} that cannot be answered from there stops the build. What
  * is left for this to hold is what an import would let through quietly.
  *
- * <p>One thing is not refused and should be. {@code ExampleExecution} answers with a
- * {@code Deadline} and an {@code EvaluationPolicy}, and both are declared in the package the JVM
- * implementation runs out of — so an execution that honoured a budget would have to name
- * {@code souther.compiler.examples} to read one. The stand-in here does not read them and so does
- * not need it. When one does, this test is where it will be said, and the answer is to move those
- * two rather than to take the package off the list.
+ * <p>What is refused is what #971 refuses: how this compiler answers its own questions, what it
+ * emits with, and what it emits. Not {@code souther.compiler.examples} — a {@code Deadline} and an
+ * {@code EvaluationPolicy} are declared there and neither is a word of the machine, so refusing the
+ * package would be this test making a claim the issue does not, and the stand-in would pass it by
+ * not reading the budget rather than by not needing the machine. Whether those two are still owned
+ * by the package the JVM implementation runs out of is a question about ownership, and it is not
+ * settled by what a test finds convenient.
  */
 class AnExecutionThatIsNotTheJvmsCanBeWrittenTest {
 
@@ -39,7 +40,6 @@ class AnExecutionThatIsNotTheJvmsCanBeWrittenTest {
             "souther.compiler.codegen",
             "souther.compiler.generated",
             "souther.compiler.jvm",
-            "souther.compiler.examples",
             "ClassLoader");
 
     private static final Path STAND_IN =
@@ -88,7 +88,8 @@ class AnExecutionThatIsNotTheJvmsCanBeWrittenTest {
                 "example.money", "金額", null, new WrittenValue.Whole(500), List.of(), null));
 
         assertEquals(new ConstantOutcome.NotEvaluatedHere(), answered);
-        assertEquals(List.of("constant 金額 written in example.money over 0 clauses"),
+        assertEquals(List.of("constant 金額 written in example.money at null, of null,"
+                        + " over 0 clauses, of Whole[value=500]"),
                 execution.asked());
     }
 }
