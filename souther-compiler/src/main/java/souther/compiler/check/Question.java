@@ -22,6 +22,11 @@ import java.util.Set;
  * reason. So the library gaining an operation is the library asking these questions, and each is
  * unanswered until someone answers it.
  *
+ * <p>One of the two and not either. A silence says that nothing is true under the subject, so it is
+ * the denial of a rule rather than a spare row beside one, and an operation carrying both is one
+ * where one of the two is wrong. Read as "a rule or a silence", a silence that had become false was
+ * only ever a filler and stayed where it was.
+ *
  * <p>A range is read off the declaration and nothing else, so it holds an operation nobody thought
  * of. Where the answer too is read off the declaration the rule is derived rather than written
  * ({@link Combinators}), and the range is still stated here: a signature the derivation gets nothing
