@@ -73,8 +73,8 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
      *
      * <p>The pair space is sized at nought because a size is a product over the positions, and the
      * positions are what was not derived. Nothing reads the number: the measurement beside it says
-     * none was made, and a document leaves the whole section out rather than writing a size nobody
-     * worked out.
+     * none could be finished, and a document leaves the whole section out rather than writing a
+     * size nobody worked out.
      */
     public static PartitionEvidence boundaryNotDerived(String behavior) {
         return new PartitionEvidence(

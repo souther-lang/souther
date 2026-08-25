@@ -410,8 +410,7 @@ public final class Adequacy {
      * skipped the behavior instead published a map with a hole in it — one its own readers then
      * read three ways: as a composition with nothing to measure, as the whole query not having
      * answered, and as this compiler disagreeing with itself. Two of those are wrong about a
-     * behavior whose declaration rests on a name nothing resolved, and the third stopped the report
-     * (issue #1044).
+     * behavior whose declaration rests on a name nothing resolved, and the third stops the report.
      *
      * <p>So the loop is here and the caller writes what one behavior comes to. It is handed a
      * declaration and owes a value: a mapper that answered {@code null} would be the skip again,
@@ -502,10 +501,14 @@ public final class Adequacy {
          */
         public static SignatureEvidence boundaryNotDerived(Hir.BehaviorDef behavior) {
             String name = behavior.name();
+            // The positions themselves, where the declaration writes them. They are read off the
+            // declaration and nothing about them went short — what could not be read is the cases
+            // at each of them, which is each position's own answer. A measurement of the list that
+            // said it was weakened would be a shortfall in a thing that has none, and the same two
+            // states this measure exists to tell apart would be three.
             Measure<List<InputCaseEvidence>> positions =
                     behavior instanceof Hir.SpecBehavior spec
-                            ? new Measurement.Partial<>(declaredPositions(name, spec),
-                                    BoundaryForMeasurement.wentWithout(name))
+                            ? at(declaredPositions(name, spec))
                             : BoundaryForMeasurement.failed(name);
             return new SignatureEvidence(OutputCaseEvidence.boundaryNotDerived(name), positions,
                     BoundaryForMeasurement.failed(name));
@@ -1056,10 +1059,10 @@ public final class Adequacy {
                             checkedBodies == null ? souther.compiler.coverage.SuppliedRules.NONE : checkedBodies.supplied());
             Map<String, souther.compiler.check.PathReachability.Answers.AsRun> reachableArms = db.ask(new Arrived(name)).value();
             return answerEveryBehavior(prepared.value(), behavior ->
-                    // What this measure works from, or the fact that it has none. A behavior whose
-                    // boundary did not work out used to be left out of this map, which reads as a
-                    // measure nobody asked for — so a behavior nothing could be established about
-                    // was held to no bar at all, silently (issue #1044).
+                    // What this measure works from, or the fact that it has none. A behavior left
+                    // out of this map reads as a measure nobody asked for, and a measure nobody
+                    // asked for goes without nothing — so a behavior nothing could be established
+                    // about would be held to no bar at all, and say nothing about it.
                     switch (BoundaryForMeasurement.of(sigs.value(), behavior.name())) {
                         case BoundaryForMeasurement.NotDerived _ ->
                                 SignatureEvidence.boundaryNotDerived(behavior);
@@ -1990,8 +1993,7 @@ public final class Adequacy {
 
             Map<String, souther.compiler.check.PathReachability.Answers.AsRun> reachable = db.ask(new Arrived(name)).value();
 
-            Map<String, BranchEvidence> out = new LinkedHashMap<>();
-            for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
+            return answerEveryBehavior(prepared.value(), behavior -> {
                 // The arms, and not every site of the behavior. A comparison of a guard's condition
                 // has a site of its own and is not a fork a row is in or out of, so counting it here
                 // would report an arm the body does not have.
@@ -2004,16 +2006,14 @@ public final class Adequacy {
                 BranchEvidence absent = whyNoArms(name, prepared.value().writesItsOwnBody(behavior),
                         bodiesRead, arms, arrives, instrumented, observed);
                 if (absent != null) {
-                    out.put(behavior.name(), absent);
-                    continue;
+                    return absent;
                 }
                 Set<Integer> covered = new LinkedHashSet<>(lit);
                 covered.retainAll(arms.stream()
                         .map(souther.compiler.coverage.CoverageSites.Site::index).toList());
-                out.put(behavior.name(), BranchEvidence.measured(behavior.name(), arms, covered,
-                        arrives, rowsBehind(observed)));
-            }
-            return Answer.of(Ordered.map(out));
+                return BranchEvidence.measured(behavior.name(), arms, covered,
+                        arrives, rowsBehind(observed));
+            });
         }
 
         /**

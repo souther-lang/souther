@@ -25,9 +25,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * no number that says what it went without. And the reading of what the model divides the behavior
  * into is never asked for, because the measure that would ask has already answered.
  *
- * <p>Read as one, they were: the two measures that read a boundary left the behavior out of their
- * maps, one reader of that stopped the report and one read it as a measure nobody asked for — so a
- * behavior nothing could be established about was held to no bar at all (issue #1044).
+ * <p>Read as one they are not distinguishable: a behavior left out of a measure's map reads to one
+ * reader as this compiler disagreeing with itself and to another as a measure nobody asked for, and
+ * a measure nobody asked for goes without nothing — so a behavior nothing could be established
+ * about is held to no bar at all and says nothing about it.
  */
 class ABehaviorWithNoBoundaryIsMeasuredAsOneNobodyCouldMeasureTest {
 
@@ -144,14 +145,25 @@ class ABehaviorWithNoBoundaryIsMeasuredAsOneNobodyCouldMeasureTest {
      * <p>Which is why the positions are a measurement. Both come out with no case counted anywhere,
      * and only one of them can say how many places there were to count at: a {@code >->} takes what
      * its first stage takes, and that is the boundary that did not work out.
+     *
+     * <p><b>Two states and not three.</b> The positions of a declared behavior are read off the
+     * declaration and nothing about them fell short — what could not be read is the cases at each
+     * of them, which each position answers for itself. A measurement saying the list itself was
+     * weakened would be a shortfall in a thing that has none, and the two states this measure
+     * exists to tell apart would be three.
      */
     @Test
     void thePositionsAreKnownOnlyWhereTheDeclarationWritesThem() {
         Map<String, Adequacy.SignatureEvidence> witnesses =
                 measured().db().ask(new Adequacy.Witnesses("probe.unresolved")).value();
 
-        assertEquals(1, witnesses.get("issue").positions().size(),
+        assertInstanceOf(Measurement.Complete.class, witnesses.get("issue").inputs(),
                 "`issue` writes one parameter, whatever its type resolved to");
+        assertEquals(1, witnesses.get("issue").positions().size());
+        assertEquals(BoundaryForMeasurement.NotDerived.BEHAVIOR_BOUNDARY_NOT_DERIVED,
+                witnesses.get("issue").positions().get(0).cases().why(),
+                "and the cases at it are what could not be read");
+
         assertInstanceOf(Measurement.FailedToMeasure.class, witnesses.get("whole").inputs(),
                 "a composition's positions are its first stage's, and that is what was not read");
     }
@@ -241,7 +253,8 @@ class ABehaviorWithNoBoundaryIsMeasuredAsOneNobodyCouldMeasureTest {
                 () -> "and not the state of a behavior nobody wrote a row for:\n" + text);
     }
 
-    /** And no measure the bar rests on was made, so the verdict is undetermined. */
+    /** And no measure the bar rests on could be finished, so the verdict is undetermined. Not a
+     *  build that asked for nothing: every one of them was asked for and started. */
     @Test
     void theVerdictIsUndetermined() {
         assertEquals(AdequacyReport.AdequacyStatus.UNDETERMINED,

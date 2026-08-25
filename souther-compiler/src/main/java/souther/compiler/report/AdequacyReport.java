@@ -672,8 +672,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 // Not a word for whatever is left. This measure carries one of the four reason
                 // types above and nothing else, so a fifth arriving here is a reason nobody decided
                 // a word for — and given the word of one of the others it would be printed as a
-                // state it is not, which is what `no_rows` was doing for every reason added after
-                // it was written (issue #1044).
+                // state it is not. A word standing in for every reason added after it was written
+                // is the same defect as a key standing in for every way a measure can have no
+                // answer, one surface further out.
+                //
+                // A throw and not exhaustiveness the compiler checks. What is switched on is a
+                // `MeasureReason`, which is a plain interface because two of the reasons here
+                // belong to no measure in particular — nobody asked is one fact about the run, and
+                // a boundary that could not be worked out is one fact about the behavior, each
+                // read by several measures. Sealing a reason type per measure would make those
+                // name every measure that reads them, which is the dependency the other way round.
+                // Worth revisiting only if the reasons stop being shared.
                 default -> throw new IllegalStateException(
                         "the signature measure has no word for " + counted.reason());
             };

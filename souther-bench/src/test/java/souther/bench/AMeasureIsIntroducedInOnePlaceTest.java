@@ -110,11 +110,11 @@ class AMeasureIsIntroducedInOnePlaceTest {
             // parameter to it — five factories and one introduction, which is what keeps them
             // saying the same thing.
             Map.entry("souther.compiler.query.BoundaryForMeasurement#failed(Ljava/lang/String;)Lsouther/compiler/query/Measurement;", 1),
-            // The positions of such a behavior, where its declaration writes them. What the
-            // parameters are is known and no case of any of them was read, which is neither of the
-            // two the factory above chooses between.
-            Map.entry("souther.compiler.query.Adequacy$SignatureEvidence#boundaryNotDerived(Lsouther/compiler/ast/Hir$BehaviorDef;)Lsouther/compiler/query/Adequacy$SignatureEvidence;", 1),
-            // And the positions of a signature that was read, which is every one of them.
+            // And the positions of a signature, which are its own measure: known where something
+            // wrote them down, whether that is the boundary or the declaration the boundary was to
+            // be built from, and unknown where a composition takes what a stage nobody could work
+            // out takes. Two states and one place that chooses between them — the cases at each
+            // position are that position's own answer and never this one's.
             Map.entry("souther.compiler.query.Adequacy$SignatureEvidence#at(Ljava/util/List;)Lsouther/compiler/query/Measure;", 1)));
 
     @Test
