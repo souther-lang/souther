@@ -40,8 +40,11 @@ public sealed interface GenerationOutcome {
     /**
      * A strategy applies, and it composed nothing.
      *
-     * <p>Never a claim that nothing can be written. What the attempt established is carried whole, and
-     * saying more than it is the thing this type exists to prevent.
+     * <p>And nothing more than that. Whether a row can be written at all is what the reasons carried
+     * here answer — some of them say the model leaves no value there and a reader may act on it,
+     * most of them say this compiler fell short and a reader may not — so the attempt is carried
+     * whole and this arm claims neither. Read as always meaning the second, a run that had settled
+     * the question would be printed under a sentence taking it back.
      *
      * <p><b>All of what was tried, and not the weakest of it.</b> An arm is looked for at every
      * combination claiming it, and those come to different things — one the model refuses, one the

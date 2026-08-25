@@ -26,6 +26,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.SequencedMap;
 import java.util.Set;
 
 /**
@@ -88,12 +89,36 @@ public final class Generator {
      */
     private static final int MOST_RUNS_PER_INTERPRETATION = 3;
 
-    /** The behavior a row would be written for: what its inputs are called, what they are, and where
-     * the model divides them. */
-    public record Subject(BehaviorInputs inputs, List<Axis> axes, HeldCounts held) {
+    /**
+     * The behavior a row would be written for: what it is called, what its inputs are called, what
+     * they are, and where the model divides them.
+     *
+     * <p><b>Named here rather than read back off a position.</b> Which behavior this is about is a
+     * fact about the subject and holds whether or not the model divides any of its positions —
+     * while an axis carries the name only because a report names axes across behaviors. Taken from
+     * the first axis, a run with no divided position had nowhere to read it, and every sentence
+     * this generation says about the behavior as a whole was reachable only through a position.
+     *
+     * @param behavior what the behavior is called, which every axis of it agrees with
+     */
+    public record Subject(String behavior, BehaviorInputs inputs, List<Axis> axes,
+                          HeldCounts held) {
 
         public Subject {
             axes = List.copyOf(axes);
+            if (behavior == null || behavior.isEmpty()) {
+                throw new IllegalArgumentException("a row is written for a behavior with a name");
+            }
+            // An axis of another behavior, which is a subject assembled from two measurements. The
+            // name would then be one of two answers rather than the subject's, and whichever
+            // sentence read it would be right about one of them.
+            for (Axis axis : axes) {
+                if (!axis.id().behavior().equals(behavior)) {
+                    throw new IllegalArgumentException(
+                            "an axis of " + axis.id().behavior() + " in the subject of " + behavior
+                                    + ": " + axis.id());
+                }
+            }
         }
 
         /**
@@ -127,6 +152,28 @@ public final class Generator {
 
         public Symbols symbols() {
             return inputs.symbols();
+        }
+
+        /**
+         * Whether the model divides this position into a class spelled this way.
+         *
+         * <p>The one place the question is answered. A reader working it out from a partition's
+         * axes beside this one is a second reading of what a search's own universe is, and the two
+         * agree until either moves — which is how a case of an input came to be told there was no
+         * axis at its position by one reading while the search had classes there under the other.
+         */
+        public boolean divides(ClassOwed owed) {
+            for (Axis axis : axes) {
+                if (!axis.id().equals(owed.at())) {
+                    continue;
+                }
+                for (PartitionClass cls : axis.classes()) {
+                    if (cls.id().equals(owed.classId())) {
+                        return true;
+                    }
+                }
+            }
+            return false;
         }
     }
 
@@ -401,14 +448,20 @@ public final class Generator {
              */
             NO_CERTIFIED_WITNESS,
             /**
-             * A strategy that takes this class produced neither a row nor a reason for it.
+             * The walk ran to the end of what it had and put no candidate forward at all.
              *
-             * <p>Which is this compiler failing to say, and not something established about the
-             * class. Named rather than guessed at: the alternative is to write down whichever cause
-             * seemed likely when the branch was added, and a reason read off an empty result outlives
-             * whatever made it plausible.
+             * <p>Nothing was built, so nothing was refused, and nothing stopped it: what it had to
+             * offer was nothing. A fact about what this compiler can compose here, like
+             * {@link #NOTHING_COMPOSES_ONE} and unlike the two words about the model — another
+             * reading of the same position may well offer one.
+             *
+             * <p>It used to be spelled as no reason having been recorded, which was a confession
+             * this compiler had failed to say why. The confession was real and belonged somewhere
+             * else: a class or an arm the run never answered for. That absence cannot be built now,
+             * and what is left here is a walk that ran and came back empty — which is a thing that
+             * happened rather than a thing nobody wrote down.
              */
-            NO_REASON_RECORDED;
+            NO_CANDIDATE_WAS_OFFERED;
 
             /**
              * Whether this reason proves there is nothing to find, which one of them does.
@@ -432,7 +485,7 @@ public final class Generator {
                          NO_CERTIFIED_WITNESS, THE_GROUP_WAS_NOT_OFFERED,
                          THE_POSITION_WAS_WITHHELD, THE_ROWS_WERE_NOT_READ,
                          THE_WAY_IN_PLACES_AT_NO_CLASS,
-                         NO_REASON_RECORDED -> false;
+                         NO_CANDIDATE_WAS_OFFERED -> false;
                 };
             }
         }
@@ -462,65 +515,24 @@ public final class Generator {
         }
     }
 
+    /**
+     * What a generation with nothing owed came to.
+     *
+     * <p>The rows offered at a behavior's boundaries are this: composed for points, which nobody is
+     * asked about and nothing keeps a list of. What a run against a plan comes to is
+     * {@link FillResult}, and holding both in one shape meant a result that had dropped its
+     * obligations and one that never had any were the same value.
+     */
     public record GenerationResult(List<GeneratedRow> rows, List<UnresolvedCombination> unresolved,
-                                   List<GenerationReason> reasons, List<ClassAttempt> classes,
-                                   List<ArmAttempt> arms) {
+                                   List<GenerationReason> reasons) {
 
         public static final GenerationResult NONE =
-                new GenerationResult(List.of(), List.of(), List.of(), List.of(), List.of());
-
-        public GenerationResult(List<GeneratedRow> rows, List<UnresolvedCombination> unresolved,
-                                List<GenerationReason> reasons) {
-            this(rows, unresolved, reasons, List.of(), List.of());
-        }
+                new GenerationResult(List.of(), List.of(), List.of());
 
         public GenerationResult {
             rows = List.copyOf(rows);
             unresolved = List.copyOf(unresolved);
             reasons = List.copyOf(reasons);
-            classes = List.copyOf(classes);
-            arms = List.copyOf(arms);
-        }
-
-        /**
-         * What composing a row that takes {@code probe} came to, or null where no combination this
-         * run took claims it.
-         *
-         * <p>One entry per arm the run was asked about, made where the search ends and read here.
-         * A row through the arm is what it is owed and is the answer whatever the combinations
-         * beside it came to; where there is none, what every one of them came to is carried, the
-         * search's budget and the model's own refusal being different news.
-         *
-         * <p>Null is an answer and not a failure, and it is one thing: no combination of the body's
-         * own decisions claims this arm, so nothing here composes an input for it. An arm the
-         * search stopped short of says so in its own entry — read off an absent one, that arm was
-         * reported as one the body cannot reach, which is a fact about the model told on the
-         * strength of a limit (issue #967).
-         */
-        public ArmAttempt armAt(int probe) {
-            for (ArmAttempt each : arms) {
-                if (each.probe() == probe) {
-                    return each;
-                }
-            }
-            return null;
-        }
-
-        /**
-         * What composing a row for one class came to, or null where this run was not asked about it.
-         *
-         * <p>Asked by identity — the position's own name and the class's own id — so that a finding
-         * about a class and the attempt made for it are two readings of one thing. Matched on the
-         * words a report writes instead, a class and the row offered for it were joined by a label
-         * that two positions of one type spell the same way.
-         */
-        public ClassAttempt attemptAt(AxisId at, String classId) {
-            for (ClassAttempt each : classes) {
-                if (each.at().equals(at) && each.classId().equals(classId)) {
-                    return each;
-                }
-            }
-            return null;
         }
 
         /**
@@ -533,65 +545,6 @@ public final class Generator {
          */
         public boolean isEmpty() {
             return rows.isEmpty() && unresolved.isEmpty() && reasons.isEmpty();
-        }
-    }
-
-    /**
-     * What composing a row for one of the body's combinations came to, at one arm that row claims.
-     *
-     * <p>Per arm and keyed by the arm, because an arm is what a finding is about while a
-     * combination is what a search is asked for. One row claims several arms — a combination is
-     * what the body settles together, and taking it is taking a way through each of the forks it
-     * reads — so the row that answers a finding about one of them is found by that arm's own
-     * number and not by reading the combination's name.
-     *
-     * <p>The number the plan gave the arm ({@code ControlPointId.ArmOccurrence#probe}), which is
-     * the number the site carries ({@code CoverageSites.Site#index}). One identity, so a finding
-     * and the attempt made for it are two readings of one arm.
-     */
-    public sealed interface ArmAttempt {
-
-        /** Which arm, by the number the plan gave it. */
-        int probe();
-
-        /** A row composed for a combination that takes this arm. */
-        record Built(int probe, GeneratedRow row) implements ArmAttempt {}
-
-        /**
-         * Nothing was tried, because the reading of the body has no way into this arm to try.
-         *
-         * <p>Which is two pieces of news and the reading says which: no run reaches the arm at all,
-         * or this compiler cannot state what steers a row there. Neither is a search that failed,
-         * and carrying either as one would tell a reader a value was looked for.
-         */
-        record NoWayIn(int probe, souther.compiler.reading.PathAccess access)
-                implements ArmAttempt {
-
-            public NoWayIn {
-                if (access instanceof souther.compiler.reading.PathAccess.Ways) {
-                    throw new IllegalArgumentException(
-                            "an arm with ways into it is one this search had somewhere to look");
-                }
-            }
-        }
-
-        /**
-         * No row came of the combinations that would have taken it, and what each came to.
-         *
-         * <p>All of them, because they are not one fact. One combination stopping at the search's
-         * budget and another the model's own rules refuse are different news — the first says a row
-         * may still be writable and the second says the model settles it — and the arm is answered
-         * by the whole of what was tried rather than by whichever was walked first.
-         */
-        record Unresolved(int probe, List<UnresolvedCombination> why) implements ArmAttempt {
-
-            public Unresolved {
-                why = List.copyOf(why);
-                if (why.isEmpty()) {
-                    throw new IllegalArgumentException(
-                            "an arm nothing was tried at is one with no way into it");
-                }
-            }
         }
     }
 
@@ -645,7 +598,7 @@ public final class Generator {
      * left the two joined by whatever a reader could match — the words in a row's name — and a row
      * is named for what it was composed for rather than for everything it turns out to settle.
      */
-    public sealed interface ClassAttempt {
+    private sealed interface ClassAttempt {
 
         /** The position, by the name every reading of it uses. */
         AxisId at();
@@ -796,11 +749,12 @@ public final class Generator {
      * nothing consults a clock or a hash order — the same model and the same rows produce the same
      * rows twice. Nothing is asked about the body here, so no arm is looked for.
      */
-    public static GenerationResult fill(Subject subject, List<ObservedRow> existing,
+    public static FillResult fill(Subject subject, List<ObservedRow> existing,
                                         CandidateCheck check,
                                         AdequacyPolicy.OfTheGeneration budget) {
         return fill(subject, existing, check,
-                new souther.compiler.reading.CoverageRead.Read(List.of(), Map.of()), budget);
+                new souther.compiler.reading.CoverageRead.Read(List.of(),
+                        new LinkedHashMap<>()), budget);
     }
 
     /**
@@ -812,7 +766,7 @@ public final class Generator {
      * is owed is one row, and a budget the arms spent first left a class the report names with
      * nothing offered for it.
      */
-    public static GenerationResult fill(Subject subject, List<ObservedRow> existing,
+    public static FillResult fill(Subject subject, List<ObservedRow> existing,
                                         CandidateCheck check,
                                         souther.compiler.reading.CoverageRead.Read read,
                                         AdequacyPolicy.OfTheGeneration budget) {
@@ -830,12 +784,46 @@ public final class Generator {
      * <p>A row that missed is not offered and the arm stays unanswered. It is not evidence that the
      * arm is unreachable: what was shown is that these candidates were not witnesses (ADR-0091).
      */
-    public static GenerationResult fill(Subject subject, List<ObservedRow> existing,
+    public static FillResult fill(Subject subject, List<ObservedRow> existing,
                                         CandidateCheck check,
                                         souther.compiler.reading.CoverageRead.Read read,
                                         Trial trial, AdequacyPolicy.OfTheGeneration budget) {
-        return fill(subject, existing, check, read, trial, List.of(),
-                everyClassNoRowSitsIn(subject, existing), read.arms().keySet(), budget);
+        // Both in the order their own walks reached them: the positions the search fixes them in,
+        // and the numbers the plan gave the arms. Each is what that walk means by its order.
+        return fill(planOver(subject, everyClassNoRowSitsIn(subject, existing),
+                        List.copyOf(read.arms().keySet())),
+                existing, check, read, trial, List.of(), budget);
+    }
+
+    /**
+     * A plan over what a caller gathered, in the order they gathered it.
+     *
+     * <p>Ordered, because the plan is. Which order it is belongs to whoever gathered the
+     * obligations: a walk that gathers each thing once knows what its own order means, and a set
+     * handed over here would leave that to whatever collection the caller happened to hold — so
+     * this takes the answer rather than the collection it was kept in.
+     */
+    public static GenerationPlan planOver(Subject subject, List<ClassOwed> classes,
+                                          List<Integer> arms) {
+        return new GenerationPlan(subject, classes, arms.stream().map(ArmOwed::new).toList());
+    }
+
+    /**
+     * The same, for a caller that gathered its obligations itself.
+     *
+     * <p>A test standing the search up on its own is the caller this is for. The plan is still what
+     * the search is asked with — there is no way in that does not carry one — and this is where the
+     * one such a caller holds is assembled.
+     */
+    public static FillResult fill(Subject subject, List<ObservedRow> existing,
+                                        CandidateCheck check,
+                                        souther.compiler.reading.CoverageRead.Read read,
+                                        Trial trial, List<Baseline> baselines,
+                                        List<ClassOwed> classesOwed,
+                                        List<Integer> armsOwed,
+                                        AdequacyPolicy.OfTheGeneration budget) {
+        return fill(planOver(subject, classesOwed, armsOwed), existing, check, read, trial,
+                baselines, budget);
     }
 
     /**
@@ -885,6 +873,16 @@ public final class Generator {
     public record ClassOwed(AxisId at, String classId) {}
 
     /**
+     * One arm of the body, which is the other thing a row can be owed for.
+     *
+     * <p>Named the way {@link ClassOwed} is rather than carried as the number the plan gave it. The
+     * two are the halves of what one run is asked for and are answered side by side; one of them
+     * spelled as a bare {@code int} put the obligations into two vocabularies, and anything holding
+     * both had to say which kind of thing a number was every time it read one.
+     */
+    public record ArmOwed(int probe) {}
+
+    /**
      * Every class of every position no row the author wrote sits in.
      *
      * <p><b>Not what a build asks for.</b> Which classes are owed a row is what the partition
@@ -900,8 +898,11 @@ public final class Generator {
      * one element under a line and one over it — and each of them is covered. Read as one class,
      * the rest would be asked for again, which is work the author has already done.
      */
-    public static Set<ClassOwed> everyClassNoRowSitsIn(Subject subject,
+    public static List<ClassOwed> everyClassNoRowSitsIn(Subject subject,
                                                        List<ObservedRow> existing) {
+        // Gathered once apiece and handed over in the order the walk reached them, which is the
+        // order the search fixes the positions in. The set is how "once apiece" is kept; what a
+        // caller is given is the order, because that is what the plan is asking for.
         Set<ClassOwed> out = new LinkedHashSet<>();
         for (Axis axis : ordered(subject)) {
             Set<String> covered = new LinkedHashSet<>();
@@ -917,7 +918,7 @@ public final class Generator {
                 }
             }
         }
-        return out;
+        return List.copyOf(out);
     }
 
     /**
@@ -929,19 +930,28 @@ public final class Generator {
      * stand, and a value the model already names is one a reader recognises — so the difference
      * between the row and what is already written is the class, and the class alone.
      */
-    public static GenerationResult fill(Subject subject, List<ObservedRow> existing,
+    public static FillResult fill(GenerationPlan plan, List<ObservedRow> existing,
                                         CandidateCheck check,
                                         souther.compiler.reading.CoverageRead.Read read,
                                         Trial trial, List<Baseline> baselines,
-                                        Set<ClassOwed> classesOwed,
-                                        Set<Integer> armsOwed,
                                         AdequacyPolicy.OfTheGeneration budget) {
+        Subject subject = plan.subject();
+        List<ClassOwed> classesOwed = plan.classesOwed();
+        List<Integer> armsOwed = plan.armsOwed().stream().map(ArmOwed::probe).toList();
         List<Axis> ordered = ordered(subject);
         // A position where some row's value could not be read is a position nothing is known about.
         // A row generated for a class there may be a row that is already written, and telling an
         // author to write one is worse than saying nothing: it is a specific piece of work that is
         // already done.
         List<GenerationReason> undecided = new ArrayList<>();
+        // The positions that were held back, kept so that the classes of one are answered for by
+        // name. A reason about the position says what happened to it; a class of it is a thing this
+        // run was asked for, and is owed an entry of its own saying it was never looked for.
+        Set<AxisId> withheld = new LinkedHashSet<>();
+        // And the positions the rules leave no room for anything at, kept for the same reason: a
+        // class of one is a thing this run was asked for, and what the rules leave there is an
+        // answer about the model rather than an absence.
+        Set<AxisId> leftNoRoom = new LinkedHashSet<>();
         List<Axis> axes = new ArrayList<>();
         for (Axis axis : ordered) {
             // A position inside a collection the rules leave no room in. No value stands there in
@@ -949,17 +959,22 @@ public final class Generator {
             // row would be one no row can be written for, including the ones that name a position
             // beside it and have nothing to do with this one.
             if (holdsNothing(subject, axis)) {
+                leftNoRoom.add(axis.id());
                 continue;
             }
             if (readEverywhere(axis, existing)) {
                 axes.add(axis);
             } else {
                 undecided.add(new GenerationReason.PositionWithheld(axis.id()));
+                withheld.add(axis.id());
             }
         }
-        if (axes.isEmpty()) {
-            return new GenerationResult(List.of(), List.of(), undecided);
-        }
+        // No return where nothing was kept. Nothing being divided is a fact about the classes, and
+        // the arms below do not read the classes for their answer: what it takes to arrive at an arm
+        // is what the reading of the body says, and that reading was made before this was called.
+        // Stopped here, an arm that reading had an answer for was left with no entry at all, and
+        // whoever read the result for one had nothing to go on but the absence.
+        //
         // Which class of which position is owed a row, handed in by whoever read the rows. The
         // search keeps no list of its own: a class is owed one where nothing sits in it, and what
         // sits where is what the partition measure reads off the rows — so a search working it out
@@ -983,9 +998,15 @@ public final class Generator {
         // fact about the module rather than about the class asking.
         List<ResolvedOrigin> origins = resolve(subject, axes, baselines, check);
 
-        List<GeneratedRow> rows = new ArrayList<>();
+        // The rows this run composes, each numbered where it is composed. The number is an
+        // identity and nothing reads it as a place: what says two obligations were answered by one
+        // line is that both entries name the same one.
+        SequencedMap<RowId, ComposedRow> composed = new LinkedHashMap<>();
         List<ClassAttempt> attempts = new ArrayList<>();
-        List<ArmAttempt> arms = new ArrayList<>();
+        // Which row answered which class. A row is a line in the file and the same line can answer
+        // several things, so what says a class was answered is the entry naming the row rather than
+        // anything written on the row itself.
+        Map<ClassOwed, RowId> answeredAt = new LinkedHashMap<>();
         List<UnresolvedCombination> unresolved = new ArrayList<>();
         List<GenerationReason> reasons = new ArrayList<>(undecided);
         // The classes first. What each is owed is one row, and the arms below are looked for among
@@ -1000,7 +1021,7 @@ public final class Generator {
         int classesLeft = 0;
         for (int i = 0; i < owed.size(); i++) {
             int[] at = owed.get(i);
-            if (rows.size() >= budget.rows()) {
+            if (composed.size() >= budget.rows()) {
                 classesLeft = owed.size() - i;
                 for (int cut = i; cut < owed.size(); cut++) {
                     Axis axis = axes.get(owed.get(cut)[0]);
@@ -1016,7 +1037,14 @@ public final class Generator {
             ClassAttempt attempt = rowFor(subject, axes, at[0], at[1], origins, check);
             attempts.add(attempt);
             switch (attempt) {
-                case ClassAttempt.Built made -> rows.add(made.row());
+                case ClassAttempt.Built made -> {
+                    // Its own row, whatever the ones beside it are written as. Two classes can be
+                    // answered by rows written the same way and are still two rows the search
+                    // composed one apiece — each is offered for its own class, and merging them
+                    // would take one of the two classes its answer.
+                    answeredAt.put(new ClassOwed(attempt.at(), attempt.classId()),
+                            compose(composed, made.row().inputs()));
+                }
                 case ClassAttempt.Unresolved none -> unresolved.add(none.why());
             }
         }
@@ -1027,7 +1055,7 @@ public final class Generator {
         // in first — which is a preference between two answers and not one of them standing in for
         // the other. An arm no combination is over is answered from its way in all the same.
         Set<Integer> left = new LinkedHashSet<>(armsOwed);
-        Map<Integer, GeneratedRow> built = new LinkedHashMap<>();
+        Map<Integer, RowId> built = new LinkedHashMap<>();
         Map<Integer, List<UnresolvedCombination>> failed = new LinkedHashMap<>();
         // Arms the row budget ran out before, which is what the search stopping looks like from an
         // arm. Told apart from an arm with nowhere to look, because raising the budget changes one
@@ -1041,7 +1069,7 @@ public final class Generator {
         // The combinations worth looking in, built once. A group builds a cell where it is asked
         // for one, so a walk per arm builds every cell of it again for an answer that does not
         // depend on which arm is asking.
-        List<WhereToLook>cells = placesFor(armsOwed, offered);
+        List<WhereToLook>cells = placesFor(new LinkedHashSet<>(armsOwed), offered);
         Set<Integer> notOffered = new LinkedHashSet<>();
         // Which arms each held-back group could have been searched at, kept per group so that the
         // summary at the end can be counted off the entries rather than worked out a second way.
@@ -1062,7 +1090,7 @@ public final class Generator {
                 continue;
             }
             for (WhereToLook place : whereToLookFor(probe, read, cells, axes)) {
-                if (rows.size() >= budget.rows()) {
+                if (composed.size() >= budget.rows()) {
                     cutOff.add(probe);
                     break;
                 }
@@ -1109,22 +1137,10 @@ public final class Generator {
                         unconfirmed = true;
                     }
                 }
-                // What the row is offered for, said here and not read off what the search happened
-                // to be called with. A cell searched once answers every arm looked for in it, and
-                // the row it composed carries the purpose of whichever arm asked first — so a row
-                // named by that would be offered for one arm and handed to another.
-                List<Purpose> purposes = new ArrayList<>();
-                purposes.add(new Purpose.ForAnArm(probe));
-                also.forEach(each -> purposes.add(new Purpose.ForAnArm(each)));
-                GeneratedRow offering = new GeneratedRow(purposes, row.inputs());
-                GeneratedRow kept = keep(rows, offering);
-                if (kept != offering) {
-                    // It merged into a row already offered, so an arm answered by that one is
-                    // answered by the merged one. The entries carry the row a reader is shown, and
-                    // two of them for one set of values would be the same line under two names.
-                    List<String> written = writtenAs(kept);
-                    built.replaceAll((_, was) -> writtenAs(was).equals(written) ? kept : was);
-                }
+                // The row already offering these values where there is one, so that a class's row
+                // an arm also goes through is one line and not two. What each of them is offered for
+                // is the entries naming it, so nothing is written on the row here.
+                RowId kept = keep(composed, row.inputs());
                 built.put(probe, kept);
                 left.remove(probe);
                 also.forEach(each -> {
@@ -1157,23 +1173,25 @@ public final class Generator {
         // cut off carries that beside whatever was tried before it: a place the model refuses says
         // nothing about the ones nobody got to, and an arm answered by the first alone was reported
         // as settled by the model on the strength of a search that stopped.
+        Map<ArmOwed, ArmDisposition> armAnswers = new LinkedHashMap<>();
         for (int probe : armsOwed) {
-            GeneratedRow row = built.get(probe);
+            RowId row = built.get(probe);
             List<UnresolvedCombination> why = new ArrayList<>(
                     failed.getOrDefault(probe, List.of()));
+            ArmOwed asked = new ArmOwed(probe);
             if (row != null) {
-                arms.add(new ArmAttempt.Built(probe, row));
+                armAnswers.put(asked, new ArmDisposition.Built(row));
             } else if (cutOff.contains(probe)) {
                 why.add(new UnresolvedCombination(List.of(),
                         UnresolvedCombination.Reason.SEARCH_LIMIT));
-                arms.add(new ArmAttempt.Unresolved(probe, why));
+                armAnswers.put(asked, new ArmDisposition.Unresolved(why));
             } else if (!why.isEmpty()) {
-                arms.add(new ArmAttempt.Unresolved(probe, why));
+                armAnswers.put(asked, new ArmDisposition.Unresolved(why));
             } else {
                 // Nothing was tried, and the reading says why: no run reaches the arm, or this
                 // compiler cannot state what steers a row there. Either way it is an answer about
                 // the arm and not an absence for a reader to make one of.
-                arms.add(new ArmAttempt.NoWayIn(probe, read.armAt(probe)));
+                armAnswers.put(asked, new ArmDisposition.NoWayIn(read.armAt(probe)));
             }
         }
         // Said once, at the end, and about both searches. One that ran out on the classes stopped
@@ -1183,7 +1201,7 @@ public final class Generator {
         // combination claiming it was refused is not one the limit cut off, and counting it here
         // told a reader to raise a limit that would change nothing.
         if (classesLeft + cutOff.size() > 0) {
-            reasons.add(new GenerationReason.SearchLimit(axes.get(0).id().behavior(),
+            reasons.add(new GenerationReason.SearchLimit(subject.behavior(),
                     classesLeft + cutOff.size()));
         }
         // And the groups the limit held back that this run was asked about an arm behind. What it
@@ -1203,13 +1221,43 @@ public final class Generator {
             }
         }
         if (heldBackAndAskedAbout > 0) {
-            reasons.add(new GenerationReason.GroupsNotOffered(axes.get(0).id().behavior(),
+            reasons.add(new GenerationReason.GroupsNotOffered(subject.behavior(),
                     heldBackAndAskedAbout));
         }
         if (unconfirmed) {
-            reasons.add(new GenerationReason.RowsNotConfirmed(axes.get(0).id().behavior()));
+            reasons.add(new GenerationReason.RowsNotConfirmed(subject.behavior()));
         }
-        return new GenerationResult(rows, unresolved, reasons, attempts, arms);
+        // One entry per class the plan named, which the walk above wrote for the ones it kept a
+        // position for. A class of a position that was held back was never a thing to look for, and
+        // it says that here rather than being left out — a class the plan named and nothing
+        // answered for is what a reader downstream had to invent a sentence about.
+        Map<ClassOwed, ClassDisposition> classAnswers = new LinkedHashMap<>();
+        for (ClassAttempt attempt : attempts) {
+            ClassOwed key = new ClassOwed(attempt.at(), attempt.classId());
+            classAnswers.put(key, switch (attempt) {
+                case ClassAttempt.Built _ -> new ClassDisposition.Built(answeredAt.get(key));
+                case ClassAttempt.Unresolved none -> new ClassDisposition.Unresolved(none.why());
+            });
+        }
+        for (ClassOwed asked : classesOwed) {
+            if (classAnswers.containsKey(asked)) {
+                continue;
+            }
+            if (withheld.contains(asked.at())) {
+                classAnswers.put(asked, new ClassDisposition.Unresolved(
+                        new UnresolvedCombination(List.of(labelOf(subject, asked)),
+                                UnresolvedCombination.Reason.THE_POSITION_WAS_WITHHELD)));
+            } else if (leftNoRoom.contains(asked.at())) {
+                // The position is inside a collection the rules cap at none, so no value stands
+                // there in any row this model admits. Which is what the model says rather than what
+                // this search fell short of, and a reader may act on it.
+                classAnswers.put(asked, new ClassDisposition.Unresolved(
+                        new UnresolvedCombination(List.of(labelOf(subject, asked)),
+                                UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE)));
+            }
+        }
+        return new FillResult(plan, composed, unresolved, reasons,
+                new Discharge(classAnswers, armAnswers));
     }
 
     /**
@@ -1362,10 +1410,10 @@ public final class Generator {
      * ways in agree. Written down twice, an author is handed the same line twice and told it
      * answers two different things.
      */
-    private static GeneratedRow keep(List<GeneratedRow> rows, GeneratedRow row) {
-        List<String> written = writtenAs(row);
-        for (int i = 0; i < rows.size(); i++) {
-            GeneratedRow already = rows.get(i);
+    private static RowId keep(SequencedMap<RowId, ComposedRow> composed,
+                              List<FixtureTemplate> inputs) {
+        List<String> written = inputs.stream().map(FixtureTemplate::text).toList();
+        for (Map.Entry<RowId, ComposedRow> already : composed.entrySet()) {
             // Whatever the row beside it was composed for, and not the arms alone. One set of
             // values is one line in the file: a class's row and an arm's row of the same values are
             // one row that fills the class and goes through the arm, and written down twice the
@@ -1374,17 +1422,26 @@ public final class Generator {
             // By what the rows are written as, which is what "the same line" means and is a string
             // to compare. A template also carries the expression it stands for, and holding two
             // rows to that walks two trees for an answer the text already gave.
-            if (!writtenAs(already).equals(written)) {
-                continue;
+            if (already.getValue().writtenAs().equals(written)) {
+                return already.getKey();
             }
-            List<Purpose> both = new ArrayList<>(already.purposes());
-            row.purposes().stream().filter(each -> !both.contains(each)).forEach(both::add);
-            GeneratedRow merged = new GeneratedRow(both, already.inputs());
-            rows.set(i, merged);
-            return merged;
         }
-        rows.add(row);
-        return row;
+        return compose(composed, inputs);
+    }
+
+    /**
+     * A row of these values, numbered where it is composed.
+     *
+     * <p>The number is minted here and read nowhere as a place. What the identity is for is saying
+     * that two entries name one line, and an identity that meant "the nth row offered" would move
+     * with whatever the offer was ordered by — which is the arrangement a row's own account of what
+     * it was composed for came apart under.
+     */
+    private static RowId compose(SequencedMap<RowId, ComposedRow> composed,
+                                 List<FixtureTemplate> inputs) {
+        RowId id = new RowId(composed.size());
+        composed.put(id, new ComposedRow(inputs));
+        return id;
     }
 
     /** What a row is written as, which is what tells one line of a file from another. */
@@ -1498,7 +1555,7 @@ public final class Generator {
                     UnresolvedCombination.Reason.SEARCH_LIMIT);
             case Completeness.Nothing.LOOKED_EVERYWHERE -> last == null
                     ? new UnresolvedCombination(List.of(label),
-                            UnresolvedCombination.Reason.NO_REASON_RECORDED)
+                            UnresolvedCombination.Reason.NO_CANDIDATE_WAS_OFFERED)
                     : new UnresolvedCombination(List.of(label), last.reason(), last.detail(),
                             last.said());
         };
@@ -2452,6 +2509,28 @@ public final class Generator {
     }
 
     /**
+     * The same, for a class named the way an obligation names it.
+     *
+     * <p>What a report writes beside the row, worked out where the classes are rather than kept
+     * beside the obligation. A label copied into the obligation would be a second spelling of the
+     * class, free to disagree with the axis the day either moved.
+     */
+    static String labelOf(Subject subject, ClassOwed owed) {
+        for (Axis axis : subject.axes()) {
+            if (!axis.id().equals(owed.at())) {
+                continue;
+            }
+            for (PartitionClass cls : axis.classes()) {
+                if (cls.id().equals(owed.classId())) {
+                    return axis.path() + "=" + cls.label();
+                }
+            }
+        }
+        throw new IllegalStateException(
+                "a row was owed for a class the subject does not divide: " + owed);
+    }
+
+    /**
      * The positions the cell is about, at the classes the row came to hold.
      *
      * <p>The cell says which classes a position may hold and the row holds one of them, so the name
@@ -2676,7 +2755,8 @@ public final class Generator {
                     // leaving no assignment at all. Named rather than guessed at, the same way
                     // every other empty result here is.
                     yield new Witness.Exhausted(named,
-                            UnresolvedCombination.Reason.NO_REASON_RECORDED, null, Optional.empty());
+                            UnresolvedCombination.Reason.NO_CANDIDATE_WAS_OFFERED, null,
+                            Optional.empty());
                 }
             };
         }

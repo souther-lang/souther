@@ -59,6 +59,10 @@ class CompileExampleGenerateTest {
         return all;
     }
 
+    private static List<String> inputs(souther.compiler.partition.FillResult result) {
+        return inputs(result.rows());
+    }
+
     private static List<String> inputs(Generator.GenerationResult result) {
         return inputs(result.rows());
     }
@@ -72,7 +76,7 @@ class CompileExampleGenerateTest {
 
     @Test
     void whatTheWrittenRowAlreadyCoversIsNotGeneratedAgain() {
-        Generator.GenerationResult filled = generated(TRIP).get("submit").composed();
+        souther.compiler.partition.FillResult filled = generated(TRIP).get("submit").composed();
 
         // One row per class the written row is not in, and no more. The written row is
         // `Domestic, urgent = true`, so what is left is `Overseas` at one position and `false` at
@@ -114,7 +118,7 @@ class CompileExampleGenerateTest {
                     Accepted { at = "now" }
                 }
                 """;
-        Generator.GenerationResult filled = generated(correlated).get("submit").composed();
+        souther.compiler.partition.FillResult filled = generated(correlated).get("submit").composed();
 
         assertTrue(inputs(filled).stream().noneMatch(row -> row.contains("Amount(101)")),
                 "a value the model refuses is not written into a row: " + inputs(filled));
@@ -541,7 +545,7 @@ class CompileExampleGenerateTest {
                 let take (request, flag) = Ok { n = 0 }
                 """;
 
-        Generator.GenerationResult filled = generated(source).get("take").composed();
+        souther.compiler.partition.FillResult filled = generated(source).get("take").composed();
 
         assertEquals(List.of(), filled.unresolved(),
                 () -> "the value between the edges builds: " + filled.unresolved());
@@ -774,7 +778,7 @@ class CompileExampleGenerateTest {
 
     @Test
     void aRowForAClassIsWrittenAgainstTheValueTheModuleStates() {
-        Generator.GenerationResult filled = generated(AGAINST_A_LET).get("calc").composed();
+        souther.compiler.partition.FillResult filled = generated(AGAINST_A_LET).get("calc").composed();
 
         assertEquals(List.of("Cond { ...none, f = C }", "Cond { ...none, g = G2 }"),
                 inputs(filled));

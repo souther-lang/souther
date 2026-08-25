@@ -1181,7 +1181,7 @@ public final class Adequacy {
                     new souther.compiler.partition.BehaviorInputs(parameters, sig.inputTypes(),
                             symbols, policy);
             return Answer.of(Coverages.searched(measured, inputs,
-                    probing(divided, sig, symbols, policy, parameters,
+                    probing(spec.name(), divided, sig, symbols, policy, parameters,
                             constructing(db, name, prepared.value().forExamples(), symbols),
                             domain),
                     domain.quantities(symbols), divided.reaching()));
@@ -1196,13 +1196,14 @@ public final class Adequacy {
          * are missing" into "the edge can be written".
          */
         private static Coverages.Probe probing(
+                String behavior,
                 souther.compiler.partition.Partitions.Partitioning partitioning, Sig sig,
                 Symbols symbols, souther.compiler.check.ReadingPolicy policy,
                 List<String> parameters, FixtureReader.Construction building, InputDomain domain) {
             if (building == null) {
                 return null;
             }
-            Generator.Subject subject = new Generator.Subject(
+            Generator.Subject subject = new Generator.Subject(behavior,
                     new souther.compiler.partition.BehaviorInputs(parameters, sig.inputTypes(),
                             symbols, policy), partitioning.axes(),
                     souther.compiler.partition.HeldCounts.of(domain, symbols));
@@ -1435,50 +1436,6 @@ public final class Adequacy {
             return List.copyOf(out);
         }
 
-        /**
-         * A way to try to build a row at a boundary, or nothing where there is nothing to try against.
-         *
-         * <p>Nothing rather than a check that refuses nothing. A row built without the decoder is a row
-         * nobody has put through anything, and counting one as a witness would turn "the classes are
-         * missing" into "the edge can be written".
-         */
-        private static Coverages.Probe probing(
-                souther.compiler.partition.Partitions.Partitioning partitioning, Sig sig,
-                Symbols symbols, souther.compiler.check.ReadingPolicy policy,
-                List<String> parameters, FixtureReader.Construction building, InputDomain domain) {
-            if (building == null) {
-                return null;
-            }
-            Generator.Subject subject = new Generator.Subject(
-                    new souther.compiler.partition.BehaviorInputs(parameters, sig.inputTypes(),
-                            symbols, policy), partitioning.axes(), souther.compiler.partition.HeldCounts.of(domain, symbols));
-            Generator.CandidateCheck check =
-                    (at, candidate) -> built(building.build(sig.ins().get(at), candidate.value()));
-            return new Coverages.Probe() {
-
-                @Override
-                public Generator.BoundaryAttempt attempt(String label,
-                        java.util.function.Function<souther.compiler.inputs.NumericTerm,
-                                souther.compiler.check.Carrier> on,
-                        java.util.Map<souther.compiler.inputs.NumericTerm,
-                                souther.compiler.numeric.Place> fixing) {
-                    return built(() ->
-                            Generator.probeFixing(subject, label, on, fixing, check));
-                }
-
-                private Generator.BoundaryAttempt built(
-                        java.util.function.Supplier<Generator.BoundaryAttempt> attempt) {
-                    try {
-                        return attempt.get();
-                    } catch (LinkageError _) {
-                        // The generated classes would not link, so nothing can be built to find out
-                        // what a model admits. Nothing was tried, which is not the same as everything
-                        // tried being refused, and neither of them says the edge cannot be written.
-                        return null;
-                    }
-                }
-            };
-        }
     }
 
 
@@ -2283,12 +2240,9 @@ public final class Adequacy {
      * edge are different requests, asked with different flags, and a caller that merged them could not
      * take one without the other.
      */
-    public record Filling(Generator.GenerationResult composed,
+    public record Filling(souther.compiler.partition.FillResult composed,
                           Generator.GenerationResult boundaries,
                           List<GenerationDisposition> generation) {
-
-        public static final Filling NONE = new Filling(Generator.GenerationResult.NONE,
-                Generator.GenerationResult.NONE, List.of());
 
         public Filling {
             generation = List.copyOf(generation);
@@ -2380,19 +2334,24 @@ public final class Adequacy {
             }
             List<Finding> owed = findings == null ? List.of()
                     : findings.getOrDefault(behavior, List.of());
-            Generator.GenerationResult composed;
+            InputDomain domain = domainOf(readInputs, spec);
+            // What this run is asked for, settled before the search and before anything that can
+            // stop it. Every way out of the generation below holds this same list.
+            souther.compiler.partition.GenerationPlan asked = planFor(spec, sig, symbols,
+                    db.ask(new Front.Reading()).value(), divided, domain, owed,
+                    PartitionEvidence.answeredFor(partitions, prepared.value(), spec));
+            souther.compiler.partition.FillResult composed;
             try {
-                composed = rowsFor(spec, sig, symbols, db.ask(new Front.Reading()).value(),
+                composed = rowsFor(spec, sig, symbols, asked,
                         baselines(name, spec, sig,
                                 db.ask(new Bodies.ModuleDefinitions(name)).value(),
                                 prepared.value(), symbols),
-                        owed, divided, bodies.get(behavior), plan,
+                        divided, bodies.get(behavior), plan,
                         Rows.readingFor(byTarget, behavior),
                         constructing(db, name, prepared.value().forExamples(), symbols),
-                        domainOf(readInputs, spec),
+                        domain,
                         runningRowsOf(trialling(db, name, prepared.value().forExamples(), symbols),
                                 behavior, sig),
-                        PartitionEvidence.answeredFor(partitions, prepared.value(), spec),
                         levelOf(db).runsInstrumentedRows(),
                         db.ask(new Front.Adequacy()).value().generation());
             } catch (LinkageError _) {
@@ -2405,12 +2364,13 @@ public final class Adequacy {
                 // findings would take them out of a list that is meant to hold every one —
                 // which is the same defect the list was written against, arriving as control
                 // flow rather than as a value.
-                composed = new Generator.GenerationResult(List.of(), List.of(),
+                composed = souther.compiler.partition.FillResult.nothingWasLookedFor(asked,
+                        Generator.UnresolvedCombination.Reason.LINKAGE_FAILED,
                         List.of(new souther.compiler.partition.GenerationReason
                                 .LinkageFailed(behavior)));
             }
             return Answer.of(new Filling(composed, offered(behavior, edges),
-                    dispositions(owed, edges, partitions.get(behavior), composed, spec)));
+                    dispositions(owed, edges, composed, spec)));
         }
 
         /**
@@ -2435,8 +2395,7 @@ public final class Adequacy {
          */
         private static List<GenerationDisposition> dispositions(List<Finding> findings,
                                                       List<BorderAssessment> edges,
-                                                      PartitionEvidence partition,
-                                                      Generator.GenerationResult composed,
+                                                      souther.compiler.partition.FillResult composed,
                                                       Hir.SpecBehavior spec) {
             List<GenerationDisposition> out = new ArrayList<>();
             for (Finding finding : findings) {
@@ -2445,7 +2404,7 @@ public final class Adequacy {
                         : switch (finding.about()) {
                             case About.APointOfABorder(var point) -> atEdge(finding, point, edges);
                             case About.ACaseNoRowAppliesItTo(var input, var missing) ->
-                                    atCase(input, missing, partition, composed, spec);
+                                    atCase(input, missing, composed, spec);
                             case About.AClassNoRowIsIn(var missing) -> atClass(missing, composed);
                             case About.AnArmNoRowGoesThrough(var arm) -> atArm(arm, composed);
                             // The eight above, which is what `none` was not null for.
@@ -2476,32 +2435,34 @@ public final class Adequacy {
          * arm — which is an answer about the arm and never an absence. An arm no combination
          * claimed used to have no entry at all, and the sentence read off that absence said rows
          * are composed for classes and combinations and nothing takes this arm, of a body two of
-         * whose own classes walk straight into it (issue #1009).
+         * whose own classes walk straight into it.
+         *
+         * <p>There is no absence to read now. A fill is total over the plan it was asked with, and
+         * this finding is one of the arms that plan names — so the entry is there whatever the run
+         * did, including the runs that never looked at anything.
          */
         private static GenerationOutcome atArm(souther.compiler.coverage.CoverageSites.Site arm,
-                                               Generator.GenerationResult composed) {
-            return switch (composed.armAt(arm.index())) {
-                case Generator.ArmAttempt.Built built ->
-                        new GenerationOutcome.Generated(List.of(built.row()));
+                                               souther.compiler.partition.FillResult composed) {
+            Generator.ArmOwed owed = new Generator.ArmOwed(arm.index());
+            souther.compiler.partition.ArmDisposition answer = composed.discharge().at(owed);
+            if (answer == null) {
+                throw new IllegalStateException(
+                        "a finding names an arm this run was not asked about: " + arm.index());
+            }
+            return switch (answer) {
+                case souther.compiler.partition.ArmDisposition.Built built ->
+                        new GenerationOutcome.Generated(List.of(composed.rowFor(built.row())));
                 // What every place a row was looked for came to, all of it. They are not one fact
                 // and they do not order against each other: one the model refuses says the arm may
                 // be unreachable, one the search stopped at says nothing at all, and a reader
                 // handed whichever came first was handed the order the search happened to walk.
-                case Generator.ArmAttempt.Unresolved none ->
+                case souther.compiler.partition.ArmDisposition.Unresolved none ->
                         new GenerationOutcome.CannotGenerate(none.why());
-                case Generator.ArmAttempt.NoWayIn none -> nothingReaches(none.access());
-                // No attempt was recorded for this arm, which is not a search that reached it and
-                // stopped: a run that never composed anything — the classes would not link, no
-                // position was left to divide — records why in its own words, and this asks for
-                // them. The same question a class with no attempt asks, answered in the same place
-                // (issue #1009): a word of this reading's own beside it would be a second answer to
-                // one question, free to disagree with the first the day either moves.
-                case null -> new GenerationOutcome.CannotGenerate(
-                        new Generator.UnresolvedCombination(
-                                List.of(souther.compiler.report.ArmVocabulary.label(arm)),
-                                whyNothingWasTried(composed)));
+                case souther.compiler.partition.ArmDisposition.NoWayIn none ->
+                        nothingReaches(none.access());
             };
         }
+
 
         /**
          * What a reader is told about an arm nothing was composed for, from what the reading of the
@@ -2552,13 +2513,12 @@ public final class Adequacy {
          * would differ the first time either side of the search moved.
          */
         private static GenerationOutcome atClass(PartitionEvidence.AxisClass missing,
-                                                 Generator.GenerationResult composed) {
+                                                 souther.compiler.partition.FillResult composed) {
             // The spelling the search labels this class with, which is what the block prints beside
             // the rows. Written another way here, one class came out under two names — the
             // search's `c.f=C` and this one's `C at c.f` — and the block, which drops a line it has
             // already said, said the same fact twice because the two lines were not the same line.
-            return atClass(missing.axis().at(), missing.name(),
-                    missing.axis().path() + "=" + missing.name(), composed);
+            return atClass(missing.axis().at(), missing.name(), composed);
         }
 
         /**
@@ -2568,72 +2528,26 @@ public final class Adequacy {
          * and a class of a position are two findings about one class, and answering them from two
          * readings of one search is two answers that agree until either moves.
          *
-         * @param said how the finding's own words name this class, for the one thing this has to
-         *             say in them: that nothing here reached it
+         * <p>Total over the plan, so there is no absence here to interpret. A class this run was
+         * not asked about is a finding and a plan disagreeing about what is owed, which is a defect
+         * in this compiler rather than something to write a sentence about — the two are made from
+         * one reading of the rows and cannot honestly differ.
          */
         private static GenerationOutcome atClass(souther.compiler.partition.AxisId at,
-                                                 String classId, String said,
-                                                 Generator.GenerationResult composed) {
-            return switch (composed.attemptAt(at, classId)) {
-                case Generator.ClassAttempt.Built built ->
-                        new GenerationOutcome.Generated(List.of(built.row()));
-                case Generator.ClassAttempt.Unresolved none ->
-                        new GenerationOutcome.CannotGenerate(none.why());
-                // No attempt was recorded for this class, which is not the same as a search that
-                // reached it and stopped. Which of them it was is what the run wrote down, and
-                // where it wrote nothing this says so rather than picking the likeliest — a reason
-                // read off an empty result outlives whatever made it plausible.
-                case null -> new GenerationOutcome.CannotGenerate(
-                        new Generator.UnresolvedCombination(List.of(said), whyNothingWasTried(composed)));
-            };
-        }
-
-        /**
-         * Why no attempt was recorded for a class, in the words the run wrote down.
-         *
-         * <p>Only the reasons that say a class was never searched for. A run that stopped before
-         * reaching one records it as the search limit itself, so this is asked where nothing was
-         * recorded at all — and what it must not do is decide which of them it was from the fact
-         * that there is nothing here. Where the run says nothing this says nothing: the class was
-         * owed a row, a strategy takes it, and it produced neither a row nor a reason, which is
-         * this compiler failing to say.
-         */
-        private static Generator.UnresolvedCombination.Reason whyNothingWasTried(
-                Generator.GenerationResult composed) {
-            for (souther.compiler.partition.GenerationReason why : composed.reasons()) {
-                switch (why) {
-                    case souther.compiler.partition.GenerationReason.NothingToBuildAgainst _ -> {
-                        return Generator.UnresolvedCombination.Reason.NOTHING_TO_BUILD_AGAINST;
-                    }
-                    case souther.compiler.partition.GenerationReason.NoValuesWereAskedFor _ -> {
-                        return Generator.UnresolvedCombination.Reason.NO_VALUES_WERE_ASKED_FOR;
-                    }
-                    case souther.compiler.partition.GenerationReason.LinkageFailed _ -> {
-                        return Generator.UnresolvedCombination.Reason.LINKAGE_FAILED;
-                    }
-                    // The position was held back, so no class of it was ever a thing to look for.
-                    case souther.compiler.partition.GenerationReason.PositionWithheld _ -> {
-                        return Generator.UnresolvedCombination.Reason.THE_POSITION_WAS_WITHHELD;
-                    }
-                    // Nothing was read, so nothing was searched for.
-                    case souther.compiler.partition.GenerationReason.RowsNotRead _ -> {
-                        return Generator.UnresolvedCombination.Reason.THE_ROWS_WERE_NOT_READ;
-                    }
-                    // About a search that happened, and said in their own words beside the rows.
-                    // Answering with one of them here would be the same fact under a second
-                    // spelling, over a class the search never got to.
-                    //
-                    // `GroupsNotOffered` is here for a different reason: it is not about classes at
-                    // all. A group of the body's decisions is where a row for an <em>arm</em> is
-                    // looked for, and the classes are walked in a loop that never consults one — so
-                    // a class with nothing recorded was not left that way by a group being held
-                    // back, and saying it was would be a cause this run has no evidence for.
-                    case souther.compiler.partition.GenerationReason.SearchLimit _,
-                            souther.compiler.partition.GenerationReason.GroupsNotOffered _,
-                            souther.compiler.partition.GenerationReason.RowsNotConfirmed _ -> { }
-                }
+                                                 String classId,
+                                                 souther.compiler.partition.FillResult composed) {
+            souther.compiler.partition.ClassDisposition answer =
+                    composed.discharge().at(new Generator.ClassOwed(at, classId));
+            if (answer == null) {
+                throw new IllegalStateException(
+                        "a finding names a class this run was not asked about: " + at + "=" + classId);
             }
-            return Generator.UnresolvedCombination.Reason.NO_REASON_RECORDED;
+            return switch (answer) {
+                case souther.compiler.partition.ClassDisposition.Built built ->
+                        new GenerationOutcome.Generated(List.of(composed.rowFor(built.row())));
+                case souther.compiler.partition.ClassDisposition.Unresolved none ->
+                        new GenerationOutcome.CannotGenerate(none.why());
+            };
         }
 
         /**
@@ -2710,22 +2624,27 @@ public final class Adequacy {
          * nothing a fact about the model.
          */
         private static GenerationOutcome atCase(InputCaseEvidence input, TypeSymbol case_,
-                                                PartitionEvidence partition,
-                                                Generator.GenerationResult composed,
+                                                souther.compiler.partition.FillResult composed,
                                                 Hir.SpecBehavior spec) {
             String missing = case_.name();
             int at = input.at();
             String parameter = at >= 0 && at < spec.params().size()
                     ? spec.params().get(at).name() : null;
-            boolean divided = partition != null && parameter != null
-                    && partition.axes().stream().anyMatch(
-                            axis -> axis.path().equals(parameter) && axis.classes().contains(missing));
-            if (!divided) {
+            if (parameter == null) {
                 return new GenerationOutcome.NotSupported(
                         GenerationOutcome.NotSupported.Reason.NO_AXIS_AT_THIS_POSITION);
             }
-            return atClass(new souther.compiler.partition.AxisId(spec.name(), parameter), missing,
-                    parameter + "=" + missing, composed);
+            // Asked of the subject the search was made over, which is what says what this run had
+            // classes for. Worked out from a partition's axes beside it, the answer was a second
+            // reading of the search's own universe, and a case whose position the search divides
+            // could be told there was no axis there.
+            Generator.ClassOwed owed = new Generator.ClassOwed(
+                    new souther.compiler.partition.AxisId(spec.name(), parameter), missing);
+            if (!composed.plan().subject().divides(owed)) {
+                return new GenerationOutcome.NotSupported(
+                        GenerationOutcome.NotSupported.Reason.NO_AXIS_AT_THIS_POSITION);
+            }
+            return atClass(owed.at(), owed.classId(), composed);
         }
 
         /**
@@ -2930,34 +2849,27 @@ public final class Adequacy {
             return out;
         }
 
-        private static Generator.GenerationResult rowsFor(
+        private static souther.compiler.partition.FillResult rowsFor(
                 Hir.SpecBehavior spec, Sig sig, Symbols symbols,
-                souther.compiler.check.ReadingPolicy policy,
-                List<Generator.Baseline> baselines, List<Finding> owed,
+                souther.compiler.partition.GenerationPlan asked,
+                List<Generator.Baseline> baselines,
                 souther.compiler.partition.Partitions.Partitioning partitioning,
                 souther.compiler.core.Core body,
                 souther.compiler.coverage.CoverageSites.Plan plan, RowReading observed,
                 FixtureReader.Construction building, InputDomain domain,
-                Generator.Trial trial,
-                PartitionEvidence evidence, boolean recording,
+                Generator.Trial trial, boolean recording,
                 souther.compiler.partition.AdequacyPolicy.OfTheGeneration budget) {
             if (observed.someRowsUnseen()) {
                 // Rows exist that nothing read. What they cover is unknown, so what is left uncovered
                 // is unknown too — and a generated row is a specific piece of work handed to a person,
                 // which may already be sitting in the file that could not be evaluated.
-                return new Generator.GenerationResult(List.of(), List.of(),
+                return souther.compiler.partition.FillResult.nothingWasLookedFor(asked,
+                        Generator.UnresolvedCombination.Reason.THE_ROWS_WERE_NOT_READ,
                         List.of(new souther.compiler.partition.GenerationReason.RowsNotRead(
                                 spec.name(), observed.gaps())));
             }
             List<RowOutcome> rows = observed.rowsSeen();
-            List<String> parameters = spec.params().stream().map(Hir.Param::name).toList();
-            // One reading of what the behavior takes, for both halves of this: the rows already
-            // written are read by it, and the rows offered are generated from it.
-            souther.compiler.partition.BehaviorInputs inputs =
-                    new souther.compiler.partition.BehaviorInputs(parameters, sig.inputTypes(),
-                            symbols, policy);
-            Generator.Subject subject =
-                    new Generator.Subject(inputs, partitioning.axes(), souther.compiler.partition.HeldCounts.of(domain, symbols));
+            souther.compiler.partition.BehaviorInputs inputs = asked.subject().inputs();
             Generator.CandidateCheck check = building == null ? Generator.CandidateCheck.ANY
                     : (at, candidate) -> built(building.build(sig.ins().get(at), candidate.value()));
 
@@ -2969,20 +2881,52 @@ public final class Adequacy {
                             InputClassifications.of(row.inputs(), inputs, partitioning.axes()),
                             watched(row, recording)))
                     .toList();
+            return Generator.fill(asked, existing, check,
+                    souther.compiler.reading.CoverageRead
+                            .of(spec.name(), body, plan, domain, symbols),
+                    trial, baselines, budget);
+        }
+
+        /**
+         * What this build is asking the generator for, settled before anything that can stop it.
+         *
+         * <p>The classes off the partition measure and the arms off the findings, which is where
+         * each of them was established. Made here rather than inside the search so that the ways a
+         * generation ends without searching — the rows could not be read, the classes would not
+         * link — hold the same list as the search does. Made there, each of them answered with a
+         * reason about the run and no word about the thing a reader was asking after.
+         */
+        private static souther.compiler.partition.GenerationPlan planFor(
+                Hir.SpecBehavior spec, Sig sig, Symbols symbols,
+                souther.compiler.check.ReadingPolicy policy,
+                souther.compiler.partition.Partitions.Partitioning partitioning,
+                InputDomain domain, List<Finding> owed, PartitionEvidence evidence) {
+            List<String> parameters = spec.params().stream().map(Hir.Param::name).toList();
+            // One reading of what the behavior takes, for both halves of this: the rows already
+            // written are read by it, and the rows offered are generated from it.
+            souther.compiler.partition.BehaviorInputs inputs =
+                    new souther.compiler.partition.BehaviorInputs(parameters, sig.inputTypes(),
+                            symbols, policy);
+            Generator.Subject subject =
+                    new Generator.Subject(spec.name(), inputs, partitioning.axes(),
+                            souther.compiler.partition.HeldCounts.of(domain, symbols));
             // The arms this build is owed a row at, which the measure established and this reads.
             // A combination the body settles together is where one is looked for and is not itself
             // owed a row — nothing reports one — so what is searched follows from the findings
             // rather than from the shape of the search space.
-            Set<Integer> armsOwed = new LinkedHashSet<>();
+            // In the order the findings were established, which is the order this build raised
+            // them in. Handed over as a list rather than as the set that kept them once apiece:
+            // what the plan is asking for is the order, and this is where what the order means is
+            // known.
+            Set<Integer> arms = new LinkedHashSet<>();
             for (Finding finding : owed) {
-                if (finding.about() instanceof About.AnArmNoRowGoesThrough(var arm)) {
-                    armsOwed.add(arm.index());
+                if (finding.about()
+                        instanceof About.AnArmNoRowGoesThrough(
+                                souther.compiler.coverage.CoverageSites.Site arm)) {
+                    arms.add(arm.index());
                 }
             }
-            return Generator.fill(subject, existing, check,
-                    souther.compiler.reading.CoverageRead
-                            .of(spec.name(), body, plan, domain, symbols),
-                    trial, baselines, classesOwed(evidence), armsOwed, budget);
+            return Generator.planOver(subject, classesOwed(evidence), List.copyOf(arms));
         }
 
         /**
@@ -3001,7 +2945,10 @@ public final class Adequacy {
          * this replaces — and it would be one no test covers, the query answering every behavior
          * the generator reaches.
          */
-        private static Set<Generator.ClassOwed> classesOwed(PartitionEvidence evidence) {
+        private static List<Generator.ClassOwed> classesOwed(PartitionEvidence evidence) {
+            // Gathered once apiece and handed over in the order the measure holds the positions
+            // and their classes in, which is the order this walk reached them. The set keeps the
+            // once-apiece; the list is what says what the order is.
             Set<Generator.ClassOwed> out = new LinkedHashSet<>();
             for (PartitionEvidence.AxisCoverage axis : evidence.axes()) {
                 Set<String> covered = axis.reached().made()
@@ -3013,7 +2960,7 @@ public final class Adequacy {
                     }
                 }
             }
-            return out;
+            return List.copyOf(out);
         }
     }
 

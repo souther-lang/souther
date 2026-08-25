@@ -54,7 +54,7 @@ class AFloorNothingBuildsIsSaidTheSameWhereverItIsWrittenTest {
         Sig sig = sigs.get(behavior);
         InputDomain domain = InputDomain.of(spec, sig, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         Partitions.Partitioning partitioning = Partitions.of(spec.name(), domain, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
-        Generator.GenerationResult filled = Generator.fill(new Generator.Subject(
+        FillResult filled = Generator.fill(new Generator.Subject(spec.name(),
                 new BehaviorInputs(spec.params().stream().map(Hir.Param::name).toList(),
                         sig.inputTypes(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
                 partitioning.axes(), HeldCounts.of(domain, symbols)), List.of(), REFUSED, Budgets.generation());

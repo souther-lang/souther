@@ -75,16 +75,26 @@ class AGenerationThatWentOnDoesNotSayItStoppedTest {
                 .filter(b -> b.name().equals("submit")).findFirst().orElseThrow();
         Sig sig = sigs.get("submit");
         InputDomain domain = InputDomain.of(spec, sig, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
-        return new Generator.Subject(new souther.compiler.partition.BehaviorInputs(
+        return new Generator.Subject(spec.name(), new souther.compiler.partition.BehaviorInputs(
                 spec.params().stream().map(Hir.Param::name).toList(), sig.inputTypes(), symbols,
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
                 Partitions.of(spec.name(), domain, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES).axes(), souther.compiler.partition.HeldCounts.of(domain, symbols));
     }
 
-    private static String written(Generator.GenerationResult result) {
+    private static String written(souther.compiler.partition.FillResult result) {
         return GeneratedRows.of("example.trip",
-                Map.of("submit", new Adequacy.Filling(result, Generator.GenerationResult.NONE, List.of())),
+                Map.of("submit", new Adequacy.Filling(result, Generator.GenerationResult.NONE,
+                        List.of())),
                 Map.of(), false, SourceNameResolver.identity()).text();
+    }
+
+    /** A run asked for nothing, which is what a reason about the run alone is written against. */
+    private static souther.compiler.partition.FillResult stoppedWith(GenerationReason why) {
+        souther.compiler.partition.GenerationPlan plan =
+                new souther.compiler.partition.GenerationPlan(subject(), List.of(), List.of());
+        return new souther.compiler.partition.FillResult(plan, new LinkedHashMap<>(), List.of(),
+                List.of(why),
+                souther.compiler.partition.Discharge.NOTHING);
     }
 
     /**
@@ -104,7 +114,7 @@ class AGenerationThatWentOnDoesNotSayItStoppedTest {
                 Incompleteness.Code.VALUE_TRUNCATED, first.id().behavior(), first.id().term())));
         row.put(second.id(), Classification.in(second.classes().get(0).id()));
 
-        Generator.GenerationResult filled =
+        souther.compiler.partition.FillResult filled =
                 Generator.fill(subject, List.of(Generator.ObservedRow.unseen(row)),
                         Generator.CandidateCheck.ANY, Budgets.generation());
 
@@ -121,8 +131,7 @@ class AGenerationThatWentOnDoesNotSayItStoppedTest {
     /** And a run that did stop says so, in words a reader can act on. */
     @Test
     void aSearchThatRanOutSaysItStopped() {
-        String written = written(new Generator.GenerationResult(List.of(), List.of(),
-                List.of(new GenerationReason.SearchLimit("submit", 12))));
+        String written = written(stoppedWith(new GenerationReason.SearchLimit("submit", 12)));
 
         assertEquals("// generation stopped for `submit`: 12 classes and arms past the row limit"
                 + System.lineSeparator(), written);
@@ -131,8 +140,7 @@ class AGenerationThatWentOnDoesNotSayItStoppedTest {
     /** One left is one thing on the plan, which is a class or an arm and never a combination. */
     @Test
     void theCountIsWrittenAsACount() {
-        String written = written(new Generator.GenerationResult(List.of(), List.of(),
-                List.of(new GenerationReason.SearchLimit("submit", 1))));
+        String written = written(stoppedWith(new GenerationReason.SearchLimit("submit", 1)));
 
         assertTrue(written.contains("1 class or arm past"), written);
     }

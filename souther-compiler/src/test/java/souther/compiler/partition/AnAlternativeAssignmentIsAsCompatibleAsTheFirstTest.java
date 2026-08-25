@@ -97,7 +97,7 @@ class AnAlternativeAssignmentIsAsCompatibleAsTheFirstTest {
                 checked.supplied());
         Partitions.Partitioning axes =
                 Partitions.of(spec.name(), inputs, symbols, ReadAs.THE_COMPILATION_DOES);
-        return new Model(new Generator.Subject(
+        return new Model(new Generator.Subject(spec.name(),
                 new BehaviorInputs(spec.params().stream().map(Hir.Param::name).toList(),
                         sig.inputTypes(), symbols, ReadAs.THE_COMPILATION_DOES),
                 axes.axes(), HeldCounts.of(inputs, symbols)),
@@ -126,9 +126,9 @@ class AnAlternativeAssignmentIsAsCompatibleAsTheFirstTest {
                 Budgets.generation());
         assertFalse(every.isEmpty(), "the body has arms a combination takes");
 
-        Generator.GenerationResult filled = Generator.fill(model.subject(), List.of(),
+        FillResult filled = Generator.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.refusing(AnAlternativeAssignmentIsAsCompatibleAsTheFirstTest::notTheFirst),
-                model.read(), Generator.Trial.NOTHING_RUNS, List.of(), Set.of(), every,
+                model.read(), Generator.Trial.NOTHING_RUNS, List.of(), List.of(), List.copyOf(every),
                 Budgets.generation());
 
         assertEquals(List.of(), filled.unresolved().stream()

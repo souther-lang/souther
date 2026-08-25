@@ -102,8 +102,8 @@ class AClassThatNarrowsStatesTheNarrowingAndNotAValueTest {
                     symbols, ReadAs.THE_COMPILATION_DOES, guards.unread(), guards.singled(),
                     guards.between());
         }
-        Generator.GenerationResult filled = Generator.fill(
-                new Generator.Subject(new BehaviorInputs(
+        FillResult filled = Generator.fill(
+                new Generator.Subject(spec.name(), new BehaviorInputs(
                         spec.params().stream().map(Hir.Param::name).toList(), sig.inputTypes(),
                         symbols, ReadAs.THE_COMPILATION_DOES),
                         axes.axes(), HeldCounts.of(domain, symbols)),

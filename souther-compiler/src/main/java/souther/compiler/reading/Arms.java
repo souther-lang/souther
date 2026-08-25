@@ -61,8 +61,11 @@ final class Arms {
      * really is beyond what the path language states. The check would then hold of a walk that
      * stopped early, which is the whole of what it is for.
      */
-    Map<Integer, PathAccess> found(String behavior) {
-        Map<Integer, PathAccess> out = new LinkedHashMap<>();
+    java.util.SequencedMap<Integer, PathAccess> found(String behavior) {
+        // Walked over the plan's own arms, so the order these come back in is the order the plan
+        // holds the behavior's arms in. Which is what whoever asks for a row at each of them takes
+        // as the order to ask in, and it is only that because this walk is where it comes from.
+        java.util.SequencedMap<Integer, PathAccess> out = new LinkedHashMap<>();
         for (CoverageSites.Site arm : plan.arms(behavior)) {
             PathAccess access = byArm.get(arm.index());
             if (access == null) {
@@ -72,6 +75,6 @@ final class Arms {
             }
             out.put(arm.index(), access);
         }
-        return java.util.Collections.unmodifiableMap(out);
+        return java.util.Collections.unmodifiableSequencedMap(out);
     }
 }
