@@ -197,8 +197,16 @@ public final class RuleAccounting {
             }
         }
 
-        /** The reading that turns a clause into an end a line can be drawn at. */
-        record TheEndReadingSays(souther.compiler.inputs.BlockReason.RuleWithoutLineReason why)
+        /**
+         * The reading that turns a clause into an end a line can be drawn at.
+         *
+         * <p>Only a reason that says that reading stopped. A rule it took in from end to end
+         * answered the question by being read — where it places no line, there is no line to be
+         * owed, and where it restricts no value there is nothing to be admitted. Held as either
+         * half, a rule this compiler understood completely was one nobody had accounted for, and
+         * the measurement went to partial on the strength of it.
+         */
+        record TheEndReadingSays(souther.compiler.inputs.BlockReason.RuleReadingStopped why)
                 implements Why {
 
             public TheEndReadingSays {

@@ -754,15 +754,30 @@ public final class FieldDomains {
         return new RuleAccounting.Outcome.Accounted(RuleAccounting.Reader.THE_END_READING);
     }
 
-    /** What the reading of ends said about the rule at this position, where it said anything. */
+    /**
+     * What the reading of ends said about the rule at this position, where it said anything.
+     *
+     * <p>Unanswered only where that reading stopped. A rule it read from end to end and drew no
+     * line from has answered the question that reading answers: the rule places no line, so there
+     * is none to be owed at, and a reader sent after it would be looking for a limit of this
+     * compiler that is not there.
+     *
+     * <p>Which is the second of two places that has to hold. A rule read to the end raises no such
+     * question in the first place ({@link ClauseStates.NoRestriction},
+     * {@link ClauseStates.ARelation}), so nothing reaches here to be answered this way — and the
+     * question being unaskable is what makes the answer unreachable rather than the other way
+     * about. Both are written, because the day one of them slips the other is what is left.
+     */
     private RuleAccounting.Outcome unreadAnswerFor(RuleRef rule, Core part,
                                                    Owed.Subject.OfAPosition where) {
         for (Unread said : unread) {
             if (said.from().equals(rule) && said.part() == part
                     && said.path().equals(where.path())
-                    && said.measured() == where.measured()) {
+                    && said.measured() == where.measured()
+                    && said.why() instanceof souther.compiler.inputs.BlockReason
+                            .RuleReadingStopped stopped) {
                 return new RuleAccounting.Outcome.Unaccounted(
-                        new RuleAccounting.Why.TheEndReadingSays(said.why()));
+                        new RuleAccounting.Why.TheEndReadingSays(stopped));
             }
         }
         return new RuleAccounting.Outcome.Accounted(RuleAccounting.Reader.THE_END_READING);
