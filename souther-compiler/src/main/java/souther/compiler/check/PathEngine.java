@@ -355,7 +355,7 @@ final class PathEngine {
      *
      * <p>{@code Core} carries the selector and not what it covers, so the arm's side is resolved
      * back here. That is this pass crossing into the one that resolves a case, and not a second
-     * reading of what a case means: {@link ResolvedCase#resolve} is where that is worked out, and
+     * reading of what a case means: {@link CaseSpace#resolve} is where that is worked out, and
      * the selector is what it is asked about — a carrier of an optional is not the case a name of
      * the same spelling would be.
      *
@@ -375,7 +375,7 @@ final class PathEngine {
         }
         Set<TypeSymbol> ruleCovers = new LinkedHashSet<>(selected.atoms());
         for (CaseSelector armCase : pattern.selectors()) {
-            if (!ruleCovers.containsAll(ResolvedCase.resolve(armCase, AtomSpace.of(symbols)).atoms())) {
+            if (!ruleCovers.containsAll(CaseSpace.resolve(armCase, symbols).atoms())) {
                 return false;
             }
         }

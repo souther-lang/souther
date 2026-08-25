@@ -24,8 +24,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * written as AST when they reach here and are the named exception, so what this holds is that the
  * exception has one owner rather than being a method anybody in reach can call.
  *
- * <p>Read off the class files and not off the source, because what matters is which code can reach
- * the elaborator — a call written through a helper, a lambda or another class is still a call.
+ * <p>A tripwire over the direct references and not a reachability proof. What it reads is which
+ * class files of this package name the elaborator in their constant pool, so a call made through
+ * something else in this package would not be one of them. What closes that today is the shape
+ * rather than this: the way in is a private nested class of the owner, so there is nothing for
+ * another emitter here to call, and {@link BodyGen} takes Core. This holds the day somebody writes
+ * the call again in a place of their own.
  */
 class OnlyTheCodecEmitterTurnsAnAstIntoCoreTest {
 
