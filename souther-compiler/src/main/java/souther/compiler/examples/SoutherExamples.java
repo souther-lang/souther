@@ -10,7 +10,9 @@ import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Front;
-import souther.compiler.query.ExampleRuns;
+import souther.compiler.execute.ExampleExecution;
+import souther.compiler.execute.jvm.JvmExampleRuns;
+import souther.compiler.query.ExampleExecutions;
 import souther.compiler.query.Output;
 import souther.compiler.query.Shapes;
 
@@ -193,10 +195,15 @@ public final class SoutherExamples {
             throw new IllegalArgumentException(implementation.getClass().getName()
                     + " implements no behavior of " + sigs.keySet());
         }
-        Prepared.Examples rows = compilation.db()
-                .ask(new Shapes.Prepared(module)).value().forExamples();
-        return new BoundExamples(module, rows, ExampleRuns.evaluating(compilation.db(), module,
-                Answering.bound(implementation, Set.copyOf(bound), sigs.get(module))), bound);
+        ExampleExecution asked = ExampleExecutions.of(compilation.db(), module);
+        if (asked == null) {
+            throw new IllegalStateException("`" + module + "` did not check, so it has no rows to"
+                    + " run");
+        }
+        return new BoundExamples(module, asked.rows(),
+                JvmExampleRuns.evaluating(compilation.jvmProgramImages(), asked,
+                        Answering.bound(implementation, Set.copyOf(bound), sigs.get(module))),
+                bound);
     }
 
     /**
