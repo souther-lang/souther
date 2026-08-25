@@ -157,8 +157,7 @@ public final class InputDomain {
         // rules on would have to be read after everything under it, and the order positions are
         // reported in is the order they are declared and descended into.
         List<Position> settled = found.stream()
-                .map(each -> handoffs.unresolvedAt(each.path())
-                        ? each.shortOfRulesNobodyTookOver() : each)
+                .map(each -> handoffs.unresolvedAt(each.path()) ? shortOfHandedOnRules(each) : each)
                 .toList();
         return settled.isEmpty() ? NONE
                 : new InputDomain(settled, read, parameters, roots, policy);
@@ -404,6 +403,30 @@ public final class InputDomain {
      */
     public Map<BindingId, String> parameterReads() {
         return read;
+    }
+
+    /**
+     * {@code position} with the rules it handed on counted as unread, because nothing took them.
+     *
+     * <p>Made here and not asked of the position, which does not know it. A reading of a value ends
+     * where no declaration stands to be read and the rules under the position become another
+     * reading's; whether one was opened is settled by the descent past this position, and that
+     * happens after the position has been read and reported. Answering it would be a way to write a
+     * {@link Position} down, and there being no such way is what keeps one position to one answer.
+     *
+     * <p>Read off the ledger and not off whether a reading exists somewhere under the path: an
+     * obligation discharged by whatever happens to be below it is one no descent ever had to meet
+     * ({@link RuleHandoffs}).
+     */
+    private static Position shortOfHandedOnRules(Position position) {
+        ReadPosition read = (ReadPosition) position;
+        return read.rulesNotReached() ? read
+                : new ReadPosition(read.path(), read.view(), read.term(), read.numericDomain(),
+                        read.ownEnds(), read.narrowedEnds(), read.rangeLeft(), read.narrowedLower(),
+                        read.narrowedUpper(), read.nothingExists(), read.projection(),
+                        read.declared(), read.reading(), read.obligations(), read.completeness(),
+                        read.valuesUnread(), read.rulesWithoutALine(), read.unansweredQuestions(),
+                        true, read.structure());
     }
 
     /**

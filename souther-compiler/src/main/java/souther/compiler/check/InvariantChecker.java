@@ -900,17 +900,22 @@ public final class InvariantChecker {
     private record Written(RuleRef.Invariant from, Core clause) {}
 
     /**
-     * Whether the value a stop was taken at is one every value of what is being read has.
+     * Whether the value a stop left unread is one every value of what is being read has.
      *
-     * <p>Two questions are asked of one stop and they do not have one answer. What a position
-     * admits is short wherever a rule about it went unread, however the value it is written under is
-     * reached — a rule inside an optional narrows that value when there is one. Whether an edge may
-     * be promised is about what a construction has to satisfy, and a rule about a value the
-     * construction need not make refuses nothing at an edge of a field it must.
+     * <p>Two questions are asked of one stop and they do not have one answer. What a position admits
+     * is short wherever a rule about it went unread; whether an edge may be promised is about what a
+     * construction has to satisfy, and a rule about a value the construction need not make refuses
+     * nothing at an edge of a field it must.
      *
      * <p>Which of the two a stop was is known where the stop is taken and nowhere after it, so it is
      * said there. Read off the path instead, a reader would be deciding from a spelling what the
      * walk knew.
+     *
+     * <p><b>Asked only of the stops that leave rules unread.</b> A stop at a container, an optional
+     * or a choice between declarations hands the rules to a reading one position down and is not one
+     * of these ({@link Gathering#handedOn}); {@link PathEngine} refuses to answer for it rather than
+     * giving it a word. So nothing here decides what is handed on, and the day these two questions
+     * stop agreeing is a day nothing was resting on their agreeing (#1072).
      */
     enum Borne {
 
@@ -918,11 +923,17 @@ public final class InvariantChecker {
         BY_EVERY_VALUE,
 
         /**
-         * It may be absent or empty, or is a type already met on the way down.
+         * A type already met on the way down, read where it was met.
          *
          * <p>The same reach {@link #everyRuleRead} has, and for the same reason: a rule four records
          * down the required chain refuses the outermost construction exactly as one on its own
-         * fields does, and one inside a collection is about a value that need not be there.
+         * fields does.
+         *
+         * <p>The one stop that leaves this word, and a required field of a type already entered is
+         * borne by every value rather than by some. It is written down as it is because such a value
+         * cannot be built — a record that must hold its own kind has no values — so no construction
+         * and no edge is decided by the answer. A model that could be built here would be one this
+         * has to be told apart from the collections and optionals it used to stand for.
          */
         BY_SOME_VALUES
     }

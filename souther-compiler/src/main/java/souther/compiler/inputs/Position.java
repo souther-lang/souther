@@ -169,21 +169,6 @@ public sealed interface Position permits ReadPosition {
     boolean rulesNotReached();
 
     /**
-     * The same position, with the rules it handed on counted as unread because nothing took them.
-     *
-     * <p>Said after the position is read, because it is not something the reading of this position
-     * knows. A reading of a value ends where no declaration stands to be read and the rules under
-     * the position become another reading's; whether one was opened is settled by the descent past
-     * this position, which happens after this position has been read and reported. So the reading
-     * answers for itself, and this is where the walk's answer is put beside it.
-     *
-     * <p>Answered here rather than by the walk consulting whether a reading exists somewhere under
-     * the path: an obligation discharged by whatever happens to be below it is one no descent ever
-     * had to meet (#1072, {@link RuleHandoffs}).
-     */
-    Position shortOfRulesNobodyTookOver();
-
-    /**
      * What stopped the reading of which values this position may hold, or null where nothing did.
      *
      * <p>{@link #completeness()} said in the vocabulary a report is projected from. Kept apart from

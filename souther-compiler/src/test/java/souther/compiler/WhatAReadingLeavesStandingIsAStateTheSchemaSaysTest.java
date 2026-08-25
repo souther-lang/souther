@@ -219,9 +219,10 @@ class WhatAReadingLeavesStandingIsAStateTheSchemaSaysTest {
         JsonNode partition = partitionOf(BOTH_FACTS, "f");
 
         // The rule nothing took in, at the position it is about. Asked of the questions rather than
-        // of an axis: where a rule of the model went unread the border measure declines, and the
-        // classes at `r.n` are ones a comparison in the body draws — so the position that carries
-        // this fact has no axis in this model, and the fact is the model's either way.
+        // of an axis: the classes at `r.n` are ones a comparison in the body draws, and this model
+        // is refused, so its bodies are not elaborated and there is no comparison to draw them. The
+        // question the model raises about `r.n` is raised either way — it is read off the
+        // declaration, which is what makes it the thing to assert here.
         assertEquals(1, partition.get("unanswered").size(), partition.toString());
         assertEquals("r.n", partition.get("unanswered").get(0).get("at").asString());
         assertEquals("admitted_values",

@@ -49,9 +49,14 @@ public enum UnreadReason {
      * The reading never reached the rules about this position.
      *
      * <p>A different thing from a rule it read and could not use. The walk that gathers clauses
-     * stopped — at a depth, at a type it had already been through, at one with no declaration to
-     * read — or a clause could not be typed and so never arrived. Which of those it was is not
-     * recorded: none of them is a fact about the rule, and all of them leave the same hole.
+     * stopped — at a depth, at a type it had already been through — or a clause could not be typed
+     * and so never arrived. Which of those it was is not recorded: none of them is a fact about the
+     * rule, and all of them leave the same hole.
+     *
+     * <p>Not a walk that stopped where no declaration stands to be read. What is written under a
+     * container, an optional or a choice between declarations is written about a value one position
+     * down, where a reading of that declaration is opened and a row meets it — so those rules are
+     * handed on rather than left unread, and the position above admits what it admits (#1072).
      */
     NOT_REACHED
 }
