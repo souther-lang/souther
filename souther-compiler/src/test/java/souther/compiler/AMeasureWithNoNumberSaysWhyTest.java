@@ -371,7 +371,7 @@ class AMeasureWithNoNumberSaysWhyTest {
         assertFalse(lines.isEmpty(), "the invariant draws two");
         for (BorderAssessment.Point line : lines) {
             assertEquals(ItemAssessment.Coverage.NotAsked.NO_ROWS, line.item().weakeningSource().why(),
-                    line.border().rule().named() + " at " + line.asked());
+                    line.border().origin().named() + " at " + line.asked());
         }
     }
 
@@ -467,9 +467,9 @@ class AMeasureWithNoNumberSaysWhyTest {
                 continue;   // nothing was measured there and nothing was waiting on a row
             }
             assertNotEquals(ItemAssessment.Coverage.NotAsked.NO_ROWS, line.item().weakeningSource().why(),
-                    line.border().rule().named() + " at " + line.asked());
+                    line.border().origin().named() + " at " + line.asked());
             assertEquals(MeasurementStatus.PARTIAL, AdequacyReport.statusOf(line.item().weakeningSource()),
-                    line.border().rule().named() + " at " + line.asked());
+                    line.border().origin().named() + " at " + line.asked());
         }
     }
 
@@ -701,9 +701,9 @@ class AMeasureWithNoNumberSaysWhyTest {
 
     private static List<Adequacy.Finding> findings(String behavior, Adequacy.Kind kind) {
         Compilation compilation = compiled();
-        Map<String, List<Adequacy.Finding>> all = compilation.db()
+        List<Adequacy.Finding> all = compilation.db()
                 .ask(new Adequacy.Findings(compilation.modules().get(0))).value();
-        return all.getOrDefault(behavior, List.of()).stream()
+        return all.stream().filter(f -> f.subject().isBehavior(behavior))
                 .filter(f -> f.kind() == kind).toList();
     }
 

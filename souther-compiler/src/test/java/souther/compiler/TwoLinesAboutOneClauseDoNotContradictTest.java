@@ -124,8 +124,8 @@ class TwoLinesAboutOneClauseDoNotContradictTest {
     void aClauseALineIsDrawnFromIsNotReportedAsUnread() {
         String human = humanOf(THE_ISSUE);
 
-        assertTrue(human.contains("price/length = 1 (invariant Length (min))"), human);
-        assertTrue(human.contains("price/length = 100 (invariant Length (max))"), human);
+        assertTrue(human.contains("value = 1 (invariant Length (min))"), human);
+        assertTrue(human.contains("value = 100 (invariant Length (max))"), human);
         assertFalse(human.contains("not accounted for"),
                 "every rule of this model was taken in by something: " + human);
         assertFalse(human.contains("rules not reached"), human);

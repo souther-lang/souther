@@ -45,14 +45,20 @@ class AskingForOneNumbersEndsDoesNotAnswerWithAnothersTest {
         return new RuleRef.Invariant(new Clause.Ref(new Clause.Id(ON, at), Optional.empty()));
     }
 
+    /** The clauses an end names, which is what these assertions are about: which conjunct of each
+     *  drew it is beside that and is not what a reader is sent to look at. */
+    private static List<RuleRef.Invariant> rulesOf(DeclaredBounds.End end) {
+        return end.from().stream().map(DeclaredBounds.Drawn::rule).toList();
+    }
+
     /** An end above one number of `names`, placed by the clause at {@code by}. */
     private static FieldDomains.Placed upTo(FieldDomains.Coordinate on, int by, int at) {
-        return new FieldDomains.Placed(on, rule(by), false, Endpoint.inclusive(Count.of(at)));
+        return new FieldDomains.Placed(on, rule(by), false, Endpoint.inclusive(Count.of(at)), 0);
     }
 
     /** And one below it. */
     private static FieldDomains.Placed from(FieldDomains.Coordinate on, int by, int at) {
-        return new FieldDomains.Placed(on, rule(by), true, Endpoint.inclusive(Count.of(at)));
+        return new FieldDomains.Placed(on, rule(by), true, Endpoint.inclusive(Count.of(at)), 0);
     }
 
     private static final FieldDomains.Coordinate HOW_LONG =
@@ -80,9 +86,9 @@ class AskingForOneNumbersEndsDoesNotAnswerWithAnothersTest {
                 Carrier.WHOLE);
 
         assertEquals(Count.of(3), howLong.max().at().at(), "the end the rule about the length drew");
-        assertEquals(List.of(rule(0)), howLong.max().from(), "and the clause that drew it");
+        assertEquals(List.of(rule(0)), rulesOf(howLong.max()), "and the clause that drew it");
         assertEquals(Count.of(7), howMany.max().at().at(), "the end the rule about the size drew");
-        assertEquals(List.of(rule(1)), howMany.max().from(), "and the clause that drew it");
+        assertEquals(List.of(rule(1)), rulesOf(howMany.max()), "and the clause that drew it");
     }
 
     /**
@@ -117,6 +123,6 @@ class AskingForOneNumbersEndsDoesNotAnswerWithAnothersTest {
         assertEquals(Count.of(3), howLong.max().at().at(), "the length's own upper end");
         assertEquals(Count.of(1), howLong.min().at().at(),
                 "and its own lower one, which is not the floor the rule about the size put there");
-        assertEquals(List.of(rule(1)), howLong.min().from(), "named by the clause that drew it");
+        assertEquals(List.of(rule(1)), rulesOf(howLong.min()), "named by the clause that drew it");
     }
 }

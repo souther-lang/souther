@@ -98,7 +98,7 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
     void aPositionAgainstAValueIsALineAtThatPosition() {
         String report = report(guarded("a.value <= 10"));
 
-        assertTrue(report.contains("point f/a = 10"), report);
+        assertTrue(report.contains("point value = 10"), report);
     }
 
     /**

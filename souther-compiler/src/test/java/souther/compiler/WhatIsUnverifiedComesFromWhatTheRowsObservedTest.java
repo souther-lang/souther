@@ -8,7 +8,6 @@ import souther.compiler.query.Db;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -176,10 +175,10 @@ class WhatIsUnverifiedComesFromWhatTheRowsObservedTest {
     /** The cases one kind of finding names for one behavior, in the order the findings are held. */
     private static List<String> named(String source, String behavior, Adequacy.Kind kind) {
         Compilation compilation = compiled(source);
-        Map<String, List<Adequacy.Finding>> all = compilation.db()
+        List<Adequacy.Finding> all = compilation.db()
                 .ask(new Adequacy.Findings(compilation.modules().get(0))).value();
         return all == null ? List.of()
-                : all.getOrDefault(behavior, List.of()).stream()
+                : all.stream().filter(f -> f.subject().isBehavior(behavior))
                         .filter(f -> f.kind() == kind)
                         .map(WhatIsUnverifiedComesFromWhatTheRowsObservedTest::caseOf)
                         .toList();

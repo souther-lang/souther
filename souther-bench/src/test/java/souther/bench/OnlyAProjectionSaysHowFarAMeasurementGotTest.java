@@ -165,6 +165,11 @@ class OnlyAProjectionSaysHowFarAMeasurementGotTest {
      * <p>The factories take the measurement instead, which leaves no argument to pass the wrong
      * thing in: a caller hands over the one it is looking at. This holds the other half — that the
      * canonical constructor, which a public record cannot hide, is not how anybody makes one.
+     *
+     * <p>The two take a {@link souther.compiler.query.FindingSubject} and not a behavior's name.
+     * Still two: what a finding is about became a value rather than a word, because not every
+     * finding is about a behavior (issue #1062). The overloads that take a name hand one over and
+     * make nothing, which is why they are not here.
      */
     @Test
     void aFindingIsMadeFromTheMeasurementThatFoundIt() throws IOException {
@@ -176,12 +181,14 @@ class OnlyAProjectionSaysHowFarAMeasurementGotTest {
             }
         }
         assertEquals(Set.of(
-                        "souther.compiler.query.Adequacy$Finding#by(Ljava/lang/String;"
+                        "souther.compiler.query.Adequacy$Finding#by("
+                                + "Lsouther/compiler/query/FindingSubject;"
                                 + "Lsouther/compiler/query/Measure;"
                                 + "Lsouther/compiler/diag/Citation;"
                                 + "Lsouther/compiler/query/About;)"
                                 + "Lsouther/compiler/query/Adequacy$Finding;",
-                        "souther.compiler.query.Adequacy$Finding#noticed(Ljava/lang/String;"
+                        "souther.compiler.query.Adequacy$Finding#noticed("
+                                + "Lsouther/compiler/query/FindingSubject;"
                                 + "Lsouther/compiler/diag/Citation;"
                                 + "Lsouther/compiler/query/About;)"
                                 + "Lsouther/compiler/query/Adequacy$Finding;"),

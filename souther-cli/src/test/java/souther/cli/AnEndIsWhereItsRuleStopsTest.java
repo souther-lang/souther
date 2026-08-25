@@ -48,7 +48,7 @@ class AnEndIsWhereItsRuleStopsTest {
     void anEdgeIsNotAtAValueNoRuleNamed() throws Exception {
         String report = reportOn(MODEL);
 
-        assertFalse(report.contains("take/h.p = 1"),
+        assertFalse(report.contains("point value = 1"),
                 () -> "`value > 0m` says nothing about one:\n" + report);
     }
 
@@ -93,7 +93,7 @@ class AnEndIsWhereItsRuleStopsTest {
                 """);
 
         assertFalse(report.contains("not known to be writable: the ON point take/h.b = 10"), () -> report);
-        assertTrue(report.contains("no row is at the ON point take/h.b = 10"),
+        assertTrue(report.contains("no row is at the ON point value = 10"),
                 () -> "and the edge is one a row is owed at:\n" + report);
     }
 

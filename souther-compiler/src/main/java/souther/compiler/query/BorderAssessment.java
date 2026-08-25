@@ -105,12 +105,22 @@ public record BorderAssessment(Border border, Map<PointRole, ItemAssessment> ite
     }
 
     /** The rule that drew the line, as a report about {@code sectionSource} writes it. */
-    public String origin(SourceNameResolver names, SourceId sectionSource) {
+    public String describe(SourceNameResolver names, SourceId sectionSource) {
         return border.origin().describe(names, sectionSource);
     }
 
-    /** The rule itself, for a reader that renders it rather than printing what this would. */
-    public OriginRef rule() {
+    /**
+     * The rule as this reading met it, for a reader that renders it rather than printing what
+     * {@link #describe} would.
+     *
+     * <p>An {@link OriginRef} and not a {@link souther.compiler.check.RuleRef}, which is why it is
+     * not called the rule. Which rule of the model this came from is
+     * {@link souther.compiler.partition.BorderObligationId#provenance()}, the same value however
+     * many lines the rule drew; what a row is owed for is
+     * {@link souther.compiler.partition.Border#obligation()}. Named the rule, the first two were one
+     * word, and a caller wanting either reached for whichever this happened to be.
+     */
+    public OriginRef origin() {
         return border.origin();
     }
 
@@ -190,6 +200,30 @@ public record BorderAssessment(Border border, Map<PointRole, ItemAssessment> ite
         public String said() {
             return role.againstTheLine() ? border.axis() + " = " + against()
                     : border.axis() + " " + asked();
+        }
+
+        /**
+         * Whether the behavior this reading belongs to is the one owed a row here.
+         *
+         * <p>Two of a border's four points can be owed to the declaration that drew the line rather
+         * than to any body carrying the type: what a row standing at the line shows is a fact about
+         * the type, and one row anywhere settles it (issue #1062). The other two are the regions
+         * either side, and where a region stops is settled by every other rule reaching this
+         * position — so they are this reading's whatever drew the line.
+         *
+         * <p>Asked here and not at each reader. Everything that measures a behavior, counts what it
+         * covers or raises a finding about it has to leave the declaration's points out, and the
+         * rule written at each of them is a rule each of them can forget: a verdict that kept them
+         * weighed one behavior's row against another behavior having no rows, and a count that keeps
+         * them says a body is short of something no row written for it is owed.
+         *
+         * <p>A reader that only describes may show them all the same. What is not this behavior's to
+         * be measured for is still a line its values are held to, and the block that says so is
+         * telling an author about the type they wrote.
+         */
+        public boolean owedHere() {
+            return !role.againstTheLine()
+                    || border.origin().owedToTheDeclaration().isEmpty();
         }
 
         /** The measured half, or null where no row is owed here. */

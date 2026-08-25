@@ -43,6 +43,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ABorderSaysWhichOfItsTwoPointsALineIsTest {
 
+    /** The clause here states one thing, so the end it places comes out of its first conjunct. */
+    private static final int THE_ONLY_CONJUNCT = 0;
+
+
     /** {@code <=}: the line's own values satisfy the rule, so 100 is inside and 101 is the step out. */
     private static final String CLOSED = model("<=");
 
@@ -139,8 +143,8 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
     void aBoundsPointComesFromItsEndAndNotFromItsOperator() {
         String report = report(bounded("Int", "> 5"));
 
-        assertTrue(report.contains("the ON point take/h.a = 6"), report);
-        assertFalse(report.contains("take/h.a = 5"), report);
+        assertTrue(report.contains("the ON point value = 6"), report);
+        assertFalse(report.contains("value = 5"), report);
     }
 
     /**
@@ -160,8 +164,8 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
         String closed = report(bounded("Int", ">= 5"));
         String strict = report(bounded("Int", "> 5"));
 
-        assertTrue(closed.contains("the ON point take/h.a = 5"), closed);
-        assertTrue(strict.contains("the ON point take/h.a = 6"), strict);
+        assertTrue(closed.contains("the ON point value = 5"), closed);
+        assertTrue(strict.contains("the ON point value = 6"), strict);
         // And neither owes a row over the line. A bound leaves nothing outside itself, so the two
         // points out there are excluded — said in those words rather than left out, because a border
         // showing two of four items and nothing beside them reads as this compiler being short.
@@ -173,7 +177,11 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
             assertTrue(report.contains("excluded — the rules leave no value there"), report);
             assertFalse(report.contains("no row is at the OFF point"), report);
         }
-        assertFalse(strict.contains("take/h.a = 5"), strict);
+        // Asked of the value the line is named by, which is how a bound is written now: a line a
+        // declaration is owed is named in the terms it wrote and never by the position a behavior
+        // met it at (issue #1062). Left as `take/h.a = 5`, this refused a string the report has no
+        // way of printing and said nothing about where the line is.
+        assertFalse(strict.contains("point value = 5"), strict);
     }
 
     /**
@@ -189,13 +197,13 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
     @Test
     void aBoundThatStopsShortOfItsValueDrawsNoBorderAtIt() {
         assertEquals(Criterion.AtTheLevel.class,
-                borderOf(new OriginRef.InvariantOrigin(invariant(), true))
+                borderOf(new OriginRef.InvariantOrigin(invariant(), THE_ONLY_CONJUNCT, true))
                         .demand(PointRole.ON).criterion().getClass(),
                 "a bound that admits its own end is at that end's ON point");
         // And where it does not admit it, the position does not reach the line: the value is outside
         // what the rules leave, so there is no border here and no point of one either. Read as a
         // border, it would owe an ON point one step in that no carrier here names.
-        assertEquals(null, borderOf(new OriginRef.InvariantOrigin(invariant(), false)),
+        assertEquals(null, borderOf(new OriginRef.InvariantOrigin(invariant(), THE_ONLY_CONJUNCT, false)),
                 "a bound whose own end its position refuses draws no line at it");
     }
 
@@ -239,7 +247,7 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
                 border.demand(PointRole.OUT).criterion().asked(border.cut().of()));
 
         // A bound owes nothing outside itself, and says which of the three answers settled it.
-        Border bound = borderOf(new OriginRef.InvariantOrigin(invariant(), true));
+        Border bound = borderOf(new OriginRef.InvariantOrigin(invariant(), THE_ONLY_CONJUNCT, true));
         assertEquals(new Demand.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT),
                 bound.demand(PointRole.OFF));
         assertEquals(new Demand.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT),

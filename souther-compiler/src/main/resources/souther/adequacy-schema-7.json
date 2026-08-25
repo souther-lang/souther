@@ -98,6 +98,19 @@
         "behaviors": {
           "type": "array",
           "items": { "$ref": "#/$defs/behavior" }
+        },
+        "declarations": {
+          "type": "array",
+          "description": "What each of the module's own declarations is short of. A line an `invariant` drew is a fact about the type wherever the type is carried, so it is owed once and is not any behavior's: published under one of them it would be published under whichever a walk reached first. Under the declaration and not in one flat list, because what a finding says of itself is what the line asks of a row — two declarations bounding a string's length at one say it the same way, and which declaration a reader is being sent to would be gone. Not in `required`: a document written before this array existed is still a document of this version.",
+          "items": {
+            "type": "object",
+            "required": ["name", "findings"],
+            "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string", "description": "The declaration whose clause drew the lines below." },
+              "findings": { "$ref": "#/$defs/findings" }
+            }
+          }
         }
       }
     },
@@ -131,7 +144,7 @@
     },
     "findings": {
       "type": "array",
-      "description": "Everything the measures found about this behavior and nothing filled, and what a build does about each. The measures above each say what they measured; this says which findings came out of them and which of those a build refuses over, which no measure's own object can say. Not in `required`: a document written before this array existed is still a document of this version.",
+      "description": "Everything the measures found about one subject and nothing filled, and what a build does about each. The measures above each say what they measured; this says which findings came out of them and which of those a build refuses over, which no measure's own object can say. Not in `required`: a document written before this array existed is still a document of this version.",
       "items": {
         "type": "object",
         "required": ["kind", "disposition", "subject"],

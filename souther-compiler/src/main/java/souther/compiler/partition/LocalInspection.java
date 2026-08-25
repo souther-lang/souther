@@ -2,7 +2,6 @@ package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
 import souther.compiler.check.DeclaredBounds;
-import souther.compiler.check.RuleRef;
 import souther.compiler.check.Symbols;
 import souther.compiler.inputs.Position;
 import souther.compiler.numeric.Endpoint;
@@ -128,8 +127,10 @@ final class LocalInspection {
         // was settled where the clause was read and arrives as it was. What is added is a
         // boundary's own answer about that rule — that a reading of it drew this cut, taken in by
         // these declarations — which is nothing the rule says about itself.
-        for (RuleRef.Invariant from : end.from()) {
-            put(into, carrier, end.value(), new OriginRef.InvariantOrigin(from, end.at().inclusive()),
+        for (DeclaredBounds.Drawn from : end.from()) {
+            put(into, carrier, end.value(),
+                    new OriginRef.InvariantOrigin(from.rule(), from.conjunct(),
+                            end.at().inclusive()),
                     moved ? within : List.<TypeSymbol>of());
         }
     }

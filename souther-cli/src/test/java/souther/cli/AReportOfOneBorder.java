@@ -53,7 +53,7 @@ final class AReportOfOneBorder {
     static Border aBoundedBorder() {
         OriginRef origin = new OriginRef.InvariantOrigin(new RuleRef.Invariant(new Clause.Ref(
                 new Clause.Id(TypeSymbols.declared(new TypeKey("example.rate", "Amount")), 0),
-                java.util.Optional.of(new ClauseName("cap")))), true);
+                java.util.Optional.of(new ClauseName("cap")))), 0, true);
         return Border.at(
                 BoundaryTarget.at(
                         new BorderQuantity.OfACoordinate(new AxisId("weigh", "w.a"),
@@ -70,7 +70,7 @@ final class AReportOfOneBorder {
     static Border aBorderAtTheEdgeOfItsDomain() {
         OriginRef origin = new OriginRef.InvariantOrigin(new RuleRef.Invariant(new Clause.Ref(
                 new Clause.Id(TypeSymbols.declared(new TypeKey("example.rate", "Amount")), 0),
-                java.util.Optional.of(new ClauseName("cap")))), true);
+                java.util.Optional.of(new ClauseName("cap")))), 0, true);
         return Border.at(
                 BoundaryTarget.at(
                         new BorderQuantity.OfACoordinate(new AxisId("weigh", "w.a"),
@@ -179,7 +179,7 @@ final class AReportOfOneBorder {
         return new AdequacyReport(AdequacyReport.SCHEMA_VERSION, "test",
                 held, WeakeningSet.none(),
                 List.of(new AdequacyReport.ModuleReport("example.wide",
-                        new SourceId("wide.sou"), List.of(behavior))))
+                        new SourceId("wide.sou"), List.of(behavior), List.of(), List.of())))
                 .adequacy();
     }
 }

@@ -38,6 +38,13 @@ public sealed interface OriginRef {
      * declaration bounding a position at one value came out as one origin, and the cut kept one
      * rule where ADR-0090 says it keeps every rule that drew it.
      *
+     * @param conjunct        which conjunct of the clause drew this end. What tells one line of a
+     *                        clause from another where the clause drew several: {@code
+     *                        String.length(name) >= 1 && String.length(code) >= 1} is one clause and
+     *                        two lines at one value, and a row at either says nothing about the
+     *                        other. The clause's own text and not the number it was written about,
+     *                        which is spelled differently by every reading that reaches it
+     *                        ({@link souther.compiler.check.DeclaredBounds.Drawn})
      * @param holdsAtTheValue whether the cut value is one the bound admits, which is the end's own
      *                        inclusivity and is what says whether a row at the cut is the border's
      *                        {@code ON} point or its {@code OFF} point. Carried for the same reason
@@ -51,11 +58,16 @@ public sealed interface OriginRef {
      *                        derivation gets and not one about the end, and reading the end is what
      *                        keeps the two from being confused if it ever does get further
      */
-    record InvariantOrigin(RuleRef.Invariant rule, boolean holdsAtTheValue) implements OriginRef {
+    record InvariantOrigin(RuleRef.Invariant rule, int conjunct, boolean holdsAtTheValue)
+            implements OriginRef {
 
         public InvariantOrigin {
             if (rule == null) {
                 throw new IllegalArgumentException("a bound drawn by no clause");
+            }
+            if (conjunct < 0) {
+                throw new IllegalArgumentException(
+                        "a conjunct of a clause is counted from zero: " + conjunct);
             }
         }
     }
@@ -284,6 +296,56 @@ public sealed interface OriginRef {
             case ComparisonOrigin g -> java.util.Optional.of(g.read().written().at());
             case NarrowedOrigin n -> n.bound().citation();
             case InvariantOrigin _, EnsuresOrigin _ -> java.util.Optional.empty();
+        };
+    }
+
+    /**
+     * The declaration this line is owed to, where it is a declaration's line rather than a body's.
+     *
+     * <p>Whose debt a row at the line is. A clause of a {@code data} says something about the type
+     * wherever the type is carried, so a row standing at the line is evidence about the type and the
+     * behaviors carrying it have nothing to add — one line, owed once, at the declaration that wrote
+     * it. A comparison and an {@code ensures} clause are written in a body and say something about
+     * that body at that position, so they are owed per behavior, as they were.
+     *
+     * <p>Asked of the rule rather than matched on which kind it is. Read by a caller as "is this an
+     * invariant", the question would be asked again wherever a report, a build's refusal or an
+     * editor wanted it, and a rule added later would be whatever the arm it was written next to
+     * happened to say (issue #1062).
+     *
+     * <p>A narrowed end is the bound's declaration. The declarations that took it in are what
+     * {@link #describe} says beside the rule, and each of them is one where taking any away leaves
+     * the end where it is — so there is no one of them to send a reader to, and the rule that placed
+     * the end is where the line came from.
+     */
+    default java.util.Optional<TypeSymbol> owedToTheDeclaration() {
+        return switch (this) {
+            case InvariantOrigin i ->
+                    java.util.Optional.of(i.rule().clause().id().declaredOn());
+            case ComparisonOrigin _, EnsuresOrigin _ -> java.util.Optional.empty();
+            case NarrowedOrigin n -> n.bound().owedToTheDeclaration();
+        };
+    }
+
+    /**
+     * Which authored line of a declaration this is, where it is a declaration's line.
+     *
+     * <p>The clause and the conjunct that drew the end, which together name one line the author
+     * wrote — a clause places as many as it has conjuncts with an end in them, and they are not each
+     * other's ({@link souther.compiler.check.DeclaredBorders}).
+     *
+     * <p>Here rather than at the reader that needs it, for the reason {@link #owedToTheDeclaration}
+     * is: a caller taking the clause and the conjunct apart has to know which arms have them, and a
+     * rule added later is then answered by whichever arm it was written beside. Both questions are
+     * the rule's, so both are asked of it.
+     */
+    default java.util.Optional<souther.compiler.check.DeclaredBorders.Key> declaredLine() {
+        return switch (this) {
+            case InvariantOrigin i ->
+                    java.util.Optional.of(
+                            new souther.compiler.check.DeclaredBorders.Key(i.rule(), i.conjunct()));
+            case ComparisonOrigin _, EnsuresOrigin _ -> java.util.Optional.empty();
+            case NarrowedOrigin n -> n.bound().declaredLine();
         };
     }
 

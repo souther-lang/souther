@@ -9,6 +9,7 @@
     "status" : "partial",
     "weakening" : [ "rule_unread" ],
     "incompleteness" : [ ],
+    "declarations" : [ ],
     "behaviors" : [ {
       "name" : "discount",
       "implementation" : "implemented",
@@ -221,6 +222,15 @@
     "status" : "partial",
     "weakening" : [ "rules_not_reached", "rule_unread" ],
     "incompleteness" : [ ],
+    "declarations" : [ {
+      "name" : "Sku",
+      "findings" : [ {
+        "kind" : "boundary_unmet",
+        "disposition" : "refused",
+        "subject" : "String.length(value) = 1",
+        "code" : "E1916"
+      } ]
+    } ],
     "behaviors" : [ {
       "name" : "台帳へ書く",
       "implementation" : "injected",
@@ -372,11 +382,6 @@
         "reason" : "no_body"
       },
       "findings" : [ {
-        "kind" : "boundary_unmet",
-        "disposition" : "refused",
-        "subject" : "台帳へ書く/String.length(指示.品目[*]) = 1",
-        "code" : "E1916"
-      }, {
         "kind" : "partition_not_derivable",
         "disposition" : "reported",
         "subject" : "指示.受付日"
@@ -674,11 +679,6 @@
         "unreached" : [ ]
       },
       "findings" : [ {
-        "kind" : "boundary_unmet",
-        "disposition" : "refused",
-        "subject" : "出荷する/String.length(指示.品目[*]) = 1",
-        "code" : "E1916"
-      }, {
         "kind" : "domain_point_uncovered",
         "disposition" : "refused",
         "subject" : "出荷する/指示.重量 in 30001 < 指示.重量",

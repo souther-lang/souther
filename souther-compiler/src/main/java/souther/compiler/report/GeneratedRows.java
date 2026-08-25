@@ -99,8 +99,50 @@ public final class GeneratedRows {
                     boundaries, names);
             out.append(one.text());
             rows += one.rows();
+            // And what the module's own declarations are short of, which is no behavior's and so
+            // is in none of the fillings above. Left out, an author who took every row this offers
+            // would be left with a model that still fails and nothing would have said which part
+            // was never attempted (issue #1062).
+            if (boundaries) {
+                declarations(out, compilation, name, behavior);
+            }
         }
         return new Block(out.toString(), rows);
+    }
+
+    /**
+     * What nothing offers a row for among the module's declarations.
+     *
+     * <p>A line an {@code invariant} drew is owed once over every behavior carrying the type, and a
+     * row is composed by walking one behavior's inputs — so which reading composes the one row a
+     * line is owed is a search over the readings, and nothing does it yet. Said rather than left
+     * out, for the reason every other disposition is said: a block that printed only what it managed
+     * reads as though it filled everything.
+     *
+     * <p>Only where the caller asked for the edges, as the lines about them are: a caller that asked
+     * for no boundary rows is not asking about these either.
+     */
+    private static void declarations(StringBuilder out, Compilation compilation, String module,
+                                     String behavior) {
+        java.util.Set<String> said = new java.util.LinkedHashSet<>();
+        for (Adequacy.GenerationDisposition each
+                : Adequacy.generatedForDeclarationsOf(compilation.db(), module, behavior)) {
+            // A line the behavior asked about does not carry is not work this block is about, the
+            // way a report narrowed to one behavior keeps the lines that behavior carries and drops
+            // the rest.
+            if (behavior != null && each.finding().about()
+                    instanceof About.APointOfADeclaredBorder(var debt, var _)
+                    && !debt.carriedBy(behavior)) {
+                continue;
+            }
+            // Only where nothing composed one. Where a reading of the line did, the row is already
+            // above — it was composed for that reading's own point — and a sentence saying nothing
+            // offers a row would be printed under it.
+            if (each.outcome() instanceof GenerationOutcome.NotSupported none) {
+                say(out, said, String.format("// nothing offers a row for `%s` in `%s`: %s%n",
+                        about(each.finding()), each.finding().named(), none.reason().said()));
+            }
+        }
     }
 
     /**
@@ -601,6 +643,10 @@ public final class GeneratedRows {
             // the role: a point away from the line was written as the value the line is at, which
             // is the one place in reach that such a point is not.
             case About.APointOfABorder(var point) -> point.said();
+            // The same words on what the declaration wrote. Nothing composes a row for one of
+            // these yet — the search walks one behavior's inputs and this line is owed once over
+            // all of them — so what is printed beside it is that, in its own sentence.
+            case About.APointOfADeclaredBorder(var debt, var role) -> debt.said(role);
             // The arm's own short name, which is what the report writes and what the document's
             // `subject` joins on. The finding carries the arm rather than words about it, so that
             // the sentence a diagnostic says in the reader's language and the words written here

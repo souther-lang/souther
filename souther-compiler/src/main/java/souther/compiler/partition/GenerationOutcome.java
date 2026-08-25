@@ -133,6 +133,18 @@ public sealed interface GenerationOutcome {
          */
         public enum Reason {
 
+            /**
+             * The line is owed once across every reading of it, and the search is asked of one.
+             *
+             * <p>A row at the line is composed by walking one behavior's inputs, and a line an
+             * {@code invariant} drew is owed by the declaration rather than by any of the behaviors
+             * carrying the type (issue #1062). Which reading composes the one row a debt is owed is
+             * a search over the readings and not a fold of them, and nothing does it yet.
+             */
+            NO_SEARCH_IS_ASKED_FOR_A_LINE_ACROSS_ITS_READINGS(
+                    "a row is composed by walking one behavior's inputs, and this line is owed once"
+                            + " over every behavior carrying the type"),
+
             /** The fork this arm belongs to is one no position of the inputs could be named for. */
             NO_WAY_INTO_THIS_ARM_CAN_BE_NAMED(
                     "a row is steered into an arm by the decisions that hold on the way there, and"

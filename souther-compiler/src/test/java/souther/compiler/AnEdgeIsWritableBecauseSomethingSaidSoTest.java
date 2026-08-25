@@ -294,7 +294,7 @@ at.coverage().made().orElseThrow());
 
         List<BorderAssessment.Point> guards =
                 BorderAssessment.pointsOf(boundaries.get("f")).stream()
-                        .filter(p -> p.border().rule().isWrittenRatherThanNamed())
+                        .filter(p -> p.border().origin().isWrittenRatherThanNamed())
                         .filter(p -> p.owed() != null).toList();
         assertFalse(guards.isEmpty(), "the comparison draws lines: " + boundaries.get("f"));
         for (BorderAssessment.Point at : guards) {

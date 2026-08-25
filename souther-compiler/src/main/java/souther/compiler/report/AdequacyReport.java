@@ -22,6 +22,7 @@ import souther.compiler.query.OutputCaseEvidence;
 import souther.compiler.query.About;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
+import souther.compiler.query.BorderObligationAssessment;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.BehaviorEvidence;
@@ -95,9 +96,25 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     public record ModuleReport(String module, SourceId declaredIn,
-                               List<BehaviorReport> behaviors) {
+                               List<BehaviorReport> behaviors,
+                               List<Adequacy.Finding> declarations,
+                               List<Adequacy.DeclaredDebt> debts) {
+
+        /**
+         * What the module is short of that is not any behavior's.
+         *
+         * <p>A line an {@code invariant} drew is a fact about the type — whether a row standing at
+         * the boundary of {@code UserId} is believed is a question about {@code UserId}, and the
+         * behaviors carrying it say nothing about the length of a user id (issue #1062). Held in a
+         * behavior's list, it had to be filed under whichever of them a walk reached first.
+         *
+         * <p>Here rather than left out of the report, so that a finding whose subject is not a
+         * behavior cannot go missing between the measure and the page.
+         */
         public ModuleReport {
             behaviors = List.copyOf(behaviors);
+            declarations = List.copyOf(declarations);
+            debts = List.copyOf(debts);
         }
 
         /**
@@ -283,7 +300,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 compilation.db().ask(new souther.compiler.query.Bodies.Claimed(name)).value();
         // The lines this report prints and the warnings a build is given are the same list, asked for
         // once here. A second reading of the evidence would be a second statement of what a gap is.
-        Map<String, List<Adequacy.Finding>> findings =
+        List<Adequacy.Finding> findings =
                 compilation.db().ask(new Adequacy.Findings(name)).value();
         List<BehaviorReport> behaviors = new ArrayList<>();
         for (Hir.BehaviorDef behavior : module.behaviors()) {
@@ -311,10 +328,76 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     new BehaviorEvidence(reading, signature, partition, branch),
                     claims == null ? ClaimAnnotations.NONE
                             : claims.getOrDefault(behavior.name(), ClaimAnnotations.NONE),
-                    findings == null ? List.of()
-                            : findings.getOrDefault(behavior.name(), List.of())));
+                    ofBehavior(findings, behavior.name())));
         }
-        return new ModuleReport(name, compilation.sourceIdOf(name), behaviors);
+        List<Adequacy.DeclaredDebt> debts =
+                compilation.db().ask(new Adequacy.DeclaredBorders(name)).value();
+        return new ModuleReport(name, compilation.sourceIdOf(name), behaviors,
+                findings == null ? List.of()
+                        : findings.stream()
+                                .filter(each -> !(each.subject()
+                                        instanceof souther.compiler.query.FindingSubject.OfABehavior))
+                                .toList(),
+                debts == null ? List.of() : debts);
+    }
+
+    /**
+     * The declarations' findings that one of {@code shown} carries.
+     *
+     * <p>Asked of the debt, which knows which behaviors read the line. A line no behavior in this
+     * report carries is work nobody reading it can do, and one that some behavior here carries is
+     * work a row written in front of the reader settles.
+     */
+    private static List<Adequacy.Finding> carriedBy(List<Adequacy.Finding> declarations,
+                                                    List<BehaviorReport> shown) {
+        java.util.Set<String> names = shown.stream().map(BehaviorReport::name)
+                .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
+        return declarations.stream()
+                .filter(each -> !(each.about()
+                        instanceof About.APointOfADeclaredBorder(var debt, var _))
+                        || names.stream().anyMatch(debt::carriedBy))
+                .toList();
+    }
+
+    /** The findings about one behavior. Grouped here, where a block per behavior is printed, and
+     *  not by the measure: what each finding is about is its own answer. */
+    private static List<Adequacy.Finding> ofBehavior(List<Adequacy.Finding> findings, String name) {
+        return findings == null ? List.of()
+                : findings.stream().filter(each -> each.subject().isBehavior(name)).toList();
+    }
+
+    /**
+     * What the module's declarations are short of, under the declaration that wrote the rule.
+     *
+     * <p>Under the declaration and not under a behavior, because that is where an author fixes it. A
+     * line an {@code invariant} drew is a fact about the type — whether a row standing at the
+     * boundary of {@code UserId} is believed is a question about {@code UserId} — and it is met by a
+     * row written anywhere the type is carried. Printed under a behavior, it would have to be
+     * printed under whichever one a walk reached first, and an author sent there would be sent to a
+     * body that says nothing about the length of a user id (issue #1062).
+     *
+     * <p>The two points against the line and no others. What a row well inside the border shows is
+     * about the region of one position, so it stays with that position's behavior — which is why
+     * this block holds one kind of line and the block above still holds both.
+     *
+     * <p>After the behaviors, so that a reader who has just read what each body is short of reads
+     * what the model itself is short of once.
+     */
+    private void declared(StringBuilder out, ModuleReport module, SourceNameResolver names) {
+        Map<String, List<Adequacy.Finding>> byDeclaration = new java.util.LinkedHashMap<>();
+        for (Adequacy.Finding each : module.declarations()) {
+            byDeclaration.computeIfAbsent(each.named(), _ -> new ArrayList<>()).add(each);
+        }
+        byDeclaration.forEach((declaration, findings) -> {
+            out.append(String.format("  %s%n", declaration));
+            for (Adequacy.Finding f : findings) {
+                if (f.about() instanceof About.APointOfADeclaredBorder(var debt, var role)) {
+                    out.append(String.format("      %s no row is at the %s point %s = %s (%s)%n",
+                            mark(f), role, debt.axis(), debt.against(role),
+                            debt.origin().describe(names, module.declaredIn())));
+                }
+            }
+        });
     }
 
     /** This report with only the modules and behaviors the caller asked about. A name that matches
@@ -333,7 +416,21 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // what only it carried and keeps what a whole source cost every one of them. That was a
             // filter over a list of the module's own, which is a second statement of who a reason
             // counts against — asked of the reason where it belongs (issue #996).
-            ModuleReport one = new ModuleReport(m.module(), m.declaredIn(), behaviors);
+            // What the module's declarations are short of, kept where a behavior that is shown
+            // carries the line. A line an `invariant` drew is not any behavior's, and it is
+            // discharged by a row written for any behavior carrying the type — so it is work the
+            // reader of this report can do, and a verdict that kept a line none of the behaviors
+            // shown carries would be a verdict about what the reader cannot see.
+            // And the debts those behaviors carry, for the same reason and by the same question:
+            // a verdict about a line none of them carries is a verdict about what the reader
+            // cannot see.
+            java.util.Set<String> names = behaviors.stream().map(BehaviorReport::name)
+                    .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
+            ModuleReport one = new ModuleReport(m.module(), m.declaredIn(), behaviors,
+                    carriedBy(m.declarations(), behaviors),
+                    m.debts().stream()
+                            .filter(owed -> names.stream().anyMatch(owed.debt()::carriedBy))
+                            .toList());
             kept.add(one);
             overall = overall.union(one.weakenedBy());
         }
@@ -352,10 +449,20 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 .mapToInt(java.util.OptionalInt::getAsInt).sum();
     }
 
-    /** Everything the measures found, across everything reported. */
+    /**
+     * Everything the measures found, across everything reported.
+     *
+     * <p>What the declarations are short of as well as what the bodies are. A line an
+     * {@code invariant} drew is not any behavior's, and a walk over the behaviors alone left it out
+     * of the verdict — so a report printed a gap and said the rows met the bar under it
+     * (issue #1062).
+     */
     public List<Adequacy.Finding> findings() {
-        return modules.stream().flatMap(m -> m.behaviors().stream())
-                .flatMap(b -> b.findings().stream()).toList();
+        return java.util.stream.Stream.concat(
+                        modules.stream().flatMap(m -> m.behaviors().stream())
+                                .flatMap(b -> b.findings().stream()),
+                        modules.stream().flatMap(m -> m.declarations().stream()))
+                .toList();
     }
 
     /** The findings a build is entitled to refuse: a measure came to an answer and the answer was
@@ -502,9 +609,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     add(measures, behavior.partition().partitioned());
                     behavior.partition().axes().forEach(axis -> add(measures, axis.reached()));
                 }
-                // And of a border's four points, the ones the bar asks for.
+                // And of a border's four points, the ones the bar asks for — of the lines this
+                // behavior is owed. A line a declaration is owed is answered once for the module
+                // below, from every reading of it: read here as well, a row standing at it in one
+                // behavior would be weighed against another behavior having no rows, and the
+                // verdict would hold open what the aggregation had settled (issue #1062).
                 BorderAssessment.pointsOf(behavior.partition().boundaries()).stream()
                         .filter(p -> held.requires(p.role()))
+                        .filter(BorderAssessment.Point::owedHere)
                         .forEach(p -> add(measures, measurementOf(p.item())));
                 // Which of the four those are is the bar's answer and not a second reading of it
                 // here: a build refusing over a missing IN row and calling a model satisfied while
@@ -516,6 +628,19 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 // question stands for it, which is a fact about the measure's reading — so it
                 // leaves the measure's own answer short of complete, and reading it back off the
                 // list of what was dropped would be this report deciding a measure's status again.
+            }
+            // And what the module's declarations are owed, once each and from every reading.
+            //
+            // The debts and not their findings. A line a row already stands at has no finding, so a
+            // denominator made of the findings is a denominator made of the gaps — which is
+            // satisfied by whatever it does not contain.
+            for (Adequacy.DeclaredDebt owed : module.debts()) {
+                for (souther.compiler.partition.PointRole role
+                        : BorderObligationAssessment.AGAINST_THE_LINE) {
+                    if (held.requires(role)) {
+                        add(measures, measurementOf(owed.debt().at(role)));
+                    }
+                }
             }
         }
         return measures;
@@ -596,6 +721,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                         .filter(gap -> gap.behavior().map(behavior.name()::equals).orElse(false))
                         .toList(), names);
             }
+            declared(out, module, names);
             said(out, module.incompleteness().stream()
                     .filter(gap -> gap.behavior().isEmpty()).toList(), names);
         }
@@ -981,10 +1107,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     out.append(againstTheLine
                             ? String.format("      %s no row is at the %s point %s = %s (%s)%n",
                                     mark(f), point.role(), point.border().axis(),
-                                    point.against(), point.border().origin(names, declaredIn))
+                                    point.against(), point.border().describe(names, declaredIn))
                             : String.format("      %s no row is at an %s point of %s, %s (%s)%n",
                                     mark(f), point.role(), point.border().axis(),
-                                    point.against(), point.border().origin(names, declaredIn)));
+                                    point.against(), point.border().describe(names, declaredIn)));
                 }
             }
         }
@@ -999,7 +1125,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // without this line the difference reads as the tool being arbitrary.
             out.append(String.format("      · not known to be writable: the %s point %s %s (%s)%s%n",
                     p.role(), p.border().axis(), p.asked(),
-                    p.border().origin(names, declaredIn),
+                    p.border().describe(names, declaredIn),
                     whatWasTried(owed(p).attempt(), names, declaredIn)));
         }
         // And what the model itself answered, which is not a row anybody is behind on. Named by the
@@ -1008,7 +1134,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         for (BorderAssessment.Point p : BorderAssessment.pointsOf(partition.boundaries())) {
             if (p.item() instanceof ItemAssessment.NotOwed not) {
                 out.append(String.format("      · no %s point is owed at %s (%s): %s%n",
-                        p.role(), p.border().label(), p.border().origin(names, declaredIn),
+                        p.role(), p.border().label(), p.border().describe(names, declaredIn),
                         whyNotOwed(not.reason())));
             }
         }
@@ -1721,6 +1847,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                         gap.sourceIdentity().map(sources::written).orElseGet(gap::subject));
                 gap.at().ifPresent(where -> at(g, where, sources));
             }
+            // What the module's declarations are short of, beside what its bodies are. A line an
+            // `invariant` drew is not any behavior's, so publishing it under one would publish it
+            // under whichever a walk reached first — and left out, a consumer counting what a build
+            // refuses over would come up short of what the page shows (issue #1062).
+            //
+            // Under the declaration that owes it, the way a behavior's findings are under the
+            // behavior. What a finding says of itself is what the line asks of a row, and two
+            // declarations bounding a string's length at one say it the same way — so published as
+            // one flat list they are two identical objects, and which declaration a reader is being
+            // sent to is exactly what {@link souther.compiler.query.FindingSubject} was introduced
+            // to keep.
+            declarations(m.putArray("declarations"), module.declarations(), sources);
             ArrayNode behaviors = m.putArray("behaviors");
             for (BehaviorReport behavior : module.behaviors()) {
                 ObjectNode b = behaviors.addObject();
@@ -1970,7 +2108,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // a place written without its source is a line and a column belonging to nothing —
             // and where a boundary is the only place a report points at, the `sources` table has
             // no other entry to guess from.
-            b.put("origin", boundary.origin(sources::written, null));
+            b.put("origin", boundary.describe(sources::written, null));
             // What the line is a line at, said rather than left to be inferred from the text beside
             // it. A line between two positions writes the other position where a line at a count
             // writes the count, and the two read alike.
@@ -2142,8 +2280,40 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * line or a class, that coordinate is not where the reader would go.
      */
     private void findings(ObjectNode behavior, BehaviorReport of, DocumentSources sources) {
-        ArrayNode out = behavior.putArray("findings");
-        for (Adequacy.Finding finding : of.findings()) {
+        findings(behavior.putArray("findings"), of.findings(), sources);
+    }
+
+    /**
+     * What each declaration of the module is short of, under the declaration.
+     *
+     * <p>The grouping a human report prints, published. A finding carries which declaration it is
+     * about, so this is a rendering of that and not a second answer: read off the entries alone, the
+     * subject a finding writes is what the line asks of a row, and the declaration it belongs to
+     * would be gone.
+     */
+    private void declarations(ArrayNode out, List<Adequacy.Finding> written,
+                              DocumentSources sources) {
+        Map<String, List<Adequacy.Finding>> byDeclaration = new LinkedHashMap<>();
+        for (Adequacy.Finding each : written) {
+            byDeclaration.computeIfAbsent(each.named(), _ -> new ArrayList<>()).add(each);
+        }
+        byDeclaration.forEach((declaration, findings) -> {
+            ObjectNode one = out.addObject();
+            one.put("name", declaration);
+            findings(one.putArray("findings"), findings, sources);
+        });
+    }
+
+    /**
+     * The same entries, wherever they are published.
+     *
+     * <p>One writer, because a finding about a declaration is published in the same fields as one
+     * about a behavior — what it is about is the subject's answer and not a second shape of entry.
+     * Written twice, a consumer joining on the fields would find them agreeing until one of the two
+     * was edited.
+     */
+    private void findings(ArrayNode out, List<Adequacy.Finding> written, DocumentSources sources) {
+        for (Adequacy.Finding finding : written) {
             ObjectNode f = out.addObject();
             f.put("kind", word(finding.kind()));
             f.put("disposition", word(finding.disposition(held)));
@@ -2198,7 +2368,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case About.AnArmNoRowGoesThrough _ -> finding.at();
             case About.ACaseNoRowExpects _, About.ACaseNothingWasSeenToProduce _,
                     About.ACaseNoRowAppliesItTo _, About.AClassNoRowIsIn _,
-                    About.APointOfABorder _, About.APositionNoLineDivides _,
+                    About.APointOfABorder _, About.APointOfADeclaredBorder _,
+                    About.APositionNoLineDivides _,
                     About.APositionThisCouldNotRead _, About.ARuleWithoutALine _,
                     About.AQuestionNothingAnswered _,
                     About.APositionWhoseRulesWereNotReached _,
@@ -2254,6 +2425,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // What the point asks of a row, which is what joins it to one of a border's `items`.
             // Asked of the point, which is where the two readers of that name meet.
             case About.APointOfABorder(var point) -> point.said();
+            // The same sentence, on what the declaration wrote. A line owed once over every reading
+            // of it is named by the terms the author used and not by the position some behavior met
+            // it at, which is what the debt is (issue #1062).
+            case About.APointOfADeclaredBorder(var debt, var role) -> debt.said(role);
         };
     }
 

@@ -770,14 +770,32 @@ public final class Analyzer {
     /** Whether anything this behavior is short of is a thing writing a row could answer. */
     private static boolean anythingARowCouldAnswer(Compilation compilation, String module,
                                                    String behavior) {
-        Map<String, List<souther.compiler.query.Adequacy.Finding>> findings =
+        List<souther.compiler.query.Adequacy.Finding> findings =
                 compilation.db().ask(new souther.compiler.query.Adequacy.Findings(module)).value();
         if (findings == null) {
             return false;
         }
-        return findings.getOrDefault(behavior, List.of()).stream()
-                .anyMatch(each -> souther.compiler.query.Adequacy
-                        .whereNoRowCouldAnswer(each.about()) == null);
+        // This behavior's own, and the lines its type declarations are owed that a row written here
+        // would settle. A line an `invariant` drew is not this behavior's finding — what `UserId`
+        // says is the same wherever the type is carried — and a row written for a behavior carrying
+        // the type is what discharges it, so an offer standing beside that behavior is an offer to
+        // do that work (issue #1062). Read as the behavior's own alone, the offer went quiet as
+        // soon as the only work left was a line a declaration is owed.
+        //
+        // Asked of the finding and never of what a search has composed. Whether a value has been
+        // built turns on how much the build was measuring, and an offer that read it would appear
+        // at one level and not at another for work that is there either way.
+        for (souther.compiler.query.Adequacy.Finding each : findings) {
+            if (souther.compiler.query.Adequacy.whereNoRowCouldAnswer(each.about()) != null) {
+                continue;
+            }
+            if (each.subject().isBehavior(behavior)
+                    || each.about() instanceof souther.compiler.query.About
+                            .APointOfADeclaredBorder(var debt, var _) && debt.carriedBy(behavior)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

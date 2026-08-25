@@ -87,10 +87,10 @@ class EveryFindingHasAGenerationDispositionTest {
      */
     private static List<Adequacy.Finding> findings(Compilation compilation, String module,
                                                    String behavior) {
-        Map<String, List<Adequacy.Finding>> found =
+        List<Adequacy.Finding> found =
                 compilation.db().ask(new Adequacy.Findings(module)).value();
         assertNotNull(found, "the model under test compiles");
-        return found.get(behavior);
+        return found.stream().filter(each -> each.subject().isBehavior(behavior)).toList();
     }
 
     private static Adequacy.Filling filling(Compilation compilation, String module,
@@ -142,9 +142,9 @@ class EveryFindingHasAGenerationDispositionTest {
 
     @Test
     void aBoundaryARowWasComposedForIsAnsweredWithThatRow() {
-        Compilation compilation = compiled(POLICY);
+        Compilation compilation = compiled(GUARDED);
         List<Adequacy.GenerationDisposition> answered =
-                filling(compilation, "example.policy", "fee").generation().stream()
+                filling(compilation, "example.guarded", "band").generation().stream()
                         .filter(d -> d.finding().kind() == Adequacy.Kind.BOUNDARY_UNMET).toList();
 
         assertEquals(2, answered.size(), "both edges");
@@ -152,6 +152,114 @@ class EveryFindingHasAGenerationDispositionTest {
                         d -> d.outcome() instanceof GenerationOutcome.Generated),
                 "a strategy applies to a boundary and it composed a row: " + answered);
     }
+
+    /**
+     * A line the declaration is owed is answered too, with the row a reading of it already composed.
+     *
+     * <p>The subject the walk over the behaviors does not reach. A line an {@code invariant} drew is
+     * not any behavior's, so the fillings above answer for every finding but those — and one printed
+     * in the report and left out of this answer is one an author is told nothing about, while the
+     * rows beside it read as though they filled everything.
+     *
+     * <p>And answered with what is known rather than with what has not been arranged. A reading of
+     * the line composed a row standing at the point, and the readings of a debt ask the same of a
+     * row at the points against the line — so that row is the one the debt is offered. Answered
+     * "nothing offers a row" regardless, a block printed the row and then said no row was on offer.
+     */
+    @Test
+    void aLineOwedToADeclarationIsAnsweredForToo() {
+        Compilation compilation = compiled(POLICY);
+        List<Adequacy.Finding> declared =
+                compilation.db().ask(new Adequacy.Findings("example.policy")).value().stream()
+                        .filter(each -> each.subject()
+                                instanceof souther.compiler.query.FindingSubject.OfADeclaration)
+                        .toList();
+        assertFalse(declared.isEmpty(), "the model under test has lines its declarations are owed");
+
+        List<Adequacy.GenerationDisposition> answered =
+                Adequacy.generatedForDeclarationsOf(compilation.db(), "example.policy", null);
+        assertEquals(declared, answered.stream()
+                        .map(Adequacy.GenerationDisposition::finding).toList(),
+                "every one of them, and each with its own answer");
+        assertTrue(answered.stream().allMatch(each ->
+                        each.outcome() instanceof GenerationOutcome.Generated),
+                "a reading of each of these composed a row at the point: " + answered);
+    }
+
+    /**
+     * A generation narrowed to one behavior answers from what that behavior's search composed.
+     *
+     * <p>A line is owed once over every behavior carrying the type, and a row for it may be
+     * composable at one of them and not at another — {@code held} holds the field to a single
+     * value the line is not at, and {@code anywhere} does not. Answered from the module's readings, a
+     * request that searched only {@code held} would say a row is on offer because {@code anywhere}
+     * had one, and print no row beside it (issue #1062).
+     *
+     * <p>Which reading to search when the one asked about composes nothing is the question
+     * {@code --generate} does not ask yet, and the answer says that rather than borrowing another
+     * reading's row.
+     */
+    @Test
+    void aGenerationNarrowedToOneBehaviorAnswersFromWhatThatBehaviorSearched() {
+        Compilation compilation = compiled(NARROWED);
+        assertFalse(Adequacy.generatedForDeclarationsOf(compilation.db(), "example.narrowed",
+                        "held").isEmpty(),
+                "the line is owed at both, so both are asked about");
+
+        assertTrue(Adequacy.generatedForDeclarationsOf(compilation.db(), "example.narrowed", "anywhere")
+                        .stream().allMatch(each ->
+                                each.outcome() instanceof GenerationOutcome.Generated),
+                "the search of `anywhere` composed a row at the line");
+        assertTrue(Adequacy.generatedForDeclarationsOf(compilation.db(), "example.narrowed",
+                        "held").stream().allMatch(each ->
+                                each.outcome() instanceof GenerationOutcome.NotSupported),
+                "and the search of `held` composed none, whatever `anywhere` did");
+    }
+
+    /** One line, at a position one behavior can hold a row at and the other cannot. */
+    private static final String NARROWED = """
+            module example.narrowed
+
+            data Code = String
+                invariant nonempty = String.length(value) >= 1
+
+            data Wide = { c: Code }
+
+            data Narrow = { c: Code }
+                invariant fixed = String.length(c.value) >= 4
+
+            data Ok
+
+            behavior anywhere : (w: Wide) -> Ok
+            let anywhere (w) = Ok
+
+            behavior held : (n: Narrow) -> Ok
+            let held (n) = Ok
+
+            example anywhere
+                | "a" : (Wide { c = Code("abc") }) -> Ok
+
+            example held
+                | "a" : (Narrow { c = Code("abcd") }) -> Ok
+            """;
+
+    /** A guard on an input, whose line is the behavior's own and is owed a row either side. */
+    private static final String GUARDED = """
+            module example.guarded
+
+            data Ok
+            data No
+            data Verdict = Ok | No
+
+            behavior band : (days: Int) -> Verdict
+            let band (days) = {
+                guard days <= 30 else No
+                Ok
+            }
+
+            example band
+                | "well inside" : (5) -> Ok
+            """;
 
     /** A body whose decisions read two positions together, so the combinations reach its arms. */
     private static final String SHIPPING = """
