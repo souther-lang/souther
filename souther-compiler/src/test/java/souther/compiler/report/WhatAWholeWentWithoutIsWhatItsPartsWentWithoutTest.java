@@ -121,8 +121,10 @@ class WhatAWholeWentWithoutIsWhatItsPartsWentWithoutTest {
 
                 if (behavior.signature() != null) {
                     Adequacy.SignatureEvidence signature = behavior.signature();
-                    WeakeningSet cases = signature.output().cases().weakening();
-                    for (InputCaseEvidence each : signature.inputs()) {
+                    WeakeningSet cases = signature.output().cases().weakening()
+                            .union(signature.inputs().weakening());
+                    for (InputCaseEvidence each
+                            : signature.inputs().made().orElseGet(java.util.List::of)) {
                         cases = cases.union(each.cases().weakening());
                     }
                     holds(lost, "signature of " + behavior.name(),

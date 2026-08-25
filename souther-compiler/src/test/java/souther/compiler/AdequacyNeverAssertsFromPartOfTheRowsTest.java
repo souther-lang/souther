@@ -206,7 +206,7 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
                 if (!signature.output().unspecified().isEmpty()) {
                     wrong.add("signature output: " + signature.output().unspecified());
                 }
-                signature.inputs().stream().filter(in -> !in.unspecified().isEmpty())
+                signature.positions().stream().filter(in -> !in.unspecified().isEmpty())
                         .forEach(in -> wrong.add("signature input: " + in.unspecified()));
             }
 

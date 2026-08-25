@@ -180,8 +180,8 @@ class SignatureCoverageReadsAPositionThroughItsNamesTest {
     private static InputCaseEvidence input(String rows, String behavior) {
         Map<String, Adequacy.SignatureEvidence> all = signatures(rows);
         Adequacy.SignatureEvidence evidence = all.get(behavior);
-        assertEquals(1, evidence.inputs().size());
-        return evidence.inputs().get(0);
+        assertEquals(1, evidence.positions().size());
+        return evidence.positions().get(0);
     }
 
     private static Map<String, Adequacy.SignatureEvidence> signatures(String rows) {

@@ -78,6 +78,18 @@ public record OutputCaseEvidence(Set<TypeSymbol> declared, Measure<Cases> cases)
         return new OutputCaseEvidence(Set.of(), new Measure.NotApplicable<>(NotASum.NOT_A_SUM));
     }
 
+    /**
+     * The boundary this is read off was not worked out, so what the output type has was never seen.
+     *
+     * <p>{@link #declared} is empty here and says nothing by being so. Which of the ways a case set
+     * comes out empty this is, is the measurement beside it: {@link NotASum} is a type that was read
+     * and holds one case, and it is a reason rather than something read back off the set for exactly
+     * this — a set nobody filled in and a set there was nothing to fill in with are the same bytes.
+     */
+    public static OutputCaseEvidence boundaryNotDerived(String behavior) {
+        return new OutputCaseEvidence(Set.of(), BoundaryForMeasurement.failed(behavior));
+    }
+
 
     /** What the model declares, with nothing counted against it, for a build that asked for no
      *  measurement. Made here rather than by emptying a measurement above, because this is where the

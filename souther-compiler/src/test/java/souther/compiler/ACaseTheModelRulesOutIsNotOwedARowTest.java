@@ -108,7 +108,7 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
         Adequacy.SignatureEvidence signature = compilation.db()
                 .ask(new Adequacy.Witnesses(compilation.modules().get(0))).value().get("pick");
         assertNotNull(signature, "the model under test compiles");
-        return signature.inputs().get(at);
+        return signature.positions().get(at);
     }
 
     private static PartitionEvidence.AxisCoverage axis(String source) {

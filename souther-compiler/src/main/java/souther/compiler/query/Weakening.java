@@ -76,6 +76,20 @@ public sealed interface Weakening {
     record BodiesNotElaborated(String module) implements Weakening {}
 
     /**
+     * The boundary of one behavior could not be worked out, so every measure that reads one is
+     * short of it.
+     *
+     * <p>Named by the behavior and by nothing else. Both measures of a behavior's boundary go
+     * without this one thing, and which of them was asking is not part of the fact — a measure
+     * named beside it would turn one cause into as many facts as there are measures that read it,
+     * which is counting the paths a fact arrived by ({@link WeakeningSet}).
+     *
+     * <p>Not the reason there is no boundary. A name that resolved to nothing is reported where it
+     * was written, and this says only what that left unmeasurable.
+     */
+    record BoundaryNotDerived(String behavior) implements Weakening {}
+
+    /**
      * The space of two-class combinations was too large to walk, so the counts describe part of it.
      *
      * <p>Not an observation that went missing and not a reading of the model that stopped: the model

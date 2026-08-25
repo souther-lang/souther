@@ -46,6 +46,7 @@
                  "output_cases_unreadable", "input_cases_unreadable", "row_did_not_finish",
                  "border_value_unreadable", "rule_unread", "position_not_read",
                  "question_unanswered", "rules_not_reached", "bodies_not_elaborated",
+                 "behavior_boundary_not_derived",
                  "pair_space_truncated", "proof_contradicted", "arms_unsettled"]
       }
     },
@@ -227,7 +228,7 @@
     },
     "partition": {
       "type": "object",
-      "description": "How much of what the model distinguishes about this behavior's inputs the rows reach.",
+      "description": "How much of what the model distinguishes about this behavior's inputs the rows reach. Absent where there were no positions to write: the boundary they are read off did not work out, so how many there are is unknown and an empty `axes` would say the model divides none of them. Said as `behavior_boundary_not_derived` in the behavior's `weakening`. A `>->` composition is not this — it is measured at its stages and carries a section saying so.",
       "required": ["axes", "boundaries", "pairs", "notDerivable"],
       "additionalProperties": false,
       "properties": {
@@ -525,7 +526,7 @@
     },
     "signature": {
       "type": "object",
-      "description": "What the rows establish about the cases of the behavior's inputs and its output. Absent where the behavior has no signature to read.",
+      "description": "What the rows establish about the cases of the behavior's inputs and its output. Absent where the behavior has no signature to read — which includes a declaration resting on a name that resolved to nothing, whose positions and cases were never seen. What that left unmeasured is the behavior's `weakening`, as `behavior_boundary_not_derived`; which name went unresolved is a compile error reported where it was written.",
       "required": ["status", "output", "inputs"],
       "additionalProperties": false,
       "properties": {

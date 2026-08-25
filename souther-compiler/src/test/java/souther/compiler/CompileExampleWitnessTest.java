@@ -117,12 +117,12 @@ class CompileExampleWitnessTest {
                     | (MemberId("m-1"), Active) -> Found { id = MemberId("m-1") }
                 """).get("lookup");
 
-        assertEquals(2, lookup.inputs().size());
-        assertEquals(List.of(), names(lookup.inputs().get(0).declared()),
+        assertEquals(2, lookup.positions().size());
+        assertEquals(List.of(), names(lookup.positions().get(0).declared()),
                 "a parameter that is not a sum has nothing to cover");
-        assertEquals(List.of("Active", "Suspended"), names(lookup.inputs().get(1).declared()));
-        assertEquals(List.of("Active"), names(lookup.inputs().get(1).seen().specified()));
-        assertEquals(List.of("Suspended"), lookup.inputs().get(1).unspecified().stream()
+        assertEquals(List.of("Active", "Suspended"), names(lookup.positions().get(1).declared()));
+        assertEquals(List.of("Active"), names(lookup.positions().get(1).seen().specified()));
+        assertEquals(List.of("Suspended"), lookup.positions().get(1).unspecified().stream()
                 .map(TypeSymbol::name).toList());
     }
 
