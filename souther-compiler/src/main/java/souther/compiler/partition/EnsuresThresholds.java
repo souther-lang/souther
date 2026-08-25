@@ -254,8 +254,9 @@ public final class EnsuresThresholds {
     }
 
     /**
-     * The positions a statement names that nothing turned into a line, where that is a limit of
-     * this compiler.
+     * The positions a statement names that it draws no line at, for whichever of the two reasons
+     * there are: this reading got partway through the rule, or it read the rule whole and there is
+     * no line in it.
      *
      * <p>Named rather than passed over, because a position left out of every answer is reported as
      * one the model draws no line through — a sentence about the model, and the model says otherwise
@@ -267,9 +268,9 @@ public final class EnsuresThresholds {
      * behavior is applied to. Reported as unread it sends an author after a limit of this compiler
      * that is not there, which is the opposite mistake to the one above and just as wrong.
      *
-     * <p>Why it could not be read is a comparison's own answer where the statement is one. Where it
-     * is not — a rule stated in some other form — what stopped this is the form, which is the one
-     * of the three reasons that does not turn on what two sides name.
+     * <p>Why there is no line is a comparison's own answer where the statement is one. Where it is
+     * not — a rule stated in some other form — this reading did not take it apart at all, and the
+     * form is what stopped it: the one reason that does not turn on what two sides name.
      */
     private static void reportRuleWithoutLine(RuleRef.Ensures rule, Core statement, BindingId answer,
                                      BlockReason.RuleWithoutLineReason why,
