@@ -4,6 +4,7 @@ import souther.compiler.check.Carrier;
 import souther.compiler.check.NumericAnswers;
 import souther.compiler.check.Symbols;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Dates;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.observe.Incompleteness;
@@ -286,6 +287,7 @@ public sealed interface NumericTerm permits NumericTerm.ValueOf, NumericTerm.Tak
         return switch (how) {
             case TakenAs.HowManyItHolds _ -> howMany(at);
             case TakenAs.PartOfTime taken -> partOfTime(taken.part(), at, observed);
+            case TakenAs.PartOfDate taken -> partOfDate(taken.part(), at, observed);
         };
     }
 
@@ -334,6 +336,39 @@ public sealed interface NumericTerm permits NumericTerm.ValueOf, NumericTerm.Tak
         return new Reading.Number(Count.of(seconds
                 .divideToIntegralValue(java.math.BigDecimal.valueOf(part.seconds()))
                 .remainder(java.math.BigDecimal.valueOf(part.many()))));
+    }
+
+    /**
+     * Which year, month or day of its month an observed date falls in.
+     *
+     * <p>Turned into a date and asked, rather than divided. A date counts days and its parts are the
+     * calendar's: the months are of different lengths and a leap year has a day the year before it
+     * does not, so no step and modulus over the count answers any of the three. What turns a count
+     * into a date is {@link Dates}, which is also what a report and a fixture read, so the date this
+     * takes a part of is the date they would write for the same day.
+     *
+     * <p>Answered on the order the operation answers, which is a count by one, while the value is
+     * decoded on the order it is written on. The two are the same pair of orders a part of a time
+     * travels on, and for the same reason: a line at the twelfth month is not a line at the twelfth
+     * day.
+     */
+    private static Reading partOfDate(TakenAs.DatePart part, ObservedValue at, Carrier observed) {
+        if (observed == null) {
+            return new Reading.NotNumber();
+        }
+        Place read = observed.placeOf(at);
+        // A place that is not a count is not a date. No operation declaring this arm is given
+        // anything else, so this is the observation being something other than what the position
+        // declares, which is what `NotNumber` says.
+        if (!(read instanceof Count count)) {
+            return new Reading.NotNumber();
+        }
+        java.time.LocalDate date = Dates.dateAt(count);
+        return new Reading.Number(Count.of(switch (part) {
+            case YEAR -> date.getYear();
+            case MONTH -> date.getMonthValue();
+            case DAY -> date.getDayOfMonth();
+        }));
     }
 
     /** How the values beside a boundary on this term are found, which is what the number it names
