@@ -535,8 +535,19 @@ public final class Names {
         return symbols(db, name, resolvedRegistry(db));
     }
 
-    /** The same over the derived declarations — what everything below the check reads. */
-    static Answer<Symbols> derivedSymbols(Db db, String name) {
+    /**
+     * The same over the derived declarations — what everything below the check reads.
+     *
+     * <p>Public where its two neighbours are not, because {@link souther.compiler.program} takes
+     * its snapshot of what a module declares through it. What is widened is this entry and nothing
+     * under it: the registry it reads through stays this package's.
+     *
+     * <p>A way in and not a key. What comes back holds a registry that asks {@code db} for each
+     * declaration, so it is how to reach an answer rather than an answer — it has no equality to be
+     * memoised by, and a caller that kept one would be holding the compilation it was made from. It
+     * is built where it is used and dropped there.
+     */
+    public static Answer<Symbols> derivedSymbols(Db db, String name) {
         return symbols(db, name, derivedRegistry(db));
     }
 
