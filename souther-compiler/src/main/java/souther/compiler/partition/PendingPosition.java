@@ -177,10 +177,17 @@ sealed interface PendingPosition {
      * reason beside it. What makes it the phase's answer is where it is produced, not this
      * signature: a caller inside this package can still build one out of half a reading.
      *
-     * <p>The structural reason outranks the rules'. Where the walk could not reach into what a
-     * position holds, a rule naming something inside it describes that same stop from the other end
-     * and the first is the cause (issue #626). So a {@link Blocked} completes as itself whatever
-     * the rules came to, and only a {@link Leaf} can reach an absence.
+     * <p><b>Two readings answer about one position, and the verdict is one.</b> Which of their
+     * answers outranks is {@link LeftAtThePosition#outranking}'s and is written once: a reading
+     * that stopped over a rule read to the end, and either over nothing being stated. Decided per
+     * phase instead, the phases disagreed — a rule read to the end in the declaration hid a stop
+     * in the body, and a rule read to the end in the body was reported as a stop because that is
+     * the only thing the body could say.
+     *
+     * <p>The structural reason is among what outranks, not beside it. Where the walk could not
+     * reach into what a position holds, a rule naming something inside it describes that same stop
+     * from the other end and the first is the cause (issue #626) — a stop either way, so the
+     * priority already has it.
      */
     default UndividedPosition complete(BodyCutInspection body) {
         if (body instanceof BodyCutInspection.Evidence) {
@@ -190,20 +197,37 @@ sealed interface PendingPosition {
             throw new IllegalStateException(
                     "the rules drew a line at " + at() + " and its axis has no evidence");
         }
-        return switch (this) {
-            case Blocked _ -> UndividedPosition.cannotDerive(at());
+        LeftAtThePosition left = LeftAtThePosition.outranking(leftHere(), leftBy(body));
+        return switch (left) {
+            case null -> UndividedPosition.absentAfter(this);
+            // Something is written here and this compiler did not read it, so nothing about the
+            // model follows from there being no line.
+            case LeftAtThePosition.AReadingStopped _ -> UndividedPosition.cannotDerive(at());
             // Read to the end, and what it says draws no line. Not a derivation this compiler could
             // not make, and not an absence either: the model states something at this position, and
             // the rule that states it is named in a finding of its own.
-            case ARuleWithNoLine _ -> UndividedPosition.statedWithoutALine(at());
-            case Leaf _ -> switch (body) {
-                case BodyCutInspection.Blocked _ -> UndividedPosition.cannotDerive(at());
-                // The producers of both phases asked, none of them stopped, and none of them found
-                // anything. Which is the only way to an absence, and is what one means: what those
-                // readers read, rather than a claim about what could have been written.
-                case BodyCutInspection.Exhausted _ -> UndividedPosition.absentAfter(this);
-                case BodyCutInspection.Evidence _ -> throw new IllegalStateException("unreachable");
-            };
+            case LeftAtThePosition.ARuleWithNoLine _ -> UndividedPosition.statedWithoutALine(at());
+        };
+    }
+
+    /** What the reading of this position's own declarations left it with. */
+    private LeftAtThePosition leftHere() {
+        return switch (this) {
+            case Leaf _ -> null;
+            case Blocked blocked -> new LeftAtThePosition.AReadingStopped(blocked.why());
+            case ARuleWithNoLine it -> new LeftAtThePosition.ARuleWithNoLine(it.why());
+        };
+    }
+
+    /** And what the reading of the body left it with. */
+    private static LeftAtThePosition leftBy(BodyCutInspection body) {
+        return switch (body) {
+            // The producers of this phase asked, none of them stopped, and none of them found
+            // anything. Which is one half of the way to an absence, and is what it means: what
+            // those readers read, rather than a claim about what could have been written.
+            case BodyCutInspection.Exhausted _ -> null;
+            case BodyCutInspection.NoLine(var left) -> left;
+            case BodyCutInspection.Evidence _ -> throw new IllegalStateException("unreachable");
         };
     }
 }

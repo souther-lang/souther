@@ -37,7 +37,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *   <li>What a rule cuts outranks how it is spelled. Which positions a rule restricts is settled by
  *       the quantity its canonical form cuts, and the spelling answers only where there is no
  *       quantity to be had.</li>
- *   <li>A rule that cuts nothing raises no coverage obligation.</li>
+ *   <li>A comparison whose positions cancel and whose residue holds of every row raises no
+ *       coverage obligation. One whose positions cancel and whose residue holds of none admits
+ *       nothing, which is the opposite, and raises what it always did.</li>
  *   <li>A rule read to the end that draws no line is never a question nobody answered.</li>
  *   <li>Every question nobody answered is one whose reading actually stopped, which
  *       {@code RuleAccounting.Unaccounted} takes only a stop for.</li>

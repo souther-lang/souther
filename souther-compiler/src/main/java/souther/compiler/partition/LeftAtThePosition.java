@@ -62,6 +62,45 @@ public sealed interface LeftAtThePosition {
     }
 
     /**
+     * What a run of rules with no line at one position leaves it with, or null where it holds
+     * none.
+     *
+     * <p><b>A stop ahead of a rule read to the end, and never the first of the list.</b> Either
+     * keeps the position from completing as one the model draws no line through, and they are not
+     * alike in anything else: one is a limit somebody can lift and the other is what the model
+     * says. Taken in the order the rules happen to be in, which of the two a position came out
+     * under turned on which clause its author wrote first.
+     */
+    static LeftAtThePosition of(Iterable<souther.compiler.inputs.RuleWithoutALine> rules) {
+        LeftAtThePosition out = null;
+        for (souther.compiler.inputs.RuleWithoutALine rule : rules) {
+            out = outranking(out, of(rule.why()));
+        }
+        return out;
+    }
+
+    /**
+     * Of two, the one that outranks — and the first where they rank alike.
+     *
+     * <p>The one priority, written once, because more than one reading answers about a position and
+     * their answers have to be put together. A reading that stopped outranks a rule read to the
+     * end: what such a rule states is known, and what a stop leaves is not, so a position where
+     * both happened is one somebody can still do something about. Written per phase, the phases
+     * disagreed — the input reading's rule read to the end hid a stop in the body, and a stop in
+     * the input reading was hidden by nothing at all.
+     */
+    static LeftAtThePosition outranking(LeftAtThePosition first, LeftAtThePosition second) {
+        if (first == null) {
+            return second;
+        }
+        if (second == null) {
+            return first;
+        }
+        return first instanceof AReadingStopped || !(second instanceof AReadingStopped)
+                ? first : second;
+    }
+
+    /**
      * Which of the two {@code why} is, asked once.
      *
      * <p>A reason a rule reading stopped on is in both capabilities — it is a stop, and it is a rule

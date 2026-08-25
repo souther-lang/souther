@@ -599,9 +599,11 @@ public final class InputDomain {
         // own type draws a line, because a clause relating two fields is not a partition of one.
         NumericDomain.Bounds admissible = nothingExists ? null
                 : TypeBounds.admissible(own, projected, term);
-        List<RuleWithoutALine> unread = rulesWithoutALineAt(placed, path, type, symbols, competing);
+        List<RuleWithoutALine> withoutALine =
+                rulesWithoutALineAt(placed, path, type, symbols, competing);
 
-        ReadingResult reading = crossed(declared, view, admissible, admitted, symbols, unread,
+        ReadingResult reading = crossed(declared, view, admissible, admitted, symbols,
+                withoutALine,
                 nothingExists, type);
         return new ReadPosition(path, view, term, admissible, own, projected,
                 // Where the position actually stops, which the ends as written do not say: a clause
@@ -612,7 +614,7 @@ public final class InputDomain {
                 placed.projection(), declared, reading,
                 ObligationDomain.of(reading, declared), admitted.completeness(),
                 admitted.whyPartial() == null ? null : Crossing.stopped(admitted.whyPartial()),
-                unread,
+                withoutALine,
                 // What the rules of this position raise that nothing answered. Asked of the
                 // accounting rather than read off the completeness beside it: one reading being
                 // short of a position's rules is that reading's business, and a rule another
@@ -640,13 +642,14 @@ public final class InputDomain {
      */
     private static ReadingResult crossed(List<Case> declared, TypeView view,
                                          NumericDomain.Bounds admissible, AdmissibleSet admitted,
-                                         Symbols symbols, List<RuleWithoutALine> unread,
+                                         Symbols symbols,
+                                         List<RuleWithoutALine> withoutALine,
                                          boolean nothingExists, Type type) {
         BlockReason.AboutThePosition unreadable = Distinctions.unreadableAt(view);
         if (unreadable != null) {
             return new ReadingResult.Unsupported(unreadable);
         }
-        BlockReason.RuleReadingStopped here = stoppedOn(unread);
+        BlockReason.RuleReadingStopped here = stoppedOn(withoutALine);
         if (!declared.isEmpty()) {
             return Crossing.of(declared, view, admissible, admitted, symbols, here);
         }
@@ -681,8 +684,8 @@ public final class InputDomain {
      * the values are an upper bound and there is no more or less of that — and which rule to go and
      * look at is the finding's to say, one per rule, where they are all named.
      */
-    private static BlockReason.RuleReadingStopped stoppedOn(List<RuleWithoutALine> unread) {
-        for (RuleWithoutALine each : unread) {
+    private static BlockReason.RuleReadingStopped stoppedOn(List<RuleWithoutALine> rules) {
+        for (RuleWithoutALine each : rules) {
             if (each.why() instanceof BlockReason.RuleReadingStopped stopped) {
                 return stopped;
             }

@@ -9,7 +9,6 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.codegen.InvariantConstraints;
-import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.Position;
 import souther.compiler.inputs.StructuralInspection;
@@ -267,14 +266,18 @@ public final class Partitions {
         // A finding the reading did not name a number for is at the position, and answers for every
         // axis on it: what number it was about is what was not read, so an axis cannot be excused by
         // it naming another.
-        boolean anyUnread = rules.stream().anyMatch(one -> switch (one.at()) {
+        LeftAtThePosition left = LeftAtThePosition.of(rules.stream().filter(one -> switch (one.at()) {
             case souther.compiler.inputs.FilingCoordinate.OfTerm it ->
                     it.term().equals(axis.term());
             case souther.compiler.inputs.FilingCoordinate.AtPosition it ->
                     it.path().equals(axis.path());
-        });
-        measured.add(new Measured(axis, anyUnread ? new BodyCutInspection.Blocked()
-                : new BodyCutInspection.Exhausted()));
+        }).toList());
+        // Which of the two this phase was left with, and not merely that it was left with
+        // something. The verdict below tells a reading that stopped from a rule read to the end,
+        // and answered here with one word it read every rule this phase understood as one it could
+        // not read.
+        measured.add(new Measured(axis, left == null ? new BodyCutInspection.Exhausted()
+                : new BodyCutInspection.NoLine(left)));
     }
 
     /**
@@ -917,17 +920,10 @@ public final class Partitions {
      * and each of them used to read it off where the evidence had come from.
      */
     private static LeftAtThePosition leftAt(Position position) {
-        BlockReason stopped = position.valuesUnread();
-        for (RuleWithoutALine rule : position.rulesWithoutALine()) {
-            if (rule.why() instanceof BlockReason.RuleReadingStopped why) {
-                return new LeftAtThePosition.AReadingStopped(why);
-            }
-        }
-        if (stopped != null) {
-            return LeftAtThePosition.of(stopped);
-        }
-        return position.rulesWithoutALine().isEmpty() ? null
-                : LeftAtThePosition.of(position.rulesWithoutALine().getFirst().why());
+        return LeftAtThePosition.outranking(
+                LeftAtThePosition.of(position.rulesWithoutALine()),
+                position.valuesUnread() == null ? null
+                        : new LeftAtThePosition.AReadingStopped(position.valuesUnread()));
     }
 
     // --- small helpers ----------------------------------------------------------------------------

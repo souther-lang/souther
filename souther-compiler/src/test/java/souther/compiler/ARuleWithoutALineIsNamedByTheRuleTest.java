@@ -37,7 +37,8 @@ class ARuleWithoutALineIsNamedByTheRuleTest {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
-    /** Two clauses of one declaration, stopped by one limit at one position. */
+    /** Two clauses of one declaration, each read to the end and each drawing no line at one
+     *  position. */
     private static final String TWO_INVARIANTS = """
             module m
 
@@ -84,11 +85,11 @@ class ARuleWithoutALineIsNamedByTheRuleTest {
      * rest. So the two clauses became one line and the line named neither.
      */
     @Test
-    void twoInvariantClausesStoppedAlikeAreTwoFindings() {
+    void twoInvariantClausesWithNoLineAreTwoFindings() {
         // Two rules about two positions, so four findings: a reader looking up either position is
         // owed both rules. What was one line is the pair at one position.
-        assertEquals(4, rulesNotRead(TWO_INVARIANTS).size(), () -> unread(TWO_INVARIANTS));
-        assertEquals(2, ruleIdsNotRead(TWO_INVARIANTS).size(), () -> unread(TWO_INVARIANTS));
+        assertEquals(4, rulesNotRead(TWO_INVARIANTS).size(), () -> withoutALine(TWO_INVARIANTS));
+        assertEquals(2, ruleIdsNotRead(TWO_INVARIANTS).size(), () -> withoutALine(TWO_INVARIANTS));
         assertTrue(namesRule(human(TWO_INVARIANTS), "invariant R (first)"),
                 human(TWO_INVARIANTS));
         assertTrue(namesRule(human(TWO_INVARIANTS), "invariant R (second)"),
@@ -110,14 +111,14 @@ class ARuleWithoutALineIsNamedByTheRuleTest {
     /** And two comparisons of one condition, which the guard producer kept one of. */
     @Test
     void twoComparisonsStoppedAlikeAreTwoFindings() {
-        assertEquals(2, rulesNotRead(TWO_COMPARISONS).size(), () -> unread(TWO_COMPARISONS));
-        assertEquals(2, ruleIdsNotRead(TWO_COMPARISONS).size(), () -> unread(TWO_COMPARISONS));
+        assertEquals(2, rulesNotRead(TWO_COMPARISONS).size(), () -> withoutALine(TWO_COMPARISONS));
+        assertEquals(2, ruleIdsNotRead(TWO_COMPARISONS).size(), () -> withoutALine(TWO_COMPARISONS));
     }
 
     /** And two clauses of an {@code ensures}. */
     @Test
-    void twoEnsuresClausesStoppedAlikeAreTwoFindings() {
-        assertEquals(2, ruleIdsNotRead(TWO_ENSURES).size(), () -> unread(TWO_ENSURES));
+    void twoEnsuresClausesWithNoLineAreTwoFindings() {
+        assertEquals(2, ruleIdsNotRead(TWO_ENSURES).size(), () -> withoutALine(TWO_ENSURES));
         assertTrue(namesRule(human(TWO_ENSURES), "ensures f (low)"), human(TWO_ENSURES));
         assertTrue(namesRule(human(TWO_ENSURES), "ensures f (high)"), human(TWO_ENSURES));
     }
@@ -135,7 +136,7 @@ class ARuleWithoutALineIsNamedByTheRuleTest {
         assertEquals(List.of("r.a", "r.b"),
                 rulesNotRead(TWO_INVARIANTS).stream()
                         .map(PartitionEvidence.NotRead::at).distinct().sorted().toList(),
-                () -> unread(TWO_INVARIANTS));
+                () -> withoutALine(TWO_INVARIANTS));
     }
 
     /**
@@ -169,7 +170,7 @@ class ARuleWithoutALineIsNamedByTheRuleTest {
 
         List<PartitionEvidence.NotRead> said = rulesNotRead(model);
 
-        assertEquals(1, said.size(), () -> unread(model));
+        assertEquals(1, said.size(), () -> withoutALine(model));
         assertTrue(human(model).contains("not read: comparison@"), human(model));
         assertTrue(human(model).lines()
                         .filter(line -> line.contains("not read:"))
@@ -357,7 +358,7 @@ class ARuleWithoutALineIsNamedByTheRuleTest {
         return AdequacyReport.of(compilation).human(SourceNameResolver.identity());
     }
 
-    private static String unread(String model) {
+    private static String withoutALine(String model) {
         JsonNode document = JSON.readTree(json(model));
         return document.get("modules").get(0).get("behaviors").get(0)
                 .get("partition").get("notRead").toString();

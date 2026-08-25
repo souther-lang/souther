@@ -124,7 +124,8 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
         PendingPosition pending = PendingPosition.of(pending(new StructuralInspection.Continuation.None(),
                 new BlockReason.UnreadValueRule()));
 
-        assertFalse(pending.complete(new BodyCutInspection.Blocked()).isAbsent());
+        assertFalse(pending.complete(new BodyCutInspection.NoLine(new LeftAtThePosition.AReadingStopped(
+                        new BlockReason.UnreadValueRule()))).isAbsent());
         assertNull(pending.reportable(), "each rule is said with its rule, not as this position");
     }
 
@@ -170,10 +171,46 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
     /** A rule about the position that went unread is what it is left with, and not an absence. */
     @Test
     void aLeafWhoseRuleWentUnreadSaysThat() {
-        UndividedPosition done = new PendingPosition.Leaf(AT)
-                .complete(new BodyCutInspection.Blocked());
+        UndividedPosition done = new PendingPosition.Leaf(AT).complete(new BodyCutInspection.NoLine(new LeftAtThePosition.AReadingStopped(
+                        new BlockReason.UnreadValueRule())));
 
         assertFalse(done.isAbsent());
+        assertEquals(new UndividedPosition.Why.CannotDerive(), done.why());
+    }
+
+    /**
+     * And a rule the body read from end to end says the other thing, as the same rule does where
+     * the declaration wrote it.
+     *
+     * <p>The phase a rule was written in is no part of what it says. This one used to be the only
+     * answer the body could give — that something was left — and a verdict read it as the position
+     * having rules nothing looked at, over a {@code guard} this compiler understood completely.
+     */
+    @Test
+    void aLeafWhoseBodyRuleWasReadToTheEndSaysTheOtherThing() {
+        UndividedPosition done = new PendingPosition.Leaf(AT).complete(
+                new BodyCutInspection.NoLine(new LeftAtThePosition.ARuleWithNoLine(
+                        new BlockReason.ComparisonBetweenPositions())));
+
+        assertFalse(done.isAbsent());
+        assertEquals(new UndividedPosition.Why.StatedWithoutALine(), done.why());
+    }
+
+    /**
+     * A stop in the body outranks a rule the declaration read to the end.
+     *
+     * <p>Both phases answer about one position and the verdict is one. Read off the first phase
+     * alone, a rule read to the end at the declaration hid a reading that stopped two lines into
+     * the body — and a position nothing had read came back as one the model states something at.
+     */
+    @Test
+    void aStopInTheBodyOutranksARuleTheDeclarationReadToTheEnd() {
+        PendingPosition stated = new PendingPosition.ARuleWithNoLine(AT,
+                new BlockReason.ComparisonBetweenPositions());
+
+        UndividedPosition done = stated.complete(new BodyCutInspection.NoLine(
+                new LeftAtThePosition.AReadingStopped(new BlockReason.UnreadValueRule())));
+
         assertEquals(new UndividedPosition.Why.CannotDerive(), done.why());
     }
 
@@ -192,7 +229,8 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
         UndividedPosition.Why expected = new UndividedPosition.Why.CannotDerive();
 
         assertEquals(expected, blocked.complete(new BodyCutInspection.Exhausted()).why());
-        assertEquals(expected, blocked.complete(new BodyCutInspection.Blocked()).why());
+        assertEquals(expected, blocked.complete(new BodyCutInspection.NoLine(new LeftAtThePosition.AReadingStopped(
+                        new BlockReason.UnreadValueRule()))).why());
         // And the finding is the stop, whatever the rules came to: a rule naming something inside a
         // position the walk could not enter describes that same stop from the other end.
         assertEquals(new souther.compiler.inputs.PositionReadingBlocked(AT,
