@@ -96,8 +96,8 @@ public record DeclaredRows(GenerationScope scope,
     public List<Unmet> unmet() {
         List<Unmet> out = new ArrayList<>();
         resolved.forEach((_, answer) -> {
-            if (answer.resolution() instanceof DeclarationResolution.Unresolved(var coverage)) {
-                out.add(unmet(answer, coverage));
+            if (answer.resolution() instanceof DeclarationResolution.Unresolved _) {
+                out.add(unmet(answer));
             }
         });
         return List.copyOf(out);
@@ -108,12 +108,34 @@ public record DeclaredRows(GenerationScope scope,
      *
      * <p>The one place the gate is passed. Every reader of this holds an answer whose shape says
      * what it may be spelled as, so none of them carries a copy of the rule.
+     *
+     * <p>Reachable from the package for the same reason: what it decides is held directly, rather
+     * than through a rendering of it or a compilation arranged to produce the evidence.
+     *
+     * <p>The coverage is read off the answer rather than handed in beside it. Taken as a second
+     * argument, a caller could pass one walk's evidence beside another walk's answer, and the two
+     * would have to be kept in step by whoever called.
      */
-    private static Unmet unmet(Answer answer, SearchCoverage coverage) {
+    static Unmet unmet(Answer answer) {
+        if (!(answer.resolution() instanceof DeclarationResolution.Unresolved(var coverage))) {
+            throw new IllegalStateException(
+                    "what is left to say about a point a row was composed at, or none was looked"
+                            + " for at: " + answer.resolution());
+        }
         List<At> came = new ArrayList<>();
         coverage.came().forEach((reading, search) -> {
-            if (search instanceof SearchCoverage.ReadingSearch.Attempted(var why)) {
-                came.add(new At(reading, why));
+            switch (search) {
+                case SearchCoverage.ReadingSearch.Attempted(var why) ->
+                        came.add(new At.Searched(reading, why));
+                // Kept and not skipped. A reading this run could not search is something that
+                // happened to it, and dropping it here would put back the absence the coverage was
+                // made total to take out: a reader would see the readings that answered and no sign
+                // that another was asked.
+                case SearchCoverage.ReadingSearch.Unavailable _ ->
+                        came.add(new At.CouldNotBeSearched(reading));
+                // The request never asked about it, so nothing was spent on it and there is
+                // nothing to report. Its absence from this is what the scope already says.
+                case SearchCoverage.ReadingSearch.OutOfScope _ -> { }
             }
         });
         if (came.isEmpty()) {
@@ -125,9 +147,26 @@ public record DeclaredRows(GenerationScope scope,
                         List.copyOf(came));
     }
 
-    /** What one reading of the line came to, and which reading it was. */
-    public record At(BorderObligationAssessment.Reading reading,
-                     Generator.UnresolvedCombination why) {}
+    /**
+     * What one reading of the line came to, and which reading it was.
+     *
+     * <p>Two shapes, because a search that ran and a search that could not be made are different
+     * news and only the first says anything about the point. Held as one with a reason that might
+     * be missing, the second reads as a search that came back empty.
+     */
+    public sealed interface At {
+
+        /** Which reading this is about. */
+        BorderObligationAssessment.Reading reading();
+
+        /** The search ran and no row came of it, in its own words. */
+        record Searched(BorderObligationAssessment.Reading reading,
+                        Generator.UnresolvedCombination why) implements At {}
+
+        /** The search of this reading had no answer to give, so nothing was looked for at it. A
+         *  fact about this run, and never about the point. */
+        record CouldNotBeSearched(BorderObligationAssessment.Reading reading) implements At {}
+    }
 
     /**
      * What is left to say about a line no row was composed at.
@@ -148,6 +187,9 @@ public record DeclaredRows(GenerationScope scope,
          *
          * <p>The one arm a sentence about the line may be written from. What each reading said is
          * kept beside it rather than folded, because they prove it of different positions.
+         *
+         * <p>Every entry here is a search that ran: the gate this arm passes is every reading having
+         * been walked, so a reading this run could not search cannot be in one.
          */
         record TheLineCannotBeWritten(String owedBy, String said, List<At> proving)
                 implements Unmet {}
@@ -205,8 +247,7 @@ public record DeclaredRows(GenerationScope scope,
             out.add(new Adequacy.GenerationDisposition(finding, switch (answer.resolution()) {
                 case DeclarationResolution.Generated(var _, var row) ->
                         new GenerationOutcome.Generated(List.of(row));
-                case DeclarationResolution.Unresolved(var coverage) ->
-                        cannot(unmet(answer, coverage));
+                case DeclarationResolution.Unresolved _ -> cannot(unmet(answer));
                 case DeclarationResolution.NoSearch(var cause) -> throw new IllegalStateException(
                         "a finding at a point nothing was looked for at, which the measurement says"
                                 + " needs nothing looked for: " + at + " " + cause);
@@ -228,15 +269,25 @@ public record DeclaredRows(GenerationScope scope,
      * at the one reading it was about would have reported it as the line refusing a row.
      */
     private static GenerationOutcome.CannotGenerate cannot(Unmet unmet) {
-        return new GenerationOutcome.CannotGenerate(switch (unmet) {
-            case Unmet.TheLineCannotBeWritten(var _, var _, var proving) ->
-                    proving.stream().map(At::why).toList();
-            case Unmet.WhatTheReadingsCameTo(var _, var _, var came) ->
-                    came.stream().map(At::why).toList();
-            case Unmet.NothingWasSearched(var _, var said) ->
-                    List.of(new Generator.UnresolvedCombination(List.of(said),
-                            Generator.UnresolvedCombination.Reason
-                                    .NO_READING_OF_THE_LINE_COULD_BE_SEARCHED));
-        });
+        List<Generator.UnresolvedCombination> said = switch (unmet) {
+            case Unmet.TheLineCannotBeWritten(var _, var _, var proving) -> whys(proving);
+            case Unmet.WhatTheReadingsCameTo(var _, var _, var came) -> whys(came);
+            case Unmet.NothingWasSearched(var _, var _) -> List.of();
+        };
+        // Where no reading was searched there is nothing any of them said, and the run says that
+        // about itself. Read as a search that came back empty, a request that could look at none of
+        // the readings it was about would have reported it as the line refusing a row.
+        return new GenerationOutcome.CannotGenerate(said.isEmpty()
+                ? List.of(new Generator.UnresolvedCombination(List.of(unmet.said()),
+                        Generator.UnresolvedCombination.Reason
+                                .NO_READING_OF_THE_LINE_COULD_BE_SEARCHED))
+                : said);
+    }
+
+    /** What the readings that were searched came to, which is what a reason can be read from. */
+    private static List<Generator.UnresolvedCombination> whys(List<At> came) {
+        return came.stream()
+                .filter(At.Searched.class::isInstance)
+                .map(each -> ((At.Searched) each).why()).toList();
     }
 }

@@ -167,6 +167,38 @@ class WhichReadingComposesTheRowALineIsOwedTest {
     }
 
     /**
+     * A reading this run could not search is carried to whoever reads the answer.
+     *
+     * <p>The coverage is total so that "the request never asked" and "it asked and got no answer"
+     * are states rather than an absence. A projection that took only the readings that answered
+     * would put that absence straight back: a reader sees the readings that said something and no
+     * sign that another was asked. The one the request never asked about may be left out, because
+     * the scope already says it.
+     */
+    @Test
+    void aReadingThisRunCouldNotSearchIsCarriedOver() {
+        Reading answered = at("here");
+        Reading silent = at("elsewhere");
+        Reading unasked = at("further");
+
+        SearchCoverage coverage = coverageOf(Map.of(
+                        answered, new SearchCoverage.ReadingSearch.Attempted(refused()),
+                        silent, new SearchCoverage.ReadingSearch.Unavailable(),
+                        unasked, new SearchCoverage.ReadingSearch.OutOfScope()),
+                List.of(answered, silent, unasked));
+
+        DeclaredRows.Unmet unmet = DeclaredRows.unmet(new DeclaredRows.Answer(SAID, "Code",
+                new DeclarationResolution.Unresolved(coverage)));
+
+        List<DeclaredRows.At> came = assertInstanceOf(
+                DeclaredRows.Unmet.WhatTheReadingsCameTo.class, unmet).came();
+        assertEquals(List.of(answered, silent), came.stream().map(DeclaredRows.At::reading).toList(),
+                "the reading that answered and the one that could not be searched");
+        assertInstanceOf(DeclaredRows.At.Searched.class, came.get(0));
+        assertInstanceOf(DeclaredRows.At.CouldNotBeSearched.class, came.get(1));
+    }
+
+    /**
      * A coverage whose readings are in another order than the line's cannot be made.
      *
      * <p>The order is half the contract: it is what makes "the first that composed a row" one

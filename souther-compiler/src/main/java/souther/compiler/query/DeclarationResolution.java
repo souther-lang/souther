@@ -43,7 +43,7 @@ public sealed interface DeclarationResolution {
      * for different reasons — one whose rules leave no value at the point, one whose candidates were
      * all refused, one the search stopped short of — and a single reason carried in this arm would
      * be one of them standing for the rest, chosen by the order the walk happened to take. What the
-     * line itself settles, if anything, is {@link SearchCoverage#conclusiveReason}.
+     * line itself settles, if anything, is {@link SearchCoverage#provesTheLineCannotBeWritten}.
      */
     record Unresolved(SearchCoverage coverage) implements DeclarationResolution {
 

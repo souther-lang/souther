@@ -41,13 +41,20 @@ public final class OfferedAtTheLines {
         declared.unmet().forEach(unmet -> {
             switch (unmet) {
                 case DeclaredRows.Unmet.TheLineCannotBeWritten(var _, var _, var proving) ->
-                        proving.forEach(at -> unresolved.add(at.why()));
+                        proving.forEach(at -> searched(unresolved, at));
                 case DeclaredRows.Unmet.WhatTheReadingsCameTo(var _, var _, var came) ->
-                        came.forEach(at -> unresolved.add(at.why()));
+                        came.forEach(at -> searched(unresolved, at));
                 case DeclaredRows.Unmet.NothingWasSearched(var _, var _) -> { }
             }
         });
         return new Generator.GenerationResult(rows, unresolved, own.reasons());
+    }
+
+    /** What one reading came to, where it was searched at all. */
+    private static void searched(List<Generator.UnresolvedCombination> out, DeclaredRows.At at) {
+        if (at instanceof DeclaredRows.At.Searched(var _, var why)) {
+            out.add(why);
+        }
     }
 
     private OfferedAtTheLines() {}

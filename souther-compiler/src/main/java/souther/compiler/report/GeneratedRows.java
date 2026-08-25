@@ -155,10 +155,19 @@ public final class GeneratedRows {
                 // One line per reading, because they are not one fact: a reading whose rules leave
                 // nothing at its own position and one whose search stopped are different news, and
                 // a line carrying whichever came first would carry the order the walk took.
-                case DeclaredRows.Unmet.WhatTheReadingsCameTo(var _, var _, var came) ->
-                        came.forEach(at -> say(out, said, String.format(
-                                "// no row for `%s` in `%s`: %s%n", at.why().subject(),
-                                at.reading().behavior(), saidOf(at.why()))));
+                case DeclaredRows.Unmet.WhatTheReadingsCameTo(var _, var asked, var came) ->
+                        came.forEach(at -> say(out, said, switch (at) {
+                            case DeclaredRows.At.Searched(var reading, var why) -> String.format(
+                                    "// no row for `%s` in `%s`: %s%n", why.subject(),
+                                    reading.behavior(), saidOf(why));
+                            // Said, because a reading that was asked about and could not be
+                            // searched is a thing that happened to this run. Left out, a reader
+                            // sees the readings that answered and no sign that another was asked.
+                            case DeclaredRows.At.CouldNotBeSearched(var reading) -> String.format(
+                                    "// no row for `%s` in `%s`: the lines of that behavior could"
+                                            + " not be searched, so nothing was looked for at it%n",
+                                    asked, reading.behavior());
+                        }));
                 case DeclaredRows.Unmet.NothingWasSearched(var owedBy, var asked) ->
                         say(out, said, String.format(
                                 "// no row for `%s` owed by `%s`: %s%n", asked, owedBy,
