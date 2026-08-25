@@ -463,10 +463,12 @@ public final class GuardThresholds {
      * positions, and the arithmetic that would have cancelled {@code b} is the part that stopped —
      * so nothing here may become the subject of a question.
      *
-     * <p>The number and not the position alone. A side the term reading names is named as the term
-     * it is, so a rule about a length that nothing could read leaves the length short and the
-     * string alone; a side it does not name is a position the walk met inside something else, and
-     * what was wanted of it is the position's own values.
+     * <p>The number where a side names one, and the position where none was named. A rule about a
+     * length that nothing could read leaves the length short and the string alone, so a side the
+     * term reading names is filed as the term it is. A position the walk met inside something it
+     * could not take apart is filed as the position, and that is not a claim that the rule is about
+     * the position's own values — which number of it the rule is about is exactly the part that was
+     * not read.
      */
     static List<FilingCoordinate> filedAt(Core.Binary comparison, InputReads reads,
                                                Symbols symbols) {

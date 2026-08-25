@@ -44,13 +44,6 @@ import java.util.Map;
  * could be met by no row and composed for by none (#1018). Nothing here reads an operand's type, and
  * the guard that used to — the two operands being of one order — was about neither position.
  *
- * @param holdsAtTheLine whether the line's own values satisfy the comparison, which is what tells
- *                       {@code <} from {@code <=} and is the whole of what the row on the line shows
- * @param valueBelongsBelow which side of the line the pair standing on it belongs to. Not derivable
- *                       from {@link #holdsAtTheLine}, which says what happens on the line and
- *                       nothing about either side of it: {@code a < b} and {@code a > b} agree there
- *                       and are opposite everywhere else. Together the two say which way the rule is
- *                       satisfied, which is what a border is read off
  * @param stepsApart     how far apart the rule holds them, as a number on the carrier's counts.
  *                       Zero where the rule cuts where they meet, which is every comparison written
  *                       as one position against another. A number and not a count of steps: an order
@@ -166,21 +159,11 @@ record ComparedTerms(NumericTerm on, NumericTerm against,
         return new ComparedTerms(two[0], two[1], carriers, new Count(read.cut()));
     }
 
-    /** Which side the left of the comparison is on where the comparison is satisfied. Read off the
-     *  operator as written, since neither side is turned round here. */
-    private static boolean onIsAbove(BinOp op) {
-        return op == BinOp.GT || op == BinOp.GE;
-    }
-
     /** Whether an operator orders its two sides, which {@code ==} and {@code /=} do not. */
     private static boolean ordersStrictly(BinOp op) {
         return switch (op) {
             case LT, LE, GT, GE -> true;
             case EQ, NE, AND, OR, ADD, SUB, MUL, DIV, CONCAT -> false;
         };
-    }
-
-    private static boolean holdsAtTheLine(BinOp op) {
-        return op == BinOp.LE || op == BinOp.GE;
     }
 }

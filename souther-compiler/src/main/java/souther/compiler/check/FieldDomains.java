@@ -403,7 +403,9 @@ public final class FieldDomains {
     public record Placed(String path, ValueName by, RuleRef.Invariant from,
                          boolean lower, Endpoint end) {
 
-        /** Whether it is a number taken of the position rather than its own values. */
+        /** Whether it is a number taken of the position rather than its own values, which is what
+         *  the readings of this value's own clauses ask each other. Derived and not stored: which
+         *  number it is, is {@link #by}, and a stored answer beside it would be a second one. */
         public boolean measured() {
             return by != null;
         }
@@ -439,7 +441,8 @@ public final class FieldDomains {
     public record Unread(String path, ValueName by, RuleRef.Invariant from,
                          Core part, souther.compiler.inputs.BlockReason.AboutARule why) {
 
-        /** Whether it is a number taken of the position rather than its own values. */
+        /** Whether it is a number taken of the position rather than its own values, derived for the
+         *  reason {@link Placed#measured} gives. */
         public boolean measured() {
             return by != null;
         }
