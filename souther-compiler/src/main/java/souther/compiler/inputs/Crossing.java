@@ -70,13 +70,13 @@ final class Crossing {
     /**
      * What stopped the values reading, in the vocabulary a report is projected from.
      *
-     * <p>A relation between two positions is what {@link BlockReason.ComparisonBetweenPositions}
-     * already says, whichever rule wrote it: a {@code guard} comparing two inputs and an
-     * {@code invariant} relating two fields leave a reader the same thing to know. The other two
-     * are their own, because what would lift each is different work — one wants a reader for a form,
-     * and one wants the gathering to reach further.
+     * <p>A stop, and the type says so. Every arm of {@link souther.compiler.values.UnreadReason}
+     * leaves the values here an upper bound, including the one for a rule the reading of ends took
+     * in whole — {@code a < b} places no line and is no shortfall there, and here it is a rule this
+     * could not turn into a set of one position's values at all. What each of them would take to
+     * lift is different work, which is why they stay apart rather than becoming one word.
      */
-    static BlockReason stopped(souther.compiler.values.UnreadReason why) {
+    static BlockReason.ReadingStopReason stopped(souther.compiler.values.UnreadReason why) {
         return BlockReason.of(why);
     }
 

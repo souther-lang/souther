@@ -109,11 +109,13 @@ public sealed interface BlockReason {
                 // bounded it, and nothing knows which — so both.
                 case PARTITION -> switch (this) {
                     case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
-                         UnreadValueRule _, CompetingCoordinates _ -> true;
+                         UnreadValueRule _, ValueRuleRelatingTwoPositions _,
+                         CompetingCoordinates _ -> true;
                 };
                 case BOUNDARY -> switch (this) {
                     case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
-                         UnreadValueRule _, CompetingCoordinates _ -> true;
+                         UnreadValueRule _, ValueRuleRelatingTwoPositions _,
+                         CompetingCoordinates _ -> true;
                 };
             };
         }
@@ -164,21 +166,29 @@ public sealed interface BlockReason {
     /**
      * What a value reading's account of a rule it could not use comes to here.
      *
-     * <p>The one place the two vocabularies meet, so a reader holding a reading's completeness and
-     * one holding a block reason cannot come to different words for one stop. A relation between
-     * two positions is what {@link ComparisonBetweenPositions} already says, whichever rule wrote
-     * it: a {@code guard} comparing two inputs and an {@code invariant} relating two fields leave a
-     * reader the same thing to know. The other is its own, because what would lift it is different
-     * work — a reader for a form rather than a gathering that reaches further.
+     * <p><b>Every one of them is a stop, and that is a fact about this reading rather than about
+     * the rule.</b> What is held at a position is a set of its own values, and every arm of
+     * {@link souther.compiler.values.UnreadReason} widens it — a position carrying one of them
+     * admits what the reading arrived at and may admit fewer. So a caller here is being told this
+     * compiler fell short, whichever rule shape it fell short on.
+     *
+     * <p>Which is why a relation between two positions is {@link ValueRuleRelatingTwoPositions}
+     * here and {@link ComparisonBetweenPositions} where a line is drawn. One rule, two readings,
+     * two answers, and both are true: the reading of ends took {@code a < b} in completely and
+     * placed no line, and the reading of values could not turn it into a set of one position's
+     * values at all. Written as one reason, the second was reported in the words of the first —
+     * that nothing fell short — over a position whose values are an upper bound. A word out there
+     * is not what splits: {@link ReportedReason} sends both to the one the document has, so a
+     * reader holding either still meets one vocabulary.
      *
      * <p>{@link souther.compiler.values.UnreadReason#NOT_REACHED} is refused rather than answered.
      * A reading that never arrived at the rules of a position is holding no rule for this to be
      * about, so a caller here would be naming one it does not have — which is the whole of what
      * {@link AboutThePosition} is beside this for.
      */
-    static RuleWithoutLineReason ofARuleTheValueReadingLeft(souther.compiler.values.UnreadReason why) {
+    static RuleReadingStopped ofARuleTheValueReadingLeft(souther.compiler.values.UnreadReason why) {
         return switch (why) {
-            case RELATES_TWO_POSITIONS -> new ComparisonBetweenPositions();
+            case RELATES_TWO_POSITIONS -> new ValueRuleRelatingTwoPositions();
             case FORM_NOT_READ, ALTERNATIVE_NOT_READ -> new UnreadValueRule();
             case NOT_REACHED -> throw new IllegalArgumentException(
                     "a reading that did not reach the rules of a position holds no rule to say"
@@ -193,8 +203,12 @@ public sealed interface BlockReason {
      * to "why is there nothing here", and which of them it is decides what a report may go on to
      * say rather than whether the reading stopped. Written in terms of the one above, so the
      * classification is stated once.
+     *
+     * <p>A stop either way, which the type says. A value reading has no way of finishing and
+     * leaving a rule without a line — that is the reading of ends' answer to give — so nothing this
+     * returns may reach a caller as a rule read from end to end.
      */
-    static BlockReason of(souther.compiler.values.UnreadReason why) {
+    static ReadingStopReason of(souther.compiler.values.UnreadReason why) {
         return why == souther.compiler.values.UnreadReason.NOT_REACHED
                 ? new ValueRulesNotReached() : ofARuleTheValueReadingLeft(why);
     }
@@ -261,6 +275,24 @@ public sealed interface BlockReason {
      * values that follows a rule into a shape it does not enter today.
      */
     record UnreadValueRule() implements RuleReadingStopped {}
+
+    /**
+     * A rule about the position says how it stands against another position, and what is held here
+     * is a set of this position's own values.
+     *
+     * <p>The reading of values could not turn the rule into one, so what it arrived at is an upper
+     * bound: a value it holds may be one no row can take, and a value it does not hold is still
+     * one no rule admits. That is a stop, and every arm of
+     * {@link souther.compiler.values.UnreadReason} is one for the same reason.
+     *
+     * <p><b>Its own case and not {@link ComparisonBetweenPositions}, which is the other reading's
+     * answer for the same rule.</b> Nothing about {@code a < b} was beyond the reading of ends: it
+     * took the rule in whole and placed no line, and no measure is short of anything on its
+     * account. The reading of values met the same rule and got nothing it could hold. One reason
+     * for both said the second in the words of the first — that the rule was read and nothing is
+     * missing — over a position whose values this compiler cannot state.
+     */
+    record ValueRuleRelatingTwoPositions() implements RuleReadingStopped {}
 
     /**
      * The reading of what the position may hold never reached the rules about it.
