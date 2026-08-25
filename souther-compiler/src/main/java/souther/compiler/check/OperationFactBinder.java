@@ -4,7 +4,6 @@ import souther.compiler.stdlib.Stdlib;
 import souther.compiler.semantics.ArgumentRef;
 import souther.compiler.semantics.OperationFact;
 import souther.compiler.semantics.OperationFacts;
-import souther.compiler.types.Type;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -67,9 +66,11 @@ final class OperationFactBinder {
                 // statement and a signature could disagree with either half.
                 case OperationFact.StatesTheOrderOfItsArguments states -> {
                     DischargeRules.holdToTheDeclaration(stdlib, each.operation(), states.order().greater(),
-                            null, type -> true, "the argument a positive answer names as greater");
+                            null, TypeRequirement.ANY,
+                            "the argument a positive answer names as greater");
                     DischargeRules.holdToTheDeclaration(stdlib, each.operation(), states.order().lesser(),
-                            null, type -> true, "the argument a positive answer names as lesser");
+                            null, TypeRequirement.ANY,
+                            "the argument a positive answer names as lesser");
                 }
                 case OperationFact.ShiftsBy shifts -> DischargeRules.holdShift(stdlib, each.operation(),
                         shifts);
@@ -79,22 +80,22 @@ final class OperationFactBinder {
                         DischargeRules.holdToTheDeclaration(stdlib, each.operation(),
                                 builds.built().from(),
                                 new ArgumentRef.TheContainer(),
-                                t -> Type.elementOfAContainer(t) != null,
+                                TypeRequirement.CONTAINER,
                                 "the container something is built from");
                 case OperationFact.ResultIsNoSmallerThan bounded ->
                         DischargeRules.holdToTheDeclaration(stdlib, each.operation(), bounded.container(),
                                 new ArgumentRef.TheContainer(),
-                                t -> Type.elementOfAContainer(t) != null,
+                                TypeRequirement.CONTAINER,
                                 "a container the result is no smaller than");
                 case OperationFact.ReadsItsContainer reads ->
                         DischargeRules.holdToTheDeclaration(stdlib, each.operation(), reads.container(),
                                 new ArgumentRef.TheContainer(),
-                                t -> Type.elementOfAContainer(t) != null,
+                                TypeRequirement.CONTAINER,
                                 "the container a predicate reads");
                 case OperationFact.IsStatedOverAProjection over ->
                         DischargeRules.holdToTheDeclaration(stdlib, each.operation(), over.projection(),
                                 new ArgumentRef.TheClosure(),
-                                type -> type instanceof Type.FnOf,
+                                TypeRequirement.CLOSURE,
                                 "the projection a predicate is stated over");
                 // None of these names an argument — a silence names none by definition — so there
                 // is nothing about one to hold to a signature. Their operation is held above with
@@ -109,8 +110,8 @@ final class OperationFactBinder {
                 // wrong here (#1027).
                 case OperationFact.EveryAnswerItCanGiveHasASourceValue _ ->
                         DischargeRules.holdTheResultToTheDeclaration(stdlib, each.operation(),
-                                NumericAnswers::isANumber,
-                                "a number for every answer of it to have a value");
+                                TypeRequirement.NUMBER,
+                                "what every answer of it has a value for");
                 case OperationFact.AnswersANumberTakenOfTheOneValueItIsGiven taken ->
                         DischargeRules.holdTakenOf(stdlib, declared, each.operation(), taken.how());
                 case OperationFact.ComputesANumber computes ->
