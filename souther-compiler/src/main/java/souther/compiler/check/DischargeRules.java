@@ -24,10 +24,8 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
-import java.util.function.Predicate;
 
 /**
  * What the language's own operations do to the properties the invariant-discharge check tracks
@@ -244,7 +242,7 @@ final class DischargeRules {
      * result it cannot is a form it cannot carry.
      *
      * <p>Asked with {@link NumericAnswers#isANumber} where the binding asks
-     * {@link Question#countsToANumber}. That is the difference between what is true of the
+     * {@link Carrier#countsToANumber}. That is the difference between what is true of the
      * operation and what this check can do with it — a date counts and is no number, so
      * {@code Date.daysBetween} is declared and is not carried here.
      *
@@ -522,8 +520,8 @@ final class DischargeRules {
     }
 
     /**
-     * As {@link #bind}, for the arithmetic an operation computes: it takes as many arguments as the
-     * row hands over, and it answers its number where the row says it does.
+     * As {@link #holdToTheDeclaration}, for the arithmetic an operation computes: it takes as many
+     * arguments as the row hands over, and it answers its number where the row says it does.
      *
      * <p>The result position is the half a signature can disagree with silently. A row saying the
      * number arrives in the case carrying {@code Int} is read at an arm, and an arm that never
@@ -548,8 +546,8 @@ final class DischargeRules {
         }
         switch (rule.at()) {
             case NumericResult.Answered.Directly ignored ->
-                    holdTheResultToTheDeclaration(stdlib, operation, NumericAnswers::isANumber,
-                            "a number for the arithmetic it computes to be answered at");
+                    holdTheResultToTheDeclaration(stdlib, operation, TypeRequirement.NUMBER,
+                            "where the arithmetic it computes is answered");
             case NumericResult.Answered.InTheCaseCarrying(Type carried) -> {
                 if (!(signature.result() instanceof Type.Union(Set<TypeSymbol> members))) {
                     throw new IllegalStateException(operation + " answers "
@@ -581,19 +579,19 @@ final class DischargeRules {
         }
         if (rule.unless() != null) {
             holdToTheDeclaration(stdlib, operation, rule.unless().argument(), null,
-                    NumericAnswers::isANumber, "the argument a failure is decided by");
+                    TypeRequirement.NUMBER, "the argument a failure is decided by");
         }
     }
 
     /**
-     * As {@link #bind}, for a rule stating a shift through a measure: the amount is a number, the
-     * value shifted is of the type the measure counts, and the measure counts two of what the
-     * operation answers. A rule pairing an operation with a measure of something else would state a
-     * relation between two values that have none.
+     * As {@link #holdToTheDeclaration}, for a rule stating a shift through a measure: the amount is
+     * a number, the value shifted is of the type the measure counts, and the measure counts two of
+     * what the operation answers. A rule pairing an operation with a measure of something else
+     * would state a relation between two values that have none.
      */
     static void holdShift(Stdlib stdlib, ValueName operation, OperationFact.ShiftsBy
             shift) {
-        holdToTheDeclaration(stdlib, operation, shift.amount(), null, NumericAnswers::isANumber,
+        holdToTheDeclaration(stdlib, operation, shift.amount(), null, TypeRequirement.NUMBER,
                 "the amount a shift moves by");
         Stdlib.Entry counts = stdlib.entry(shift.measure().qualified());
         if (counts == null) {
@@ -608,30 +606,41 @@ final class DischargeRules {
             throw new IllegalStateException(shift.measure().qualified()
                     + " does not count two of what " + operation + " answers apart as a number");
         }
-        holdToTheDeclaration(stdlib, operation, shift.of(), null,
-                t -> t.equals(shifted.signature().result()), "the value a shift moves from");
+        Type moved = holdToTheDeclaration(stdlib, operation, shift.of(), null,
+                TypeRequirement.ANY, "the value a shift moves from");
+        // Not a requirement on the type, which is why it is stated here rather than passed as one.
+        // What this asks is that two positions of one signature stand at the same type, and nothing
+        // about a type on its own answers that — a requirement able to say it would be one carrying
+        // the signature it was written for.
+        if (!moved.equals(shifted.signature().result())) {
+            throw new IllegalStateException("the value " + ((ValueName.Stdlib) operation).qualified()
+                    + " shifts is " + Type.show(moved) + " and what it answers is "
+                    + Type.show(shifted.signature().result())
+                    + ", so what it moves is not what the measure counts");
+        }
     }
 
-    /** As {@link #bind}, for the arguments a case names: the one it answers, and the two sides of
-     * each condition it is reached under. */
+    /** As {@link #holdToTheDeclaration}, for the arguments a case names: the one it answers, and
+     * the two sides of each condition it is reached under. */
     static void holdCase(Stdlib stdlib, ValueName operation, OperationFact.Case one) {
-        holdTheResultToTheDeclaration(stdlib, operation, NumericAnswers::isANumber,
-                "a number for a case of the definition to answer");
+        holdTheResultToTheDeclaration(stdlib, operation, TypeRequirement.NUMBER,
+                "what a case of the definition answers");
         List<ArgumentRef> named = new ArrayList<>();
         named.add(one.answers());
         one.given().forEach(stands -> {
             named.add(stands.left());
             named.add(stands.right());
         });
-        named.forEach(each -> holdToTheDeclaration(stdlib, operation, each, null, NumericAnswers::isANumber,
-                "an argument a case of the definition names"));
+        named.forEach(each -> holdToTheDeclaration(stdlib, operation, each, null,
+                TypeRequirement.NUMBER, "an argument a case of the definition names"));
     }
 
-    /** As {@link #bind}, for the arguments a bound names: the one the result is bounded against, and
-     * the one a condition on the rule reads. Each is a separate claim about a separate argument. */
+    /** As {@link #holdToTheDeclaration}, for the arguments a bound names: the one the result is
+     * bounded against, and the one a condition on the rule reads. Each is a separate claim about a
+     * separate argument. */
     static void holdBound(Stdlib stdlib, ValueName operation, ResultBound bound) {
-        holdTheResultToTheDeclaration(stdlib, operation, NumericAnswers::isANumber,
-                "a number for a bound on the result to hold of");
+        holdTheResultToTheDeclaration(stdlib, operation, TypeRequirement.NUMBER,
+                "what a bound on the result holds of");
         List<ArgumentRef> named = new ArrayList<>();
         if (bound.against() != null) {
             named.add(bound.against());
@@ -641,34 +650,8 @@ final class DischargeRules {
                 constant) {
             named.add(constant.argument());
         }
-        named.forEach(one -> holdToTheDeclaration(stdlib, operation, one, null, NumericAnswers::isANumber,
-                "an argument a bound on the result names"));
-    }
-
-    /** As {@link #bind}, for a rule that names more than one argument: each is held to the
-     * declaration on its own, since each is a separate claim about a separate argument. */
-    static Map<ValueName, List<ArgumentRef>> bindEach(Stdlib stdlib,
-                                                Map<ValueName, List<ArgumentRef>> rules,
-                                                ArgumentRef derived,
-                                                Predicate<Type> required, String what) {
-        rules.forEach((operation, reads) -> reads.forEach(one ->
-                bind(stdlib, Map.of(operation, one), Function.identity(), derived, required, what)));
-        return rules;
-    }
-
-    /**
-     * {@code rules}, once every row has been held to the operation it is about: the operation is one
-     * the library declares, the argument it names is one that declaration has, and what stands there
-     * is what the rule is about. A row naming a part of something the signature says the operation
-     * does not hand is caught by {@link ArgumentRef}; one that writes a position the signature already
-     * answers is caught here, since two answers to one question are what come apart later.
-     */
-    static <T> Map<ValueName, T> bind(Stdlib stdlib, Map<ValueName, T> rules,
-                                      Function<T, ArgumentRef> reads, ArgumentRef derived,
-                                      Predicate<Type> required, String what) {
-        rules.forEach((operation, rule) ->
-                holdToTheDeclaration(stdlib, operation, reads.apply(rule), derived, required, what));
-        return rules;
+        named.forEach(one -> holdToTheDeclaration(stdlib, operation, one, null,
+                TypeRequirement.NUMBER, "an argument a bound on the result names"));
     }
 
     /**
@@ -766,17 +749,18 @@ final class DischargeRules {
      * Improvising a check per kind defaults to omitting it, which is how a fact naming no argument
      * once went through an empty arm ({@link #holdTheOperationToTheLibrary}).
      *
-     * <p>What is required is the caller's, since what a fact says of the result is the fact's. A
+     * <p>Which requirement is the caller's, since what a fact says of the result is the fact's. A
      * form is about a count and a bound about a number, and the difference between those two is a
-     * difference between the propositions and not between two ways of holding one.
+     * difference between the propositions and not between two ways of holding one. Which it may
+     * choose from is not the caller's ({@link TypeRequirement}).
      */
     static void holdTheResultToTheDeclaration(Stdlib stdlib, ValueName operation,
-            Predicate<Type> required, String what) {
+            TypeRequirement required, String role) {
         Type result = holdTheOperationToTheLibrary(stdlib, operation).signature().result();
-        if (result == null || !required.test(result)) {
+        if (result == null || !required.admits(result)) {
             throw new IllegalStateException("what " + ((ValueName.Stdlib) operation).qualified()
                     + " answers is " + (result == null ? "left to its body" : Type.show(result))
-                    + ", which is not " + what);
+                    + ", not " + required + "; it is named as " + role);
         }
     }
 
@@ -824,8 +808,8 @@ final class DischargeRules {
         // answers at that path is the union — which case it is in is a question this account has no
         // room for. Narrower than the range of whatever asks for such an account, and deliberately:
         // what may be declared and what is asked about are two ranges.
-        holdTheResultToTheDeclaration(stdlib, operation, NumericAnswers::isANumber,
-                "a number for a term of what it answers to be about");
+        holdTheResultToTheDeclaration(stdlib, operation, TypeRequirement.NUMBER,
+                "what a term of its answer is about");
         // Before the shape below, because it is the operation that is being asked about and not
         // this fact. An account that does not fit the operation is still an account of a number
         // some other representation may already read, and asked the other way round the exclusivity
@@ -864,38 +848,57 @@ final class DischargeRules {
      */
     static void holdAFormOfItsArguments(Stdlib stdlib, ValueName operation,
             souther.compiler.numeric.NumericDomain.LinearForm<ArgumentRef> form) {
-        holdTheResultToTheDeclaration(stdlib, operation, Question::countsToANumber,
-                "a value with a count for a form of its arguments to be about");
+        holdTheResultToTheDeclaration(stdlib, operation, TypeRequirement.COUNTED,
+                "what a form of its arguments is about");
         for (ArgumentRef argument : form.coefs().keySet()) {
-            holdToTheDeclaration(stdlib, operation, argument, null, Question::countsToANumber,
+            holdToTheDeclaration(stdlib, operation, argument, null, TypeRequirement.COUNTED,
                     "an argument the result is a form of");
         }
     }
 
-    /** The same, for one rule. Asked per rule so that whatever holds a whole declaration source can
-     *  walk it and hold each of them, rather than reaching for a table of its own. */
-    static void holdToTheDeclaration(Stdlib stdlib, ValueName operation, ArgumentRef at,
-                                     ArgumentRef derived, Predicate<Type> required, String what) {
+    /**
+     * Holds one rule to the operation it is about: the operation is one the library declares, the
+     * argument it names is one that declaration has, and what stands there is what the rule
+     * requires. A rule naming a part of something the signature says the operation does not hand is
+     * caught by {@link ArgumentRef}; one that writes a position the signature already answers is
+     * caught here, since two answers to one question are what come apart later.
+     *
+     * <p>Asked per rule so that whatever holds a whole declaration source can walk it and hold each
+     * of them, rather than reaching for a table of its own. Holding a table at a time was two
+     * wrappers over this, and neither was reached: what walks the declarations walks them one rule
+     * at a time, so an entry point taking a map of them said there was a way of binding that
+     * nothing binds.
+     *
+     * <p>Answers what stands at the position it held. A caller with something to state that a
+     * requirement cannot — that two positions of one signature stand at one type — then says it
+     * without reading the position over again, and two readings of where an argument is are two
+     * answers to it.
+     */
+    static Type holdToTheDeclaration(Stdlib stdlib, ValueName operation, ArgumentRef at,
+                                     ArgumentRef derived, TypeRequirement required, String role) {
         Stdlib.Entry entry = holdTheOperationToTheLibrary(stdlib, operation);
         ValueName.Stdlib library = (ValueName.Stdlib) operation;
         List<Type> params = entry.signature().params();
         int position = CallArguments.positionIn(at, operation);
         if (position < 0 || position >= params.size()) {
             throw new IllegalStateException(library.qualified() + " takes " + params.size()
-                    + " argument(s), and the rule about " + what + " reads argument "
+                    + " argument(s), and the rule about " + role + " reads argument "
                     + (position + 1));
         }
-        if (!required.test(params.get(position))) {
+        Type stands = params.get(position);
+        if (!required.admits(stands)) {
             throw new IllegalStateException("argument " + (position + 1) + " of "
-                    + library.qualified() + " is not " + what);
+                    + library.qualified() + " is " + Type.show(stands) + ", not " + required
+                    + "; it is named as " + role);
         }
         if (at instanceof ArgumentRef.At && derived != null && Combinators.of(operation) != null
                 && CallArguments.positionIn(derived, operation) == position) {
-            throw new IllegalStateException("the rule about " + what + " for "
+            throw new IllegalStateException("the rule about " + role + " for "
                     + library.qualified()
                     + " writes the argument its signature already answers — say which part it is"
                     + " rather than where, so the two cannot come apart");
         }
+        return stands;
     }
 
     /**

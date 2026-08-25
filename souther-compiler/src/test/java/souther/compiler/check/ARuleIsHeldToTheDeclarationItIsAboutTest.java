@@ -5,13 +5,9 @@ import souther.compiler.semantics.ArgumentRef;
 import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.ElementLineage;
 import souther.compiler.semantics.SizeAgainstItsSource;
-import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
-
-import java.util.Map;
-import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -37,7 +33,7 @@ class ARuleIsHeldToTheDeclarationItIsAboutTest {
 
     private static void bindCarried(String operation, ArgumentRef container) {
         DischargeRules.holdToTheDeclaration(DefaultStdlib.get(), op(operation), container,
-                new ArgumentRef.TheContainer(), Question::holdsElements,
+                new ArgumentRef.TheContainer(), TypeRequirement.CONTAINER,
                 "the container a predicate reads");
     }
 
@@ -45,7 +41,7 @@ class ARuleIsHeldToTheDeclarationItIsAboutTest {
         DischargeRules.holdToTheDeclaration(DefaultStdlib.get(), op(operation),
                 new BuiltFrom(new ElementLineage.SameAs(new ElementLineage.Source(from, 1)),
                         SizeAgainstItsSource.AT_MOST).from(),
-                new ArgumentRef.TheContainer(), Question::holdsElements,
+                new ArgumentRef.TheContainer(), TypeRequirement.CONTAINER,
                 "the container something is built from");
     }
 
@@ -62,7 +58,9 @@ class ARuleIsHeldToTheDeclarationItIsAboutTest {
         // container's elements — of a string this names only its length.
         IllegalStateException e = assertThrows(IllegalStateException.class,
                 () -> bindCarried("String.contains", new ArgumentRef.At(1)));
-        assertTrue(e.getMessage().contains("is not the container a predicate reads"), e.getMessage());
+        assertTrue(e.getMessage().contains("is String, not a container"), e.getMessage());
+        assertTrue(e.getMessage().contains("named as the container a predicate reads"),
+                e.getMessage());
     }
 
     @Test
@@ -103,12 +101,11 @@ class ARuleIsHeldToTheDeclarationItIsAboutTest {
         });
     }
 
-    /** The binding reads what the declaration says, so a table it agrees with binds. */
+    /** The binding reads what the declaration says, so a rule it agrees with binds. */
     @Test
     void aRuleThatAgreesWithTheDeclaration() {
-        assertDoesNotThrow(() -> DischargeRules.bind(DefaultStdlib.get(), 
-                Map.of(op("List.reverse"), new ArgumentRef.At(0)),
-                Function.identity(), new ArgumentRef.TheContainer(),
-                (Type t) -> Question.holdsElements(t), "the container something is built from"));
+        assertDoesNotThrow(() -> DischargeRules.holdToTheDeclaration(DefaultStdlib.get(),
+                op("List.reverse"), new ArgumentRef.At(0), new ArgumentRef.TheContainer(),
+                TypeRequirement.CONTAINER, "the container something is built from"));
     }
 }

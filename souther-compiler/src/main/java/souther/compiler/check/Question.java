@@ -84,7 +84,8 @@ enum Question {
         @Override
         boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
             Type result = signature.result();
-            if (result == null || signature.params().stream().noneMatch(Question::holdsElements)) {
+            if (result == null || signature.params().stream().noneMatch(
+                    t -> Type.elementOfAContainer(t) != null)) {
                 return false;
             }
             boolean carriesItBack = signature.params().stream().anyMatch(
@@ -133,7 +134,7 @@ enum Question {
         boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
             Type result = signature.result();
             return result != null && signature.params().stream().anyMatch(
-                    t -> holdsElements(t) && result.equals(Terms.elementType(t)));
+                    t -> result.equals(Type.elementOfAContainer(t)));
         }
 
         @Override
@@ -158,8 +159,9 @@ enum Question {
     BUILT("what it keeps of the container it is built from") {
         @Override
         boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
-            return holdsElements(signature.result())
-                    && signature.params().stream().anyMatch(Question::holdsElements);
+            return Type.elementOfAContainer(signature.result()) != null
+                    && signature.params().stream().anyMatch(
+                            t -> Type.elementOfAContainer(t) != null);
         }
 
         @Override
@@ -451,8 +453,8 @@ enum Question {
     FORM("what it answers, counted, in what its arguments are counted as") {
         @Override
         boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
-            return countsToANumber(signature.result())
-                    && signature.params().stream().anyMatch(Question::countsToANumber);
+            return Carrier.countsToANumber(signature.result())
+                    && signature.params().stream().anyMatch(Carrier::countsToANumber);
         }
 
         @Override
@@ -602,13 +604,6 @@ enum Question {
         return entry != null && asksOf(stdlib, entry.signature());
     }
 
-    /** Whether a construction over {@code t} is one whose elements a shape can speak of. Read where
-     * the rules are bound as well: what a rule about a container may be written over is the same
-     * question as what puts an operation in range of one. */
-    static boolean holdsElements(Type t) {
-        return t instanceof Type.ListOf || t instanceof Type.SetOf || t instanceof Type.MapOf;
-    }
-
     /**
      * Whether the library counts two values of {@code t} apart as a number.
      *
@@ -627,28 +622,18 @@ enum Question {
     }
 
     /**
-     * Whether values of {@code t} count to a number.
+     * Whether {@code t} is something these questions can name the size of — a container, or a
+     * string.
      *
-     * <p>Wider than {@link NumericAnswers#isANumber} and asked where the arithmetic is over counts
-     * rather than over numbers a model wrote: a date is not a number and counts days, so a
-     * difference of two of them is a number of days. Asked of {@link Carrier}, which is the one
-     * table saying which types have an order with counts under it — a second answer here would be a
-     * second table, and a type that is a carrier to one of them and not to the other is what that
-     * costs.
-     *
-     * <p>Asked without the declarations, which is what a reading of the library's own signatures
-     * has: {@link Carrier#ofPrimitive} answers where the type settles it and leaves a name
-     * unanswered. The names in those signatures are the error unions and {@code RoundingMode}, and
-     * a form is written over none of them.
+     * <p>A policy of this range and not a classification of the type. Nothing here says a string is
+     * a container or that either is intrinsically sized: it says which types a question about a size
+     * call is asked of, which is this enum's own business and is why it is answered here. Should a
+     * reader outside these ranges need the same set for a reason of its own, whether that is one
+     * proposition or two sets that happen to agree is the question to settle then — the same set is
+     * not the same statement.
      */
-    static boolean countsToANumber(Type t) {
-        Carrier carrier = Carrier.ofPrimitive(t);
-        return carrier != null && carrier.counts();
-    }
-
-    /** Whether {@code t} is something the check can name the size of — a container, or a string. */
     private static boolean hasASize(Type t) {
-        return holdsElements(t) || t == Type.Prim.STRING;
+        return Type.elementOfAContainer(t) != null || t == Type.Prim.STRING;
     }
 
     @Override
