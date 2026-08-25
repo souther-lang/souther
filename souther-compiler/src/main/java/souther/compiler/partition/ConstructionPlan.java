@@ -37,8 +37,27 @@ import java.util.Set;
  * where the walk that collected the choices and this one disagree". Holding the positions and the
  * shape they compose back into as one value is what makes that disagreement unsayable rather than
  * something a test has to go looking for.
+ *
+ * <p><b>Made only by {@link #of}, which is where the requirements are put together.</b> A path the
+ * caller fixed a value at states what has to hold for that position to exist, and a caller that also
+ * hands over requirements of its own is handing over the second half of one fact rather than a
+ * second fact (ADR-0114: coverage and construction use one merge, and neither keeps an account of
+ * its own). A constructor a caller could reach is that merge being optional, and one caller took the
+ * option: a line at {@code query.tag@Tag} was planned against no requirement at all, and the row
+ * offered for it put a {@code NoTag} there.
  */
-record ConstructionPlan(Node root) {
+final class ConstructionPlan {
+
+    private final Node root;
+
+    private ConstructionPlan(Node root) {
+        this.root = root;
+    }
+
+    /** The position the parameter's own value is built at. */
+    Node root() {
+        return root;
+    }
 
     /** How deep a record is built. Past this a value stops being anything an author recognises as
      *  one input, and a type that refers to itself would not stop at all.
@@ -143,17 +162,52 @@ record ConstructionPlan(Node root) {
     }
 
     /**
-     * The plan for one parameter.
+     * A plan, or the position that would have to be two things for there to be one.
      *
-     * @param decided the paths the caller has already fixed a value at, which are positions this
-     *                search does not choose at and does not look under. Not a depth and not a fact
-     *                about the type: the caller has what goes there, so what the field of a record
-     *                three levels inside it would have offered is nothing this row asks
+     * <p>Two answers because both are ordinary. A caller asking for a class under one case of a sum
+     * beside a class under another has asked for a row no value is, which the model settles and this
+     * reports; nothing here fell short.
      */
-    static ConstructionPlan of(Type declared, TermPath at, Symbols symbols, Set<TermPath> decided,
-                               Requirements required,
-                               java.util.function.ToIntBiFunction<TermPath, Type> least) {
-        return new ConstructionPlan(node(declared, at, symbols, 0, decided, required, least));
+    sealed interface Result {
+
+        /** The plan, which is what a caller that got one goes on with. */
+        record Planned(ConstructionPlan plan) implements Result {}
+
+        /** No value is at both, and this is the position and the two it would have to be. */
+        record Conflict(TermPath at, Refinement one, Refinement other) implements Result {}
+    }
+
+    /**
+     * The plan for one parameter, against everything that has to hold of it.
+     *
+     * <p><b>The requirements are put together here and nowhere else.</b> A path states what has to
+     * hold for the position it names to exist ({@link TermPath#requirements}), and a caller may have
+     * requirements besides that — a class selects a refinement at its own position, which no path
+     * says. Both are read here, so a caller cannot hand over a fixed path under a case and no
+     * requirement that the case was taken: the two would be one location decided twice, and the
+     * plan would build the position as the sum rather than as the case.
+     *
+     * @param decided    the paths the caller has already fixed a value at, which are positions this
+     *                   search does not choose at and does not look under. Not a depth and not a
+     *                   fact about the type: the caller has what goes there, so what the field of a
+     *                   record three levels inside it would have offered is nothing this row asks
+     * @param additional what has to hold besides whatever {@code decided} already states. Named for
+     *                   that, because a caller handing over the whole of it is the arrangement this
+     *                   exists to stop
+     */
+    static Result of(Type declared, TermPath at, Symbols symbols, Set<TermPath> decided,
+                     Requirements additional,
+                     java.util.function.ToIntBiFunction<TermPath, Type> least) {
+        Requirements required = additional;
+        for (TermPath fixed : decided) {
+            switch (required.merge(fixed.requirements())) {
+                case Requirements.Merge.Merged both -> required = both.requirements();
+                case Requirements.Merge.Conflict against ->
+                        { return new Result.Conflict(against.at(), against.one(), against.other()); }
+            }
+        }
+        return new Result.Planned(
+                new ConstructionPlan(node(declared, at, symbols, 0, decided, required, least)));
     }
 
     /** The collections this plan builds out of what stands at their element. */

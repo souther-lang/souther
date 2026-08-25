@@ -91,7 +91,7 @@ class ARowAtAnotherCaseStandsNowhereBelowItTest {
 
     private static TermPath under(String module, String leaf, String field) {
         return TermPath.of("query")
-                .refine(new Refinement.SumCase(TypeSymbols.declared(new TypeKey(module, leaf))))
+                .refine(Refinement.sumCase(TypeSymbols.declared(new TypeKey(module, leaf))))
                 .then(field);
     }
 

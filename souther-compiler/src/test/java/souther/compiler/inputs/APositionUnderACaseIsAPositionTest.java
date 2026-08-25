@@ -170,7 +170,7 @@ class APositionUnderACaseIsAPositionTest {
                 behavior open : (b: Box) -> Ack
                 """, "open");
         Position least = read.at(TermPath.of("b").refine(
-                new Refinement.SumCase(caseNamed(read, "Held"))).then("least"));
+                Refinement.sumCase(caseNamed(read, "Held"))).then("least"));
         assertNotNull(least, "a field of the case is a position");
         assertFalse(least.rulesNotReached(),
                 "and the clause relating it to the field beside it was reached");

@@ -77,7 +77,7 @@ class AClassUnderACaseIsOfferedARowAtThatCaseTest {
     }
 
     private static TermPath under(String leaf) {
-        return TermPath.of("query").refine(new Refinement.SumCase(
+        return TermPath.of("query").refine(Refinement.sumCase(
                 TypeSymbols.declared(new TypeKey("example.q", leaf))));
     }
 
@@ -131,7 +131,7 @@ class AClassUnderACaseIsOfferedARowAtThatCaseTest {
         assertFalse(tag.requirements().compatibleWith(sum.requiring(classOf(sum, "FeedQuery"))),
                 "and a row that is a FeedQuery is at none of them");
         assertEquals(Requirements.NONE.and(TermPath.of("query"),
-                        new Refinement.SumCase(
+                        Refinement.sumCase(
                                 TypeSymbols.declared(new TypeKey("example.q", "GlobalQuery")))),
                 tag.requirements(),
                 "which the path says on its own, with nothing kept beside it");

@@ -68,7 +68,7 @@ class ALeafIsNotAnAbsenceTest {
 
     private StructuralInspection.Branch unitCase(String name) {
         return new StructuralInspection.Branch(
-                new Refinement.SumCase(((Type.Ref) named(name)).name()), null);
+                Refinement.sumCase(((Type.Ref) named(name)).name()), null);
     }
 
     private Type named(String name) {

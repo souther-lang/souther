@@ -171,11 +171,13 @@ final class PartitionClasses {
     private static PartitionClass caseClass(Case.SumCase one, List<TypeSymbol> worn,
                                             ReadingPolicy policy,
                                             List<TypeReachName.Written> writes, Symbols symbols) {
-        // The narrowing a row in this class meets, carried from the distinction it was made from. A
-        // row whose value here is an `Approved` is a row at every position the `Approved` case
-        // declares, and that is the same fact read from the other end.
+        // The narrowing a row in this class meets, asked of the one reading that relates the two
+        // vocabularies. A row whose value here is an `Approved` is a row at every position the
+        // `Approved` case declares, and that is the same fact read from the other end — read here a
+        // second time, this class and the branch under the position would be free to disagree about
+        // which narrowing they are.
         return holdingWhatItIs(one, writableCase(one.leaf(), worn, policy, writes, symbols))
-                .selecting(new Refinement.SumCase(one.leaf()));
+                .selecting(Refinement.of(one));
     }
 
     /**

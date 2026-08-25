@@ -37,22 +37,72 @@ public sealed interface Refinement {
      */
     static Refinement of(Case one) {
         return switch (one) {
-            case Case.SumCase sum -> new SumCase(sum.leaf());
+            case Case.SumCase sum -> sumCase(sum.leaf());
             case Case.Presence presence -> new Presence(presence.present());
             case Case.Truth _, Case.Named _ -> null;
         };
     }
 
     /**
+     * The narrowing to {@code leaf}, for a caller that already has the case and not the distinction.
+     *
+     * <p>Not a second correspondence. {@link #of} relates two vocabularies — what a position divides
+     * into, and what a position under it stands beneath — and a caller holding a {@code match} arm's
+     * case has not asked that question: which case the arm selected was settled where the arm was
+     * read. Sent back through {@link Distinctions} to be turned into a {@link Case} first, it would
+     * be a reader re-deriving what it was already told, which is the arrangement this vocabulary
+     * exists to stop.
+     *
+     * <p>Here rather than at a constructor, so that what a narrowing is stays this type's to say.
+     */
+    static Refinement sumCase(TypeSymbol leaf) {
+        return new SumCase(leaf);
+    }
+
+    /**
      * The value turned out to be this case of the sum standing at the position.
      *
-     * @param leaf the case, folded to a leaf as {@link Distinctions} folds the cases it reads
+     * <p>A class and not a record so that the canonical way in can be closed: nothing outside this
+     * declaration may spell a narrowing, because a narrowing spelled somewhere else is a second
+     * reading of which distinctions narrow a position. Compared by what it narrows to all the same —
+     * every reader that decides whether two requirements hold together does it by equality
+     * ({@link Requirements#merge}), and an identity comparison here would have no two narrowings
+     * ever agree.
      */
-    record SumCase(TypeSymbol leaf) implements Refinement {
+    final class SumCase implements Refinement {
+
+        /** The case, folded to a leaf as {@link Distinctions} folds the cases it reads. */
+        private final TypeSymbol leaf;
+
+        private SumCase(TypeSymbol leaf) {
+            if (leaf == null) {
+                throw new IllegalArgumentException("a narrowing to no case is not one");
+            }
+            this.leaf = leaf;
+        }
+
+        public TypeSymbol leaf() {
+            return leaf;
+        }
 
         @Override
         public String spelled() {
             return leaf.name();
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof SumCase that && leaf.equals(that.leaf);
+        }
+
+        @Override
+        public int hashCode() {
+            return leaf.hashCode();
+        }
+
+        @Override
+        public String toString() {
+            return "SumCase[leaf=" + leaf + "]";
         }
     }
 
@@ -64,12 +114,39 @@ public sealed interface Refinement {
      * ({@link TermPath}). So the position under it is {@code x@Some} and never {@code x@Some.value}
      * — the second would be a location this compiler invented, spelled by nothing else that reads
      * the same value.
+     *
+     * <p>A class for the reason {@link SumCase} is, and compared the same way.
      */
-    record Presence(boolean present) implements Refinement {
+    final class Presence implements Refinement {
+
+        private final boolean present;
+
+        private Presence(boolean present) {
+            this.present = present;
+        }
+
+        public boolean present() {
+            return present;
+        }
 
         @Override
         public String spelled() {
             return present ? "Some" : "None";
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Presence that && present == that.present;
+        }
+
+        @Override
+        public int hashCode() {
+            return Boolean.hashCode(present);
+        }
+
+        @Override
+        public String toString() {
+            return "Presence[present=" + present + "]";
         }
     }
 }

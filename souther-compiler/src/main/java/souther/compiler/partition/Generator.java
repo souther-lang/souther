@@ -3039,11 +3039,18 @@ public final class Generator {
         return out;
     }
 
-    /** One parameter's value, with the positions the caller fixed already decided. */
+    /**
+     * One parameter's value, with the positions the caller fixed already decided.
+     *
+     * <p>{@code additional} is what has to hold besides whatever the fixed paths already state.
+     * What a path under a refinement requires is read from the path, where it is written, and the
+     * plan puts the two together — so a caller with nothing of its own to add hands over nothing
+     * and loses none of it.
+     */
     private static Outcome valueAt(Subject subject, int p,
                                    Map<TermPath, List<FixtureTemplate>> decided,
                                    Map<TermPath, Place> settled,
-                                   Requirements required, CandidateCheck check) {
+                                   Requirements additional, CandidateCheck check) {
         // Where a value has to be built under this parameter, worked out once. What each position
         // may take, the search that chooses them one at a time, and the composing of what was chosen
         // all read this, so there is no second reading of the declarations for one of them to
@@ -3055,9 +3062,18 @@ public final class Generator {
         // how many the list holds is not a row.
         FieldDomains under = rulesOf(subject.types().get(p), subject.symbols(),
                 subject.inputs().policy(), under(root, settled));
-        ConstructionPlan plan = ConstructionPlan.of(subject.types().get(p), root, subject.symbols(),
-                decided.keySet(), required, (at, building) -> leastHeld(under, at, building,
-                        subject.symbols()));
+        ConstructionPlan.Result planned = ConstructionPlan.of(subject.types().get(p), root,
+                subject.symbols(), decided.keySet(), additional,
+                (at, building) -> leastHeld(under, at, building, subject.symbols()));
+        // A row that would have to be two things at one position, which is what the model settles
+        // and not something this fell short of — the same answer the class search gives when two
+        // classes select different refinements of one position.
+        if (planned instanceof ConstructionPlan.Result.Conflict against) {
+            return new Outcome(null, UnresolvedCombination.Reason.ONE_POSITION_CANNOT_BE_BOTH,
+                    "`" + against.at() + "` would have to be both " + against.one().spelled()
+                            + " and " + against.other().spelled());
+        }
+        ConstructionPlan plan = ((ConstructionPlan.Result.Planned) planned).plan();
         Choices choices = choicesOf(subject, p, plan, decided, settled);
         if (choices.missingAt() != null) {
             return new Outcome(null, UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
