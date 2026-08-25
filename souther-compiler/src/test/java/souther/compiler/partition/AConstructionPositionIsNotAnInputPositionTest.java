@@ -85,9 +85,11 @@ class AConstructionPositionIsNotAnInputPositionTest {
     /** The plan for the behavior's one parameter, with nothing decided and the given
      *  requirements. */
     private static ConstructionPlan plan(Read read, Requirements required) {
-        return ConstructionPlan.of(read.sig().inputTypes().get(0),
+        ConstructionPlan.Result planned = ConstructionPlan.of(read.sig().inputTypes().get(0),
                 TermPath.of(read.spec().params().get(0).name()), read.symbols(), Set.of(), required,
                 (_, _) -> 0);
+        return assertInstanceOf(ConstructionPlan.Result.Planned.class, planned,
+                "nothing here asks one position to be two things").plan();
     }
 
     private static List<String> slots(ConstructionPlan plan) {
@@ -226,7 +228,7 @@ class AConstructionPositionIsNotAnInputPositionTest {
     /** The requirement a class of {@code d} states by being the {@code Approved} case of it. */
     private static Requirements throughApproved(Read read) {
         return Requirements.NONE.and(TermPath.of(read.spec().params().get(0).name()),
-                new Refinement.SumCase(caseNamed(SUM, "probe")));
+                Refinement.sumCase(caseNamed(SUM, "probe")));
     }
 
     /** The name of the case to build through, taken off a behavior that is declared to take one. */
@@ -246,7 +248,9 @@ class AConstructionPositionIsNotAnInputPositionTest {
         ConstructionPlan built = plan(read, throughApproved(read));
         assertEquals(declared, reading(read).at(TermPath.of("d")).view().declared(),
                 "the position is still declared to hold a Decision");
-        assertEquals("Approved", Type.show(built.root().type()),
+        ConstructionPlan.Built root = assertInstanceOf(ConstructionPlan.Built.class, built.root(),
+                "an `Approved` is composed out of its fields");
+        assertEquals("Approved", Type.show(root.type()),
                 "and what is built there is the case the class named");
     }
 }

@@ -236,15 +236,23 @@ class PartitionsTest {
         assertEquals("Amount", invariant.rule().clause().id().declaredOn().name());
     }
 
-    /** A record is taken apart, and only so far: two levels reach a field of a record a parameter
-     * holds, which is where rules are written. */
+    /**
+     * A record is taken apart, and only so far: two levels reach a field of a record a parameter
+     * holds, which is where rules are written.
+     *
+     * <p>{@code memo@Some} is beside {@code memo} rather than instead of it, and is not a third
+     * level. The optional divides into holding something and holding nothing, which is what
+     * {@code memo} is measured on; what it holds stands at the narrowing, which is where anything
+     * written about that type is read. A narrowing is not a step into the value, so the field is
+     * where it was.
+     */
     @Test
     void aProductIsTakenApartFieldByField() {
         List<String> paths = partitioningOf(KINDS, "submit").axes().stream()
                 .map(a -> a.path().toString()).toList();
 
         assertEquals(List.of("request.kind", "request.cost", "request.urgent", "request.memo",
-                "request.note"), paths);
+                "request.memo@Some", "request.note"), paths);
     }
 
     @Test

@@ -9,6 +9,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -30,17 +31,30 @@ class AMeasureIsShortOfWhateverItsReadingDidNotReachTest {
     /**
      * A position the walk could not reach into, which is a fact no question carries.
      *
-     * <p>Nothing was read there and so nothing was found wanting: an {@code Option} holds its value
+     * <p>Nothing was read there and so nothing was found wanting: a {@code Map} holds its values
      * inside something this does not enter, and a rule about what is inside raises no question this
      * could be short of. Both measures are short of it, because what is not known about the
      * position is not known for either.
+     *
+     * <p><b>Written on a mapping because that is what is left.</b> This was an {@code Amount?}, and
+     * an optional is entered now — what it holds stands at the narrowing that says it holds
+     * something, where the rules of that type are read and its border is owed. So the model that
+     * used to be short of both is short of one, and a fixture kept for its numbers would have gone
+     * on being called a position nothing reached into.
+     *
+     * <p><b>The {@code Bool} is what makes the model say two things.</b> This is about the two
+     * measures answering apart, and a position has to be measured for one of them to be the answer
+     * it is: the optional divided into holding something and holding nothing and was that position
+     * itself, and a mapping divides nothing. Without it both measures say the same word for
+     * different reasons, and the test would pass over the two being merged. So the field is part of
+     * what is being said and is asserted below rather than left standing as scenery.
      */
     private static final String RULES_NOT_REACHED = """
             module example.notreached
 
             data Amount = Int
                 invariant value >= 0 && value <= 100
-            data Req = { cost: Amount? }
+            data Req = { cost: Map<String, Amount>, flag: Bool }
             data Res = { n: Int }
 
             behavior f : (r: Req) -> Res
@@ -48,7 +62,7 @@ class AMeasureIsShortOfWhateverItsReadingDidNotReachTest {
             let f (r) = Res { n = 0 }
 
             example f
-                | "one" : (Req { cost = 1 }) -> Res { n = 0 }
+                | "one" : (Req { cost = [ ("a", Amount(1)) ], flag = true }) -> Res { n = 0 }
             """;
 
     /**
@@ -84,6 +98,14 @@ class AMeasureIsShortOfWhateverItsReadingDidNotReachTest {
     @Test
     void aPositionTheWalkDidNotReachIntoLeavesBothMeasuresShort() {
         PartitionEvidence evidence = evidenceFor(RULES_NOT_REACHED, "f");
+
+        // What the partition did measure, so that the two answers below are one model saying two
+        // things rather than one measure with nothing in it. A fixture whose every position is out
+        // of reach says `NOT_MEASURED` on both sides for two different reasons, and reading that as
+        // this would be the merge this exists to catch.
+        assertEquals(List.of("r.flag"),
+                evidence.axes().stream().map(PartitionEvidence.AxisCoverage::path).toList(),
+                () -> "the mapping divides nothing, so the `Bool` is the position measured here");
 
         assertEquals(MeasurementStatus.PARTIAL, AdequacyReport.statusOf(evidence.partitioned()),
                 () -> "partition: " + evidence.partitioned());

@@ -20,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 class WhyADerivationStoppedIsNotWhatAReportPromisesTest {
 
     /**
-     * The collapse, written down where it can be reviewed. Three missing traversals are one word a
+     * The collapse, written down where it can be reviewed. Every missing traversal is one word a
      * report writes, because a reader of the report cannot act on which of them it was — the model
      * is the same either way.
      */
@@ -43,15 +43,15 @@ class WhyADerivationStoppedIsNotWhatAReportPromisesTest {
     }
 
     /**
-     * Which traversals are told apart here is a claim about what would lift each: choosing among a
-     * sequence's elements, choosing whether an optional holds one, and deciding what part of a
-     * mapping a rule is about are three pieces of work. Written out so that collapsing two of them
-     * is a change to this test rather than a quiet edit.
+     * Which traversals are named here is a claim about what is still not reached, and it shrinks as
+     * the reachings are made: a sequence's elements are positions of the input, and so is what an
+     * optional holds — a branch under the narrowing that it holds one. What is left is deciding
+     * what part of a mapping a rule is about, which nothing has decided. Written out so that a
+     * reaching leaving this list is a change to this test rather than a quiet edit.
      */
     @Test
-    void theTraversalsToldApartAreTheOnesLiftedByDifferentWork() {
-        assertEquals(Set.of(BlockReason.Traversal.OPTIONAL_VALUE,
-                        BlockReason.Traversal.MAPPING_CONTENT),
+    void theTraversalsNamedAreTheOnesStillNotMade() {
+        assertEquals(Set.of(BlockReason.Traversal.MAPPING_CONTENT),
                 Set.of(BlockReason.Traversal.values()));
     }
 
@@ -62,7 +62,7 @@ class WhyADerivationStoppedIsNotWhatAReportPromisesTest {
         for (BlockReason reason : new BlockReason[] {
                 new BlockReason.TypeUnresolved(),
                 new BlockReason.DepthLimit(),
-                new BlockReason.UnsupportedTraversal(BlockReason.Traversal.OPTIONAL_VALUE)}) {
+                new BlockReason.UnsupportedTraversal(BlockReason.Traversal.MAPPING_CONTENT)}) {
             assertNotNull(ReportedReason.of(reason), reason + " is reported as something");
         }
     }

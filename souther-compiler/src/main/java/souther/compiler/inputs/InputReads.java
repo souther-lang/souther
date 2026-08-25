@@ -109,7 +109,7 @@ public record InputReads(InputDomain read, Map<BindingId, TermPath> roots,
         if (scrutinee == null) {
             return this;
         }
-        TermPath narrowed = scrutinee.refine(new Refinement.SumCase(arm.caseTypes().get(0)));
+        TermPath narrowed = scrutinee.refine(Refinement.sumCase(arm.caseTypes().get(0)));
         // Only where the reading of the input has such a position. A narrowing of something that is
         // not a sum of the input's, or of a case the rules refuse, is a place no row is read at and
         // no class is drawn at — and a line drawn there would be owed by nothing.

@@ -60,7 +60,6 @@ class OneProjectionWritesTheWordADocumentReadsTest {
         List<BlockReason> all = List.of(
                 new BlockReason.TypeUnresolved(),
                 new BlockReason.DepthLimit(),
-                new BlockReason.UnsupportedTraversal(BlockReason.Traversal.OPTIONAL_VALUE),
                 new BlockReason.UnsupportedTraversal(BlockReason.Traversal.MAPPING_CONTENT),
                 new BlockReason.UnreadComparisonForm(),
                 new BlockReason.UnreadComparisonDomain(),

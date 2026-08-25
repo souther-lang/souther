@@ -2294,6 +2294,9 @@ public final class Generator {
         // came back as one every value tried was refused at.
         Map<TermPath, Place> settled = new LinkedHashMap<>();
         Map<TermPath, UnresolvedCombination.Reason> heldBack = new LinkedHashMap<>();
+        // Per term, because a fixing names one order pair per position and a row is certified
+        // against the one its own value was built on.
+        Map<NumericTerm, souther.compiler.inputs.TermOrders> builtOn = new LinkedHashMap<>();
         for (Map.Entry<NumericTerm, Place> each : fixing.entrySet()) {
             // The order this position is written back on, which is the position's own. Handed one
             // order for the whole fixing, a form over positions written back differently wrote each
@@ -2318,6 +2321,9 @@ public final class Generator {
                         UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE));
             }
             decided.put(at, edge.values());
+            // The orders the value was built against, kept so that reading it back asks the
+            // question building it asked rather than a second reading of the same position.
+            builtOn.put(each.getKey(), edge.on());
             if (edge.settledAt() != null) {
                 settled.put(at, edge.settledAt());
             }
@@ -2326,13 +2332,20 @@ public final class Generator {
         List<FixtureTemplate> inputs = new ArrayList<>();
         for (int p = 0; p < subject.parameters().size() && p < subject.types().size(); p++) {
             String head = subject.parameters().get(p);
+            // Whether a candidate was turned away for standing somewhere else, which is what tells
+            // a search that ran out of candidates from one that certified none of the ones it had.
+            // Per parameter, since it is this parameter's search the answer is about: shared, a
+            // candidate turned away under one parameter would name the reason another failed for.
+            boolean[] uncertified = {false};
+            CandidateCheck certified =
+                    certifying(check, subject, p, fixing, builtOn, uncertified);
             Map<TermPath, List<FixtureTemplate>> here = new LinkedHashMap<>();
             for (NumericTerm term : fixing.keySet()) {
                 if (term.path().head().equals(head)) {
                     here.put(term.path(), decided.get(term.path()));
                 }
             }
-            Outcome tried = valueAt(subject, p, here, settled, Requirements.NONE, check);
+            Outcome tried = valueAt(subject, p, here, settled, Requirements.NONE, certified);
             if (tried.value() == null) {
                 // Where the refusal is of the values one edge offered, what that edge held back
                 // outranks it: values that were never built were not among the ones refused. Only
@@ -2341,6 +2354,13 @@ public final class Generator {
                 // something this knows. Taken from whichever came first, the reason named the wrong
                 // position's search.
                 UnresolvedCombination.Reason why = tried.reason();
+                // A search that offered candidates and certified none of them has not shown that
+                // every value the rules allow was refused: what it found out is that what it built
+                // did not stand where it was built for, which is its own answer.
+                if (uncertified[0]
+                        && why == UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED) {
+                    why = UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS;
+                }
                 if (here.size() == 1
                         && why == UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED) {
                     why = heldBack.getOrDefault(here.keySet().iterator().next(), why);
@@ -2352,6 +2372,89 @@ public final class Generator {
         }
         return new BoundaryAttempt.Built(
                 new GeneratedRow(new Purpose.ForAPoint(label), inputs));
+    }
+
+    /**
+     * {@code check}, refusing any candidate at this parameter that does not read back at the place
+     * it is being built for.
+     *
+     * <p><b>An acceptance condition and not an assertion.</b> A candidate that reads back somewhere
+     * else is one candidate the search has tried, and the search goes on to the next — the same
+     * shape a class's witness is certified with. Written as a throw, or as a refusal of the whole
+     * point, one candidate landing elsewhere would be reported as a point no row can be written at.
+     *
+     * <p>What it asks is the property {@code TermRealizations} states of itself: every value built
+     * there reads back as the number it was built for, and the way that would break is "a row
+     * offered at an edge it does not stand on". Asked through the reading a row's own values are
+     * read by, so nothing here is a second account of where a value stands.
+     *
+     * @param refused set where a candidate was turned away for this and nothing else, which is what
+     *                tells a search that ran out of candidates from one that certified none
+     */
+    private static CandidateCheck certifying(CandidateCheck check, Subject subject, int parameter,
+                                             Map<NumericTerm, Place> fixing,
+                                             Map<NumericTerm, souther.compiler.inputs.TermOrders> builtOn,
+                                             boolean[] refused) {
+        return (at, candidate) -> {
+            CandidateCheck.Built built = check.build(at, candidate);
+            // Nothing built it, so nothing here can say where it went, and the row is offered as it
+            // was composed.
+            if (at != parameter || !(built instanceof CandidateCheck.Built.Value(var observed))) {
+                return built;
+            }
+            for (Map.Entry<NumericTerm, Place> each : fixing.entrySet()) {
+                if (!subject.parameters().get(parameter).equals(each.getKey().path().head())) {
+                    continue;
+                }
+                String elsewhere = readsElsewhere(subject, parameter, observed, each.getKey(),
+                        each.getValue(), builtOn.get(each.getKey()));
+                if (elsewhere != null) {
+                    refused[0] = true;
+                    return new CandidateCheck.Built.Refused(elsewhere);
+                }
+            }
+            return built;
+        };
+    }
+
+    /**
+     * Where the row reads at the term's position, said only where that is not {@code at}.
+     *
+     * <p>Null where nothing here can say. A fixing whose edge kept no orders, a position the row
+     * wrote no value at, a walk the value and the type disagree about — none of them is the row
+     * standing somewhere else, and refusing a candidate for one would turn what this compiler
+     * cannot see into a row the model does not have.
+     *
+     * <p>One occurrence is enough, as it is for a row that was written: a row stands at a point
+     * where one of its readings does.
+     *
+     * @param on the orders the value was built against, carried from the edge that built it. Read
+     *           back on anything else, this would be a second reading of the position free to
+     *           disagree with the one the value came from
+     */
+    private static String readsElsewhere(Subject subject, int parameter,
+                                         souther.compiler.observe.ObservedValue observed,
+                                         NumericTerm term, Place at, souther.compiler.inputs.TermOrders on) {
+        if (on == null) {
+            return null;
+        }
+        // Only this parameter's value is filled in: the walk reads the one the path names, and the
+        // others are not this candidate's to say anything about.
+        List<souther.compiler.observe.ObservedValue> row = new ArrayList<>(
+                java.util.Collections.nCopies(subject.parameters().size(), null));
+        row.set(parameter, observed);
+        List<souther.compiler.observe.ObservedValue> values =
+                subject.inputs().valuesAt(row, term.path());
+        if (values == null || values.isEmpty()) {
+            return null;
+        }
+        for (souther.compiler.observe.ObservedValue value : values) {
+            if (term.read(value, on) instanceof NumericTerm.Reading.Number number
+                    && number.value().compareTo(at) == 0) {
+                return null;
+            }
+        }
+        return "it was composed to put " + term + " at " + at + " and does not stand there";
     }
 
     /**
@@ -2395,10 +2498,10 @@ public final class Generator {
         if (declared == null) {
             return Edge.none(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
-        return edgeFrom(TermRealizations.at(term, declared,
-                new souther.compiler.inputs.TermOrders(
-                        term.observedOn(declared, subject.symbols()), carrier),
-                at, subject.symbols(), subject.inputs().policy()), term, at);
+        souther.compiler.inputs.TermOrders on = new souther.compiler.inputs.TermOrders(
+                term.observedOn(declared, subject.symbols()), carrier);
+        return edgeFrom(TermRealizations.at(term, declared, on, at, subject.symbols(),
+                subject.inputs().policy()), term, at, on);
     }
 
     /** The type declared at a position this subject has no axis for, which is a bare parameter and
@@ -3039,11 +3142,18 @@ public final class Generator {
         return out;
     }
 
-    /** One parameter's value, with the positions the caller fixed already decided. */
+    /**
+     * One parameter's value, with the positions the caller fixed already decided.
+     *
+     * <p>{@code additional} is what has to hold besides whatever the fixed paths already state.
+     * What a path under a refinement requires is read from the path, where it is written, and the
+     * plan puts the two together — so a caller with nothing of its own to add hands over nothing
+     * and loses none of it.
+     */
     private static Outcome valueAt(Subject subject, int p,
                                    Map<TermPath, List<FixtureTemplate>> decided,
                                    Map<TermPath, Place> settled,
-                                   Requirements required, CandidateCheck check) {
+                                   Requirements additional, CandidateCheck check) {
         // Where a value has to be built under this parameter, worked out once. What each position
         // may take, the search that chooses them one at a time, and the composing of what was chosen
         // all read this, so there is no second reading of the declarations for one of them to
@@ -3055,9 +3165,18 @@ public final class Generator {
         // how many the list holds is not a row.
         FieldDomains under = rulesOf(subject.types().get(p), subject.symbols(),
                 subject.inputs().policy(), under(root, settled));
-        ConstructionPlan plan = ConstructionPlan.of(subject.types().get(p), root, subject.symbols(),
-                decided.keySet(), required, (at, building) -> leastHeld(under, at, building,
-                        subject.symbols()));
+        ConstructionPlan.Result planned = ConstructionPlan.of(subject.types().get(p), root,
+                subject.symbols(), decided.keySet(), additional,
+                (at, building) -> leastHeld(under, at, building, subject.symbols()));
+        // A row that would have to be two things at one position, which is what the model settles
+        // and not something this fell short of — the same answer the class search gives when two
+        // classes select different refinements of one position.
+        if (planned instanceof ConstructionPlan.Result.Conflict against) {
+            return new Outcome(null, UnresolvedCombination.Reason.ONE_POSITION_CANNOT_BE_BOTH,
+                    "`" + against.at() + "` would have to be both " + against.one().spelled()
+                            + " and " + against.other().spelled());
+        }
+        ConstructionPlan plan = ((ConstructionPlan.Result.Planned) planned).plan();
         Choices choices = choicesOf(subject, p, plan, decided, settled);
         if (choices.missingAt() != null) {
             return new Outcome(null, UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
@@ -3664,6 +3783,9 @@ public final class Generator {
             case ConstructionPlan.Slot slot -> worn(slot.worn(), chosen.get(slot.at()), symbols);
             case ConstructionPlan.Built built -> composed(built, chosen, symbols, policy);
             case ConstructionPlan.Held held -> held(held, chosen, symbols, policy);
+            // The requirement settled this one, so nothing was chosen for it and there is nothing to
+            // look up. Under every name the position wears, since the value arrives bare.
+            case ConstructionPlan.Exact exact -> worn(exact.worn(), exact.exact(), symbols);
         };
     }
 
@@ -3770,16 +3892,23 @@ public final class Generator {
      * location at it, and what the rest of the record may hold is read from the rules relating them;
      * a line on a count taken of a location settles no number inside it, and saying it did would tell
      * the rest of the row that a string's length is the number the string holds.
+     *
+     * @param on the pair of orders the values here were built against: the one a value at the
+     *           position is written on, and the one the number it answers is measured on. Carried
+     *           rather than worked out again by whoever wants it — reading a value back is asking
+     *           the same question building it asked, and a second answer to it is two readings of
+     *           one position free to disagree about which order the number is on
      */
     private record Edge(List<FixtureTemplate> values, UnresolvedCombination.Reason reason,
-                        Place settledAt, UnresolvedCombination.Reason heldBack) {
+                        Place settledAt, UnresolvedCombination.Reason heldBack,
+                        souther.compiler.inputs.TermOrders on) {
 
         Edge {
             values = List.copyOf(values);
         }
 
         static Edge none(UnresolvedCombination.Reason why) {
-            return new Edge(List.of(), why, null, null);
+            return new Edge(List.of(), why, null, null, null);
         }
 
         /**
@@ -3807,12 +3936,10 @@ public final class Generator {
         // The order the line was drawn on is the caller's — a cut carries the one the rule was read
         // on — and the order the value at the position is written on is the position's. Both, so
         // neither stands in for the other.
-        return edgeFrom(
-                TermRealizations.at(axis.term(), axis.type(),
-                        new souther.compiler.inputs.TermOrders(
-                                axis.term().observedOn(axis.type(), symbols), carrier),
-                        at, symbols, policy),
-                axis.term(), at);
+        souther.compiler.inputs.TermOrders on = new souther.compiler.inputs.TermOrders(
+                axis.term().observedOn(axis.type(), symbols), carrier);
+        return edgeFrom(TermRealizations.at(axis.term(), axis.type(), on, at, symbols, policy),
+                axis.term(), at, on);
     }
 
     /**
@@ -3824,7 +3951,8 @@ public final class Generator {
      * the search records as settled is the one and not the other. The one question here the variant
      * genuinely settles, and asked of the variant.
      */
-    private static Edge edgeFrom(TermRealizations.Realization made, NumericTerm term, Place at) {
+    private static Edge edgeFrom(TermRealizations.Realization made, NumericTerm term, Place at,
+                                 souther.compiler.inputs.TermOrders on) {
         Place settled = switch (term) {
             case NumericTerm.ValueOf _ -> at;
             case NumericTerm.TakenOf _ -> null;
@@ -3832,7 +3960,7 @@ public final class Generator {
         return switch (made) {
             case TermRealizations.Realization.BuiltNone none -> Edge.none(none.why());
             case TermRealizations.Realization.Built built ->
-                    new Edge(built.values(), null, settled, built.heldBack());
+                    new Edge(built.values(), null, settled, built.heldBack(), on);
         };
     }
 
