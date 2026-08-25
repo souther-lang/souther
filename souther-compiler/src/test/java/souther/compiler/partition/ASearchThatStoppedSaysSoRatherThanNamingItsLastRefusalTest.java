@@ -19,8 +19,6 @@ import souther.compiler.query.Scopes;
 import souther.compiler.query.Shapes;
 
 import java.util.List;
-import souther.compiler.coverage.Observation;
-
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
