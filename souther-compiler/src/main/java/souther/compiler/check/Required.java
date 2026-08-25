@@ -155,8 +155,20 @@ public sealed interface Required {
         return out;
     }
 
-    private static Owed admittedValues(Owed.Subject where) {
-        return new Owed(CoverageObligation.ADMITTED_VALUES, where);
+    private static Owed admittedValues(String path) {
+        return new Owed(CoverageObligation.ADMITTED_VALUES, Owed.Subject.at(path));
+    }
+
+    /**
+     * The subject a line on {@code line} is about.
+     *
+     * <p>Here and nowhere else, because this is where a coverage question is made out of what a
+     * reading found. The projection is what {@link Owed.Subject} can carry today and is undone one
+     * commit along; what matters is that the reading hands over the number and not a flag.
+     */
+    private static Owed.Subject subjectOf(FieldDomains.Coordinate line) {
+        return new Owed.Subject.OfAPosition(line.path(),
+                line.kind() instanceof FieldDomains.CoordinateKind.OfWhatAnOperationAnswers);
     }
 
     /**
@@ -182,9 +194,9 @@ public sealed interface Required {
             // A `LinkedHashSet` and not `Set.of`, which iterates in an order salted once per JVM
             // run — the questions reach a document in the order they are written here.
             case ClauseStates.ABound bound -> {
-                Set<Owed> owed = bound.named().stream().map(Required::admittedValues)
+                Set<Owed> owed = bound.positions().stream().map(Required::admittedValues)
                         .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
-                owed.add(new Owed(CoverageObligation.BOUNDARY, bound.line()));
+                owed.add(new Owed(CoverageObligation.BOUNDARY, subjectOf(bound.line())));
                 yield new Some(owed);
             }
             // A clause about no position of this value raises no question about one. Not a rule
