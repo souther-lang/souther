@@ -84,7 +84,8 @@ enum Question {
         @Override
         boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
             Type result = signature.result();
-            if (result == null || signature.params().stream().noneMatch(Question::holdsElements)) {
+            if (result == null || signature.params().stream().noneMatch(
+                    t -> Type.elementOfAContainer(t) != null)) {
                 return false;
             }
             boolean carriesItBack = signature.params().stream().anyMatch(
@@ -133,7 +134,7 @@ enum Question {
         boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
             Type result = signature.result();
             return result != null && signature.params().stream().anyMatch(
-                    t -> holdsElements(t) && result.equals(Terms.elementType(t)));
+                    t -> result.equals(Type.elementOfAContainer(t)));
         }
 
         @Override
@@ -158,8 +159,9 @@ enum Question {
     BUILT("what it keeps of the container it is built from") {
         @Override
         boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
-            return holdsElements(signature.result())
-                    && signature.params().stream().anyMatch(Question::holdsElements);
+            return Type.elementOfAContainer(signature.result()) != null
+                    && signature.params().stream().anyMatch(
+                            t -> Type.elementOfAContainer(t) != null);
         }
 
         @Override
@@ -602,13 +604,6 @@ enum Question {
         return entry != null && asksOf(stdlib, entry.signature());
     }
 
-    /** Whether a construction over {@code t} is one whose elements a shape can speak of. Read where
-     * the rules are bound as well: what a rule about a container may be written over is the same
-     * question as what puts an operation in range of one. */
-    static boolean holdsElements(Type t) {
-        return t instanceof Type.ListOf || t instanceof Type.SetOf || t instanceof Type.MapOf;
-    }
-
     /**
      * Whether the library counts two values of {@code t} apart as a number.
      *
@@ -626,9 +621,19 @@ enum Question {
         });
     }
 
-    /** Whether {@code t} is something the check can name the size of — a container, or a string. */
+    /**
+     * Whether {@code t} is something these questions can name the size of — a container, or a
+     * string.
+     *
+     * <p>A policy of this range and not a classification of the type. Nothing here says a string is
+     * a container or that either is intrinsically sized: it says which types a question about a size
+     * call is asked of, which is this enum's own business and is why it is answered here. Should a
+     * reader outside these ranges need the same set for a reason of its own, whether that is one
+     * proposition or two sets that happen to agree is the question to settle then — the same set is
+     * not the same statement.
+     */
     private static boolean hasASize(Type t) {
-        return holdsElements(t) || t == Type.Prim.STRING;
+        return Type.elementOfAContainer(t) != null || t == Type.Prim.STRING;
     }
 
     @Override

@@ -197,6 +197,28 @@ public sealed interface Type permits Type.Leaf, Type.Compound {
         };
     }
 
+    /**
+     * What a container of this type holds many of, or null where it is no container: a list's or a
+     * set's element, and a map's value.
+     *
+     * <p>Beside {@link #elementOf} and narrower than it. That one answers what is handed out one at
+     * a time, which an option's payload and a closure's first parameter also are; this one answers
+     * what a construction holds many of, which neither of them is. A reader that asks the wider
+     * question where it means this one is told an {@code Option<Int>} has elements, and goes on to
+     * say what became of them.
+     *
+     * <p>The element and not a yes. Whether a type is a container and what it holds are wanted
+     * together wherever either is wanted at all, and asking them separately is two answers that can
+     * come apart — which is what a check testing for the constructor here and reading the element
+     * over there had.
+     */
+    static Type elementOfAContainer(Type t) {
+        return switch (t) {
+            case ListOf _, SetOf _, MapOf _ -> elementOf(t);
+            case null, default -> null;
+        };
+    }
+
     /** A homogeneous list of {@code element}. */
     record ListOf(Type element) implements Compound {}
 

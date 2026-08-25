@@ -37,7 +37,7 @@ class ARuleIsHeldToTheDeclarationItIsAboutTest {
 
     private static void bindCarried(String operation, ArgumentRef container) {
         DischargeRules.holdToTheDeclaration(DefaultStdlib.get(), op(operation), container,
-                new ArgumentRef.TheContainer(), Question::holdsElements,
+                new ArgumentRef.TheContainer(), t -> Type.elementOfAContainer(t) != null,
                 "the container a predicate reads");
     }
 
@@ -45,7 +45,7 @@ class ARuleIsHeldToTheDeclarationItIsAboutTest {
         DischargeRules.holdToTheDeclaration(DefaultStdlib.get(), op(operation),
                 new BuiltFrom(new ElementLineage.SameAs(new ElementLineage.Source(from, 1)),
                         SizeAgainstItsSource.AT_MOST).from(),
-                new ArgumentRef.TheContainer(), Question::holdsElements,
+                new ArgumentRef.TheContainer(), t -> Type.elementOfAContainer(t) != null,
                 "the container something is built from");
     }
 
@@ -109,6 +109,7 @@ class ARuleIsHeldToTheDeclarationItIsAboutTest {
         assertDoesNotThrow(() -> DischargeRules.bind(DefaultStdlib.get(), 
                 Map.of(op("List.reverse"), new ArgumentRef.At(0)),
                 Function.identity(), new ArgumentRef.TheContainer(),
-                (Type t) -> Question.holdsElements(t), "the container something is built from"));
+                (Type t) -> Type.elementOfAContainer(t) != null,
+                "the container something is built from"));
     }
 }

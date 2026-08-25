@@ -79,17 +79,17 @@ final class OperationFactBinder {
                         DischargeRules.holdToTheDeclaration(stdlib, each.operation(),
                                 builds.built().from(),
                                 new ArgumentRef.TheContainer(),
-                                Question::holdsElements,
+                                t -> Type.elementOfAContainer(t) != null,
                                 "the container something is built from");
                 case OperationFact.ResultIsNoSmallerThan bounded ->
                         DischargeRules.holdToTheDeclaration(stdlib, each.operation(), bounded.container(),
                                 new ArgumentRef.TheContainer(),
-                                Question::holdsElements,
+                                t -> Type.elementOfAContainer(t) != null,
                                 "a container the result is no smaller than");
                 case OperationFact.ReadsItsContainer reads ->
                         DischargeRules.holdToTheDeclaration(stdlib, each.operation(), reads.container(),
                                 new ArgumentRef.TheContainer(),
-                                Question::holdsElements,
+                                t -> Type.elementOfAContainer(t) != null,
                                 "the container a predicate reads");
                 case OperationFact.IsStatedOverAProjection over ->
                         DischargeRules.holdToTheDeclaration(stdlib, each.operation(), over.projection(),

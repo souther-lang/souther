@@ -163,9 +163,8 @@ final class Accumulations {
             Stdlib.Signature signature = stdlib.entry(operation.toString()).signature();
             int found = -1;
             for (int i = 0; i < signature.params().size(); i++) {
-                Type param = signature.params().get(i);
-                if (!Question.holdsElements(param)
-                        || !signature.result().equals(Terms.elementType(param))) {
+                Type element = Type.elementOfAContainer(signature.params().get(i));
+                if (element == null || !element.equals(signature.result())) {
                     continue;
                 }
                 if (found >= 0) {
