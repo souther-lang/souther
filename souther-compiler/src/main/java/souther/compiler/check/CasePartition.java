@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.types.ResolvedCase;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;

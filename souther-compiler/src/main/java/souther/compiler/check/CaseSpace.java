@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.types.CaseSelector;
+import souther.compiler.types.ResolvedCase;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
@@ -112,7 +113,8 @@ sealed interface CaseSpace {
             if (TypeSymbol.SOME.equals(name) || TypeSymbol.NONE.equals(name)) {
                 return null;   // an optional's carriers, which no subject with cases has
             }
-            ResolvedCase candidate = ResolvedCase.resolve(CaseSelector.direct(name), symbols);
+            ResolvedCase candidate =
+                    ResolvedCase.resolve(CaseSelector.direct(name), AtomSpace.of(symbols));
             return !candidate.atoms().isEmpty()
                     && new LinkedHashSet<>(AtomSpace.subjectAtoms(subject, symbols))
                             .containsAll(candidate.atoms())
@@ -134,8 +136,9 @@ sealed interface CaseSpace {
             // element's own atoms are not what an arm over an optional answers for: `Some` is the
             // case, whatever it wraps.
             return new Optional(subject, List.of(
-                    ResolvedCase.resolve(CaseSelector.optionPresent(option.element()), symbols),
-                    ResolvedCase.resolve(CaseSelector.optionAbsent(), symbols)));
+                    ResolvedCase.resolve(CaseSelector.optionPresent(option.element()),
+                            AtomSpace.of(symbols)),
+                    ResolvedCase.resolve(CaseSelector.optionAbsent(), AtomSpace.of(symbols))));
         }
         if (subject instanceof Type.Union union) {
             // Described from the members this lists and not by showing the union again. What a
@@ -226,7 +229,7 @@ sealed interface CaseSpace {
         }
         List<ResolvedCase> out = new ArrayList<>();
         for (TypeSymbol member : seen) {
-            out.add(ResolvedCase.resolve(CaseSelector.direct(member), symbols));
+            out.add(ResolvedCase.resolve(CaseSelector.direct(member), AtomSpace.of(symbols)));
         }
         return out;
     }

@@ -6,6 +6,7 @@ import souther.compiler.check.BehaviorContract.Guard;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.CaseSelector;
+import souther.compiler.types.ResolvedCase;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
@@ -373,7 +374,7 @@ final class PathEngine {
         }
         Set<TypeSymbol> ruleCovers = new LinkedHashSet<>(selected.atoms());
         for (CaseSelector armCase : pattern.selectors()) {
-            if (!ruleCovers.containsAll(ResolvedCase.resolve(armCase, symbols).atoms())) {
+            if (!ruleCovers.containsAll(ResolvedCase.resolve(armCase, AtomSpace.of(symbols)).atoms())) {
                 return false;
             }
         }

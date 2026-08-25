@@ -1,6 +1,8 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.types.Atoms;
+import souther.compiler.types.ResolvedCase;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
@@ -56,6 +58,17 @@ public final class AtomSpace {
         Set<TypeSymbol> atoms = new LinkedHashSet<>();
         descend(roots(t), symbols, atoms, new HashSet<>());
         return List.copyOf(atoms);
+    }
+
+    /**
+     * The same descent, as the reading {@link ResolvedCase} asks for.
+     *
+     * <p>Where a case's atoms come from, said once. {@code types} holds no declarations and so
+     * cannot descend one; this is the descent handed to it, so a resolved case is worked out by the
+     * walk above wherever it is made and the value carries none of this.
+     */
+    public static Atoms of(Symbols symbols) {
+        return t -> subjectAtoms(t, symbols);
     }
 
     /**

@@ -1,9 +1,4 @@
-package souther.compiler.check;
-
-import souther.compiler.types.CaseSelector;
-import souther.compiler.types.Refinement;
-import souther.compiler.types.Type;
-import souther.compiler.types.TypeSymbol;
+package souther.compiler.types;
 
 import java.util.List;
 
@@ -24,14 +19,16 @@ import java.util.List;
  * below it a case is a selector, and at this level it is a selector that has been resolved against
  * the declarations.
  *
- * <p>Made in this package and read anywhere. There is no way to say what a case covers: the
- * constructor is private and the one way in — {@link #resolve} — takes the causes only, a selector
- * and the symbols to resolve it against, so the atoms are worked out and never supplied. A
- * constructor taking them would have moved the half-decided state rather than removed it, since a
- * caller here could hand {@code Station}'s selector the leaves of {@code Hospital} and nothing
- * could tell. {@code resolve} is package-private on top of that, so the backend reads one and mints
- * none; but a tripwire over the mint sites is the lesser guard, and the value is already
- * unrepresentable without it.
+ * <p>There is no way to say what a case covers: the constructor is private and the one way in —
+ * {@link #resolve} — takes the causes only, a selector and a way of descending the type it stands
+ * over, so the atoms are worked out and never supplied. A constructor taking them would have moved
+ * the half-decided state rather than removed it, since a caller could hand {@code Station}'s
+ * selector the leaves of {@code Hospital} and nothing could tell.
+ *
+ * <p>The value is here and the resolving is not. What a case covers is read off the declarations,
+ * which this package holds none of; {@link Atoms} is that reading asked for rather than done, and
+ * the module that read them answers it. So a resolved case carries no compiler in it and is read by
+ * an output that names none.
  *
  * <p>What is emitted downstream is the selector — {@link #selector()} — which is all {@code Core}
  * and the backend have ever needed.
@@ -50,16 +47,17 @@ public final class ResolvedCase {
      * {@code selector} resolved against the declarations {@code symbols} holds.
      *
      * <p>The one way in, and it takes the causes only: a selector, which is self-validating and says
-     * what it tests and reads, and the symbols to work out what it covers. There is no way to state
-     * the atoms, so a case covering leaves it does not reach is not a value that can be written.
+     * what it tests and reads, and a reading of what a type reaches to work out what it covers.
+     * There is no way to state the atoms, so a case covering leaves it does not reach is not a value
+     * that can be written.
      *
      * <p>Also where a selector that came back from {@code Core} is made whole again. A pass reading
      * an elaborated arm has the selector and not what it covers — {@code Core} carries nothing about
      * the program around it — and asking here is that pass crossing back into this one, not a second
      * reading: what a case covers is worked out in this method and nowhere else.
      */
-    static ResolvedCase resolve(CaseSelector selector, Symbols symbols) {
-        return new ResolvedCase(selector, covers(selector, symbols));
+    public static ResolvedCase resolve(CaseSelector selector, Atoms atoms) {
+        return new ResolvedCase(selector, covers(selector, atoms));
     }
 
     /**
@@ -74,16 +72,16 @@ public final class ResolvedCase {
      * <p>A case whose carrier is the value covers what it holds — one atom for a leaf, and the
      * leaves under it for a case that is itself a sum. A name that denotes no type holds nothing to
      * descend ({@code Raw}, which a stage may be unioned with and which no declaration takes apart)
-     * and covers no atom: the answer {@link AtomSpace} gives a type that names no case, said here
+     * and covers no atom: the answer {@link Atoms} gives a type that names no case, said here
      * because the type to ask it about is the one that is missing.
      */
-    private static List<TypeSymbol> covers(CaseSelector selector, Symbols symbols) {
+    private static List<TypeSymbol> covers(CaseSelector selector, Atoms atoms) {
         return switch (selector.refinement()) {
             case Refinement.OptionPresent _ -> List.of(TypeSymbol.SOME);
             case Refinement.OptionAbsent _ -> List.of(TypeSymbol.NONE);
             case Refinement.Direct direct -> direct.bound() == null
                     ? List.of()
-                    : AtomSpace.subjectAtoms(direct.bound(), symbols);
+                    : atoms.of(direct.bound());
         };
     }
 

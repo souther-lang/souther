@@ -9,6 +9,7 @@ import souther.compiler.diag.msg.MatchMessage;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.CaseSelector;
 import souther.compiler.types.Refinement;
+import souther.compiler.types.ResolvedCase;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 

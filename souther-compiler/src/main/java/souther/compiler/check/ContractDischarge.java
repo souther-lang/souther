@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.check.BehaviorContract.ContractParam;
 import souther.compiler.check.BehaviorContract.Guard;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.ResolvedCase;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;

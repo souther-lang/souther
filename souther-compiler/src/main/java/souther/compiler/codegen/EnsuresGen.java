@@ -1,6 +1,5 @@
 package souther.compiler.codegen;
 
-import souther.compiler.check.ResolvedCase;
 import souther.compiler.check.BehaviorContract;
 import souther.compiler.check.BehaviorContract.ContractParam;
 import souther.compiler.check.BehaviorContract.Guard;
@@ -9,6 +8,7 @@ import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.RuntimeCaseToken;
 import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.types.Refinement;
+import souther.compiler.types.ResolvedCase;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 

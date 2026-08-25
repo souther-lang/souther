@@ -9,6 +9,7 @@ import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.CaseSelector;
 import souther.compiler.types.ReachName;
+import souther.compiler.types.ResolvedCase;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
@@ -212,7 +213,7 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
         return new StatedContract(FIND, List.of(), Type.INT,
                 List.of(new StatedContract.StatedRule(new RuleId(FIND, 0, 0, AN_INT),
                         new Guard.Case(ResolvedCase.resolve(CaseSelector.direct(AN_INT),
-                                Symbols.none(DefaultStdlib.get()))), value,
+                                AtomSpace.of(Symbols.none(DefaultStdlib.get())))), value,
                         Optional.empty(),
                         List.of(new StatedContract.Conjunct(POS,
                                 new souther.compiler.check.TypedClause.Typed(states))))));
@@ -273,8 +274,10 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         TypeSymbol once = named(symbols, "OnceKind");
         TypeSymbol station = named(symbols, "Station");
-        Guard aboutOnceKind = new Guard.Case(ResolvedCase.resolve(CaseSelector.direct(once), symbols));
-        Guard aboutStation = new Guard.Case(ResolvedCase.resolve(CaseSelector.direct(station), symbols));
+        Guard aboutOnceKind = new Guard.Case(
+                ResolvedCase.resolve(CaseSelector.direct(once), AtomSpace.of(symbols)));
+        Guard aboutStation = new Guard.Case(
+                ResolvedCase.resolve(CaseSelector.direct(station), AtomSpace.of(symbols)));
 
         assertTrue(reading.impliedBy(aboutOnceKind, single(station)),
                 "a station is one of the values the rule about OnceKind is stated of");
@@ -296,10 +299,10 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
                 List.of(CaseSelector.direct(station), CaseSelector.direct(hospital)), visitKind);
 
         assertTrue(reading.impliedBy(
-                        new Guard.Case(ResolvedCase.resolve(CaseSelector.direct(once), symbols)), both),
+                        new Guard.Case(ResolvedCase.resolve(CaseSelector.direct(once), AtomSpace.of(symbols))), both),
                 "both alternatives are values the rule about OnceKind is stated of");
         assertFalse(reading.impliedBy(
-                        new Guard.Case(ResolvedCase.resolve(CaseSelector.direct(station), symbols)), both),
+                        new Guard.Case(ResolvedCase.resolve(CaseSelector.direct(station), AtomSpace.of(symbols))), both),
                 "one of the alternatives is a value the rule says nothing of");
     }
 

@@ -12,6 +12,7 @@ import souther.compiler.diag.DiagnosticRenderer;
 import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
+import souther.compiler.types.ResolvedCase;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
