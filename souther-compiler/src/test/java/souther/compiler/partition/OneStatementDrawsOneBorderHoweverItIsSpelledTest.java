@@ -105,12 +105,25 @@ class OneStatementDrawsOneBorderHoweverItIsSpelledTest {
                 reasonsOf("a: DateTime, b: DateTime", "DateTime.minutesBetween(a, b) > 10"));
     }
 
-    /** And the same of a component, which is a count divided rather than a form of one. */
+    /**
+     * A component of a value is not a form of it, and is a line all the same.
+     *
+     * <p>The other way a rule reaches a position. A form says what a result is in the counts of what
+     * it was given, so the rule is read into the arguments and the border falls where the arithmetic
+     * puts it. A component is no such arithmetic — the months are of different lengths, so no step
+     * over the day count answers the year — and the operation says instead which representation
+     * reads the number it answers. Read that way, {@code Date.year(a) > 2020} is a border on what
+     * {@code a} may be, and the position is divided.
+     *
+     * <p>Beside the case above and not folded into it. What {@code DateTime.minutesBetween} answers
+     * is read by nothing at all, so the rule stays about a value made from the positions; the
+     * difference between the two is which representation the operation declares, and it shows here
+     * as a border against no border.
+     */
     @Test
-    void aComponentOfAValueIsARuleAboutADerivedValue() {
-        assertEquals(List.of(), bordersOf("a: Date", "Date.year(a) > 2020"));
-        assertEquals(List.of(UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE),
-                reasonsOf("a: Date", "Date.year(a) > 2020"));
+    void aComponentOfAValueIsABorderOnThePositionItIsTakenOf() {
+        assertEquals(List.of("2020"), bordersOf("a: Date", "Date.year(a) > 2020"));
+        assertEquals(List.of(), reasonsOf("a: Date", "Date.year(a) > 2020"));
     }
 
     /**
