@@ -69,7 +69,7 @@ class AClassUnderACaseIsOfferedARowAtThatCaseTest {
         InputDomain domain = InputDomain.of(spec, sig, symbols, ReadAs.THE_COMPILATION_DOES);
         Partitions.Partitioning partitioning =
                 Partitions.of(spec.name(), domain, symbols, ReadAs.THE_COMPILATION_DOES);
-        return new Model(new Generator.Subject(
+        return new Model(new Generator.Subject(spec.name(),
                 new BehaviorInputs(spec.params().stream().map(Hir.Param::name).toList(),
                         sig.inputTypes(), symbols, ReadAs.THE_COMPILATION_DOES),
                 partitioning.axes(), HeldCounts.of(domain, symbols)),
@@ -84,7 +84,7 @@ class AClassUnderACaseIsOfferedARowAtThatCaseTest {
     /** Every class of every position, including the ones only one case has. */
     @Test
     void aClassUnderACaseIsOfferedARow() {
-        Generator.GenerationResult filled = Generator.fill(model().subject(), List.of(),
+        FillResult filled = Generator.fill(model().subject(), List.of(),
                 Generator.CandidateCheck.ANY, Budgets.generation());
 
         assertEquals(List.of(), filled.unresolved(), filled.unresolved().toString());
@@ -97,7 +97,7 @@ class AClassUnderACaseIsOfferedARowAtThatCaseTest {
     /** And the row written for it is that case, because the class under it says so. */
     @Test
     void theRowWrittenForItIsThatCase() {
-        Generator.GenerationResult filled = Generator.fill(model().subject(), List.of(),
+        FillResult filled = Generator.fill(model().subject(), List.of(),
                 Generator.CandidateCheck.ANY, Budgets.generation());
 
         for (Generator.GeneratedRow row : filled.rows()) {

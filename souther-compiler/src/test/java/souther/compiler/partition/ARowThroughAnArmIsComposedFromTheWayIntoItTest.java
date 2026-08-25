@@ -107,15 +107,15 @@ class ARowThroughAnArmIsComposedFromTheWayIntoItTest {
     void anArmNoCombinationIsOverIsComposedForFromItsWayIn() {
         Model model = Model.of(NESTED, "press");
 
-        Generator.GenerationResult filled = Generator.fill(model.subject(), List.of(),
+        FillResult filled = Generator.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.ANY, model.read(), Generator.Trial.NOTHING_RUNS,
                 List.of(), Set.of(), model.read().arms().keySet(), Budgets.generation());
 
         assertEquals(List.of(), model.read().interactions(),
                 "nothing in this body consumes two decided values into one");
-        assertFalse(filled.arms().isEmpty(), "and every arm is answered");
-        assertTrue(filled.arms().stream().allMatch(Generator.ArmAttempt.Built.class::isInstance),
-                () -> "with a row through it: " + filled.arms());
+        assertFalse(filled.discharge().arms().values().isEmpty(), "and every arm is answered");
+        assertTrue(filled.discharge().arms().values().stream().allMatch(ArmDisposition.Built.class::isInstance),
+                () -> "with a row through it: " + filled.discharge().arms().values());
         assertTrue(inputsOf(filled).contains(List.of("Ready", "Reset")),
                 () -> "including the pair the tutorial's model is short of: " + inputsOf(filled));
         assertTrue(inputsOf(filled).contains(List.of("Running", "Reset")),
@@ -133,14 +133,14 @@ class ARowThroughAnArmIsComposedFromTheWayIntoItTest {
     void twoArmsThatCameToOneSetOfValuesAreOneRow() {
         Model model = Model.of(SHIPPING, "shippingFee");
 
-        Generator.GenerationResult filled = Generator.fill(model.subject(), List.of(),
+        FillResult filled = Generator.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.ANY, model.read(), Generator.Trial.NOTHING_RUNS,
                 List.of(), Set.of(), model.read().arms().keySet(), Budgets.generation());
 
         assertEquals(4, model.read().arms().size(), "two arms in each of the two helpers");
-        assertTrue(filled.arms().stream().allMatch(Generator.ArmAttempt.Built.class::isInstance),
-                () -> "each answered: " + filled.arms());
-        assertTrue(filled.rows().size() < filled.arms().size(),
+        assertTrue(filled.discharge().arms().values().stream().allMatch(ArmDisposition.Built.class::isInstance),
+                () -> "each answered: " + filled.discharge().arms().values());
+        assertTrue(filled.rows().size() < filled.discharge().arms().values().size(),
                 () -> "in fewer rows than there are arms: " + inputsOf(filled));
         assertEquals(filled.rows().size(), new LinkedHashSet<>(inputsOf(filled)).size(),
                 () -> "and no two of them are the same line twice: " + inputsOf(filled));
@@ -162,7 +162,7 @@ class ARowThroughAnArmIsComposedFromTheWayIntoItTest {
         Set<Integer> everyArm = model.read().arms().keySet();
         Observation everywhere = doing(model.read());
 
-        Generator.GenerationResult watched = Generator.fill(model.subject(), List.of(),
+        FillResult watched = Generator.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.ANY, model.read(),
                 _ -> new Generator.Watched.Ran(everywhere),
                 List.of(), Set.of(), everyArm, Budgets.generation());
@@ -178,7 +178,7 @@ class ARowThroughAnArmIsComposedFromTheWayIntoItTest {
 
         // The same search where nothing watched anything: one row per arm's own way in, and no arm
         // is taken off the list by a reading of where a row would go.
-        Generator.GenerationResult unwatched = Generator.fill(model.subject(), List.of(),
+        FillResult unwatched = Generator.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.ANY, model.read(), Generator.Trial.NOTHING_RUNS,
                 List.of(), Set.of(), everyArm, Budgets.generation());
         assertTrue(unwatched.rows().size() > 1,
@@ -198,14 +198,14 @@ class ARowThroughAnArmIsComposedFromTheWayIntoItTest {
         Model model = Model.of(NESTED, "press");
         Set<Integer> everyArm = model.read().arms().keySet();
 
-        Generator.GenerationResult filled = Generator.fill(model.subject(), List.of(),
+        FillResult filled = Generator.fill(model.subject(), List.of(),
                 // Refuses every value, so every way in is a search that ran and composed nothing.
                 Generator.CandidateCheck.refusing((_, _) -> java.util.Optional.of("no")),
                 model.read(), Generator.Trial.NOTHING_RUNS, List.of(), Set.of(), everyArm,
                 Budgets.generation());
 
         for (int probe : everyArm) {
-            assertInstanceOf(Generator.ArmAttempt.Unresolved.class, filled.armAt(probe),
+            assertInstanceOf(ArmDisposition.Unresolved.class, filled.discharge().at(new Generator.ArmOwed(probe)),
                     "a way in this tried and composed nothing at is not one it never had: " + probe);
         }
         assertTrue(model.read().arms().values().stream()
@@ -214,7 +214,7 @@ class ARowThroughAnArmIsComposedFromTheWayIntoItTest {
     }
 
     /** The values of each row, in the order the row writes them. */
-    private static List<List<String>> inputsOf(Generator.GenerationResult filled) {
+    private static List<List<String>> inputsOf(FillResult filled) {
         return filled.rows().stream()
                 .map(row -> row.inputs().stream().map(FixtureTemplate::text).toList())
                 .toList();
@@ -265,7 +265,7 @@ class ARowThroughAnArmIsComposedFromTheWayIntoItTest {
                     checked.supplied());
             Partitions.Partitioning partitioning =
                     Partitions.of(spec.name(), inputs, symbols, ReadAs.THE_COMPILATION_DOES);
-            return new Model(new Generator.Subject(
+            return new Model(new Generator.Subject(spec.name(),
                     new BehaviorInputs(spec.params().stream().map(Hir.Param::name).toList(),
                             sigs.get(behavior).inputTypes(), symbols, ReadAs.THE_COMPILATION_DOES),
                     partitioning.axes(), HeldCounts.of(inputs, symbols)),

@@ -63,7 +63,7 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
      * written under leaves a model that does not compile, and a test asking such a model for its rows
      * gets an empty answer that agrees with whatever it expected of one.
      */
-    private static Generator.GenerationResult generated(String source) {
+    private static souther.compiler.partition.FillResult generated(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
@@ -76,7 +76,7 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
 
     /** The one row the generator writes for that combination, as the text an author is offered. */
     private static String generatedRow(String source) {
-        Generator.GenerationResult filled = generated(source);
+        souther.compiler.partition.FillResult filled = generated(source);
         assertEquals(List.of(), filled.unresolved(),
                 "the combination is one a value exists for, so nothing is left unresolved");
         assertEquals(1, filled.rows().size(), "one combination is uncovered, so one row is written");
@@ -92,7 +92,7 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
      * holding an element there.
      */
     private static List<String> generatedRows(String source) {
-        Generator.GenerationResult filled = generated(source);
+        souther.compiler.partition.FillResult filled = generated(source);
         assertEquals(List.of(), filled.unresolved(),
                 "the combination is one a value exists for, so nothing is left unresolved");
         return filled.rows().stream().map(row -> row.inputs().get(0).text()).toList();
@@ -468,7 +468,7 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
 
                 let look (t) = 1
                 """;
-        Generator.GenerationResult filled = generated(source);
+        souther.compiler.partition.FillResult filled = generated(source);
 
         assertEquals(List.of(), filled.rows(),
                 "no row, rather than one carrying a million elements");
@@ -495,7 +495,7 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
         for (int i = 1; i <= 8; i++) {
             formats += "    invariant p%d = String.matches(\"[a-h]{%d}\", value)\n".formatted(i, i);
         }
-        Generator.GenerationResult filled = generated("""
+        souther.compiler.partition.FillResult filled = generated("""
                 module nd.gen
 
                 data Domestic
@@ -542,7 +542,7 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
         for (int i = 1; i <= 8; i++) {
             formats += "    invariant p%d = String.matches(\"[a-h]{%d}\", value)\n".formatted(i, i);
         }
-        Generator.GenerationResult filled = generated("""
+        souther.compiler.partition.FillResult filled = generated("""
                 module nd.gen
 
                 data Domestic
@@ -585,7 +585,7 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
      */
     @Test
     void aTypeWrittenInTermsOfItselfIsDescendedIntoAndComesBack() {
-        Generator.GenerationResult filled = generated("""
+        souther.compiler.partition.FillResult filled = generated("""
                 module nd.gen
 
                 data Domestic
@@ -645,7 +645,7 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
                         && List.length(value) >= 2
                     invariant notTwo = List.length(value) /= 2
                 """, "tags: Tags", "tags = Tags([\"a\", \"b\", \"c\"])");
-        Generator.GenerationResult filled = generated(source);
+        souther.compiler.partition.FillResult filled = generated(source);
 
         assertEquals(List.of(), filled.rows(), "two equal elements is not a list of two distinct ones");
         assertTrue(filled.unresolved().stream().allMatch(left ->

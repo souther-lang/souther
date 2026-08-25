@@ -84,23 +84,25 @@ class TheCompositionIsNotBehindTheBaselinesBudgetTest {
         Adequacy.Filling filling = generated(crowded()).get("submit");
         assertNotNull(filling, "the behavior under test is generated for");
 
-        Generator.ClassAttempt at = attemptAtTheLowerHi(filling);
+        ClassDisposition at = attemptAtTheLowerHi(filling);
         assertEquals(List.of("Request { lo = Amount(0), hi = Amount(0) }"),
-                ((Generator.ClassAttempt.Built) at).row().inputs().stream()
+                filling.composed().rowFor(((ClassDisposition.Built) at).row()).inputs().stream()
                         .map(FixtureTemplate::text).toList(),
                 "composed from the classes, which is what a row is where none of the values the "
                         + "model states can be written for it: " + at);
     }
 
     /** What the search made of the class {@code hi} takes below the line the body draws. */
-    private static Generator.ClassAttempt attemptAtTheLowerHi(Adequacy.Filling filling) {
-        for (Generator.ClassAttempt each : filling.composed().classes()) {
-            if (each.at().term().endsWith("hi") && each.classId().contains("0")) {
-                return each;
+    private static ClassDisposition attemptAtTheLowerHi(Adequacy.Filling filling) {
+        for (Map.Entry<Generator.ClassOwed, ClassDisposition> each
+                : filling.composed().discharge().classes().entrySet()) {
+            if (each.getKey().at().term().endsWith("hi")
+                    && each.getKey().classId().contains("0")) {
+                return each.getValue();
             }
         }
         throw new AssertionError("the lower class of `hi` is one the search was asked about: "
-                + filling.composed().classes());
+                + filling.composed().discharge().classes());
     }
 
     private static Map<String, Adequacy.Filling> generated(String source) {

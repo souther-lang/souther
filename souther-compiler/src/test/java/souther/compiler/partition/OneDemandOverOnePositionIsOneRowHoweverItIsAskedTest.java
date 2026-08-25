@@ -160,7 +160,7 @@ class OneDemandOverOnePositionIsOneRowHoweverItIsAskedTest {
             assertNotNull(inputs, "the behavior's inputs were read");
             Core body = checked.behaviorBodies().get(behavior);
             assertNotNull(body, "the behavior under test has a body");
-            return new Model(new Generator.Subject(
+            return new Model(new Generator.Subject(spec.name(),
                     new BehaviorInputs(spec.params().stream().map(Hir.Param::name).toList(),
                             sig.inputTypes(), symbols,
                             souther.compiler.query.ReadAs.THE_COMPILATION_DOES),

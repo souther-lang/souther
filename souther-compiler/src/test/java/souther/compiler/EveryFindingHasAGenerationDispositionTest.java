@@ -205,23 +205,28 @@ class EveryFindingHasAGenerationDispositionTest {
     }
 
     /**
-     * An arm a strategy takes and composes nothing for is answered by what the search came to.
+     * An arm nothing was composed for is answered from the reading of the body, whatever the
+     * positions came to.
      *
      * <p>The way into this arm is a comparison between a value the body works out and a position
-     * beside it, and the classes it leaves are ones this can put a row at — so a search runs, and
-     * what it comes to is what a reader is told. Answered {@link GenerationOutcome.NotSupported}
-     * instead, an author would be told no strategy reaches the arm while one had just tried.
+     * beside it, and the ways to such a value could not all be written down — so the reading has an
+     * answer about the arm before any position is looked at. No position of this model is divided
+     * either, and the search over the classes has nothing to walk; read as though that were what
+     * happened to the arm, the answer was that a strategy took the arm and recorded neither a row
+     * nor a reason, which is this compiler failing to say rather than anything about the model.
      */
     @Test
-    void anArmAStrategyTriesAndComposesNothingForSaysWhatItCameTo() {
+    void anArmNothingWasComposedForIsAnsweredFromTheReadingOfTheBody() {
         Compilation compilation = compiled(POLICY);
         List<Adequacy.GenerationDisposition> arms =
                 filling(compilation, "example.policy", "fee").generation().stream()
                         .filter(d -> d.finding().kind() == Adequacy.Kind.ARM_UNREACHED).toList();
 
         assertEquals(1, arms.size());
-        assertTrue(arms.get(0).outcome() instanceof GenerationOutcome.CannotGenerate,
-                "a search ran at this arm and came to something: " + arms);
+        assertEquals(new GenerationOutcome.NotSupported(
+                        GenerationOutcome.NotSupported.Reason.THE_WAYS_INTO_THIS_ARM_ARE_NOT_ENUMERABLE),
+                arms.get(0).outcome(),
+                "the reading says the ways into this arm are not enumerable: " + arms);
     }
 
     /** A fork inside a block, whose body runs where something applies it. */
@@ -462,16 +467,37 @@ class EveryFindingHasAGenerationDispositionTest {
     private static String saidAbout(souther.compiler.partition.GenerationReason why,
                                     souther.compiler.partition.GenerationReason alsoAtTheEdges) {
         return GeneratedRows.of("example.kind",
-                Map.of("pick", new Adequacy.Filling(stopped(why), stopped(alsoAtTheEdges),
+                Map.of("pick", new Adequacy.Filling(stopped(why), atTheEdges(alsoAtTheEdges),
                         List.of())),
                 Map.of(), true, SourceNameResolver.identity()).text();
     }
 
-    private static souther.compiler.partition.Generator.GenerationResult stopped(
+    /** A run asked for nothing that came to a reason about itself, which is what a stopped
+     *  generation is when nothing was owed. */
+    private static souther.compiler.partition.FillResult stopped(
+            souther.compiler.partition.GenerationReason why) {
+        souther.compiler.partition.GenerationPlan plan =
+                new souther.compiler.partition.GenerationPlan(nothingIsDivided(), List.of(),
+                        List.of());
+        return why == null ? souther.compiler.partition.FillResult.nothingAskedOf(plan)
+                : new souther.compiler.partition.FillResult(plan, Map.of(), List.of(),
+                        List.of(why), souther.compiler.partition.Discharge.NOTHING);
+    }
+
+    /** The same at the boundaries, which nothing is owed at and which has no plan. */
+    private static souther.compiler.partition.Generator.GenerationResult atTheEdges(
             souther.compiler.partition.GenerationReason why) {
         return why == null ? souther.compiler.partition.Generator.GenerationResult.NONE
-                : new souther.compiler.partition.Generator.GenerationResult(
-                        List.of(), List.of(), List.of(why));
+                : new souther.compiler.partition.Generator.GenerationResult(List.of(), List.of(),
+                        List.of(why));
+    }
+
+    private static souther.compiler.partition.Generator.Subject nothingIsDivided() {
+        return new souther.compiler.partition.Generator.Subject("pick",
+                new souther.compiler.partition.BehaviorInputs(List.of(), List.of(),
+                        souther.compiler.check.Symbols.none(DefaultStdlib.get()),
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                List.of(), souther.compiler.partition.HeldCounts.NONE);
     }
 
     /**

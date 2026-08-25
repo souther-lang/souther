@@ -3,7 +3,6 @@ package souther.compiler;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.meta.ModulePath;
-import souther.compiler.partition.Generator;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
@@ -65,7 +64,7 @@ class ACaseIsBuiltAtItsPositionWithoutBeingNamedHereTest {
                     | Resignation   -> Verdict { text = "resigned" }
             """;
 
-    private static Generator.GenerationResult filled() {
+    private static souther.compiler.partition.FillResult filled() {
         Compilation compilation = Compilation.ofSources(List.of(DOMAIN, CONSUMER), ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
@@ -76,7 +75,7 @@ class ACaseIsBuiltAtItsPositionWithoutBeingNamedHereTest {
 
     @Test
     void aLeafThisModuleCanNameGetsARowAndTheOthersGetTheirReason() {
-        Generator.GenerationResult filled = filled();
+        souther.compiler.partition.FillResult filled = filled();
 
         assertEquals(List.of("Resignation { note = \"x\" }"),
                 filled.rows().stream()

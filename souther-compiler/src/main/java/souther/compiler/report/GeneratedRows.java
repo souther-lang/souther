@@ -672,9 +672,9 @@ public final class GeneratedRows {
             case THE_ROWS_WERE_NOT_READ ->
                     "the rows were not read, so nothing was looked for; what stopped them being"
                             + " read is said above";
-            case NO_REASON_RECORDED ->
-                    "the search that takes this class left no reason, which is this compiler failing"
-                            + " to say rather than anything established about the class";
+            case NO_CANDIDATE_WAS_OFFERED ->
+                    "the walk over what could stand there put no value forward, so nothing was"
+                            + " built and nothing was refused";
         };
     }
 

@@ -92,15 +92,15 @@ class ARowIsAWitnessForAnArmOnlyByGoingThroughItTest {
         Model model = Model.of(GATE);
         Set<Integer> everyArm = model.read().arms().keySet();
 
-        Generator.GenerationResult filled = Generator.fill(model.subject(), List.of(),
+        FillResult filled = Generator.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.ANY, model.read(),
                 // Seen doing everything the ways in name, and seen at no arm at all.
                 _ -> new Generator.Watched.Ran(waysWithoutTheArms(model.read())),
                 List.of(), Set.of(), everyArm, Budgets.generation());
 
         for (int probe : everyArm) {
-            assertFalse(filled.armAt(probe) instanceof Generator.ArmAttempt.Built,
-                    () -> "no row goes through an arm nothing was seen at: " + filled.arms());
+            assertFalse(filled.discharge().at(new Generator.ArmOwed(probe)) instanceof ArmDisposition.Built,
+                    () -> "no row goes through an arm nothing was seen at: " + filled.discharge().arms().values());
         }
         assertEquals(List.of(), filled.rows(),
                 () -> "so nothing is offered for one: " + filled.rows());
@@ -113,13 +113,13 @@ class ARowIsAWitnessForAnArmOnlyByGoingThroughItTest {
         Model model = Model.of(GATE);
         Set<Integer> everyArm = model.read().arms().keySet();
 
-        Generator.GenerationResult filled = Generator.fill(model.subject(), List.of(),
+        FillResult filled = Generator.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.ANY, model.read(),
                 _ -> new Generator.Watched.Ran(everywhere(model.read(), everyArm)),
                 List.of(), Set.of(), everyArm, Budgets.generation());
 
-        assertTrue(filled.arms().stream().allMatch(Generator.ArmAttempt.Built.class::isInstance),
-                () -> "each arm has a row through it: " + filled.arms());
+        assertTrue(filled.discharge().arms().values().stream().allMatch(ArmDisposition.Built.class::isInstance),
+                () -> "each arm has a row through it: " + filled.discharge().arms().values());
     }
 
     /** Everything the ways in name, and nothing at any arm. */
@@ -188,7 +188,7 @@ class ARowIsAWitnessForAnArmOnlyByGoingThroughItTest {
             assertFalse(partitioning.axes().isEmpty() || partitioning.axes().stream()
                             .allMatch(axis -> axis.classes().isEmpty()),
                     "and divides it into classes a row can be composed at");
-            return new Model(new Generator.Subject(
+            return new Model(new Generator.Subject(spec.name(),
                     new BehaviorInputs(spec.params().stream().map(Hir.Param::name).toList(),
                             sigs.get("fee").inputTypes(), symbols, ReadAs.THE_COMPILATION_DOES),
                     partitioning.axes(), HeldCounts.of(inputs, symbols)),

@@ -93,6 +93,6 @@ class TwoValuesStandingAlikeAreStillTwoValuesTest {
             }
         }
         throw new AssertionError("no row was offered for " + classId + ": "
-                + filling.composed().classes());
+                + filling.composed().discharge().classes().values());
     }
 }

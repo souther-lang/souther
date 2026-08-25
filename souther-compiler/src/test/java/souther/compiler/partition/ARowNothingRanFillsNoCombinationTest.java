@@ -153,16 +153,16 @@ class ARowNothingRanFillsNoCombinationTest {
         Model model = Model.of(SHIPPING, "shippingFee");
         Set<Integer> every =
                 Generator.everyArmACombinationMayTake(model.subject(), model.groups(), Budgets.generation());
-        Generator.GenerationResult filled = Generator.fill(model.subject(), List.of(),
+        FillResult filled = Generator.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.refusing((_, _) -> java.util.Optional.of("no")),
                 model.read(), Generator.Trial.NOTHING_RUNS, List.of(), Set.of(), every, Budgets.generation());
 
         assertEquals(List.of(), filled.rows(), "nothing builds, so nothing is composed");
         for (int probe : every) {
-            Generator.ArmAttempt at = filled.armAt(probe);
-            assertInstanceOf(Generator.ArmAttempt.Unresolved.class, at,
+            ArmDisposition at = filled.discharge().at(new Generator.ArmOwed(probe));
+            assertInstanceOf(ArmDisposition.Unresolved.class, at,
                     "the arm was tried and says so: " + probe);
-            assertEquals(3, ((Generator.ArmAttempt.Unresolved) at).why().size(),
+            assertEquals(3, ((ArmDisposition.Unresolved) at).why().size(),
                     "and keeps what each place it was looked for came to — the two combinations"
                             + " claiming it and the way into it: " + at);
         }
@@ -182,7 +182,7 @@ class ARowNothingRanFillsNoCombinationTest {
                 Generator.everyArmACombinationMayTake(model.subject(), model.groups(), Budgets.generation());
         // Refuses the first case of the first position, so the combinations naming it fail and the
         // ones beside them build. Every arm of the second decision is claimed by both.
-        Generator.GenerationResult filled = Generator.fill(model.subject(), List.of(),
+        FillResult filled = Generator.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.refusing((_, candidate) ->
                         candidate.text().contains("Premium")
                                 ? java.util.Optional.of("no") : java.util.Optional.empty()),
@@ -190,11 +190,11 @@ class ARowNothingRanFillsNoCombinationTest {
 
         assertFalse(filled.rows().isEmpty(), "the combinations that build compose their rows");
         List<Integer> built = every.stream()
-                .filter(probe -> filled.armAt(probe) instanceof Generator.ArmAttempt.Built)
+                .filter(probe -> filled.discharge().at(new Generator.ArmOwed(probe)) instanceof ArmDisposition.Built)
                 .toList();
         assertEquals(3, built.size(),
                 "the arm nothing builds is the refused one; the three beside it are answered: "
-                        + filled.arms());
+                        + filled.discharge().arms().values());
     }
 
     /**
@@ -253,7 +253,7 @@ class ARowNothingRanFillsNoCombinationTest {
                 Generator.everyArmACombinationMayTake(model.subject(), model.groups(), Budgets.generation());
         assertFalse(every.isEmpty(), "the body has arms");
 
-        Generator.GenerationResult filled = Generator.fill(model.subject(), List.of(),
+        FillResult filled = Generator.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.ANY, model.read(), Generator.Trial.NOTHING_RUNS,
                 List.of(), Generator.everyClassNoRowSitsIn(model.subject(), List.of()), every, Budgets.generation());
 
@@ -261,11 +261,11 @@ class ARowNothingRanFillsNoCombinationTest {
                         .anyMatch(GenerationReason.SearchLimit.class::isInstance),
                 "the classes alone spend the budget: " + filled.reasons());
         for (int probe : every) {
-            Generator.ArmAttempt at = filled.armAt(probe);
-            assertInstanceOf(Generator.ArmAttempt.Unresolved.class, at,
+            ArmDisposition at = filled.discharge().at(new Generator.ArmOwed(probe));
+            assertInstanceOf(ArmDisposition.Unresolved.class, at,
                     "the arm has an entry rather than the silence of one nothing claims: " + probe);
             assertEquals(List.of(Generator.UnresolvedCombination.Reason.SEARCH_LIMIT),
-                    ((Generator.ArmAttempt.Unresolved) at).why().stream()
+                    ((ArmDisposition.Unresolved) at).why().stream()
                             .map(Generator.UnresolvedCombination::reason).toList(),
                     "and says the search stopped, nothing having been tried at it");
         }
@@ -401,7 +401,7 @@ class ARowNothingRanFillsNoCombinationTest {
             assertNotNull(body, "the behavior under test has a body");
             CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
                 checked.supplied());
-            return new Model(new Generator.Subject(
+            return new Model(new Generator.Subject(spec.name(),
                     new BehaviorInputs(spec.params().stream().map(Hir.Param::name).toList(),
                             sig.inputTypes(), symbols,
                             souther.compiler.query.ReadAs.THE_COMPILATION_DOES),

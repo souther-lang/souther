@@ -90,7 +90,7 @@ class ASearchThatStoppedSaysSoRatherThanNamingItsLastRefusalTest {
      */
     @Test
     void aCombinationLeftWithAnUnrunCandidateSaysTheSearchStopped() {
-        Generator.GenerationResult filled = fill(Model.of(TWO_FREE, "shippingFee"), _ -> MISSED);
+        FillResult filled = fill(Model.of(TWO_FREE, "shippingFee"), _ -> MISSED);
 
         assertEquals(Generator.UnresolvedCombination.Reason.SEARCH_LIMIT,
                 reasonFor(filled, List.of("member=Premium", "delivery=Express")),
@@ -105,7 +105,7 @@ class ASearchThatStoppedSaysSoRatherThanNamingItsLastRefusalTest {
      */
     @Test
     void aCombinationEveryCandidateMissedSaysTheCandidatesWereNotWitnesses() {
-        Generator.GenerationResult filled = fill(Model.of(ONE_FREE, "shippingFee"), _ -> MISSED);
+        FillResult filled = fill(Model.of(ONE_FREE, "shippingFee"), _ -> MISSED);
 
         assertEquals(Generator.UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS,
                 reasonFor(filled, List.of("member=Premium", "delivery=Express")),
@@ -126,7 +126,7 @@ class ASearchThatStoppedSaysSoRatherThanNamingItsLastRefusalTest {
      */
     @Test
     void candidatesWhoseValuesAlreadyRanDoNotStopTheSearch() {
-        Generator.GenerationResult filled = fill(Model.of(ONE_FREE, "shippingFee"), _ -> MISSED);
+        FillResult filled = fill(Model.of(ONE_FREE, "shippingFee"), _ -> MISSED);
 
         assertEquals(Generator.UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS,
                 reasonFor(filled, List.of("member=Premium")),
@@ -159,7 +159,7 @@ class ASearchThatStoppedSaysSoRatherThanNamingItsLastRefusalTest {
 
     /** What the search made of the one combination named by {@code classes}. */
     private static Generator.UnresolvedCombination.Reason reasonFor(
-            Generator.GenerationResult filled, List<String> classes) {
+            FillResult filled, List<String> classes) {
         return filled.unresolved().stream()
                 .filter(each -> each.classes().equals(classes))
                 .findFirst()
@@ -169,7 +169,7 @@ class ASearchThatStoppedSaysSoRatherThanNamingItsLastRefusalTest {
                 .reason();
     }
 
-    private static Generator.GenerationResult fill(Model model, Generator.Trial trial) {
+    private static FillResult fill(Model model, Generator.Trial trial) {
         return Generator.fill(model.subject(), List.of(), Generator.CandidateCheck.ANY,
                 model.read(), trial, Budgets.generation());
     }
@@ -200,7 +200,7 @@ class ASearchThatStoppedSaysSoRatherThanNamingItsLastRefusalTest {
             assertNotNull(inputs, "the behavior's inputs were read");
             Core body = checked.behaviorBodies().get(behavior);
             assertNotNull(body, "the behavior under test has a body");
-            return new Model(new Generator.Subject(
+            return new Model(new Generator.Subject(spec.name(),
                     new BehaviorInputs(spec.params().stream().map(Hir.Param::name).toList(),
                             sig.inputTypes(), symbols,
                             souther.compiler.query.ReadAs.THE_COMPILATION_DOES),

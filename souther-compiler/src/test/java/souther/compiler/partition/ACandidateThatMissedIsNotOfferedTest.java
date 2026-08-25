@@ -88,7 +88,7 @@ class ACandidateThatMissedIsNotOfferedTest {
     void aCombinationEveryCandidateMissedIsLeftUntried() {
         Model model = Model.of(SHIPPING, "shippingFee");
 
-        Generator.GenerationResult filled = fill(model, _ -> MISSED);
+        FillResult filled = fill(model, _ -> MISSED);
 
         assertTrue(filled.unresolved().stream().anyMatch(each -> each.reason()
                         == Generator.UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS),
@@ -104,7 +104,7 @@ class ACandidateThatMissedIsNotOfferedTest {
         Model model = Model.of(SHIPPING, "shippingFee");
         Observation everything = doing(everyClaimOf(model));
 
-        Generator.GenerationResult filled =
+        FillResult filled =
                 fill(model, _ -> new Generator.Watched.Ran(everything));
 
         assertTrue(filled.unresolved().stream().noneMatch(each -> each.reason()
@@ -158,7 +158,7 @@ class ACandidateThatMissedIsNotOfferedTest {
     void rowsNothingRanAreOfferedAndSaidToBeUnconfirmed() {
         Model model = Model.of(SHIPPING, "shippingFee");
 
-        Generator.GenerationResult filled = fill(model, Generator.Trial.NOTHING_RUNS);
+        FillResult filled = fill(model, Generator.Trial.NOTHING_RUNS);
 
         assertFalse(filled.rows().isEmpty(), "the rows are offered");
         assertEquals(1, filled.reasons().stream()
@@ -166,7 +166,7 @@ class ACandidateThatMissedIsNotOfferedTest {
                 "and the generation says once that nothing ran them: " + filled.reasons());
     }
 
-    private static Generator.GenerationResult fill(Model model, Generator.Trial trial) {
+    private static FillResult fill(Model model, Generator.Trial trial) {
         return Generator.fill(model.subject(), List.of(), Generator.CandidateCheck.ANY,
                 model.read(), trial, Budgets.generation());
     }
@@ -228,7 +228,7 @@ class ACandidateThatMissedIsNotOfferedTest {
             assertNotNull(inputs, "the behavior's inputs were read");
             Core body = checked.behaviorBodies().get(behavior);
             assertNotNull(body, "the behavior under test has a body");
-            return new Model(new Generator.Subject(
+            return new Model(new Generator.Subject(spec.name(),
                     new BehaviorInputs(spec.params().stream().map(Hir.Param::name).toList(),
                             sig.inputTypes(), symbols,
                             souther.compiler.query.ReadAs.THE_COMPILATION_DOES),

@@ -40,7 +40,7 @@ class APositionWithAFloorIsOfferedAValueThatMeetsItTest {
         Sig sig = sigs.get(behavior);
         InputDomain domain = InputDomain.of(spec, sig, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         Partitions.Partitioning partitioning = Partitions.of(spec.name(), domain, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
-        return new Generator.Subject(
+        return new Generator.Subject(spec.name(),
                 new BehaviorInputs(spec.params().stream().map(Hir.Param::name).toList(),
                         sig.inputTypes(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
                 partitioning.axes(), HeldCounts.of(domain, symbols));
@@ -48,7 +48,7 @@ class APositionWithAFloorIsOfferedAValueThatMeetsItTest {
 
     /** The value at the position the row wrote, which is the one the search reached first. */
     private static String firstValueAt(String source, String behavior, int position) {
-        Generator.GenerationResult filled =
+        FillResult filled =
                 Generator.fill(subjectOf(source, behavior), List.of(), Generator.CandidateCheck.ANY, Budgets.generation());
         assertEquals(List.of(), filled.unresolved(), "nothing should have gone unresolved");
         return filled.rows().get(0).inputs().get(position).text();
