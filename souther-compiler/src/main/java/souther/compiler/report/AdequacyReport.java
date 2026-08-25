@@ -1052,7 +1052,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // given, which sent them looking for a rule the sentence never named — and two rules
         // stopped by one limit at one position came out as one line.
         for (Adequacy.Finding f : behavior.findings()) {
-            if (f.about() instanceof About.ARuleThisCouldNotRead(var it)) {
+            if (f.about() instanceof About.ARuleWithoutALine(var it)) {
                 // Two sentences, because two opposite things are being said. A form no reader takes
                 // apart is a limit of this compiler; a rule whose quantity is empty was read from
                 // end to end and says what it says. Written under one word, a line read "not read:
@@ -2217,7 +2217,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case About.ACaseNoRowExpects _, About.ACaseNothingWasSeenToProduce _,
                     About.ACaseNoRowAppliesItTo _, About.AClassNoRowIsIn _,
                     About.APointOfABorder _, About.APositionNoLineDivides _,
-                    About.APositionThisCouldNotRead _, About.ARuleThisCouldNotRead _,
+                    About.APositionThisCouldNotRead _, About.ARuleWithoutALine _,
                     About.AQuestionNothingAnswered _,
                     About.APositionWhoseRulesWereNotReached _,
                     About.APositionReadWiderThanItsRules _ -> null;
@@ -2251,7 +2251,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     missing.name() + " (at " + missing.axis().path() + ")";
             case About.APositionNoLineDivides(var position) -> position.at().toString();
             case About.APositionThisCouldNotRead(var it) -> it.at();
-            case About.ARuleThisCouldNotRead(var it) -> it.at();
+            case About.ARuleWithoutALine(var it) -> it.at();
             case About.APositionWhoseRulesWereNotReached(var axis) -> axis.path();
             // The position, as the two above write it. What is said of it is the kind's; there is
             // no rule to name and no class this is about, so the position is the whole subject.

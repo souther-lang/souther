@@ -42,7 +42,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
                                 Measure<List<BorderAssessment>> bounded,
                                 PairSpace pairs,
                                 List<souther.compiler.partition.UndividedPosition> notDerivable,
-                                List<souther.compiler.inputs.UnreadRule> unread,
+                                List<souther.compiler.inputs.RuleWithoutALine> unread,
                                 List<souther.compiler.inputs.PositionReadingBlocked> blocked,
                                 List<souther.compiler.inputs.PositionValuesNotSeparated> notSeparated,
                                 List<Unanswered> unanswered,
@@ -160,7 +160,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
     }
 
     /**
-     * One entry of what this reading could not read, as a document writes it.
+     * One entry of the document's {@code notRead}, as a document writes it.
      *
      * <p>Two shapes because two authorities answer. A rule was read and could not be used, and the
      * finding names which rule; or the reading never got to the rules of a position, and there is
@@ -171,6 +171,20 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
      * <p>The reason in the vocabulary a document promises its reader, not the one this compiler
      * records for itself: which capability was missing is this compiler's own business, and which
      * kind of thing stopped the derivation is what a reader can act on.
+     */
+    /*
+     * `NotRead` is the document's word, and it is wider than the word. A rule read from end to end
+     * that draws no line arrives here, and the array it is written to is called `notRead` in every
+     * document of schema 7. Renaming that is a version and a retired word, and the schema already
+     * tells a consumer which entries are about a limit of this compiler and which are facts about
+     * the rule — so the word stays, and the name here is the word, because this is where the
+     * document's shape is written and a type named for one thing writing a field named for another
+     * is a second place to be kept in step.
+     *
+     * Behind this projection it means what it says. Nothing in the compiler calls a rule it read to
+     * the end one it could not read: what a reading fell short of is `BlockReason.ReadingStopReason`
+     * and a rule that is no line at a position is `RuleWithoutALine`. The older word lives on this
+     * side alone.
      */
     public sealed interface NotRead {
 
@@ -194,7 +208,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
         boolean readingStopped();
 
         /** A rule of the model this read and could not turn into a line. */
-        record ARule(souther.compiler.inputs.UnreadRule finding) implements NotRead {
+        record ARule(souther.compiler.inputs.RuleWithoutALine finding) implements NotRead {
 
             @Override
             public String at() {

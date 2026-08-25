@@ -2,7 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.check.RuleAccounting;
 import souther.compiler.inputs.BlockReason;
-import souther.compiler.inputs.UnreadRule;
+import souther.compiler.inputs.RuleWithoutALine;
 
 /**
  * One thing that stopped a measure's reading of the model from running out.
@@ -26,7 +26,7 @@ public sealed interface ClosureGap {
 
     /** A rule of the model that a reader set aside. The rule says which measures that costs
      *  ({@link BlockReason.RuleWithoutLineReason#leavesShort}). */
-    record RuleUnread(UnreadRule rule) implements ClosureGap {}
+    record RuleUnread(RuleWithoutALine rule) implements ClosureGap {}
 
     /**
      * A question the rules written about one position raise that nothing answered.

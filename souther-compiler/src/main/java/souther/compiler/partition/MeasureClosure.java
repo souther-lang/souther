@@ -153,10 +153,10 @@ public final class MeasureClosure {
      *                and it is the rule's own reason that answers
      *                ({@link souther.compiler.inputs.BlockReason.RuleWithoutLineReason#leavesShort})
      */
-    static Both of(List<Axis> axes, List<souther.compiler.inputs.UnreadRule> refused) {
+    static Both of(List<Axis> axes, List<souther.compiler.inputs.RuleWithoutALine> refused) {
         Set<ClosureGap> partition = new LinkedHashSet<>();
         Set<ClosureGap> border = new LinkedHashSet<>();
-        for (souther.compiler.inputs.UnreadRule rule : refused) {
+        for (souther.compiler.inputs.RuleWithoutALine rule : refused) {
             if (rule.why().leavesShort(CoverageObligation.Measure.PARTITION)) {
                 partition.add(new ClosureGap.RuleUnread(rule));
             }

@@ -106,7 +106,7 @@ sealed interface PendingPosition {
      * did: {@link #of} refuses an axis with evidence.
      *
      * <p>Null where the surviving reason is about a rule. Such a reason is a rule this read and
-     * could not use, which is an {@link souther.compiler.inputs.UnreadRule} made by the reader that
+     * could not use, which is an {@link souther.compiler.inputs.RuleWithoutALine} made by the reader that
      * read it and carrying which rule — said again here, it would be the same fact twice, once
      * without the rule.
      *

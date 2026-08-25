@@ -42,7 +42,7 @@ public sealed interface BodyCutInspection {
      * settles is only that this phase did not.
      *
      * <p>It carries no reason, and the reason is not lost. A rule this phase read and could not use
-     * is an {@link souther.compiler.inputs.UnreadRule} made by the reader that read it, naming
+     * is an {@link souther.compiler.inputs.RuleWithoutALine} made by the reader that read it, naming
      * which rule; carried through here as well, one limit at one position stood for however many
      * rules were stopped by it, and the first of them was the one a report printed.
      * What this phase owes the verdict is whether it drew anything, which is the whole of what

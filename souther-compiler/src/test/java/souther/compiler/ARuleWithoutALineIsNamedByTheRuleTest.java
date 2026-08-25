@@ -33,7 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * (spec §example-partition). All three are here, because what each of them had in hand was a
  * different value and each dropped it at its own seam.
  */
-class ARuleThisCouldNotReadIsNamedByTheRuleTest {
+class ARuleWithoutALineIsNamedByTheRuleTest {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 

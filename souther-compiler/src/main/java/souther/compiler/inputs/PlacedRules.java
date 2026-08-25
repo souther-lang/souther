@@ -202,9 +202,9 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules) {
      * answer at the root is what the type's own reading already gives. A rule nothing could read is
      * not given twice by anybody, and a newtype's own clause is where the question started.
      */
-    List<FieldDomains.Unread> unreadAt(TermPath path) {
+    List<FieldDomains.NoLine> noLineAt(TermPath path) {
         String where = keyOf(path);
-        return where == null ? List.of() : bounds().unreadAt(where);
+        return where == null ? List.of() : bounds().noLineAt(where);
     }
 
     /** Which declarations' clauses are holding the end at {@code path}, on the side asked for. */

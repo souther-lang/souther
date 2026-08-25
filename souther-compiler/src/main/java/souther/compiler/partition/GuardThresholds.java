@@ -12,7 +12,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.FilingCoordinate;
-import souther.compiler.inputs.UnreadRule;
+import souther.compiler.inputs.RuleWithoutALine;
 import souther.compiler.numeric.Place;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
@@ -64,7 +64,7 @@ public final class GuardThresholds {
      * operator is still in hand, and which values arrive is asked of the reading of the whole body.
      */
     public record Guards(List<Threshold> thresholds,
-                         List<UnreadRule> unread, List<Singled> singled,
+                         List<RuleWithoutALine> unread, List<Singled> singled,
                          List<LineDrawn> between,
                          ReachingCuts reaching) {
 
@@ -125,7 +125,7 @@ public final class GuardThresholds {
                             Symbols symbols,
                             souther.compiler.check.ElementBindings elements) {
         List<Threshold> found = new ArrayList<>();
-        List<UnreadRule> unread = new ArrayList<>();
+        List<RuleWithoutALine> unread = new ArrayList<>();
         List<Guards.Singled> singled = new ArrayList<>();
         List<LineDrawn> between = new ArrayList<>();
         // The comparisons this reader assessed, and not the positions they were about. A position
@@ -178,7 +178,7 @@ public final class GuardThresholds {
      * unread would put a statement into the report that the behavior does not make.
      */
     private static void noticed(String behavior, ComparisonReadings read, List<Core> assessed,
-                                CoverageSites.Plan plan, Symbols symbols, List<UnreadRule> out) {
+                                CoverageSites.Plan plan, Symbols symbols, List<RuleWithoutALine> out) {
         for (ComparisonReadings.Reading reading : read.all()) {
             if (reading.standing() instanceof BoundaryPolicy.Standing.DrawsNone none
                     && none.why() == NotABoundary.NOTHING_READS_IT) {
@@ -221,7 +221,7 @@ public final class GuardThresholds {
                 // well as the place. Kept by position alone, the second comparison of one condition
                 // about one position was dropped as a repeat of the first — which is the defect this
                 // finding is about, one level in.
-                UnreadRule said = new UnreadRule(rule, cited, each, why);
+                RuleWithoutALine said = new RuleWithoutALine(rule, cited, each, why);
                 if (out.stream().noneMatch(had -> had.sameAs(said))) {
                     out.add(said);
                 }
@@ -520,7 +520,7 @@ public final class GuardThresholds {
                                souther.compiler.inputs.Quantities quantities,
                                List<Threshold> out, List<Guards.Singled> singled,
                                List<LineDrawn> between,
-                               List<Core> assessed, List<UnreadRule> unread) {
+                               List<Core> assessed, List<RuleWithoutALine> unread) {
         // The plan numbered every comparison of an instrumented condition before anything read a
         // line off one, so this is here. Required rather than looked up leniently: a line whose
         // comparison has no site is this reader and the plan disagreeing about what a condition
@@ -606,7 +606,7 @@ public final class GuardThresholds {
      */
     private static void publish(String behavior, Core.Binary comparison, CoverageSites.Plan plan,
                                 InputReads reads, Symbols symbols, ComparisonAssessment read,
-                                List<UnreadRule> out) {
+                                List<RuleWithoutALine> out) {
         BlockReason.RuleWithoutLineReason why = read.whyTheLineReadingDrewNone().orElse(null);
         if (why == null) {
             return;
@@ -618,7 +618,7 @@ public final class GuardThresholds {
         // walk met.
         List<FilingCoordinate> named = read.filedAt(comparison, reads, symbols);
         for (FilingCoordinate at : named) {
-            UnreadRule said = new UnreadRule(rule, cited, at, why);
+            RuleWithoutALine said = new RuleWithoutALine(rule, cited, at, why);
             if (out.stream().noneMatch(had -> had.sameAs(said))) {
                 out.add(said);
             }

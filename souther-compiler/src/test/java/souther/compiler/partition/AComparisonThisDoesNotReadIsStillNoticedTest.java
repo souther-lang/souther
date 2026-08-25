@@ -12,7 +12,7 @@ import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
-import souther.compiler.inputs.UnreadRule;
+import souther.compiler.inputs.RuleWithoutALine;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
@@ -177,13 +177,13 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
      */
     @Test
     void twoComparisonsAboutOnePositionAreTwoFindings() {
-        List<UnreadRule> unread = read("at: Int",
+        List<RuleWithoutALine> unread = read("at: Int",
                 "Int.multiply(at, at) < 4 || Int.multiply(at, at) > 9").unread();
 
         assertEquals(List.of(new Said(TermPath.of("at"), new BlockReason.UnreadComparisonForm()),
                         new Said(TermPath.of("at"), new BlockReason.UnreadComparisonForm())),
                 said(unread));
-        assertEquals(2, unread.stream().map(UnreadRule::rule).distinct().count(),
+        assertEquals(2, unread.stream().map(RuleWithoutALine::rule).distinct().count(),
                 () -> "two comparisons are two rules: " + unread);
     }
 
@@ -198,7 +198,7 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
      */
     @Test
     void aFindingNamesTheComparisonThatWentUnread() {
-        UnreadRule said = read("p: Pair", "Int.multiply(p.x, p.x) < 10").unread().getFirst();
+        RuleWithoutALine said = read("p: Pair", "Int.multiply(p.x, p.x) < 10").unread().getFirst();
 
         assertInstanceOf(RuleRef.Comparison.class, said.rule());
         RuleCitation.WrittenAt cited = assertInstanceOf(RuleCitation.WrittenAt.class, said.cited());
@@ -336,7 +336,7 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
         }
     }
 
-    private static List<Said> said(List<UnreadRule> unread) {
+    private static List<Said> said(List<RuleWithoutALine> unread) {
         return unread.stream().map(each -> new Said(each.at(), each.why())).toList();
     }
 }

@@ -10,7 +10,7 @@ import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.FilingCoordinate;
-import souther.compiler.inputs.UnreadRule;
+import souther.compiler.inputs.RuleWithoutALine;
 import souther.compiler.types.BindingId;
 
 import java.util.ArrayList;
@@ -73,7 +73,7 @@ public final class EnsuresThresholds {
      *                and the model says otherwise in its own declaration
      */
     public record Clauses(List<Threshold> thresholds, List<GuardThresholds.Guards.Singled> singled,
-                          List<LineDrawn> between, List<UnreadRule> unread) {
+                          List<LineDrawn> between, List<RuleWithoutALine> unread) {
 
         public static final Clauses NONE =
                 new Clauses(List.of(), List.of(), List.of(), List.of());
@@ -136,7 +136,7 @@ public final class EnsuresThresholds {
      *  after. Together because they are filled together and are one answer. */
     private record Drawn(String behavior, List<Threshold> thresholds,
                          List<GuardThresholds.Guards.Singled> singled,
-                         List<LineDrawn> between, List<UnreadRule> unread) {}
+                         List<LineDrawn> between, List<RuleWithoutALine> unread) {}
 
     /**
      * The comparisons a rule states outright: its own, and those of both sides of every {@code &&}
@@ -176,7 +176,7 @@ public final class EnsuresThresholds {
             // A statement that is not a comparison was not assessed as one, so what stopped this
             // is the form it is written in — the one of the reasons that does not turn on what two
             // sides name — and the positions the walk met are all there is to file it at.
-            reportUnread(new RuleRef.Ensures(rule.id(), clause), e, rule.value(),
+            reportRuleWithoutLine(new RuleRef.Ensures(rule.id(), clause), e, rule.value(),
                     new BlockReason.UnreadComparisonForm(),
                     GuardThresholds.mentionedIn(e, reads, symbols).stream()
                             .map(FilingCoordinate::at).toList(),
@@ -192,7 +192,7 @@ public final class EnsuresThresholds {
         // of the assessment and not worked out per arm here: the same table stood in the guard
         // reader, and a case added to an assessment had to be answered in both.
         assessed.whyTheLineReadingDrewNone().ifPresent(why ->
-                reportUnread(new RuleRef.Ensures(rule.id(), clause), comparison, rule.value(), why,
+                reportRuleWithoutLine(new RuleRef.Ensures(rule.id(), clause), comparison, rule.value(), why,
                         assessed.filedAt(comparison, reads, symbols), out.unread()));
         // And the geometry, which is this reader's own. Only the two arms that draw something have
         // anything to add here.
@@ -271,17 +271,17 @@ public final class EnsuresThresholds {
      * is not — a rule stated in some other form — what stopped this is the form, which is the one
      * of the three reasons that does not turn on what two sides name.
      */
-    private static void reportUnread(RuleRef.Ensures rule, Core statement, BindingId answer,
+    private static void reportRuleWithoutLine(RuleRef.Ensures rule, Core statement, BindingId answer,
                                      BlockReason.RuleWithoutLineReason why,
                                      List<FilingCoordinate> at,
-                                     List<UnreadRule> unread) {
+                                     List<RuleWithoutALine> unread) {
         if (ComparisonAssessment.readsAnswer(statement, answer)) {
             return;
         }
         souther.compiler.check.RuleCitation cited =
                 souther.compiler.check.RuleCitation.named(rule);
         for (FilingCoordinate named : at) {
-            UnreadRule here = new UnreadRule(rule, cited, named, why);
+            RuleWithoutALine here = new RuleWithoutALine(rule, cited, named, why);
             if (unread.stream().noneMatch(had -> had.sameAs(here))) {
                 unread.add(here);
             }

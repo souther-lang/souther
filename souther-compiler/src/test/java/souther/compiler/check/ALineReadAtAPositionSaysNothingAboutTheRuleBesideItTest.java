@@ -126,8 +126,8 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
                 """, "Parcel");
 
         assertFalse(read.placedAt("length").isEmpty());
-        assertEquals(List.of(), read.unreadAt("length"));
-        assertEquals(List.of(), read.unreadAt("width"));
+        assertEquals(List.of(), read.noLineAt("length"));
+        assertEquals(List.of(), read.noLineAt("width"));
     }
 
     /**
@@ -147,8 +147,8 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
                     invariant length /= 5
                 """, "Parcel");
 
-        assertEquals(List.of(), read.unreadAt("label"));
-        assertEquals(List.of(), read.unreadAt("length"));
+        assertEquals(List.of(), read.noLineAt("label"));
+        assertEquals(List.of(), read.noLineAt("length"));
     }
 
     /**
@@ -167,7 +167,7 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
                     invariant length == 5
                 """, "Parcel");
 
-        assertEquals(List.of(), read.unreadAt("length"));
+        assertEquals(List.of(), read.noLineAt("length"));
     }
 
     /**
@@ -308,7 +308,7 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
                     invariant value >= 1 + 1
                 """, "Stepped");
 
-        List<FieldDomains.Unread> said = read.unreadAt(FieldDomains.THE_VALUE);
+        List<FieldDomains.NoLine> said = read.noLineAt(FieldDomains.THE_VALUE);
         assertEquals(1, said.size(), () -> "said " + said);
         assertInstanceOf(BlockReason.UnreadComparisonForm.class, said.getFirst().why());
         assertTrue(said.getFirst().from().clause().id().declaredOn().name().endsWith("Stepped"),
@@ -316,6 +316,6 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
     }
 
     private static List<BlockReason.RuleWithoutLineReason> reasonsAt(FieldDomains read, String path) {
-        return read.unreadAt(path).stream().map(FieldDomains.Unread::why).toList();
+        return read.noLineAt(path).stream().map(FieldDomains.NoLine::why).toList();
     }
 }

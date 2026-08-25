@@ -174,7 +174,13 @@ public sealed interface Position permits ReadPosition {
     BlockReason.ReadingStopReason valuesUnread();
 
     /**
-     * The rules written about this position that the reading of ends could not turn into one.
+     * The rules written about this position that the reading of ends drew no line from.
+     *
+     * <p>Both ways of there being none. A rule that reading got partway through, and one it read
+     * from end to end that places no line — a relation between two positions, a quantity the
+     * position cancels out of. Each is worth saying at a position a report is asked about, and they
+     * are opposite sentences about this compiler; which of the two is the reason's to say and is
+     * not read back out of this list's name.
      *
      * <p>Whichever value they are written on: a clause of this position's own type and a clause of
      * the value it sits in are two ways of saying where its values stop, and both come from the one
@@ -186,7 +192,7 @@ public sealed interface Position permits ReadPosition {
      * answered for the record's clause about the same field, and the clause was dropped in silence
      * (issue #868).
      */
-    List<UnreadRule> unreadRules();
+    List<RuleWithoutALine> rulesWithoutALine();
 
     /**
      * Whether the values at this position are read from a product this reading cannot show the

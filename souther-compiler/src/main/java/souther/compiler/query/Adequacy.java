@@ -1422,7 +1422,7 @@ public final class Adequacy {
                             .Reason.A_FACT_ABOUT_THE_MODEL);
             // What this compiler could not read. A row would answer a question nothing asked, and
             // offering one would be reporting our own shortfall as the author's work.
-            case About.APositionThisCouldNotRead _, About.ARuleThisCouldNotRead _,
+            case About.APositionThisCouldNotRead _, About.ARuleWithoutALine _,
                  About.APositionWhoseRulesWereNotReached _,
                  About.APositionReadWiderThanItsRules _, About.AQuestionNothingAnswered _ ->
                     new GenerationOutcome.NotApplicable(GenerationOutcome.NotApplicable
@@ -2549,7 +2549,7 @@ public final class Adequacy {
                             case About.ACaseNoRowExpects _, About.ACaseNothingWasSeenToProduce _,
                                     About.APositionNoLineDivides _,
                                     About.APositionThisCouldNotRead _,
-                                    About.ARuleThisCouldNotRead _,
+                                    About.ARuleWithoutALine _,
                                     About.APositionWhoseRulesWereNotReached _,
                                     About.APositionReadWiderThanItsRules _,
                                     About.AQuestionNothingAnswered _ ->
@@ -3391,7 +3391,7 @@ public final class Adequacy {
                 case About.APointOfABorder(var point) -> point.role().againstTheLine()
                         ? Kind.BOUNDARY_UNMET : Kind.DOMAIN_POINT_UNCOVERED;
                 case About.APositionNoLineDivides _ -> Kind.PARTITION_NOT_DERIVABLE;
-                case About.ARuleThisCouldNotRead _ -> Kind.PARTITION_NOT_READ;
+                case About.ARuleWithoutALine _ -> Kind.PARTITION_NOT_READ;
                 // One word, whatever stopped the reading, and the reason beside it says which.
                 // PARTITION_RULES_NOT_REACHED belongs to the finding above — a position the axes
                 // did measure — and the two write nothing but the position, so sharing the word
@@ -3607,7 +3607,7 @@ public final class Adequacy {
                         Citation.of(behavior.pos()),
                         switch (each) {
                             case PartitionEvidence.NotRead.ARule rule ->
-                                    new About.ARuleThisCouldNotRead(rule);
+                                    new About.ARuleWithoutALine(rule);
                             case PartitionEvidence.NotRead.APosition position ->
                                     new About.APositionThisCouldNotRead(position);
                         }));
@@ -3789,7 +3789,7 @@ public final class Adequacy {
                         // defaulted, so that one added later has to be answered here rather than
                         // arriving as a warning with no sentence.
                         case About.ACaseNothingWasSeenToProduce _,
-                                About.APositionNoLineDivides _, About.APositionThisCouldNotRead _, About.ARuleThisCouldNotRead _,
+                                About.APositionNoLineDivides _, About.APositionThisCouldNotRead _, About.ARuleWithoutALine _,
                                 About.APositionWhoseRulesWereNotReached _,
                                 About.APositionReadWiderThanItsRules _,
                                 About.AQuestionNothingAnswered _ ->
@@ -3863,7 +3863,7 @@ public final class Adequacy {
                 // reason the switch above gives.
                 case About.ACaseNoRowAppliesItTo _, About.ACaseNothingWasSeenToProduce _,
                         About.APositionNoLineDivides _,
-                        About.APositionThisCouldNotRead _, About.ARuleThisCouldNotRead _,
+                        About.APositionThisCouldNotRead _, About.ARuleWithoutALine _,
                         About.APositionWhoseRulesWereNotReached _,
                         About.APositionReadWiderThanItsRules _,
                         About.AQuestionNothingAnswered _ -> { }

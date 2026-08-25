@@ -127,9 +127,9 @@ public sealed interface About {
      * unread and left them to work out which rule — which the accounting was made to say and this
      * measure beside it was not.
      */
-    record ARuleThisCouldNotRead(PartitionEvidence.NotRead.ARule finding)
+    record ARuleWithoutALine(PartitionEvidence.NotRead.ARule finding)
             implements OfARule, OfSomethingNotRead {
-        public ARuleThisCouldNotRead {
+        public ARuleWithoutALine {
             java.util.Objects.requireNonNull(finding, "a finding is about something");
         }
 

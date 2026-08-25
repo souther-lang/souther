@@ -1089,7 +1089,7 @@ public final class InvariantChecker {
      *                  that found one conjunct wanting and reached for the rule's questions would
      *                  name the positions of the conjunct written beside it as well
      */
-    record Reading(List<Direct> directs, List<FieldDomains.Unread> unread,
+    record Reading(List<Direct> directs, List<FieldDomains.NoLine> unread,
                    Map<String, List<TypeSymbol>> narrowers,
                    Map<RuleRef, Required> raised,
                    Map<RuleRef, Map<Core, Required>> raisedByPart) {}
@@ -1115,7 +1115,7 @@ public final class InvariantChecker {
         held.forEach((path, counted) -> byName.put(counted.atom(),
                 new Coordinate(path, counted.by(), Carrier.WHOLE)));
         List<Direct> out = new ArrayList<>();
-        List<FieldDomains.Unread> unread = new ArrayList<>();
+        List<FieldDomains.NoLine> unread = new ArrayList<>();
         Map<String, List<TypeSymbol>> narrowers = new LinkedHashMap<>();
         Map<RuleRef, Required> raised = new LinkedHashMap<>();
         Map<RuleRef, Map<Core, Required>> raisedByPart = new LinkedHashMap<>();
@@ -1220,7 +1220,7 @@ public final class InvariantChecker {
      */
     private void direct(Core clause, RuleRef.Invariant from, Denotations at,
                         Map<FactSubject, Coordinate> byName, List<Direct> out,
-                        List<FieldDomains.Unread> unread,
+                        List<FieldDomains.NoLine> unread,
                         Map<String, List<TypeSymbol>> narrowers,
                         Map<RuleRef, Required> raised, ReadingEvidence took,
                         Map<String, Type> typeAt,
@@ -1299,7 +1299,7 @@ public final class InvariantChecker {
             // §example-partition). A position carries more than one statement, and an end read at
             // it says nothing about the rule beside it: kept as what the position was left with,
             // a bound on a field's own type swallowed the record's clause about the same field.
-            unreadEnds(bin, from, at, byName, unread);
+            noLineDrawn(bin, from, at, byName, unread);
             // The declaration and not the clause. Which declaration took an edge in is what ADR-0090
             // names beside a line, and what a reader is sent to look at is the declaration holding
             // the relation.
@@ -1491,8 +1491,8 @@ public final class InvariantChecker {
      * cannot come to a different answer. What is read here is only what each side of the comparison
      * came to, which is this reader's own way of looking a coordinate up.
      */
-    private void unreadEnds(Core.Binary comparison, RuleRef.Invariant from, Denotations at,
-                            Map<FactSubject, Coordinate> byName, List<FieldDomains.Unread> out) {
+    private void noLineDrawn(Core.Binary comparison, RuleRef.Invariant from, Denotations at,
+                            Map<FactSubject, Coordinate> byName, List<FieldDomains.NoLine> out) {
         if (!InvariantBound.ordering(comparison.op())) {
             return;
         }
@@ -1502,8 +1502,8 @@ public final class InvariantChecker {
                 quantityOf(comparison, at, byName),
                 place -> carrierAt(place, left, right) != null);
         for (Coordinate each : coordinatesIn(comparison, at, byName)) {
-            FieldDomains.Unread said =
-                    new FieldDomains.Unread(each.path(), each.by(), from, comparison, why);
+            FieldDomains.NoLine said =
+                    new FieldDomains.NoLine(each.path(), each.by(), from, comparison, why);
             if (!out.contains(said)) {
                 out.add(said);
             }

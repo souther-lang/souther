@@ -16,7 +16,7 @@ import souther.compiler.inputs.StructuralInspection;
 import souther.compiler.inputs.TypeBounds;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.inputs.UnreadRule;
+import souther.compiler.inputs.RuleWithoutALine;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Granularity;
@@ -68,7 +68,7 @@ public final class Partitions {
     public record Partitioning(List<Axis> axes,
                                java.util.Set<NumericTerm> uncertain,
                                List<UndividedPosition> undivided,
-                               List<UnreadRule> unread,
+                               List<RuleWithoutALine> unread,
                                List<souther.compiler.inputs.PositionReadingBlocked> blocked,
                                List<souther.compiler.inputs.PositionValuesNotSeparated> notSeparated,
                                List<Border> between,
@@ -174,7 +174,7 @@ public final class Partitions {
                                   ReadingPolicy policy) {
         List<Axis> found = new ArrayList<>();
         java.util.Set<NumericTerm> uncertain = new java.util.LinkedHashSet<>();
-        List<UnreadRule> unread = new ArrayList<>();
+        List<RuleWithoutALine> unread = new ArrayList<>();
         // What the reading could not hold together, asked of every position it read rather than of
         // the ones left pending. This qualifies the classes and does not stand in for them: a
         // position with classes read from a product wider than the rules admit is exactly where it
@@ -229,7 +229,7 @@ public final class Partitions {
      *  went unread. Kept beside the axis rather than looked up afterwards by how its path is
      *  spelled. */
     private static void keep(List<Axis> out, List<Measured> measured, Axis axis,
-                             BodyCutInspection drew, List<UnreadRule> rules) {
+                             BodyCutInspection drew, List<RuleWithoutALine> rules) {
         out.add(axis);
         if (drew != null) {
             measured.add(new Measured(axis, drew));
@@ -331,7 +331,7 @@ public final class Partitions {
                                               souther.compiler.inputs.Quantities reading,
                                               List<Threshold> thresholds,
                                               Symbols symbols, ReadingPolicy policy,
-                                              List<UnreadRule> unread) {
+                                              List<RuleWithoutALine> unread) {
         return withThresholds(base, reading, thresholds, symbols, policy, unread, List.of());
     }
 
@@ -348,7 +348,7 @@ public final class Partitions {
                                               souther.compiler.inputs.Quantities reading,
                                               List<Threshold> thresholds,
                                               Symbols symbols, ReadingPolicy policy,
-                                              List<UnreadRule> unread,
+                                              List<RuleWithoutALine> unread,
                                               List<GuardThresholds.Guards.Singled> singled) {
         return withThresholds(base, reading, thresholds, symbols, policy, unread, singled, List.of());
     }
@@ -365,7 +365,7 @@ public final class Partitions {
                                               souther.compiler.inputs.Quantities reading,
                                               List<Threshold> thresholds,
                                               Symbols symbols, ReadingPolicy policy,
-                                              List<UnreadRule> unread,
+                                              List<RuleWithoutALine> unread,
                                               List<GuardThresholds.Guards.Singled> singled,
                                               List<LineDrawn> between) {
         return withThresholds(base, reading, thresholds, symbols, policy, unread, singled, between,
@@ -390,7 +390,7 @@ public final class Partitions {
                                               souther.compiler.inputs.Quantities reading,
                                               List<Threshold> thresholds,
                                               Symbols symbols, ReadingPolicy policy,
-                                              List<UnreadRule> unread,
+                                              List<RuleWithoutALine> unread,
                                               List<GuardThresholds.Guards.Singled> singled,
                                               List<LineDrawn> between,
                                               souther.compiler.check.PathReachability.Answers
@@ -411,7 +411,7 @@ public final class Partitions {
                                               souther.compiler.inputs.Quantities reading,
                                               List<Threshold> thresholds,
                                               Symbols symbols, ReadingPolicy policy,
-                                              List<UnreadRule> unread,
+                                              List<RuleWithoutALine> unread,
                                               List<GuardThresholds.Guards.Singled> singled,
                                               List<LineDrawn> between,
                                               souther.compiler.check.PathReachability.Answers
@@ -420,8 +420,8 @@ public final class Partitions {
         // Both producers of one kind of evidence. What a body compared and what a type's own rules
         // bound are read by different readers and answer the same question, so a position either of
         // them wrote about and neither could turn into a line is named once, whichever wrote it.
-        List<UnreadRule> rules = new ArrayList<>(base.unread());
-        for (UnreadRule each : unread) {
+        List<RuleWithoutALine> rules = new ArrayList<>(base.unread());
+        for (RuleWithoutALine each : unread) {
             if (rules.stream().noneMatch(had -> had.sameAs(each))) {
                 rules.add(each);
             }
@@ -827,8 +827,8 @@ public final class Partitions {
     private static void axisOf(String behavior, Position position, Symbols symbols,
                                ReadingPolicy policy,
                                List<Axis> out, java.util.Set<NumericTerm> uncertain,
-                               List<UnreadRule> unread) {
-        for (UnreadRule each : position.unreadRules()) {
+                               List<RuleWithoutALine> unread) {
+        for (RuleWithoutALine each : position.rulesWithoutALine()) {
             if (unread.stream().noneMatch(had -> had.sameAs(each))) {
                 unread.add(each);
             }
@@ -888,8 +888,8 @@ public final class Partitions {
      * <p>The first, as a comparison's is. What a reader has to lift is the first limit in the way.
      */
     private static BlockReason leftUnread(Position position) {
-        return position.unreadRules().isEmpty() ? position.valuesUnread()
-                : position.unreadRules().getFirst().why();
+        return position.rulesWithoutALine().isEmpty() ? position.valuesUnread()
+                : position.rulesWithoutALine().getFirst().why();
     }
 
     // --- small helpers ----------------------------------------------------------------------------

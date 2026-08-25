@@ -148,7 +148,7 @@ class AnOpenPositionIsAReadingThatRanToTheEndTest {
             assertNotNull(position.term(), type + " is measured at some term");
             assertNotNull(position.reading(), type + " says which values it may hold");
             assertNotNull(position.completeness(), type + " says how much of its rules was read");
-            assertNotNull(position.unreadRules(), type + " says which of its rules went unread");
+            assertNotNull(position.rulesWithoutALine(), type + " says which of its rules went unread");
         }
     }
 

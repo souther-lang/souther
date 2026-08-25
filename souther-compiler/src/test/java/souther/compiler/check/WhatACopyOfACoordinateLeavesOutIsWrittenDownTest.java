@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * A record built by copying fields out of another says which it left behind.
  *
- * <p>{@code FieldDomains.Unread} is written from a coordinate the reading found, one field at a
+ * <p>{@code FieldDomains.NoLine} is written from a coordinate the reading found, one field at a
  * time, because the coordinate is this class's own and the record crosses into {@code inputs}. Two
  * of its fields went in one round late apiece — first whether the position is a count, then which
  * conjunct the reason came from — each after something downstream turned out to need what the
@@ -53,7 +53,7 @@ class WhatACopyOfACoordinateLeavesOutIsWrittenDownTest {
     @Test
     void theCopyCarriesEveryFieldOfTheCoordinateButTheCarrier() {
         Set<String> left = new LinkedHashSet<>(componentsOf(coordinate()));
-        left.removeAll(componentsOf(FieldDomains.Unread.class));
+        left.removeAll(componentsOf(FieldDomains.NoLine.class));
 
         assertEquals(Set.of("carrier"), left,
                 "a field of the coordinate that the copy does not carry, and nobody decided to");
@@ -62,11 +62,11 @@ class WhatACopyOfACoordinateLeavesOutIsWrittenDownTest {
     /** And what it adds is what the copy is for: whose rule it is, and which conjunct. */
     @Test
     void andWhatItAddsIsWhatTheCopyIsFor() {
-        Set<String> added = new LinkedHashSet<>(componentsOf(FieldDomains.Unread.class));
+        Set<String> added = new LinkedHashSet<>(componentsOf(FieldDomains.NoLine.class));
         added.removeAll(componentsOf(coordinate()));
 
         assertEquals(Set.of("from", "part", "why"), added);
-        assertTrue(componentsOf(FieldDomains.Unread.class).containsAll(Set.of("path", "by")),
+        assertTrue(componentsOf(FieldDomains.NoLine.class).containsAll(Set.of("path", "by")),
                 "beside the two of the coordinate that a reader downstream turned out to need:"
                         + " where it sits, and which operation takes the number if one does");
     }

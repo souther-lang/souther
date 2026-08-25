@@ -75,8 +75,8 @@ public final class FieldDomains {
      * leave — see {@link #placedAt}. */
     private final List<InvariantChecker.Direct> directs;
     /** The rules saying where a coordinate's values stop that no end came out of — see
-     * {@link #unreadAt}. */
-    private final List<Unread> unread;
+     * {@link #noLineAt}. */
+    private final List<NoLine> unread;
     /** What each clause reaching this value raises, keyed on the rule it is. */
     private final Map<RuleRef, Required> raised;
     /** The same per part of each clause. A reader that found one conjunct wanting names what that
@@ -143,7 +143,7 @@ public final class FieldDomains {
                          Map<String, ValueSet> admittedByField,
                          Map<String, UnreadReason> unreadByField,
                          Set<String> notSeparatedByField,
-                         List<InvariantChecker.Direct> directs, List<Unread> unread,
+                         List<InvariantChecker.Direct> directs, List<NoLine> unread,
                          Map<RuleRef, Required> raised,
                          Map<RuleRef, Map<Core, Required>> raisedByPart, ReadingEvidence took,
                          Map<String, List<TypeSymbol>> narrowers,
@@ -438,7 +438,7 @@ public final class FieldDomains {
      * @param why  what would have to change before this rule could be a line, in this compiler's
      *             own terms
      */
-    public record Unread(String path, ValueName by, RuleRef.Invariant from,
+    public record NoLine(String path, ValueName by, RuleRef.Invariant from,
                          Core part, souther.compiler.inputs.BlockReason.RuleWithoutLineReason why) {
 
         /** Whether it is a number taken of the position rather than its own values, derived for the
@@ -720,7 +720,7 @@ public final class FieldDomains {
      * What answered "where does the line fall" for one rule at one position.
      *
      * <p>The reading that turns a clause into an end, asked for its own account. It keeps one where
-     * a rule says where the values stop and no end came of it ({@link Unread}), so the absence of
+     * a rule says where the values stop and no end came of it ({@link NoLine}), so the absence of
      * one is the reading having got there: either it placed the end, or it read the rule to the end
      * and found the order stops past where the rule points. The second is the line understood and
      * not a reading that fell short — whether a value can be written at it is a question about
@@ -770,7 +770,7 @@ public final class FieldDomains {
      */
     private RuleAccounting.Outcome unreadAnswerFor(RuleRef rule, Core part,
                                                    Owed.Subject.OfAPosition where) {
-        for (Unread said : unread) {
+        for (NoLine said : unread) {
             if (said.from().equals(rule) && said.part() == part
                     && said.path().equals(where.path())
                     && said.measured() == where.measured()
@@ -848,7 +848,7 @@ public final class FieldDomains {
      * and an end there says nothing about this — read as one answer, a bound on a field's own type
      * silenced the record's clause about the same field.
      */
-    public List<Unread> unreadAt(String path) {
+    public List<NoLine> noLineAt(String path) {
         return unread.stream().filter(each -> each.path().equals(path)).toList();
     }
 

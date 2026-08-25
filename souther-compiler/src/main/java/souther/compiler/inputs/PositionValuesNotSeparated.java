@@ -3,7 +3,7 @@ package souther.compiler.inputs;
 /**
  * A position whose values are read from a product this reading cannot show the rules admit.
  *
- * <p>Not {@link UnreadRule} and not {@link PositionReadingBlocked}. Every rule about the position
+ * <p>Not {@link RuleWithoutALine} and not {@link PositionReadingBlocked}. Every rule about the position
  * arrived and every one of them was taken in, so there is no rule to name and nothing was left
  * unreached; what happened is that a choice reaching across positions is held one position at a
  * time, and a clause met with it afterwards can leave the values wider than the rules are. Said as
