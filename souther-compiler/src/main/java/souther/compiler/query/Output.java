@@ -5,8 +5,10 @@ import souther.compiler.source.SourceId;
 import souther.compiler.generated.EvaluationArtifact;
 import souther.compiler.generated.GeneratedImplementations;
 import souther.compiler.generated.MemoryClassLoader;
-import souther.compiler.jvm.GeneratedClass;
-import souther.compiler.jvm.SoutherJvmAbi;
+import souther.compiler.execute.ConstantConstruction;
+import souther.compiler.execute.ConstantOutcome;
+import souther.compiler.execute.ProgramExecution;
+import souther.compiler.execute.WrittenValue;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.BehaviorContract;
@@ -626,33 +628,20 @@ public final class Output {
             if (checks.isEmpty()) {
                 return Answer.of(Boolean.TRUE);
             }
-            Map<String, byte[]> classes = db.ask(new Linked(name)).value();
-            if (classes == null) {
-                return Answer.absent();
-            }
-            ClassLoader loader = loader(db, classes);
+            ProgramExecution execution = db.execution();
             List<Report> reports = new ArrayList<>();
             for (DataChecker.ConstCheck check : checks) {
-                boolean holds;
-                Class<?> ctfe;
-                try {
-                    ctfe = Class.forName(SoutherJvmAbi.nameOf(new GeneratedClass.Ctfe(
-                            new GeneratedClass.Value(check.type()))).binaryName(), true, loader);
-                    holds = (boolean) ctfe.getMethod("check", paramClass(check.value()))
-                            .invoke(null, check.value());
-                } catch (ReflectiveOperationException | LinkageError _) {
-                    continue;   // cannot evaluate at compile time; the run-time check still applies
-                }
-                if (!holds) {
-                    String shown = check.typeName() + "("
-                            + (check.value() instanceof String s ? "\"" + s + "\"" : check.value()) + ")";
-                    String clause = failingClause(db, check, ctfe);
+                ConstantConstruction written = asked(db, check);
+                // The other two answers say nothing here. A construction that holds is a
+                // construction nobody is told about, and one this compile could not evaluate is
+                // left to the check that runs when the program does (ADR-0032).
+                if (execution.check(written) instanceof ConstantOutcome.Violates(var clause)) {
                     reports.add(Report.raised(Diagnostic.at(check.pos())
-                                    .say(clause == null
+                                    .say(clause.isEmpty()
                                             ? new DataMessage.TheWrittenValueViolatesTheInvariant(
-                                                    shown)
+                                                    shown(written))
                                             : new DataMessage.TheWrittenValueViolatesTheClause(
-                                                    shown, clause))
+                                                    shown(written), clause.get()))
                                     .build()));
                 }
             }
@@ -660,16 +649,28 @@ public final class Output {
         }
 
         /**
-         * The name of the clause this constant breaks, or null where the clause carries none or the
-         * declaration cannot be read here. The same run-time checks the decoder refines with are asked
-         * one at a time, in declaration order, so the clause named is the one a construction would
-         * report.
+         * The construction as a question about the program: what was written, and what the type it
+         * builds is declared to hold of its values.
+         *
+         * <p>The clauses are read here and not by whatever runs the check. They are the declaration
+         * of the module that declares the type, which is this compiler's to answer for; a runner
+         * that read them itself would be reaching back into the query graph in the middle of
+         * running, which is the arrangement this boundary replaces.
          */
-        private String failingClause(Db db, DataChecker.ConstCheck check, Class<?> ctfe) {
-            Answer<souther.compiler.check.Prepared> declaring = db.ask(new Shapes.Prepared(check.type().module()));
+        private ConstantConstruction asked(Db db, DataChecker.ConstCheck check) {
+            return new ConstantConstruction(name, check.typeName(), check.type(),
+                    writtenValue(check.value()), clausesOf(db, check), check.pos());
+        }
+
+        /** What the type is declared to hold of its values, in declaration order, or none where the
+         *  declaring module cannot be read here. */
+        private static List<ConstantConstruction.Clause> clausesOf(Db db,
+                DataChecker.ConstCheck check) {
+            Answer<souther.compiler.check.Prepared> declaring =
+                    db.ask(new Shapes.Prepared(check.type().module()));
             Answer<Symbols> scope = Names.derivedSymbols(db, check.type().module());
             if (!declaring.present() || !scope.present()) {
-                return null;
+                return List.of();
             }
             List<Hir.InvariantClause> clauses = null;
             for (souther.compiler.check.Derived.Def declared : declaring.value().defs()) {
@@ -678,30 +679,42 @@ public final class Output {
                 }
             }
             if (clauses == null) {
-                return null;
+                return List.of();
             }
-            for (int i = 0; i < clauses.size(); i++) {
-                try {
-                    boolean holds = (boolean) ctfe.getMethod(Backend.clauseCheck(i),
-                            paramClass(check.value())).invoke(null, check.value());
-                    if (!holds) {
-                        return clauses.get(i).name().orElse(null);
-                    }
-                } catch (ReflectiveOperationException | LinkageError _) {
-                    return null;
-                }
+            List<ConstantConstruction.Clause> named = new ArrayList<>();
+            for (Hir.InvariantClause clause : clauses) {
+                named.add(new ConstantConstruction.Clause(clause.name()));
             }
-            return null;
+            return named;
         }
 
-        private Class<?> paramClass(Object v) {
-            if (v instanceof Long) {
-                return long.class;
-            }
-            if (v instanceof Boolean) {
-                return boolean.class;
-            }
-            return v.getClass();   // String, BigDecimal
+        /**
+         * The constant in the four a source can write it as.
+         *
+         * <p>A fold answers with the object it happened to make, and which of them it is is what
+         * the language wrote. Anything else is this compiler having folded to something no source
+         * states, which is not a fact about the program being compiled.
+         */
+        private static WrittenValue writtenValue(Object value) {
+            return switch (value) {
+                case Long whole -> new WrittenValue.Whole(whole);
+                case Boolean truth -> new WrittenValue.Truth(truth);
+                case String text -> new WrittenValue.Text(text);
+                case java.math.BigDecimal decimal -> new WrittenValue.Decimal(decimal);
+                default -> throw new IllegalStateException("a constant folded to "
+                        + value.getClass().getName()
+                        + ", which is not one of the four a source can write");
+            };
+        }
+
+        /** The construction as the source wrote it, for the message that quotes it. */
+        private static String shown(ConstantConstruction written) {
+            return written.typeName() + "(" + switch (written.value()) {
+                case WrittenValue.Text(String text) -> "\"" + text + "\"";
+                case WrittenValue.Whole(long whole) -> String.valueOf(whole);
+                case WrittenValue.Truth(boolean truth) -> String.valueOf(truth);
+                case WrittenValue.Decimal(java.math.BigDecimal decimal) -> decimal.toString();
+            } + ")";
         }
     }
 

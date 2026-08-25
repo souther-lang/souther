@@ -128,6 +128,38 @@ public final class Db {
     private final Set<Key<?>> hasSpoken = new LinkedHashSet<>();
 
     /**
+     * What runs this compilation's programs, for the questions the language can only answer by
+     * running one.
+     *
+     * <p>Beside the memos and not in them. An answer is a value — this store stops work by
+     * comparing one with the one it replaces, and everything under an answer has to mean something
+     * by {@code equals} for that to hold. What runs a program is not a value and has no business
+     * being compared: it is a term of the compilation, set where the compilation is set up, and it
+     * is the same one for as long as the store lives.
+     */
+    private souther.compiler.execute.ProgramExecution execution;
+
+    /** Names what runs this compilation's programs. Set once, where the compilation is set up. */
+    public Db running(souther.compiler.execute.ProgramExecution execution) {
+        this.execution = execution;
+        return this;
+    }
+
+    /**
+     * What runs this compilation's programs.
+     *
+     * <p>Raises where nothing was named. A store built by hand and asked a question that has to run
+     * the program is a caller that set up half a compilation; saying so here names what is missing,
+     * where the alternative is a null reference thrown from inside whatever was about to run.
+     */
+    public souther.compiler.execute.ProgramExecution execution() {
+        if (execution == null) {
+            throw new IllegalStateException("nothing was named to run this compilation's programs");
+        }
+        return execution;
+    }
+
+    /**
      * Gives an input its value. An input set to what it already held changes nothing, so a caller
      * may hand over a whole workspace on every keystroke. Returns this store, so a compilation can
      * be set up in one expression.

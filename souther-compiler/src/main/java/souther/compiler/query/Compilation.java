@@ -62,6 +62,13 @@ public final class Compilation {
         // this one, so a behavior measured twice in one compilation is measured under the same
         // limits both times.
         db.set(new Front.Adequacy(), Front.Adequacy.STANDARD);
+        // And the one place the implementation that runs this compile's programs is named. What
+        // decides whether a constant construction holds and whether a row holds has to run the
+        // program, and ADR-0032 settles that it is run as the program that will ship. Which
+        // implementation that is belongs here, so that nothing deciding whether the language
+        // accepts a program names one.
+        db.running(new souther.compiler.execute.jvm.JvmProgramExecution(
+                new QueryJvmProgramImages(db)));
     }
 
     /** A compile of several sources identified by their position, the way a build hands them over.
