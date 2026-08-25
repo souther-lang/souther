@@ -885,7 +885,12 @@ public final class Partitions {
      * for a range at all — so it names one limit while the report's own line names another, and one
      * position came back with two causes for one clause.
      *
-     * <p>The first, as a comparison's is. What a reader has to lift is the first limit in the way.
+     * <p>The first, as a comparison's is. Any of them keeps the position from completing as one the
+     * model draws no line through, which is the whole of what a caller here does with it: a rule
+     * this got partway through is a limit somebody can lift, and one read from end to end that
+     * draws no line is not, and neither of them leaves a position the model states nothing about.
+     * Which of the two it is stays readable in the value — {@code PendingPosition.reportable} asks
+     * the type before writing a limit down, and writes none for a rule.
      */
     private static BlockReason leftUnread(Position position) {
         return position.rulesWithoutALine().isEmpty() ? position.valuesUnread()
