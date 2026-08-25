@@ -196,11 +196,12 @@ public sealed interface StructuralInspection {
             // what a case declares is under the case and not under the sum, which is why this is a
             // continuation rather than a decomposition, and why the sum keeps the classes it has.
             case Shape.Sum _ -> new Retained(new Continuation.Branches(branchesOf(shape, declared)));
-            // Still held inside something nothing here reaches into. A branch under one is exactly
-            // what would lift it — whether the optional holds anything is a narrowing like any
-            // other — and it is not taken here.
-            case Shape.Optional _ -> stopped(new BlockReason.UnsupportedTraversal(
-                    BlockReason.Traversal.OPTIONAL_VALUE));
+            // Whether an optional holds anything is a narrowing like any other, so it is branches
+            // like a sum's cases: `Some` leaves what the optional holds at this same position and
+            // the absence leaves nothing. Not a decomposition, and not a step inward — what an
+            // optional holds is at no name of its own, so the position under it is `x@Some`.
+            case Shape.Optional _ ->
+                    new Retained(new Continuation.Branches(branchesOf(shape, declared)));
             case Shape.Mapping _ -> stopped(new BlockReason.UnsupportedTraversal(
                     BlockReason.Traversal.MAPPING_CONTENT));
             // Nothing was interpreted, so there is nothing to be made of. A model carrying one

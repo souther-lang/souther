@@ -30,17 +30,27 @@ class AMeasureIsShortOfWhateverItsReadingDidNotReachTest {
     /**
      * A position the walk could not reach into, which is a fact no question carries.
      *
-     * <p>Nothing was read there and so nothing was found wanting: an {@code Option} holds its value
+     * <p>Nothing was read there and so nothing was found wanting: a {@code Map} holds its values
      * inside something this does not enter, and a rule about what is inside raises no question this
      * could be short of. Both measures are short of it, because what is not known about the
      * position is not known for either.
+     *
+     * <p><b>Written on a mapping because that is what is left.</b> This was an {@code Amount?}, and
+     * an optional is entered now — what it holds stands at the narrowing that says it holds
+     * something, where the rules of that type are read and its border is owed. So the model that
+     * used to be short of both is short of one, and a fixture kept for its numbers would have gone
+     * on being called a position nothing reached into.
+     *
+     * <p>The {@code Bool} beside it is what the partition measures. Without it nothing here divides
+     * at all and that measure says so instead, which is the other way of having no number and not
+     * the one this is about.
      */
     private static final String RULES_NOT_REACHED = """
             module example.notreached
 
             data Amount = Int
                 invariant value >= 0 && value <= 100
-            data Req = { cost: Amount? }
+            data Req = { cost: Map<String, Amount>, flag: Bool }
             data Res = { n: Int }
 
             behavior f : (r: Req) -> Res
@@ -48,7 +58,7 @@ class AMeasureIsShortOfWhateverItsReadingDidNotReachTest {
             let f (r) = Res { n = 0 }
 
             example f
-                | "one" : (Req { cost = 1 }) -> Res { n = 0 }
+                | "one" : (Req { cost = [ ("a", Amount(1)) ], flag = true }) -> Res { n = 0 }
             """;
 
     /**

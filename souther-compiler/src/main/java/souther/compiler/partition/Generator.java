@@ -3680,6 +3680,9 @@ public final class Generator {
             case ConstructionPlan.Slot slot -> worn(slot.worn(), chosen.get(slot.at()), symbols);
             case ConstructionPlan.Built built -> composed(built, chosen, symbols, policy);
             case ConstructionPlan.Held held -> held(held, chosen, symbols, policy);
+            // The requirement settled this one, so nothing was chosen for it and there is nothing to
+            // look up. Under every name the position wears, since the value arrives bare.
+            case ConstructionPlan.Exact exact -> worn(exact.worn(), exact.exact(), symbols);
         };
     }
 

@@ -110,20 +110,29 @@ final class PartitionClasses {
     }
 
     /**
-     * The class one distinction gets.
+     * The class one distinction gets, and the narrowing a row in it meets.
      *
      * <p>Exhaustive over {@link Case}, with no {@code default}: a distinction the reading learns to
      * make later stops this compiling rather than arriving as a class nothing can name.
+     *
+     * <p><b>Which narrowing it is is asked once, here, of the one reading that relates the two
+     * vocabularies.</b> What a position divides into and what a position under it stands beneath are
+     * the same statement read twice, and each arm below deciding for itself is how they came apart:
+     * the arm for a sum's case spelled the narrowing again and the arm for an optional spelled none,
+     * so an optional's classes narrowed nothing — a row could be asked to be `None` here and to hold
+     * a class under `Some` at the same time, and nothing could say the two do not go together.
      */
     private static PartitionClass classOf(Case one, TypeView view, List<TypeSymbol> worn,
                                           ReadingPolicy policy,
                                           List<TypeReachName.Written> writes, Symbols symbols) {
-        return switch (one) {
+        PartitionClass built = switch (one) {
             case Case.Truth truth -> eitherWay(truth.value(), worn, writes);
             case Case.Presence presence -> heldOrNot(presence.present(), view, worn, policy, writes, symbols);
             case Case.SumCase sum -> caseClass(sum, worn, policy, writes, symbols);
             case Case.Named named -> ValueClasses.classAt(named.value(), view, worn, symbols);
         };
+        Refinement narrowing = Refinement.of(one);
+        return narrowing == null ? built : built.selecting(narrowing);
     }
 
     /** One of the two values of a {@code Bool}, under the names the position writes it under. */
@@ -171,13 +180,7 @@ final class PartitionClasses {
     private static PartitionClass caseClass(Case.SumCase one, List<TypeSymbol> worn,
                                             ReadingPolicy policy,
                                             List<TypeReachName.Written> writes, Symbols symbols) {
-        // The narrowing a row in this class meets, asked of the one reading that relates the two
-        // vocabularies. A row whose value here is an `Approved` is a row at every position the
-        // `Approved` case declares, and that is the same fact read from the other end — read here a
-        // second time, this class and the branch under the position would be free to disagree about
-        // which narrowing they are.
-        return holdingWhatItIs(one, writableCase(one.leaf(), worn, policy, writes, symbols))
-                .selecting(Refinement.of(one));
+        return holdingWhatItIs(one, writableCase(one.leaf(), worn, policy, writes, symbols));
     }
 
     /**

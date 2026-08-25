@@ -154,7 +154,7 @@
           "provenInfeasible" : 0,
           "unknown" : 0
         },
-        "notDerivable" : [ ],
+        "notDerivable" : [ "item.note@Some" ],
         "notRead" : [ {
           "position" : "item.price",
           "reason" : "unsupported_syntax",
@@ -187,6 +187,10 @@
         "unreached" : [ ]
       },
       "findings" : [ {
+        "kind" : "partition_not_derivable",
+        "disposition" : "reported",
+        "subject" : "item.note@Some"
+      }, {
         "kind" : "partition_not_read",
         "disposition" : "reported",
         "subject" : "item.price",

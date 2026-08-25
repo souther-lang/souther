@@ -362,14 +362,12 @@ public sealed interface BlockReason {
      * What a derivation would have to be able to reach into.
      *
      * <p>What it can reach into is not here. The elements of a {@code List} or a {@code Set} were,
-     * and are positions of the input now — a word for a reaching that is made says a reader can
-     * still meet it, and the next one to read this would take its presence for evidence that a
-     * sequence is where the walk stops.
+     * and are positions of the input now; so was the value an {@code Option} holds, which is a
+     * branch of the position under the narrowing that it holds one. A word for a reaching that is
+     * made says a reader can still meet it, and the next one to read this would take its presence
+     * for evidence that a sequence, or an optional, is where the walk stops.
      */
     enum Traversal {
-
-        /** The value an {@code Option} holds when it holds one. */
-        OPTIONAL_VALUE,
 
         /**
          * What a {@code Map} holds. One case and not two, because which of a key and a value a rule

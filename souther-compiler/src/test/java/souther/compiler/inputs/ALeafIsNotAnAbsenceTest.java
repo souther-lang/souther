@@ -173,15 +173,37 @@ class ALeafIsNotAnAbsenceTest {
         assertEquals(blocked(new BlockReason.DepthLimit()), under(Type.list(named("Slot")), false));
     }
 
-    /** Each of the three is its own reaching, so implementing one does not read as all three. */
+    /**
+     * The one reaching still not made is its own, so making another does not read as making it.
+     *
+     * <p>Two of the three are made now: a sequence holds a position, and what an optional holds
+     * stands under the branch that says it holds something. What a mapping holds is not reached,
+     * and is stopped as that rather than as a shape nothing was read at.
+     */
     @Test
-    void theOtherTwoReachingsAreToldApartFromIt() {
-        assertEquals(blocked(new BlockReason.UnsupportedTraversal(
-                        BlockReason.Traversal.OPTIONAL_VALUE)),
-                under(Type.option(Type.INT)));
+    void theReachingStillNotMadeIsToldApartFromIt() {
         assertEquals(blocked(new BlockReason.UnsupportedTraversal(
                         BlockReason.Traversal.MAPPING_CONTENT)),
                 under(Type.map(Type.STRING, Type.INT)));
+    }
+
+    /**
+     * And whether an optional holds anything is a narrowing, so it answers with branches.
+     *
+     * <p>Beside the mapping rather than instead of it. The two were one word until the optional's
+     * branches were taken, and what says they were never one question is that each answers
+     * differently now.
+     */
+    @Test
+    void whatAnOptionalHoldsStandsUnderTheBranchThatSaysItDoes() {
+        StructuralInspection.Retained retained =
+                assertInstanceOf(StructuralInspection.Retained.class, under(Type.option(Type.INT)));
+        assertEquals(new StructuralInspection.Continuation.Branches(List.of(
+                        new StructuralInspection.Branch(Refinement.of(new Case.Presence(false)), null),
+                        new StructuralInspection.Branch(Refinement.of(new Case.Presence(true)),
+                                Type.INT))),
+                retained.continuation(),
+                "the absence puts no position anywhere, and `Some` leaves the element here");
     }
 
     /** A declaration reachable from itself: interpreted as far as it goes, which is not far enough. */

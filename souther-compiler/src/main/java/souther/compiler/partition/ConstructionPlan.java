@@ -67,15 +67,21 @@ final class ConstructionPlan {
      *  a record four levels down still has to be constructed. */
     private static final int MAX_DEPTH = 8;
 
-    /** One position of the value being built. */
-    sealed interface Node permits Slot, Built, Held {
+    /**
+     * One position of the value being built.
+     *
+     * <p><b>Where it is, and no more.</b> What is built at a position is a question three of these
+     * answer and the fourth does not have: a requirement that settles the value itself leaves
+     * nothing to build there, and a type answered for it would be a type nothing is built at. Asked
+     * of all four, the one that has no answer has to invent one — the declared type, or the absence
+     * dressed as a type — which is the shortfall this vocabulary exists to state going back in under
+     * another name. So {@code type()} is each builder's own, and every reader of one already knows
+     * which it is holding.
+     */
+    sealed interface Node permits Slot, Built, Held, Exact {
 
         /** Where it is. */
         TermPath at();
-
-        /** What is built there — the declared type, unless a requirement narrowed the position, or
-         *  the caller settled it before this was worked out. */
-        Type type();
 
         /**
          * The newtype names still to put on what this node produces, outermost first.
@@ -162,6 +168,34 @@ final class ConstructionPlan {
     }
 
     /**
+     * A position the requirement itself settles the value of.
+     *
+     * <p>The absence of an optional is the one of these there is. {@code None} is not a narrowed
+     * type with something to be chosen inside it — it is a branch that "puts no position anywhere"
+     * (ADR-0114) — so there is nothing here for the search to look at and nothing for it to be
+     * refused at.
+     *
+     * <p><b>Beside the value being fixed by the caller and not the same thing.</b> A caller that
+     * fixed a value has one to hand over; here nobody handed anything over and the requirement
+     * decides, so writing it as a fixed {@link Slot} would mean putting the value into the caller's
+     * table as well — a class stating a narrowing and fixing a value at the same position, which is
+     * the two accounts ADR-0114 keeps apart.
+     *
+     * @param exact the value, which is what the requirement came to
+     * @param worn  {@link Node#worn}: every name the position wears, since the value arrives bare.
+     *              A {@code data MaybeTagN = Tag?} carries {@code MaybeTagN(None)}
+     */
+    record Exact(TermPath at, FixtureTemplate exact, List<TypeOps.Layer> worn) implements Node {
+
+        Exact {
+            if (exact == null) {
+                throw new IllegalArgumentException("a position settled at no value is not settled");
+            }
+            worn = List.copyOf(worn);
+        }
+    }
+
+    /**
      * A plan, or the position that would have to be two things for there to be one.
      *
      * <p>Two answers because both are ordinary. A caller asking for a class under one case of a sum
@@ -219,7 +253,9 @@ final class ConstructionPlan {
 
     private static void collectHeld(Node node, List<Held> out) {
         switch (node) {
-            case Slot _ -> { }
+            // Nothing is built under either: one holds a value the search chooses and the other a
+            // value the requirement settled, and a collection is neither.
+            case Slot _, Exact _ -> { }
             case Built built -> built.under().values().forEach(each -> collectHeld(each, out));
             case Held held -> {
                 out.add(held);
@@ -240,6 +276,9 @@ final class ConstructionPlan {
             case Slot slot -> out.add(slot);
             case Built built -> built.under().values().forEach(each -> collect(each, out));
             case Held held -> collect(held.under(), out);
+            // Not a position a value is chosen at: the requirement settled it, so there is nothing
+            // here for the search to offer and nothing for it to be refused at.
+            case Exact _ -> { }
         }
     }
 
@@ -252,19 +291,26 @@ final class ConstructionPlan {
             return new Slot(at, declared, List.of(), true);
         }
         Refinement refinement = required.at(at);
-        Type building = refined(declared, refinement, symbols);
-        TypeView view = TypeView.of(building, symbols);
         // The position as the narrowing leaves it, which is where every path below it hangs. A
         // refinement is not a step into the value and takes no level of the plan; what it changes is
         // the name of this one position and what may be built at it. Written without it, two cases
         // spreading one record would put two different positions at one name.
         TermPath here = refinement == null ? at : at.refine(refinement);
         // The names the position wore before the narrowing, which are what a value chosen at it is
-        // still missing; and those with the narrowed type's own after them, which is what a value
-        // composed here bare needs. Both are what the position declares, kept: a value written
-        // under the narrowed type's names alone is of a type the parameter does not declare.
+        // still missing.
         List<TypeOps.Layer> outer =
                 refinement == null ? List.of() : TypeView.of(declared, symbols).wrappers();
+        Type building = refined(declared, refinement, symbols);
+        // The absence of an optional settles the value rather than narrowing to something to be
+        // built: `None` is a branch that puts no position anywhere (ADR-0114), so the search has
+        // nothing to look at here. Under the names the position wore, since the value arrives bare.
+        if (building == null) {
+            return new Exact(here, FixtureTemplate.none(), outer);
+        }
+        TypeView view = TypeView.of(building, symbols);
+        // And those with the narrowed type's own after them, which is what a value composed here
+        // bare needs. Both are what the position declares, kept: a value written under the narrowed
+        // type's names alone is of a type the parameter does not declare.
         List<TypeOps.Layer> worn = refinement == null ? view.wrappers()
                 : outside(outer, view.wrappers());
         if (refinement != null && decided.contains(here)) {
@@ -325,31 +371,55 @@ final class ConstructionPlan {
             case Built built -> built.under().values().stream()
                     .anyMatch(ConstructionPlan::holdsAFixedPosition);
             case Held held -> holdsAFixedPosition(held.under());
+            // A value the requirement settled is as much something asked of the position as one the
+            // caller fixed: a list asked to hold a `None` is a list built around it. Reached where
+            // the path above it does not narrow, which is a requirement stated at this position
+            // rather than at one the path passed through.
+            case Exact _ -> true;
         };
     }
 
     /**
-     * The type a value is built at: the declared one, unless a refinement narrowed the position.
+     * The type a value is built at: the declared one, unless a refinement narrowed the position, and
+     * null where the narrowing leaves nothing to build.
      *
      * <p>A narrowing of what stands at the position and not a rereading of the declaration. The
      * position's declared type is still the sum, and the axis still says so — a class of it saying
      * which case a witness takes is not the position becoming that case, and reading the two as one
      * would have a later reader believe the model declares something it does not. What moves is what
      * is being built.
+     *
+     * <p>Null is the one narrowing that settles the value instead of narrowing the type, and it is
+     * read as that by {@link #node} and nowhere else. Answered with the declared type, the position
+     * would be built as the optional and the search would be free to put a value in it; answered
+     * with what the optional holds, it would be built as the value the narrowing says is not there.
      */
     private static Type refined(Type declared, Refinement refinement, Symbols symbols) {
         return switch (refinement) {
             case null -> declared;
             case Refinement.SumCase one -> Type.ref(one.leaf());
-            // Nothing builds through one yet. An optional's classes are values a row writes —
-            // a value of what it holds, or nothing — and neither is composed field by field, so
-            // no requirement of this kind reaches a plan. The day one does, what is built here is
-            // what it holds, and that is a decision to make with the row that asks for it rather
-            // than one to leave standing as a guess.
-            case Refinement.Presence _ -> throw new IllegalStateException(
-                    "a value is asked to be built through the presence of an optional at `" + declared
-                            + "`; nothing states such a requirement, so this is the generator and"
-                            + " the classes disagreeing about what a class asks for");
+            // What a `Some` leaves at the position is what the optional was declared to hold, which
+            // is the same reading the branches under a position are made from
+            // (`StructuralInspection.carried`). And the absence leaves nothing.
+            case Refinement.Presence presence -> presence.present() ? held(declared, symbols) : null;
         };
+    }
+
+    /**
+     * What the optional at this position holds.
+     *
+     * <p>Asked of the shape rather than of the written type, since the position may wear names: a
+     * {@code data MaybeTagN = Tag?} is an optional and holds a {@code Tag}.
+     */
+    private static Type held(Type declared, Symbols symbols) {
+        if (TypeView.of(declared, symbols).shape()
+                instanceof souther.compiler.check.Shape.Optional optional) {
+            return optional.element();
+        }
+        // The requirement and the declaration disagreeing about the position's shape, which is this
+        // compiler contradicting itself rather than anything a model can write.
+        throw new IllegalStateException("`" + Type.show(declared) + "` is asked for what it holds,"
+                + " and it is not an optional; the reading of a position and the plan built from it"
+                + " disagree about its shape");
     }
 }

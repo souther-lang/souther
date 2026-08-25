@@ -248,7 +248,9 @@ class AConstructionPositionIsNotAnInputPositionTest {
         ConstructionPlan built = plan(read, throughApproved(read));
         assertEquals(declared, reading(read).at(TermPath.of("d")).view().declared(),
                 "the position is still declared to hold a Decision");
-        assertEquals("Approved", Type.show(built.root().type()),
+        ConstructionPlan.Built root = assertInstanceOf(ConstructionPlan.Built.class, built.root(),
+                "an `Approved` is composed out of its fields");
+        assertEquals("Approved", Type.show(root.type()),
                 "and what is built there is the case the class named");
     }
 }

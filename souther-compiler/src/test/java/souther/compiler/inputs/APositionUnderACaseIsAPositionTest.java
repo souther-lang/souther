@@ -66,12 +66,21 @@ class APositionUnderACaseIsAPositionTest {
                 .map(each -> each.path().toString()).toList();
     }
 
-    /** Every case's fields, each under the narrowing it stands beneath. */
+    /**
+     * Every case's fields, each under the narrowing it stands beneath.
+     *
+     * <p>And what an optional field holds is one of them. {@code tag} is a position of its own —
+     * the model divides it into holding something and holding nothing — and {@code tag@Some} is
+     * where what it holds stands, which is where that type's rules are read and where its border is
+     * owed. A narrowing takes no level either way, so both are at the same distance from the
+     * parameter as a plain field would be.
+     */
     @Test
     void theFieldsOfEveryCaseArePositionsOfTheInput() {
         assertEquals(List.of("query",
                         "query@GlobalQuery", "query@GlobalQuery.limit", "query@GlobalQuery.tag",
-                        "query@GlobalQuery.author",
+                        "query@GlobalQuery.tag@Some",
+                        "query@GlobalQuery.author", "query@GlobalQuery.author@Some",
                         "query@FeedQuery", "query@FeedQuery.limit", "query@FeedQuery.followees",
                         "query@FeedQuery.followees[*]"),
                 positionsOf(QUERIES, "readArticles"));
