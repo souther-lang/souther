@@ -59,6 +59,12 @@
         <build.classes>${project.basedir}/target/classes</build.classes>
         <build.test.classes>${project.basedir}/target/test-classes</build.test.classes>
         <errorprone.version>2.50.0</errorprone.version>
+        <checkstyle.plugin.version>3.6.0</checkstyle.plugin.version>
+        <!-- What the pre-commit hook hands to Checkstyle: the directory it wrote the staged files
+             into. A build that is not the hook leaves it at the root module's sources, which do
+             not exist, so the goal has nothing to read. -->
+        <checkstyle.staged.dir>${project.basedir}/src/main/java</checkstyle.staged.dir>
+        <checkstyle.version>10.26.1</checkstyle.version>
         <nullaway.version>0.13.8</nullaway.version>
         <!-- What NullAway is asked for, written once. The gate below and the `lint` profile both
              ask, and a gate configured differently in each is a gate whose answer depends on which
@@ -214,6 +220,47 @@
                              thread. -->
                         <argLine>-XX:TieredStopAtLevel=1 -XX:+UseSerialGC -Xss4m</argLine>
                     </configuration>
+                </plugin>
+                <!-- The pre-commit hook's checker, configured here and bound to no lifecycle phase.
+                     A binding would put it in `mvn verify`, which is CI's build and already answers
+                     the same question through Error Prone; this one is for the answer a commit can
+                     wait for. The hook calls the goal by name, `checkstyle:check`, so no ordinary
+                     build runs it.
+
+                     The rule it reads is config/checkstyle.xml. What it reads it over is
+                     `checkstyle.staged.dir`, which the hook sets to a directory holding what `git`
+                     has staged — the content the commit will carry, and not what the working tree
+                     happens to hold. `sourceDirectories` takes no command-line property of its own,
+                     which is why the directory arrives through one declared here. Unset, it names
+                     the root module's sources, and the root module has none. -->
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-checkstyle-plugin</artifactId>
+                    <version>${checkstyle.plugin.version}</version>
+                    <configuration>
+                        <configLocation>${project.basedir}/config/checkstyle.xml</configLocation>
+                        <sourceDirectories>
+                            <sourceDirectory>${checkstyle.staged.dir}</sourceDirectory>
+                        </sourceDirectories>
+                        <includeTestSourceDirectory>false</includeTestSourceDirectory>
+                        <inputEncoding>UTF-8</inputEncoding>
+                        <consoleOutput>true</consoleOutput>
+                        <logViolationsToConsole>true</logViolationsToConsole>
+                        <!-- `failsOnError` is about Checkstyle failing, not about a file
+                             violating a rule: on it, the goal stops at the first violation and
+                             reports a count instead of naming the import. Off, it prints each
+                             violation and `failOnViolation` ends the build afterwards. -->
+                        <failsOnError>false</failsOnError>
+                        <failOnViolation>true</failOnViolation>
+                        <violationSeverity>error</violationSeverity>
+                    </configuration>
+                    <dependencies>
+                        <dependency>
+                            <groupId>com.puppycrawl.tools</groupId>
+                            <artifactId>checkstyle</artifactId>
+                            <version>${checkstyle.version}</version>
+                        </dependency>
+                    </dependencies>
                 </plugin>
             </plugins>
         </pluginManagement>
