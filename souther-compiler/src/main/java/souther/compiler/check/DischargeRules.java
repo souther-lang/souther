@@ -541,7 +541,7 @@ final class DischargeRules {
                     + " argument(s), and the arithmetic written for it reads " + reads.size());
         }
         for (int i = 0; i < reads.size(); i++) {
-            if (!reads.get(i).heldBy(signature.params().get(i), answers)) {
+            if (!heldBy(stdlib, reads.get(i), signature.params().get(i), answers)) {
                 throw new IllegalStateException("argument " + (i + 1) + " of " + operation
                         + " is " + Type.show(signature.params().get(i))
                         + ", which the arithmetic written for it reads as " + reads.get(i));
@@ -670,6 +670,62 @@ final class DischargeRules {
         rules.forEach((operation, rule) ->
                 holdToTheDeclaration(stdlib, operation, reads.apply(rule), derived, required, what));
         return rules;
+    }
+
+    /**
+     * Whether the argument declared {@code at} is what the row says that position reads, for an
+     * operation answering {@code answered}.
+     *
+     * <p>Here and not on {@link Arithmetic.Reads}, which says what a position is and stops there.
+     * Holding one of those to a declaration is a question about the library, and this is the reader
+     * that has the library — the same reader that holds the operation's arity and its result to it.
+     *
+     * <p>Two of them are answered from the row itself: the number the operation answers is the one
+     * its result carries, and a scale is a count. The third is answered from a declaration, because
+     * there is nothing about a rounding policy that a type says of itself — and reading it off a
+     * name written here would be a second answer to which type it is, which is what ADR-0087 ends.
+     */
+    private static boolean heldBy(Stdlib stdlib, Arithmetic.Reads reads, Type at, Type answered) {
+        return switch (reads) {
+            case THE_NUMBER_IT_ANSWERS -> at.equals(answered);
+            case A_SCALE -> at == Type.Prim.INT;
+            case A_ROUNDING_MODE -> at.equals(theRoundingPolicyTheLibraryDeclares(stdlib));
+        };
+    }
+
+    /** Which library operation the rounding policy is read off, and where in its arguments. */
+    private static final ValueName.Stdlib ROUNDING_POLICY_ANCHOR =
+            new ValueName.Stdlib("Decimal", "round");
+
+    /** {@code round(scale, mode, d)} — the second of them. */
+    private static final int ROUNDING_POLICY_ARGUMENT = 1;
+
+    /**
+     * The type the library declares for a rounding policy, taken from the operation that declares
+     * one and read as whatever that operation declares there.
+     *
+     * <p>Whatever it declares there, and never a type this checks against. A rule that said the
+     * anchor's argument must be {@code RoundingMode} would be the spelling back again, one operation
+     * further along. What is held is that two declarations agree: {@code Decimal.divide} takes at
+     * its policy position the type {@code Decimal.round} takes at its own, and either of them
+     * drifting alone fails this. Both moving to a new policy type together passes, and should —
+     * that is the library being redesigned rather than the table and the library disagreeing.
+     *
+     * <p>The anchor is a choice and is written down as one. What it is not is a second definition
+     * of which type the policy is: the library's declaration remains the only one.
+     *
+     * @throws IllegalStateException where the anchor no longer declares the argument it is read off
+     */
+    private static Type theRoundingPolicyTheLibraryDeclares(Stdlib stdlib) {
+        List<Type> params = holdTheOperationToTheLibrary(stdlib, ROUNDING_POLICY_ANCHOR)
+                .signature().params();
+        if (params.size() <= ROUNDING_POLICY_ARGUMENT) {
+            throw new IllegalStateException(ROUNDING_POLICY_ANCHOR.qualified() + " takes "
+                    + params.size() + " argument(s), and the rounding policy every arithmetic over"
+                    + " one is held to is read off argument " + (ROUNDING_POLICY_ARGUMENT + 1)
+                    + " of it");
+        }
+        return params.get(ROUNDING_POLICY_ARGUMENT);
     }
 
     /**
