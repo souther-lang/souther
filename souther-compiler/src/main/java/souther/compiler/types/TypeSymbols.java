@@ -53,19 +53,20 @@ public final class TypeSymbols {
      * governed by {@code constructs} and the language's vocabulary is not.
      */
     public static TypeSymbol declared(TypeKey key) {
-        return new TypeSymbol(key.module(), key.name());
+        return new TypeSymbol.AtModule(key);
     }
 
     /**
-     * The identity of something the language declares rather than a module: a primitive case name,
-     * {@code Option}'s cases, the prelude's runtime-backed data.
+     * The identity of something the language declares rather than a module, where the compiler still
+     * files it under a module name no module has.
      *
-     * <p>Its own way in because it is its own kind of fact. Nothing indexes these — there is no
-     * source that declares {@code Int} — and a compilation that declares nothing at all still has
-     * them.
+     * <p>Its own way in because it is its own kind of fact: nothing indexes these, and a compilation
+     * that declares nothing at all still has them. What is left here is the standard library's own
+     * declarations, which are anchored to the runtime namespace until they are addressed by the
+     * module that writes them; the language's cases have their own case and come through no string.
      */
     static TypeSymbol ofLanguage(String module, String name) {
-        return new TypeSymbol(module, name);
+        return new TypeSymbol.AtModule(new TypeKey(module, name));
     }
 
 }

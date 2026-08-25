@@ -1,136 +1,221 @@
 package souther.compiler.types;
 
 /**
- * A data type's identity: the module that declares it and the name written there. Two modules may
- * both declare {@code 金額}; those are different types, and only the pair tells them apart.
+ * A data type's identity: which declaration this is, told apart by who declared it.
  *
- * <p>Every {@link Type.Ref} carries one of these, so a name that reached the checker has already
- * been resolved to its declaring module. What the source wrote — a bare {@code 金額}, a qualified
- * {@code probe.b.金額}, or an alias {@code B.金額} — is settled during resolution and does not
- * survive into the type.
+ * <p>Every {@link Type.Ref} carries one, so a name that reached the checker has already been
+ * resolved. What the source wrote — a bare {@code 金額}, a qualified {@code probe.b.金額}, or an
+ * alias {@code B.金額} — is settled during resolution and does not survive into the type.
  *
- * <p>The pair itself is {@link TypeKey}, which is what a class file carries and what a declaration
- * says of itself. This is that key where it stands for the declaration in the compiler's own
- * reasoning, and the two are told apart by more than which type a signature names: a key is
- * structural and anything holding two strings has one, while an identity comes from
- * {@link TypeSymbols} and nowhere else. {@link #key()} goes down to the address; nothing here comes
- * back up.
+ * <p>Two ways a declaration comes to be, and the sum is over exactly that. {@link AtModule} is one a
+ * module wrote, and a module and a name is what tells two of those apart: two modules may both
+ * declare {@code 金額}, and only the pair says which. {@link OfLanguage} is one no module wrote —
+ * a primitive standing in a union, {@code Option}'s cases, the error cases a division answers — and
+ * there is no module to name, so none is named. What stood here before was a module string either
+ * way, which meant every declaration the language gives had to be filed under a module nothing
+ * declares: {@code souther} for a primitive, {@code souther.runtime} for the rest. Choosing that
+ * string was choosing a namespace, and the one chosen was a JVM package.
+ *
+ * <p>Nothing here says what any of this is called on a machine. {@code jvm.SoutherJvmAbi} is where
+ * that is asked and answered, and it is the only place that may.
  */
-public final class TypeSymbol implements Comparable<TypeSymbol> {
+public sealed interface TypeSymbol extends Comparable<TypeSymbol> {
 
-    /** The module a primitive case name belongs to. {@code Int | DivisionByZero} unions a primitive
-     * with a data case, so a primitive needs a name of this shape to sit in {@link Type.Union}; it
-     * never reaches codegen as a class, since a primitive case maps to its boxed class by name. */
-    public static final String PRIMITIVE = "souther";
-
-    /** The module of the built-in error cases ({@code DivisionByZero}, {@code NotANumber}). It is
-     * their real runtime package, so they need no special case when a class name is derived. */
-    public static final String RUNTIME = "souther.runtime";
-
-    private final TypeKey key;
+    /** The name this is written under. */
+    String name();
 
     /**
-     * Closed. An identity comes from {@link TypeSymbols}, which is the one edge from the structural
-     * address to the identity the compiler reasons with; a caller that could build one from two
-     * strings is a caller that could arrive at an identity without having been handed one.
-     */
-    TypeSymbol(String module, String name) {
-        this.key = new TypeKey(module, name);
-    }
-
-    /** Which declaration this is, written down.
+     * A declaration a module wrote, at the address that says which.
      *
-     * <p>One direction only. Nothing here builds a name from a key: a key is what a class file
-     * carries, and turning one back into the identity the compiler reasons with is the work of
-     * whatever knows the declarations, which is not this. */
-    public TypeKey key() {
-        return key;
-    }
-
-    /** The module that declares it. */
-    public String module() {
-        return key.module();
-    }
-
-    /** The name written there. */
-    public String name() {
-        return key.name();
-    }
-
-    /** A primitive case name ({@code Int}) as it appears in a union. */
-    public static TypeSymbol primitive(String name) {
-        return TypeSymbols.ofLanguage(PRIMITIVE, name);
-    }
-
-    /** The same, minted from the primitive itself, which is where the spelling comes from. */
-    public static TypeSymbol primitive(Type.Prim prim) {
-        return TypeSymbols.ofLanguage(PRIMITIVE, prim.shown());
-    }
-
-    /**
-     * The primitive this name denotes, or null where it names none.
-     *
-     * <p>The other direction of {@link #primitive(Type.Prim)}, and written as its inverse rather
-     * than as a table beside it: a reader that needs the primitive back has one place to get it, and
-     * a spelling can only be wrong here by being wrong in both directions at once. {@code Some} and
-     * {@code None} are primitive-module names that denote no primitive, so they answer nothing.
+     * <p>{@link TypeKey} is structural and anything holding two strings has one; this is that key
+     * where it stands for the declaration in the compiler's own reasoning, and one is minted from
+     * the other only in {@link TypeSymbols}.
      */
-    public Type.Prim primitiveKind() {
-        if (!isPrimitive()) {
-            return null;
+    final class AtModule implements TypeSymbol {
+
+        private final TypeKey key;
+
+        /**
+         * Closed. An identity comes from {@link TypeSymbols} and nowhere else: a caller that could
+         * build one from a key is a caller that could arrive at an identity without a declaration
+         * world having handed it one, which is what issues #464, #696 and #700 each were.
+         *
+         * <p>Which is also why this is not a record. The other two cases are — a {@link Type.Prim}
+         * and a {@link LanguageCaseId} are closed sets, and there is no wrong one to fabricate —
+         * but a record's canonical constructor is as public as the record, and this one carries two
+         * strings that anything could supply.
+         */
+        AtModule(TypeKey key) {
+            if (key == null) {
+                throw new IllegalArgumentException("an address is what this is");
+            }
+            this.key = key;
         }
-        return Type.Prim.named(name());
+
+        /** Which declaration this is, written down. */
+        public TypeKey key() {
+            return key;
+        }
+
+        /** The module that declares it. */
+        public String module() {
+            return key.module();
+        }
+
+        @Override
+        public String name() {
+            return key.name();
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof AtModule at && key.equals(at.key);
+        }
+
+        @Override
+        public int hashCode() {
+            return key.hashCode();
+        }
+
+        @Override
+        public String toString() {
+            return key.qualified();
+        }
     }
 
-    /** A built-in error case ({@code DivisionByZero}). */
-    public static TypeSymbol runtime(String name) {
-        return TypeSymbols.ofLanguage(RUNTIME, name);
+    /** A declaration the language gives and no module does. */
+    sealed interface OfLanguage extends TypeSymbol permits Primitive, LanguageCase {}
+
+    /**
+     * A primitive standing as a case of a union: {@code Int} in {@code Int | DivisionByZero}.
+     *
+     * <p>Its identity is the primitive, and not a name minted from the primitive's spelling. A
+     * spelling written down beside {@link Type.Prim} would be a second table of the same nine words,
+     * and recovering the primitive from one was already written as the inverse of writing it out for
+     * exactly that reason.
+     */
+    record Primitive(Type.Prim primitive) implements OfLanguage {
+
+        public Primitive {
+            if (primitive == null) {
+                throw new IllegalArgumentException("a primitive is what this is");
+            }
+        }
+
+        @Override
+        public String name() {
+            return primitive.shown();
+        }
+
+        @Override
+        public String toString() {
+            return name();
+        }
+    }
+
+    /** One of the cases the language gives, from the closed list of them. */
+    record LanguageCase(LanguageCaseId id) implements OfLanguage {
+
+        public LanguageCase {
+            if (id == null) {
+                throw new IllegalArgumentException("a case of the language is what this is");
+            }
+        }
+
+        @Override
+        public String name() {
+            return id.spelling();
+        }
+
+        @Override
+        public String toString() {
+            return name();
+        }
+    }
+
+    // --- transitional, and removed with the readers that still ask ---
+
+    /** The module of a primitive case name, and of {@code Some} and {@code None}. */
+    String PRIMITIVE = "souther";
+
+    /** The module the language's other declarations are filed under. */
+    String RUNTIME = "souther.runtime";
+
+    /** Which module this is filed under, as the readers still ask it. */
+    default String module() {
+        return switch (this) {
+            case AtModule at -> at.key().module();
+            case Primitive _ -> PRIMITIVE;
+            case LanguageCase c -> switch (c.id()) {
+                case SOME, NONE -> PRIMITIVE;
+                case DIVISION_BY_ZERO, NOT_A_NUMBER, NOT_A_DATE, NOT_A_TIME -> RUNTIME;
+            };
+        };
+    }
+
+    /** Which declaration this is, written down. */
+    default TypeKey key() {
+        return this instanceof AtModule at ? at.key() : new TypeKey(module(), name());
+    }
+
+    /** The fully qualified form, {@code probe.b.金額}. */
+    default String qualified() {
+        return key().qualified();
+    }
+
+    default boolean isPrimitive() {
+        return this instanceof Primitive;
+    }
+
+    /** The primitive this denotes, or null where it denotes none. */
+    default Type.Prim primitiveKind() {
+        return this instanceof Primitive p ? p.primitive() : null;
+    }
+
+    @Override
+    default int compareTo(TypeSymbol other) {
+        return key().compareTo(other.key());
+    }
+
+    /** A primitive case name ({@code Int}) as it appears in a union.
+     *
+     *  @throws IllegalArgumentException where {@code name} spells no primitive */
+    static TypeSymbol primitive(String name) {
+        Type.Prim prim = Type.Prim.named(name);
+        if (prim == null) {
+            throw new IllegalArgumentException("`" + name + "` is no primitive");
+        }
+        return new Primitive(prim);
+    }
+
+    /** The same, minted from the primitive itself. */
+    static TypeSymbol primitive(Type.Prim prim) {
+        return new Primitive(prim);
+    }
+
+    /** A declaration filed under the runtime namespace: one of the language's own cases, or one the
+     *  standard library declares and this still anchors there. */
+    static TypeSymbol runtime(String name) {
+        LanguageCaseId id = LanguageCaseId.named(name);
+        return id != null && id != LanguageCaseId.SOME && id != LanguageCaseId.NONE
+                ? new LanguageCase(id)
+                : TypeSymbols.ofLanguage(RUNTIME, name);
     }
 
     /** {@code Some} / {@code None}: written in a match arm over an {@code Option}, declared by no
-     * module. They are named for the same reason a primitive case is — a name a pattern writes has to
-     * denote something — and they name no class: an Option match dispatches on the runtime Option
-     * classes, never on the arm's own name. */
-    public static final TypeSymbol SOME = primitive("Some");
+     * module. They name no class: an Option match dispatches on the runtime Option classes, never on
+     * the arm's own name. */
+    TypeSymbol SOME = new LanguageCase(LanguageCaseId.SOME);
 
     /** @see #SOME */
-    public static final TypeSymbol NONE = primitive("None");
+    TypeSymbol NONE = new LanguageCase(LanguageCaseId.NONE);
 
     /** Option's case of that spelling, or {@code null} for any other. */
-    public static TypeSymbol optionCase(String written) {
+    static TypeSymbol optionCase(String written) {
         return switch (written) {
             case "Some" -> SOME;
             case "None" -> NONE;
             default -> null;
         };
-    }
-
-    public boolean isPrimitive() {
-        return module().equals(PRIMITIVE);
-    }
-
-    /** The fully qualified form, {@code probe.b.金額}. Also the generated class's binary name. */
-    public String qualified() {
-        return key.qualified();
-    }
-
-    @Override
-    public int compareTo(TypeSymbol other) {
-        return key.compareTo(other.key);
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        return o instanceof TypeSymbol other && key.equals(other.key);
-    }
-
-    @Override
-    public int hashCode() {
-        return key.hashCode();
-    }
-
-    @Override
-    public String toString() {
-        return qualified();
     }
 }

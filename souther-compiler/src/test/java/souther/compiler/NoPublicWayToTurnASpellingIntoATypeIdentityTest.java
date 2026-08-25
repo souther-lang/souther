@@ -135,9 +135,18 @@ class NoPublicWayToTurnASpellingIntoATypeIdentityTest {
     void anAddressBecomesAnIdentityInOnePlace() {
         Set<String> exchanging = new java.util.LinkedHashSet<>();
         Set<String> asking = new java.util.LinkedHashSet<>();
-        for (Class<?> c : List.of(TypeSymbol.class, souther.compiler.types.TypeSymbols.class,
+        // The cases of TypeSymbol are read as well as the type itself. One of them holds a key, and
+        // a public constructor on it would be this door standing open in a place the list above
+        // does not look — which is what a record would have made it, its canonical constructor being
+        // as public as the record.
+        List<Class<?>> read = new java.util.ArrayList<>(List.of(TypeSymbol.class,
+                souther.compiler.types.TypeSymbols.class,
                 souther.compiler.check.Declarations.class, souther.compiler.check.TypeScope.class,
-                souther.compiler.check.Registry.class, Symbols.class, Hir.Def.class)) {
+                souther.compiler.check.Registry.class, Symbols.class, Hir.Def.class));
+        java.util.Collections.addAll(read, TypeSymbol.class.getPermittedSubclasses());
+        java.util.Collections.addAll(read,
+                TypeSymbol.OfLanguage.class.getPermittedSubclasses());
+        for (Class<?> c : read) {
             for (Method m : c.getMethods()) {
                 if (!List.of(m.getParameterTypes()).contains(souther.compiler.types.TypeKey.class)) {
                     continue;
