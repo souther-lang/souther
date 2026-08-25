@@ -1,5 +1,6 @@
 package souther.compiler.examples;
 
+import souther.compiler.observe.Observations;
 import souther.compiler.generated.EvaluationArtifact;
 import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.check.AtomSpace;
@@ -650,25 +651,6 @@ public final class ExampleVerifier {
                  COMPARISON, STEP_LIMIT, DEPTH_LIMIT, TIMEOUT, STACK_EXHAUSTED, VALUE_CROSSING ->
                     Incompleteness.Code.ROW_UNDECIDED;
         };
-    }
-
-    /**
-     * What evaluating a source's rows turned up: the diagnostics it reports, the observation each row
-     * left, and what stopped it from observing.
-     *
-     * <p>Not named {@code Result} because {@code net.unit8.raoh.Result} is what a decoder answers with
-     * here, and a nested type of that name would take the spelling away from it.
-     */
-    public record Observations(List<Diagnostic> failures, List<RowOutcome> rows,
-                               List<Incompleteness> incompleteness) {
-
-        public static final Observations NONE = new Observations(List.of(), List.of(), List.of());
-
-        public Observations {
-            failures = List.copyOf(failures);
-            rows = List.copyOf(rows);
-            incompleteness = List.copyOf(incompleteness);
-        }
     }
 
     /** The one-line form for a set of failures gathered across modules: the count, then the first

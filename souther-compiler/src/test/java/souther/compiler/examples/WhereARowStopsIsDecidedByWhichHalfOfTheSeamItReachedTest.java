@@ -1,5 +1,6 @@
 package souther.compiler.examples;
 
+import souther.compiler.observe.Observations;
 import souther.compiler.observe.ArmObservation;
 import org.junit.jupiter.api.Test;
 
@@ -72,7 +73,7 @@ class WhereARowStopsIsDecidedByWhichHalfOfTheSeamItReachedTest {
     /** The row states a stand-in, and it could not be made. Nothing was applied. */
     @Test
     void aStandinThatCouldNotBeMadeStopsTheRowBeforeItEntersTheBehavior() {
-        ExampleVerifier.Observations observed = evaluated(REFUSING);
+        Observations observed = evaluated(REFUSING);
 
         RowOutcome row = only(observed);
         assertEquals(Stage.FIXTURES_VALIDATED, row.stage(),
@@ -94,7 +95,7 @@ class WhereARowStopsIsDecidedByWhichHalfOfTheSeamItReachedTest {
     /** The stand-in was made, and the behavior it was made for failed. The row entered it. */
     @Test
     void aFailureFromTheBehaviorStopsTheRowInsideIt() {
-        ExampleVerifier.Observations observed = evaluated(FAILING);
+        Observations observed = evaluated(FAILING);
 
         RowOutcome row = only(observed);
         assertEquals(Stage.INVOKED, row.stage(), "the behavior was entered");
@@ -113,7 +114,7 @@ class WhereARowStopsIsDecidedByWhichHalfOfTheSeamItReachedTest {
      */
     @Test
     void anImplementationThatCouldNotBeReachedLeavesTheRowHavingAppliedNothing() {
-        ExampleVerifier.Observations observed = evaluated(UNREACHABLE);
+        Observations observed = evaluated(UNREACHABLE);
 
         RowOutcome row = only(observed);
         assertEquals(Stage.FIXTURES_VALIDATED, row.stage(), "it never got in");
@@ -137,7 +138,7 @@ class WhereARowStopsIsDecidedByWhichHalfOfTheSeamItReachedTest {
      */
     @Test
     void aRowThatCouldNotBeHandedOverIsUndecidedRatherThanFailed() {
-        ExampleVerifier.Observations observed = evaluated(UNCROSSABLE);
+        Observations observed = evaluated(UNCROSSABLE);
 
         RowOutcome row = only(observed);
         assertEquals(Stage.FIXTURES_VALIDATED, row.stage(), "it was never handed over");
@@ -283,17 +284,17 @@ class WhereARowStopsIsDecidedByWhichHalfOfTheSeamItReachedTest {
         };
     }
 
-    private static RowOutcome only(ExampleVerifier.Observations observed) {
+    private static RowOutcome only(Observations observed) {
         assertEquals(1, observed.rows().size());
         return observed.rows().get(0);
     }
 
     /** The row, evaluated the way the query asks it, against an answerer the test chooses. */
-    private static ExampleVerifier.Observations evaluated(Answerer answerer) {
+    private static Observations evaluated(Answerer answerer) {
         return evaluated(MODEL, answerer);
     }
 
-    private static ExampleVerifier.Observations evaluated(String model, Answerer answerer) {
+    private static Observations evaluated(String model, Answerer answerer) {
         Compilation c = Compilation.ofSource(model, "Main");
         c.db().ask(new Output.All());
         String name = c.modules().get(0);

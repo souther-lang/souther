@@ -1,5 +1,6 @@
 package souther.compiler.examples;
 
+import souther.compiler.observe.Observations;
 import souther.compiler.observe.ArmObservation;
 import org.junit.jupiter.api.Test;
 
@@ -79,7 +80,7 @@ class WhetherAnythingAppliesABehaviorIsTheRunsAnswerTest {
      */
     @Test
     void aBehaviorWithNoBodyIsRunWhenTheRunHasSomethingToApplyIt() {
-        ExampleVerifier.Observations observed = evaluated(applyingTheOneWithNoBody());
+        Observations observed = evaluated(applyingTheOneWithNoBody());
 
         RowOutcome row = rowFor(observed, "doubleFromOutside");
         assertEquals(Stage.COMPARED, row.stage(), "the row was run and its answer compared");
@@ -98,7 +99,7 @@ class WhetherAnythingAppliesABehaviorIsTheRunsAnswerTest {
      */
     @Test
     void aBehaviorWithABodyIsRecordedWhenNothingInTheRunAppliesIt() {
-        ExampleVerifier.Observations observed = evaluated(applyingTheOneWithNoBody());
+        Observations observed = evaluated(applyingTheOneWithNoBody());
 
         RowOutcome row = rowFor(observed, "double");
         assertEquals(Stage.FIXTURES_VALIDATED, row.stage(),
@@ -121,7 +122,7 @@ class WhetherAnythingAppliesABehaviorIsTheRunsAnswerTest {
      */
     @Test
     void anImplementationThatCannotBeReachedIsAFailureAndNotARowNothingApplies() {
-        ExampleVerifier.Observations observed = evaluated(claimingEverythingAndReachingNothing());
+        Observations observed = evaluated(claimingEverythingAndReachingNothing());
 
         assertEquals(2, observed.rows().size());
         for (RowOutcome row : observed.rows()) {
@@ -294,14 +295,14 @@ class WhetherAnythingAppliesABehaviorIsTheRunsAnswerTest {
         };
     }
 
-    private static RowOutcome rowFor(ExampleVerifier.Observations observed, String target) {
+    private static RowOutcome rowFor(Observations observed, String target) {
         List<RowOutcome> rows =
                 observed.rows().stream().filter(r -> r.target().equals(target)).toList();
         assertEquals(1, rows.size(), "one row is written for `" + target + "`");
         return rows.get(0);
     }
 
-    private static ExampleVerifier.Observations evaluated(Answering answering) {
+    private static Observations evaluated(Answering answering) {
         Compilation c = compiled();
         String name = c.modules().get(0);
         return ExampleVerifier.check(

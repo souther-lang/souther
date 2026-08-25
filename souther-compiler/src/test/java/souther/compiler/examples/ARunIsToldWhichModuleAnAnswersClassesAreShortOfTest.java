@@ -1,5 +1,6 @@
 package souther.compiler.examples;
 
+import souther.compiler.observe.Observations;
 import souther.compiler.observe.ArmObservation;
 import org.junit.jupiter.api.Test;
 
@@ -198,7 +199,7 @@ class ARunIsToldWhichModuleAnAnswersClassesAreShortOfTest {
     }
 
     /** The rows of {@code ROOT}, run against {@code answering}. */
-    private static ExampleVerifier.Observations evaluated(Answering answering) {
+    private static Observations evaluated(Answering answering) {
         Compilation c = Compilation.ofSources(List.of(SHARED, ROOT), ModulePath.EMPTY);
         c.db().ask(new Output.All());
         String name = "example.root";

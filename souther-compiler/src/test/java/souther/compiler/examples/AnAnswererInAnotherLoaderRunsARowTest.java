@@ -1,5 +1,6 @@
 package souther.compiler.examples;
 
+import souther.compiler.observe.Observations;
 import souther.compiler.observe.ArmObservation;
 import net.unit8.raoh.Ok;
 import net.unit8.raoh.Result;
@@ -72,7 +73,7 @@ class AnAnswererInAnotherLoaderRunsARowTest {
     @Test
     void aRowHeldByAnImplementationInAnotherLoaderHolds() {
         Crossed crossed = new Crossed();
-        ExampleVerifier.Observations observed = evaluated(crossed);
+        Observations observed = evaluated(crossed);
 
         assertEquals(List.of(), reasons(observed), "the row holds, and holds for its own reason");
         assertEquals(1, observed.rows().size());
@@ -213,7 +214,7 @@ class AnAnswererInAnotherLoaderRunsARowTest {
     }
 
     /** The row, evaluated the way the query asks it, against an answerer the test chooses. */
-    private static ExampleVerifier.Observations evaluated(Crossed answerer) {
+    private static Observations evaluated(Crossed answerer) {
         Compilation c = Compilation.ofSource(MODEL, "Main");
         c.db().ask(new Output.All());
         String name = c.modules().get(0);
@@ -250,7 +251,7 @@ class AnAnswererInAnotherLoaderRunsARowTest {
         }
     }
 
-    private static List<String> reasons(ExampleVerifier.Observations observed) {
+    private static List<String> reasons(Observations observed) {
         List<String> said = new ArrayList<>();
         observed.failures().forEach(f -> said.add(String.valueOf(f.code())));
         return said;

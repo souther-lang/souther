@@ -1,5 +1,7 @@
 package souther.compiler.query;
 
+import souther.compiler.observe.WrittenStatements;
+import souther.compiler.observe.Observations;
 import souther.compiler.observe.ArmObservation;
 import souther.compiler.source.SourceId;
 
@@ -724,7 +726,7 @@ public final class Output {
      * disagreements says that with the same empty list it says agreement with.
      */
     public record Disagreements(String name)
-            implements Key<souther.compiler.examples.ExampleStatements.Readings> {
+            implements Key<WrittenStatements.Readings> {
 
         @Override
         public String module() {
@@ -732,7 +734,7 @@ public final class Output {
         }
 
         @Override
-        public Answer<souther.compiler.examples.ExampleStatements.Readings> compute(Db db) {
+        public Answer<WrittenStatements.Readings> compute(Db db) {
             Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
             Answer<Symbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
@@ -741,7 +743,7 @@ public final class Output {
             }
             if (!db.ask(new Bodies.Checked(name)).present()) {
                 // a module that did not check states nothing yet
-                return Answer.of(souther.compiler.examples.ExampleStatements.Readings.NONE);
+                return Answer.of(WrittenStatements.Readings.NONE);
             }
             // The classes alone: nothing here applies a behavior, so what the compile implemented is
             // not a question this asks.
@@ -804,7 +806,7 @@ public final class Output {
 
         @Override
         public Answer<Boolean> compute(Db db) {
-            souther.compiler.examples.ExampleStatements.Readings read =
+            WrittenStatements.Readings read =
                     db.ask(new Disagreements(name)).value();
             if (read == null) {
                 return Answer.of(true);
@@ -812,20 +814,20 @@ public final class Output {
             List<Report> reports = new ArrayList<>();
             // Each is filed under the source its own caret is in, which is what a report with
             // nothing beside its place is filed under.
-            for (souther.compiler.examples.ExampleStatements.Disagreement d : read.disagreements()) {
+            for (WrittenStatements.Disagreement d : read.disagreements()) {
                 reports.add(Report.of(said(d)));
             }
-            for (souther.compiler.examples.ExampleStatements.UnreadFake f : read.unread()) {
+            for (WrittenStatements.UnreadFake f : read.unread()) {
                 reports.add(Report.of(unread(f)));
             }
             return Answer.of(true, reports);
         }
 
         /** One fake that could not be read: the caret on the behavior it names, and what stopped. */
-        private static Diagnostic unread(souther.compiler.examples.ExampleStatements.UnreadFake f) {
+        private static Diagnostic unread(WrittenStatements.UnreadFake f) {
             // Which of the three it was travels into the message, because what to do about them
             // differs — and one of them is not about the model at all.
-            souther.compiler.examples.ExampleStatements.Unread why = f.why();
+            WrittenStatements.Unread why = f.why();
             Diagnostic.Builder said = Diagnostic.at(f.at(), f.width())
                     .say(why.isDepth()
                             ? new ExampleMessage.NotComparedTheTableReachedItsDepthLimit(
@@ -850,9 +852,9 @@ public final class Output {
 
         /** One disagreement: the caret on the recorded row, a second region on the stand-in in
          * whichever file it was written in, and what each of them answers. */
-        private static Diagnostic said(souther.compiler.examples.ExampleStatements.Disagreement d) {
-            souther.compiler.examples.ExampleStatements.Statement recorded = d.recorded();
-            souther.compiler.examples.ExampleStatements.Statement standIn = d.standIn();
+        private static Diagnostic said(WrittenStatements.Disagreement d) {
+            WrittenStatements.Statement recorded = d.recorded();
+            WrittenStatements.Statement standIn = d.standIn();
             boolean viaWith = d.viaWith();
             // The region says which file it is in, and whether that is worth printing is the
             // renderer's — it already leaves the name out where it matches the one in the heading.
@@ -1047,7 +1049,7 @@ public final class Output {
             if (contracts == null) {
                 return Answer.absent();
             }
-            souther.compiler.examples.ExampleVerifier.Observations observed =
+            Observations observed =
                     souther.compiler.examples.ExampleVerifier.check(rows, scope.value(), sigs.value(),
                             artifact,
                             // What this compile can read declarations of, for holding an answer's own
