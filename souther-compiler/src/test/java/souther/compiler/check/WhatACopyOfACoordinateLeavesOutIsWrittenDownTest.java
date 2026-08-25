@@ -66,7 +66,8 @@ class WhatACopyOfACoordinateLeavesOutIsWrittenDownTest {
         added.removeAll(componentsOf(coordinate()));
 
         assertEquals(Set.of("from", "part", "why"), added);
-        assertTrue(componentsOf(FieldDomains.Unread.class).containsAll(Set.of("path", "measured")),
-                "beside the two of the coordinate that a reader downstream turned out to need");
+        assertTrue(componentsOf(FieldDomains.Unread.class).containsAll(Set.of("path", "by")),
+                "beside the two of the coordinate that a reader downstream turned out to need:"
+                        + " where it sits, and which operation takes the number if one does");
     }
 }

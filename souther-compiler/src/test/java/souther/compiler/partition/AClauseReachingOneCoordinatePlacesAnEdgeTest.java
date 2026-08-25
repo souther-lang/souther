@@ -312,8 +312,8 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
                   onSpan                   implemented   rows 1    pending 0
                     signature   not applicable (this behavior's output is not a sum)
                     partition   not applicable (the rules of this behavior divide no position)
-                      · not read: invariant Span #1 — it relates two positions rather than dividing one, about `v.startsAt`
-                      · not read: invariant Span #1 — it relates two positions rather than dividing one, about `v.endsAt`
+                      · no line: invariant Span #1 — it relates two positions rather than dividing one, about `v.startsAt`
+                      · no line: invariant Span #1 — it relates two positions rather than dividing one, about `v.endsAt`
                     border      not applicable (the rules of this behavior draw no line)
                 """), report);
     }
@@ -328,8 +328,8 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
                   onFloor                  implemented   rows 1    pending 0
                     signature   not applicable (this behavior's output is not a sum)
                     partition   not applicable (the rules of this behavior divide no position)
-                      · not read: invariant Floor #1 — it relates two positions rather than dividing one, about `v.n`
-                      · not read: invariant Floor #1 — it relates two positions rather than dividing one, about `v.min`
+                      · no line: invariant Floor #1 — it relates two positions rather than dividing one, about `v.n`
+                      · no line: invariant Floor #1 — it relates two positions rather than dividing one, about `v.min`
                     border      not applicable (the rules of this behavior draw no line)
                 """), report);
     }
@@ -461,16 +461,9 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
      */
     @Test
     void rulesAboutBothCoordinatesLeaveThePositionUndivided() {
-        String report = report(TWO_WAYS);
-
-        assertTrue(report.contains("""
-                  onR                      implemented   rows 1    pending 0
-                    signature   not applicable (this behavior's output is not a sum)
-                    partition   not measured (no partition axis was derived at any position)
-                      · not read: invariant R #1 — a rule beside it is about the position's other coordinate, so neither can be chosen, about `v.s`
-                      · not read: invariant R #2 — a rule beside it is about the position's other coordinate, so neither can be chosen, about `v.s`
-                    border      not measured (no line was derived at any position)
-                """), report);
+        assertEquals(List.of("v.s: COMPETING_COORDINATES", "String.length(v.s): COMPETING_COORDINATES"),
+                notReadIn(TWO_WAYS, "onR"),
+                "both rules are named, each at the coordinate it is about");
     }
 
     /**
@@ -829,5 +822,22 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return AdequacyReport.of(compilation).human(SourceNameResolver.identity());
+    }
+
+    /**
+     * What {@code behavior} left unread, as the coordinate it is about and the reason.
+     *
+     * <p>Off the evidence rather than out of the rendered report: what a document prints for a
+     * reason is a projection made elsewhere, and a test reading the sentence is held to how it is
+     * worded as much as to what it says.
+     */
+    private static List<String> notReadIn(String source, String behavior) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        return AdequacyReport.of(compilation).modules().get(0).behaviors().stream()
+                .filter(each -> each.name().equals(behavior))
+                .flatMap(each -> each.partition().notRead().stream())
+                .map(each -> each.at() + ": " + each.reason()).toList();
     }
 }

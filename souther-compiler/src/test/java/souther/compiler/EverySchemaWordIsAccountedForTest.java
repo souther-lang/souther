@@ -232,7 +232,13 @@ class EverySchemaWordIsAccountedForTest {
             // What a rule of the model raises. Only the questions this compiler issues today: a
             // word arrives here in the same change that starts raising it, so the enum and the
             // schema move together or the compile stops.
+            // `singleton` and `partition` are what a comparison owes by having been read — the row at
+            // the value it singles out, and the rows in the classes its line makes. Those are the
+            // partition's own geometry and never a question standing against an answer, so the
+            // compiler stopped raising them. Retired rather than gone: reports of this version were
+            // written carrying them.
             new Vocabulary("coverageQuestion", List.of("$defs", "coverageQuestion"),
+                    Set.of("singleton", "partition"),
                     souther.compiler.check.CoverageObligation.class),
             // `no_axis_derived` is what `the_reading_did_not_run_out` was called while it also
             // stood for a reading that ran out and found nothing to divide. Retired rather than

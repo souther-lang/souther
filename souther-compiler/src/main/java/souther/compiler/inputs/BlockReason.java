@@ -36,16 +36,33 @@ public sealed interface BlockReason {
         /**
          * Whether {@code measure} is thereby short of something.
          *
-         * <p>Not every rule a reading set aside was one it fell short of, and the ones that were
-         * are not all short of the same measure. A comparison in a form no reader takes apart may
-         * have divided the position or bounded it, and nothing knows which — so both.
-         *
-         * <p>Relating two positions leaves neither, and not because a line is always drawn from
-         * such a rule: an invariant clause that relates two positions raises no question either
-         * measure answers, and a body's comparison that places a relational border has that border
-         * accounted for by the reading that placed it. Either way nothing is missing here, which is
-         * what this answers.
-         *
+         * <p>Which of the two halves the reason is in answers most of it. A reading that stopped
+         * leaves what the rule states unknown, and what it would have divided or bounded is exactly
+         * the part that was not read; a rule read to the end that divided no position states what
+         * it states, and nothing is missing. So the second half answers alike and the first is asked
+         * per reason.
+         */
+        boolean leavesShort(CoverageObligation.Measure measure);
+    }
+
+    /**
+     * A rule a reading stopped on, which is the half of {@link AboutARule} that says this compiler
+     * fell short.
+     *
+     * <p>Told apart by the type because the two halves are opposite sentences and were one set. A
+     * reading that stopped leaves whatever the rule states unknown; a rule read to the end that
+     * divides no one position states what it states, and nothing is missing. Held alike, a rule
+     * about a pair of positions the carrier could not be read for was described as a rule that
+     * relates two positions — which is true of it, and says nothing fell short, and something did.
+     *
+     * <p>Which is why a reading's own answer for having stopped may only be one of these. What such
+     * a rule would have raised is exactly the part that was not read, so an obligation cannot be
+     * built from it; that the model is thereby short of something is what {@link #leavesShort} says
+     * instead.
+     */
+    sealed interface ReadingStopped extends AboutARule {
+
+        /**
          * <p><b>Two switches and no {@code default} on either.</b> Asked per measure rather than
          * answered with a set of them: a set is open at the measure end, so a third measure would
          * be one every reason had silently answered "not short of" — which is the shape this whole
@@ -53,25 +70,41 @@ public sealed interface BlockReason {
          * way a reason added fails the inner switch and a measure added fails the outer, and
          * whichever axis grows has to be answered for.
          */
+        @Override
         default boolean leavesShort(CoverageObligation.Measure measure) {
             return switch (measure) {
+                // A comparison in a form no reader takes apart may have divided the position or
+                // bounded it, and nothing knows which — so both.
                 case PARTITION -> switch (this) {
                     case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
                          UnreadValueRule _, CompetingCoordinates _ -> true;
-                    // The rule was read and it divides neither position, which is what it says and
-                    // not something missing here. Nor does a rule read to the end whose quantity is
-                    // empty: there was no line in it, so none is owed.
-                    case ComparisonBetweenPositions _, ComparisonCuttingNothing _ -> false;
                 };
                 case BOUNDARY -> switch (this) {
                     case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
                          UnreadValueRule _, CompetingCoordinates _ -> true;
-                    // Whatever line such a rule places is placed by the reading that reaches it, and
-                    // where none is placed none was owed. A rule whose quantity is empty places
-                    // none either, and for the same reason: there was nothing in it to place.
-                    case ComparisonBetweenPositions _, ComparisonCuttingNothing _ -> false;
                 };
             };
+        }
+    }
+
+    /**
+     * A rule read to the end that left no position divided, which is the other half.
+     *
+     * <p>Three ways for that to happen and they are three: the quantity the rule cuts is empty, the
+     * quantity is a form over several positions and divides none of them on its own, and the line
+     * falls where the quantity never runs. Each is a fact about the rule rather than about this
+     * compiler — the reading finished — and each is still worth saying, because a position nothing
+     * is said about comes back as one the model states nothing about, and the model states this.
+     *
+     * <p>No measure is short of anything here, and that is what makes them one half rather than
+     * three reasons that happen to agree. A rule that was read has had whatever it places placed by
+     * the reading that placed it, and where it places none there is none to be owed.
+     */
+    sealed interface ReadButDidNotDivideAPosition extends AboutARule {
+
+        @Override
+        default boolean leavesShort(CoverageObligation.Measure measure) {
+            return false;
         }
     }
 
@@ -154,11 +187,11 @@ public sealed interface BlockReason {
      * producers of one kind of evidence (spec §example-partition), and what stopped each of them is
      * the same fact about this compiler.
      */
-    record UnreadComparisonForm() implements AboutARule {}
+    record UnreadComparisonForm() implements ReadingStopped {}
 
     /** A comparison naming the position is against values no line is drawn on here — the carrier,
      *  asked of the carrier. */
-    record UnreadComparisonDomain() implements AboutARule {}
+    record UnreadComparisonDomain() implements ReadingStopped {}
 
     /**
      * A rule is written about a value that came from the position rather than about the position.
@@ -173,7 +206,7 @@ public sealed interface BlockReason {
      * is not the difficulty. It is here at all so that such a rule is not silent: read as nothing,
      * a model whose predicate this cannot follow is one that states no rule.
      */
-    record RuleAboutADerivedValue() implements AboutARule {}
+    record RuleAboutADerivedValue() implements ReadingStopped {}
 
     /**
      * A rule naming which values the position may hold is written in a form no reader here takes
@@ -185,7 +218,7 @@ public sealed interface BlockReason {
      * different work — one wants a wider fragment of comparison forms, and one wants a reading of
      * values that follows a rule into a shape it does not enter today.
      */
-    record UnreadValueRule() implements AboutARule {}
+    record UnreadValueRule() implements ReadingStopped {}
 
     /**
      * The reading of what the position may hold never reached the rules about it.
@@ -212,7 +245,7 @@ public sealed interface BlockReason {
      * not a reader for an expression but a rule for which coordinate wins, and an author told the
      * first would go looking for a syntax this compiler handles perfectly well.
      */
-    record CompetingCoordinates() implements AboutARule {}
+    record CompetingCoordinates() implements ReadingStopped {}
 
     /**
      * The comparison was read to the end and cuts no quantity at all.
@@ -225,7 +258,21 @@ public sealed interface BlockReason {
      * not read. The two were one absence and so one word, and a rule this compiler had read from
      * end to end was reported as one whose spelling defeated it.
      */
-    record ComparisonCuttingNothing() implements AboutARule {}
+    record ComparisonCuttingNothing() implements ReadButDidNotDivideAPosition {}
+
+    /**
+     * The comparison was read to the end, the quantity it cuts was found, and the line it draws
+     * falls where that quantity never runs.
+     *
+     * <p>Three times a length is never negative, so {@code List.length(xs) <= -1} has no value
+     * either side of its line for a row to be owed at and divides the position into nothing.
+     *
+     * <p>Its own case beside {@link ComparisonCuttingNothing}, which is the answer where the
+     * quantity itself is empty. The two are opposite halves of one shape: there the rule has no
+     * quantity to cut, and here it has one and cuts outside it. Read as a rule this compiler could
+     * not take in, an author was sent after a limit that is not there.
+     */
+    record ComparisonCuttingOutsideDomain() implements ReadButDidNotDivideAPosition {}
 
     /**
      * The comparison relates two positions rather than dividing one.
@@ -235,7 +282,7 @@ public sealed interface BlockReason {
      * partition of one is not — so a line like this is settled beside the partition rather than in
      * it, and the position it names is left with no class of its own from this rule.
      */
-    record ComparisonBetweenPositions() implements AboutARule {}
+    record ComparisonBetweenPositions() implements ReadButDidNotDivideAPosition {}
 
     /**
      * What a derivation would have to be able to reach into.

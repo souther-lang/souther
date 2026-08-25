@@ -43,6 +43,12 @@ import java.util.Set;
  * because what is not known about them is not known for either. And a rule set aside answers
  * through its own reason ({@link souther.compiler.inputs.BlockReason.AboutARule#leavesShort}),
  * which for a comparison relating two positions is neither measure.
+ *
+ * <p><b>A clause's question may stand and a comparison's may not.</b> A comparison raises a question
+ * exactly where the reading of it reached a line, and that line answers it — both come off the one
+ * reading, so a comparison either yields the question and its answer together or yields neither and
+ * records what stopped it. So the way a comparison leaves a measure short is as a rule this reading
+ * set aside, and never as a question nothing answered.
  */
 public final class MeasureClosure {
 
@@ -141,15 +147,13 @@ public final class MeasureClosure {
      * is the second bookkeeping this type exists to prevent.
      *
      * @param axes    every position the reading kept, measured or not
-     * @param compared what the body's comparisons raised and what answered each
      * @param refused the rules of the model this reading set aside, each from the reader that did.
      *                Asked which measures it leaves short rather than counted: a comparison relating
      *                two positions is set aside by what it says and not by anything missing here,
      *                and it is the rule's own reason that answers
      *                ({@link souther.compiler.inputs.BlockReason.AboutARule#leavesShort})
      */
-    static Both of(List<Axis> axes, List<GuardThresholds.Guards.AtAPosition> compared,
-                   List<souther.compiler.inputs.UnreadRule> refused) {
+    static Both of(List<Axis> axes, List<souther.compiler.inputs.UnreadRule> refused) {
         Set<ClosureGap> partition = new LinkedHashSet<>();
         Set<ClosureGap> border = new LinkedHashSet<>();
         for (souther.compiler.inputs.UnreadRule rule : refused) {
@@ -183,15 +187,6 @@ public final class MeasureClosure {
             for (RuleAccounting.Unanswered each : axis.unanswered()) {
                 ClosureGap gap = new ClosureGap.QuestionUnanswered(axis.id(), each);
                 switch (each.owed().obligation().answeredBy()) {
-                    case PARTITION -> partition.add(gap);
-                    case BOUNDARY -> border.add(gap);
-                }
-            }
-        }
-        for (GuardThresholds.Guards.AtAPosition each : compared) {
-            for (RuleAccounting.Unanswered open : each.accounting().unansweredQuestions()) {
-                ClosureGap gap = new ClosureGap.ComparisonUnanswered(each.at(), open);
-                switch (open.owed().obligation().answeredBy()) {
                     case PARTITION -> partition.add(gap);
                     case BOUNDARY -> border.add(gap);
                 }

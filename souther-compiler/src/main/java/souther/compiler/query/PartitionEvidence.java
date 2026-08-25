@@ -187,6 +187,19 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
         /** What stopped it, in the words a document promises. */
         souther.compiler.partition.UndividedPosition.Reason reason();
 
+        /**
+         * Whether this is a reading that stopped, rather than one that ran to the end and left the
+         * position divided no way.
+         *
+         * <p>Both are here because both leave the position with nothing from that rule, and they
+         * are opposite sentences to whoever is told one: a form no reader takes apart is a limit of
+         * this compiler, and a rule whose quantity is empty was read from end to end and says what
+         * it says. Read off the reason word instead, a renderer would be deciding which half a word
+         * belongs to — a second place for the split to be made, and the two would disagree the day
+         * a word is added.
+         */
+        boolean readingStopped();
+
         /** A rule of the model this read and could not turn into a line. */
         record ARule(souther.compiler.inputs.UnreadRule finding) implements NotRead {
 
@@ -198,6 +211,11 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
             @Override
             public souther.compiler.partition.UndividedPosition.Reason reason() {
                 return souther.compiler.partition.ReportedReason.of(finding.why());
+            }
+
+            @Override
+            public boolean readingStopped() {
+                return finding.why() instanceof souther.compiler.inputs.BlockReason.ReadingStopped;
             }
 
             /** Which rule, which is what tells this finding from the one beside it. */
@@ -223,6 +241,13 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
             @Override
             public souther.compiler.partition.UndividedPosition.Reason reason() {
                 return souther.compiler.partition.ReportedReason.of(finding.why());
+            }
+
+            /** A walk that never arrived at the rules of a position is a reading that stopped,
+             *  whatever stopped it. */
+            @Override
+            public boolean readingStopped() {
+                return true;
             }
         }
     }

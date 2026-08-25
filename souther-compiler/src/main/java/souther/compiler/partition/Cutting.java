@@ -20,53 +20,192 @@ import souther.compiler.numeric.Towards;
  * so read no form at all. That is the shape this whole reading was written to stop, one level up
  * from where it was found.
  *
- * <p>Three readings, in this order, and the order is not a preference. The first two read carriers
- * whose values the arithmetic cannot: a date against a written date, a case of an enumeration, one
- * string against another. The third reads the arithmetic, which reaches every carrier that counts
- * and no other. So a comparison is met by whichever of them can say what it states, and all three
- * answer the same question — the canonical form decides the variant, and a reading that stops
- * earlier stops because the arithmetic has no numbers there rather than because of how the rule was
- * spelled.
+ * <p><b>The arithmetic first, and how it was written only where the arithmetic stopped.</b> The
+ * canonical form says which quantity the rule cuts; what is left to decide is whether this compiler
+ * can realize a line on the order that quantity is on. A reading of the operands is reached only
+ * where the arithmetic had no answer at all — a date against a written date, a case of an
+ * enumeration — so a spelling never settles a question the form has already settled. Tried first,
+ * it did: {@code a <= a} came back a distance between two positions while the form had already
+ * cancelled them, and the tautology was owed a row where the two hold one count.
+ *
+ * <p>Which levels the order has a place at is the order's own answer ({@link LevelSpace#canCutAt}).
+ * Asked of the carrier instead — "do these values count" — two strings, which stand no measurable
+ * distance apart and are still one above the other, were left with no line at the place they meet.
  *
  * @param of     what the rule cuts
  * @param at     where on it
  * @param claim  what the operator states about the threshold's own value
- * @param within what the rules leave the quantity itself, or null where they leave it everything.
- *               Three times a length is never negative, and a threshold outside where a quantity
- *               runs is one the rule draws no border at. Asked of the reading of the input rather
- *               than composed from what each of the form's positions runs between: a product of
- *               per-position answers cannot carry a rule relating them, so two fields a record
- *               holds at five together came to ten and a border was drawn where the model has
- *               nothing
+ * @param within what the rules leave the quantity itself. Three times a length is never negative,
+ *               and a threshold outside where a quantity runs is one the rule draws no border at.
+ *               Asked of every quantity alike, since what a quantity runs between is a question
+ *               about the quantity
  */
 record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                souther.compiler.numeric.NumericDomain.Bounds within) {
 
-    /** The line {@code comparison} draws, or null where nothing here reads one. */
-    static Cutting of(String behavior, Core.Binary comparison, InputReads reads, Symbols symbols,
-                      souther.compiler.inputs.Quantities quantities) {
-        // Read once and handed to each of the three. Each reading asks the same arithmetic a
-        // different question, and walking the comparison again per question is four to six walks of
-        // every comparison in every body and every clause.
-        AffineReading read = AffineReading.of(comparison, reads, symbols);
-        ComparedLine atAPosition = ComparedLine.of(comparison, read, reads, symbols);
-        if (atAPosition != null) {
-            return new Cutting(
-                    new BorderQuantity.OfACoordinate(AxisId.of(behavior, atAPosition.term()),
-                            atAPosition.term(), atAPosition.orders()),
-                    new Level.OnACarrier(atAPosition.orders().answered(), atAPosition.value()),
-                    claimOf(atAPosition), null);
+    /**
+     * What reading {@code comparison} as a line came to.
+     *
+     * <p>Three answers, and the two that are not a line are not one absence. A comparison whose
+     * positions cancel was read from end to end and there was no line in it; one this compiler could
+     * not take apart leaves whatever it states unknown. Told apart by a {@code null}, whoever asked
+     * had to work out which — and worked it out by reading the comparison a second time, which is
+     * how a rule read in full came to be described as one whose spelling defeated this compiler.
+     */
+    sealed interface Read {
+
+        /** The line it draws. */
+        record Cuts(Cutting cutting) implements Read {
+
+            public Cuts {
+                java.util.Objects.requireNonNull(cutting, "a comparison that cuts has a line");
+            }
         }
-        ComparedTerms apart = ComparedTerms.of(comparison, read, reads, symbols);
-        if (apart != null) {
-            return new Cutting(
-                    new BorderQuantity.Apart(behavior, apart.on(), apart.against(),
-                            apart.carriers()),
-                    new Level.ACount(apart.stepsApart()),
-                    new ComparisonClaim.Cut(apart.valueBelongsBelow(), apart.holdsAtTheLine()),
-                    null);
+
+        /** Read to the end, and the quantity it cuts is nothing. */
+        record CutsNothing() implements Read {}
+
+        /** The reading stopped, and this is what it stopped on. */
+        record Stopped(souther.compiler.inputs.BlockReason.ReadingStopped why) implements Read {
+
+            public Stopped {
+                java.util.Objects.requireNonNull(why, "a reading that stopped says why");
+            }
         }
-        return overAForm(behavior, read, reads, symbols, quantities);
+    }
+
+    /**
+     * The same, said as which of the three it is.
+     *
+     * <p>The reason a reading stopped is settled here, where it stopped, and not asked for
+     * afterwards by whoever met the absence. Worked out later, the reason came from a second walk
+     * over the comparison and answered about the shape rather than about what this reading could do
+     * with it.
+     */
+    static Read read(String behavior, Core.Binary comparison, InputReads reads, Symbols symbols,
+                     souther.compiler.inputs.Quantities quantities) {
+        AffineReading.OfAComparison canonical = AffineReading.read(comparison, reads, symbols);
+        return switch (canonical) {
+            // Nothing was missing: the form was read from end to end, and the quantity in it is
+            // empty. Unconditional, and before anything about how the comparison was spelled —
+            // `a <= a` names one position on either side and the arithmetic has already said the
+            // two are one, so a reading of the operands finding a distance there is that reading
+            // being wrong about the rule.
+            case AffineReading.OfAComparison.CutsNothing _ -> new Read.CutsNothing();
+            // The quantity is what the arithmetic says it is, and the realization is the only thing
+            // left to try. Read the other way round, a spelling that produced a line took the
+            // comparison before the canonical form was consulted at all.
+            case AffineReading.OfAComparison.Cuts cuts ->
+                    realized(behavior, cuts.read(), reads, symbols, quantities);
+            // And only here does how it was written decide anything. The arithmetic stopped, which
+            // is what a date against a written date and a case of an enumeration do: the values are
+            // ones it cannot count, and the comparison still states a line.
+            case AffineReading.OfAComparison.Stopped _ ->
+                    asWritten(behavior, comparison, canonical, reads, symbols, quantities);
+        };
+    }
+
+    /**
+     * The line the canonical quantity draws, or the reading stopping on the order it is on.
+     *
+     * <p>Three shapes and one order among them, which is the arithmetic's: one position's own
+     * values, two positions held apart, and a form over several. Nothing here reads the comparison
+     * again — what each of them is handed is the form the reading already came to.
+     */
+    private static Read realized(String behavior, AffineReading read, InputReads reads,
+                                 Symbols symbols,
+                                 souther.compiler.inputs.Quantities quantities) {
+        Cutting drawn = atAPosition(behavior, ComparedLine.fromTheForm(read, reads, symbols),
+                quantities);
+        if (drawn == null) {
+            drawn = apart(behavior, ComparedTerms.fromTheForm(read, reads, symbols), read.claim(),
+                    quantities);
+        }
+        if (drawn != null) {
+            return new Read.Cuts(drawn);
+        }
+        Cutting form = overAForm(behavior, read, reads, symbols, quantities);
+        if (form != null) {
+            return new Read.Cuts(form);
+        }
+        // The quantity was read and no line could be built on it: a position with no order to be
+        // counted on, or an order whose values this draws no line against. Its own answer and not
+        // the form's — the form is right here, and it is the carrier that stopped this.
+        return new Read.Stopped(new souther.compiler.inputs.BlockReason.UnreadComparisonDomain());
+    }
+
+    /**
+     * The line the comparison draws as it was written, where the arithmetic could not read it.
+     *
+     * <p>The two readings that reach carriers the arithmetic cannot: a date against a written date,
+     * a case of an enumeration, one string against another. Reached only from a reading that
+     * stopped, so a spelling never answers a question the canonical form has already answered.
+     */
+    private static Read asWritten(String behavior, Core.Binary comparison,
+                                  AffineReading.OfAComparison canonical, InputReads reads,
+                                  Symbols symbols,
+                                  souther.compiler.inputs.Quantities quantities) {
+        Cutting drawn = atAPosition(behavior, ComparedLine.asWritten(comparison, reads, symbols),
+                quantities);
+        if (drawn == null) {
+            drawn = apart(behavior, ComparedTerms.asWritten(comparison, reads, symbols),
+                    ComparisonClaim.of(comparison.op()), quantities);
+        }
+        if (drawn != null) {
+            return new Read.Cuts(drawn);
+        }
+        return new Read.Stopped(
+                GuardThresholds.whyItStopped(comparison, canonical, reads, symbols));
+    }
+
+    /** One position's own values, cut where the reading found the line, or null where that reading
+     *  found none and where the order has no place for the one it found. */
+    private static Cutting atAPosition(String behavior, ComparedLine drawn,
+                                       souther.compiler.inputs.Quantities quantities) {
+        if (drawn == null) {
+            return null;
+        }
+        return made(new BorderQuantity.OfACoordinate(AxisId.of(behavior, drawn.term()),
+                        drawn.term(), drawn.orders()),
+                new Level.OnACarrier(drawn.orders().answered(), drawn.value()), claimOf(drawn),
+                quantities);
+    }
+
+    /** How far two positions stand apart, cut where the reading found the line, or null on the same
+     *  two counts. */
+    private static Cutting apart(String behavior, ComparedTerms drawn, ComparisonClaim claim,
+                                 souther.compiler.inputs.Quantities quantities) {
+        if (drawn == null) {
+            return null;
+        }
+        return made(new BorderQuantity.Apart(behavior, drawn.on(), drawn.against(),
+                        drawn.carriers()),
+                new Level.ACount(drawn.stepsApart()), claim, quantities);
+    }
+
+    /**
+     * One line, with what the rules leave the quantity it is on.
+     *
+     * <p>Asked of every quantity and not of the one shape that used to ask. What a quantity runs
+     * between is a question about the quantity, which {@link #direction} answers for all three
+     * alike; asked only where the quantity was a form, a rule cutting a length at a negative drew a
+     * border where a length never goes, and a row was owed at a value no row can carry.
+     *
+     * <p>Asked of the reading of the input rather than composed from what each of the form's
+     * positions runs between: a product of per-position answers cannot carry a rule relating them,
+     * so two fields a record holds at five together came to ten and a border was drawn where the
+     * model has nothing.
+     */
+    private static Cutting made(BorderQuantity of, Level at, ComparisonClaim claim,
+                                souther.compiler.inputs.Quantities quantities) {
+        // Whether the order has a place at that level for a line to be, which is the order's answer
+        // and not the carrier's. An order whose only number is where two positions meet has one
+        // place and no others; every order that counts is parted anywhere, whether or not it takes
+        // the level itself.
+        if (!of.levels().canCutAt(at)) {
+            return null;
+        }
+        return new Cutting(of, at, claim, quantities.runsBetween(direction(of)));
     }
 
     /**
@@ -79,11 +218,17 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * <p>Each position on the order it is written back on, which the reading answers per position.
      * Only where every one of them has an order with counts under it: a position with no number is
      * one a sum has nothing to add.
+     *
+     * <p><b>Whatever the operator states, and not orders alone.</b> {@code 2 * a == 8} names four
+     * and {@code a + b == 10} names the place their sum reaches ten, and both are quantities this
+     * reads. Refused here for not ordering its values, an equality over a form was reported as a
+     * rule written in a form this compiler cannot take apart — a sentence about this compiler, and
+     * the form is right here.
      */
     private static Cutting overAForm(String behavior, AffineReading read, InputReads reads,
                                      Symbols symbols,
                                      souther.compiler.inputs.Quantities quantities) {
-        if (read == null || !read.orders()) {
+        if (read == null || read.claim() instanceof ComparisonClaim.Nothing) {
             return null;
         }
         java.util.Map<NumericTerm, souther.compiler.inputs.TermOrders> on =
@@ -91,9 +236,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         if (on == null) {
             return null;
         }
-        return new Cutting(new BorderQuantity.OverAForm(behavior, read.form(), on),
-                new Level.ACount(new Count(read.cut())), read.claim(),
-                quantities.runsBetween(read.form()));
+        return made(new BorderQuantity.OverAForm(behavior, read.form(), on),
+                new Level.ACount(new Count(read.cut())), read.claim(), quantities);
     }
 
     /** What the operator of a line at a position states, which the reading of it already answered
@@ -210,6 +354,44 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         Seam seam = seam();
         Level side = valueBelongsBelow() ? seam.below() : seam.above();
         return side instanceof Level.OnACarrier on ? on.at() : null;
+    }
+
+    /**
+     * Whether the quantity takes the level this rule names.
+     *
+     * <p>Asked of the quantity, which is what knows. {@code 2 * a == 8} names four and takes it;
+     * {@code 2 * a == 9} takes the even numbers and nine is not one, so it names no value the
+     * quantity holds; {@code a + b == 10} takes ten and {@code 2 * a + 2 * b == 9} does not. One
+     * question, and the same answer whether the quantity is one position's own values or a form
+     * over several.
+     *
+     * <p>Read off whether a value of a <em>position</em> could be written instead, this was the
+     * wrong question wearing the right answer: a form over several positions has no value of a
+     * position at all, so every rule singling one out on such a quantity came back naming nothing —
+     * which is true of {@code 2 * a + 2 * b == 9} and false of {@code a + b == 10}.
+     */
+    boolean takesTheValueItNames() {
+        return of.levels().attainable(at);
+    }
+
+    /**
+     * The positions the canonical quantity is over, as a reader is sent to them.
+     *
+     * <p>What a rule that was read is filed at. The quantity is what the rule is about, so a
+     * position the arithmetic cancelled is not one it says anything about: {@code a + b - b + c <=
+     * 10} is {@code a + c <= 10}, and a note filed at {@code b} would say the rule relates a
+     * position it does not mention.
+     */
+    java.util.List<souther.compiler.inputs.FilingCoordinate> over() {
+        // By the position's own name, which is the one thing about a form that does not depend on
+        // how it was written — the same order {@link AffineReading#ordered} puts a form's
+        // coefficients in. Read off the map instead, the entries come back in an order salted once
+        // per run, and a report is a document compared against the one written last time.
+        return AffineReading.ordered(direction(of)).stream()
+                .map(java.util.Map.Entry::getKey)
+                .<souther.compiler.inputs.FilingCoordinate>map(
+                        souther.compiler.inputs.FilingCoordinate::of)
+                .distinct().toList();
     }
 
     /** Whether the rule singles a value out rather than ordering the values around it. */

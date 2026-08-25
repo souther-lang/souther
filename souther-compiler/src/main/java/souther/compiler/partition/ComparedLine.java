@@ -51,8 +51,7 @@ record ComparedLine(NumericTerm term, Place value, souther.compiler.inputs.TermO
      * positions hold dates (#1018). One question with one place to ask it is what keeps that from
      * depending on which reading a rule happens to fall into.
      */
-    static ComparedLine of(Core.Binary comparison, AffineReading read, InputReads reads,
-                           Symbols symbols) {
+    static ComparedLine asWritten(Core.Binary comparison, InputReads reads, Symbols symbols) {
         BinOp op = comparison.op();
         GuardThresholds.Named named = GuardThresholds.namedBy(comparison.left(), reads, symbols);
         Place value = named == null ? null : named.order().literalOf(comparison.right(), symbols);
@@ -64,10 +63,10 @@ record ComparedLine(NumericTerm term, Place value, souther.compiler.inputs.TermO
         NumericTerm term = named == null ? null : named.term();
         souther.compiler.inputs.TermOrders orders = named == null ? null : named.orders();
         if (term == null || value == null) {
-            // Nothing here is a position against a value the carrier writes. It may still be a
-            // statement about one position: `a + 1 <= 10` and `a <= b - b + 9` are both `a <= 9`,
-            // and which quantity a rule cuts is the arithmetic's answer rather than the spelling's.
-            return fromTheForm(read, reads, symbols);
+            // Nothing here is a position against a value this carrier writes, and there is nothing
+            // else for a spelling to try: which quantity a rule cuts is the arithmetic's answer,
+            // and this reading is reached only where the arithmetic had none.
+            return null;
         }
         return switch (ComparisonClaim.of(op)) {
             case ComparisonClaim.Cut cut -> new ComparedLine(term, value, orders,
@@ -88,8 +87,8 @@ record ComparedLine(NumericTerm term, Place value, souther.compiler.inputs.TermO
      * nine is not one of them, and reading it as a line on {@code a} would put a row at four and a
      * half. That is a quantity of its own ({@link BorderQuantity.OverAForm}) and is read elsewhere.
      */
-    private static ComparedLine fromTheForm(AffineReading read, InputReads reads,
-                                            Symbols symbols) {
+    static ComparedLine fromTheForm(AffineReading read, InputReads reads,
+                                    Symbols symbols) {
         if (read == null) {
             return null;
         }

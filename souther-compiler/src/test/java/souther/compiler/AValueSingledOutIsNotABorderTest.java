@@ -2,36 +2,32 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.check.CoverageObligation;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.report.AdequacyReport;
 
-import java.util.LinkedHashSet;
-import java.util.Set;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * A value a rule singles out is not a border, and is not asked about as one.
+ * A value a rule singles out is not a border, and no border is built on it.
  *
  * <p>A border has an order across it: rows are owed either side, and each side has a role a document
  * names ({@code ON} and {@code OFF}). {@code x == c} and {@code x /= c} place the same thing and it
  * is not that — what they tell apart is {@code c} from every other value, and the values either side
- * of {@code c} are one class. {@code ComparisonClaim.Singled} says as much: reading it as a place to
- * cut puts an order between the two sides that the model never drew.
+ * of {@code c} are one class. Reading it as a place to cut puts an order between the two sides that
+ * the model never drew.
  *
- * <p>So the question is its own. Raising {@code BOUNDARY} for it would bring the order the rule never
- * drew back in through the words a reader is given, which is the same fabrication one level up from
- * reading an equality as a cut.
- *
- * <p>Only a comparison nothing could read shows this: one the reading takes in leaves no question
- * standing, so what is asserted below is what a rule asks when nothing has answered.
+ * <p><b>What the comparison is about is the canonical comparison's answer.</b> Positions named on
+ * either side establish nothing on their own: {@code r.a <= r.a + 1} names one twice and cancels,
+ * and {@code r.a <= r.other * r.other} names two and stops the reading before anything is known
+ * about what it divides. Both were read as orders between two things that move with the row, and
+ * both had a border collected for them.
  */
 class AValueSingledOutIsNotABorderTest {
 
-    /** The condition, with a bound the measure reads no line out of, so the questions survive. */
     private static final String SOURCE = """
                 module m
 
@@ -46,107 +42,50 @@ class AValueSingledOutIsNotABorderTest {
                     | "one" : (R { cost = 1, a = 1, other = 2 }) -> B
                 """;
 
-    /** The condition, with a bound the measure reads no line out of, so the questions survive. */
-    private static Set<CoverageObligation> raisedBy(String condition) {
-        Compilation compilation = Compilation.ofSource(
-                SOURCE.formatted(condition), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        PartitionEvidence partition = AdequacyReport.of(compilation)
-                .modules().get(0).behaviors().get(0).partition();
-        Set<CoverageObligation> out = new LinkedHashSet<>();
-        partition.unanswered().forEach(each -> out.add(each.question()));
-        return out;
-    }
-
-    /** The questions themselves, for a row that is about what they are about. */
-    private static java.util.List<PartitionEvidence.Unanswered> raisedWith(String condition) {
+    private static PartitionEvidence measured(String condition) {
         Compilation compilation = Compilation.ofSource(SOURCE.formatted(condition), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        return AdequacyReport.of(compilation)
-                .modules().get(0).behaviors().get(0).partition().unanswered();
+        return AdequacyReport.of(compilation).modules().get(0).behaviors().get(0).partition();
     }
 
-    /** What the questions of that condition are about, as a report names them. */
-    private static Set<String> subjectsOf(String condition) {
-        return raisedWith(condition).stream().map(each -> each.subject().toString())
-                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+    /** The classes the rules divide the behavior's positions into, each named as a document names
+     *  it. */
+    private static List<String> classes(String condition) {
+        return measured(condition).axes().stream()
+                .flatMap(each -> each.classes().stream()).toList();
     }
 
-    /** An order across the value it names: a border, and the classes either side of it. */
+    /** How many borders the rules draw, which is what a rule placing no order across a value does
+     *  not add to. */
+    private static int borders(String condition) {
+        return measured(condition).boundaries().size();
+    }
+
+    /** What the rules left unread, as the position and the reason. */
+    private static List<String> notRead(String condition) {
+        return measured(condition).notRead().stream()
+                .map(each -> each.at() + ": " + each.reason()).toList();
+    }
+
+    /** An order across the value it names: the classes either side of it, and a border between
+     *  them. */
     @Test
-    void anOrderingComparisonAsksAboutABorder() {
-        assertEquals(Set.of(CoverageObligation.BOUNDARY, CoverageObligation.PARTITION),
-                raisedBy("r.cost <= Int.min(20, 30)"));
-    }
-
-    /** And an equality asks about the value it singles out, beside the same classes. */
-    @Test
-    void anEqualityAsksAboutTheValueItSinglesOut() {
-        assertEquals(Set.of(CoverageObligation.SINGLETON, CoverageObligation.PARTITION),
-                raisedBy("r.cost == Int.min(20, 30)"));
+    void anOrderingComparisonDividesThePositionAndDrawsABorder() {
+        assertEquals(List.of("r.cost/x <= 20", "r.cost/20 < x"), classes("r.cost <= 20"));
+        assertEquals(1, borders("r.cost <= 20"));
     }
 
     /**
-     * Between two positions it singles nothing out, whatever the operator is.
+     * And an equality divides the position into the value and everything else.
      *
-     * <p>What a comparison places is the operator's, and what it places it about is not: {@code x ==
-     * 10} tells one value from every other and {@code a == b} says where one position stands against
-     * another. Read off the operator alone, the second raised a question about a value singled out at
-     * {@code a} that no rule wrote — and an equality between two positions is not even a line, since
-     * it puts the whole of one arm on the place and that arm is a row the branch measure already
-     * asks for.
+     * <p>One class of its own and one class of the rest, which is a partition and not an order: the
+     * values either side of twenty are the same class, so nothing is owed away from a line between
+     * them.
      */
     @Test
-    void anEqualityBetweenTwoPositionsSinglesNothingOut() {
-        assertEquals(Set.of(), raisedBy("r.a == r.other"),
-                "a rule about a pair, and no question about one of them");
-        assertEquals(Set.of(), raisedBy("r.a /= r.other"));
-    }
-
-    /**
-     * Both sides moving with the row is a relation, and an order across it is still a line.
-     *
-     * <p>What decides which it is is not how many positions are named: {@code a <= a + 1} names one,
-     * twice, and is a rule about how a position stands against itself. Counted by distinct names,
-     * that came back as a bound on {@code a} — a question about where {@code a} stops that no rule
-     * wrote.
-     *
-     * <p>The line is where the two sides hold one count, so it is on neither of them and divides
-     * neither: a border, and no classes. Raised whether or not this compiler can find that place —
-     * {@code a <= b} and {@code a <= b * b} relate two positions alike (ADR-0090), and only
-     * one of them is a place this can name. Which is the whole of the difference between a question
-     * and an answer.
-     */
-    @Test
-    void anOrderBetweenTwoThingsThatMoveIsABorderAndNoClasses() {
-        assertEquals(Set.of(CoverageObligation.BOUNDARY), raisedBy("r.a <= Int.multiply(r.other, r.other)"));
-        assertEquals(Set.of(CoverageObligation.BOUNDARY), raisedBy("r.a <= r.a + 1"),
-                "one name twice is still both sides moving");
-    }
-
-    /**
-     * And the place it names is the comparison that drew it, which tells two of them apart.
-     *
-     * <p>Writing the place out takes both sides in a vocabulary this compiler has, and it has none
-     * for {@code r.other * r.other}: the best it could print was {@code r.a = r.other}, a place
-     * that rule never stopped, and the two bounds came out as one subject. Named by the comparison,
-     * the subject is exact — which is only true while the comparison travels as itself, so this asks
-     * what it is and not what it is called.
-     */
-    @Test
-    void theBorderOfARelationIsNamedByTheComparisonThatDrewIt() {
-        java.util.List<souther.compiler.diag.Citation> drawn =
-                raisedWith("r.a <= Int.multiply(r.other, r.other)\n                        && r.a <= Int.multiply(r.other, r.cost)").stream()
-                        .map(PartitionEvidence.Unanswered::subject)
-                        .map(souther.compiler.check.Owed.Subject.OfComparison.class::cast)
-                        .map(souther.compiler.check.Owed.Subject.OfComparison::at)
-                        .toList();
-
-        assertEquals(2, drawn.size(), () -> "one line each: " + drawn);
-        assertEquals(2, Set.copyOf(drawn).size(),
-                () -> "and two places, not one sentence twice: " + drawn);
+    void anEqualityPutsTheValueInAClassOfItsOwn() {
+        assertEquals(List.of("r.cost/= 20", "r.cost//= 20"), classes("r.cost == 20"));
     }
 
     /**
@@ -158,7 +97,62 @@ class AValueSingledOutIsNotABorderTest {
      */
     @Test
     void andSoDoesADisequality() {
-        assertEquals(Set.of(CoverageObligation.SINGLETON, CoverageObligation.PARTITION),
-                raisedBy("r.cost /= Int.min(20, 30)"));
+        assertEquals(classes("r.cost == 20"), classes("r.cost /= 20"));
+    }
+
+    /**
+     * An order the canonical comparison reads as one over two positions is a border and no classes.
+     *
+     * <p>The line is where the two sides hold one count, so it is on neither of them and divides
+     * neither.
+     */
+    @Test
+    void anOrderCanonicallyRelatingTwoPositionsIsABorderAndNoClasses() {
+        assertEquals(List.of(), classes("r.a <= r.other"));
+        assertEquals(1, borders("r.a <= r.other"));
+    }
+
+    /**
+     * A comparison whose reading stopped relates nothing yet, so no border is built from how it was
+     * spelled.
+     *
+     * <p>Both positions are named, as they are for a relation that was read. What is not known is
+     * whether the rule divides one of them or relates the pair — the product is where the reading
+     * stopped — so a border collected here would be one the spelling asked for.
+     */
+    @Test
+    void anOrderTheReadingStoppedOnRelatesNothingYet() {
+        assertEquals(List.of(), classes("r.a <= Int.multiply(r.other, r.other)"));
+        assertEquals(0, borders("r.a <= Int.multiply(r.other, r.other)"));
+        assertEquals(List.of("r.a: UNSUPPORTED_SYNTAX", "r.other: UNSUPPORTED_SYNTAX"),
+                notRead("r.a <= Int.multiply(r.other, r.other)"));
+    }
+
+    /**
+     * And one whose positions cancel relates nothing at all.
+     *
+     * <p>{@code r.a <= r.a + 1} puts a position on either side and is {@code 0 <= 1}: every row
+     * satisfies it, and there is no second position for a class to be about. Counted by which sides
+     * move with the row, it came back a relation and owed a row where two positions hold one count.
+     */
+    @Test
+    void anOrderWhosePositionsCancelRelatesNothing() {
+        assertEquals(List.of(), classes("r.a <= r.a + 1"));
+        assertEquals(0, borders("r.a <= r.a + 1"));
+        assertEquals(List.of("r.a: RULE_CUTS_NOTHING"), notRead("r.a <= r.a + 1"));
+    }
+
+    /**
+     * An equality over two positions singles one out of neither, so nothing is drawn.
+     *
+     * <p>It puts the whole of one arm on the place the two meet, and that arm is a row the branch
+     * measure already asks for. Read off the operator alone, {@code a == b} raised a question about
+     * a value singled out at {@code a} that no rule wrote.
+     */
+    @Test
+    void anEqualityBetweenTwoPositionsSinglesNothingOut() {
+        assertEquals(List.of(), classes("r.a == r.other"));
+        assertEquals(0, borders("r.a == r.other"));
+        assertEquals(0, borders("r.a /= r.other"));
     }
 }

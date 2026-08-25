@@ -2,25 +2,27 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.check.CoverageObligation;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.report.AdequacyReport;
+
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * A line on a count is about the count, wherever the rule that draws it is written.
  *
- * <p>{@code Owed.Subject} carries the count apart from the position on purpose, and says so: which
- * of the two a question is about is settled where the question is raised and not by whatever a
- * reader downstream has to hand. That is how a line about a string's length came to be printed as a
- * fact about which strings may stand there.
+ * <p>The count is carried apart from the position on purpose, and which of the two a reading was
+ * after is settled where the reading was, not by whatever a reader downstream has to hand. That is
+ * how a line about a string's length came to be printed as a fact about which strings may stand
+ * there.
  *
- * <p>Only a question nothing answered shows it. A rule this compiler can read leaves no question, so
- * a comparison whose bound cannot be folded is what these are written on — the subject is then the
- * one thing about the question a report has left to get right.
+ * <p>A comparison whose bound cannot be folded is what these are written on, because a rule this
+ * compiler reads leaves nothing standing at all. What such a rule would have divided is the part
+ * that was not read — so nothing is raised about it — and the number it was read for is the one
+ * thing about it a report has left to get right.
  */
 class AQuestionAboutACountIsNotOneAboutTheValueItCountsTest {
 
@@ -37,13 +39,16 @@ class AQuestionAboutACountIsNotOneAboutTheValueItCountsTest {
         throw new AssertionError("no behavior called " + behavior);
     }
 
-    /** The number the line question falls on, which is the only one both producers raise. */
-    private static String lineSubjectIn(PartitionEvidence partition) {
-        return partition.unanswered().stream()
-                .filter(each -> each.question() == CoverageObligation.BOUNDARY)
-                .map(PartitionEvidence.Unanswered::measure)
-                .findFirst().orElseThrow(() -> new AssertionError(
-                        "no line was asked about: " + partition.unanswered()));
+    /**
+     * The number the rule was read for, which is the only one both producers name.
+     *
+     * <p>Off what the reading left rather than off a question it raised. A comparison this could
+     * not read raises nothing — what it would have divided is the part that was not read — and
+     * which number of the position it was after is still known and still the whole point: a bound
+     * on the length is not a bound on which strings may stand there.
+     */
+    private static List<String> readFor(PartitionEvidence partition) {
+        return partition.notRead().stream().map(PartitionEvidence.NotRead::at).toList();
     }
 
     /** A guard on a length, with a bound this cannot fold. */
@@ -62,9 +67,9 @@ class AQuestionAboutACountIsNotOneAboutTheValueItCountsTest {
                     | "one" : (Code { text = "a" }) -> 2
                 """, "price");
 
-        assertEquals("String.length(c.text)", lineSubjectIn(partition),
-                () -> "the line is on the count and the values are the string's: "
-                        + partition.unanswered());
+        assertEquals(List.of("String.length(c.text)"), readFor(partition),
+                () -> "the rule was read for the count and not for the string's own values: "
+                        + partition.notRead());
     }
 
     /** And a clause of an `ensures` on the same shape, which is the other producer. */
@@ -86,8 +91,8 @@ class AQuestionAboutACountIsNotOneAboutTheValueItCountsTest {
                     | "one" : (Code { text = "a" }) -> TooShort
                 """, "price");
 
-        assertEquals("String.length(c.text)", lineSubjectIn(partition),
-                () -> "read the same way wherever the rule is written: " + partition.unanswered());
+        assertEquals(List.of("String.length(c.text)"), readFor(partition),
+                () -> "read the same way wherever the rule is written: " + partition.notRead());
     }
 
     /**

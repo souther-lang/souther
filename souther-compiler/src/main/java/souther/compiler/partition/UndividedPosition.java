@@ -158,6 +158,17 @@ public record UndividedPosition(TermPath at, Why why) {
          */
         RULE_CUTS_NOTHING,
         /**
+         * A rule naming this position was read to the end and draws its line where the quantity it
+         * cuts never runs: three times a length is never negative, and a rule comparing one against
+         * a negative has no value either side of its line.
+         *
+         * <p>Its own word beside {@link #RULE_CUTS_NOTHING}, which is what a rule with no quantity
+         * to cut gets. Both were read completely and neither divides the position, and what a
+         * reader may go on to do about them differs: one rule states something about the position
+         * that no row can satisfy, and the other states nothing about it at all.
+         */
+        RULE_CUTS_OUTSIDE_WHAT_THE_QUANTITY_HOLDS,
+        /**
          * The position holds its values inside something this does not reach into — the elements of
          * a collection, what an optional holds, what a map holds. One word for all of them: which
          * reaching is missing is a fact about this compiler, and the model reads the same either

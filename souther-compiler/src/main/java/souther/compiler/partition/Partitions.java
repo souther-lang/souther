@@ -73,12 +73,10 @@ public final class Partitions {
                                List<souther.compiler.inputs.PositionValuesNotSeparated> notSeparated,
                                List<Border> between,
                                java.util.Map<AxisId, List<Border>> along,
-                               List<GuardThresholds.Guards.AtAPosition> compared,
                                ReachingCuts reaching,
                                MeasureClosure.OfThePartition partitionClosure,
                                MeasureClosure.OfTheBorder borderClosure) {
         public Partitioning {
-            compared = List.copyOf(compared);
             axes = List.copyOf(axes);
             uncertain = java.util.Set.copyOf(uncertain);
             undivided = List.copyOf(undivided);
@@ -210,10 +208,10 @@ public final class Partitions {
         for (Axis axis : kept) {
             keep(new ArrayList<>(), measured, axis, null, unread);
         }
-        MeasureClosure.Both closed = MeasureClosure.of(kept, List.of(), unread);
+        MeasureClosure.Both closed = MeasureClosure.of(kept, unread);
         return new Partitioning(kept, uncertain, undividedIn(measured),
                 List.copyOf(unread), blockedIn(measured), List.copyOf(notSeparated),
-                List.of(), linesAlong(kept, quantities, symbols), List.of(), ReachingCuts.NONE,
+                List.of(), linesAlong(kept, quantities, symbols), ReachingCuts.NONE,
                 closed.partition(), closed.border());
     }
 
@@ -240,7 +238,21 @@ public final class Partitions {
         // Whether this phase left anything at the position unread, and not which limit it was.
         // A limit belongs to the rule it stopped, and the findings carry it there; taken as the
         // position's, the first rule of however many were stopped alike was the one a report named.
-        boolean anyUnread = rules.stream().anyMatch(one -> one.at().equals(axis.path()));
+        //
+        // The number and not the path. A `String` is measured more than one way, and an axis is one
+        // of them: a rule about a length that nothing could read leaves the length blocked and says
+        // nothing about the string's own values. Matched by path alone, either axis answered for
+        // both.
+        //
+        // A finding the reading did not name a number for is at the position, and answers for every
+        // axis on it: what number it was about is what was not read, so an axis cannot be excused by
+        // it naming another.
+        boolean anyUnread = rules.stream().anyMatch(one -> switch (one.at()) {
+            case souther.compiler.inputs.FilingCoordinate.OfTerm it ->
+                    it.term().equals(axis.term());
+            case souther.compiler.inputs.FilingCoordinate.AtPosition it ->
+                    it.path().equals(axis.path());
+        });
         measured.add(new Measured(axis, anyUnread ? new BodyCutInspection.Blocked()
                 : new BodyCutInspection.Exhausted()));
     }
@@ -357,7 +369,7 @@ public final class Partitions {
                                               List<GuardThresholds.Guards.Singled> singled,
                                               List<LineDrawn> between) {
         return withThresholds(base, reading, thresholds, symbols, policy, unread, singled, between,
-                souther.compiler.check.PathReachability.Answers.NONE, List.of());
+                souther.compiler.check.PathReachability.Answers.NONE);
     }
 
     /**
@@ -382,10 +394,9 @@ public final class Partitions {
                                               List<GuardThresholds.Guards.Singled> singled,
                                               List<LineDrawn> between,
                                               souther.compiler.check.PathReachability.Answers
-                                                      arrives,
-                                              List<GuardThresholds.Guards.AtAPosition> compared) {
-        return withThresholds(base, reading, thresholds, symbols, policy, unread, singled, between, arrives,
-                compared, ReachingCuts.NONE);
+                                                      arrives) {
+        return withThresholds(base, reading, thresholds, symbols, policy, unread, singled, between,
+                arrives, ReachingCuts.NONE);
     }
 
     /**
@@ -405,7 +416,6 @@ public final class Partitions {
                                               List<LineDrawn> between,
                                               souther.compiler.check.PathReachability.Answers
                                                       arrives,
-                                              List<GuardThresholds.Guards.AtAPosition> compared,
                                               ReachingCuts reaching) {
         // Both producers of one kind of evidence. What a body compared and what a type's own rules
         // bound are read by different readers and answer the same question, so a position either of
@@ -503,7 +513,7 @@ public final class Partitions {
                     reachable.stream().map(Threshold::parts).toList()),
                     reachable.isEmpty() ? null : new BodyCutInspection.Evidence(), rules);
         }
-        MeasureClosure.Both closed = MeasureClosure.of(out, compared, rules);
+        MeasureClosure.Both closed = MeasureClosure.of(out, rules);
         return new Partitioning(out, base.uncertain(),
                 undividedIn(measured), List.copyOf(rules), blockedIn(measured),
                 // Carried across: what a reading could not hold together is a fact about the
@@ -517,7 +527,7 @@ public final class Partitions {
                 // where the position has no value beside it, its border over here — and the two
                 // sides of that border are runs of what all of them leave.
                 base.notSeparated(), Border.allOf(between, partedByQuantity(out)),
-                linesAlong(out, reading, symbols), compared,
+                linesAlong(out, reading, symbols),
                 reaching, closed.partition(), closed.border());
     }
 

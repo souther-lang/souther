@@ -2,7 +2,6 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.check.CoverageObligation;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.query.Adequacy;
@@ -11,7 +10,6 @@ import souther.compiler.query.PartitionEvidence;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.List;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -53,26 +51,38 @@ class AGuardsQuestionIsCitedByWhereItIsWrittenTest {
         return AdequacyReport.of(compilation).modules().get(0).behaviors().get(0).partition();
     }
 
-    /** The comparison raises both questions its line raises, and nothing answers either. */
-    @Test
-    void aComparisonNothingCouldReadLeavesBothOfItsQuestionsStanding() {
-        List<PartitionEvidence.Unanswered> standing = partition().unanswered().stream()
+    /** The findings this reading left that a reader is sent to a place for. */
+    private static List<PartitionEvidence.NotRead.ARule> writtenComparisons() {
+        return partition().notRead().stream()
+                .filter(PartitionEvidence.NotRead.ARule.class::isInstance)
+                .map(PartitionEvidence.NotRead.ARule.class::cast)
                 .filter(each -> each.cited() instanceof RuleCitation.WrittenAt)
                 .toList();
+    }
 
-        assertEquals(Set.of(CoverageObligation.BOUNDARY, CoverageObligation.PARTITION),
-                standing.stream().map(PartitionEvidence.Unanswered::question)
-                        .collect(java.util.stream.Collectors.toSet()),
-                () -> "one line, two questions: " + standing);
+    /**
+     * The comparison this compiler could not read is reported, and it is one finding.
+     *
+     * <p>What such a rule divides is the part that was not read, so it raises no question — and it
+     * is still a rule the author wrote about a position, which is what a report has to say. Said as
+     * nothing, the position came back as one the model divides no way, two tokens from the
+     * comparison about it.
+     */
+    @Test
+    void aComparisonNothingCouldReadIsStillReportedAtThePositionItIsAbout() {
+        List<PartitionEvidence.NotRead.ARule> said = writtenComparisons();
+
+        assertEquals(List.of("length"),
+                said.stream().map(PartitionEvidence.NotRead::at).toList(),
+                () -> "one finding, at the position's own values, which is what the rule bounds: "
+                        + said);
     }
 
     /** And it is cited by where the author wrote it, not by a name it does not have and not by
      *  the construct standing round it. */
     @Test
     void itIsCitedByThePlaceAndNamedByNothing() {
-        PartitionEvidence.Unanswered one = partition().unanswered().stream()
-                .filter(each -> each.question() == CoverageObligation.BOUNDARY)
-                .findFirst().orElseThrow();
+        PartitionEvidence.NotRead.ARule one = writtenComparisons().getFirst();
 
         RuleCitation.WrittenAt written =
                 assertInstanceOf(RuleCitation.WrittenAt.class, one.cited());

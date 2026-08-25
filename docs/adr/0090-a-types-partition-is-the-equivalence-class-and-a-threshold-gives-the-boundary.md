@@ -11,7 +11,10 @@ declaration it is written on. Revised again for #868: a rule left unread is a ru
 values stop, and is answered per rule rather than per position. Revised again for #870: a border is
 what owes the four coverage items of domain testing, and a point it owes none of says which of three
 things settled that. Revised again for #907: whether a range is the whole of what the rules leave a
-position is settled by a certificate, and having none of them is not the range being wider.
+position is settled by a certificate, and having none of them is not the range being wider. Revised
+again for #1029: whether a comparison divides one position, relates several, or says nothing is read
+from one canonical comparison, and the operands as written do not establish its subject on their
+own.
 
 ## Context
 
@@ -289,18 +292,21 @@ rule leaves open is which values stand at the position, which is another reading
 answered where that reading gives up.
 
 Which limit stopped a comparison is one answer for both producers and not a classification each of
-them makes. A relation asks for a class about two positions, a carrier nothing orders asks for that
-order, and what is left is a form this does not take apart — and whether a comparison is a relation
-is asked of what its sides *name*, however deeply. `x < y + 1` relates two positions as surely as
-`x < y` does. Read off whether a side *is* a position, the two producers gave one shape two
-different answers the moment they classified it apart.
+them makes. A relation asks for a class about several positions, a carrier nothing orders asks for
+that order, and what is left is a form this does not take apart.
 
-Two positions and not a position on each side. `x < x + 1` puts one on either side of the
-comparison and names one position, so there is no second one for a class to be about: what a reader
-would have to be given is a reading of the form. Asked as "does each side name something", both
-producers sent an author looking for a position the model never wrote — which is the distinction
-`Relates` already draws for the readings that turn a clause into values, held here too because it
-is the same question about the same shape.
+**And whether a comparison is a relation is the canonical comparison's answer, not the operands'.**
+`x < y + 1` relates two positions as surely as `x < y` does, and it does so because the arithmetic
+reads it as `x - y < 1` — a quantity over both of them. Positions named on either side establish
+nothing on their own: `x < x + 1` names one position twice and cancels to `0 < 1`, which relates
+nothing and states that every row satisfies it; `x < y * y` names two and stops the reading before
+anything is known about what it divides. A comparison whose reading stops has no subject yet, so no
+boundary and no partition is inferred from how it was spelled — what is recorded is that the reading
+stopped, and which measures are thereby short of something is that reason's to say.
+
+Read the other way round, the subject came off the operands while the line came off the canonical
+form, and one rule was measured by one reading and reported by the other: a border was drawn at a
+position nothing was owed about, and a question was raised about a place its rule never stopped.
 
 And it is asked per rule. A position carries more than one statement, so a line read at it says
 nothing about the rule beside it. Held as what a position is left with when nothing divides it, a

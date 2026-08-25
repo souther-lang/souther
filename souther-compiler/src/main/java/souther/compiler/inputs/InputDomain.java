@@ -556,7 +556,7 @@ public final class InputDomain {
         // could name the position and nothing else, which is what it is for.
         List<UnreadRule> competing = List.of();
         if (undecidable(ofType, valueOfType, stated, taken, carried)) {
-            competing = competingCoordinates(stated, path);
+            competing = competingCoordinates(stated, path, type, symbols);
             stated = List.of();
         }
         boolean bySize = measuredHere(ofType, valueOfType, stated, taken);
@@ -588,7 +588,7 @@ public final class InputDomain {
         // own type draws a line, because a clause relating two fields is not a partition of one.
         NumericDomain.Bounds admissible = nothingExists ? null
                 : TypeBounds.admissible(own, projected, term);
-        List<UnreadRule> unread = unreadRulesAt(placed, path, competing);
+        List<UnreadRule> unread = unreadRulesAt(placed, path, type, symbols, competing);
 
         ReadingResult reading = crossed(declared, view, admissible, admitted, symbols, unread,
                 nothingExists, type);
@@ -692,17 +692,61 @@ public final class InputDomain {
      * what the key settles.
      */
     private static List<UnreadRule> competingCoordinates(List<FieldDomains.Placed> stated,
-                                                         TermPath path) {
+                                                         TermPath path, Type type,
+                                                         Symbols symbols) {
         List<UnreadRule> out = new ArrayList<>();
         for (FieldDomains.Placed each : stated) {
             UnreadRule said = new UnreadRule(each.from(),
-                    souther.compiler.check.RuleCitation.named(each.from()), path,
+                    souther.compiler.check.RuleCitation.named(each.from()),
+                    // Each rule at the coordinate that rule is about, which is what makes the two
+                    // two. What is undecided is which of them the position is measured at, and that
+                    // is a fact about the position rather than about either rule — this reading has
+                    // chosen no term for the position, and each rule chose one for itself.
+                    filedAt(path, each.by(), type, symbols),
                     new BlockReason.CompetingCoordinates());
             if (out.stream().noneMatch(had -> had.sameAs(said))) {
                 out.add(said);
             }
         }
         return List.copyOf(out);
+    }
+
+    /**
+     * The number one rule of a declaration is about, as a finding names it.
+     *
+     * <p><b>The rule's own answer and not this reading's.</b> Which number a position is measured
+     * at and which number a rule is about are two questions, and they coincide only while a
+     * position has at most one number taken of it. Answered with the term this reading chose for
+     * the position, a rule about one operation's number would be filed at another's the day a
+     * second is taken of the same place — which is the identity this coordinate exists to keep.
+     *
+     * <p>The operation comes from the clause's reading, which recorded it against the count, and
+     * the path from this one. Neither can name the term alone: a path is held there as a spelling,
+     * and one parsed back out of a spelling is a path this compiler made up.
+     *
+     * <p>No falling back to the position. A rule with an operation beside it is a rule about that
+     * operation's number, so a term that cannot be built from the two is the reading of the clause
+     * and the reading of the position disagreeing about what stands here — which is this compiler
+     * contradicting itself rather than something the model left out.
+     */
+    private static FilingCoordinate filedAt(TermPath path, ValueName by, Type type,
+                                            Symbols symbols) {
+        if (by == null) {
+            return FilingCoordinate.of(new NumericTerm.ValueOf(path));
+        }
+        // The operation a count is taken by is one the library declares, which is what the reading
+        // that recorded the count went to. Anything else here is that reading and this one holding
+        // different ideas of what an operation is.
+        if (!(by instanceof ValueName.Stdlib operation)) {
+            throw new IllegalStateException("a clause of `" + path + "` was read as a rule about `"
+                    + by + "`, which is not an operation a number is taken by");
+        }
+        NumericTerm.TakenOf taken = NumericTerm.TakenOf.of(operation, path, type, symbols);
+        if (taken == null) {
+            throw new IllegalStateException("a clause of `" + path + "` was read as a rule about `"
+                    + by + "`, and that takes no number of what stands there");
+        }
+        return FilingCoordinate.of(taken);
     }
 
     /**
@@ -748,14 +792,20 @@ public final class InputDomain {
      * to rewrite is what an author acts on, and a position is not it. Kept per reason, the second
      * of them was dropped as a repeat of the first.
      */
-    private static List<UnreadRule> unreadRulesAt(PlacedRules placed, TermPath path,
-                                                  List<UnreadRule> competing) {
+    private static List<UnreadRule> unreadRulesAt(PlacedRules placed, TermPath path, Type type,
+                                                  Symbols symbols, List<UnreadRule> competing) {
         List<UnreadRule> out = new ArrayList<>(competing);
         for (FieldDomains.Unread each : placed.unreadAt(path)) {
             // The rule the reading of ends was holding when it gave up, carried rather than left
             // behind. It is a clause of an invariant, so it has a name and the handle is that name.
+            //
+            // At the number that rule is about, which the rule itself says. Nothing is missing here
+            // for the position to stand in for: a clause was read far enough to be about one number
+            // or the other, and it is only the line that nothing came of.
             UnreadRule said = new UnreadRule(each.from(),
-                    souther.compiler.check.RuleCitation.named(each.from()), path, each.why());
+                    souther.compiler.check.RuleCitation.named(each.from()),
+                    filedAt(path, each.by(), type, symbols),
+                    each.why());
             if (out.stream().noneMatch(had -> had.sameAs(said))) {
                 out.add(said);
             }

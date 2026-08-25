@@ -36,7 +36,7 @@ import souther.compiler.check.RuleRef;
  *              terms. Which word a report writes for it is {@link ReportedReason}'s, so a
  *              capability gained here need not move a published vocabulary
  */
-public record UnreadRule(RuleRef rule, RuleCitation cited, TermPath at,
+public record UnreadRule(RuleRef rule, RuleCitation cited, FilingCoordinate at,
                          BlockReason.AboutARule why) {
 
     public UnreadRule {
