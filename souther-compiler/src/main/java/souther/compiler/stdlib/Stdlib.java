@@ -95,8 +95,6 @@ public final class Stdlib {
     private final Map<String, ValueName.Stdlib> operations;
     private final Map<String, Rewrite> sugars;
     private final Map<TypeKey, Hir.Def> language;
-    /** The bare spelling a source writes each of them as, which is the only way one is written. */
-    private final Map<String, TypeKey> bareTypes;
     /** And the same declarations by the library module that writes them, worked out once with
      *  everything else rather than gathered on each ask. */
     private final Map<String, Map<String, Hir.Def>> byModule;
@@ -118,17 +116,14 @@ public final class Stdlib {
         this.operations = operations;
         this.sugars = sugars;
         this.language = language;
-        Map<String, TypeKey> bare = new LinkedHashMap<>();
         Map<String, TypeSymbol> identities = new LinkedHashMap<>();
         Map<String, Map<String, Hir.Def>> grouped = new LinkedHashMap<>();
         for (Map.Entry<TypeKey, Hir.Def> e : language.entrySet()) {
             TypeKey address = e.getKey();
-            bare.put(address.name(), address);
             identities.put(address.name(), TypeSymbols.declared(address));
             grouped.computeIfAbsent(address.module(), _ -> new LinkedHashMap<>())
                     .put(address.name(), e.getValue());
         }
-        this.bareTypes = Collections.unmodifiableMap(bare);
         grouped.replaceAll((_, defs) -> Collections.unmodifiableMap(defs));
         this.byModule = Collections.unmodifiableMap(grouped);
         this.intrinsics = intrinsics;
@@ -245,10 +240,6 @@ public final class Stdlib {
         return byModule.getOrDefault(moduleName, Map.of());
     }
 
-    /** The address the language declares under the bare spelling {@code bare}, or null. */
-    public TypeKey languageAddressOf(String bare) {
-        return bareTypes.get(bare);
-    }
 
     /**
      * Every published name a bare {@code bareName} could be reaching for, in {@link Reserved#MODULES}

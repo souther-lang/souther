@@ -57,6 +57,23 @@ public sealed interface TypeSpelling {
         if (!unnameable.isEmpty()) {
             return new Unnameable(unnameable.getFirst());
         }
-        return new Spelled(Type.showAs(type, name -> spelled.get(name), false));
+        return new Spelled(Type.showAs(type, name -> spelt(spelled, name), false));
+    }
+
+    /**
+     * The spelling asked for above, and a failure where it was not asked for.
+     *
+     * <p>{@link Type#forEachName} says which names a type mentions and {@link Type#showAs} writes
+     * them; they are two exhaustive switches over the same constructors and they have to agree. A
+     * name reaching the renderer that the walk did not offer would otherwise be written as the word
+     * {@code null}, into a signature a jar carries.
+     */
+    private static String spelt(Map<TypeSymbol, String> spelled, TypeSymbol name) {
+        String rendered = spelled.get(name);
+        if (rendered == null) {
+            throw new IllegalStateException("`" + name + "` is written here and was not among the"
+                    + " names this type mentions");
+        }
+        return rendered;
     }
 }

@@ -39,6 +39,18 @@ class EveryLanguageDeclarationHasAJvmImplementationTest {
                         + " emits classes for");
     }
 
+    /** And the table names nothing else: an entry for a declaration the library stopped giving is a
+     *  class this backend claims to ship for a name nobody writes. */
+    @Test
+    void andTheTableNamesNothingTheLibraryDoesNotDeclare() {
+        List<TypeKey> declared = DefaultStdlib.get().languageDeclarationsIn("souther.decimal")
+                .values().stream().map(def -> def.declares().key()).toList();
+
+        assertEquals(List.of(), SoutherJvmAbi.providedByTheRuntime().stream()
+                        .filter(at -> !declared.contains(at)).sorted().toList(),
+                "this backend ships a class for something the library does not declare");
+    }
+
     /**
      * And the two names are not the same name, which is the whole of what this backend is saying.
      *

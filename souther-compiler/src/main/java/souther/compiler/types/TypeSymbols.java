@@ -13,19 +13,18 @@ package souther.compiler.types;
  * without having been. That is what made a spelling and an identity interchangeable, which is what
  * issues #464, #696 and #700 each were.
  *
- * <p>Two ways a declaration enters, and they are the whole of the list:
+ * <p>One way a declaration enters, and it is the whole of the list. {@link #declared} — a
+ * declaration world says one is at this address. Nearly always a module of this compilation wrote
+ * it: the implicit unit data a module only names comes in this way too, because it is written into
+ * the tree while the source is parsed, and so does a module read off the path, because its published
+ * text is parsed like any other source. The standard library's own declarations come in the same
+ * way, since which of the two declared it is its own question and
+ * {@code Declarations.declaredByCompilation} is where it is asked.
  *
- * <ul>
- *   <li>{@link #declared} — a declaration world says one is at this address. Nearly always a module
- *       of this compilation wrote it: the implicit unit data a module only names comes in this way
- *       too, because it is written into the tree while the source is parsed, and so does a module
- *       read off the path, because its published text is parsed like any other source. An address
- *       answered for by the language's own vocabulary comes in the same way, since which of the two
- *       declared it is its own question and {@code Declarations.declaredByCompilation} is where it
- *       is asked.</li>
- *   <li>{@link #ofLanguage} — the language declares it and no module does: a primitive standing in a
- *       union, {@code Option}'s two cases, the prelude's runtime-backed data.</li>
- * </ul>
+ * <p>There used to be a second, for what the language declares and no module does. It took a module
+ * name and a spelling, and what it was for was that those declarations had no address to be found
+ * at — so one was invented for them. They have one now, or they are a case of a closed set and are
+ * not addressed at all ({@link TypeSymbol.OfLanguage}), and there is nothing left for it to do.
  *
  * <p>A name read back off a class the compiler is holding is not a third way. What a binary name
  * gives is an address, and a linker holding one asks the declaration world whether anything is
@@ -56,17 +55,5 @@ public final class TypeSymbols {
         return new TypeSymbol.AtModule(key);
     }
 
-    /**
-     * The identity of something the language declares rather than a module, where the compiler still
-     * files it under a module name no module has.
-     *
-     * <p>Its own way in because it is its own kind of fact: nothing indexes these, and a compilation
-     * that declares nothing at all still has them. What is left here is the standard library's own
-     * declarations, which are anchored to the runtime namespace until they are addressed by the
-     * module that writes them; the language's cases have their own case and come through no string.
-     */
-    static TypeSymbol ofLanguage(String module, String name) {
-        return new TypeSymbol.AtModule(new TypeKey(module, name));
-    }
 
 }

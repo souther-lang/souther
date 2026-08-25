@@ -122,8 +122,14 @@ class AReachedNameResolvesBackToWhatItWasAskedAboutTest {
                         TypeSymbols.declared(new TypeKey("souther.decimal", "RoundingMode"))),
                 unnameable, "one its module keeps to itself, one this module took the spelling of");
         for (TypeSymbol type : unnameable) {
-            for (String spelling : List.of(type.name(), ((TypeSymbol.AtModule) type).key().qualified(),
-                    "up." + type.name(), "lib." + type.name())) {
+            // Its own module's name among them where there is one to write. A cast would say the
+            // same thing by failing, and say it as a class cast rather than as this test's subject.
+            List<String> spellings = new ArrayList<>(List.of(type.name(),
+                    "up." + type.name(), "lib." + type.name()));
+            if (type instanceof TypeSymbol.AtModule at) {
+                spellings.add(at.key().qualified());
+            }
+            for (String spelling : spellings) {
                 assertFalse(type.equals(symbols.scope().resolve(spelled(spelling)).type()),
                         "`" + spelling + "` reaches " + type + " after all");
             }
