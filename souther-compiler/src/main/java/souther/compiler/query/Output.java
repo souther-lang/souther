@@ -925,7 +925,19 @@ public final class Output {
         @Override
         public Answer<Of> compute(Db db) {
             Answer<Of> ran = evaluate(db, name, sourceId, arms);
-            List<Diagnostic> wrong = fakeTables(db, name, sourceId);
+            if (!(fakeTables(db, name, sourceId)
+                    instanceof souther.compiler.observe.TableBuild.Built(
+                            List<Diagnostic> wrong))) {
+                // The tables this source's fakes state were not built, so this key did not answer
+                // for the source. A fake is a statement about a behavior the way a row is, and an
+                // answer that carried the rows and said nothing about the fakes reads as fakes that
+                // are fine — which is what a source writing only fakes got, because its rows are
+                // empty and nothing else here had anything to say.
+                //
+                // Absent is how a source that produced no observation is said; the reading that
+                // counts it names it for what it is (`OBSERVATION_ABSENT`, of the source).
+                return Answer.absent(ran.reports());
+            }
             if (wrong.isEmpty()) {
                 return ran;
             }
@@ -949,18 +961,12 @@ public final class Output {
          * written for one dependency answers is a fact about the module, so the reading that knows
          * that is the one that picks what this source's share of them is.
          */
-        private static List<Diagnostic> fakeTables(Db db, String name, SourceId sourceId) {
+        private static souther.compiler.observe.TableBuild fakeTables(Db db, String name,
+                SourceId sourceId) {
             ExampleExecution asked = ExampleExecutions.of(db, name);
-            if (asked == null) {
-                return List.of();   // nothing here can have a value built with yet
-            }
-            // Nothing to say where nothing was built, and nothing is lost by saying nothing: what
-            // could not build a table could not run a row either, so the answer this is added to has
-            // already gone absent. Which of the two happened is readable now rather than guessed
-            // from an empty list.
-            return db.execution().fakeTables(asked, sourceId)
-                    instanceof souther.compiler.observe.TableBuild.Built(List<Diagnostic> wrong)
-                    ? wrong : List.of();
+            return asked == null
+                    ? new souther.compiler.observe.TableBuild.NotBuiltHere()
+                    : db.execution().fakeTables(asked, sourceId);
         }
 
         /**
