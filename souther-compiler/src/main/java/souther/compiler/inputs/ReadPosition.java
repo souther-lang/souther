@@ -34,7 +34,7 @@ record ReadPosition(TermPath path, TypeView view, NumericTerm term,
                     List<TypeSymbol> narrowedUpper, boolean nothingExists,
                     ProjectionEvidence projection, List<Case> declared, ReadingResult reading,
                     ObligationDomain obligations, AdmissibleSet.Completeness completeness,
-                    BlockReason valuesUnread, List<UnreadRule> unreadRules,
+                    BlockReason.ReadingStopReason valuesUnread, List<UnreadRule> unreadRules,
                     List<RuleAccounting.Unanswered> unansweredQuestions, boolean rulesNotReached,
                     StructuralInspection structure) implements Position {
 

@@ -15,7 +15,7 @@ public sealed interface Unsettlement {
 
     /** A rule about the position went unread, and it could refuse the distinction as readily as one
      *  that was read. */
-    record ReadingStopped(BlockReason why) implements Unsettlement {
+    record ReadingStopped(BlockReason.ReadingStopReason why) implements Unsettlement {
 
         public ReadingStopped {
             if (why == null) {

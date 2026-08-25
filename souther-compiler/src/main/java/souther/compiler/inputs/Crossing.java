@@ -42,17 +42,22 @@ final class Crossing {
      *
      * @param within   what the rules leave the position's numbers, or null where nothing bounds them
      * @param admitted which values the position may hold, and how much of its rules was read
-     * @param unread   a rule about this position's own values that this reading could not turn into
-     *                 an end, or null where there is none. A rule that went unread can refuse a
-     *                 distinction as readily as one that was read, so it is what keeps an admission
-     *                 from being claimed here
+     * @param unread   a rule about this position that this compiler got partway through, or null
+     *                 where there is none. A rule that went unread can refuse a distinction as
+     *                 readily as one that was read, so it is what keeps an admission from being
+     *                 claimed here — and a rule read from end to end cannot be that, which is why
+     *                 the type takes only the stops. Handed a rule that placed no line because it
+     *                 relates two positions, this called the reading partial over a position
+     *                 nothing had been short of
      */
     static ReadingResult of(List<Case> declared, TypeView view, NumericDomain.Bounds within,
-                            AdmissibleSet admitted, Symbols symbols, BlockReason unread) {
+                            AdmissibleSet admitted, Symbols symbols,
+                            BlockReason.RuleReadingStopped unread) {
         List<Case> kept = admits(constructibleWithin(declared, view, within, symbols), admitted);
         List<Case> refused = new ArrayList<>(declared);
         refused.removeAll(kept);
-        BlockReason why = admitted.whyPartial() != null ? stopped(admitted.whyPartial()) : unread;
+        BlockReason.ReadingStopReason why =
+                admitted.whyPartial() != null ? stopped(admitted.whyPartial()) : unread;
         if (why != null) {
             // A rule left standing is said ahead of what the reading could not hold together, and
             // both may be true of one position. What a caller does about them is the same — the

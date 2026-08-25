@@ -171,7 +171,7 @@ public sealed interface Position permits ReadPosition {
      * is what decides whether an absence of classes may be reported as the model stating no
      * division.
      */
-    BlockReason valuesUnread();
+    BlockReason.ReadingStopReason valuesUnread();
 
     /**
      * The rules written about this position that the reading of ends could not turn into one.

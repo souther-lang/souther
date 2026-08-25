@@ -634,11 +634,11 @@ public final class InputDomain {
                                          NumericDomain.Bounds admissible, AdmissibleSet admitted,
                                          Symbols symbols, List<UnreadRule> unread,
                                          boolean nothingExists, Type type) {
-        BlockReason unreadable = Distinctions.unreadableAt(view);
+        BlockReason.AboutThePosition unreadable = Distinctions.unreadableAt(view);
         if (unreadable != null) {
             return new ReadingResult.Unsupported(unreadable);
         }
-        BlockReason here = unread.isEmpty() ? null : unread.get(0).why();
+        BlockReason.RuleReadingStopped here = stoppedOn(unread);
         if (!declared.isEmpty()) {
             return Crossing.of(declared, view, admissible, admitted, symbols, here);
         }
@@ -648,14 +648,38 @@ public final class InputDomain {
         // value of it for a rule to have named.
         List<Case> named = nothingExists ? List.of()
                 : Distinctions.ofValues(admitted.approximation(), type, symbols);
-        BlockReason why = admitted.whyPartial() != null ? Crossing.stopped(admitted.whyPartial())
-                : here;
+        BlockReason.ReadingStopReason why = admitted.whyPartial() != null
+                ? Crossing.stopped(admitted.whyPartial()) : here;
         if (why != null) {
             return new ReadingResult.Partial(named, List.of(), why);
         }
         return admitted.alternativesNotSeparated()
                 ? new ReadingResult.NotSeparated(named, List.of())
                 : new ReadingResult.Complete(named, List.of());
+    }
+
+    /**
+     * A rule at this position that this compiler got partway through, or null where there is none.
+     *
+     * <p>What such a rule costs the reading is everything it would have said, so a position holding
+     * one has values this cannot claim are what the rules leave. That is what a caller does with
+     * this, and it is why the rules read from end to end are not here: a rule that placed no line
+     * because it relates two positions, or because its quantity is empty, was taken in whole and
+     * takes nothing back. Handed one of those, the reading called itself partial over a position
+     * nothing had been short of, and every claim about its cases came back unsettled because a rule
+     * went unread.
+     *
+     * <p>The first, and the rest say the same thing. Any one of them costs the reading the same —
+     * the values are an upper bound and there is no more or less of that — and which rule to go and
+     * look at is the finding's to say, one per rule, where they are all named.
+     */
+    private static BlockReason.RuleReadingStopped stoppedOn(List<UnreadRule> unread) {
+        for (UnreadRule each : unread) {
+            if (each.why() instanceof BlockReason.RuleReadingStopped stopped) {
+                return stopped;
+            }
+        }
+        return null;
     }
 
     /**
