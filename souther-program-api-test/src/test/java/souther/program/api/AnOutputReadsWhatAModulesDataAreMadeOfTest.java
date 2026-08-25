@@ -118,13 +118,22 @@ class AnOutputReadsWhatAModulesDataAreMadeOfTest {
         return product.fields().stream().map(CheckedData.Field::name).toList();
     }
 
+    /**
+     * Every declaration the module has, in the order it declares them.
+     *
+     * <p>The whole list and in order, because both are what is claimed. {@code Plain} and
+     * {@code Express} are declared by {@code Kind}'s case list rather than written on their own, and
+     * they stand after the declarations that are written — which is a thing a reader walking this
+     * list meets and nothing else would tell it.
+     */
     @Test
-    void aModuleAnswersWithWhatItDeclares() {
+    void aModuleAnswersWithEveryDeclarationItHasInTheOrderItDeclaresThem() {
         CheckedModule module = demo();
 
-        assertTrue(names(module.data()).containsAll(
-                        List.of("Amount", "Common", "Wide", "Both", "Reach", "Kind")),
-                () -> "declared " + names(module.data()));
+        assertEquals(
+                List.of("Amount", "Common", "Wide", "Only", "Both", "First", "Middle", "Last",
+                        "Left", "Right", "Reach", "Kind", "Plain", "Express"),
+                names(module.data()));
     }
 
     /**
@@ -169,9 +178,9 @@ class AnOutputReadsWhatAModulesDataAreMadeOfTest {
      * A sum answers what a value of it can be, which is not the cases it lists.
      *
      * <p>{@code Reach} lists two sums, and both of them reach {@code Middle}. What crosses is the
-     * descent this compiler already makes, with a case reached twice appearing once — the answer
-     * four readers inside the compiler used to work out for themselves and disagreed about at
-     * exactly this shape.
+     * descent already made, with a case reached twice appearing once. This is the shape two
+     * readers descending for themselves would differ at, and it is the shape neither of them would
+     * have been written against.
      */
     @Test
     void aSumAnswersTheLeafCasesAValueOfItCanBe() {
@@ -284,8 +293,10 @@ class AnOutputReadsWhatAModulesDataAreMadeOfTest {
         assertTrue(reads.size() >= 2, () -> "found " + reads.size());
         int offSums = 0;
         int offProducts = 0;
+        List<Core.FieldAccess> unaccounted = new ArrayList<>();
         for (Core.FieldAccess read : reads) {
             if (!(read.target().type() instanceof Type.Ref(TypeSymbol.AtModule named))) {
+                unaccounted.add(read);
                 continue;
             }
             switch (module.data(named)) {
@@ -311,20 +322,44 @@ class AnOutputReadsWhatAModulesDataAreMadeOfTest {
         }
         assertEquals(1, offSums, "the read off a sum is the one this module writes");
         assertTrue(offProducts >= 1, () -> "no read off a product among " + reads.size());
+        // Every read is accounted for, so a read of a shape this does not know how to place cannot
+        // pass by being skipped. The two arms above are what the language admits reading a field
+        // off; a read that arrived at neither would be the finding, and going quiet about it is
+        // what would hide one.
+        assertEquals(List.of(), unaccounted.stream().map(Core.FieldAccess::field).toList(),
+                "a field read of a shape neither arm answers for");
     }
 
+    /** A second module, so that a name declared somewhere other than {@code demo} is one this test
+     *  can hold rather than one it has to imagine. */
+    private static final String OTHER = """
+            module other
+
+            data Elsewhere = { n: Int }
+            """;
+
     /**
-     * Which module a name belongs to is asked before what the name is, and the two absences are
-     * separate answers.
+     * A module this compile did not check and a name a module does not declare are two answers.
+     *
+     * <p>Which module a name belongs to is asked before what the name is, and both questions can
+     * answer nothing. Asked as one they would answer nothing once, and a reader could not tell a
+     * program it was given too little of from a name that is not a declaration. Held with a name
+     * another module really declares, because a name no module declares cannot be made at all —
+     * which is the same reason the two questions can be kept apart.
      */
     @Test
     void aModuleThisCompileDidNotCheckAndANameItDoesNotDeclareAreTwoAnswers() {
-        CheckedProgram program = CheckedProgram.of(List.of(MODULE));
+        CheckedProgram program = CheckedProgram.of(List.of(MODULE, OTHER));
+        CheckedModule demo = program.module("demo");
+        CheckedModule other = program.module("other");
+        assertNotNull(demo);
+        assertNotNull(other);
+        TypeSymbol.AtModule elsewhere = declared(other, "Elsewhere").name();
 
-        assertNull(program.module("elsewhere"), "this compile checked no such module");
-        CheckedModule module = program.module("demo");
-        assertNotNull(module);
-        assertSame(declared(module, "Wide"), module.data(declared(module, "Wide").name()));
+        assertNull(program.module("nowhere"), "this compile checked no module of that name");
+        assertNull(demo.data(elsewhere), "`demo` declares no `Elsewhere`");
+        assertSame(declared(other, "Elsewhere"), other.data(elsewhere),
+                "the module that declares it answers for it");
     }
 
     /** Every body this module holds: a behavior written here, and a helper it emits. */

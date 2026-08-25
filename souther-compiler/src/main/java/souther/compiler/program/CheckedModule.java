@@ -72,7 +72,8 @@ public final class CheckedModule {
         return helperByName.get(name);
     }
 
-    /** What it declares, in the order the declarations are written. */
+    /** What it declares, in the order it declares them — a case a sum declares rather than being
+     *  written on its own standing after the sum that declares it. */
     public List<CheckedData> data() {
         return data;
     }

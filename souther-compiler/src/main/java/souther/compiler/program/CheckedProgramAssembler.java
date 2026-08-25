@@ -105,6 +105,12 @@ final class CheckedProgramAssembler {
      * carried straight into the list. Nothing between the two holds the fields as a set: an order
      * the answer decided, passed through something that does not keep one, comes out as an order
      * nothing decided.
+     *
+     * <p>Walked over the module's own declarations rather than looked up one at a time, because
+     * that is where an order of them exists. A declaration world answers which declaration a name
+     * is and states no order over them, so a reader that iterated one would publish whichever order
+     * its map happened to be in. What a name means is still asked of that world, which is what
+     * {@code symbols} is here for.
      */
     private static List<CheckedData> dataOf(Hir.Module lowered, Symbols symbols) {
         List<CheckedData> declared = new ArrayList<>();

@@ -16,9 +16,8 @@ import java.util.NoSuchElementException;
  * <p>The shape a value has, and not the declaration as it was written. An include is already
  * flattened into {@link Product#fields()}, and a case that is itself a sum is already descended
  * into {@link Sum#cases()}. Either one worked out again by a reader would be a second answer to a
- * question this compiler settled once — and the descent in particular is a question four readers
- * inside the compiler used to answer for themselves, disagreeing wherever it reached one case
- * twice.
+ * question the language settled once, and two readers that each descended would differ at the
+ * shape neither of them is written against: the one where the descent reaches a case twice.
  *
  * <p>Three arms and not fields-or-cases. The language declares in three forms, and a unit written as
  * a product with no fields is a declaration a reader cannot tell from one that happens to have
