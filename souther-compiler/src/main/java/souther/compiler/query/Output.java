@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.execute.ExampleExecution;
 import souther.compiler.observe.WrittenStatements;
 import souther.compiler.observe.Observations;
 import souther.compiler.observe.ArmObservation;
@@ -735,38 +736,27 @@ public final class Output {
 
         @Override
         public Answer<WrittenStatements.Readings> compute(Db db) {
-            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
-            Answer<Symbols> scope = Names.derivedSymbols(db, name);
-            Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
-            if (!prepared.present() || !scope.present() || !sigs.present()) {
-                return Answer.absent();
-            }
+            // Asked ahead of the reading environment, and answered rather than left absent: a
+            // module that did not check states nothing yet, which is a different answer from one
+            // this could not read.
             if (!db.ask(new Bodies.Checked(name)).present()) {
-                // a module that did not check states nothing yet
                 return Answer.of(WrittenStatements.Readings.NONE);
+            }
+            ExampleExecution asked = ExampleExecutions.of(db, name);
+            if (asked == null) {
+                return Answer.absent();
             }
             // The classes alone: nothing here applies a behavior, so what the compile implemented is
             // not a question this asks.
             EvaluationArtifact artifact =
                     db.ask(new EvaluationLinked(name, ArmObservation.OMIT)).value();
-            Map<String, byte[]> classes = artifact == null ? null : artifact.classes();
-            Map<String, List<BehaviorRequirement>> requirements =
-                    db.ask(new Bodies.Requirements(name)).value();
-            if (classes == null || requirements == null) {
+            if (artifact == null) {
                 return Answer.absent();
             }
-            Map<String, Hir.FnDef> values = db.ask(new Bodies.ModuleDefinitions(name)).value();
-            Map<String, BehaviorContract> contracts = db.ask(new Bodies.Contracts(name)).value();
-            if (contracts == null) {
-                return Answer.absent();
-            }
-            // `requirements` is asked for above as a readiness condition — a module whose
-            // requirements are not settled is not one to read statements off yet — rather than
-            // because reading them needs it. Nothing here applies a behavior.
             return Answer.of(souther.compiler.examples.ExampleStatements.disagreements(
-                    prepared.value().forExamples(),
-                    scope.value(), sigs.value(), classes, evaluationLoader(db),
-                    values == null ? Map.of() : values, deadlineOf(db), policyOf(db), contracts));
+                    asked.rows(),
+                    asked.symbols(), asked.signatures(), artifact.classes(), evaluationLoader(db),
+                    asked.definitions(), asked.deadline(), asked.policy(), asked.contracts()));
         }
     }
 
@@ -967,35 +957,21 @@ public final class Output {
          * that is the one that picks what this source's share of them is.
          */
         private static List<Diagnostic> fakeTables(Db db, String name, SourceId sourceId) {
-            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
-            Answer<Symbols> scope = Names.derivedSymbols(db, name);
-            Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
-            if (!prepared.present() || !scope.present() || !sigs.present()) {
-                return List.of();
+            ExampleExecution asked = ExampleExecutions.of(db, name);
+            if (asked == null) {
+                return List.of();   // nothing here can have a value built with yet
             }
-            if (!db.ask(new Bodies.Checked(name)).present()) {
-                return List.of();   // a module that did not check has nothing to build a value with
-            }
-            // As above: building a table applies no behavior, so only the classes are read.
+            // Building a table applies no behavior, so only the classes are read.
             EvaluationArtifact artifact =
                     db.ask(new EvaluationLinked(name, ArmObservation.OMIT)).value();
-            Map<String, byte[]> classes = artifact == null ? null : artifact.classes();
-            Map<String, List<BehaviorRequirement>> requirements =
-                    db.ask(new Bodies.Requirements(name)).value();
-            if (classes == null || requirements == null) {
+            if (artifact == null) {
                 return List.of();
             }
-            Map<String, Hir.FnDef> values = db.ask(new Bodies.ModuleDefinitions(name)).value();
-            Map<String, BehaviorContract> contracts = db.ask(new Bodies.Contracts(name)).value();
-            if (contracts == null) {
-                return List.of();
-            }
-            // As above: `requirements` says this module is ready to be read, not what to read.
             return souther.compiler.examples.ExampleStatements.fakeTables(
-                    prepared.value().forExamples(), scope.value(),
-                    sigs.value(), classes, evaluationLoader(db),
-                    values == null ? Map.of() : values, sourceId,
-                    deadlineOf(db), policyOf(db), contracts);
+                    asked.rows(), asked.symbols(),
+                    asked.signatures(), artifact.classes(), evaluationLoader(db),
+                    asked.definitions(), sourceId,
+                    asked.deadline(), asked.policy(), asked.contracts());
         }
 
         /**
@@ -1008,14 +984,9 @@ public final class Output {
          */
         static Answer<Of> evaluate(Db db, String name, SourceId sourceId, EvaluationArtifact artifact,
                                    ArmObservation arms) {
-            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
-            Answer<Symbols> scope = Names.derivedSymbols(db, name);
-            Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
-            if (!prepared.present() || !scope.present() || !sigs.present()) {
-                return Answer.absent();
-            }
-            if (!db.ask(new Bodies.Checked(name)).present()) {
-                return Answer.absent();   // a module that did not check has nothing to run
+            ExampleExecution asked = ExampleExecutions.of(db, name);
+            if (asked == null) {
+                return Answer.absent();   // nothing here can have its examples evaluated yet
             }
             if (artifact == null) {
                 // Arms were asked for and the instrumented classes could not be made. Falling back to
@@ -1028,42 +999,30 @@ public final class Output {
                                         souther.compiler.observe.Incompleteness.Code.INSTRUMENTATION_ABSENT,
                                         souther.compiler.observe.Incompleteness.Scope.MODULE, name))));
             }
-            souther.compiler.check.Prepared.Examples rows =
-                    prepared.value().forExamplesWrittenIn(sourceId);
+            souther.compiler.check.Prepared.Examples rows = asked.rowsWrittenIn(sourceId);
             if (rows.rows().isEmpty()) {
                 return Answer.of(Of.NONE);
-            }
-            Map<String, List<BehaviorRequirement>> requirements =
-                    db.ask(new Bodies.Requirements(name)).value();
-            if (requirements == null) {
-                return Answer.absent();
             }
             List<Report> reports = new ArrayList<>(alreadyDeclared(db, name, sourceId));
             if (!reports.isEmpty()) {
                 return Answer.absent(reports);   // a row naming one would read the other declaration
             }
-            Map<String, Hir.FnDef> values = db.ask(new Bodies.ModuleDefinitions(name)).value();
-            // What the module's behaviors declare of what they answer, which is what says a row's
-            // values have something to be held to.
-            Map<String, BehaviorContract> contracts = db.ask(new Bodies.Contracts(name)).value();
-            if (contracts == null) {
-                return Answer.absent();
-            }
             Observations observed =
-                    souther.compiler.examples.ExampleVerifier.check(rows, scope.value(), sigs.value(),
+                    souther.compiler.examples.ExampleVerifier.check(rows, asked.symbols(),
+                            asked.signatures(),
                             artifact,
                             // What this compile can read declarations of, for holding an answer's own
                             // against. Asked for only if something has to be held: a compile's own
                             // answers are of the module being evaluated by being of this compile of
                             // it, and every answer this run has is one of those today.
                             () -> declarationsRead(db),
-                            requirements, evaluationLoader(db),
-                            values == null ? Map.of() : values, deadlineOf(db),
-                            policyOf(db),
+                            asked.requirements(), evaluationLoader(db),
+                            asked.definitions(), asked.deadline(),
+                            asked.policy(),
                             // What applies a behavior here is what this compile emitted. A compile has
                             // nothing else to run a row against; something supplied from outside one
                             // arrives through the same seam and brings its own classes.
-                            souther.compiler.examples.Answering.generatedHere(), contracts);
+                            souther.compiler.examples.Answering.generatedHere(), asked.contracts());
             for (Diagnostic failure : observed.failures()) {
                 reports.add(Report.of(failure));
             }
