@@ -1420,10 +1420,21 @@ public final class Adequacy {
             case About.APositionNoLineDivides _ ->
                     new GenerationOutcome.NotApplicable(GenerationOutcome.NotApplicable
                             .Reason.A_FACT_ABOUT_THE_MODEL);
-            // What this compiler could not read. A row would answer a question nothing asked, and
-            // offering one would be reporting our own shortfall as the author's work.
-            case About.APositionThisCouldNotRead _, About.ARuleWithoutALine _,
-                 About.APositionWhoseRulesWereNotReached _,
+            // <b>Asked of the finding and not read off which kind it is.</b> The two reasons here
+            // are the same distinction this compiler makes everywhere else — a shortfall of ours
+            // against something the model states — and a finding about something with no line
+            // carries both halves. Listed by kind, every rule with no line was a measure we could
+            // not make, including the ones we read from end to end and understood, and a build was
+            // told its own model's silence was our failure to read it.
+            case About.OfSomethingNotRead notRead -> new GenerationOutcome.NotApplicable(
+                    notRead.finding().readingStopped()
+                            // A row would answer a question nothing asked, and offering one would
+                            // be reporting our own shortfall as the author's work.
+                            ? GenerationOutcome.NotApplicable.Reason.NOTHING_WAS_MEASURED
+                            // The rule was read to the end and draws no line. Nothing is missing
+                            // and no row anybody writes changes what it states.
+                            : GenerationOutcome.NotApplicable.Reason.A_FACT_ABOUT_THE_MODEL);
+            case About.APositionWhoseRulesWereNotReached _,
                  About.APositionReadWiderThanItsRules _, About.AQuestionNothingAnswered _ ->
                     new GenerationOutcome.NotApplicable(GenerationOutcome.NotApplicable
                             .Reason.NOTHING_WAS_MEASURED);

@@ -68,6 +68,21 @@ public record UndividedPosition(TermPath at, Why why) {
          * lost.
          */
         record CannotDerive() implements Why {}
+
+        /**
+         * Every reading ran to the end, and a rule states something here that draws no line.
+         *
+         * <p>Neither of the two above. Not an absence — the model states something at this position,
+         * and a verdict saying it divides the position no way would deny the declaration two tokens
+         * away. Not a derivation this compiler could not make either: nothing was missing, and a
+         * reader sent after a limit would be looking for one that is not there.
+         *
+         * <p>What states it is named in a finding of its own, with the rule. Nothing here carries
+         * the rule, for the reason {@link CannotDerive} carries no cause: a verdict says whether
+         * anything divides the position, and reading a cause back off a verdict is where the rule
+         * was lost.
+         */
+        record StatedWithoutALine() implements Why {}
     }
 
     /**
@@ -188,6 +203,10 @@ public record UndividedPosition(TermPath at, Why why) {
      */
     static UndividedPosition absentAfter(PendingPosition proven) {
         return new UndividedPosition(proven.at(), Why.Absent.PROVEN);
+    }
+
+    static UndividedPosition statedWithoutALine(TermPath at) {
+        return new UndividedPosition(at, new Why.StatedWithoutALine());
     }
 
     static UndividedPosition cannotDerive(TermPath at) {

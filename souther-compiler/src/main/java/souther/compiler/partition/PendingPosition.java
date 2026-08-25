@@ -41,7 +41,25 @@ sealed interface PendingPosition {
      * <p>Carried rather than reported: a rule a body writes may still draw a line on this same
      * position, and where one does the position is measured and this is never said.
      */
-    record Blocked(TermPath at, BlockReason why) implements PendingPosition {}
+    record Blocked(TermPath at, BlockReason.ReadingStopReason why) implements PendingPosition {}
+
+    /**
+     * A rule states something here and the readings turn it into no line, every one of them having
+     * run to the end.
+     *
+     * <p>Its own state beside {@link Blocked}, which is this compiler having fallen short. Nothing
+     * is missing here: the rule relates the position to another, or cuts a quantity it does not
+     * appear in, or draws its line where that quantity never runs. What the two share is that an
+     * absence may not follow from either — the model states something at this position — and what
+     * they do not share is whose work it would be to change that.
+     *
+     * <p>Held apart because the consumers of this chain each carry the same distinction and each
+     * used to read it off which state this was. A rule read from end to end arriving as
+     * {@link Blocked} came out as a position this compiler could not read, in a verdict, in a
+     * generation's account of why no row could answer, and in the words a claim is annotated with.
+     */
+    record ARuleWithNoLine(TermPath at, BlockReason.ReadToEndWithoutLine why)
+            implements PendingPosition {}
 
     /**
      * What is still to be answered for at {@code axis}, or null where the axis has evidence.
@@ -71,9 +89,7 @@ sealed interface PendingPosition {
             //
             // It outranks nothing else. This is not a division, so the position is still pending
             // whatever a body says; it is a rule the model states, so an absence may not follow.
-            case StructuralInspection.Continuation.None _ ->
-                    axis.unread() == null ? new Leaf(axis.path())
-                            : new Blocked(axis.path(), axis.unread());
+            case StructuralInspection.Continuation.None _ -> pending(axis);
             // A sequence, whose elements were reached and are a position of their own. Nothing
             // stopped here, so this is the same state a leaf is in: what the list itself divides
             // into is what its own rules say about how many it holds, and an absence may follow
@@ -83,14 +99,28 @@ sealed interface PendingPosition {
             // And a sum, whose cases were reached and stand under it. Nothing stopped here either:
             // a sum with no evidence is one whose own cases the rules left it none of, which is a
             // reading that ran to the end.
-                 StructuralInspection.Continuation.Branches _ ->
-                    axis.unread() == null ? new Leaf(axis.path())
-                            : new Blocked(axis.path(), axis.unread());
+                 StructuralInspection.Continuation.Branches _ -> pending(axis);
             // A position with no evidence that was never read. Nothing about a model follows from
             // it — an answer here would be this compiler's state written down as what the model
             // divides, which is the sentence the whole protocol is against.
             case null -> throw new IllegalStateException(
                     "nothing was read at " + axis.path() + " and it has no evidence");
+        };
+    }
+
+    /**
+     * A position nothing under it accounts for, in the state whatever is left at it puts it in.
+     *
+     * <p>Which of the two states is the evidence's answer and not this reader's. Read off whether
+     * the slot was filled at all, a rule read from end to end put the position in the state that
+     * says this compiler could not read it.
+     */
+    private static PendingPosition pending(Axis axis) {
+        return switch (axis.leftWith()) {
+            case null -> new Leaf(axis.path());
+            case LeftAtThePosition.AReadingStopped(var why) -> new Blocked(axis.path(), why);
+            case LeftAtThePosition.ARuleWithNoLine(var why) ->
+                    new ARuleWithNoLine(axis.path(), why);
         };
     }
 
@@ -129,7 +159,10 @@ sealed interface PendingPosition {
             return null;
         }
         return switch (blocked.why()) {
-            case BlockReason.RuleWithoutLineReason _ -> null;
+            // A rule this got partway through is a finding about that rule, made where the rule is
+            // known and named there. What is written here is the other one: a position whose rules
+            // this never arrived at, which names no rule because none was seen.
+            case BlockReason.RuleReadingStopped _ -> null;
             case BlockReason.AboutThePosition why ->
                     new souther.compiler.inputs.PositionReadingBlocked(at(), why);
         };
@@ -159,6 +192,10 @@ sealed interface PendingPosition {
         }
         return switch (this) {
             case Blocked _ -> UndividedPosition.cannotDerive(at());
+            // Read to the end, and what it says draws no line. Not a derivation this compiler could
+            // not make, and not an absence either: the model states something at this position, and
+            // the rule that states it is named in a finding of its own.
+            case ARuleWithNoLine _ -> UndividedPosition.statedWithoutALine(at());
             case Leaf _ -> switch (body) {
                 case BodyCutInspection.Blocked _ -> UndividedPosition.cannotDerive(at());
                 // The producers of both phases asked, none of them stopped, and none of them found

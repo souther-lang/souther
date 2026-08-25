@@ -19,6 +19,7 @@ import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -62,7 +63,8 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
      *  in — which is a second way a position can be left unable to reach an absence. */
     private static Axis pending(StructuralInspection.Continuation found, BlockReason unread) {
         return Axis.pendingAt(ID, new NumericTerm.ValueOf(AT), Type.BOOL,
-                java.util.List.of(), false, found, unread);
+                java.util.List.of(), false, found,
+                unread == null ? null : LeftAtThePosition.of(unread));
     }
 
     /**
@@ -86,6 +88,26 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
         assertNull(PendingPosition.of(pending(new StructuralInspection.Continuation.None(), unread))
                         .reportable(),
                 "a rule this read and could not use is not a position nothing was reached at");
+    }
+
+    /**
+     * And a leaf carrying a rule read from end to end completes as neither of the two above.
+     *
+     * <p>Not an absence: the model states something at this position. Not a derivation this
+     * compiler could not make either — the reading ran to the end, and a reader sent after a limit
+     * would be looking for one that is not there. Held as the same state a stop puts a position in,
+     * every consumer of this chain went on saying the first of those about the second.
+     */
+    @Test
+    void aLeafCarryingARuleReadToTheEndSaysNeitherOfThose() {
+        BlockReason read = new BlockReason.ComparisonBetweenPositions();
+
+        UndividedPosition said = PendingPosition.of(
+                        pending(new StructuralInspection.Continuation.None(), read))
+                .complete(new BodyCutInspection.Exhausted());
+
+        assertFalse(said.isAbsent(), said.toString());
+        assertInstanceOf(UndividedPosition.Why.StatedWithoutALine.class, said.why(), said.toString());
     }
 
     /**

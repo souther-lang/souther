@@ -867,7 +867,7 @@ public final class Partitions {
                     case StructuralInspection.Retained retained ->
                             out.add(Axis.pendingAt(id, term, position.type(),
                                     position.unansweredQuestions(), position.rulesNotReached(),
-                                    retained.continuation(), leftUnread(position)));
+                                    retained.continuation(), leftAt(position)));
                 }
             }
         }
@@ -885,16 +885,29 @@ public final class Partitions {
      * for a range at all — so it names one limit while the report's own line names another, and one
      * position came back with two causes for one clause.
      *
-     * <p>The first, as a comparison's is. Any of them keeps the position from completing as one the
-     * model draws no line through, which is the whole of what a caller here does with it: a rule
-     * this got partway through is a limit somebody can lift, and one read from end to end that
-     * draws no line is not, and neither of them leaves a position the model states nothing about.
-     * Which of the two it is stays readable in the value — {@code PendingPosition.reportable} asks
-     * the type before writing a limit down, and writes none for a rule.
+     * <p><b>A stop ahead of a rule read to the end, and not the first of the list.</b> Either keeps
+     * the position from completing as one the model draws no line through, and they are not alike
+     * in anything else: one is a limit somebody can lift and the other is what the model says. Taken
+     * in the order the rules happen to be in, which of the two a position came out under turned on
+     * which clause its author wrote first.
+     *
+     * <p>Which of the two it is travels with it, so nothing downstream works it out again. That is
+     * what {@link LeftAtThePosition} is for: the same distinction is drawn by a verdict, by a
+     * generation's account of why no row could answer, and by the words a claim is annotated with,
+     * and each of them used to read it off where the evidence had come from.
      */
-    private static BlockReason leftUnread(Position position) {
-        return position.rulesWithoutALine().isEmpty() ? position.valuesUnread()
-                : position.rulesWithoutALine().getFirst().why();
+    private static LeftAtThePosition leftAt(Position position) {
+        BlockReason stopped = position.valuesUnread();
+        for (RuleWithoutALine rule : position.rulesWithoutALine()) {
+            if (rule.why() instanceof BlockReason.RuleReadingStopped why) {
+                return new LeftAtThePosition.AReadingStopped(why);
+            }
+        }
+        if (stopped != null) {
+            return LeftAtThePosition.of(stopped);
+        }
+        return position.rulesWithoutALine().isEmpty() ? null
+                : LeftAtThePosition.of(position.rulesWithoutALine().getFirst().why());
     }
 
     // --- small helpers ----------------------------------------------------------------------------
