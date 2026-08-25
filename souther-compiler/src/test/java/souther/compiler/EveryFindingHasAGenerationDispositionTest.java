@@ -177,7 +177,7 @@ class EveryFindingHasAGenerationDispositionTest {
         assertFalse(declared.isEmpty(), "the model under test has lines its declarations are owed");
 
         List<Adequacy.GenerationDisposition> answered =
-                Adequacy.generatedForDeclarationsOf(compilation.db(), "example.policy");
+                Adequacy.generatedForDeclarationsOf(compilation.db(), "example.policy", null);
         assertEquals(declared, answered.stream()
                         .map(Adequacy.GenerationDisposition::finding).toList(),
                 "every one of them, and each with its own answer");
@@ -185,6 +185,63 @@ class EveryFindingHasAGenerationDispositionTest {
                         each.outcome() instanceof GenerationOutcome.Generated),
                 "a reading of each of these composed a row at the point: " + answered);
     }
+
+    /**
+     * A generation narrowed to one behavior answers from what that behavior's search composed.
+     *
+     * <p>A line is owed once over every behavior carrying the type, and a row for it may be
+     * composable at one of them and not at another — {@code held} holds the field to a single
+     * value the line is not at, and {@code anywhere} does not. Answered from the module's readings, a
+     * request that searched only {@code held} would say a row is on offer because {@code anywhere}
+     * had one, and print no row beside it (issue #1062).
+     *
+     * <p>Which reading to search when the one asked about composes nothing is the question
+     * {@code --generate} does not ask yet, and the answer says that rather than borrowing another
+     * reading's row.
+     */
+    @Test
+    void aGenerationNarrowedToOneBehaviorAnswersFromWhatThatBehaviorSearched() {
+        Compilation compilation = compiled(NARROWED);
+        assertFalse(Adequacy.generatedForDeclarationsOf(compilation.db(), "example.narrowed",
+                        "held").isEmpty(),
+                "the line is owed at both, so both are asked about");
+
+        assertTrue(Adequacy.generatedForDeclarationsOf(compilation.db(), "example.narrowed", "anywhere")
+                        .stream().allMatch(each ->
+                                each.outcome() instanceof GenerationOutcome.Generated),
+                "the search of `anywhere` composed a row at the line");
+        assertTrue(Adequacy.generatedForDeclarationsOf(compilation.db(), "example.narrowed",
+                        "held").stream().allMatch(each ->
+                                each.outcome() instanceof GenerationOutcome.NotSupported),
+                "and the search of `held` composed none, whatever `anywhere` did");
+    }
+
+    /** One line, at a position one behavior can hold a row at and the other cannot. */
+    private static final String NARROWED = """
+            module example.narrowed
+
+            data Code = String
+                invariant nonempty = String.length(value) >= 1
+
+            data Wide = { c: Code }
+
+            data Narrow = { c: Code }
+                invariant fixed = String.length(c.value) >= 4
+
+            data Ok
+
+            behavior anywhere : (w: Wide) -> Ok
+            let anywhere (w) = Ok
+
+            behavior held : (n: Narrow) -> Ok
+            let held (n) = Ok
+
+            example anywhere
+                | "a" : (Wide { c = Code("abc") }) -> Ok
+
+            example held
+                | "a" : (Narrow { c = Code("abcd") }) -> Ok
+            """;
 
     /** A guard on an input, whose line is the behavior's own and is owed a row either side. */
     private static final String GUARDED = """

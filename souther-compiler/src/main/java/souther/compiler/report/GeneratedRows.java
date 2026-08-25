@@ -126,7 +126,7 @@ public final class GeneratedRows {
                                      String behavior) {
         java.util.Set<String> said = new java.util.LinkedHashSet<>();
         for (Adequacy.GenerationDisposition each
-                : Adequacy.generatedForDeclarationsOf(compilation.db(), module)) {
+                : Adequacy.generatedForDeclarationsOf(compilation.db(), module, behavior)) {
             // A line the behavior asked about does not carry is not work this block is about, the
             // way a report narrowed to one behavior keeps the lines that behavior carries and drops
             // the rest.

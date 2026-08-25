@@ -616,8 +616,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 // verdict would hold open what the aggregation had settled (issue #1062).
                 BorderAssessment.pointsOf(behavior.partition().boundaries()).stream()
                         .filter(p -> held.requires(p.role()))
-                        .filter(p -> !p.role().againstTheLine()
-                                || p.border().origin().owedToTheDeclaration().isEmpty())
+                        .filter(BorderAssessment.Point::owedHere)
                         .forEach(p -> add(measures, measurementOf(p.item())));
                 // Which of the four those are is the bar's answer and not a second reading of it
                 // here: a build refusing over a missing IN row and calling a model satisfied while

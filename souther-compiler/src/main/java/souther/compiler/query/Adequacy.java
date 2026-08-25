@@ -1492,34 +1492,72 @@ public final class Adequacy {
      * once over every behavior carrying the type, so which reading composes the one row it is owed
      * is a search over the readings and not a fold of them.
      */
-    public static List<GenerationDisposition> generatedForDeclarationsOf(Db db, String module) {
+    public static List<GenerationDisposition> generatedForDeclarationsOf(Db db, String module,
+                                                                        String behavior) {
         List<Finding> findings = db.ask(new Findings(module)).value();
         if (findings == null) {
             return List.of();
         }
+        // What this request searched, and never what the measurement happened to have composed. The
+        // two are both called an attempt and they answer different questions: a measurement builds a
+        // value where the level asks it to, and says whether the point exists; a generation is asked
+        // afterwards and composes the row an author is offered. Read from the measurement, a build
+        // at `witness` composes nothing, and a block that had just printed a row would say nothing
+        // offers one — which is the sentence this whole answer exists to stop saying.
+        Map<String, List<BorderAssessment>> searched = behavior == null
+                ? searchedBoundariesOf(db, module)
+                : searchedFor(db, module, behavior);
         List<GenerationDisposition> out = new ArrayList<>();
         for (Finding finding : findings) {
             if (!(finding.about()
                     instanceof About.APointOfADeclaredBorder(var debt, var role))) {
                 continue;
             }
-            // What a reading of this line already composed, where one did. A row standing at the
-            // point is a row standing at the line, and the readings of a debt ask the same of a row
-            // at the points against it — which is checked where their demands are. So this is the
-            // row the debt is offered and not one reading's standing in for the rest.
-            //
             // Which reading composes it where none has is a search over the readings and not a fold
             // of them, and nothing does that yet: the answer is then about the search rather than
-            // about the line. Said the second way for every debt, a block printed a row at the line
-            // and a sentence under it saying nothing offers one.
+            // about the line.
+            Generator.GeneratedRow row = composed(searched, debt, role);
             out.add(new GenerationDisposition(finding,
-                    debt.owedAt(role).attempt() instanceof ItemAssessment.Attempt.Built built
-                            ? new GenerationOutcome.Generated(List.of(built.row()))
+                    row != null ? new GenerationOutcome.Generated(List.of(row))
                             : new GenerationOutcome.NotSupported(
                                     GenerationOutcome.NotSupported.Reason
                                             .NO_SEARCH_IS_ASKED_FOR_A_LINE_ACROSS_ITS_READINGS)));
         }
         return List.copyOf(out);
+    }
+
+    /**
+     * The row this request composed at one point of one line, or null where it composed none.
+     *
+     * <p>Found among the readings this request searched, which is what makes it the row the debt is
+     * offered: the readings of a debt ask the same of a row at the points against the line — checked
+     * where their demands are — so a row standing at one of them stands at the line.
+     *
+     * <p>Null is this request having composed none, and says nothing about whether another could.
+     * Which reading to search next is the question {@code --generate} does not ask yet.
+     */
+    private static Generator.GeneratedRow composed(Map<String, List<BorderAssessment>> searched,
+                                                   BorderObligationAssessment debt,
+                                                   souther.compiler.partition.PointRole role) {
+        for (List<BorderAssessment> lines : searched.values()) {
+            for (BorderAssessment line : lines) {
+                if (!line.border().obligation().equals(debt.id())) {
+                    continue;
+                }
+                ItemAssessment.Owed owed = line.owedAt(role);
+                if (owed != null && owed.attempt() instanceof ItemAssessment.Attempt.Built built) {
+                    return built.row();
+                }
+            }
+        }
+        return null;
+    }
+
+    /** The lines one behavior was searched at, keyed the way every behavior's are. */
+    private static Map<String, List<BorderAssessment>> searchedFor(Db db, String module,
+                                                                   String behavior) {
+        List<BorderAssessment> lines = db.ask(new BoundarySearch(module, behavior)).value();
+        return lines == null ? Map.of() : Map.of(behavior, lines);
     }
 
     /** The same, with a value composed at every point worth one — which is a request, and costs what
@@ -3813,12 +3851,9 @@ public final class Adequacy {
                 // `crm` — one per position of every behavior carrying the type — for a rule the
                 // author wrote once (issue #1062). Asked of the rule rather than matched on which
                 // kind it is: which of them are the declaration's is the rule's own answer.
-                // The two points against the line only. The two away from it are regions of this
-                // position — where a region stops is settled by every other rule reaching the
-                // position — so a row well inside one reading is not a row that could stand at
-                // another at all, and the point is this behavior's as it was.
-                if (point.role().againstTheLine()
-                        && point.border().origin().owedToTheDeclaration().isPresent()) {
+                // This behavior's own. A line a declaration is owed is answered once for the
+                // module, from every reading of it.
+                if (!point.owedHere()) {
                     continue;
                 }
                 // The point itself, and one finding for either kind. Which of the two a build is

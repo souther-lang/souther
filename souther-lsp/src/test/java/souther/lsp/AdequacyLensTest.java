@@ -269,6 +269,32 @@ class AdequacyLensTest {
                 "and at `witness` they are the same rows: taking the action is what asks for them");
     }
 
+    /**
+     * The rows the action writes are not printed under a sentence saying nothing offers them.
+     *
+     * <p>Both are answers about the same request, and they were read from different places. A line
+     * an {@code invariant} drew is owed to the declaration, and what a generation can do about it is
+     * what this request's search composed — read from the measurement instead, a build at
+     * {@code witness} composes nothing while it measures, so the block printed the rows the action
+     * had just composed and then said no row was on offer (issue #1062).
+     *
+     * <p>At {@code witness} because that is where the two come apart. At {@code all} the measurement
+     * composes values of its own and the two answers agree by accident.
+     */
+    @Test
+    void theRowsTheActionWritesAreNotPrintedUnderASentenceSayingNothingOffersThem() {
+        Analyzer analyzer = measuring(Adequacy.Level.WITNESS);
+        ModuleGraph graph = graphOf(Map.of(EDGES, ONLY_EDGES));
+        CodeAction.Deferred offered = assertInstanceOf(CodeAction.Deferred.class,
+                analyzer.codeActions(EDGES, ONLY_EDGES, on(7), graph).get(0),
+                "there is work to offer");
+
+        CodeAction.Edit taken = analyzer.resolve(offered, ONLY_EDGES, graph);
+        assertNotNull(taken, "and taking it writes rows");
+        assertFalse(taken.newText().contains("nothing offers a row"),
+                () -> "the rows are right there: " + taken.newText());
+    }
+
     /** With one document there is nothing to offer: the values a row writes are built through the
      * module's derived decoders, and its imports are part of that. */
     @Test
