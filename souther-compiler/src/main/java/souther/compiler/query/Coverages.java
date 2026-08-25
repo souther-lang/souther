@@ -175,7 +175,7 @@ final class Coverages {
                 PartitionDerivation.of(axes, partitioning.partitionClosure()),
                 BoundaryDerivation.of(boundaries, partitioning.borderClosure()),
                 pairsOf(behavior.name(), divided, readings, level.readsRows(), budget),
-                partitioning.undivided(), partitioning.unread(), partitioning.blocked(),
+                partitioning.undivided(), partitioning.rulesWithoutALine(), partitioning.blocked(),
                 partitioning.notSeparated(), List.copyOf(standing),
                 whyUnclassified(readings.byRow(),
                         partitioning.axes().stream().map(Axis::id).toList()));

@@ -68,7 +68,7 @@ public final class Partitions {
     public record Partitioning(List<Axis> axes,
                                java.util.Set<NumericTerm> uncertain,
                                List<UndividedPosition> undivided,
-                               List<RuleWithoutALine> unread,
+                               List<RuleWithoutALine> rulesWithoutALine,
                                List<souther.compiler.inputs.PositionReadingBlocked> blocked,
                                List<souther.compiler.inputs.PositionValuesNotSeparated> notSeparated,
                                List<Border> between,
@@ -80,7 +80,7 @@ public final class Partitions {
             axes = List.copyOf(axes);
             uncertain = java.util.Set.copyOf(uncertain);
             undivided = List.copyOf(undivided);
-            unread = List.copyOf(unread);
+            rulesWithoutALine = List.copyOf(rulesWithoutALine);
             blocked = List.copyOf(blocked);
             notSeparated = List.copyOf(notSeparated);
             between = List.copyOf(between);
@@ -174,7 +174,7 @@ public final class Partitions {
                                   ReadingPolicy policy) {
         List<Axis> found = new ArrayList<>();
         java.util.Set<NumericTerm> uncertain = new java.util.LinkedHashSet<>();
-        List<RuleWithoutALine> unread = new ArrayList<>();
+        List<RuleWithoutALine> rulesWithoutALine = new ArrayList<>();
         // What the reading could not hold together, asked of every position it read rather than of
         // the ones left pending. This qualifies the classes and does not stand in for them: a
         // position with classes read from a product wider than the rules admit is exactly where it
@@ -191,7 +191,7 @@ public final class Partitions {
                 notSeparated.add(
                         new souther.compiler.inputs.PositionValuesNotSeparated(position.path()));
             }
-            axisOf(behavior, position, symbols, policy, found, uncertain, unread);
+            axisOf(behavior, position, symbols, policy, found, uncertain, rulesWithoutALine);
         }
         // Every position the reading found, including the ones nothing divides: a report names what
         // it could not measure at one of those, and a body's comparison can still draw the first
@@ -206,11 +206,11 @@ public final class Partitions {
         // of them was left unread — settled beside each axis, as it is once a body has spoken.
         List<Measured> measured = new ArrayList<>();
         for (Axis axis : kept) {
-            keep(new ArrayList<>(), measured, axis, null, unread);
+            keep(new ArrayList<>(), measured, axis, null, rulesWithoutALine);
         }
-        MeasureClosure.Both closed = MeasureClosure.of(kept, unread);
+        MeasureClosure.Both closed = MeasureClosure.of(kept, rulesWithoutALine);
         return new Partitioning(kept, uncertain, undividedIn(measured),
-                List.copyOf(unread), blockedIn(measured), List.copyOf(notSeparated),
+                List.copyOf(rulesWithoutALine), blockedIn(measured), List.copyOf(notSeparated),
                 List.of(), linesAlong(kept, quantities, symbols), ReachingCuts.NONE,
                 closed.partition(), closed.border());
     }
@@ -235,7 +235,7 @@ public final class Partitions {
             measured.add(new Measured(axis, drew));
             return;
         }
-        // Whether this phase left anything at the position unread, and not which limit it was.
+        // Whether this phase left anything at the position with no line, and not which limit it was.
         // A limit belongs to the rule it stopped, and the findings carry it there; taken as the
         // position's, the first rule of however many were stopped alike was the one a report named.
         //
@@ -331,8 +331,8 @@ public final class Partitions {
                                               souther.compiler.inputs.Quantities reading,
                                               List<Threshold> thresholds,
                                               Symbols symbols, ReadingPolicy policy,
-                                              List<RuleWithoutALine> unread) {
-        return withThresholds(base, reading, thresholds, symbols, policy, unread, List.of());
+                                              List<RuleWithoutALine> rulesWithoutALine) {
+        return withThresholds(base, reading, thresholds, symbols, policy, rulesWithoutALine, List.of());
     }
 
     /**
@@ -348,9 +348,9 @@ public final class Partitions {
                                               souther.compiler.inputs.Quantities reading,
                                               List<Threshold> thresholds,
                                               Symbols symbols, ReadingPolicy policy,
-                                              List<RuleWithoutALine> unread,
+                                              List<RuleWithoutALine> rulesWithoutALine,
                                               List<GuardThresholds.Guards.Singled> singled) {
-        return withThresholds(base, reading, thresholds, symbols, policy, unread, singled, List.of());
+        return withThresholds(base, reading, thresholds, symbols, policy, rulesWithoutALine, singled, List.of());
     }
 
     /**
@@ -365,10 +365,10 @@ public final class Partitions {
                                               souther.compiler.inputs.Quantities reading,
                                               List<Threshold> thresholds,
                                               Symbols symbols, ReadingPolicy policy,
-                                              List<RuleWithoutALine> unread,
+                                              List<RuleWithoutALine> rulesWithoutALine,
                                               List<GuardThresholds.Guards.Singled> singled,
                                               List<LineDrawn> between) {
-        return withThresholds(base, reading, thresholds, symbols, policy, unread, singled, between,
+        return withThresholds(base, reading, thresholds, symbols, policy, rulesWithoutALine, singled, between,
                 souther.compiler.check.PathReachability.Answers.NONE);
     }
 
@@ -390,12 +390,12 @@ public final class Partitions {
                                               souther.compiler.inputs.Quantities reading,
                                               List<Threshold> thresholds,
                                               Symbols symbols, ReadingPolicy policy,
-                                              List<RuleWithoutALine> unread,
+                                              List<RuleWithoutALine> rulesWithoutALine,
                                               List<GuardThresholds.Guards.Singled> singled,
                                               List<LineDrawn> between,
                                               souther.compiler.check.PathReachability.Answers
                                                       arrives) {
-        return withThresholds(base, reading, thresholds, symbols, policy, unread, singled, between,
+        return withThresholds(base, reading, thresholds, symbols, policy, rulesWithoutALine, singled, between,
                 arrives, ReachingCuts.NONE);
     }
 
@@ -411,7 +411,7 @@ public final class Partitions {
                                               souther.compiler.inputs.Quantities reading,
                                               List<Threshold> thresholds,
                                               Symbols symbols, ReadingPolicy policy,
-                                              List<RuleWithoutALine> unread,
+                                              List<RuleWithoutALine> rulesWithoutALine,
                                               List<GuardThresholds.Guards.Singled> singled,
                                               List<LineDrawn> between,
                                               souther.compiler.check.PathReachability.Answers
@@ -420,8 +420,8 @@ public final class Partitions {
         // Both producers of one kind of evidence. What a body compared and what a type's own rules
         // bound are read by different readers and answer the same question, so a position either of
         // them wrote about and neither could turn into a line is named once, whichever wrote it.
-        List<RuleWithoutALine> rules = new ArrayList<>(base.unread());
-        for (RuleWithoutALine each : unread) {
+        List<RuleWithoutALine> rules = new ArrayList<>(base.rulesWithoutALine());
+        for (RuleWithoutALine each : rulesWithoutALine) {
             if (rules.stream().noneMatch(had -> had.sameAs(each))) {
                 rules.add(each);
             }
@@ -827,10 +827,10 @@ public final class Partitions {
     private static void axisOf(String behavior, Position position, Symbols symbols,
                                ReadingPolicy policy,
                                List<Axis> out, java.util.Set<NumericTerm> uncertain,
-                               List<RuleWithoutALine> unread) {
+                               List<RuleWithoutALine> rulesWithoutALine) {
         for (RuleWithoutALine each : position.rulesWithoutALine()) {
-            if (unread.stream().noneMatch(had -> had.sameAs(each))) {
-                unread.add(each);
+            if (rulesWithoutALine.stream().noneMatch(had -> had.sameAs(each))) {
+                rulesWithoutALine.add(each);
             }
         }
         NumericTerm term = position.term();

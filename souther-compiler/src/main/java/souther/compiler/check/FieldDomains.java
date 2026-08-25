@@ -76,7 +76,7 @@ public final class FieldDomains {
     private final List<InvariantChecker.Direct> directs;
     /** The rules saying where a coordinate's values stop that no end came out of — see
      * {@link #noLineAt}. */
-    private final List<NoLine> unread;
+    private final List<NoLine> noLines;
     /** What each clause reaching this value raises, keyed on the rule it is. */
     private final Map<RuleRef, Required> raised;
     /** The same per part of each clause. A reader that found one conjunct wanting names what that
@@ -143,7 +143,7 @@ public final class FieldDomains {
                          Map<String, ValueSet> admittedByField,
                          Map<String, UnreadReason> unreadByField,
                          Set<String> notSeparatedByField,
-                         List<InvariantChecker.Direct> directs, List<NoLine> unread,
+                         List<InvariantChecker.Direct> directs, List<NoLine> noLines,
                          Map<RuleRef, Required> raised,
                          Map<RuleRef, Map<Core, Required>> raisedByPart, ReadingEvidence took,
                          Map<String, List<TypeSymbol>> narrowers,
@@ -162,7 +162,7 @@ public final class FieldDomains {
         this.unreadByField = unreadByField;
         this.notSeparatedByField = notSeparatedByField;
         this.directs = directs;
-        this.unread = unread;
+        this.noLines = noLines;
         this.raised = raised;
         this.raisedByPart = raisedByPart;
         this.took = took;
@@ -770,7 +770,7 @@ public final class FieldDomains {
      */
     private RuleAccounting.Outcome unreadAnswerFor(RuleRef rule, Core part,
                                                    Owed.Subject.OfAPosition where) {
-        for (NoLine said : unread) {
+        for (NoLine said : noLines) {
             if (said.from().equals(rule) && said.part() == part
                     && said.path().equals(where.path())
                     && said.measured() == where.measured()
@@ -849,7 +849,7 @@ public final class FieldDomains {
      * silenced the record's clause about the same field.
      */
     public List<NoLine> noLineAt(String path) {
-        return unread.stream().filter(each -> each.path().equals(path)).toList();
+        return noLines.stream().filter(each -> each.path().equals(path)).toList();
     }
 
     /**

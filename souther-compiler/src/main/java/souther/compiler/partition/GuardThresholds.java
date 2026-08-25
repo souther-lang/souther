@@ -607,10 +607,15 @@ public final class GuardThresholds {
     private static void publish(String behavior, Core.Binary comparison, CoverageSites.Plan plan,
                                 InputReads reads, Symbols symbols, ComparisonAssessment read,
                                 List<RuleWithoutALine> out) {
-        BlockReason.RuleWithoutLineReason why = read.whyTheLineReadingDrewNone().orElse(null);
-        if (why == null) {
-            return;
-        }
+        read.whyTheLineReadingDrewNone().ifPresent(why ->
+                publish(behavior, comparison, plan, reads, symbols, read, out, why));
+    }
+
+    /** The same, once there is something to say. */
+    private static void publish(String behavior, Core.Binary comparison, CoverageSites.Plan plan,
+                                InputReads reads, Symbols symbols, ComparisonAssessment read,
+                                List<RuleWithoutALine> out,
+                                BlockReason.RuleWithoutLineReason why) {
         RuleRef.Comparison rule = new RuleRef.Comparison(behavior, comparison.origin());
         souther.compiler.check.RuleCitation cited = citationOf(comparison, plan.comparisons());
         // Whose positions these are is the assessment's answer, not this reader's: a rule that was
