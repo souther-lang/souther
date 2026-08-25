@@ -105,12 +105,22 @@ public record BorderAssessment(Border border, Map<PointRole, ItemAssessment> ite
     }
 
     /** The rule that drew the line, as a report about {@code sectionSource} writes it. */
-    public String origin(SourceNameResolver names, SourceId sectionSource) {
+    public String describe(SourceNameResolver names, SourceId sectionSource) {
         return border.origin().describe(names, sectionSource);
     }
 
-    /** The rule itself, for a reader that renders it rather than printing what this would. */
-    public OriginRef rule() {
+    /**
+     * The rule as this reading met it, for a reader that renders it rather than printing what
+     * {@link #describe} would.
+     *
+     * <p>An {@link OriginRef} and not a {@link souther.compiler.check.RuleRef}, which is why it is
+     * not called the rule. Which rule of the model this came from is
+     * {@link souther.compiler.partition.BorderObligationId#provenance()}, the same value however
+     * many lines the rule drew; what a row is owed for is
+     * {@link souther.compiler.partition.Border#obligation()}. Named the rule, the first two were one
+     * word, and a caller wanting either reached for whichever this happened to be.
+     */
+    public OriginRef origin() {
         return border.origin();
     }
 

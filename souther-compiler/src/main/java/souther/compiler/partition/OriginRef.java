@@ -38,6 +38,13 @@ public sealed interface OriginRef {
      * declaration bounding a position at one value came out as one origin, and the cut kept one
      * rule where ADR-0090 says it keeps every rule that drew it.
      *
+     * @param conjunct        which conjunct of the clause drew this end. What tells one line of a
+     *                        clause from another where the clause drew several: {@code
+     *                        String.length(name) >= 1 && String.length(code) >= 1} is one clause and
+     *                        two lines at one value, and a row at either says nothing about the
+     *                        other. The clause's own text and not the number it was written about,
+     *                        which is spelled differently by every reading that reaches it
+     *                        ({@link souther.compiler.check.DeclaredBounds.Drawn})
      * @param holdsAtTheValue whether the cut value is one the bound admits, which is the end's own
      *                        inclusivity and is what says whether a row at the cut is the border's
      *                        {@code ON} point or its {@code OFF} point. Carried for the same reason
@@ -51,11 +58,16 @@ public sealed interface OriginRef {
      *                        derivation gets and not one about the end, and reading the end is what
      *                        keeps the two from being confused if it ever does get further
      */
-    record InvariantOrigin(RuleRef.Invariant rule, boolean holdsAtTheValue) implements OriginRef {
+    record InvariantOrigin(RuleRef.Invariant rule, int conjunct, boolean holdsAtTheValue)
+            implements OriginRef {
 
         public InvariantOrigin {
             if (rule == null) {
                 throw new IllegalArgumentException("a bound drawn by no clause");
+            }
+            if (conjunct < 0) {
+                throw new IllegalArgumentException(
+                        "a conjunct of a clause is counted from zero: " + conjunct);
             }
         }
     }

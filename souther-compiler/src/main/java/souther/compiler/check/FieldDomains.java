@@ -401,7 +401,8 @@ public final class FieldDomains {
      *              other kind of rule reaches this reading
      * @param lower whether this bounds the coordinate below; otherwise above
      */
-    public record Placed(Coordinate at, RuleRef.Invariant from, boolean lower, Endpoint end) {
+    public record Placed(Coordinate at, RuleRef.Invariant from, boolean lower, Endpoint end,
+                        int conjunct) {
 
         /** Where in the value the end sits. Never which number it is on: that is {@link #at}, and
          *  reading one off the other is what the pair exists to stop. */
@@ -829,7 +830,7 @@ public final class FieldDomains {
     public List<Placed> placed() {
         return directs.stream()
                 .map(each -> new Placed(each.at(), each.from(),
-                        each.bound().lower(), each.bound().end()))
+                        each.bound().lower(), each.bound().end(), each.conjunct()))
                 .toList();
     }
 

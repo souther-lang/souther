@@ -64,6 +64,19 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
         return demands.get(role);
     }
 
+    /**
+     * What a row here is owed for, which several readings of this line share.
+     *
+     * <p>The line the author wrote, without the position it was read at. Everything that folds
+     * readings together keys on this; everything that says where a row would go reads {@link #cut}.
+     * Both are here rather than one being worked out from the other by whoever needs it, because a
+     * caller deriving a key from the parts it happened to know is how one clause's row came to be
+     * asked for once per position of every behavior carrying the type (issue #1062).
+     */
+    public BorderObligationId obligation() {
+        return new BorderObligationId(origin, cut.at());
+    }
+
     /** Where the line is, as a report names it. Not what any one of its points asks for: that is
      *  {@link #label(PointRole)}, and the two differ at three of the four. */
     public String label() {

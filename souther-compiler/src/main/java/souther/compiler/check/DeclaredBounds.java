@@ -31,6 +31,40 @@ import java.util.List;
 public final class DeclaredBounds {
 
     /**
+     * One rule that put an end here, and which number of the declaration it was written about.
+     *
+     * <p>The pair and not the rule alone. One clause can bound two numbers of one declaration —
+     * {@code invariant both = String.length(name) >= 1 && String.length(code) >= 1} places two ends
+     * at one value — and they are two lines an author drew: a row whose {@code name} is one
+     * character says nothing about {@code code}. Held as the rule, the two came out as one thing to
+     * write a row for, which is the mistake issue #1062 is about with the halves the other way round.
+     *
+     * <p><b>The conjunct and not the number it was written about.</b> Which coordinate a clause
+     * bounded is read from whatever value the reading started at — {@code Day}'s own clause is about
+     * {@code value} read from {@code Day} and about {@code d} read from the {@code Span} holding it
+     * — so two readings of one line spell the coordinate two ways, and an identity built on it calls
+     * one authored line two. The conjunct is the clause's own text: it is the same number whichever
+     * value the reading started at, and it is what tells the ends of {@code value >= 0 && value <=
+     * 10} apart.
+     *
+     * <p>Counted over every conjunct and not over the ones a line came out of, so that a reading
+     * that could make nothing of one conjunct still numbers the next the same as a reading that
+     * could.
+     */
+    public record Drawn(RuleRef.Invariant rule, int conjunct) {
+
+        public Drawn {
+            if (rule == null) {
+                throw new IllegalArgumentException("a rule put an end here, and this is which");
+            }
+            if (conjunct < 0) {
+                throw new IllegalArgumentException(
+                        "a conjunct of a clause is counted from zero: " + conjunct);
+            }
+        }
+    }
+
+    /**
      * One end of a range, and every rule that put it there.
      *
      * <p>Rules, plural. Two layers can state the same bound — a wrapper repeating what it wraps — and
@@ -46,7 +80,7 @@ public final class DeclaredBounds {
      * reference, it built the identity back for itself, which is a decision about what a rule is
      * being taken by whoever happened to consume one.
      */
-    public record End(Endpoint at, List<RuleRef.Invariant> from) {
+    public record End(Endpoint at, List<Drawn> from) {
 
         public Place value() {
             return at.at();
@@ -71,7 +105,7 @@ public final class DeclaredBounds {
             if (had.value().compareTo(one.value()) != 0) {
                 return at == had.at() ? had : one;
             }
-            List<RuleRef.Invariant> both = new ArrayList<>(had.from());
+            List<Drawn> both = new ArrayList<>(had.from());
             one.from().stream().filter(n -> !both.contains(n)).forEach(both::add);
             return new End(at, List.copyOf(both));
         }
@@ -125,7 +159,13 @@ public final class DeclaredBounds {
             for (TypeOps.Declared declared
                     : TypeOps.declaredInvariants(named, layer.data(), symbols, _ -> null)) {
                 RuleRef.Invariant rule = new RuleRef.Invariant(Clause.Ref.of(declared));
+                // Which conjunct of the clause each end came out of, counted over all of them in
+                // the order the clause was written. The other reading of these clauses counts them
+                // the same way, which is what makes an end read here and an end read through the
+                // value this type sits in one line rather than two.
+                int conjunct = -1;
                 for (Hir.Expr each : ClauseHelpers.conjunctsOf(declared.clause().expr())) {
+                    conjunct++;
                     // An end and nothing else. A rule this reads no end from narrows nothing here,
                     // and a rule stepping past the last value of the order states an end no value is
                     // at — which is a declaration with no value, answered where counts are and not
@@ -136,7 +176,7 @@ public final class DeclaredBounds {
                         continue;
                     }
                     InvariantBound read = placed.bound();
-                    End end = new End(read.end(), List.of(rule));
+                    End end = new End(read.end(), List.of(new Drawn(rule, conjunct)));
                     if (read.lower()) {
                         min = End.tighter(min, end, false);
                     } else {
@@ -170,7 +210,7 @@ public final class DeclaredBounds {
             if (!each.at().kind().equals(kind)) {
                 continue;
             }
-            End end = new End(each.end(), List.of(each.from()));
+            End end = new End(each.end(), List.of(new Drawn(each.from(), each.conjunct())));
             if (each.lower()) {
                 min = End.tighter(min, end, false);
             } else {

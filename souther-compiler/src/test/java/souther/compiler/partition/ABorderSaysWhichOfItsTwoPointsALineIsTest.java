@@ -43,6 +43,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ABorderSaysWhichOfItsTwoPointsALineIsTest {
 
+    /** The clause here states one thing, so the end it places comes out of its first conjunct. */
+    private static final int THE_ONLY_CONJUNCT = 0;
+
+
     /** {@code <=}: the line's own values satisfy the rule, so 100 is inside and 101 is the step out. */
     private static final String CLOSED = model("<=");
 
@@ -189,13 +193,13 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
     @Test
     void aBoundThatStopsShortOfItsValueDrawsNoBorderAtIt() {
         assertEquals(Criterion.AtTheLevel.class,
-                borderOf(new OriginRef.InvariantOrigin(invariant(), true))
+                borderOf(new OriginRef.InvariantOrigin(invariant(), THE_ONLY_CONJUNCT, true))
                         .demand(PointRole.ON).criterion().getClass(),
                 "a bound that admits its own end is at that end's ON point");
         // And where it does not admit it, the position does not reach the line: the value is outside
         // what the rules leave, so there is no border here and no point of one either. Read as a
         // border, it would owe an ON point one step in that no carrier here names.
-        assertEquals(null, borderOf(new OriginRef.InvariantOrigin(invariant(), false)),
+        assertEquals(null, borderOf(new OriginRef.InvariantOrigin(invariant(), THE_ONLY_CONJUNCT, false)),
                 "a bound whose own end its position refuses draws no line at it");
     }
 
@@ -239,7 +243,7 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
                 border.demand(PointRole.OUT).criterion().asked(border.cut().of()));
 
         // A bound owes nothing outside itself, and says which of the three answers settled it.
-        Border bound = borderOf(new OriginRef.InvariantOrigin(invariant(), true));
+        Border bound = borderOf(new OriginRef.InvariantOrigin(invariant(), THE_ONLY_CONJUNCT, true));
         assertEquals(new Demand.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT),
                 bound.demand(PointRole.OFF));
         assertEquals(new Demand.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT),

@@ -3741,7 +3741,7 @@ public final class Adequacy {
                         // different criteria and are told under different codes.
                         case About.APointOfABorder(var point) ->
                                 point.role().againstTheLine()
-                                        ? point.border().rule().isWrittenRatherThanNamed()
+                                        ? point.border().origin().isWrittenRatherThanNamed()
                                                 ? new ExampleMessage
                                                         .NoRowIsAtThePointOfTheBorderAConstructDrew(
                                                         point.role().name(), point.border().axis(),
@@ -3750,8 +3750,8 @@ public final class Adequacy {
                                                         .NoRowIsAtThePointOfTheBorderARuleDrew(
                                                         point.role().name(), point.border().axis(),
                                                         point.against(),
-                                                        point.border().rule().named())
-                                        : point.border().rule().isWrittenRatherThanNamed()
+                                                        point.border().origin().named())
+                                        : point.border().origin().isWrittenRatherThanNamed()
                                                 ? new ExampleMessage
                                                         .NoRowIsAtThePointAwayFromTheBorderAConstructDrew(
                                                         point.role().name(), point.border().axis(),
@@ -3760,7 +3760,7 @@ public final class Adequacy {
                                                         .NoRowIsAtThePointAwayFromTheBorderARuleDrew(
                                                         point.role().name(), point.border().axis(),
                                                         point.against(),
-                                                        point.border().rule().named());
+                                                        point.border().origin().named());
                         case About.AnArmNoRowGoesThrough(var arm) ->
                                 new ExampleMessage.NoRowGoesThroughThatArm(
                                         phraseFor(arm), arm.behavior());
@@ -3812,7 +3812,7 @@ public final class Adequacy {
                     // dropped, on the grounds that a label naming no source would be read against
                     // the file the diagnostic is in; a label no longer takes its file from where it
                     // is shown, so what was left unsaid can be said.
-                    point.border().rule().citation().ifPresent(cited -> {
+                    point.border().origin().citation().ifPresent(cited -> {
                         switch (cited) {
                             case souther.compiler.diag.Citation.Written w ->
                                     built.secondary(souther.compiler.diag.Region.point(w.at()),

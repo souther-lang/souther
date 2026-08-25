@@ -871,7 +871,7 @@ public final class InvariantChecker {
      *                 they came back as one
      */
     record Direct(FieldDomains.Coordinate at, RuleRef.Invariant from,
-                  InvariantBound bound, Core part) {
+                  InvariantBound bound, Core part, int conjunct) {
 
         /** Where in the value the end was placed. Never which end it is: one position carries more
          *  than one number and {@link #at} is what says which of them this is. */
@@ -1123,7 +1123,7 @@ public final class InvariantChecker {
         Map<RuleRef, Required> raised = new LinkedHashMap<>();
         Map<RuleRef, Map<Core, Required>> raisedByPart = new LinkedHashMap<>();
         stated.forEach(each ->
-                direct(each.clause(), each.from(), at, byName, out, noLines, narrowers, raised,
+                direct(each.clause(), each.from(), new int[1], at, byName, out, noLines, narrowers, raised,
                         took, typeAt, parts, raisedByPart));
         // Insertion order, kept: `Map.copyOf` iterates in an order salted once per JVM run, and
         // what a report prints for a position is these in the order the declaration writes them.
@@ -1221,7 +1221,7 @@ public final class InvariantChecker {
      * asked once — read apart, the second would be a walk that had to agree with this one about which
      * comparisons it had already accounted for.
      */
-    private void direct(Core clause, RuleRef.Invariant from, Denotations at,
+    private void direct(Core clause, RuleRef.Invariant from, int[] conjunct, Denotations at,
                         Map<FactSubject, Coordinate> byName, List<Direct> out,
                         List<FieldDomains.NoLine> noLines,
                         Map<String, List<TypeSymbol>> narrowers,
@@ -1229,18 +1229,27 @@ public final class InvariantChecker {
                         Map<String, Type> typeAt,
                         PartsRead parts,
                         Map<RuleRef, Map<Core, Required>> raisedByPart) {
+        if (clause instanceof Core.Binary and && and.op() == BinOp.AND) {
+            // One rule the author wrote, so what it raises is what its conjuncts raise together.
+            // Left before right, which is the order the clause was written in and the order
+            // {@code ClauseHelpers.conjunctsOf} reads it in: the two readings of one clause number
+            // its conjuncts alike, which is what lets a line drawn here be recognised as the line
+            // the declaration's own reading drew (issue #1062).
+            direct(and.left(), from, conjunct, at, byName, out, noLines, narrowers, raised, took,
+                    typeAt, parts, raisedByPart);
+            direct(and.right(), from, conjunct, at, byName, out, noLines, narrowers, raised, took,
+                    typeAt, parts, raisedByPart);
+            return;
+        }
+        // Which conjunct of the clause this is, taken here so that every one of them is numbered —
+        // including the ones no end comes out of. Numbered only where a line was drawn, the count
+        // would depend on what this reading could make of the conjuncts before it, and two readings
+        // of one clause would disagree about which line is which.
+        int part = conjunct[0]++;
         if (!(clause instanceof Core.Binary bin)) {
             settle(clause, from, states(clause, at, byName, null),
                     new InvariantBound.Read.NoEnd(),
                     at, byName, raised, took, typeAt, parts, raisedByPart);
-            return;
-        }
-        if (bin.op() == BinOp.AND) {
-            // One rule the author wrote, so what it raises is what its conjuncts raise together.
-            direct(bin.left(), from, at, byName, out, noLines, narrowers, raised, took, typeAt,
-                    parts, raisedByPart);
-            direct(bin.right(), from, at, byName, out, noLines, narrowers, raised, took, typeAt,
-                    parts, raisedByPart);
             return;
         }
         if (!InvariantBound.ordering(bin.op()) && bin.op() != BinOp.EQ) {
@@ -1317,7 +1326,7 @@ public final class InvariantChecker {
             return;
         }
         if (end instanceof InvariantBound.Read.AnEnd placed) {
-            out.add(new Direct(found.at(), from, placed.bound(), bin));
+            out.add(new Direct(found.at(), from, placed.bound(), bin, part));
         }
     }
 

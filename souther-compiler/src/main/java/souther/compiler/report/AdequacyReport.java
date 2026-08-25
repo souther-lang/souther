@@ -981,10 +981,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     out.append(againstTheLine
                             ? String.format("      %s no row is at the %s point %s = %s (%s)%n",
                                     mark(f), point.role(), point.border().axis(),
-                                    point.against(), point.border().origin(names, declaredIn))
+                                    point.against(), point.border().describe(names, declaredIn))
                             : String.format("      %s no row is at an %s point of %s, %s (%s)%n",
                                     mark(f), point.role(), point.border().axis(),
-                                    point.against(), point.border().origin(names, declaredIn)));
+                                    point.against(), point.border().describe(names, declaredIn)));
                 }
             }
         }
@@ -999,7 +999,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // without this line the difference reads as the tool being arbitrary.
             out.append(String.format("      · not known to be writable: the %s point %s %s (%s)%s%n",
                     p.role(), p.border().axis(), p.asked(),
-                    p.border().origin(names, declaredIn),
+                    p.border().describe(names, declaredIn),
                     whatWasTried(owed(p).attempt(), names, declaredIn)));
         }
         // And what the model itself answered, which is not a row anybody is behind on. Named by the
@@ -1008,7 +1008,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         for (BorderAssessment.Point p : BorderAssessment.pointsOf(partition.boundaries())) {
             if (p.item() instanceof ItemAssessment.NotOwed not) {
                 out.append(String.format("      · no %s point is owed at %s (%s): %s%n",
-                        p.role(), p.border().label(), p.border().origin(names, declaredIn),
+                        p.role(), p.border().label(), p.border().describe(names, declaredIn),
                         whyNotOwed(not.reason())));
             }
         }
@@ -1970,7 +1970,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // a place written without its source is a line and a column belonging to nothing —
             // and where a boundary is the only place a report points at, the `sources` table has
             // no other entry to guess from.
-            b.put("origin", boundary.origin(sources::written, null));
+            b.put("origin", boundary.describe(sources::written, null));
             // What the line is a line at, said rather than left to be inferred from the text beside
             // it. A line between two positions writes the other position where a line at a count
             // writes the count, and the two read alike.

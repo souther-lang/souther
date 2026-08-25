@@ -104,8 +104,8 @@ class CompileExampleBoundaryTest {
         BorderAssessment.Point zero = at(away, "0").get(0);
         assertFalse(zero.owed().hasRowWitness());
         assertEquals(MeasurementStatus.COMPLETE, AdequacyReport.statusOf(zero.item().weakeningSource()));
-        assertTrue(zero.border().rule().named().startsWith("invariant"),
-                zero.border().rule().named());
+        assertTrue(zero.border().origin().named().startsWith("invariant"),
+                zero.border().origin().named());
 
         PartitionEvidence edge = evidence(MODEL + """
 
@@ -129,8 +129,8 @@ class CompileExampleBoundaryTest {
         assertEquals(MeasurementStatus.COMPLETE, AdequacyReport.statusOf(hundred.item().weakeningSource()));
         assertTrue(hundred.owed().hasRowWitness(),
                 "the row wrote 100 and the guard compared it");
-        assertTrue(hundred.border().rule().isWrittenRatherThanNamed(),
-                hundred.border().rule().named());
+        assertTrue(hundred.border().origin().isWrittenRatherThanNamed(),
+                hundred.border().origin().named());
     }
 
     /**
@@ -167,7 +167,7 @@ class CompileExampleBoundaryTest {
                 """);
 
         BorderAssessment.Point first = at(evidence, "0").stream()
-                .filter(p -> p.border().rule().isWrittenRatherThanNamed()).findFirst().orElseThrow();
+                .filter(p -> p.border().origin().isWrittenRatherThanNamed()).findFirst().orElseThrow();
         BorderAssessment.Point second = at(evidence, "100").get(0);
 
         assertEquals(MeasurementStatus.COMPLETE, AdequacyReport.statusOf(second.item().weakeningSource()),
