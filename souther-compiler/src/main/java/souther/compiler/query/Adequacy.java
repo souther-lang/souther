@@ -2462,7 +2462,7 @@ public final class Adequacy {
             Map<String, souther.compiler.check.StatedContract> declared =
                     db.ask(new Bodies.StatedContracts(name)).value();
 
-            Map<String, List<Finding>> findings = db.ask(new Findings(name)).value();
+            List<Finding> findings = db.ask(new Findings(name)).value();
             Map<String, PartitionEvidence> partitions = coverage.value();
 
             Hir.SpecBehavior spec = specOf(prepared.value(), behavior);
@@ -2484,8 +2484,11 @@ public final class Adequacy {
                 // is a sentence about neither.
                 return Answer.absent();
             }
+            // This behavior's own, grouped here because that is what a generation is asked for.
+            // What each finding is about is the finding's; a walk that read them out of a map keyed
+            // by behavior would be reading the grouping as the answer.
             List<Finding> owed = findings == null ? List.of()
-                    : findings.getOrDefault(behavior, List.of());
+                    : findings.stream().filter(each -> each.subject().isBehavior(behavior)).toList();
             InputDomain domain = domainOf(readInputs, spec);
             // What this run is asked for, settled before the search and before anything that can
             // stop it. Every way out of the generation below holds this same list.
@@ -3294,7 +3297,18 @@ public final class Adequacy {
      * one of a body that may have been spliced in from a file nobody holds. A report reading a
      * coordinate cannot tell the two apart, and printed the second as though it were the first.
      */
-    public record Finding(String behavior, WeakeningSet weakenedBy, Citation at, About about) {
+    public record Finding(FindingSubject subject, WeakeningSet weakenedBy, Citation at,
+                          About about) {
+
+        /**
+         * What a report calls what this is about.
+         *
+         * <p>Here rather than at each reader, so that a message wanting a word for the subject does
+         * not reach past it for the one kind of subject it happens to know about.
+         */
+        public String named() {
+            return subject.named();
+        }
 
         /**
          * A finding one measurement established, carrying what <em>that</em> measurement went
@@ -3315,7 +3329,13 @@ public final class Adequacy {
          * different things.
          */
         public static Finding by(String behavior, Measure<?> found, Citation at, About about) {
-            return new Finding(behavior, found.weakening(), at, about);
+            return by(new FindingSubject.OfABehavior(behavior), found, at, about);
+        }
+
+        /** The same, about whatever the measure was of. */
+        public static Finding by(FindingSubject subject, Measure<?> found, Citation at,
+                                 About about) {
+            return new Finding(subject, found.weakening(), at, about);
         }
 
         /**
@@ -3327,7 +3347,12 @@ public final class Adequacy {
          * is its criterion's alone — every kind that reaches here is one no criterion refuses.
          */
         public static Finding noticed(String behavior, Citation at, About about) {
-            return new Finding(behavior, WeakeningSet.none(), at, about);
+            return noticed(new FindingSubject.OfABehavior(behavior), at, about);
+        }
+
+        /** The same, about whatever it was noticed of. */
+        public static Finding noticed(FindingSubject subject, Citation at, About about) {
+            return new Finding(subject, WeakeningSet.none(), at, about);
         }
 
         /**
@@ -3427,7 +3452,7 @@ public final class Adequacy {
      * asked to be warned, because a report wants them either way; what the level decides is which
      * measures were made at all.
      */
-    public record Findings(String name) implements Key<Map<String, List<Finding>>> {
+    public record Findings(String name) implements Key<List<Finding>> {
 
         @Override
         public String module() {
@@ -3435,7 +3460,7 @@ public final class Adequacy {
         }
 
         @Override
-        public Answer<Map<String, List<Finding>>> compute(Db db) {
+        public Answer<List<Finding>> compute(Db db) {
             Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
             if (!prepared.present()) {
                 return Answer.absent();
@@ -3449,20 +3474,26 @@ public final class Adequacy {
             Map<String, PartitionEvidence> partitions = db.ask(new Coverage(name)).value();
             Map<String, BranchEvidence> branches = db.ask(new BranchCoverage(name)).value();
 
-            Map<String, List<Finding>> out = new LinkedHashMap<>();
+            // One list and not a block per behavior. What each finding is about is its own
+            // ({@link FindingSubject}), and a map keyed by behavior has no key for a finding about
+            // a declaration — so one had to be filed under whichever behavior carrying the type a
+            // walk reached first, which is a choice nothing made and a reader cannot check
+            // (issue #1062). Whoever prints a block per behavior groups these; the model says what
+            // each is about.
+            //
+            // In the order the module declares its behaviors, because a build reads the warnings
+            // these become and a set of warnings whose order moves between runs is a diff nobody
+            // wrote.
+            List<Finding> out = new ArrayList<>();
             for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
-                List<Finding> found = new ArrayList<>();
                 signatureFindings(behavior.name(), Citation.of(behavior.pos()),
-                        signatures == null ? null : signatures.get(behavior.name()), found);
+                        signatures == null ? null : signatures.get(behavior.name()), out);
                 partitionFindings(behavior,
-                        partitions == null ? null : partitions.get(behavior.name()), found);
+                        partitions == null ? null : partitions.get(behavior.name()), out);
                 armFindings(behavior,
-                        branches == null ? null : branches.get(behavior.name()), found);
-                out.put(behavior.name(), List.copyOf(found));
+                        branches == null ? null : branches.get(behavior.name()), out);
             }
-            // Ordered, because a build reads the warnings these become and a set of warnings whose
-            // order moves between runs is a diff nobody wrote.
-            return Answer.of(Ordered.map(out));
+            return Answer.of(List.copyOf(out));
         }
 
         /**
@@ -3690,16 +3721,14 @@ public final class Adequacy {
             if (!asked.warn()) {
                 return Answer.of(true);
             }
-            Answer<Map<String, List<Finding>>> found = db.ask(new Findings(name));
+            Answer<List<Finding>> found = db.ask(new Findings(name));
             if (!found.present()) {
                 return Answer.absent();
             }
             List<Report> reports = new ArrayList<>();
-            for (List<Finding> ofBehavior : found.value().values()) {
-                for (Finding finding : ofBehavior) {
-                    if (finding.isAdequacyGap(asked.held())) {
-                        reports.add(warning(finding));
-                    }
+            for (Finding finding : found.value()) {
+                if (finding.isAdequacyGap(asked.held())) {
+                    reports.add(warning(finding));
                 }
             }
             return Answer.of(true, reports);
@@ -3719,12 +3748,12 @@ public final class Adequacy {
                     .say(switch (said) {
                         case About.ACaseNoRowExpects(var missing) ->
                                 new ExampleMessage.NoRowExpectsThatCase(
-                                        missing.name(), finding.behavior());
+                                        missing.name(), finding.named());
                         case About.ACaseNoRowAppliesItTo(var input, var missing) ->
                                 new ExampleMessage.NoRowAppliesItToThatCase(missing.name(),
                                         // How a person is told which input, which is one-based and
                                         // is this sentence's to spell.
-                                        String.valueOf(input.at() + 1), finding.behavior());
+                                        String.valueOf(input.at() + 1), finding.named());
                         // The rule named without a place. Nothing here knows what to call a
                         // source, so a line and a column written into the sentence would be read
                         // against whichever file the reader has in mind. Where a fork of a body
@@ -3768,7 +3797,7 @@ public final class Adequacy {
                         // words — which are the words the report writes for the same finding.
                         case About.AClassNoRowIsIn(var missing) ->
                                 new ExampleMessage.NoRowIsInThatClass(missing.name(),
-                                        missing.axis().path(), finding.behavior());
+                                        missing.axis().path(), finding.named());
                         // Kinds no build is told about under any code. Listed rather than
                         // defaulted, so that one added later has to be answered here rather than
                         // arriving as a warning with no sentence.

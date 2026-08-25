@@ -95,9 +95,23 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     public record ModuleReport(String module, SourceId declaredIn,
-                               List<BehaviorReport> behaviors) {
+                               List<BehaviorReport> behaviors,
+                               List<Adequacy.Finding> declarations) {
+
+        /**
+         * What the module is short of that is not any behavior's.
+         *
+         * <p>A line an {@code invariant} drew is a fact about the type — whether a row standing at
+         * the boundary of {@code UserId} is believed is a question about {@code UserId}, and the
+         * behaviors carrying it say nothing about the length of a user id (issue #1062). Held in a
+         * behavior's list, it had to be filed under whichever of them a walk reached first.
+         *
+         * <p>Here rather than left out of the report, so that a finding whose subject is not a
+         * behavior cannot go missing between the measure and the page.
+         */
         public ModuleReport {
             behaviors = List.copyOf(behaviors);
+            declarations = List.copyOf(declarations);
         }
 
         /**
@@ -283,7 +297,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 compilation.db().ask(new souther.compiler.query.Bodies.Claimed(name)).value();
         // The lines this report prints and the warnings a build is given are the same list, asked for
         // once here. A second reading of the evidence would be a second statement of what a gap is.
-        Map<String, List<Adequacy.Finding>> findings =
+        List<Adequacy.Finding> findings =
                 compilation.db().ask(new Adequacy.Findings(name)).value();
         List<BehaviorReport> behaviors = new ArrayList<>();
         for (Hir.BehaviorDef behavior : module.behaviors()) {
@@ -311,10 +325,21 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     new BehaviorEvidence(reading, signature, partition, branch),
                     claims == null ? ClaimAnnotations.NONE
                             : claims.getOrDefault(behavior.name(), ClaimAnnotations.NONE),
-                    findings == null ? List.of()
-                            : findings.getOrDefault(behavior.name(), List.of())));
+                    ofBehavior(findings, behavior.name())));
         }
-        return new ModuleReport(name, compilation.sourceIdOf(name), behaviors);
+        return new ModuleReport(name, compilation.sourceIdOf(name), behaviors,
+                findings == null ? List.of()
+                        : findings.stream()
+                                .filter(each -> !(each.subject()
+                                        instanceof souther.compiler.query.FindingSubject.OfABehavior))
+                                .toList());
+    }
+
+    /** The findings about one behavior. Grouped here, where a block per behavior is printed, and
+     *  not by the measure: what each finding is about is its own answer. */
+    private static List<Adequacy.Finding> ofBehavior(List<Adequacy.Finding> findings, String name) {
+        return findings == null ? List.of()
+                : findings.stream().filter(each -> each.subject().isBehavior(name)).toList();
     }
 
     /** This report with only the modules and behaviors the caller asked about. A name that matches
@@ -333,7 +358,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // what only it carried and keeps what a whole source cost every one of them. That was a
             // filter over a list of the module's own, which is a second statement of who a reason
             // counts against — asked of the reason where it belongs (issue #996).
-            ModuleReport one = new ModuleReport(m.module(), m.declaredIn(), behaviors);
+            // What the module's declarations are short of is kept whichever behavior was asked
+            // about, for the reason the reasons are: it is not any behavior's, so narrowing to one
+            // of them takes nothing away from it.
+            ModuleReport one = new ModuleReport(m.module(), m.declaredIn(), behaviors,
+                    m.declarations());
             kept.add(one);
             overall = overall.union(one.weakenedBy());
         }

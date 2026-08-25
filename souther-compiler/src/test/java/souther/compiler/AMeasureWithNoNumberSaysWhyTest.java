@@ -701,9 +701,9 @@ class AMeasureWithNoNumberSaysWhyTest {
 
     private static List<Adequacy.Finding> findings(String behavior, Adequacy.Kind kind) {
         Compilation compilation = compiled();
-        Map<String, List<Adequacy.Finding>> all = compilation.db()
+        List<Adequacy.Finding> all = compilation.db()
                 .ask(new Adequacy.Findings(compilation.modules().get(0))).value();
-        return all.getOrDefault(behavior, List.of()).stream()
+        return all.stream().filter(f -> f.subject().isBehavior(behavior))
                 .filter(f -> f.kind() == kind).toList();
     }
 

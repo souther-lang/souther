@@ -66,7 +66,8 @@ class AFindingCarriesWhatTheMeasureThatFoundItWentWithoutTest {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        return compilation.db().ask(new Adequacy.Findings("demo")).value().get(behavior);
+        return compilation.db().ask(new Adequacy.Findings("demo")).value().stream()
+                .filter(each -> each.subject().isBehavior(behavior)).toList();
     }
 
     private static Adequacy.SignatureEvidence signature(String behavior) {

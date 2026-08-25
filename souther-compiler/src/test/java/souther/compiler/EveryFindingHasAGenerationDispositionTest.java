@@ -87,10 +87,10 @@ class EveryFindingHasAGenerationDispositionTest {
      */
     private static List<Adequacy.Finding> findings(Compilation compilation, String module,
                                                    String behavior) {
-        Map<String, List<Adequacy.Finding>> found =
+        List<Adequacy.Finding> found =
                 compilation.db().ask(new Adequacy.Findings(module)).value();
         assertNotNull(found, "the model under test compiles");
-        return found.get(behavior);
+        return found.stream().filter(each -> each.subject().isBehavior(behavior)).toList();
     }
 
     private static Adequacy.Filling filling(Compilation compilation, String module,

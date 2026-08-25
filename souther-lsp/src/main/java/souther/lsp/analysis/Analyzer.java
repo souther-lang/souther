@@ -770,12 +770,15 @@ public final class Analyzer {
     /** Whether anything this behavior is short of is a thing writing a row could answer. */
     private static boolean anythingARowCouldAnswer(Compilation compilation, String module,
                                                    String behavior) {
-        Map<String, List<souther.compiler.query.Adequacy.Finding>> findings =
+        List<souther.compiler.query.Adequacy.Finding> findings =
                 compilation.db().ask(new souther.compiler.query.Adequacy.Findings(module)).value();
         if (findings == null) {
             return false;
         }
-        return findings.getOrDefault(behavior, List.of()).stream()
+        // This behavior's own. A finding about a declaration is not one writing a row for this
+        // behavior answers — what {@code UserId} says is the same wherever the type is carried —
+        // so the offer beside a behavior is about the behavior's own (issue #1062).
+        return findings.stream().filter(each -> each.subject().isBehavior(behavior))
                 .anyMatch(each -> souther.compiler.query.Adequacy
                         .whereNoRowCouldAnswer(each.about()) == null);
     }

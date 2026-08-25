@@ -57,8 +57,8 @@ class OneOfTwoRulesAtOneValueCanBeAGapTest {
 
         // Both halves. That the gap exists is what makes the lookup happen at all, and a model
         // whose lines were all met would pass this without the reading under test having run.
-        assertTrue(compilation.db().ask(new Adequacy.Findings(module)).value()
-                        .getOrDefault("charge", java.util.List.of()).stream()
+        assertTrue(compilation.db().ask(new Adequacy.Findings(module)).value().stream()
+                        .filter(each -> each.subject().isBehavior("charge"))
                         .anyMatch(each -> each.kind() == Adequacy.Kind.BOUNDARY_UNMET),
                 "the guard's line at a hundred is the gap this is about");
         assertDoesNotThrow(() -> Adequacy.generatedOf(compilation.db(), module),
