@@ -1,7 +1,6 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.CoverageObligation;
-import souther.compiler.check.RuleAccounting;
 import souther.compiler.inputs.StructuralInspection;
 
 import java.util.Collections;
@@ -184,9 +183,9 @@ public final class MeasureClosure {
             if (unreached) {
                 continue;
             }
-            for (RuleAccounting.Unanswered each : axis.unanswered()) {
+            for (souther.compiler.inputs.StandingQuestion each : axis.unanswered()) {
                 ClosureGap gap = new ClosureGap.QuestionUnanswered(axis.id(), each);
-                switch (each.owed().obligation().answeredBy()) {
+                switch (each.obligation().answeredBy()) {
                     case PARTITION -> partition.add(gap);
                     case BOUNDARY -> border.add(gap);
                 }

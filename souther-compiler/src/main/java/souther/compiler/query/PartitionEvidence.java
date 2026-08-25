@@ -129,7 +129,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
      *                subject because it is the reading's spelling of it and this document promises
      *                both
      */
-    public record Unanswered(souther.compiler.check.RuleAccounting.Unanswered asked, String at,
+    public record Unanswered(souther.compiler.inputs.StandingQuestion asked, String at,
                              String measure) {
 
         /** Which rule of the model raised it, which is what tells one question from another. */
@@ -144,7 +144,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
 
         /** What it asks. Which measure's section a reader meets it in follows from this. */
         public souther.compiler.check.CoverageObligation question() {
-            return asked.owed().obligation();
+            return asked.obligation();
         }
 
         /**
@@ -154,8 +154,8 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
          * of one, and the comparison that drew a border between two moving terms are three things,
          * and two of them cannot be told apart once they are one string.
          */
-        public souther.compiler.check.Owed owed() {
-            return asked.owed();
+        public souther.compiler.inputs.InputQuestion asks() {
+            return asked.asks();
         }
     }
 

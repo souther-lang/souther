@@ -617,7 +617,7 @@ public final class InputDomain {
                 // accounting rather than read off the completeness beside it: one reading being
                 // short of a position's rules is that reading's business, and a rule another
                 // reading took in is not a rule left unread.
-                placed.unanswered(path),
+                standingAt(placed, path, type, symbols),
                 // And whether the rules were reached at all, asked of the gathering that knows.
                 // No question is raised where nothing was seen, so an empty list beside it would
                 // say every rule was accounted for. Read off the reading's own reason instead, a
@@ -740,9 +740,33 @@ public final class InputDomain {
     private static FilingCoordinate filedAt(TermPath path,
                                             souther.compiler.check.FieldDomains.Coordinate at,
                                             Type type, Symbols symbols) {
+        return FilingCoordinate.of(termAt(path, at, type, symbols));
+    }
+
+    /**
+     * The number a coordinate of a declaration's own reading names, in this input's vocabulary.
+     *
+     * <p><b>The one crossing.</b> The operation comes from that reading, which recorded it against
+     * the count, and the path from this one — and neither names the term alone: a path is held over
+     * there as a key relative to the value the clauses are written on, and one parsed back out of a
+     * spelling is a path this compiler made up.
+     *
+     * <p>Shared by the two things that cross here, a finding about a rule and a question a rule
+     * raised, because it is one crossing and not a repetition. Written at each of them, the two
+     * would be free to differ by a round of edits, and what they disagreed about would be which
+     * number a rule is about.
+     *
+     * <p>No falling back to the position. A coordinate with an operation on it is about that
+     * operation's number, so a term that cannot be built from the two is the reading of the clause
+     * and the reading of the position disagreeing about what stands here — which is this compiler
+     * contradicting itself rather than something the model left out.
+     */
+    private static NumericTerm termAt(TermPath path,
+                                      souther.compiler.check.FieldDomains.Coordinate at,
+                                      Type type, Symbols symbols) {
         if (!(at.kind() instanceof souther.compiler.check.FieldDomains.CoordinateKind
                 .OfWhatAnOperationAnswers answered)) {
-            return FilingCoordinate.of(new NumericTerm.ValueOf(path));
+            return new NumericTerm.ValueOf(path);
         }
         ValueName by = answered.operation();
         // The operation a count is taken by is one the library declares, which is what the reading
@@ -757,7 +781,32 @@ public final class InputDomain {
             throw new IllegalStateException("a clause of `" + path + "` was read as a rule about `"
                     + by + "`, and that takes no number of what stands there");
         }
-        return FilingCoordinate.of(taken);
+        return taken;
+    }
+
+    /**
+     * The questions the rules of this position raise that nothing answered, crossed into this
+     * input's vocabulary.
+     *
+     * <p>Here, where the root the walk started at and the type standing at the position both are.
+     * The reading that raised them knows its positions by a key relative to the value its clauses
+     * are written on and knows a number of one by the operation beside that key; what everything
+     * past here compares is a term path and a term.
+     */
+    private static List<StandingQuestion> standingAt(PlacedRules placed, TermPath path, Type type,
+                                                     Symbols symbols) {
+        List<StandingQuestion> out = new ArrayList<>();
+        for (souther.compiler.check.RuleAccounting.Unanswered each : placed.unanswered(path)) {
+            out.add(new StandingQuestion(each.rule(), each.cited(),
+                    switch (each.owed()) {
+                        case souther.compiler.check.Owed.AdmittedValues _ ->
+                                new InputQuestion.AboutAPosition(path);
+                        case souther.compiler.check.Owed.Boundary it ->
+                                new InputQuestion.AboutANumber(
+                                        termAt(path, it.on(), type, symbols));
+                    }));
+        }
+        return List.copyOf(out);
     }
 
     /**

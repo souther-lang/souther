@@ -6,7 +6,6 @@ import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.StructuralInspection;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.types.Type;
-import souther.compiler.check.RuleAccounting;
 
 import java.util.List;
 
@@ -75,7 +74,8 @@ import java.util.List;
  *                 a rule about what is inside describes that same stop from the other end
  */
 public record Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> classes,
-                   List<Cut> cuts, List<Seam> parted, List<RuleAccounting.Unanswered> unanswered,
+                   List<Cut> cuts, List<Seam> parted,
+                   List<souther.compiler.inputs.StandingQuestion> unanswered,
                    boolean rulesNotReached,
                    StructuralInspection.Continuation pending, BlockReason unread) {
 
@@ -103,7 +103,7 @@ public record Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> 
      * reading ran to the end and found nothing, and what stopped one where it did not.
      */
     public static Axis pendingAt(AxisId id, NumericTerm term, Type type,
-                                 List<RuleAccounting.Unanswered> unanswered,
+                                 List<souther.compiler.inputs.StandingQuestion> unanswered,
                                  boolean rulesNotReached,
                                  StructuralInspection.Continuation found, BlockReason unread) {
         return new Axis(id, term, type, List.of(), List.of(), List.of(), unanswered,

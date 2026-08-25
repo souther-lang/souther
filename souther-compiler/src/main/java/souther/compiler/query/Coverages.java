@@ -403,14 +403,25 @@ final class Coverages {
     private static List<PartitionEvidence.Unanswered> unansweredAt(Axis axis) {
         return axis.unanswered().stream()
                 .map(each -> new PartitionEvidence.Unanswered(each, axis.path().toString(),
-                        // The number the line falls on, where it falls on one taken of the
-                        // position. Still spelled off the axis standing beside it, which is what
-                        // the translation at the input boundary takes away.
-                        each.owed() instanceof souther.compiler.check.Owed.Boundary line
-                                && line.on().kind() instanceof souther.compiler.check.FieldDomains
-                                        .CoordinateKind.OfWhatAnOperationAnswers
-                                ? axis.term().toString() : null))
+                        measureOf(each)))
                 .toList();
+    }
+
+    /**
+     * The number a question's line falls on, where it falls on one taken of the position.
+     *
+     * <p>Off the question, which names it. Read off the axis standing beside it, the spelling was
+     * whatever that axis happened to be measured at — and an axis is re-pointed at a term a body's
+     * rules draw while the questions the declarations raised are carried across unchanged, so the
+     * two are not the same number and nothing said when they came apart.
+     *
+     * <p>Nothing for a line on the position's own values, which is what the field says: it is the
+     * count beside a path and not a second spelling of the path.
+     */
+    private static String measureOf(souther.compiler.inputs.StandingQuestion asked) {
+        return asked.asks() instanceof souther.compiler.inputs.InputQuestion.AboutANumber it
+                && it.term() instanceof souther.compiler.inputs.NumericTerm.TakenOf taken
+                ? taken.toString() : null;
     }
 
 
@@ -431,7 +442,7 @@ final class Coverages {
                 // falls is the border measure's question, and counting it here would put a number
                 // #869 separated back together. The questions themselves are beside the measures
                 // and are said there once.
-                axis.unanswered().stream().noneMatch(each -> each.owed().obligation()
+                axis.unanswered().stream().noneMatch(each -> each.obligation()
                         == souther.compiler.check.CoverageObligation.ADMITTED_VALUES));
         // Nothing a body claims is in scope here. What a row is owed at is counted first and on its
         // own, and what was declared about those positions is put beside it afterwards

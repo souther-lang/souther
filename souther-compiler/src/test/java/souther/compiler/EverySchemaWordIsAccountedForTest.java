@@ -507,9 +507,11 @@ class EverySchemaWordIsAccountedForTest {
         // stand at a position and where a line on a number of it falls are both about the position,
         // and a document says so once.
         Set<String> written = new LinkedHashSet<>();
-        written.add(AdequacyReport.subjectWord(new souther.compiler.check.Owed.AdmittedValues("x")));
-        written.add(AdequacyReport.subjectWord(new souther.compiler.check.Owed.Boundary(
-                souther.compiler.check.FieldDomains.Coordinate.value("x"))));
+        written.add(AdequacyReport.subjectWord(new souther.compiler.inputs.InputQuestion
+                .AboutAPosition(souther.compiler.inputs.TermPath.of("x"))));
+        written.add(AdequacyReport.subjectWord(new souther.compiler.inputs.InputQuestion
+                .AboutANumber(new souther.compiler.inputs.NumericTerm.ValueOf(
+                        souther.compiler.inputs.TermPath.of("x")))));
         written.add("comparison");
 
         assertEquals(written,

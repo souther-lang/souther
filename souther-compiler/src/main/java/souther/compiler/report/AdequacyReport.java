@@ -1140,10 +1140,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     /**
      * Which of the names a question carries a reader is shown.
      *
-     * <p>The reader's choice and not the measure's. Both surfaces of this report make it, and both
-     * of them used to overrule the one the finding arrived with: a subject that is a comparison is
-     * shown as where it is written, because the words for one are the same for every comparison
-     * there is and two of them at one position read as one.
+     * <p>The reader's choice and not the measure's. What a line falls on is shown where there is
+     * one, since that is what tells two questions at one position apart; the position is what is
+     * left.
      */
     private static String subjectOf(souther.compiler.query.PartitionEvidence.Unanswered asked,
                                     SourceNameResolver names, SourceId declaredIn) {
@@ -1658,10 +1657,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * an arm added and not given a word stops the compile rather than arriving in a document as one
      * that already existed.
      */
-    public static String subjectWord(souther.compiler.check.Owed owed) {
-        return switch (owed) {
-            case souther.compiler.check.Owed.AdmittedValues _,
-                 souther.compiler.check.Owed.Boundary _ -> "position";
+    public static String subjectWord(souther.compiler.inputs.InputQuestion asks) {
+        return switch (asks) {
+            case souther.compiler.inputs.InputQuestion.AboutAPosition _,
+                 souther.compiler.inputs.InputQuestion.AboutANumber _ -> "position";
         };
     }
 
@@ -1935,13 +1934,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 // show a reader — which is what `rule` beside it is.
                 ruleId(one.putObject("ruleId"), each.rule());
                 one.put("question", word(each.question()));
-                // What the question is about, as what it is. A place a comparison drew between two
-                // moving terms is named by that comparison and not written out — printing it takes
-                // both sides in a vocabulary this compiler has, and it has none for every shape a
-                // side can be — so a consumer telling two of them apart is handed the two places
-                // rather than one sentence twice.
+                // What the question is about, as the question names it. The number a line falls on
+                // is beside the position rather than in place of it, because a rule about the
+                // length of a string is a rule at that string: an author looking for where it is
+                // written looks at the position, and what the line is on is the other half of the
+                // answer.
                 ObjectNode about = one.putObject("subject");
-                about.put("kind", subjectWord(each.owed()));
+                about.put("kind", subjectWord(each.asks()));
                 about.put("path", each.at());
                 if (each.measure() != null) {
                     about.put("measure", each.measure());

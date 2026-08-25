@@ -1,7 +1,6 @@
 package souther.compiler.partition;
 
 import souther.compiler.inputs.BlockReason;
-import souther.compiler.check.RuleAccounting;
 
 import java.util.List;
 
@@ -36,7 +35,7 @@ public sealed interface LocalPartition {
      *                   be the classes, which say nothing about what was read to get them
      */
     record Divided(List<PartitionClass> classes, CutEvidence cuts,
-                   List<RuleAccounting.Unanswered> unanswered,
+                   List<souther.compiler.inputs.StandingQuestion> unanswered,
                    boolean rulesNotReached) implements LocalPartition {
 
         public Divided {

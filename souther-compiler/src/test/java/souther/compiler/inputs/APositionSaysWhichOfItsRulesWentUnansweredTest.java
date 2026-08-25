@@ -4,9 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.check.CoverageObligation;
-import souther.compiler.check.Owed;
 import souther.compiler.check.Prepared;
-import souther.compiler.check.RuleAccounting;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.query.Bodies;
@@ -104,16 +102,16 @@ class APositionSaysWhichOfItsRulesWentUnansweredTest {
      */
     @Test
     void aClauseNothingTookInIsNamed() {
-        List<RuleAccounting.Unanswered> open = positionOf(ONE_RULE_UNANSWERED)
-                .unansweredQuestions();
+        List<StandingQuestion> open = positionOf(ONE_RULE_UNANSWERED).unansweredQuestions();
 
         assertEquals(1, open.size(), () -> "one clause, one question: " + open);
         assertEquals("invariant Length (even)", open.get(0).rule().named(),
                 "the clause the author wrote, as a report names it — and not the position it "
                         + "is about");
-        assertEquals(CoverageObligation.ADMITTED_VALUES, open.get(0).owed().obligation());
-        assertTrue(open.get(0).owed() instanceof Owed.AdmittedValues at
-                        && at.path().isEmpty(),
-                () -> "about the value the newtype wraps: " + open.get(0).owed());
+        assertEquals(CoverageObligation.ADMITTED_VALUES, open.get(0).obligation());
+        assertTrue(open.get(0).asks() instanceof InputQuestion.AboutAPosition at
+                        && at.path().equals(TermPath.of("length")),
+                () -> "about the position the newtype stands at, which is what the value its"
+                        + " clauses are written on is called out here: " + open.get(0).asks());
     }
 }
