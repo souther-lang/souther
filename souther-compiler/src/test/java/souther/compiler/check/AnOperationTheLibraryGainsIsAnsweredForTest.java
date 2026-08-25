@@ -44,9 +44,9 @@ class AnOperationTheLibraryGainsIsAnsweredForTest {
      * <p>A rule and a silence are not two ways of covering a range. A silence says that nothing is
      * true of the operation under the subject, so beside a rule saying what is, it is the denial of
      * what the rule says and one of the two is wrong. Asked as "a rule <em>or</em> a silence", a
-     * silence that had become false stayed where it was — {@code Int.add} was declared to say
-     * nothing of what it answers in what it was given, next to the arithmetic the language reads it
-     * as, and nothing fell over, because covering the range was all that was asked.
+     * silence that has become false stays where it is: {@code Int.add} declared to say nothing of
+     * what it answers in what it was given, beside the arithmetic the language reads it as, covers
+     * the range as well as anything, and covering the range is all that such a question asks.
      *
      * <p>A rule may be one another proposition already gives. What answers a question is what
      * {@link Question#answeredFor} says, which for some of them is derived from a fact declared

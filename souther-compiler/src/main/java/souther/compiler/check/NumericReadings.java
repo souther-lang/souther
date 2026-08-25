@@ -39,12 +39,12 @@ import java.util.List;
  * exclusivity would hold as far as that question's range and no further, and would move when the
  * range moved.
  *
- * <p><b>Why this exists at all.</b> The exclusivity was three conditions inside the procedure that
- * holds a declared term ({@link DischargeRules#holdTakenOf}), one per representation it knew of.
- * Written that way, a representation added is a representation every existing one has to be told
- * about, and the pair that nobody wrote down is the pair that goes unchecked. Counted here,
- * an account added is one arm added to {@link NumericReading} and one line here, and every pair it
- * makes with an existing arm is refused without being named.
+ * <p><b>Counted, and not asked one representation at a time.</b> Written as a condition per
+ * representation inside whatever holds a declaration ({@link DischargeRules#holdTakenOf}), a
+ * representation added is one every existing representation has to be told about, and the pair
+ * nobody writes down is the pair that goes unchecked. Counted here, an account added is one arm on
+ * {@link NumericReading} and one line here, and every pair it makes with an existing arm is refused
+ * without being named.
  */
 final class NumericReadings {
 
@@ -141,7 +141,7 @@ final class NumericReadings {
                 // The cases a definition is written in name which argument is answered under which
                 // relation between the arguments. A reader still reads the argument, so what the
                 // call answers has no account of its own here — and every operation carrying one
-                // today is written in the language as well, so the two have never had to be told
+                // today is written in the language as well, so nothing here has to tell the two
                 // apart.
                 case OperationFact.IsDefinedByCases _,
                      // The rest say something else about the operation: where a number runs, what

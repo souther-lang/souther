@@ -16,9 +16,9 @@ import souther.compiler.types.ValueName;
  * <p>Read by three kinds of reader and owned by none of them: what puts an operation in range of a
  * question ({@link Question}), what holds a declared fact to the signature it is about
  * ({@link DischargeRules}), and what lists the representations reading a number
- * ({@link NumericReadings}). Answered inside any one of them, the other two would be borrowing a
- * consumer's answer — which is what a resolver of facts reading a question's range was, and what
- * left the same question with two answers that part on a union.
+ * ({@link NumericReadings}). Answered inside any one of them, the other two borrow a consumer's
+ * answer, and a reader that would rather not borrow writes a second answer — which agrees with the
+ * first everywhere except a union, where nothing brings the two together to disagree.
  *
  * <p>What this is for is the carrier of a term standing for such an answer. What a number is
  * measured by follows from what the number <em>is</em>, and what it is is declared by the operation:

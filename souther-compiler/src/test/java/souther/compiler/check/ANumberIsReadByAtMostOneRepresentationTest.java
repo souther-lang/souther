@@ -46,11 +46,12 @@ class ANumberIsReadByAtMostOneRepresentationTest {
         List<String> twice = new ArrayList<>();
         for (Map.Entry<String, Stdlib.Entry> e : DefaultStdlib.get().entries().entrySet()) {
             ValueName operation = DefaultStdlib.get().operation(e.getKey());
-            if (NumericReadings.resolve(DefaultStdlib.get(), OperationFacts.declarations(),
-                    operation) instanceof NumericReadings.Resolution.Multiple(
-                            List<NumericReading> readings)) {
-                twice.add(e.getKey() + " — " + String.join(" and ",
-                        readings.stream().map(NumericReading::describes).toList()));
+            NumericReadings.Resolution read = NumericReadings.resolve(
+                    DefaultStdlib.get(), OperationFacts.declarations(), operation);
+            if (read instanceof NumericReadings.Resolution.Multiple) {
+                // Named by whatever names them in a refusal, so what a reader is told here and what
+                // the library is refused with are one sentence rather than two that drift.
+                twice.add(e.getKey() + " — " + NumericReadings.describe(read));
             }
         }
         assertEquals(List.of(), twice,

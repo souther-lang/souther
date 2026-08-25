@@ -24,8 +24,8 @@ import java.util.Set;
  *
  * <p>One of the two and not either. A silence says that nothing is true under the subject, so it is
  * the denial of a rule rather than a spare row beside one, and an operation carrying both is one
- * where one of the two is wrong. Read as "a rule or a silence", a silence that had become false was
- * only ever a filler and stayed where it was.
+ * where one of the two is wrong. Read as "a rule or a silence", a silence is only ever a filler, and
+ * one that has become false covers the range as well as anything and stays where it is.
  *
  * <p>A range is read off the declaration and nothing else, so it holds an operation nobody thought
  * of. Where the answer too is read off the declaration the rule is derived rather than written

@@ -783,20 +783,20 @@ final class DischargeRules {
     /**
      * Holds a declared account of what an operation takes of the one value it is given.
      *
-     * <p>Two different things, and they are kept apart. The first three are the declaration and the
-     * signature agreeing: the operation takes exactly one value, since what such a term is read off
-     * is one location and a term names one path; it answers a number, since a boundary is drawn on
-     * one; and what it takes it of is the shape the account is written for — a count is taken of
-     * something that holds things, a part of a time of a time. None of the three is checked
-     * anywhere else, and each is about this fact and this declaration.
+     * <p>Two different things, and they are kept apart. Three of these hold the declaration and the
+     * signature to each other: the operation takes exactly one value, since what such a term is read
+     * off is one location and a term names one path; it answers a number, since a boundary is drawn
+     * on one; and what it takes it of is the shape the account is written for — a count is taken of
+     * something that holds things, a magnitude of the operation's own kind of number. None of the
+     * three is checked anywhere else, and each is about this fact and this declaration.
      *
-     * <p>The last is not about this fact at all. It is that the number the operation answers is read
-     * by one representation, which is a property of the operation and holds whichever of the
-     * accounts was declared last. Asked as "is there already a form, an arithmetic, a body" it was
-     * three conditions naming the three representations there were, so a fourth would have had to be
-     * named in each of them and in whatever the next such procedure turned out to be. Asked as how
-     * many readings the operation has ({@link NumericReadings}), a representation added is refused
-     * against every existing one without being paired with any of them.
+     * <p>The one that is not about this fact at all is that the number the operation answers is read
+     * by one representation. That is a property of the operation and holds whichever of the accounts
+     * was declared last. Asked as "is there already a form, an arithmetic, a body", it is one
+     * condition per representation there is, so a fourth has to be named in each of them and in
+     * whatever the next such procedure turns out to be. Asked as how many readings the operation has
+     * ({@link NumericReadings}), a representation added is refused against every existing one
+     * without being paired with any of them.
      *
      * <p>Counted over the declarations being held and not over a table read from elsewhere, so the
      * answer does not depend on the order the facts were declared in or on whether they have

@@ -13,14 +13,13 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
  * Each account of a number is found where the library declares it.
  *
  * <p>What the invariant beside this cannot say. That one refuses a second reading, so it is asked of
- * an operation by counting to more than one — and an arm the resolver stopped reading takes its
- * operations from one reading to none, which is a state that invariant exists to allow. Measured:
- * with the arm for the arithmetic an operation computes removed, the whole suite stayed green.
+ * an operation by counting to more than one — and an arm the resolver stops reading takes its
+ * operations from one reading to none, which is a state that invariant exists to allow. Left to it,
+ * an account nobody reads and an account nobody looked for are the same observation, which is the
+ * defect the questions exist against, one level up.
  *
- * <p>So an account nobody reads and an account nobody looked for were the same observation, which is
- * the defect the questions exist against, one level up. Here each arm is named at an operation that
- * carries it, so a reading that stops being found is a failure rather than an operation that turns
- * out to have none.
+ * <p>So each arm is named at an operation that carries it, and a reading that stops being found is a
+ * failure rather than an operation that turns out to have none.
  *
  * <p>One operation per arm and no more. This is a characterization of the resolver and not a table
  * of the library: what every operation answers is asked of the declarations themselves, and a list
