@@ -492,17 +492,29 @@ class EverySchemaWordIsAccountedForTest {
      * And the third: which kind of thing a question is about, written from the arms of a sealed type
      * rather than from an enum.
      *
-     * <p>The arms are not interchangeable words for one thing — a position is named by where it is
-     * and a comparison by where it is written — so what a document says of each is asked of the
-     * writer rather than of a name.
+     * <p>Both arms of {@code Owed} say `position` — a position of an input, or a number of one — and
+     * they are still asked of the writer rather than assumed, so an arm added and not given a word
+     * stops the compile.
+     *
+     * <p>`comparison` is beside them and is retired. It was to have been the place a comparison of
+     * two moving things draws; nothing ever raised such a question, because a comparison this
+     * compiler reads owes its rows by having been read. The word stays because this version of the
+     * schema promised it.
      */
     @Test
     void theThirdFieldWithNoEnumBehindItIsWrittenFromWhatAQuestionIsAbout() {
-        assertEquals(Set.of(
-                        AdequacyReport.subjectWord(souther.compiler.check.Owed.Subject.at("x")),
-                        AdequacyReport.subjectWord(new souther.compiler.check.Owed.Subject
-                                .OfComparison(souther.compiler.diag.Citation.of(
-                                        new souther.compiler.diag.SourcePos(1, 1))))),
+        // A set built up rather than `Set.of`, because the two arms say one word: which values may
+        // stand at a position and where a line on a number of it falls are both about the position,
+        // and a document says so once.
+        Set<String> written = new LinkedHashSet<>();
+        written.add(AdequacyReport.subjectWord(new souther.compiler.inputs.InputQuestion
+                .AboutAPosition(souther.compiler.inputs.TermPath.of("x"))));
+        written.add(AdequacyReport.subjectWord(new souther.compiler.inputs.InputQuestion
+                .AboutANumber(new souther.compiler.inputs.NumericTerm.ValueOf(
+                        souther.compiler.inputs.TermPath.of("x")))));
+        written.add("comparison");
+
+        assertEquals(written,
                 allowedAt(schema(), List.of("$defs", "partition", "properties", "unanswered",
                         "items", "properties", "subject", "properties", "kind")));
     }

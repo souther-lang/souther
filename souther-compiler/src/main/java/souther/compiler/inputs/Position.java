@@ -2,7 +2,6 @@ package souther.compiler.inputs;
 
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.ProjectionEvidence;
-import souther.compiler.check.RuleAccounting;
 import souther.compiler.check.TypeView;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.types.Type;
@@ -150,7 +149,7 @@ public sealed interface Position permits ReadPosition {
      * that was. A reader deciding whether the numbers beside this position rest on a complete
      * reading of the model wants this and not a reading's own account.
      */
-    List<RuleAccounting.Unanswered> unansweredQuestions();
+    List<StandingQuestion> unansweredQuestions();
 
     /**
      * Whether the walk never reached the rules written about this position.

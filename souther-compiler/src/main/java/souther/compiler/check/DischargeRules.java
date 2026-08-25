@@ -10,7 +10,6 @@ import souther.compiler.semantics.ElementLineage;
 import souther.compiler.semantics.ElementShape;
 import souther.compiler.semantics.NumericResult;
 import souther.compiler.semantics.OperationFact;
-import souther.compiler.ast.Hir;
 import souther.compiler.semantics.OperationFacts;
 import souther.compiler.semantics.PositiveOrder;
 import souther.compiler.semantics.ResultBound;
@@ -244,7 +243,7 @@ final class DischargeRules {
      * counted, and what it was given, counted. A form whose arguments this can carry and whose
      * result it cannot is a form it cannot carry.
      *
-     * <p>Asked with {@link Question#isANumber} where the binding asks
+     * <p>Asked with {@link NumericAnswers#isANumber} where the binding asks
      * {@link Question#countsToANumber}. That is the difference between what is true of the
      * operation and what this check can do with it — a date counts and is no number, so
      * {@code Date.daysBetween} is declared and is not carried here.
@@ -256,12 +255,12 @@ final class DischargeRules {
     private static boolean everyPartIsANumber(Stdlib stdlib, ValueName operation) {
         Stdlib.Signature signature =
                 stdlib.entry(((ValueName.Stdlib) operation).qualified()).signature();
-        if (!Question.isANumber(signature.result())) {
+        if (!NumericAnswers.isANumber(signature.result())) {
             return false;
         }
         List<Type> params = signature.params();
         return answersAFormOf(operation).coefs().keySet().stream().allMatch(argument ->
-                Question.isANumber(params.get(CallArguments.positionIn(argument, operation))));
+                NumericAnswers.isANumber(params.get(CallArguments.positionIn(argument, operation))));
     }
 
     /** Those of them the read-through table has, by name, for the test that holds each to a
@@ -534,7 +533,7 @@ final class DischargeRules {
      */
     static void holdNumericResult(Stdlib stdlib, ValueName operation, NumericResult rule) {
         Stdlib.Signature signature = holdTheOperationToTheLibrary(stdlib, operation).signature();
-        Type answers = Question.numberAnsweredBy(signature.result());
+        Type answers = NumericAnswers.in(signature.result());
         List<Arithmetic.Reads> reads = rule.computes().reads();
         if (signature.params().size() != reads.size()) {
             throw new IllegalStateException(operation + " takes " + signature.params().size()
@@ -549,7 +548,7 @@ final class DischargeRules {
         }
         switch (rule.at()) {
             case NumericResult.Answered.Directly ignored ->
-                    holdTheResultToTheDeclaration(stdlib, operation, Question::isANumber,
+                    holdTheResultToTheDeclaration(stdlib, operation, NumericAnswers::isANumber,
                             "a number for the arithmetic it computes to be answered at");
             case NumericResult.Answered.InTheCaseCarrying(Type carried) -> {
                 if (!(signature.result() instanceof Type.Union(Set<TypeSymbol> members))) {
@@ -582,7 +581,7 @@ final class DischargeRules {
         }
         if (rule.unless() != null) {
             holdToTheDeclaration(stdlib, operation, rule.unless().argument(), null,
-                    Question::isANumber, "the argument a failure is decided by");
+                    NumericAnswers::isANumber, "the argument a failure is decided by");
         }
     }
 
@@ -594,7 +593,7 @@ final class DischargeRules {
      */
     static void holdShift(Stdlib stdlib, ValueName operation, OperationFact.ShiftsBy
             shift) {
-        holdToTheDeclaration(stdlib, operation, shift.amount(), null, Question::isANumber,
+        holdToTheDeclaration(stdlib, operation, shift.amount(), null, NumericAnswers::isANumber,
                 "the amount a shift moves by");
         Stdlib.Entry counts = stdlib.entry(shift.measure().qualified());
         if (counts == null) {
@@ -603,7 +602,7 @@ final class DischargeRules {
         }
         Stdlib.Entry shifted = holdTheOperationToTheLibrary(stdlib, operation);
         List<Type> counted = counts.signature().params();
-        if (counted.size() != 2 || !Question.isANumber(counts.signature().result())
+        if (counted.size() != 2 || !NumericAnswers.isANumber(counts.signature().result())
                 || !counted.get(0).equals(shifted.signature().result())
                 || !counted.get(1).equals(shifted.signature().result())) {
             throw new IllegalStateException(shift.measure().qualified()
@@ -616,7 +615,7 @@ final class DischargeRules {
     /** As {@link #bind}, for the arguments a case names: the one it answers, and the two sides of
      * each condition it is reached under. */
     static void holdCase(Stdlib stdlib, ValueName operation, OperationFact.Case one) {
-        holdTheResultToTheDeclaration(stdlib, operation, Question::isANumber,
+        holdTheResultToTheDeclaration(stdlib, operation, NumericAnswers::isANumber,
                 "a number for a case of the definition to answer");
         List<ArgumentRef> named = new ArrayList<>();
         named.add(one.answers());
@@ -624,14 +623,14 @@ final class DischargeRules {
             named.add(stands.left());
             named.add(stands.right());
         });
-        named.forEach(each -> holdToTheDeclaration(stdlib, operation, each, null, Question::isANumber,
+        named.forEach(each -> holdToTheDeclaration(stdlib, operation, each, null, NumericAnswers::isANumber,
                 "an argument a case of the definition names"));
     }
 
     /** As {@link #bind}, for the arguments a bound names: the one the result is bounded against, and
      * the one a condition on the rule reads. Each is a separate claim about a separate argument. */
     static void holdBound(Stdlib stdlib, ValueName operation, ResultBound bound) {
-        holdTheResultToTheDeclaration(stdlib, operation, Question::isANumber,
+        holdTheResultToTheDeclaration(stdlib, operation, NumericAnswers::isANumber,
                 "a number for a bound on the result to hold of");
         List<ArgumentRef> named = new ArrayList<>();
         if (bound.against() != null) {
@@ -642,7 +641,7 @@ final class DischargeRules {
                 constant) {
             named.add(constant.argument());
         }
-        named.forEach(one -> holdToTheDeclaration(stdlib, operation, one, null, Question::isANumber,
+        named.forEach(one -> holdToTheDeclaration(stdlib, operation, one, null, NumericAnswers::isANumber,
                 "an argument a bound on the result names"));
     }
 
@@ -784,52 +783,62 @@ final class DischargeRules {
     /**
      * Holds a declared account of what an operation takes of the one value it is given.
      *
-     * <p>Three things at once, because a term of this kind rests on all three and none of them is
-     * checked anywhere else. The operation takes exactly one value, since what such a term is read
-     * off is one location and a term names one path. It answers a number, since a boundary is drawn
-     * on one. And what it takes it of is the shape the account is written for — a count is taken of
-     * something that holds things, a magnitude of the operation's own kind of number.
+     * <p>Two different things, and they are kept apart. Three of these hold the declaration and the
+     * signature to each other: the operation takes exactly one value, since what such a term is read
+     * off is one location and a term names one path; it answers a number, since a boundary is drawn
+     * on one; and what it takes it of is the shape the account is written for — a count is taken of
+     * something that holds things, a magnitude of the operation's own kind of number. None of the
+     * three is checked anywhere else, and each is about this fact and this declaration.
+     *
+     * <p>The one that is not about this fact at all is that the number the operation answers is read
+     * by one representation. That is a property of the operation and holds whichever of the accounts
+     * was declared last. Asked as "is there already a form, an arithmetic, a body", it is one
+     * condition per representation there is, so a fourth has to be named in each of them and in
+     * whatever the next such procedure turns out to be. Asked as how many readings the operation has
+     * ({@link NumericReadings}), a representation added is refused against every existing one
+     * without being paired with any of them.
+     *
+     * <p>Counted over the declarations being held and not over a table read from elsewhere, so the
+     * answer does not depend on the order the facts were declared in or on whether they have
+     * reached a table yet. What is required is that the count comes to one and that the one is this
+     * account — a term found beside a form fails the same way whether the term or the form was
+     * written first.
      *
      * <p>Held here rather than trusted at the reader. The reader applies the account to whatever
      * observation stands at the path, so an account declared of an operation it is not the shape of
      * is a row read as a number nobody named, with nothing about it looking like a failure (#1027).
      * Refused where the declaration is written, that reading cannot be reached.
      */
-    static void holdTakenOf(Stdlib stdlib, ValueName operation,
-            souther.compiler.semantics.TakenAs how) {
+    static void holdTakenOf(Stdlib stdlib, List<OperationFacts.Declared> declared,
+            ValueName operation, souther.compiler.semantics.TakenAs how) {
         Stdlib.Entry entry = holdTheOperationToTheLibrary(stdlib, operation);
         Stdlib.Signature signature = entry.signature();
         String named = ((ValueName.Stdlib) operation).qualified();
-        // A call the reading expands is a call the reading already understands. `Int.abs` is an
-        // ordinary `let` over `<` and `-`, so a body reading takes the comparison inside it and
-        // draws the line the definition draws; a term standing for the call would be a second
-        // reading of the same call, and which of the two a report showed would be whichever reader
-        // arrived. Refused here, so the exclusivity is a property of what can be declared rather
-        // than of which operations somebody thought to leave out (#1027).
-        if (!(entry.declaration().body() instanceof Hir.FnBody.Intrinsic)) {
-            throw new IllegalStateException(named + " is written in the language, so its body is"
-                    + " read where it is called and a term of what it answers would be a second"
-                    + " reading of the same call");
-        }
-        // And a call some other representation already reads is one this must not read too. A form
-        // says what the result is in the arguments' own counts, which is more than a term standing
-        // for it can say; declared as both, `Decimal.fromInt(n)` would be `n` to one reader and an
-        // opaque number to another.
-        if (OperationFacts.answersAFormOfItsArguments(operation) != null) {
-            throw new IllegalStateException(named + " already answers a form of its arguments, which"
-                    + " says more about what it answers than a term standing for it can");
-        }
-        if (OperationFacts.computesANumber(operation) != null) {
-            throw new IllegalStateException(named + " already computes an arithmetic this reads,"
-                    + " which says more about what it answers than a term standing for it can");
-        }
         if (signature.params().size() != 1) {
             throw new IllegalStateException(named + " takes " + signature.params().size()
                     + " arguments, and a number taken of the one value an operation is given is"
                     + " taken of one");
         }
-        holdTheResultToTheDeclaration(stdlib, operation, Question::isANumber,
+        // A number and not a number at one case of a union. A term names one path and stands for
+        // what the operation answered there, and what an operation answering `Int | NotANumber`
+        // answers at that path is the union — which case it is in is a question this account has no
+        // room for. Narrower than the range of whatever asks for such an account, and deliberately:
+        // what may be declared and what is asked about are two ranges.
+        holdTheResultToTheDeclaration(stdlib, operation, NumericAnswers::isANumber,
                 "a number for a term of what it answers to be about");
+        // Before the shape below, because it is the operation that is being asked about and not
+        // this fact. An account that does not fit the operation is still an account of a number
+        // some other representation may already read, and asked the other way round the exclusivity
+        // would be reachable only through arms that happen to fit.
+        NumericReadings.Resolution read = NumericReadings.resolve(stdlib, declared, operation);
+        if (!(read instanceof NumericReadings.Resolution.One(
+                NumericReading.AsATermTakenOfItsArgument(souther.compiler.semantics.TakenAs held)))
+                || !held.equals(how)) {
+            throw new IllegalStateException("the number " + named + " answers is read as "
+                    + NumericReadings.describe(read) + ", and one numeric call is read by one"
+                    + " representation — which of them a report showed would be whichever reader"
+                    + " arrived");
+        }
         Type source = signature.params().get(0);
         Type answered = signature.result();
         if (!how.takenOf(source, answered)) {

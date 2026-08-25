@@ -48,7 +48,7 @@ class WhatARuleRaisesIsAskedOfTheRuleTest {
      * together. */
     private static Set<String> said(Required required) {
         return required.obligations().stream()
-                .map(o -> o.obligation() + " at " + o.subject())
+                .map(o -> o.obligation() + " at " + o)
                 .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
     }
 

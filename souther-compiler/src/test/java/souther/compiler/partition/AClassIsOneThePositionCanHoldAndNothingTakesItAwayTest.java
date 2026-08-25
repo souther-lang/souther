@@ -90,12 +90,6 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
                 guards.rulesWithoutALine(), guards.singled(), guards.between()));
     }
 
-    /** The one axis, whichever phase produced it. */
-    private static Axis only(Partitions.Partitioning partitioning) {
-        assertEquals(1, partitioning.axes().size(), partitioning.axes().toString());
-        return partitioning.axes().get(0);
-    }
-
     /**
      * The classes of the parameter's own position, which is the first axis read.
      *
@@ -389,11 +383,14 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
         Partitions.Partitioning base =
                 Partitions.of(read.spec().name(), InputDomain.of(read.spec(), read.sig(), read.symbols(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES), read.symbols(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
 
-        assertFalse(only(base).unanswered().isEmpty(),
+        assertFalse(base.unanswered().isEmpty(),
                 "a rule about this position was taken in by nothing, and the classes were made"
                         + " anyway");
-        assertEquals(only(base).unanswered(), only(withThresholdsOf(read, base)).unanswered(),
-                "what a body draws does not change which of the position's rules stand unanswered");
+        assertEquals(base.unanswered(), withThresholdsOf(read, base).unanswered(),
+                "what a body draws does not change which of the position's rules stand unanswered,"
+                        + " nor which number each of them is about — a body's rules re-point the"
+                        + " axis at another term, and a question carried on the axis would have"
+                        + " gone with it");
     }
 
     /** The same partitioning, with what the behavior's body draws taken in. */

@@ -393,21 +393,20 @@ public final class FieldDomains {
      * and at nothing else (ADR-0090), so handing back the range instead would make a relational rule
      * into a partition of a position it never mentioned.
      *
-     * @param path     where the coordinate sits, read from the value these are of
-     * @param measured whether the coordinate is a count taken of the position rather than its value
-     * @param from     the rule that placed the end, which is what names the line. An invariant's,
-     *                 and said so: these are the ends the clauses of a declaration place, and no
-     *                 other kind of rule reaches this reading
-     * @param lower    whether this bounds the coordinate below; otherwise above
+     * @param at    which number of which position the end is on. The number and not a path beside
+     *              a flag: one position carries more than one, and which of them an end is on is
+     *              what the operation beside the path says
+     * @param from  the rule that placed the end, which is what names the line. An invariant's,
+     *              and said so: these are the ends the clauses of a declaration place, and no
+     *              other kind of rule reaches this reading
+     * @param lower whether this bounds the coordinate below; otherwise above
      */
-    public record Placed(String path, ValueName by, RuleRef.Invariant from,
-                         boolean lower, Endpoint end) {
+    public record Placed(Coordinate at, RuleRef.Invariant from, boolean lower, Endpoint end) {
 
-        /** Whether it is a number taken of the position rather than its own values, which is what
-         *  the readings of this value's own clauses ask each other. Derived and not stored: which
-         *  number it is, is {@link #by}, and a stored answer beside it would be a second one. */
-        public boolean measured() {
-            return by != null;
+        /** Where in the value the end sits. Never which number it is on: that is {@link #at}, and
+         *  reading one off the other is what the pair exists to stop. */
+        public String path() {
+            return at.path();
         }
     }
 
@@ -438,13 +437,12 @@ public final class FieldDomains {
      * @param why  what would have to change before this rule could be a line, in this compiler's
      *             own terms
      */
-    public record NoLine(String path, ValueName by, RuleRef.Invariant from,
+    public record NoLine(Coordinate at, RuleRef.Invariant from,
                          Core part, souther.compiler.inputs.BlockReason.RuleWithoutLineReason why) {
 
-        /** Whether it is a number taken of the position rather than its own values, derived for the
-         *  reason {@link Placed#measured} gives. */
-        public boolean measured() {
-            return by != null;
+        /** Where in the value the end was to have been placed. */
+        public String path() {
+            return at.path();
         }
     }
 
@@ -701,18 +699,19 @@ public final class FieldDomains {
         return accounting;
     }
 
-    /** What answered one question of one rule. */
+    /**
+     * What answered one question of one rule.
+     *
+     * <p>One arm each, and no arm to fence off. A clause of a `data` is written about a position of
+     * it or about a number of one, which is what the readings here answer about; a place between two
+     * numbers is a comparison's and reaches no accounting of one value's clauses. That was a throw
+     * here while the question was an obligation beside a subject and the pair admitted combinations
+     * nothing raises.
+     */
     private RuleAccounting.Outcome answered(RuleRef rule, Owed owed) {
-        // A clause of a `data` is written about a position of it, which is what the readings here
-        // answer about. A place between two numbers is a comparison's and reaches no accounting of
-        // one value's clauses.
-        if (!(owed.subject() instanceof Owed.Subject.OfAPosition where)) {
-            throw new IllegalStateException(
-                    "a clause of a value asks about a position of it: " + owed);
-        }
-        return switch (owed.obligation()) {
-            case ADMITTED_VALUES -> admissionAnswered(rule, where);
-            case BOUNDARY -> boundaryAnswered(rule, where);
+        return switch (owed) {
+            case Owed.AdmittedValues it -> admissionAnswered(rule, it.path());
+            case Owed.Boundary it -> boundaryAnswered(rule, it.on());
         };
     }
 
@@ -730,8 +729,7 @@ public final class FieldDomains {
      * type and a clause of the record about the same field are two rules, and an end read for one
      * says nothing about the other.
      */
-    private RuleAccounting.Outcome boundaryAnswered(RuleRef rule,
-                                                   Owed.Subject.OfAPosition where) {
+    private RuleAccounting.Outcome boundaryAnswered(RuleRef rule, Coordinate where) {
         // Every conjunct that asked, and not whichever one happened to be read. A rule is read a
         // conjunct at a time and files one question about its line, so the two ways of reading the
         // record are both wrong: asked of what went unread alone, `value >= 1 && Int.abs(value) >= 2`
@@ -740,14 +738,18 @@ public final class FieldDomains {
         // half beside it. The parts each say what they raised, and an end says which part placed it.
         for (Map.Entry<Core, Required> part : raisedByPart
                 .getOrDefault(rule, Map.of()).entrySet()) {
+            // One arm each, so that a question added later is decided about rather than answered
+            // "not this one" by a test it also fails.
             boolean asked = part.getValue().obligations().stream()
-                    .anyMatch(owed -> owed.obligation() == CoverageObligation.BOUNDARY
-                            && owed.subject().equals(where));
+                    .anyMatch(owed -> switch (owed) {
+                        case Owed.Boundary line -> line.on().equals(where);
+                        case Owed.AdmittedValues _ -> false;
+                    });
             if (!asked) {
                 continue;
             }
             if (directs.stream().noneMatch(d -> d.from().equals(rule) && d.part() == part.getKey()
-                    && d.path().equals(where.path()) && d.measured() == where.measured())) {
+                    && d.at().equals(where))) {
                 return unreadAnswerFor(rule, part.getKey(), where);
             }
         }
@@ -768,12 +770,10 @@ public final class FieldDomains {
      * question being unaskable is what makes the answer unreachable rather than the other way
      * about. Both are written, because the day one of them slips the other is what is left.
      */
-    private RuleAccounting.Outcome unreadAnswerFor(RuleRef rule, Core part,
-                                                   Owed.Subject.OfAPosition where) {
+    private RuleAccounting.Outcome unreadAnswerFor(RuleRef rule, Core part, Coordinate where) {
         for (NoLine said : noLines) {
             if (said.from().equals(rule) && said.part() == part
-                    && said.path().equals(where.path())
-                    && said.measured() == where.measured()
+                    && said.at().equals(where)
                     && said.why() instanceof souther.compiler.inputs.BlockReason
                             .RuleReadingStopped stopped) {
                 return new RuleAccounting.Outcome.Unaccounted(
@@ -795,19 +795,18 @@ public final class FieldDomains {
      * clause beside it: {@code value >= 1} leaves the reading of values short at a position, and
      * {@code value == 7} written beside it was taken in whole.
      */
-    private RuleAccounting.Outcome admissionAnswered(RuleRef rule,
-                                                     Owed.Subject.OfAPosition where) {
-        List<FactSubject> named = named(where.path());
+    private RuleAccounting.Outcome admissionAnswered(RuleRef rule, String at) {
+        List<FactSubject> named = named(at);
         // A part of the rule nothing took in outranks everything else about it. An end placed by
         // one conjunct is not an account of the conjunct written beside it.
         if (took.anyLeftStanding(rule, named)) {
             return new RuleAccounting.Outcome.Unaccounted(
                     new RuleAccounting.Why.TheValueReadingSays(
-                            unreadByField.getOrDefault(where.path(), UnreadReason.FORM_NOT_READ)));
+                            unreadByField.getOrDefault(at, UnreadReason.FORM_NOT_READ)));
         }
         // The reading that turns this clause into where the values stop, said by the end it placed.
         if (directs.stream()
-                .anyMatch(d -> d.from().equals(rule) && d.path().equals(where.path()))) {
+                .anyMatch(d -> d.from().equals(rule) && d.path().equals(at))) {
             return new RuleAccounting.Outcome.Accounted(RuleAccounting.Reader.THE_END_READING);
         }
         // And the readings that hold what a clause says about the values themselves, each said by
@@ -815,7 +814,7 @@ public final class FieldDomains {
         if (took.tookIn(rule, named)) {
             return new RuleAccounting.Outcome.Accounted(RuleAccounting.Reader.THE_VALUE_READING);
         }
-        UnreadReason why = unreadByField.get(where.path());
+        UnreadReason why = unreadByField.get(at);
         return new RuleAccounting.Outcome.Unaccounted(new RuleAccounting.Why.TheValueReadingSays(
                 why == null ? UnreadReason.FORM_NOT_READ : why));
     }
@@ -829,7 +828,7 @@ public final class FieldDomains {
     /** Every end the rules place, wherever it is. */
     public List<Placed> placed() {
         return directs.stream()
-                .map(each -> new Placed(each.path(), each.by(), each.from(),
+                .map(each -> new Placed(each.at(), each.from(),
                         each.bound().lower(), each.bound().end()))
                 .toList();
     }
@@ -1135,6 +1134,21 @@ public final class FieldDomains {
         public static Coordinate takenBy(String path, ValueName operation) {
             return new Coordinate(path, new CoordinateKind.OfWhatAnOperationAnswers(operation));
         }
+
+        /**
+         * The number, named. The operation and not a word for the kind of thing it is: two
+         * operations over one path are two of these, and "count of" spells them the same.
+         */
+        @Override
+        public String toString() {
+            // The value itself is at no path, which reads as nothing at all where it is printed.
+            String where = path.isEmpty() ? "the value" : path;
+            return switch (kind) {
+                case CoordinateKind.OfItsOwnValue _ -> where;
+                case CoordinateKind.OfWhatAnOperationAnswers taken ->
+                        taken.operation() + "(" + where + ")";
+            };
+        }
     }
 
     /**
@@ -1280,8 +1294,9 @@ public final class FieldDomains {
                 Required required = byPartRaised == null ? null : byPartRaised.get(part);
                 if (required != null) {
                     required.obligations().forEach(owed -> {
-                        if (owed.subject() instanceof Owed.Subject.OfAPosition at) {
-                            said.add(at.path());
+                        switch (owed) {
+                            case Owed.AdmittedValues it -> said.add(it.path());
+                            case Owed.Boundary it -> said.add(it.on().path());
                         }
                     });
                 }

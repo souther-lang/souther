@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import souther.compiler.check.RuleAccounting;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.RuleWithoutALine;
 
@@ -52,7 +51,8 @@ public sealed interface ClosureGap {
      * both or yields neither and records what stopped its reading. Which is why a comparison's
      * incompleteness reaches this only as {@link RuleUnread}.
      */
-    record QuestionUnanswered(AxisId at, RuleAccounting.Unanswered question) implements ClosureGap {}
+    record QuestionUnanswered(souther.compiler.inputs.StandingQuestion question)
+            implements ClosureGap {}
 
     /** A position whose rules nothing enumerated. It raises no question, so it cannot be short of
      *  one — which is why it is a gap of its own and not one of the two above. */

@@ -145,8 +145,10 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules) {
         List<RuleAccounting.Unanswered> out = new ArrayList<>();
         bounds().accounting().values().forEach(accounting ->
                 accounting.unansweredQuestions().stream()
-                        .filter(each -> each.owed().subject() instanceof Owed.Subject.OfAPosition at
-                                && at.path().equals(where))
+                        .filter(each -> switch (each.owed()) {
+                            case Owed.AdmittedValues it -> it.path().equals(where);
+                            case Owed.Boundary it -> it.on().path().equals(where);
+                        })
                         .forEach(out::add));
         return List.copyOf(out);
     }

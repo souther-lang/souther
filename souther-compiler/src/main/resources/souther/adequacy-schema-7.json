@@ -466,7 +466,7 @@
               "question": { "$ref": "#/$defs/coverageQuestion" },
               "subject": {
                 "type": "object",
-                "description": "What the question is about. The questions do not share a subject: which values may stand somewhere is about the position, a border on one position is about a number taken of it, and a border between two things that both move with the row is on neither of them. The last is named by the comparison that drew it rather than written out — printing the place takes both sides in a vocabulary this compiler has, so a written one would say how far its printer got and would give two comparisons of one rule the same subject.",
+                "description": "What the question is about. The two questions do not share a subject: which values may stand somewhere is about the position, and a border on one position is about a number of it — the position's own values, or what an operation answers of them. A border between two things that both move with the row is on neither of them, and is not here: a comparison this compiler reads owes the rows either side of its line by having been read, so no such question is ever outstanding, and what it owes is carried as the partition's own geometry.",
                 "required": ["kind"],
                 "additionalProperties": false,
                 "oneOf": [
@@ -474,10 +474,10 @@
                   { "properties": { "kind": { "const": "comparison" } }, "not": { "anyOf": [ { "required": ["path"] }, { "required": ["measure"] } ] } }
                 ],
                 "properties": {
-                  "kind": { "enum": ["position", "comparison"], "description": "`position` is a position of an input or a number taken of one; `comparison` is the place a comparison of two moving things draws, which is neither of them." },
+                  "kind": { "enum": ["position", "comparison"], "description": "`position` is a position of an input or a number taken of one. `comparison` is retired: it was to have been the place a comparison of two moving things draws, and no compiler ever wrote it — such a line owes its rows by having been read, so it never stands as a question. It is kept because this version promised it, and a reader holding the schema still meets the word." },
                   "path": { "type": "string", "description": "The position, spelled as the entry's `at` is. Written for a `position` subject." },
                   "measure": { "type": "string", "description": "The number the line falls on, where it falls on a count rather than on the position's own values — `String.length(code)` beside a `path` of `code`. Written only where the question is about a count." },
-                  "at": { "$ref": "#/$defs/at", "description": "Where the comparison is written, for a `comparison` subject this document can point at. Absent where the comparison is out of sight, and the `rule` beside it is what sends a reader to the declaration it is in." }
+                  "at": { "$ref": "#/$defs/at", "description": "Where the comparison is written, for a `comparison` subject this document can point at. Retired with the word it belongs to." }
                 }
               }
             }
