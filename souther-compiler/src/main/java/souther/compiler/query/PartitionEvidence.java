@@ -21,7 +21,7 @@ import java.util.Set;
  *                     both
  * <p><b>Why these are still here, beside the measures that went without them.</b> #953 moved every
  * fact that costs a measure something into what weakened that measure, and the obvious next step is
- * to drop the lists and project them back out. Two of them cannot be: {@code unread} holds rules
+ * to drop the lists and project them back out. Two of them cannot be: {@code rulesWithoutALine} holds rules
  * that were set aside and left neither measure short — a comparison relating two positions is read,
  * says what it says, and divides nothing ({@code BlockReason.RuleWithoutLineReason.leavesShort}) — so the
  * weakening is a strictly smaller set than what a reader is owed, and a projection would drop
@@ -42,7 +42,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
                                 Measure<List<BorderAssessment>> bounded,
                                 PairSpace pairs,
                                 List<souther.compiler.partition.UndividedPosition> notDerivable,
-                                List<souther.compiler.inputs.RuleWithoutALine> unread,
+                                List<souther.compiler.inputs.RuleWithoutALine> rulesWithoutALine,
                                 List<souther.compiler.inputs.PositionReadingBlocked> blocked,
                                 List<souther.compiler.inputs.PositionValuesNotSeparated> notSeparated,
                                 List<Unanswered> unanswered,
@@ -95,7 +95,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
 
     public PartitionEvidence {
         notDerivable = List.copyOf(notDerivable);
-        unread = List.copyOf(unread);
+        rulesWithoutALine = List.copyOf(rulesWithoutALine);
         notSeparated = List.copyOf(notSeparated);
         blocked = List.copyOf(blocked);
         unanswered = List.copyOf(unanswered);
@@ -282,7 +282,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
      */
     public List<NotRead> notRead() {
         List<NotRead> out = new java.util.ArrayList<>();
-        unread.forEach(each -> out.add(new NotRead.ARule(each)));
+        rulesWithoutALine.forEach(each -> out.add(new NotRead.ARule(each)));
         blocked.forEach(each -> out.add(new NotRead.APosition(each)));
         return List.copyOf(out);
     }

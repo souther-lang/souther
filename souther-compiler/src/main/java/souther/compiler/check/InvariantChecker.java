@@ -1089,7 +1089,7 @@ public final class InvariantChecker {
      *                  that found one conjunct wanting and reached for the rule's questions would
      *                  name the positions of the conjunct written beside it as well
      */
-    record Reading(List<Direct> directs, List<FieldDomains.NoLine> unread,
+    record Reading(List<Direct> directs, List<FieldDomains.NoLine> noLines,
                    Map<String, List<TypeSymbol>> narrowers,
                    Map<RuleRef, Required> raised,
                    Map<RuleRef, Map<Core, Required>> raisedByPart) {}

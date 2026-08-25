@@ -102,7 +102,7 @@ final class Coverages {
         // divide the position twice.
         return new Partitioned(Partitions.withThresholds(partitioning, quantities,
                 both(clauses.thresholds(), guards.thresholds()), symbols, policy,
-                both(clauses.unread(), guards.unread()),
+                both(clauses.rulesWithoutALine(), guards.rulesWithoutALine()),
                 both(clauses.singled(), guards.singled()),
                 both(clauses.between(), guards.between()), arrives,
                 // What a row had to satisfy to arrive at each comparison, from the walk that

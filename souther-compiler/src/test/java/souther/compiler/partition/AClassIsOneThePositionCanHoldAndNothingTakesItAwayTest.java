@@ -87,7 +87,7 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
                 Partitions.of(read.spec().name(), inputs, read.symbols(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         return classesOf(Partitions.withThresholds(base, inputs.quantities(read.symbols()),
                 guards.thresholds(), read.symbols(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES,
-                guards.unread(), guards.singled(), guards.between()));
+                guards.rulesWithoutALine(), guards.singled(), guards.between()));
     }
 
     /** The one axis, whichever phase produced it. */
@@ -415,7 +415,7 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
                 InputDomain.of(read.spec(), read.sig(), read.symbols(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES)
                         .quantities(read.symbols()),
                 guards.thresholds(), read.symbols(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES,
-                guards.unread(), guards.singled(), guards.between());
+                guards.rulesWithoutALine(), guards.singled(), guards.between());
     }
 
     /**

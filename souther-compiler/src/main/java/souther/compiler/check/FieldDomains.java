@@ -374,7 +374,7 @@ public final class FieldDomains {
         positions.forEach(field ->
                 named(seeded, field).forEach(term -> placeOf.putIfAbsent(term, field)));
         return new FieldDomains(Map.copyOf(out), Map.copyOf(holds), Map.copyOf(admitted),
-                Map.copyOf(unread), Set.copyOf(notSeparated), seeded.reading().directs(), seeded.reading().unread(),
+                Map.copyOf(unread), Set.copyOf(notSeparated), seeded.reading().directs(), seeded.reading().noLines(),
                 seeded.reading().raised(), seeded.reading().raisedByPart(), seeded.took(),
                 seeded.reading().narrowers(),
                 seeded.notGathered(), placeOf,

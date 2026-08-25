@@ -83,9 +83,9 @@ class ACallIsAValueOnlyWhenItIsTheConstructionTest {
 
             assertEquals(List.of(), guards.thresholds(),
                     each[0] + ": an implementation nothing here has read draws no line");
-            assertEquals(1, guards.unread().size(),
+            assertEquals(1, guards.rulesWithoutALine().size(),
                     each[0] + ": and the position says a rule about it went unread");
-            RuleWithoutALine said = guards.unread().getFirst();
+            RuleWithoutALine said = guards.rulesWithoutALine().getFirst();
             assertEquals(souther.compiler.inputs.FilingCoordinate.of(
                             new souther.compiler.inputs.NumericTerm.ValueOf(TermPath.of("t"))),
                     said.at(),

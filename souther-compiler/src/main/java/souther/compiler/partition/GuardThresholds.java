@@ -64,7 +64,7 @@ public final class GuardThresholds {
      * operator is still in hand, and which values arrive is asked of the reading of the whole body.
      */
     public record Guards(List<Threshold> thresholds,
-                         List<RuleWithoutALine> unread, List<Singled> singled,
+                         List<RuleWithoutALine> rulesWithoutALine, List<Singled> singled,
                          List<LineDrawn> between,
                          ReachingCuts reaching) {
 
@@ -97,7 +97,7 @@ public final class GuardThresholds {
 
         public Guards {
             thresholds = List.copyOf(thresholds);
-            unread = List.copyOf(unread);
+            rulesWithoutALine = List.copyOf(rulesWithoutALine);
             singled = List.copyOf(singled);
             between = List.copyOf(between);
         }
@@ -125,7 +125,7 @@ public final class GuardThresholds {
                             Symbols symbols,
                             souther.compiler.check.ElementBindings elements) {
         List<Threshold> found = new ArrayList<>();
-        List<RuleWithoutALine> unread = new ArrayList<>();
+        List<RuleWithoutALine> withoutALine = new ArrayList<>();
         List<Guards.Singled> singled = new ArrayList<>();
         List<LineDrawn> between = new ArrayList<>();
         // The comparisons this reader assessed, and not the positions they were about. A position
@@ -144,11 +144,11 @@ public final class GuardThresholds {
         ComparisonReadings read = ComparisonReadings.of(body, plan, InputReads.of(inputs, elements), symbols);
         for (ComparisonReadings.Reading each : read.drawn()) {
             lineAt(behavior, each.comparison(), plan, each.reads(), symbols, quantities, found,
-                    singled, between, assessed, unread);
+                    singled, between, assessed, withoutALine);
         }
         // And every comparison the model states something by that this reader never saw.
-        noticed(behavior, read, assessed, plan, symbols, unread);
-        return new Guards(found, unread, singled, between, read.reaching(plan));
+        noticed(behavior, read, assessed, plan, symbols, withoutALine);
+        return new Guards(found, withoutALine, singled, between, read.reaching(plan));
     }
 
     /**
@@ -520,7 +520,7 @@ public final class GuardThresholds {
                                souther.compiler.inputs.Quantities quantities,
                                List<Threshold> out, List<Guards.Singled> singled,
                                List<LineDrawn> between,
-                               List<Core> assessed, List<RuleWithoutALine> unread) {
+                               List<Core> assessed, List<RuleWithoutALine> withoutALine) {
         // The plan numbered every comparison of an instrumented condition before anything read a
         // line off one, so this is here. Required rather than looked up leniently: a line whose
         // comparison has no site is this reader and the plan disagreeing about what a condition
@@ -533,7 +533,7 @@ public final class GuardThresholds {
         ComparisonAssessment read =
                 ComparisonAssessment.of(behavior, each, reads, symbols, quantities, null);
         assessed.add(each);
-        publish(behavior, each, plan, reads, symbols, read, unread);
+        publish(behavior, each, plan, reads, symbols, read, withoutALine);
         switch (read) {
             case ComparisonAssessment.AtAPosition at -> {
                 OriginRef.ComparisonOrigin origin = originOf(behavior, each, site, plan,

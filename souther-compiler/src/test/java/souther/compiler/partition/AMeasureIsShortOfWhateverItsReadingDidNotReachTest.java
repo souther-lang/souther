@@ -107,7 +107,7 @@ class AMeasureIsShortOfWhateverItsReadingDidNotReachTest {
         assertInstanceOf(Measurement.NotApplicable.class, evidence.bounded());
         // And the rule is named beside them, so the two answers are about a model with a rule in it
         // and not about one with none.
-        assertEquals(2, evidence.unread().size(), () -> "unread: " + evidence.unread());
+        assertEquals(2, evidence.rulesWithoutALine().size(), () -> "unread: " + evidence.rulesWithoutALine());
     }
 
     private static PartitionEvidence evidenceFor(String source, String behavior) {

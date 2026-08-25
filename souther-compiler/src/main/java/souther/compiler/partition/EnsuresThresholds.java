@@ -66,14 +66,14 @@ public final class EnsuresThresholds {
      *                them and so have no axis to come off. Already obligations rather than
      *                thresholds: a line between two positions divides neither, so there is no class
      *                for a partition to be told about
-     * @param unread  the positions a rule states something about that nothing here turned into a
-     *                line. Carried rather than left out: a position a clause compares is not a
+     * @param rulesWithoutALine  the positions a rule states something about that this drew no
+     *                line at. Carried rather than left out: a position a clause compares is not a
      *                position the model draws no line through, and a reading that answered with its
      *                lines alone would have that said of it — which is a sentence about the model,
      *                and the model says otherwise in its own declaration
      */
     public record Clauses(List<Threshold> thresholds, List<GuardThresholds.Guards.Singled> singled,
-                          List<LineDrawn> between, List<RuleWithoutALine> unread) {
+                          List<LineDrawn> between, List<RuleWithoutALine> rulesWithoutALine) {
 
         public static final Clauses NONE =
                 new Clauses(List.of(), List.of(), List.of(), List.of());
@@ -82,7 +82,7 @@ public final class EnsuresThresholds {
             thresholds = List.copyOf(thresholds);
             singled = List.copyOf(singled);
             between = List.copyOf(between);
-            unread = List.copyOf(unread);
+            rulesWithoutALine = List.copyOf(rulesWithoutALine);
         }
     }
 
@@ -129,14 +129,14 @@ public final class EnsuresThresholds {
                 }
             }
         }
-        return new Clauses(drawn.thresholds(), drawn.singled(), drawn.between(), drawn.unread());
+        return new Clauses(drawn.thresholds(), drawn.singled(), drawn.between(), drawn.rulesWithoutALine());
     }
 
     /** What the walk has found so far, and the behavior a line between two positions is named
      *  after. Together because they are filled together and are one answer. */
     private record Drawn(String behavior, List<Threshold> thresholds,
                          List<GuardThresholds.Guards.Singled> singled,
-                         List<LineDrawn> between, List<RuleWithoutALine> unread) {}
+                         List<LineDrawn> between, List<RuleWithoutALine> rulesWithoutALine) {}
 
     /**
      * The comparisons a rule states outright: its own, and those of both sides of every {@code &&}
@@ -180,7 +180,7 @@ public final class EnsuresThresholds {
                     new BlockReason.UnreadComparisonForm(),
                     GuardThresholds.mentionedIn(e, reads, symbols).stream()
                             .map(FilingCoordinate::at).toList(),
-                    out.unread());
+                    out.rulesWithoutALine());
             return;
         }
         // What the comparison comes to is read the same way wherever a comparison is written, which
@@ -193,7 +193,7 @@ public final class EnsuresThresholds {
         // reader, and a case added to an assessment had to be answered in both.
         assessed.whyTheLineReadingDrewNone().ifPresent(why ->
                 reportRuleWithoutLine(new RuleRef.Ensures(rule.id(), clause), comparison, rule.value(), why,
-                        assessed.filedAt(comparison, reads, symbols), out.unread()));
+                        assessed.filedAt(comparison, reads, symbols), out.rulesWithoutALine()));
         // And the geometry, which is this reader's own. Only the two arms that draw something have
         // anything to add here.
         switch (assessed) {
@@ -275,7 +275,7 @@ public final class EnsuresThresholds {
     private static void reportRuleWithoutLine(RuleRef.Ensures rule, Core statement, BindingId answer,
                                      BlockReason.RuleWithoutLineReason why,
                                      List<FilingCoordinate> at,
-                                     List<RuleWithoutALine> unread) {
+                                     List<RuleWithoutALine> withoutALine) {
         if (ComparisonAssessment.readsAnswer(statement, answer)) {
             return;
         }
@@ -283,8 +283,8 @@ public final class EnsuresThresholds {
                 souther.compiler.check.RuleCitation.named(rule);
         for (FilingCoordinate named : at) {
             RuleWithoutALine here = new RuleWithoutALine(rule, cited, named, why);
-            if (unread.stream().noneMatch(had -> had.sameAs(here))) {
-                unread.add(here);
+            if (withoutALine.stream().noneMatch(had -> had.sameAs(here))) {
+                withoutALine.add(here);
             }
         }
     }
