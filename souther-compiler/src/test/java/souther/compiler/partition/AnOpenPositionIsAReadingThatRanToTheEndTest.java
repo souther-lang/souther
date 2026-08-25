@@ -156,8 +156,7 @@ class AnOpenPositionIsAReadingThatRanToTheEndTest {
     @Test
     void anEmptyDivisionIsNotAnAnswer() {
         assertThrows(IllegalArgumentException.class,
-                () -> new LocalPartition.Divided(List.of(), new CutEvidence.None(),
-                        List.of(), false));
+                () -> new LocalPartition.Divided(List.of(), new CutEvidence.None(), false));
     }
 
     /**

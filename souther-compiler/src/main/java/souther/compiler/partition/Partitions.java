@@ -57,6 +57,12 @@ public final class Partitions {
      * reading of the declarations made where the assembling happened. Two readers therefore had two
      * chances to disagree about which lines exist, which is the thing this being one answer is for.
      *
+     * @param unanswered the questions the rules of this behavior's inputs raise that nothing
+     *                answered. Beside the axes and not inside one: the model raises them and an
+     *                axis is one reader of them, so a position no axis came back for still has
+     *                whatever was written about it — and an axis is re-pointed at another number as
+     *                a body's rules are read, which would carry a question about one number onto
+     *                another
      * @param axes    the positions this behavior is measured at, in parameter order. Every position
      *                the model divides is one of them: what a behavior is measured at is settled by
      *                what its types say and by what its body compares, and a count of positions is
@@ -66,6 +72,7 @@ public final class Partitions {
      *                has an entry, and an axis that is not measurable has no lines to have one for
      */
     public record Partitioning(List<Axis> axes,
+                               List<souther.compiler.inputs.StandingQuestion> unanswered,
                                java.util.Set<NumericTerm> uncertain,
                                List<UndividedPosition> undivided,
                                List<UnreadRule> unread,
@@ -78,6 +85,7 @@ public final class Partitions {
                                MeasureClosure.OfTheBorder borderClosure) {
         public Partitioning {
             axes = List.copyOf(axes);
+            unanswered = List.copyOf(unanswered);
             uncertain = java.util.Set.copyOf(uncertain);
             undivided = List.copyOf(undivided);
             unread = List.copyOf(unread);
@@ -180,6 +188,7 @@ public final class Partitions {
         // position with classes read from a product wider than the rules admit is exactly where it
         // has something to say, and a position with none is no more affected than any other.
         List<souther.compiler.inputs.PositionValuesNotSeparated> notSeparated = new ArrayList<>();
+        List<souther.compiler.inputs.StandingQuestion> standing = new ArrayList<>();
         for (Position position : inputs.positions()) {
             // Not at a position made of positions. Such a one is given up in favour of what is
             // under it and carries no classes of its own, so what this qualifies is not there —
@@ -192,6 +201,10 @@ public final class Partitions {
                         new souther.compiler.inputs.PositionValuesNotSeparated(position.path()));
             }
             axisOf(behavior, position, symbols, policy, found, uncertain, unread);
+            // What the rules of this position raise that nothing answered, gathered from the
+            // reading that found it. Once per position and not once per axis: a question is the
+            // model's, and which axis is standing beside it is this compiler's business.
+            standing.addAll(position.unansweredQuestions());
         }
         // Every position the reading found, including the ones nothing divides: a report names what
         // it could not measure at one of those, and a body's comparison can still draw the first
@@ -208,8 +221,8 @@ public final class Partitions {
         for (Axis axis : kept) {
             keep(new ArrayList<>(), measured, axis, null, unread);
         }
-        MeasureClosure.Both closed = MeasureClosure.of(kept, unread);
-        return new Partitioning(kept, uncertain, undividedIn(measured),
+        MeasureClosure.Both closed = MeasureClosure.of(kept, standing, unread);
+        return new Partitioning(kept, standing, uncertain, undividedIn(measured),
                 List.copyOf(unread), blockedIn(measured), List.copyOf(notSeparated),
                 List.of(), linesAlong(kept, quantities, symbols), ReachingCuts.NONE,
                 closed.partition(), closed.border());
@@ -513,8 +526,8 @@ public final class Partitions {
                     reachable.stream().map(Threshold::parts).toList()),
                     reachable.isEmpty() ? null : new BodyCutInspection.Evidence(), rules);
         }
-        MeasureClosure.Both closed = MeasureClosure.of(out, rules);
-        return new Partitioning(out, base.uncertain(),
+        MeasureClosure.Both closed = MeasureClosure.of(out, base.unanswered(), rules);
+        return new Partitioning(out, base.unanswered(), base.uncertain(),
                 undividedIn(measured), List.copyOf(rules), blockedIn(measured),
                 // Carried across: what a reading could not hold together is a fact about the
                 // declarations, and a body drawing a line on a position does not make the product
@@ -847,7 +860,7 @@ public final class Partitions {
                     uncertain.add(term);
                 }
                 out.add(new Axis(id, term, position.type(), divided.classes(),
-                        divided.cuts().cuts(), List.of(), divided.unanswered(),
+                        divided.cuts().cuts(), List.of(),
                         divided.rulesNotReached(), null, null));
             }
             // Nothing local divides the position, which is what licenses asking what it is made of.
@@ -866,7 +879,7 @@ public final class Partitions {
                     // position from completing as one the model divides no way.
                     case StructuralInspection.Retained retained ->
                             out.add(Axis.pendingAt(id, term, position.type(),
-                                    position.unansweredQuestions(), position.rulesNotReached(),
+                                    position.rulesNotReached(),
                                     retained.continuation(), leftUnread(position)));
                 }
             }

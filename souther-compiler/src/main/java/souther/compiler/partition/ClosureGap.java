@@ -35,7 +35,7 @@ public sealed interface ClosureGap {
      * both or yields neither and records what stopped its reading. Which is why a comparison's
      * incompleteness reaches this only as {@link RuleUnread}.
      */
-    record QuestionUnanswered(AxisId at, souther.compiler.inputs.StandingQuestion question)
+    record QuestionUnanswered(souther.compiler.inputs.StandingQuestion question)
             implements ClosureGap {}
 
     /** A position whose rules nothing enumerated. It raises no question, so it cannot be short of
