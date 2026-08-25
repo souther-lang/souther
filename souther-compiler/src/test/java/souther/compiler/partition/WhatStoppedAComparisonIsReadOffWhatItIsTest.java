@@ -101,12 +101,20 @@ class WhatStoppedAComparisonIsReadOffWhatItIsTest {
      * <p>Read off the sides, the answer was about the length: whichever side held an operation was
      * the one blamed, so an operation became more likely to be named for its neighbour the more of
      * them this learned to read.
+     *
+     * <p>Filed at the length, which is the number the reading was after when it stopped. The rule
+     * bounds the length and says nothing about which strings may stand there, so the string's own
+     * values are not what went unread.
      */
     @Test
     void anOperationThisReadsIsNotBlamedForTheFormBesideIt() {
+        PartitionEvidence measured = guard("s: String",
+                "String.length(s) > Int.multiply(String.length(s), String.length(s))");
+
         assertEquals(List.of(UndividedPosition.Reason.UNSUPPORTED_SYNTAX),
-                whyAt(guard("s: String", "String.length(s) > Int.multiply(String.length(s),"
-                        + " String.length(s))"), "s"));
+                whyAt(measured, "String.length(s)"));
+        assertEquals(List.of(), whyAt(measured, "s"),
+                "the string's own values are not what the rule is about");
     }
 
     /**

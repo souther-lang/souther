@@ -108,7 +108,18 @@ public final class DeclarationAgreement {
 
         /** What the two builds say about everything {@code behavior}'s crossing reaches. */
         Agreement heldFrom(ValueName.Behavior behavior) {
-            reach(new Reached.ABehavior(behavior));
+            // Compared, not reached. What `reach` decides is which of the things a walk finds a
+            // crossing follows, and the behavior asked about was not found — it is what this was
+            // given. Put through `reach`, a root it declined would come back `Agree` while nothing
+            // had been held at all, which is an answer this may not give.
+            //
+            // No caller reaches that today: the one there is passes the module being evaluated,
+            // which a compilation refuses to let take a reserved name. So this is what the method
+            // says rather than a case anything meets, and the root it would decline is said as a
+            // mistake by `notInSight` instead of answered.
+            Reached root = new Reached.ABehavior(behavior);
+            reached.add(root);
+            toCompare.addLast(root);
             while (!toCompare.isEmpty()) {
                 Agreement said = held(toCompare.removeFirst());
                 if (!(said instanceof Agreement.Agree)) {
@@ -161,6 +172,19 @@ public final class DeclarationAgreement {
          * can be answered; what is asked for here is narrower and is the crossing's.
          */
         private Agreement notInSight(String module) {
+            // Not a second place the language is left out — `reach` decides that, and this states
+            // what has to be true once it has. A reserved name arriving here is a walk that reached
+            // something nobody publishes, which is this compiler's mistake and not an author's:
+            // both sides would answer `SaysNothing`, and what an author would be shown is E1927
+            // asking for a dependency on `souther`, which no artifact carries and no model can add
+            // (#1049). Raised rather than returned, so that a route opened later fails where it is
+            // written instead of arriving at a reader as advice that cannot be taken.
+            if (Reserved.isNamespace(module)) {
+                throw new IllegalStateException("`" + module + "` is the language's own namespace,"
+                        + " which no build publishes, so a crossing does not read declarations of"
+                        + " it: whether two builds have the same ones is what the boundary revision"
+                        + " on each of them says");
+            }
             if (ourSide.containsKey(module)) {
                 return null;
             }
@@ -200,11 +224,35 @@ public final class DeclarationAgreement {
         private void follow(List<Object> parts) {
             walk(parts, new IdentityHashMap<>(), part -> {
                 switch (part) {
-                    // A declaration a module wrote is what crosses; what the language gives is
-                    // there in every project and is not part of what an artifact agrees about.
-                    case TypeSymbol.AtModule type -> reach(new Reached.ADeclaration(type));
-                    case ValueName.Behavior behavior -> reach(new Reached.ABehavior(behavior));
-                    case ValueName.Helper helper -> reach(new Reached.AHelper(helper));
+                    case TypeSymbol type -> reach(new Reached.ADeclaration(type));
+                    // Every kind of value name, written out. What the walk carries is `Object`, so
+                    // the outer switch is an open world and needs its default; a name that has
+                    // arrived at `ValueName` is a closed one again, and stepping into it is what
+                    // buys back the guarantee that type has — a case added there is a compile error
+                    // here rather than a name silently followed by nothing. It was not: a library
+                    // call fell through the default, so one spelling of a rule crossed and the same
+                    // rule written as a `match` did not (#1049).
+                    case ValueName value -> {
+                        switch (value) {
+                            case ValueName.Behavior behavior ->
+                                    reach(new Reached.ABehavior(behavior));
+                            case ValueName.Helper helper -> reach(new Reached.AHelper(helper));
+                            // The standard library, for the reason the language's own declarations
+                            // are left out of `reach`: nobody publishes it, and whether two builds
+                            // have the same one is what the boundary revision on each says.
+                            case ValueName.Stdlib _ -> { }
+                            // A binding is not a declaration. Which binding a use is of is compared
+                            // where the two sides' forms are held together (`sameShape`), and there
+                            // is nothing beyond this name to reach.
+                            case ValueName.Local _ -> { }
+                            // A type written where a value goes. The declaration it names is
+                            // reached as the type it is, from the same part.
+                            case ValueName.OfType _ -> { }
+                            // A meaning the language gives and no module declares: `None`, a
+                            // rounding mode. Nothing publishes one.
+                            case ValueName.Builtin _ -> { }
+                        }
+                    }
                     default -> { }
                 }
             });
@@ -213,13 +261,23 @@ public final class DeclarationAgreement {
         /**
          * Reaches one thing, once.
          *
-         * <p>The standard library is not one of them. Nobody publishes it, and whether two builds
-         * have the same one is what the boundary revision on each of them says. Neither is anything
+         * <p>What the language declares is not one of them. Nobody publishes the primitives,
+         * {@code Option}'s cases or the prelude's data — there is no {@code souther/$Module.class}
+         * for either side's path to carry — and whether two builds have the same ones is what the
+         * boundary revision on each of them says ({@link ModuleReadback#read}). Neither is anything
          * of no module: a signature written over a primitive names no declaration.
+         *
+         * <p>Asked of the identity, which is what has the answer. This used to hold the module name
+         * against {@link Reserved#isQualifier}, and a qualifier is the surface spelling a call
+         * writes — {@code List}, {@code Option} — never the module of a name resolution has already
+         * settled. So the test was one no reached thing could pass, and a rule reaching
+         * {@code Some} or {@code Int} through a {@code match} arm sent the walk after a module
+         * nobody ships; what came back was E1927, telling an author to depend on {@code souther}
+         * (#1049).
          */
         private void reach(Reached what) {
             String module = what.module();
-            if (module == null || module.isEmpty() || Reserved.isQualifier(module)) {
+            if (module == null || module.isEmpty() || what.isDeclaredByLanguage()) {
                 return;
             }
             if (reached.add(what)) {
@@ -241,20 +299,34 @@ public final class DeclarationAgreement {
 
         String name();
 
+        /** Whether the language declares it rather than a module of some compilation. Delegated to
+         *  the identity this stands for, which is where the answer is
+         *  ({@link TypeSymbol#isDeclaredByLanguage()}); read off {@link #module()} here, it would be
+         *  the namespace rule restated a fourth time. */
+        boolean isDeclaredByLanguage();
+
         /** What of {@code m} this is, as what a crossing depends on — null where m has no such
          *  thing. */
         List<Object> partsIn(Hir.Module m);
 
-        record ADeclaration(TypeSymbol.AtModule type) implements Reached {
+        record ADeclaration(TypeSymbol type) implements Reached {
 
             @Override
             public String module() {
-                return type.module();
+                // What the language declares has no module of a compilation to name, and `reach`
+                // has already left it out; answering null says the same thing twice rather than
+                // making up a module for it.
+                return type instanceof TypeSymbol.AtModule at ? at.module() : null;
             }
 
             @Override
             public String name() {
                 return type.name();
+            }
+
+            @Override
+            public boolean isDeclaredByLanguage() {
+                return type.isDeclaredByLanguage();
             }
 
             @Override
@@ -281,6 +353,11 @@ public final class DeclarationAgreement {
             }
 
             @Override
+            public boolean isDeclaredByLanguage() {
+                return behavior.isDeclaredByLanguage();
+            }
+
+            @Override
             public List<Object> partsIn(Hir.Module m) {
                 for (Hir.BehaviorDef b : m.behaviors()) {
                     if (b.name().equals(name())) {
@@ -301,6 +378,11 @@ public final class DeclarationAgreement {
             @Override
             public String name() {
                 return helper.name();
+            }
+
+            @Override
+            public boolean isDeclaredByLanguage() {
+                return helper.isDeclaredByLanguage();
             }
 
             @Override

@@ -2,7 +2,6 @@ package souther.compiler.partition;
 
 import souther.compiler.check.RuleAccounting;
 import souther.compiler.inputs.BlockReason;
-import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.UnreadRule;
 
 /**
@@ -29,13 +28,15 @@ public sealed interface ClosureGap {
      *  ({@link BlockReason.AboutARule#leavesShort}). */
     record RuleUnread(UnreadRule rule) implements ClosureGap {}
 
-    /** A question the rules written about one position raise that nothing answered. */
+    /**
+     * A question the rules written about one position raise that nothing answered.
+     *
+     * <p>A clause's, and never a comparison's. A comparison raises a question exactly where the
+     * reading of it reached a line, and that line is the answer — so a comparison either yields
+     * both or yields neither and records what stopped its reading. Which is why a comparison's
+     * incompleteness reaches this only as {@link RuleUnread}.
+     */
     record QuestionUnanswered(AxisId at, RuleAccounting.Unanswered question) implements ClosureGap {}
-
-    /** The same, for a question a body's comparison raised. It is filed at a path rather than at an
-     *  axis because a comparison is read where it is written and not at a position that was kept. */
-    record ComparisonUnanswered(TermPath at, RuleAccounting.Unanswered question)
-            implements ClosureGap {}
 
     /** A position whose rules nothing enumerated. It raises no question, so it cannot be short of
      *  one — which is why it is a gap of its own and not one of the two above. */

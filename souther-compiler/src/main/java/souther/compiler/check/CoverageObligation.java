@@ -20,6 +20,14 @@ package souther.compiler.check;
  * question every model answers by nobody having asked it, and a completeness counted over such a set
  * says more than it knows. A rule shape gaining a question here is the same change that starts
  * raising it — the two arrive together or the second is a design note wearing a type's clothes.
+ *
+ * <p><b>And not every coverage target.</b> What rows a model owes and what questions stand until
+ * something answers them are two sets, and only the second is here. A comparison this compiler can
+ * read owes rows — at the value it singles out, in the classes its line makes — and owes them by
+ * having been read: the reading that finds the line is what asks for them, so there is no moment at
+ * which such a demand is outstanding. Those live where the partition's geometry does. Held here as
+ * well, they were raised and answered in one breath and the two sets came apart nowhere except in
+ * the name.
  */
 public enum CoverageObligation {
 
@@ -37,46 +45,16 @@ public enum CoverageObligation {
     /**
      * A line rows are owed at.
      *
-     * <p>Subject: where the line falls. A rule bounding one position draws it on the number that
-     * position is measured at; a comparison of two things that both move with the row draws it where
-     * they hold one count, which is on neither of them and is named by that comparison. Raised by
-     * every rule that places an end, whether it divides the position, stops it, or holds two of them
-     * against each other.
+     * <p>Subject: where the line falls, which is the number the position is measured at. Raised by a
+     * clause of a declaration that places an end on one of its value's positions.
+     *
+     * <p>Not by a comparison. A body's condition and a clause of an {@code ensures} draw lines too,
+     * and what they owe is owed by having been read — the reading that finds the line is what asks
+     * for the rows either side, so no such demand is ever outstanding. Those live where the
+     * partition's geometry does.
      */
-    BOUNDARY,
+    BOUNDARY;
 
-    /**
-     * The value a rule singles out, and a row at it.
-     *
-     * <p>Subject: the number the position is measured at, as {@link #BOUNDARY}'s is. Raised by a
-     * rule that tells one value from every other — {@code x == c} and {@code x /= c} place the same
-     * thing and differ in which of the two classes they select.
-     *
-     * <p>Its own question beside {@link #BOUNDARY} and not a use of it. A border has an order across
-     * it and rows either side named by their roles, which is what a document promises when it writes
-     * one (ADR-0090, and the technique's ON and OFF points); a singled value has values on both
-     * sides that are one class, so there is no side for a role to be about. Read as a border, the
-     * order the rule never drew arrives in the words a reader is given — which is what
-     * {@link ComparisonClaim.Singled} says of reading it as a place to cut.
-     */
-    SINGLETON,
-
-    /**
-     * Classes a row is owed in, one either side of a line.
-     *
-     * <p>Subject: the position. Raised by a rule that treats the two sides of a line differently
-     * and leaves values on both — which is what a class is. A {@code guard}'s comparison is one, and
-     * so is a clause of an {@code ensures} about an input; an invariant's bound is not, because
-     * everything outside it is refused at construction and there is no class on the far side
-     * (ADR-0090). That is a fact about the construct the rule is written in and not about the
-     * comparison, which is why the two are asked separately where a rule raises this.
-     *
-     * <p>Beside the geometric question and never instead of it. One comparison, two questions: which
-     * rows are owed where it falls — a border for an order, a value for a singling — and which rows
-     * are owed in the classes it makes. Both shapes raise this, and a measure counting one for the
-     * other reports a model divided where nothing said so.
-     */
-    PARTITION;
 
     /**
      * Which measure of coverage answers this question.
@@ -88,13 +66,10 @@ public enum CoverageObligation {
      * twice, the day a question is added is the day one of them files it somewhere and the other
      * silently answers for it.
      *
-     * <p>A singling belongs to the partition measure. It makes the two classes {@code {c}} and
-     * everything else, and that is what counts a row for it; a border has an order across it and a
-     * role for each side, which a singled value has no sides for.
      */
     public Measure answeredBy() {
         return switch (this) {
-            case ADMITTED_VALUES, PARTITION, SINGLETON -> Measure.PARTITION;
+            case ADMITTED_VALUES -> Measure.PARTITION;
             case BOUNDARY -> Measure.BOUNDARY;
         };
     }

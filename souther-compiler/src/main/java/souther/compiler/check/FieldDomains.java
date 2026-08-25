@@ -400,8 +400,16 @@ public final class FieldDomains {
      *                 other kind of rule reaches this reading
      * @param lower    whether this bounds the coordinate below; otherwise above
      */
-    public record Placed(String path, boolean measured, RuleRef.Invariant from,
-                         boolean lower, Endpoint end) {}
+    public record Placed(String path, ValueName by, RuleRef.Invariant from,
+                         boolean lower, Endpoint end) {
+
+        /** Whether it is a number taken of the position rather than its own values, which is what
+         *  the readings of this value's own clauses ask each other. Derived and not stored: which
+         *  number it is, is {@link #by}, and a stored answer beside it would be a second one. */
+        public boolean measured() {
+            return by != null;
+        }
+    }
 
     /**
      * A rule about where one coordinate's values stop that this reading placed no end from, and
@@ -430,8 +438,15 @@ public final class FieldDomains {
      * @param why  what would have to change before this rule could be a line, in this compiler's
      *             own terms
      */
-    public record Unread(String path, boolean measured, RuleRef.Invariant from,
-                         Core part, souther.compiler.inputs.BlockReason.AboutARule why) {}
+    public record Unread(String path, ValueName by, RuleRef.Invariant from,
+                         Core part, souther.compiler.inputs.BlockReason.AboutARule why) {
+
+        /** Whether it is a number taken of the position rather than its own values, derived for the
+         *  reason {@link Placed#measured} gives. */
+        public boolean measured() {
+            return by != null;
+        }
+    }
 
     /**
      * The declaration whose clause could have moved where the coordinate at {@code path} stops, or
@@ -698,17 +713,6 @@ public final class FieldDomains {
         return switch (owed.obligation()) {
             case ADMITTED_VALUES -> admissionAnswered(rule, where);
             case BOUNDARY -> boundaryAnswered(rule, where);
-            // A clause of a `data` raises none. Everything outside an invariant's bound is refused
-            // at construction, so there is no class on the far side of the line for a row to be
-            // owed in (ADR-0090) — and these are the questions of one value's clauses. Reached, the
-            // rule that raised it was not one of those.
-            case PARTITION -> throw new IllegalStateException(
-                    "an invariant's bound divides nothing, so " + rule + " raised no partition");
-            // Nor a value singled out. An invariant's ordering comparison is the only shape that
-            // reaches this accounting with a place in it; an equality of a `data`'s clause is a rule
-            // about which values may stand there and raises that alone.
-            case SINGLETON -> throw new IllegalStateException(
-                    "an invariant states which values stand, so " + rule + " singled nothing out");
         };
     }
 
@@ -810,7 +814,7 @@ public final class FieldDomains {
     /** Every end the rules place, wherever it is. */
     public List<Placed> placed() {
         return directs.stream()
-                .map(each -> new Placed(each.path(), each.measured(), each.from(),
+                .map(each -> new Placed(each.path(), each.by(), each.from(),
                         each.bound().lower(), each.bound().end()))
                 .toList();
     }

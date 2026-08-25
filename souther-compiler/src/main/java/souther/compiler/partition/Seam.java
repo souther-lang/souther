@@ -50,6 +50,15 @@ public record Seam(CutPosition at, Level below, Level above) {
      * and where it attains no level there is nothing to read back.
      */
     public static Seam of(LevelSpace space, Level cut, Towards belongsTo, Scale into) {
+        // Whether the order has a place there at all, which is not whether the quantity takes the
+        // level: `2 * a <= 9` cuts between eight and ten and nine is neither. An order whose only
+        // number is where two positions meet has one place and no others, and a level three along
+        // it is a line nowhere — asked past that, the two sides came back with nothing at either
+        // end and a seam was built out of a level the order has no room for.
+        if (!space.canCutAt(cut)) {
+            throw new IllegalArgumentException(
+                    "this order has no place at " + cut + " for a line to be");
+        }
         boolean attains = space.attainable(cut);
         Level below = attains && belongsTo == Towards.BELOW ? cut
                 : beside(space, cut, Towards.BELOW);

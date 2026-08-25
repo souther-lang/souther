@@ -1,5 +1,7 @@
 package souther.compiler.types;
 
+import souther.compiler.Reserved;
+
 /**
  * A data type's identity: which declaration this is, told apart by who declared it.
  *
@@ -135,6 +137,29 @@ public sealed interface TypeSymbol extends Comparable<TypeSymbol> {
 
     default boolean isPrimitive() {
         return this instanceof Primitive;
+    }
+
+    /**
+     * Whether the language declares this rather than a module of some compilation.
+     *
+     * <p>The primitives, {@code Option}'s two cases, the error cases beside them, and the data the
+     * standard library declares — together and as one answer. Nothing publishes any of them: there
+     * is no {@code souther/$Module.class} for a path to carry, so a reader that goes looking for
+     * the module behind one is asking after an artifact that cannot exist, and the reader that did
+     * was told to add a dependency nobody ships (#1049).
+     *
+     * <p>Two shapes and one question. What the language gives has no module at all and answers by
+     * being what it is. What the library declares has one, and it is a module of the reserved
+     * namespace — {@code souther.decimal} declares {@code RoundingMode}, and no compilation
+     * declares it. {@link Reserved#isNamespace} is where the reserved namespace is written down and
+     * this is the only place in the compiler that reads it of a declaration.
+     *
+     * <p>Not the same question as which class carries it. That one is
+     * {@code jvm.SoutherJvmAbi}'s, and the answers differ: this backend ships
+     * {@code souther.decimal}'s {@code RoundingMode} as {@code souther.runtime.RoundingMode}.
+     */
+    default boolean isDeclaredByLanguage() {
+        return !(this instanceof AtModule at) || Reserved.isNamespace(at.module());
     }
 
     /** The primitive this denotes, or null where it denotes none. */

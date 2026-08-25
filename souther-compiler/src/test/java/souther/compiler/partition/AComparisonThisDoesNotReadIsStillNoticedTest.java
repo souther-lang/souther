@@ -241,10 +241,11 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
      */
     @Test
     void twoPositionsComparedWithEachOtherSayWhichLimitThatIs() {
+        // Both sides name a position by itself, so the reading named a term for each.
         assertEquals(List.of(
-                        new Said(TermPath.of("p").then("x"),
+                        Said.named(TermPath.of("p").then("x"),
                                 new BlockReason.ComparisonBetweenPositions()),
-                        new Said(TermPath.of("p").then("y"),
+                        Said.named(TermPath.of("p").then("y"),
                                 new BlockReason.ComparisonBetweenPositions())),
                 said(read("p: Pair", "p.x < p.y").unread()));
     }
@@ -269,24 +270,32 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
     }
 
     /**
-     * A relation stays a relation when one side is written with something added to it.
+     * A relation the arithmetic stopped on is a rule this compiler did not read, and it is named
+     * for the form rather than for the carrier.
      *
-     * <p>What `+p.x < p.y * p.y+` needs is a class about two positions, exactly as
-     * `+p.x < p.y+` does. Read off how far the derivation got, the second side stops being a
-     * position at all and the answer becomes the carrier — which is a different piece of work and
-     * not the one that is owed.
+     * <p>Both positions are named, which is what `+p.x < p.y * p.y+` has in common with
+     * `+p.x < p.y+`. What it does not have in common is that anything was read: whether the rule
+     * divides `+p.x+` or relates the pair is the part the product stopped, and a reason saying it
+     * relates two positions would say the model is short of nothing while nobody knows what the
+     * rule states.
      *
-     * <p>`+p.x < p.y + 1+` is not this case any more. It is `+p.x - p.y < 1+`, a line where the two
-     * stand one apart, and it is drawn — so what is left here is a relation the arithmetic reads
-     * nothing out of at all.
+     * <p>The form and not the carrier. Both sides are ordered and a line on either against a number
+     * would be read; what is missing is a reader for the product, which is what an author would
+     * change.
+     *
+     * <p>`+p.x < p.y + 1+` is not this case at all. It is `+p.x - p.y < 1+`, a line where the two
+     * stand one apart, and it is drawn.
      */
     @Test
-    void aRelationWithArithmeticOnOneSideIsStillARelation() {
+    void aRelationTheArithmeticStoppedOnIsNamedForTheForm() {
+        // The left side names a position by itself, so the reading named a term for it; the right
+        // is where the reading stopped, and `p.y` there is a position the walk met inside the
+        // product rather than a number the rule was read for.
         assertEquals(List.of(
-                        new Said(TermPath.of("p").then("x"),
-                                new BlockReason.ComparisonBetweenPositions()),
+                        Said.named(TermPath.of("p").then("x"),
+                                new BlockReason.UnreadComparisonForm()),
                         new Said(TermPath.of("p").then("y"),
-                                new BlockReason.ComparisonBetweenPositions())),
+                                new BlockReason.UnreadComparisonForm())),
                 said(read("p: Pair", "p.x < Int.multiply(p.y, p.y)").unread()));
     }
 
@@ -300,7 +309,7 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
      */
     @Test
     void aReadableCarrierAgainstAnUnreadableSideIsNotACarrierProblem() {
-        assertEquals(List.of(new Said(TermPath.of("p").then("x"),
+        assertEquals(List.of(Said.named(TermPath.of("p").then("x"),
                         new BlockReason.UnreadComparisonForm())),
                 said(read("p: Pair", "p.x < Int.min(1, 2)").unread()));
     }
@@ -311,7 +320,21 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
      * <p>Spelled out where every entry is about one rule and what is being read is the position and
      * the limit. Which rule it was has its own test, because it is its own question.
      */
-    private record Said(TermPath at, BlockReason why) {}
+    private record Said(souther.compiler.inputs.FilingCoordinate at, BlockReason why) {
+
+        /** The same, where the reading named no number of the position — a position the walk met
+         *  inside something it could not take apart. */
+        Said(TermPath at, BlockReason why) {
+            this(souther.compiler.inputs.FilingCoordinate.at(at), why);
+        }
+
+        /** And where it did name one: the position's own values, which is what a side naming the
+         *  position by itself comes to. */
+        static Said named(TermPath at, BlockReason why) {
+            return new Said(souther.compiler.inputs.FilingCoordinate.of(
+                    new souther.compiler.inputs.NumericTerm.ValueOf(at)), why);
+        }
+    }
 
     private static List<Said> said(List<UnreadRule> unread) {
         return unread.stream().map(each -> new Said(each.at(), each.why())).toList();

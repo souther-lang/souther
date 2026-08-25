@@ -89,10 +89,22 @@ class ARuleThisCouldNotReadIsNamedByTheRuleTest {
         // owed both rules. What was one line is the pair at one position.
         assertEquals(4, rulesNotRead(TWO_INVARIANTS).size(), () -> unread(TWO_INVARIANTS));
         assertEquals(2, ruleIdsNotRead(TWO_INVARIANTS).size(), () -> unread(TWO_INVARIANTS));
-        assertTrue(human(TWO_INVARIANTS).contains("not read: invariant R (first)"),
+        assertTrue(namesRule(human(TWO_INVARIANTS), "invariant R (first)"),
                 human(TWO_INVARIANTS));
-        assertTrue(human(TWO_INVARIANTS).contains("not read: invariant R (second)"),
+        assertTrue(namesRule(human(TWO_INVARIANTS), "invariant R (second)"),
                 human(TWO_INVARIANTS));
+    }
+
+    /**
+     * Whether the report names {@code rule} on a line saying it left the position with no line.
+     *
+     * <p>Either word the report writes for that: a reading that stopped is `+not read+` and a rule
+     * read to the end that divided no position is `+no line+`. Which of them this rule gets is its
+     * reason's business; what is asked here is that the rule is named at all, which is what a
+     * reader looking for it is owed.
+     */
+    private static boolean namesRule(String report, String rule) {
+        return report.contains("not read: " + rule) || report.contains("no line: " + rule);
     }
 
     /** And two comparisons of one condition, which the guard producer kept one of. */
@@ -106,8 +118,8 @@ class ARuleThisCouldNotReadIsNamedByTheRuleTest {
     @Test
     void twoEnsuresClausesStoppedAlikeAreTwoFindings() {
         assertEquals(2, ruleIdsNotRead(TWO_ENSURES).size(), () -> unread(TWO_ENSURES));
-        assertTrue(human(TWO_ENSURES).contains("not read: ensures f (low)"), human(TWO_ENSURES));
-        assertTrue(human(TWO_ENSURES).contains("not read: ensures f (high)"), human(TWO_ENSURES));
+        assertTrue(namesRule(human(TWO_ENSURES), "ensures f (low)"), human(TWO_ENSURES));
+        assertTrue(namesRule(human(TWO_ENSURES), "ensures f (high)"), human(TWO_ENSURES));
     }
 
     /**

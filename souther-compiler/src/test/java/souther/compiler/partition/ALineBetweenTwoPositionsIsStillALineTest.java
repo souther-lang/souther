@@ -7,6 +7,8 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -374,18 +376,26 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     }
 
     /**
-     * A line no count satisfies is reported and not counted.
+     * A line the quantity never reaches is said, and it is not a border.
      *
-     * <p>The rules leave the two positions nothing in common, so no row can be on the line. That is
-     * not a row anybody is owed and not a gap a build is refused over — and it is still the only thing
-     * there is to say about the comparison, so it is said.
+     * <p>The rules leave the two positions nothing in common: {@code a} runs to minus one and
+     * {@code b} from one, so the distance between them never comes near the place they would be
+     * equal. That is not a border whose row nobody could find — it is not a border, and the
+     * comparison says so.
+     *
+     * <p>Apart from {@link #aRuleTheRangesCouldNotTakeInIsNotAProofEither}, where the ranges do
+     * meet and the pair on the line is what the rules refuse. There the line is real and the row for
+     * it is unproven; here the quantity stops short of the line. Held alike, a rule stating
+     * something no row satisfies was reported as one this compiler could not find a witness for.
      */
     @Test
     void aLineNoCountSatisfiesIsSaidAndNotCounted() {
-        String report = report(NO_COMMON_COUNT);
-
-        assertTrue(report.contains("not known to be writable: the OFF point cmp/a = b"), report);
-        assertFalse(report.contains("no row is at the OFF point cmp/a = b"), report);
+        assertEquals(List.of("a: RULE_CUTS_OUTSIDE_WHAT_THE_QUANTITY_HOLDS",
+                        "b: RULE_CUTS_OUTSIDE_WHAT_THE_QUANTITY_HOLDS"),
+                notRead(NO_COMMON_COUNT),
+                "both positions are named, and the rule was read to the end");
+        assertEquals(2, borders(NO_COMMON_COUNT),
+                "the two the newtypes' own bounds draw, and none between the positions");
     }
 
     /**
@@ -422,16 +432,6 @@ class ALineBetweenTwoPositionsIsStillALineTest {
         String rows = generated(TWO_NEWTYPES);
 
         assertTrue(rows.contains("(Charge(1000), Ceiling(1000))"), rows);
-    }
-
-    /** A count both positions admit is what the offer is written at, and where the rules leave none
-     *  there is no offer — and no claim that the line cannot be written on either. */
-    @Test
-    void aLineNoCountSatisfiesIsOfferedNoRowAndCalledNoNames() {
-        String rows = generated(NO_COMMON_COUNT);
-
-        assertTrue(rows.contains("no row for `a = b`"), rows);
-        assertTrue(rows.contains("does not make one unwritable"), rows);
     }
 
     /**
@@ -482,16 +482,21 @@ class ALineBetweenTwoPositionsIsStillALineTest {
      *
      * <p>A place in both ranges is one each position admits on its own, and a rule relating them can
      * refuse the pair each half would have taken. Under {@code invariant a < b} the two ranges run
-     * over each other everywhere and the diagonal holds nothing, so a projection read as a proof asks
-     * for a row that cannot exist — and {@code --strict} refuses a model for not writing it.
+     * over each other everywhere and the diagonal holds nothing — so what the rules leave the
+     * distance between them never reaches the place they would be equal, and there is no border
+     * there at all. Read off the two ranges instead, a row that cannot exist was asked for and
+     * {@code --strict} refused a model for not writing it.
      */
     @Test
     void aRuleRelatingTheTwoPositionsIsNotAnsweredByTheirRangesOverlapping() {
-        String report = report(RULED_OUT_BY_THE_RECORD);
-
-        assertFalse(report.contains("no row is at the OFF point cmp/p.a = p.b"),
-                "the line holds no value, so no row is owed at it:\n" + report);
-        assertTrue(report.contains("not known to be writable: the OFF point cmp/p.a = p.b"), report);
+        assertEquals(List.of("p.a: UNSUPPORTED_PARTITION_SHAPE", "p.b: UNSUPPORTED_PARTITION_SHAPE",
+                        "p.a: RULE_CUTS_OUTSIDE_WHAT_THE_QUANTITY_HOLDS",
+                        "p.b: RULE_CUTS_OUTSIDE_WHAT_THE_QUANTITY_HOLDS"),
+                notRead(RULED_OUT_BY_THE_RECORD),
+                "the record's own rule relates them, and the guard's line is outside the distance"
+                        + " that rule leaves between them");
+        assertEquals(0, borders(RULED_OUT_BY_THE_RECORD),
+                "the diagonal holds nothing, so there is no border to owe a row at");
     }
 
     /**
@@ -516,6 +521,33 @@ class ALineBetweenTwoPositionsIsStillALineTest {
         return AdequacyReport.of(compilation).human(SourceNameResolver.identity());
     }
 
+    /**
+     * What the first behavior of {@code model} left unread, as the position it is about and the
+     * reason it was left with.
+     *
+     * <p>Off the evidence rather than out of the rendered report. What a document prints for a
+     * reason is a projection made elsewhere, and a test reading the sentence is held to how it is
+     * worded as much as to what it says.
+     */
+    private static List<String> notRead(String model) {
+        Compilation compilation = Compilation.ofSource(model, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        return AdequacyReport.of(compilation).modules().get(0).behaviors().get(0)
+                .partition().notRead().stream()
+                .map(each -> each.at() + ": " + each.reason()).toList();
+    }
+
+    /** How many borders the first behavior of {@code model} draws, which is what a line the
+     *  quantity never reaches does not add to. */
+    private static int borders(String model) {
+        Compilation compilation = Compilation.ofSource(model, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        return AdequacyReport.of(compilation).modules().get(0).behaviors().get(0)
+                .partition().boundaries().size();
+    }
+
     private static String generated(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
@@ -535,16 +567,24 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     }
 
     /**
-     * Whether any {@code not read} line of {@code block} is about {@code position}.
+     * Whether any line of {@code block} saying a rule left the position with no line is about
+     * {@code position}.
      *
      * <p>Asked as a line rather than as a prefix. A finding about a rule names the rule first and
      * the position after it, and one about a position names the position — so a test matching
      * `+not read: <position>+` stopped meaning anything for the first kind rather than failing,
      * which is a negative assertion that passes because the words moved.
+     *
+     * <p>Either word, because the report writes two: a reading that stopped is `+not read+` and a
+     * rule read to the end that divided no position is `+no line+`. Which of them a rule gets is
+     * its reason's business and not this one's — what is asked here is whether the position was
+     * named at all.
      */
     private static boolean notReadAbout(String block, String position) {
-        return block.lines().anyMatch(line -> line.contains("not read:")
+        return block.lines().anyMatch(line ->
+                (line.contains("not read:") || line.contains("no line:"))
                 && (line.contains("not read: " + position + " ")
+                        || line.contains("no line: " + position + " ")
                         || line.contains("about `" + position + "`")));
     }
 }

@@ -681,7 +681,7 @@ public final class InvariantChecker {
                             + " alternatives past a counted " + expansion;
             // And which of the clauses place an edge, asked once the positions have names to be
             // recognised by.
-            Reading reading = c.directsIn(written, at, atoms, keys, heldAtomsOf(held), typeAt, took,
+            Reading reading = c.directsIn(written, at, atoms, keys, held, typeAt, took,
                     new PartsRead(readBy, adoptedBy));
             ConstraintState<FactSubject> constraints = k.constraints()
                     .takingValuesRead(stated.values())
@@ -870,8 +870,14 @@ public final class InvariantChecker {
      *                 one value are two rules a row could be owed to, and held as declarations
      *                 they came back as one
      */
-    record Direct(String path, boolean measured, RuleRef.Invariant from,
-                  InvariantBound bound, Core part) {}
+    record Direct(String path, ValueName by, RuleRef.Invariant from,
+                  InvariantBound bound, Core part) {
+
+        /** Whether it is a number taken of the position rather than its own values. */
+        boolean measured() {
+            return by != null;
+        }
+    }
 
     /** One clause reaching a value, rebased onto the positions of that value, and which clause it
      * is. */
@@ -1043,13 +1049,25 @@ public final class InvariantChecker {
     /**
      * A coordinate a clause reaching this value could be about.
      *
+     * <p>The term itself, and not a path beside a flag saying a number was taken of it. A number
+     * taken of a position is taken <em>by an operation</em>, and this reading knows which — a
+     * {@code Counted} is recorded with it. Summarised as a boolean on the way out, two operations
+     * over one path came back as one coordinate, and every reader downstream had a path and a flag
+     * where the model had a term.
+     *
      * @param carrier what its values are ordered on, or null where nothing here draws a line on
      *                them. Here rather than left out, because a coordinate is a coordinate whether
      *                or not an end can be read on it: gated on having one, a rule written about a
      *                position no line is drawn on named nothing, and the reading that could say so
      *                had never heard of the position
      */
-    private record Coordinate(String path, boolean measured, Carrier carrier) {}
+    private record Coordinate(String path, ValueName by, Carrier carrier) {
+
+        /** Whether it is a number taken of the position rather than the position's own values. */
+        boolean measured() {
+            return by != null;
+        }
+    }
 
     /**
      * What the clauses of one value place on its coordinates, and which declarations relate each of
@@ -1078,20 +1096,24 @@ public final class InvariantChecker {
 
     private Reading directsIn(List<Written> stated, Denotations at,
                                    Map<String, FactSubject> atoms, Map<String, FactSubject> keys,
-                                   Map<String, FactSubject> held, Map<String, Type> typeAt,
+                                   Map<String, FieldDomains.Counted> held,
+                                   Map<String, Type> typeAt,
                                    ReadingEvidence took, PartsRead parts) {
         Map<FactSubject, Coordinate> byName = new LinkedHashMap<>();
         keys.forEach((path, key) -> {
             Carrier carrier = Carrier.ofValue(typeAt.get(path), symbols);
-            byName.put(key, new Coordinate(path, false, carrier));
+            byName.put(key, new Coordinate(path, null, carrier));
             FactSubject atom = atoms.get(path);
             if (atom != null) {
-                byName.put(atom, new Coordinate(path, false, carrier));
+                byName.put(atom, new Coordinate(path, null, carrier));
             }
         });
         // A count is a whole number whatever it counts, so nothing about the container decides how
-        // its sizes are spaced.
-        held.forEach((path, atom) -> byName.put(atom, new Coordinate(path, true, Carrier.WHOLE)));
+        // its sizes are spaced. The operation it is a count of comes from the reading that recorded
+        // it: dropped here and rebuilt as "a number was taken", two operations over one path were
+        // one coordinate and a report could not tell them apart.
+        held.forEach((path, counted) -> byName.put(counted.atom(),
+                new Coordinate(path, counted.by(), Carrier.WHOLE)));
         List<Direct> out = new ArrayList<>();
         List<FieldDomains.Unread> unread = new ArrayList<>();
         Map<String, List<TypeSymbol>> narrowers = new LinkedHashMap<>();
@@ -1285,7 +1307,7 @@ public final class InvariantChecker {
             return;
         }
         if (end instanceof InvariantBound.Read.AnEnd placed) {
-            out.add(new Direct(found.path(), found.measured(), from, placed.bound(), bin));
+            out.add(new Direct(found.path(), found.by(), from, placed.bound(), bin));
         }
     }
 
@@ -1459,7 +1481,7 @@ public final class InvariantChecker {
                 place -> carrierAt(place, left, right) != null);
         for (Coordinate each : coordinatesIn(comparison, at, byName)) {
             FieldDomains.Unread said =
-                    new FieldDomains.Unread(each.path(), each.measured(), from, comparison, why);
+                    new FieldDomains.Unread(each.path(), each.by(), from, comparison, why);
             if (!out.contains(said)) {
                 out.add(said);
             }

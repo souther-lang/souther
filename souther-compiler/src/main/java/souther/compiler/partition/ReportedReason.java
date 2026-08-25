@@ -55,6 +55,12 @@ public final class ReportedReason {
             // class about two positions, and the other has nothing to wait for.
             case BlockReason.ComparisonCuttingNothing _ ->
                     UndividedPosition.Reason.RULE_CUTS_NOTHING;
+            // And its own word beside that one. A rule with no quantity to cut states nothing about
+            // the position; a rule whose line falls outside where its quantity runs states
+            // something no row satisfies, and an author reading the first would take the second for
+            // a clause they could delete.
+            case BlockReason.ComparisonCuttingOutsideDomain _ ->
+                    UndividedPosition.Reason.RULE_CUTS_OUTSIDE_WHAT_THE_QUANTITY_HOLDS;
         };
     }
 

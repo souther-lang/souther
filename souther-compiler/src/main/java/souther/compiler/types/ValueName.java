@@ -1,5 +1,7 @@
 package souther.compiler.types;
 
+import souther.compiler.Reserved;
+
 /**
  * What a name written in the value namespace denotes — the answer {@link TypeSymbol} gives for the
  * type namespace.
@@ -34,6 +36,12 @@ public sealed interface ValueName {
 
     /** A module's own {@code let} — a helper, which is expanded into the body that called it. */
     record Helper(String module, String name) implements ValueName {
+
+        /** Whether the language declares it rather than a module of some compilation.
+         *  @see TypeSymbol#isDeclaredByLanguage() */
+        public boolean isDeclaredByLanguage() {
+            return Reserved.isNamespace(module);
+        }
 
         @Override
         public String toString() {
@@ -184,6 +192,12 @@ public sealed interface ValueName {
                 throw new IllegalArgumentException("module and name are required: " + module + "."
                         + name);
             }
+        }
+
+        /** Whether the language declares it rather than a module of some compilation.
+         *  @see TypeSymbol#isDeclaredByLanguage() */
+        public boolean isDeclaredByLanguage() {
+            return Reserved.isNamespace(module);
         }
 
         @Override

@@ -1026,8 +1026,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // stopped by one limit at one position came out as one line.
         for (Adequacy.Finding f : behavior.findings()) {
             if (f.about() instanceof About.ARuleThisCouldNotRead(var it)) {
-                out.append(String.format("      %s not read: %s — %s, about `%s`%n",
-                        mark(f), cited(it.cited(), names, declaredIn),
+                // Two sentences, because two opposite things are being said. A form no reader takes
+                // apart is a limit of this compiler; a rule whose quantity is empty was read from
+                // end to end and says what it says. Written under one word, a line read "not read:
+                // it was read to the end and cuts nothing" — which is what the reader is left to
+                // make sense of.
+                out.append(String.format("      %s %s: %s — %s, about `%s`%n",
+                        mark(f), it.readingStopped() ? "not read" : "no line",
+                        cited(it.cited(), names, declaredIn),
                         whyUnread(it.reason()), it.at()));
             }
         }
@@ -1080,6 +1086,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                             + " is not worked out";
             case RULE_CUTS_NOTHING ->
                     "it was read to the end and cuts nothing this position appears in";
+            case RULE_CUTS_OUTSIDE_WHAT_THE_QUANTITY_HOLDS ->
+                    "it was read to the end and draws its line outside what the quantity it cuts"
+                            + " ever holds";
             // And the four a position reaches, written about the position, because that is all
             // there is: nothing observed a rule to name. Which reasons reach which of the two is
             // settled by the authority a reason belongs to
@@ -1098,8 +1107,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         return switch (question) {
             case ADMITTED_VALUES -> "which values may stand at";
             case BOUNDARY -> "where the values stop on";
-            case PARTITION -> "which classes a row is owed in at";
-            case SINGLETON -> "which value is singled out at";
         };
     }
 
@@ -2319,8 +2326,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                         WeakeningWord.RULE_UNREAD;
                 case souther.compiler.partition.ClosureGap.PositionNotReachedInto _ ->
                         WeakeningWord.POSITION_NOT_READ;
-                case souther.compiler.partition.ClosureGap.QuestionUnanswered _,
-                     souther.compiler.partition.ClosureGap.ComparisonUnanswered _ ->
+                case souther.compiler.partition.ClosureGap.QuestionUnanswered _ ->
                         WeakeningWord.QUESTION_UNANSWERED;
                 case souther.compiler.partition.ClosureGap.RulesNotReached _ ->
                         WeakeningWord.RULES_NOT_REACHED;

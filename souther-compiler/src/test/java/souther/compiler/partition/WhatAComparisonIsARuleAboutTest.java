@@ -3,7 +3,6 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.BehaviorContract;
-import souther.compiler.check.Required;
 import souther.compiler.check.StatedContract;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
@@ -16,46 +15,46 @@ import souther.compiler.query.Scopes;
 import souther.compiler.types.BindingId;
 
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 /**
- * What a comparison is a rule about, which decides what it raises (issue #1013).
+ * What a comparison is a rule about, which decides what it raises.
  *
- * <p><b>A table of what the two sides read, and nothing else.</b> Each row varies where the values
- * in the comparison come from — a constant, an input the row chooses, the answer the behavior gives
- * — and the classification is what that provenance comes to. How the arithmetic reads the operands
- * is a different axis and is not measured here: {@code a + 1 <= 10} and {@code a <= b - b + 9} both
- * cut one position at nine, and which subject follows from that is issue #1029. A row of this table
- * written over one of those shapes would be two questions under one answer.
+ * <p><b>Read off the canonical form, and off nothing else.</b> Which quantity a comparison cuts is
+ * the arithmetic's answer, and what the comparison is a rule about follows from that same answer —
+ * {@code a + 1 <= 10} and {@code a <= b - b + 9} are both {@code a <= 9}, so both are rules about
+ * {@code a}. Worked out beside the line instead, from the operands as they were written, the first
+ * came back naming no position and the second came back a rule about a pair: a border was drawn at
+ * a position nothing was owed about, and a question was raised about a place the rule never
+ * stopped.
  *
- * <p>So the pair row is {@code a <= b} over two positions that stay two, and no row cancels.
- * The one row that puts two provenances in one comparison does it on purpose: {@code value.n + a}
- * reads the answer and names an input, and which of the two decides the classification is exactly
- * what the row fixes.
+ * <p>So the rows vary two things and no third. What the sides read — a constant, an input the row
+ * chooses, the answer the behavior gives — and how the arithmetic reads them. A row that varies
+ * only the spelling is here to fix that the spelling does not matter.
  */
 class WhatAComparisonIsARuleAboutTest {
 
     /**
-     * What one clause's comparison is a rule about, through the classifier a report is built from.
+     * What one clause's comparison comes to, through the classifier a report is built from.
      *
      * <p>The comparison is taken out of the declaration's own rules, which is where the reading
      * that measures a behavior gets it — a clause is read in the representation that keeps the
      * language's operations standing, and one built by hand here would be a shape no clause
      * arrives in.
      */
-    private static Required.ComparisonSubject about(String clause) {
+    private static ComparisonAssessment about(String params, String clause) {
         String source = """
                 module g
 
                 data Ok = { n: Int }
+                data Grade = Low | Mid | High
 
-                behavior f : (a: Int, b: Int) -> Ok
+                behavior f : %s -> Ok
                     ensures %s
-                """.formatted(clause);
+                """.formatted(params, clause);
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
@@ -76,55 +75,175 @@ class WhatAComparisonIsARuleAboutTest {
         for (BehaviorContract.ContractParam param : stated.params()) {
             roots.putIfAbsent(param.binding(), param.name());
         }
-        return ComparisonSubjects.of(comparison,
-                InputReads.ofWhatIsDeclared(inputs, roots), symbols, rule.value());
+        return ComparisonAssessment.of("f", comparison,
+                InputReads.ofWhatIsDeclared(inputs, roots), symbols,
+                inputs.quantities(symbols), rule.value());
+    }
+
+    /** The same over two {@code Int} positions, which is what most of the table is written over. */
+    private static ComparisonAssessment about(String clause) {
+        return about("(a: Int, b: Int)", clause);
     }
 
     /** How a row of the table is written down, so that a mismatch names both shapes. */
-    private static String named(Required.ComparisonSubject of) {
+    private static String named(ComparisonAssessment of) {
         return of.getClass().getSimpleName();
     }
 
     /**
      * The table.
      *
-     * <p>One assertion per row, and every row of the table in one test: what each of them fixes is
-     * the classification's <em>precedence</em>, and a row read on its own cannot say that the arm
-     * above it did not take the comparison first.
+     * <p>One assertion per row, and every row in one test: what each of them fixes is the
+     * classification's <em>precedence</em>, and a row read on its own cannot say that the arm above
+     * it did not take the comparison first.
      */
     @Test
-    void whatTheTwoSidesReadDecidesWhatTheComparisonIsAbout() {
-        assertEquals("AnInput", named(about("a <= 20")),
+    void whatTheCanonicalFormCutsDecidesWhatTheComparisonIsAbout() {
+        assertEquals("AtAPosition", named(about("a <= 20")),
                 "an input against a constant is measured at the input");
-        assertEquals("Relation", named(about("a <= b")),
-                "two inputs are a rule about the pair, and the line is on neither");
+        assertEquals("AtAPosition", named(about("a + 1 <= 10")),
+                "and so is one the arithmetic has to add up first");
+        assertEquals("AtAPosition", named(about("10 >= a + 1")),
+                "whichever side of the comparison the position was written on");
+        assertEquals("AtAPosition", named(about("2 * a <= 9")),
+                "a multiple of one position cuts that position, at four rather than at nine");
+        assertEquals("AtAPosition", named(about("a <= b - b + 9")),
+                "a position the arithmetic cancels is not one the rule is about");
+
+        assertEquals("AcrossPositions", named(about("a <= b")),
+                "two positions that stay two are a rule over both, and the line is on neither");
+        assertEquals("AcrossPositions", named(about("a <= b + 1")),
+                "a distance is a form over two positions like any other");
+        assertEquals("AcrossPositions", named(about("a + b <= 10")),
+                "and so is a sum, which is not a distance between them");
+
+        assertEquals("CutsNothing", named(about("a <= a")),
+                "a rule every row satisfies cuts no quantity, and it names a position");
+        assertEquals("CutsNothing", named(about("a - a <= 0")),
+                "however the cancelling was spelled");
+        assertEquals("NoInput", named(about("20 <= 30")),
+                "a comparison of two constants says nothing about an input");
+        assertEquals("Unread", named(about("a * a <= 9")),
+                "a form the arithmetic does not take apart is a limit of this compiler");
+
         assertEquals("AnswerDependent", named(about("value.n <= 20")),
                 "a bound on the answer is not a bound on anything a row chooses");
         assertEquals("AnswerDependent", named(about("value.n <= a")),
-                "and neither is one whose other side is an input — issue #1013");
+                "and neither is one whose other side is an input");
         assertEquals("AnswerDependent", named(about("value.n + a <= 20")),
                 "reading the answer decides it, whatever else the same side names");
-        assertEquals("NoInput", named(about("20 <= 30")),
-                "a comparison of two constants says nothing about an input");
     }
 
     /**
-     * And what each of them raises.
+     * A value singled out is read off the canonical quantity too, and it may name none.
      *
-     * <p>Beside the table rather than folded into it. What a comparison is about and what it asks
-     * of a measure of coverage are two questions with two answers, and a test that only read the
-     * second could not tell an arm that raises nothing from an arm that does not exist.
+     * <p>Apart from the table above, because what is varied here is the operator against one shape
+     * of rule. {@code 2 * a == 8} names four and {@code 2 * a == 9} names no whole number at all,
+     * and the second is not a rule this compiler failed to read.
      */
     @Test
-    void anAnswerDependentComparisonRaisesNothingAndSaysWhy() {
-        Required required = Required.ofComparison(
-                new souther.compiler.check.ComparisonClaim.Cut(true, true),
-                about("value.n <= a"));
+    void aSinglingIsReadOffTheQuantityAndMayNameNoValueItHolds() {
+        assertEquals(ComparisonAssessment.Places.AT_THE_VALUE, places(about("a == 9")),
+                "a position against a value it holds names that value");
+        assertEquals(ComparisonAssessment.Places.AT_THE_VALUE, places(about("a /= 9")),
+                "and so does a rule refusing it, which puts the same value in a class of its own");
+        assertEquals(ComparisonAssessment.Places.AT_THE_VALUE, places(about("2 * a == 8")),
+                "twice a position equal to eight names four");
+        assertEquals(ComparisonAssessment.Places.AT_NO_VALUE, places(about("2 * a == 9")),
+                "and equal to nine names no whole number, which is not a reading that stopped");
+        assertEquals("AcrossPositions", named(about("a == b")),
+                "an equality over two positions singles one out of neither");
+        assertEquals("AcrossPositions", named(about("a + b == 10")),
+                "and so does one over their sum");
+    }
 
-        assertEquals(List.of(), List.copyOf(required.obligations()),
-                "a row cannot be written where this clause stops");
-        Required.Irrelevant why = assertInstanceOf(Required.Irrelevant.class, required);
-        assertEquals(java.util.Set.of(Required.Because.IT_DEPENDS_ON_THE_ANSWER), why.because(),
-                "and the reason is the answer, not that the rule names no position — it names one");
+    /**
+     * And whether the quantity holds the value is one question, over every shape of quantity.
+     *
+     * <p>Asked as "could a value of a position be written down", a form over several positions has
+     * none at all: {@code a + b == 10} takes ten and came back naming no value the quantity holds,
+     * alongside {@code 2 * a + 2 * b == 9}, which takes the even numbers and does not take nine.
+     * The two are opposite facts about the model and had one answer.
+     */
+    @Test
+    void whetherTheQuantityHoldsTheValueIsAskedOfTheQuantity() {
+        assertEquals(ComparisonAssessment.Places.AT_THE_VALUE, places(about("a + b == 10")),
+                "a sum of two positions reaches ten");
+        assertEquals(ComparisonAssessment.Places.AT_THE_VALUE, places(about("a == b")),
+                "and the place two positions meet is one the distance between them takes");
+        assertEquals(ComparisonAssessment.Places.AT_NO_VALUE,
+                places(about("2 * a + 2 * b == 9")),
+                "while twice their sum takes the even numbers, and nine is not one");
+    }
+
+    /**
+     * A value singled out over two positions is read on orders that do not count, too.
+     *
+     * <p>The place two strings meet is exactly the one number their order has, so {@code s == t} is
+     * a value singled out on that order. What made it unreachable was the two readings of a
+     * two-position quantity being split on different axes: one took the pair and refused the
+     * operator, the other took the operator and required counting orders — so an equality over a
+     * non-counting pair fell between them and came back as a comparison this compiler cannot read.
+     */
+    @Test
+    void anEqualityOverTwoPositionsIsReadOnAnOrderThatDoesNotCount() {
+        assertEquals("AcrossPositions", named(about("(s: String, t: String)", "s == t")),
+                "two strings are equal or they are not, which is a value on the order between them");
+        assertEquals(ComparisonAssessment.Places.AT_THE_VALUE,
+                places(about("(s: String, t: String)", "s == t")),
+                "and the place they meet is the one number that order holds");
+        assertEquals(ComparisonAssessment.Places.AT_THE_VALUE,
+                places(about("(s: String, t: String)", "s /= t")),
+                "a rule refusing it places the same thing and selects the other class");
+        assertEquals(ComparisonAssessment.Places.AT_THE_VALUE,
+                places(about("(g: Grade, h: Grade)", "g == h")),
+                "an enumeration's cases are the same case or they are not");
+    }
+
+    /**
+     * The orders a line can be drawn on, which are not the numeric ones alone.
+     *
+     * <p>Two strings stand no measurable distance apart and one is still above the other, so a rule
+     * ordering them draws a line where they meet. Read as a form over positions whose counts have
+     * to add up, that line was lost; read off the operands as written, {@code s <= s} drew one
+     * between a position and itself.
+     */
+    @Test
+    void anOrderWithNoCountsUnderItStillDrawsALineWhereTwoPositionsMeet() {
+        assertEquals("AcrossPositions", named(about("(s: String, t: String)", "s <= t")),
+                "two strings are ordered, and the line is where they meet");
+        assertEquals("CutsNothing", named(about("(s: String, t: String)", "s <= s")),
+                "and one against itself cuts nothing, on that order like any other");
+        assertEquals("AcrossPositions", named(about("(g: Grade, h: Grade)", "g <= h")),
+                "an enumeration's cases are ordered by the sum they are of");
+        assertEquals("AtAPosition", named(about("(g: Grade)", "g == Mid")),
+                "and a case written against one of them is a value of that position");
+        assertEquals("AtAPosition", named(about("(s: String)", "s == \"m\"")),
+                "a string against a written string is read where the arithmetic cannot go");
+    }
+
+    /**
+     * A rule that cuts where the quantity never runs.
+     *
+     * <p>Its own answer and not a reading that stopped. A length is never negative, so the rule was
+     * read in full and what it says is that no row satisfies it — there is no border, and no class
+     * for the position to be divided into.
+     */
+    @Test
+    void aLineTheQuantityDoesNotReachIsUnderstoodRatherThanUnread() {
+        assertEquals("OutsideTheDomain",
+                named(about("(xs: List<Int>)", "List.length(xs) <= -1")),
+                "a length below zero is a line the quantity never reaches");
+        assertEquals("AtAPosition", named(about("(xs: List<Int>)", "List.length(xs) <= 3")),
+                "and the same rule at a length it does reach cuts the position");
+    }
+
+    /** What the rule does to the quantity it cuts. */
+    private static ComparisonAssessment.Places places(ComparisonAssessment of) {
+        return switch (of) {
+            case ComparisonAssessment.AtAPosition at -> at.places();
+            case ComparisonAssessment.AcrossPositions over -> over.places();
+            default -> throw new AssertionError("not a comparison that cuts: " + of);
+        };
     }
 }
