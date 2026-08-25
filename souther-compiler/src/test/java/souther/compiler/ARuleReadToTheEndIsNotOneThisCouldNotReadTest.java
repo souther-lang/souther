@@ -159,6 +159,39 @@ class ARuleReadToTheEndIsNotOneThisCouldNotReadTest {
     }
 
     /**
+     * The same clause under a different operator, which is the same rule about the model.
+     *
+     * <p>{@code lo - lo == 0} holds of every row exactly as {@code lo - lo >= 0} does. Which
+     * operator an author wrote is no part of whether their rule states anything, so a fix that
+     * turned on the operator would have left this one telling them that which values may stand at
+     * {@code lo} is a question nothing answered.
+     */
+    @Test
+    void whichOperatorIsWrittenDoesNotDecideIt() {
+        Measured measured = of("    invariant lo - lo == 0");
+
+        assertEquals("complete", measured.status());
+        assertEquals(List.of(), measured.weakening());
+        assertFalse(measured.kinds().contains("rule_unaccounted"), measured.kinds().toString());
+    }
+
+    /**
+     * And a clause whose positions cancel to something no row satisfies, which is the opposite.
+     *
+     * <p>{@code lo - lo >= 1} is {@code 0 >= 1}. The quantity it cuts is empty, exactly as the two
+     * above, and the rule admits nothing rather than restricting nothing — so the questions it
+     * raises are real ones and the rows that cannot be built are what a reader is shown. Read off
+     * the empty quantity alone, this would have come out as a rule that states nothing.
+     */
+    @Test
+    void aClauseNoRowSatisfiesIsNotOneThatRestrictsNothing() {
+        Measured measured = of("    invariant lo - lo >= 1");
+
+        assertEquals("partial", measured.status());
+        assertTrue(measured.kinds().contains("rule_unaccounted"), measured.kinds().toString());
+    }
+
+    /**
      * And a clause nothing here takes apart, which is what a limit of this compiler looks like.
      *
      * <p>Here the question standing is the truth: what the clause says about the values was never

@@ -1355,9 +1355,7 @@ public final class InvariantChecker {
         // And only where the clause names a position at all. `1 >= 0` cuts nothing either, and it
         // is not a rule that restricts no value of this position — it is a rule about nowhere, said
         // by the one authority for that question, which is whether the value is mentioned.
-        if (!found.isEmpty() && clause instanceof Core.Binary bin
-                && InvariantBound.ordering(bin.op())
-                && quantityOf(bin, at, byName) instanceof UnreadComparison.Quantity.CutsNothing<?>) {
+        if (!found.isEmpty() && clause instanceof Core.Binary bin && holdsOfEveryRow(bin, at, byName)) {
             return new ClauseStates.NoRestriction();
         }
         if (Relates.twoPositions(clause, e -> {
@@ -1508,6 +1506,54 @@ public final class InvariantChecker {
                 out.add(said);
             }
         }
+    }
+
+    /**
+     * Whether this comparison holds of every row there is.
+     *
+     * <p>Two halves and both are needed. The positions have to cancel — what the canonical form
+     * cuts is empty, so no value of anything is either side of anything — and what is left of the
+     * comparison when they have cancelled has to be true. {@code lo - lo >= 0} is {@code 0 >= 0},
+     * which every row satisfies; {@code lo - lo >= 1} is {@code 0 >= 1}, which no row satisfies,
+     * and a rule that admits nothing is the opposite of one that restricts nothing. Read off the
+     * empty quantity alone, the two came out alike.
+     *
+     * <p>Every comparison and not the orderings alone. Which operator is written is no part of
+     * whether a rule states anything: {@code lo - lo == 0} holds of every row exactly as the first
+     * one does, and an author who wrote it would have been told that which values may stand at
+     * {@code lo} is a question nothing answered. What the operator decides is what the residue has
+     * to be for the rule to hold, which is the switch below and nothing else.
+     *
+     * <p>The form read once, here, rather than through {@link #quantityOf}. That one answers which
+     * coordinates a quantity is over and throws the residue away, and the residue is half of this.
+     */
+    private boolean holdsOfEveryRow(Core.Binary comparison, Denotations at,
+                                    Map<FactSubject, Coordinate> byName) {
+        if (!comparison.op().compares()) {
+            return false;
+        }
+        AffineForms.Outcome<FactSubject, Denotations> left =
+                terms.outcomeOf(comparison.left(), at, byName::containsKey);
+        AffineForms.Outcome<FactSubject, Denotations> right =
+                terms.outcomeOf(comparison.right(), at, byName::containsKey);
+        if (!(left instanceof AffineForms.Outcome.Composed<FactSubject, Denotations> l)
+                || !(right instanceof AffineForms.Outcome.Composed<FactSubject, Denotations> r)) {
+            return false;   // the arithmetic stopped, so there is no residue to be sure about
+        }
+        NumericDomain.LinearForm<FactSubject> whole = l.form().minus(r.form());
+        if (!whole.coefs().isEmpty()) {
+            return false;
+        }
+        int residue = whole.constant().signum();
+        return switch (comparison.op()) {
+            case GE -> residue >= 0;
+            case GT -> residue > 0;
+            case LE -> residue <= 0;
+            case LT -> residue < 0;
+            case EQ -> residue == 0;
+            case NE -> residue != 0;
+            case AND, OR, ADD, SUB, MUL, DIV, CONCAT -> false;
+        };
     }
 
     /**
