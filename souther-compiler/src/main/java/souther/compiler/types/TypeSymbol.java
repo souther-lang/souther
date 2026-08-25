@@ -1,5 +1,7 @@
 package souther.compiler.types;
 
+import souther.compiler.Reserved;
+
 /**
  * A data type's identity: the module that declares it and the name written there. Two modules may
  * both declare {@code 金額}; those are different types, and only the pair tells them apart.
@@ -20,8 +22,12 @@ public final class TypeSymbol implements Comparable<TypeSymbol> {
 
     /** The module a primitive case name belongs to. {@code Int | DivisionByZero} unions a primitive
      * with a data case, so a primitive needs a name of this shape to sit in {@link Type.Union}; it
-     * never reaches codegen as a class, since a primitive case maps to its boxed class by name. */
-    public static final String PRIMITIVE = "souther";
+     * never reaches codegen as a class, since a primitive case maps to its boxed class by name.
+     *
+     * <p>Not readable from outside. What a caller wants of it is {@link #isPrimitive()}, and a
+     * caller that had the spelling wrote that question itself — which is the same question with
+     * one more place to get it wrong. */
+    private static final String PRIMITIVE = "souther";
 
     /** The module of the built-in error cases ({@code DivisionByZero}, {@code NotANumber}). It is
      * their real runtime package, so they need no special case when a class name is derived. */
@@ -105,8 +111,38 @@ public final class TypeSymbol implements Comparable<TypeSymbol> {
         };
     }
 
+    /** Whether this is a primitive case name — the {@code Int} of {@code Int | DivisionByZero}. */
     public boolean isPrimitive() {
         return module().equals(PRIMITIVE);
+    }
+
+    /**
+     * Whether the language declares this rather than a module of some compilation.
+     *
+     * <p>The primitives, {@code Option}'s two cases and the prelude's runtime-backed data, together
+     * and as one answer. Nothing publishes any of them — there is no {@code souther/$Module.class}
+     * for a path to carry — so a reader that goes looking for the module behind one is asking after
+     * an artifact that cannot exist, and the reader that did was told to add a dependency nobody
+     * ships (#1049).
+     *
+     * <p>Read off the address and not off how the identity was minted. {@link TypeSymbols} has two
+     * ways in, and which of them a given identity came through is not a fact about the declaration:
+     * {@code Declarations.identify} answers for the language's own vocabulary through
+     * {@link TypeSymbols#declared}, so one address would carry different origins by route. What is
+     * asked here is what the declaration <em>is</em>, which its address settles, so two equal
+     * identities answer alike.
+     *
+     * <p>{@link Reserved#isNamespace} is where that is written down, and this is the only place in
+     * the compiler that reads it of a declaration. A caller holding an identity asks the identity.
+     *
+     * <p>Not the same question as which class carries it. {@code souther.runtime} is both the
+     * namespace the prelude's data is addressed under and the package one backend ships it in, and
+     * the readers that mean the second still spell {@link #RUNTIME} — that is #1038's inventory and
+     * #1039's rule, and answering them through this would tidy the spelling away while leaving what
+     * those two are about exactly where it is.
+     */
+    public boolean isDeclaredByLanguage() {
+        return Reserved.isNamespace(module());
     }
 
     /** The fully qualified form, {@code probe.b.金額}. Also the generated class's binary name. */

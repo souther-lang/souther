@@ -372,7 +372,7 @@ public final class FixtureReader {
             default -> null;
         };
         String is = value.getClass().getName();
-        return TypeSymbol.PRIMITIVE.equals(candidate.module())
+        return candidate.isPrimitive()
                 ? carried != null && carried.equals(is)
                 : is.equals(candidate.qualified());
     }
