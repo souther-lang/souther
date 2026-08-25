@@ -461,7 +461,21 @@ public final class Generator {
              * and what is left here is a walk that ran and came back empty — which is a thing that
              * happened rather than a thing nobody wrote down.
              */
-            NO_CANDIDATE_WAS_OFFERED;
+            NO_CANDIDATE_WAS_OFFERED,
+            /**
+             * No reading of the line was searched, so nothing was looked for at the point.
+             *
+             * <p>A line an {@code invariant} drew is owed once over every behavior carrying the
+             * type, and a row at it is composed by walking one of those behaviors' inputs. Where
+             * the search of every one this request was about had no answer to give, the walk came
+             * back having looked at nothing — which is a fact about this run and says nothing
+             * whatever about the line.
+             *
+             * <p>Apart from {@link #NO_CANDIDATE_WAS_OFFERED}, which is a walk that ran. Read as
+             * that, a request that could not look at the one reading it was about would have
+             * reported the line as refusing a row.
+             */
+            NO_READING_OF_THE_LINE_COULD_BE_SEARCHED;
 
             /**
              * Whether this reason proves there is nothing to find, which one of them does.
@@ -484,8 +498,8 @@ public final class Generator {
                          NOTHING_TO_BUILD_AGAINST, NO_VALUES_WERE_ASKED_FOR, LINKAGE_FAILED,
                          NO_CERTIFIED_WITNESS, THE_GROUP_WAS_NOT_OFFERED,
                          THE_POSITION_WAS_WITHHELD, THE_ROWS_WERE_NOT_READ,
-                         THE_WAY_IN_PLACES_AT_NO_CLASS,
-                         NO_CANDIDATE_WAS_OFFERED -> false;
+                         THE_WAY_IN_PLACES_AT_NO_CLASS, NO_CANDIDATE_WAS_OFFERED,
+                         NO_READING_OF_THE_LINE_COULD_BE_SEARCHED -> false;
                 };
             }
         }

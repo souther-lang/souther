@@ -1,0 +1,216 @@
+package souther.compiler.query;
+
+import org.junit.jupiter.api.Test;
+
+import souther.compiler.partition.Criterion;
+import souther.compiler.partition.Generator;
+import souther.compiler.partition.Level;
+
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.SequencedMap;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * A line is owed one row, and which reading composes it is a search over the readings.
+ *
+ * <p>Held on the resolution alone, with the evidence handed in. What each reading came to is one
+ * question and what may be concluded from all of them is another, and a test that had to arrange a
+ * compilation to ask the second could only reach the conclusions some model happened to produce —
+ * so the two halves that matter most here, a row being enough from any one reading and a terminal
+ * answer taking all of them, would be tested by whatever the corpus offered.
+ *
+ * <p>The asymmetry is the whole of it. A row is an existence claim and one reading settles it; that
+ * no row can be written is a claim about every reading, and a walk that could not see one of them
+ * has not made it.
+ */
+class WhichReadingComposesTheRowALineIsOwedTest {
+
+    private static final String SAID = "String.length(value) = 1";
+
+    /**
+     * A walk stops at the first reading that composed a row.
+     *
+     * <p>Which is what makes it a search rather than a fold: what the two points against a line ask
+     * is the same at every reading of it, so a row standing at one of them stands at the line and
+     * the readings past it are work nobody needs done.
+     */
+    @Test
+    void theFirstReadingThatComposedARowAnswers() {
+        List<String> asked = new java.util.ArrayList<>();
+        DeclarationResolution resolved = DeclarationResolver.resolveAt(SAID, owed(),
+                List.of("held", "anywhere", "further"), carrier -> {
+                    asked.add(carrier);
+                    return searched(carrier.equals("held") ? notComposed() : built(carrier));
+                });
+
+        assertInstanceOf(DeclarationResolution.Generated.class, resolved);
+        assertEquals("anywhere", ((DeclarationResolution.Generated) resolved).composedBy(),
+                "the second reading composed one, and the first composing nothing is not the line"
+                        + " composing nothing");
+        assertEquals(List.of("held", "anywhere"), asked,
+                "and the reading past it was never asked: a row anywhere settles the line");
+    }
+
+    /** In the order the readings were handed over, which is the order the module declares them. */
+    @Test
+    void theReadingsAreWalkedInTheOrderTheyWereGiven() {
+        List<String> asked = new java.util.ArrayList<>();
+        DeclarationResolver.resolveAt(SAID, owed(), List.of("a", "b", "c"), carrier -> {
+            asked.add(carrier);
+            return searched(notComposed());
+        });
+
+        assertEquals(List.of("a", "b", "c"), asked);
+    }
+
+    /**
+     * A walk that composed nothing accounts for every reading, including the ones it never asked
+     * about.
+     *
+     * <p>What an empty answer is worth turns entirely on how much of the line was looked at, and
+     * read off a map of what happened to be searched that difference is an absence.
+     */
+    @Test
+    void aWalkThatComposedNothingAccountsForEveryReading() {
+        DeclarationResolution resolved = DeclarationResolver.resolveAt(SAID, owed(),
+                List.of("here", "elsewhere"),
+                carrier -> carrier.equals("here") ? searched(notComposed())
+                        : new DeclarationResolver.ReadingEvidence.OutOfScope());
+
+        SearchCoverage coverage = assertInstanceOf(DeclarationResolution.Unresolved.class, resolved)
+                .coverage();
+        assertEquals(List.of("here", "elsewhere"), List.copyOf(coverage.readings().keySet()));
+        assertInstanceOf(SearchCoverage.ReadingSearch.Attempted.class,
+                coverage.readings().get("here"));
+        assertInstanceOf(SearchCoverage.ReadingSearch.OutOfScope.class,
+                coverage.readings().get("elsewhere"));
+    }
+
+    /**
+     * The claim a reader may act on takes every reading walked to the end, and every one of them
+     * proving it.
+     *
+     * <p>Never the shape of the request. A line one behavior carries is walked entirely by a request
+     * about that behavior, and a rule that read which scope this was would refuse it the answer its
+     * own evidence supports.
+     */
+    @Test
+    void onlyAWalkThatSawEveryReadingSaysTheLineCannotBeWritten() {
+        SearchCoverage everyOne = coverageOf(Map.of(
+                "here", new SearchCoverage.ReadingSearch.Attempted(nothingThere()),
+                "elsewhere", new SearchCoverage.ReadingSearch.Attempted(nothingThere())),
+                List.of("here", "elsewhere"));
+        SearchCoverage oneLeftOut = coverageOf(Map.of(
+                "here", new SearchCoverage.ReadingSearch.Attempted(nothingThere()),
+                "elsewhere", new SearchCoverage.ReadingSearch.OutOfScope()),
+                List.of("here", "elsewhere"));
+        SearchCoverage oneUnanswered = coverageOf(Map.of(
+                "here", new SearchCoverage.ReadingSearch.Attempted(nothingThere()),
+                "elsewhere", new SearchCoverage.ReadingSearch.Unavailable()),
+                List.of("here", "elsewhere"));
+        SearchCoverage oneOfThemMerelyRefused = coverageOf(Map.of(
+                "here", new SearchCoverage.ReadingSearch.Attempted(nothingThere()),
+                "elsewhere", new SearchCoverage.ReadingSearch.Attempted(refused())),
+                List.of("here", "elsewhere"));
+
+        assertTrue(everyOne.provesTheLineCannotBeWritten());
+        assertFalse(oneLeftOut.provesTheLineCannotBeWritten(),
+                "a reading the request never asked about may be where the row is");
+        assertFalse(oneUnanswered.provesTheLineCannotBeWritten(),
+                "and so may one this run could not search");
+        assertFalse(oneOfThemMerelyRefused.provesTheLineCannotBeWritten(),
+                "every value tried being refused is a fact about the values tried");
+    }
+
+    /** One reading is enough for the claim where the line has one reading, whoever asked. */
+    @Test
+    void aLineWithOneReadingIsWalkedToTheEndByOneReading() {
+        SearchCoverage alone = coverageOf(
+                Map.of("only", new SearchCoverage.ReadingSearch.Attempted(nothingThere())),
+                List.of("only"));
+
+        assertTrue(alone.walkedEveryReading());
+        assertTrue(alone.provesTheLineCannotBeWritten());
+    }
+
+    /** A coverage that leaves one of the line's readings out cannot be made. */
+    @Test
+    void aCoverageShortOfAReadingIsRefused() {
+        assertThrows(IllegalStateException.class, () -> coverageOf(
+                Map.of("here", new SearchCoverage.ReadingSearch.Attempted(refused())),
+                List.of("here", "elsewhere")));
+    }
+
+    /**
+     * A point the measurement says needs no search is not one a walk was made at.
+     *
+     * <p>Told apart from a search that found nothing, and not by degree: those readings were looked
+     * at and this point was not, because looking would tell nobody anything.
+     */
+    @Test
+    void aPointARowAlreadyStandsAtIsNotSearchedFor() {
+        DeclarationResolution resolved = DeclarationResolver.resolveAt(SAID,
+                new ItemAssessment.Owed(new Criterion.AtTheLevel(Level.ACount.of(1)),
+                        new Measurement.Complete<>(new ItemAssessment.Coverage.Hit()),
+                        ItemAssessment.WritabilityProjection.PROVEN, null),
+                List.of("anywhere"), _ -> {
+                    throw new AssertionError("nothing is searched at a point a row stands at");
+                });
+
+        assertEquals(new DeclarationResolution.NoSearch(
+                DeclarationResolution.Cause.A_ROW_ALREADY_STANDS), resolved);
+    }
+
+    private static SearchCoverage coverageOf(Map<String, SearchCoverage.ReadingSearch> readings,
+                                             List<String> carriers) {
+        SequencedMap<String, SearchCoverage.ReadingSearch> ordered = new LinkedHashMap<>();
+        carriers.forEach(carrier -> {
+            if (readings.containsKey(carrier)) {
+                ordered.put(carrier, readings.get(carrier));
+            }
+        });
+        return new SearchCoverage(carriers, ordered);
+    }
+
+    /** A point a row is owed at, measured and missed, so a search of it would tell somebody
+     *  something. */
+    private static ItemAssessment.Owed owed() {
+        return new ItemAssessment.Owed(new Criterion.AtTheLevel(Level.ACount.of(1)),
+                new Measurement.Complete<>(new ItemAssessment.Coverage.NoHit()),
+                ItemAssessment.WritabilityProjection.PROVEN, null);
+    }
+
+    private static DeclarationResolver.ReadingEvidence searched(ItemAssessment.Attempt attempt) {
+        return new DeclarationResolver.ReadingEvidence.Searched(attempt);
+    }
+
+    private static ItemAssessment.Attempt built(String carrier) {
+        return new ItemAssessment.Attempt.Built(new Generator.GeneratedRow(
+                new Generator.Purpose.ForAPoint(carrier + ": " + SAID), List.of()), null);
+    }
+
+    /** The same, as what a reading holds at the point. */
+    private static ItemAssessment.Attempt notComposed() {
+        return new ItemAssessment.Attempt.Unresolved(refused(), null);
+    }
+
+    /** A search that ran and settled nothing, which is what most of them come to. */
+    private static Generator.UnresolvedCombination refused() {
+        return new Generator.UnresolvedCombination(List.of(SAID),
+                Generator.UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED);
+    }
+
+    /** A search that walked what the rules leave and found there is nothing there — the one kind of
+     *  answer a reader may act on (ADR-0091). */
+    private static Generator.UnresolvedCombination nothingThere() {
+        return new Generator.UnresolvedCombination(List.of(SAID),
+                Generator.UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE);
+    }
+}

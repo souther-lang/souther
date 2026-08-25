@@ -1596,6 +1596,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case THE_ROWS_WERE_NOT_READ -> "the rows were not read, so nothing was looked for";
             case NO_CANDIDATE_WAS_OFFERED ->
                     "the walk over what could stand there put no value forward";
+            // What this run could look at, and not what the line admits. A line is owed once over
+            // every behavior carrying the type, and the search of every one this asked about had
+            // no answer — so nothing was looked for at the point.
+            case NO_READING_OF_THE_LINE_COULD_BE_SEARCHED ->
+                    "no reading of the line this asked about could be searched, so nothing was"
+                            + " looked for at " + at;
         };
     }
 

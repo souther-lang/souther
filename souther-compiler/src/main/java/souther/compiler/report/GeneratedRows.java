@@ -722,6 +722,10 @@ public final class GeneratedRows {
             case NO_CANDIDATE_WAS_OFFERED ->
                     "the walk over what could stand there put no value forward, so nothing was"
                             + " built and nothing was refused";
+            case NO_READING_OF_THE_LINE_COULD_BE_SEARCHED ->
+                    "no reading of the line this asked about could be searched, so nothing was"
+                            + " looked for at it — which says nothing about whether a row stands"
+                            + " there";
         };
     }
 
