@@ -455,7 +455,7 @@ class CompileFakeExampleDisagreementTest {
                 souther.compiler.query.Scopes.derived(c.db(), name).value(),
                 c.db().ask(new souther.compiler.query.Bodies.Signatures(name)).value(),
                 c.db().ask(new souther.compiler.query.Output.EvaluationLinked(
-                        name, souther.compiler.query.Output.CoverageMode.NONE)).value().classes(),
+                        name, souther.compiler.observe.ArmObservation.OMIT)).value().classes(),
                 parent,
                 c.db().ask(new souther.compiler.query.Bodies.ModuleDefinitions(name)).value(),
                 Deadline.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis()),

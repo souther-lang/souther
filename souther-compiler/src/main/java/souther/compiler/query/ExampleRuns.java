@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.observe.ArmObservation;
 import souther.compiler.check.BehaviorContract;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.Prepared;
@@ -20,7 +21,7 @@ import java.util.Map;
  * here because the two runs differ in who owns the loop and in nothing else: a row's fixtures are
  * decoded through their derived decoders against this module's symbols and this compile's classes
  * whichever of them asks for it. What is not shared is what a bulk run adds — which source the rows
- * were written in, what a coverage mode asked the emitter for, and how an absent answer travels —
+ * were written in, whether the arms are recorded, and how an absent answer travels —
  * none of which a caller running one row at a time has a question about.
  *
  * <p>Reached from outside the compiler, so what it hands back is the thing rows are run against and
@@ -47,7 +48,7 @@ public final class ExampleRuns {
                     + " run");
         }
         EvaluationArtifact artifact = db
-                .ask(new Output.EvaluationLinked(module, Output.CoverageMode.NONE)).value();
+                .ask(new Output.EvaluationLinked(module, ArmObservation.OMIT)).value();
         if (artifact == null) {
             throw new IllegalStateException("`" + module + "` emitted nothing to run its rows"
                     + " against");

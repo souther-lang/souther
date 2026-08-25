@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.observe.ArmObservation;
 import souther.compiler.source.SourceId;
 
 import souther.compiler.generated.EvaluationArtifact;
@@ -349,16 +350,6 @@ public final class Output {
         }
     }
 
-    /** How much of what an evaluation goes through is recorded as it goes. */
-    public enum CoverageMode {
-
-        /** Nothing. What an evaluation asks for when nobody is measuring it. */
-        NONE,
-
-        /** Which arm of each of the module's bodies the rows took. */
-        ARMS
-    }
-
     /**
      * One module's classes, counting what they go through — and, where asked, recording which arms
      * they took.
@@ -368,16 +359,16 @@ public final class Output {
      * decision of whether a jar refers to the compiler inside a parameter. These are never stamped and
      * never written out.
      *
-     * <p>Counting is not optional the way coverage is. Every evaluation runs against counted classes,
-     * because what holds a row to a budget it cannot exceed is the counting itself — a row evaluated
-     * against uncounted classes has nothing but a clock behind it.
+     * <p>Counting is not optional the way recording the arms is. Every evaluation runs against
+     * counted classes, because what holds a row to a budget it cannot exceed is the counting itself
+     * — a row evaluated against uncounted classes has nothing but a clock behind it.
      *
-     * <p>Absent where {@link CoverageMode#ARMS} is asked for and the plan and the bodies do not line
-     * up, which is the one thing this must not paper over: emitting a body an arm short reports the
+     * <p>Absent where {@link ArmObservation#RECORD} is asked for and the plan and the bodies do not
+     * line up, which is the one thing this must not paper over: emitting a body an arm short reports the
      * arm that ran as one nothing reaches, and that reads as a gap in the model rather than a fault in
      * the measurement.
      */
-    public record Evaluated(String name, CoverageMode coverage)
+    public record Evaluated(String name, ArmObservation arms)
             implements Key<EvaluationArtifact> {
         @Override
         public String module() {
@@ -391,7 +382,7 @@ public final class Output {
                 return Answer.absent();
             }
             Instrumentation instrumentation = Instrumentation.COUNTING;
-            if (coverage == CoverageMode.ARMS) {
+            if (arms == ArmObservation.RECORD) {
                 instrumentation = instrumentation.measuring(
                         CoverageSites.of(in.checked().behaviorBodies(),
                                 in.checked().decisions(), in.checked().supplied()));
@@ -441,7 +432,7 @@ public final class Output {
      * under two definitions of them. {@link #evaluationLoader} takes the path's classes whole and
      * counts them on the way in, so the counting still does not stop at the import.
      */
-    public record EvaluationLinked(String name, CoverageMode coverage)
+    public record EvaluationLinked(String name, ArmObservation arms)
             implements Key<EvaluationArtifact> {
         @Override
         public String module() {
@@ -475,7 +466,7 @@ public final class Output {
                     continue;
                 }
                 Answer<EvaluationArtifact> classes = db.ask(new Evaluated(reached,
-                        reached.equals(name) ? coverage : CoverageMode.NONE));
+                        reached.equals(name) ? arms : ArmObservation.OMIT));
                 // A module this compilation declares and could not generate makes this absent rather
                 // than making the set one class short. Evaluating against a set with a hole in it
                 // produces a class that will not load, or a stale one found further up the loader
@@ -755,7 +746,7 @@ public final class Output {
             // The classes alone: nothing here applies a behavior, so what the compile implemented is
             // not a question this asks.
             EvaluationArtifact artifact =
-                    db.ask(new EvaluationLinked(name, CoverageMode.NONE)).value();
+                    db.ask(new EvaluationLinked(name, ArmObservation.OMIT)).value();
             Map<String, byte[]> classes = artifact == null ? null : artifact.classes();
             Map<String, List<BehaviorRequirement>> requirements =
                     db.ask(new Bodies.Requirements(name)).value();
@@ -888,7 +879,7 @@ public final class Output {
      * failure stops a compile, so a change to a widely-imported data says how far it reaches in one
      * compile rather than one module per round.
      */
-    public record Examples(String name, SourceId sourceId, CoverageMode coverage)
+    public record Examples(String name, SourceId sourceId, ArmObservation arms)
             implements Key<Examples.Of> {
 
         /**
@@ -905,7 +896,7 @@ public final class Output {
          * that measure the same thing should not be two compiles.
          */
         public static Examples asked(Db db, String name, SourceId sourceId) {
-            return new Examples(name, sourceId, Adequacy.coverageAsked(db));
+            return new Examples(name, sourceId, Adequacy.armsAsked(db));
         }
 
         /**
@@ -948,7 +939,7 @@ public final class Output {
         @Override
         public Answer<Of> compute(Db db) {
             Answer<Of> ran = evaluate(db, name, sourceId,
-                    db.ask(new EvaluationLinked(name, coverage)).value(), coverage);
+                    db.ask(new EvaluationLinked(name, arms)).value(), arms);
             List<Diagnostic> wrong = fakeTables(db, name, sourceId);
             if (wrong.isEmpty()) {
                 return ran;
@@ -985,7 +976,7 @@ public final class Output {
             }
             // As above: building a table applies no behavior, so only the classes are read.
             EvaluationArtifact artifact =
-                    db.ask(new EvaluationLinked(name, CoverageMode.NONE)).value();
+                    db.ask(new EvaluationLinked(name, ArmObservation.OMIT)).value();
             Map<String, byte[]> classes = artifact == null ? null : artifact.classes();
             Map<String, List<BehaviorRequirement>> requirements =
                     db.ask(new Bodies.Requirements(name)).value();
@@ -1014,7 +1005,7 @@ public final class Output {
          * difference in the measurement, not in the model, and the report has no way to tell.
          */
         static Answer<Of> evaluate(Db db, String name, SourceId sourceId, EvaluationArtifact artifact,
-                                   CoverageMode coverage) {
+                                   ArmObservation arms) {
             Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
             Answer<Symbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
@@ -1029,7 +1020,7 @@ public final class Output {
                 // uncounted ones is not open: what holds a row to a budget is the counting, so a row
                 // run against them would be back on the clock. Nothing was observed, and that travels
                 // in the channel every other reason travels in.
-                return coverage == CoverageMode.NONE ? Answer.absent()
+                return arms == ArmObservation.OMIT ? Answer.absent()
                         : Answer.of(new Of(List.of(), List.of(
                                 souther.compiler.observe.Incompleteness.of(
                                         souther.compiler.observe.Incompleteness.Code.INSTRUMENTATION_ABSENT,

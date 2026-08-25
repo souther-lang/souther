@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.observe.ArmObservation;
 import souther.compiler.source.SourceId;
 
 import souther.compiler.examples.EvaluationPolicy;
@@ -60,7 +61,7 @@ class ADependencyOnThePathIsCountedLikeAnyOtherTest {
         compilation.answerEverything();
         SourceId sourceId = compilation.exampleSourcesOf("app.uses").getFirst();
         List<RowOutcome> rows = compilation.db()
-                .ask(new Output.Examples("app.uses", sourceId, Output.CoverageMode.NONE))
+                .ask(new Output.Examples("app.uses", sourceId, ArmObservation.OMIT))
                 .value().rows();
         assertEquals(1, rows.size(), rows.toString());
         return rows.get(0);
@@ -156,13 +157,13 @@ class ADependencyOnThePathIsCountedLikeAnyOtherTest {
         compilation.answerEverything();
 
         assertFalse(compilation.db()
-                        .ask(new Output.EvaluationLinked("app.calls", Output.CoverageMode.NONE))
+                        .ask(new Output.EvaluationLinked("app.calls", ArmObservation.OMIT))
                         .value().classes().containsKey(Emitted.impl("lib.svc", "spin")),
                 "the body is not regenerated here — it is taken from the jar and counted there");
 
         SourceId sourceId = compilation.exampleSourcesOf("app.calls").getFirst();
         List<RowOutcome> rows = compilation.db()
-                .ask(new Output.Examples("app.calls", sourceId, Output.CoverageMode.NONE))
+                .ask(new Output.Examples("app.calls", sourceId, ArmObservation.OMIT))
                 .value().rows();
 
         assertEquals(FailurePhase.STEP_LIMIT, rows.get(0).failurePhase(),
@@ -186,7 +187,7 @@ class ADependencyOnThePathIsCountedLikeAnyOtherTest {
 
         assertNull(compilation.failure());
         assertTrue(compilation.db()
-                        .ask(new Output.EvaluationLinked("app.alone", Output.CoverageMode.NONE))
+                        .ask(new Output.EvaluationLinked("app.alone", ArmObservation.OMIT))
                         .value() != null,
                 "nothing on the path is not a class this compile failed to produce");
     }

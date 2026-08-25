@@ -1,5 +1,6 @@
 package souther.compiler.examples;
 
+import souther.compiler.observe.ArmObservation;
 import net.unit8.raoh.Ok;
 import net.unit8.raoh.Result;
 import net.unit8.raoh.decode.Decoder;
@@ -217,7 +218,7 @@ class AnAnswererInAnotherLoaderRunsARowTest {
         c.db().ask(new Output.All());
         String name = c.modules().get(0);
         souther.compiler.generated.EvaluationArtifact artifact = c.db()
-                .ask(new Output.EvaluationLinked(name, Output.CoverageMode.NONE)).value();
+                .ask(new Output.EvaluationLinked(name, ArmObservation.OMIT)).value();
         Map<String, byte[]> classes = artifact.classes();
         ClassLoader parent = ExampleVerifier.class.getClassLoader();
         answerer.hereNamed = "example.crossing.倍額";

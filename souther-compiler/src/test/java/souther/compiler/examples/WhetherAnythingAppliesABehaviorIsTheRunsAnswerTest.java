@@ -1,5 +1,6 @@
 package souther.compiler.examples;
 
+import souther.compiler.observe.ArmObservation;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Scopes;
@@ -329,6 +330,6 @@ class WhetherAnythingAppliesABehaviorIsTheRunsAnswerTest {
     }
 
     private static EvaluationArtifact artifactOf(Compilation c, String name) {
-        return c.db().ask(new Output.EvaluationLinked(name, Output.CoverageMode.NONE)).value();
+        return c.db().ask(new Output.EvaluationLinked(name, ArmObservation.OMIT)).value();
     }
 }

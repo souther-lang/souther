@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.observe.ArmObservation;
 import souther.compiler.source.SourceId;
 
 import souther.compiler.examples.EvaluationPolicy;
@@ -77,7 +78,7 @@ class ARowIsHeldToStepsAndNotToTheClockTest {
     private static RowOutcome onlyRowOf(Compilation compilation, String module) {
         SourceId sourceId = compilation.exampleSourcesOf(module).getFirst();
         List<RowOutcome> rows =
-                compilation.db().ask(new Output.Examples(module, sourceId, Output.CoverageMode.NONE)).value().rows();
+                compilation.db().ask(new Output.Examples(module, sourceId, ArmObservation.OMIT)).value().rows();
         assertEquals(1, rows.size(), rows.toString());
         return rows.get(0);
     }

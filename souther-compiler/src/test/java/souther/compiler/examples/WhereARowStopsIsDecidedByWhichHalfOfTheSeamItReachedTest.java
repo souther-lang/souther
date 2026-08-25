@@ -1,5 +1,6 @@
 package souther.compiler.examples;
 
+import souther.compiler.observe.ArmObservation;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Scopes;
@@ -297,7 +298,7 @@ class WhereARowStopsIsDecidedByWhichHalfOfTheSeamItReachedTest {
         c.db().ask(new Output.All());
         String name = c.modules().get(0);
         souther.compiler.generated.EvaluationArtifact artifact = c.db()
-                .ask(new Output.EvaluationLinked(name, Output.CoverageMode.NONE)).value();
+                .ask(new Output.EvaluationLinked(name, ArmObservation.OMIT)).value();
         return ExampleVerifier.check(
                 c.db().ask(new Shapes.Prepared(name)).value().forExamples(),
                 Scopes.derived(c.db(), name).value(),

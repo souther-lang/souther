@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.observe.ArmObservation;
 import souther.compiler.source.SourceId;
 import souther.compiler.diag.QuotedFrom;
 
@@ -180,7 +181,7 @@ class ExampleOutcomeTest {
         compilation.answerEverything();
 
         Output.Examples.Of attached = compilation.db()
-                .ask(new Output.Examples("example.trip", new SourceId("trip-examples.sou"), Output.CoverageMode.NONE)).value();
+                .ask(new Output.Examples("example.trip", new SourceId("trip-examples.sou"), ArmObservation.OMIT)).value();
         assertNotNull(attached);
         assertEquals(1, attached.rows().size());
         assertEquals(new QuotedFrom.ASourceThisCompileHolds(new SourceId("trip-examples.sou")),
@@ -188,7 +189,7 @@ class ExampleOutcomeTest {
         assertEquals(Disposition.HELD, attached.rows().get(0).disposition());
 
         Output.Examples.Of own = compilation.db()
-                .ask(new Output.Examples("example.trip", new SourceId("trip.sou"), Output.CoverageMode.NONE)).value();
+                .ask(new Output.Examples("example.trip", new SourceId("trip.sou"), ArmObservation.OMIT)).value();
         assertNotNull(own);
         assertEquals(List.of(), own.rows(), "the module's own source wrote no rows");
     }

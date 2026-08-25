@@ -1,5 +1,6 @@
 package souther.compiler.examples;
 
+import souther.compiler.observe.ArmObservation;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.Diagnostic;
@@ -333,7 +334,7 @@ class ARecordedRowIsRunAgainstABoundImplementationTest {
                 "the model whose rows are run compiles");
         String name = c.modules().get(0);
         EvaluationArtifact artifact = c.db()
-                .ask(new Output.EvaluationLinked(name, Output.CoverageMode.NONE)).value();
+                .ask(new Output.EvaluationLinked(name, ArmObservation.OMIT)).value();
         assertEquals(List.of(), c.diagnostics().values().stream().flatMap(List::stream)
                         .map(d -> String.valueOf(d.diagnostic().code())).toList(),
                 "the model whose rows are run compiles");

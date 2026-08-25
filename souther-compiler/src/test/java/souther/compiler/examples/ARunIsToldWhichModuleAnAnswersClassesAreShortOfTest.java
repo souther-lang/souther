@@ -1,5 +1,6 @@
 package souther.compiler.examples;
 
+import souther.compiler.observe.ArmObservation;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Scopes;
@@ -202,7 +203,7 @@ class ARunIsToldWhichModuleAnAnswersClassesAreShortOfTest {
         c.db().ask(new Output.All());
         String name = "example.root";
         EvaluationArtifact artifact = c.db()
-                .ask(new Output.EvaluationLinked(name, Output.CoverageMode.NONE)).value();
+                .ask(new Output.EvaluationLinked(name, ArmObservation.OMIT)).value();
         // Held to compiling: a model that did not is one whose rows were never emitted, and every
         // question below would be answered by that instead of by what is being measured.
         assertEquals(List.of(), c.diagnostics().values().stream().flatMap(List::stream)

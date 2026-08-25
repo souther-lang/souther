@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.observe.ArmObservation;
 import souther.compiler.source.SourceId;
 
 import souther.compiler.examples.EvaluationPolicy;
@@ -40,7 +41,7 @@ class ASettingBelongsToTheCompileThatReadItTest {
         compilation.answerEverything();
         SourceId sourceId = compilation.exampleSourcesOf("example.setting").getFirst();
         List<RowOutcome> rows = compilation.db()
-                .ask(new Output.Examples("example.setting", sourceId, Output.CoverageMode.NONE))
+                .ask(new Output.Examples("example.setting", sourceId, ArmObservation.OMIT))
                 .value().rows();
         assertEquals(1, rows.size(), rows.toString());
         return rows.get(0);

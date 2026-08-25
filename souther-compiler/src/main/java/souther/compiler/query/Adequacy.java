@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.observe.ArmObservation;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.source.SourceId;
 
@@ -397,9 +398,9 @@ public final class Adequacy {
      * only whether the arms are wanted. Two levels that want the same thing are then one evaluation,
      * and asking for a wider report does not re-run the rows.
      */
-    static Output.CoverageMode coverageAsked(Db db) {
+    static ArmObservation armsAsked(Db db) {
         return levelOf(db).runsInstrumentedRows()
-                ? Output.CoverageMode.ARMS : Output.CoverageMode.NONE;
+                ? ArmObservation.RECORD : ArmObservation.OMIT;
     }
 
     /**
@@ -3139,7 +3140,7 @@ public final class Adequacy {
         // classes here would make composing a value fail wherever the plan and the bodies do not
         // line up, which is a fault in a measurement nothing here is making.
         souther.compiler.generated.EvaluationArtifact artifact =
-                db.ask(new Output.EvaluationLinked(module, Output.CoverageMode.NONE)).value();
+                db.ask(new Output.EvaluationLinked(module, ArmObservation.OMIT)).value();
         Map<String, List<BehaviorRequirement>> requirements =
                 db.ask(new Bodies.Requirements(module)).value();
         if (artifact == null || requirements == null) {
@@ -3171,7 +3172,7 @@ public final class Adequacy {
             return null;
         }
         souther.compiler.generated.EvaluationArtifact artifact =
-                db.ask(new Output.EvaluationLinked(module, coverageAsked(db))).value();
+                db.ask(new Output.EvaluationLinked(module, armsAsked(db))).value();
         if (artifact == null || artifact.implementations() == null) {
             return null;
         }

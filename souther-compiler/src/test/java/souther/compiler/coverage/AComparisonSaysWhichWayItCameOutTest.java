@@ -1,5 +1,6 @@
 package souther.compiler.coverage;
 
+import souther.compiler.observe.ArmObservation;
 import souther.compiler.Emitted;
 import org.junit.jupiter.api.Test;
 
@@ -162,7 +163,7 @@ class AComparisonSaysWhichWayItCameOutTest {
     private static Map<String, byte[]> probed(Compilation compilation) {
         souther.compiler.generated.EvaluationArtifact artifact = compilation.db()
                 .ask(new Output.Evaluated(compilation.modules().get(0),
-                        Output.CoverageMode.ARMS)).value();
+                        ArmObservation.RECORD)).value();
         assertNotNull(artifact, "the model under test compiles");
         return artifact.classes();
     }

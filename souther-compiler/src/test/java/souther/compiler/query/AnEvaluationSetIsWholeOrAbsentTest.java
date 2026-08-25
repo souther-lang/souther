@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.observe.ArmObservation;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.generated.EvaluationArtifact;
@@ -49,7 +50,7 @@ class AnEvaluationSetIsWholeOrAbsentTest {
     @Test
     void aModuleThatDoesNotCheckHasNoEvaluationClasses() {
         Answer<EvaluationArtifact> broken = compiled().db()
-                .ask(new Output.Evaluated("example.broken", Output.CoverageMode.NONE));
+                .ask(new Output.Evaluated("example.broken", ArmObservation.OMIT));
 
         assertNull(broken.value(), "nothing was generated for it");
     }
@@ -64,7 +65,7 @@ class AnEvaluationSetIsWholeOrAbsentTest {
     @Test
     void aSetThatReachesItIsAbsentRatherThanShortAClass() {
         Answer<EvaluationArtifact> linked = compiled().db()
-                .ask(new Output.EvaluationLinked("example.reaches", Output.CoverageMode.NONE));
+                .ask(new Output.EvaluationLinked("example.reaches", ArmObservation.OMIT));
 
         assertNull(linked.value(),
                 "a set missing the classes of a module the rows can reach is not a set to run");
@@ -84,7 +85,7 @@ class AnEvaluationSetIsWholeOrAbsentTest {
         compilation.answerEverything();
 
         EvaluationArtifact linked = compilation.db()
-                .ask(new Output.EvaluationLinked("example.whole", Output.CoverageMode.NONE)).value();
+                .ask(new Output.EvaluationLinked("example.whole", ArmObservation.OMIT)).value();
 
         assertNotNull(linked);
         assertFalse(linked.classes().isEmpty(), "the module's own classes are there");
