@@ -593,30 +593,21 @@ public final class GuardThresholds {
      * says as much. A reading that stopped leaves whatever the rule states unknown, and its own
      * reason for stopping is what says which measures are thereby short of something.
      *
-     * <p>The rest leave nothing. A line on a position divides it; a rule read to the end that cuts
-     * no quantity states that every row satisfies it; a line the quantity never reaches divides the
-     * position into nothing and was understood; and a comparison about no position of the input, or
-     * about what the behavior answers, was never about a position for anything to be left at.
+     * <p>The rest leave nothing. A line on a position divides it; and a comparison about no position
+     * of the input, or about what the behavior answers, was never about a position for anything to
+     * be left at.
      *
-     * <p>Here rather than worked out afterwards from the comparison. Read again by the walk that
-     * collects what nothing turned into a line, a comparison whose carrier stopped the reading came
-     * back described as one that relates two positions — a sentence that says no measure is short
-     * of anything, over a model missing a border.
+     * <p>Which of them it is, is {@link ComparisonAssessment#whyTheLineReadingDrewNone}'s and not
+     * this reader's. The same table stood here and in the clause reader, so a case added to an
+     * assessment had to be answered twice; and worked out from the comparison afterwards rather
+     * than where the reading stopped, one whose carrier stopped the reading came back as a rule
+     * relating two positions — a sentence saying no measure is short of anything, over a model
+     * missing a border.
      */
     private static void publish(String behavior, Core.Binary comparison, CoverageSites.Plan plan,
                                 InputReads reads, Symbols symbols, ComparisonAssessment read,
                                 List<UnreadRule> out) {
-        BlockReason.RuleWithoutLineReason why = switch (read) {
-            case ComparisonAssessment.AcrossPositions _ ->
-                    new BlockReason.ComparisonBetweenPositions();
-            case ComparisonAssessment.CutsNothing _ ->
-                    new BlockReason.ComparisonCuttingNothing();
-            case ComparisonAssessment.OutsideTheDomain _ ->
-                    new BlockReason.ComparisonCuttingOutsideDomain();
-            case ComparisonAssessment.Unread unread -> unread.why();
-            case ComparisonAssessment.AtAPosition _, ComparisonAssessment.NoInput _,
-                 ComparisonAssessment.AnswerDependent _ -> null;
-        };
+        BlockReason.RuleWithoutLineReason why = read.whyTheLineReadingDrewNone().orElse(null);
         if (why == null) {
             return;
         }

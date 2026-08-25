@@ -188,6 +188,14 @@ public final class EnsuresThresholds {
         // draw one line and raise one question, and neither is worked out beside the other.
         ComparisonAssessment assessed = ComparisonAssessment.of(out.behavior(), comparison, reads,
                 symbols, quantities, rule.value());
+        // What the positions this names are left with, where the reading of lines drew none. Asked
+        // of the assessment and not worked out per arm here: the same table stood in the guard
+        // reader, and a case added to an assessment had to be answered in both.
+        assessed.whyTheLineReadingDrewNone().ifPresent(why ->
+                reportUnread(new RuleRef.Ensures(rule.id(), clause), comparison, rule.value(), why,
+                        assessed.filedAt(comparison, reads, symbols), out.unread()));
+        // And the geometry, which is this reader's own. Only the two arms that draw something have
+        // anything to add here.
         switch (assessed) {
             // A line on one position's own values. The value the classes meet at was answered by the
             // reading of the comparison; taken off the level the rule was written with, a rule that
@@ -222,11 +230,6 @@ public final class EnsuresThresholds {
             // what a border owes away from its line is a run of the arrangement every rule about
             // that quantity makes together.
             case ComparisonAssessment.AcrossPositions over -> {
-                // The positions are named as ones nothing divides, which is what a rule over a
-                // quantity that is not one position's own values leaves them.
-                reportUnread(new RuleRef.Ensures(rule.id(), clause), comparison, rule.value(),
-                        new BlockReason.ComparisonBetweenPositions(),
-                        over.filedAt(comparison, reads, symbols), out.unread());
                 // A value singled out on such a quantity has no sides, so there is nothing for a
                 // border to owe a row away from.
                 if (over.drawsABorder()) {
@@ -234,26 +237,11 @@ public final class EnsuresThresholds {
                             originOf(rule, clause, over.cutting())));
                 }
             }
-            // Nothing this reader draws. A comparison it could not read leaves the positions it
-            // names standing, in the words the reading that stopped came to — worked out again
-            // here, a comparison whose carrier stopped it would come back as one that relates two
-            // positions, which says no measure is short of anything.
-            case ComparisonAssessment.Unread unread -> reportUnread(
-                    new RuleRef.Ensures(rule.id(), clause), comparison, rule.value(), unread.why(),
-                    unread.filedAt(comparison, reads, symbols), out.unread());
-            // Read to the end, and the positions are left with no class of their own from this
-            // rule. Which of the two it was is worth saying: the quantity was empty, or the line
-            // falls where the quantity never runs. Neither leaves a measure short of anything, and
-            // both are things the model states at a position a report is asked about.
-            case ComparisonAssessment.CutsNothing nothing -> reportUnread(
-                    new RuleRef.Ensures(rule.id(), clause), comparison, rule.value(),
-                    new BlockReason.ComparisonCuttingNothing(),
-                    nothing.filedAt(comparison, reads, symbols), out.unread());
-            case ComparisonAssessment.OutsideTheDomain outside -> reportUnread(
-                    new RuleRef.Ensures(rule.id(), clause), comparison, rule.value(),
-                    new BlockReason.ComparisonCuttingOutsideDomain(),
-                    outside.filedAt(comparison, reads, symbols), out.unread());
-            case ComparisonAssessment.AnswerDependent _, ComparisonAssessment.NoInput _ -> { }
+            // Nothing this reader draws at any of them. What each leaves the positions is said
+            // above, in the one place that answers it for both readers of a comparison.
+            case ComparisonAssessment.Unread _, ComparisonAssessment.CutsNothing _,
+                 ComparisonAssessment.OutsideTheDomain _,
+                 ComparisonAssessment.AnswerDependent _, ComparisonAssessment.NoInput _ -> { }
         }
     }
 
