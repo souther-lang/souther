@@ -4,7 +4,7 @@ import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.TermPath;
 
 /**
- * A position no class came back for, and which of the two that is.
+ * A position no class came back for, and which of the three ways that happened.
  *
  * <p>The list of these used to be a list of paths, and everything downstream read a path in it as the
  * model having no distinction to draw there. A position whose rule is written in a form this does not
@@ -14,15 +14,22 @@ import souther.compiler.inputs.TermPath;
  * <p>So the absence is a value that has to be produced rather than the default reading of an empty
  * result. {@link Why.Absent} is produced by {@link PendingPosition#complete} and nowhere else, from
  * a position whose structural reading did not stop and whose rules were all read and drew nothing —
- * which is what the word means. Where the reading stopped, or where something named the position
- * and this could not turn it into a line, {@link Why.CannotDerive} says so and carries which.
+ * which is what the word means.
+ *
+ * <p>The other two are the two ways of not being that, and they are opposite sentences about this
+ * compiler. Where a reading stopped, {@link Why.CannotDerive} says something is written here that
+ * this did not read. Where every reading ran to the end and a rule states something that draws no
+ * line — a relation between two positions, a quantity the position cancels out of —
+ * {@link Why.StatedWithoutALine} says that instead: nothing is missing, and a reader sent after a
+ * limit would be looking for one that is not there. Held as one, the second went out as the first.
  *
  * @param at  the position, spelled the way a report names it
- * @param why whether the model draws nothing here or this could not read what it draws
+ * @param why whether the model draws nothing here, this could not read what it draws, or a rule
+ *            read from end to end states something that is no line
  */
 public record UndividedPosition(TermPath at, Why why) {
 
-    /** Which of the two it is. */
+    /** Which of the three it is. */
     public sealed interface Why {
 
         /**

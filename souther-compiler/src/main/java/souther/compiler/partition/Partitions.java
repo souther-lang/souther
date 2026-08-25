@@ -219,10 +219,11 @@ public final class Partitions {
         // a selection made now would be made where the least is known about what it selects
         // (see this package's documentation).
         List<Axis> kept = new ArrayList<>(found);
-        // A position undivided because a rule about it went unread says that here, without waiting
+        // A position undivided because a rule about it drew no line says that here, without waiting
         // for a body: a type bounded by a rule this cannot read is one whether or not any behavior
-        // compares it. Nothing has compared anything yet, so what the rules came to is whether one
-        // of them was left unread — settled beside each axis, as it is once a body has spoken.
+        // compares it, and so is one bounded by a rule read to the end that divides nothing. What
+        // the rules came to is whether either happened, and which of the two it was — settled
+        // beside each axis, as it is once a body has spoken.
         List<Measured> measured = new ArrayList<>();
         for (Axis axis : kept) {
             keep(new ArrayList<>(), measured, axis, null, rulesWithoutALine);
@@ -245,8 +246,8 @@ public final class Partitions {
     private record Measured(Axis axis, BodyCutInspection body) {}
 
     /** The axis, and the body's answer about it — a line it drew, nothing, or a rule about it that
-     *  went unread. Kept beside the axis rather than looked up afterwards by how its path is
-     *  spelled. */
+     *  it drew no line from, with which of the two ways that happened. Kept beside the axis rather
+     *  than looked up afterwards by how its path is spelled. */
     private static void keep(List<Axis> out, List<Measured> measured, Axis axis,
                              BodyCutInspection drew, List<RuleWithoutALine> rules) {
         out.add(axis);
@@ -520,8 +521,8 @@ public final class Partitions {
             //
             // A rule read and left outside what the position holds divided nothing, and it is not
             // a rule that went unread either: what it says was understood. So the answer there is
-            // that the rules were exhausted, which is what keeps `Blocked` meaning that a
-            // comparison could not be interpreted rather than everything that came to nothing.
+            // that the rules were exhausted, which is what keeps `NoLine` meaning that a rule was
+            // written about the position rather than everything that came to nothing.
             NumericDomain.Bounds within = domain;
             NumericTerm measuredAt = term;
             Axis read = axis;

@@ -20,12 +20,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * What a rule this read from end to end costs a measurement, which is nothing.
  *
- * <p>Four models differing by one clause, and the clause is the whole test. One draws a line; two
- * are read to the end and leave the positions no class of their own; one is written in a form
- * nothing here takes apart. The first three cost the measurement nothing and the fourth costs it
- * what a limit of this compiler costs, and the document has to say so — a rule read from end to end
- * reported as a question nobody answered tells an author to go and look at a clause that is doing
- * exactly what they wrote.
+ * <p>One model, one clause, and the clause is the whole test. It draws a line; or it is read to the
+ * end and leaves the positions no class of their own, three ways; or it is written in a form
+ * nothing here takes apart. Everything read to the end costs the measurement nothing, and only the
+ * last costs it what a limit of this compiler costs — a rule read from end to end reported as a
+ * question nobody answered tells an author to go and look at a clause that is doing exactly what
+ * they wrote.
+ *
+ * <p>And one that is read to the end and states the opposite. A comparison whose positions cancel
+ * to something no row satisfies admits nothing rather than restricting nothing, so what it raises
+ * is real — which is what keeps the reading above from being "the quantity is empty, so there is
+ * nothing to answer for".
  *
  * <p>Asked of the document and of the sentence a person reads, because the two are written by
  * different code from the same evidence and this is the seam every round of #1029 and #1047 went

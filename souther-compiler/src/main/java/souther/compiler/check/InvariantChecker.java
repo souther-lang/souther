@@ -1118,16 +1118,16 @@ public final class InvariantChecker {
                 new Coordinate(FieldDomains.Coordinate.takenBy(path, counted.by()),
                         Carrier.WHOLE)));
         List<Direct> out = new ArrayList<>();
-        List<FieldDomains.NoLine> unread = new ArrayList<>();
+        List<FieldDomains.NoLine> noLines = new ArrayList<>();
         Map<String, List<TypeSymbol>> narrowers = new LinkedHashMap<>();
         Map<RuleRef, Required> raised = new LinkedHashMap<>();
         Map<RuleRef, Map<Core, Required>> raisedByPart = new LinkedHashMap<>();
         stated.forEach(each ->
-                direct(each.clause(), each.from(), at, byName, out, unread, narrowers, raised,
+                direct(each.clause(), each.from(), at, byName, out, noLines, narrowers, raised,
                         took, typeAt, parts, raisedByPart));
         // Insertion order, kept: `Map.copyOf` iterates in an order salted once per JVM run, and
         // what a report prints for a position is these in the order the declaration writes them.
-        return new Reading(List.copyOf(out), List.copyOf(unread), Map.copyOf(narrowers),
+        return new Reading(List.copyOf(out), List.copyOf(noLines), Map.copyOf(narrowers),
                 java.util.Collections.unmodifiableMap(new LinkedHashMap<>(raised)),
                 java.util.Collections.unmodifiableMap(new LinkedHashMap<>(raisedByPart)));
     }
@@ -1223,7 +1223,7 @@ public final class InvariantChecker {
      */
     private void direct(Core clause, RuleRef.Invariant from, Denotations at,
                         Map<FactSubject, Coordinate> byName, List<Direct> out,
-                        List<FieldDomains.NoLine> unread,
+                        List<FieldDomains.NoLine> noLines,
                         Map<String, List<TypeSymbol>> narrowers,
                         Map<RuleRef, Required> raised, ReadingEvidence took,
                         Map<String, Type> typeAt,
@@ -1237,9 +1237,9 @@ public final class InvariantChecker {
         }
         if (bin.op() == BinOp.AND) {
             // One rule the author wrote, so what it raises is what its conjuncts raise together.
-            direct(bin.left(), from, at, byName, out, unread, narrowers, raised, took, typeAt,
+            direct(bin.left(), from, at, byName, out, noLines, narrowers, raised, took, typeAt,
                     parts, raisedByPart);
-            direct(bin.right(), from, at, byName, out, unread, narrowers, raised, took, typeAt,
+            direct(bin.right(), from, at, byName, out, noLines, narrowers, raised, took, typeAt,
                     parts, raisedByPart);
             return;
         }
@@ -1309,7 +1309,7 @@ public final class InvariantChecker {
             // §example-partition). A position carries more than one statement, and an end read at
             // it says nothing about the rule beside it: kept as what the position was left with,
             // a bound on a field's own type swallowed the record's clause about the same field.
-            noLineDrawn(bin, from, at, byName, unread, read);
+            noLineDrawn(bin, from, at, byName, noLines, read);
             // The declaration and not the clause. Which declaration took an edge in is what ADR-0090
             // names beside a line, and what a reader is sent to look at is the declaration holding
             // the relation.
