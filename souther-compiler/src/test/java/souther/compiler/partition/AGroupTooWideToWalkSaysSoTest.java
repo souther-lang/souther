@@ -264,7 +264,7 @@ class AGroupTooWideToWalkSaysSoTest {
 
         FillResult asked = Generator.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.ANY, model.read(), Generator.Trial.NOTHING_RUNS,
-                List.of(), Set.of(), Set.of(), Budgets.generation());
+                List.of(), List.of(), List.of(), Budgets.generation());
 
         assertEquals(List.of(), asked.reasons().stream()
                         .filter(GenerationReason.GroupsNotOffered.class::isInstance).toList(),

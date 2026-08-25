@@ -9,11 +9,10 @@ import java.util.List;
  *
  * <p>Which arm is the key it is filed under, the same way a class's is.
  *
- * <p>Three answers because they are three pieces of news. A row was composed; a search ran at every
- * place a row could have come from and came back with what each of them said; or there was nowhere
- * to look at all, which the reading of the body settles and no search is involved in. Told as one,
- * a reader could not tell an arm the model refuses from one this compiler could not state a way
- * into.
+ * <p>Three answers because they are three pieces of news. A row was composed; there is a reason
+ * there is none; or there was nowhere to look at all, which the reading of the body settles and no
+ * search is involved in. Told as one, a reader could not tell an arm the model refuses from one
+ * this compiler could not state a way into.
  */
 public sealed interface ArmDisposition {
 
@@ -21,12 +20,18 @@ public sealed interface ArmDisposition {
     record Built(RowId row) implements ArmDisposition {}
 
     /**
-     * No row came of the places a row could have come from, and what each of them came to.
+     * No row, and the reasons there is none.
      *
-     * <p>All of them, because they are not one fact. One place stopping at the search's budget and
-     * another the model's own rules refuse are different news — the first says a row may still be
-     * writable and the second says the model settles it — and the arm is answered by the whole of
-     * what was tried rather than by whichever was walked first.
+     * <p>Not only the reasons a search came back with. A run that never searched has one too — the
+     * rows could not be read, the classes would not link — and it is as much an answer about this
+     * arm as a refusal is. What this says is that there is no row and that the run can say why;
+     * whether anything was tried is in the words, where {@code THE_ROWS_WERE_NOT_READ} and
+     * {@code LINKAGE_FAILED} say it outright.
+     *
+     * <p>All of the reasons, because they are not one fact. One place stopping at the search's
+     * budget and another the model's own rules refuse are different news — the first says a row may
+     * still be writable and the second says the model settles it — and the arm is answered by the
+     * whole of what was tried rather than by whichever was walked first.
      */
     record Unresolved(List<Generator.UnresolvedCombination> why) implements ArmDisposition {
 
@@ -34,7 +39,7 @@ public sealed interface ArmDisposition {
             why = List.copyOf(why);
             if (why.isEmpty()) {
                 throw new IllegalArgumentException(
-                        "an arm nothing was tried at is one with no way into it");
+                        "an arm with no row and no reason for it is one nothing answered for");
             }
         }
     }

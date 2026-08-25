@@ -127,7 +127,7 @@ class ARowNothingRanFillsNoCombinationTest {
 
         List<Generator.GeneratedRow> composed = Generator.fill(model.subject(), List.of(),
                         Generator.CandidateCheck.ANY, model.read(),
-                        Generator.Trial.NOTHING_RUNS, List.of(), Set.of(), takes, Budgets.generation())
+                        Generator.Trial.NOTHING_RUNS, List.of(), List.of(), List.copyOf(takes), Budgets.generation())
                 .rows();
 
         assertEquals(1, composed.size(), "one row answers both: " + composed);
@@ -155,7 +155,7 @@ class ARowNothingRanFillsNoCombinationTest {
                 Generator.everyArmACombinationMayTake(model.subject(), model.groups(), Budgets.generation());
         FillResult filled = Generator.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.refusing((_, _) -> java.util.Optional.of("no")),
-                model.read(), Generator.Trial.NOTHING_RUNS, List.of(), Set.of(), every, Budgets.generation());
+                model.read(), Generator.Trial.NOTHING_RUNS, List.of(), List.of(), List.copyOf(every), Budgets.generation());
 
         assertEquals(List.of(), filled.rows(), "nothing builds, so nothing is composed");
         for (int probe : every) {
@@ -186,7 +186,7 @@ class ARowNothingRanFillsNoCombinationTest {
                 Generator.CandidateCheck.refusing((_, candidate) ->
                         candidate.text().contains("Premium")
                                 ? java.util.Optional.of("no") : java.util.Optional.empty()),
-                model.read(), Generator.Trial.NOTHING_RUNS, List.of(), Set.of(), every, Budgets.generation());
+                model.read(), Generator.Trial.NOTHING_RUNS, List.of(), List.of(), List.copyOf(every), Budgets.generation());
 
         assertFalse(filled.rows().isEmpty(), "the combinations that build compose their rows");
         List<Integer> built = every.stream()
@@ -255,7 +255,8 @@ class ARowNothingRanFillsNoCombinationTest {
 
         FillResult filled = Generator.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.ANY, model.read(), Generator.Trial.NOTHING_RUNS,
-                List.of(), Generator.everyClassNoRowSitsIn(model.subject(), List.of()), every, Budgets.generation());
+                List.of(), Generator.everyClassNoRowSitsIn(model.subject(), List.of()),
+                List.copyOf(every), Budgets.generation());
 
         assertTrue(filled.reasons().stream()
                         .anyMatch(GenerationReason.SearchLimit.class::isInstance),
@@ -293,23 +294,23 @@ class ARowNothingRanFillsNoCombinationTest {
     @Test
     void aClassIsComposedForWhenItIsOnTheListAndNotOtherwise() {
         Model model = Model.of(SHIPPING, "shippingFee");
-        Set<Generator.ClassOwed> every =
+        List<Generator.ClassOwed> every =
                 Generator.everyClassNoRowSitsIn(model.subject(), List.of());
         assertFalse(every.isEmpty(), "the model divides its positions");
-        Generator.ClassOwed one = every.iterator().next();
+        Generator.ClassOwed one = every.get(0);
 
-        assertEquals(List.of(), composedFor(model, Set.of()),
+        assertEquals(List.of(), composedFor(model, List.of()),
                 "asked for no class, nothing is composed");
-        assertEquals(List.of(one), composedFor(model, Set.of(one)),
+        assertEquals(List.of(one), composedFor(model, List.of(one)),
                 "and asked for one, that one and nothing beside it");
     }
 
     /** Which classes the generator composes a row for when it is asked about {@code classes}. */
     private static List<Generator.ClassOwed> composedFor(Model model,
-                                                         Set<Generator.ClassOwed> classes) {
+                                                         List<Generator.ClassOwed> classes) {
         return Generator.fill(model.subject(), List.of(), Generator.CandidateCheck.ANY,
                         model.read(), Generator.Trial.NOTHING_RUNS, List.of(), classes,
-                        java.util.Set.of(), Budgets.generation())
+                        List.of(), Budgets.generation())
                 .rows().stream().flatMap(row -> row.purposes().stream())
                 .map(Generator.Purpose.ForAClass.class::cast)
                 .map(at -> new Generator.ClassOwed(at.at(), at.classId())).toList();
@@ -318,7 +319,7 @@ class ARowNothingRanFillsNoCombinationTest {
     /** Which arms the generator composes a row for when it is asked about {@code arms}. */
     private static Set<Integer> offeredFor(Model model, Set<Integer> arms) {
         return Generator.fill(model.subject(), List.of(), Generator.CandidateCheck.ANY,
-                        model.read(), Generator.Trial.NOTHING_RUNS, List.of(), Set.of(), arms, Budgets.generation())
+                        model.read(), Generator.Trial.NOTHING_RUNS, List.of(), List.of(), List.copyOf(arms), Budgets.generation())
                 .rows().stream().flatMap(row -> row.purposes().stream())
                 .map(Generator.Purpose.ForAnArm.class::cast)
                 .map(Generator.Purpose.ForAnArm::probe)

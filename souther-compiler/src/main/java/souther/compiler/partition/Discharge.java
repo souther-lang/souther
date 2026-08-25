@@ -14,6 +14,10 @@ import java.util.Map;
  *
  * <p>Whether it covers the plan is {@link FillResult}'s to hold, since that is where the plan is.
  * This is the answers alone.
+ *
+ * <p>Nothing reads these in order. What a row is offered for is taken in the plan's order, and
+ * everything else asks by key — so the order the entries were written in is kept for the sake of a
+ * message about one run reading the same way twice, and is not something to build an answer from.
  */
 public record Discharge(Map<Generator.ClassOwed, ClassDisposition> classes,
                         Map<Generator.ArmOwed, ArmDisposition> arms) {

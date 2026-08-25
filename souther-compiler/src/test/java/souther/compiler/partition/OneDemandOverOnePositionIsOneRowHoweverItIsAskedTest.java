@@ -20,7 +20,6 @@ import souther.compiler.query.Shapes;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -88,9 +87,9 @@ class OneDemandOverOnePositionIsOneRowHoweverItIsAskedTest {
             for (Map.Entry<Integer, Integer> pin : onePinWaysInto(probe, model, axes)) {
                 Axis axis = axes.get(pin.getKey());
                 assertEquals(
-                        rowsOf(model, Set.of(new Generator.ClassOwed(axis.id(),
-                                axis.classes().get(pin.getValue()).id())), Set.of()),
-                        rowsOf(model, Set.of(), Set.of(probe)),
+                        rowsOf(model, List.of(new Generator.ClassOwed(axis.id(),
+                                axis.classes().get(pin.getValue()).id())), List.of()),
+                        rowsOf(model, List.of(), List.of(probe)),
                         "the class of " + axis.path() + " and the arm it is the way into");
                 asked++;
             }
@@ -124,8 +123,8 @@ class OneDemandOverOnePositionIsOneRowHoweverItIsAskedTest {
     }
 
     /** What one run of the search offered, by the values each row carries. */
-    private static List<List<String>> rowsOf(Model model, Set<Generator.ClassOwed> classes,
-                                             Set<Integer> arms) {
+    private static List<List<String>> rowsOf(Model model, List<Generator.ClassOwed> classes,
+                                             List<Integer> arms) {
         return Generator.fill(model.subject(), List.of(), Generator.CandidateCheck.ANY,
                         model.read(), Generator.Trial.NOTHING_RUNS, List.of(), classes, arms,
                         Budgets.generation())

@@ -2914,6 +2914,10 @@ public final class Adequacy {
             // A combination the body settles together is where one is looked for and is not itself
             // owed a row — nothing reports one — so what is searched follows from the findings
             // rather than from the shape of the search space.
+            // In the order the findings were established, which is the order this build raised
+            // them in. Handed over as a list rather than as the set that kept them once apiece:
+            // what the plan is asking for is the order, and this is where what the order means is
+            // known.
             Set<Integer> arms = new LinkedHashSet<>();
             for (Finding finding : owed) {
                 if (finding.about()
@@ -2922,7 +2926,7 @@ public final class Adequacy {
                     arms.add(arm.index());
                 }
             }
-            return Generator.planOver(subject, classesOwed(evidence), arms);
+            return Generator.planOver(subject, classesOwed(evidence), List.copyOf(arms));
         }
 
         /**
@@ -2941,7 +2945,10 @@ public final class Adequacy {
          * this replaces — and it would be one no test covers, the query answering every behavior
          * the generator reaches.
          */
-        private static Set<Generator.ClassOwed> classesOwed(PartitionEvidence evidence) {
+        private static List<Generator.ClassOwed> classesOwed(PartitionEvidence evidence) {
+            // Gathered once apiece and handed over in the order the measure holds the positions
+            // and their classes in, which is the order this walk reached them. The set keeps the
+            // once-apiece; the list is what says what the order is.
             Set<Generator.ClassOwed> out = new LinkedHashSet<>();
             for (PartitionEvidence.AxisCoverage axis : evidence.axes()) {
                 Set<String> covered = axis.reached().made()
@@ -2953,7 +2960,7 @@ public final class Adequacy {
                     }
                 }
             }
-            return out;
+            return List.copyOf(out);
         }
     }
 

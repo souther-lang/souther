@@ -480,8 +480,9 @@ class EveryFindingHasAGenerationDispositionTest {
                 new souther.compiler.partition.GenerationPlan(nothingIsDivided(), List.of(),
                         List.of());
         return why == null ? souther.compiler.partition.FillResult.nothingAskedOf(plan)
-                : new souther.compiler.partition.FillResult(plan, Map.of(), List.of(),
-                        List.of(why), souther.compiler.partition.Discharge.NOTHING);
+                : new souther.compiler.partition.FillResult(plan, new java.util.LinkedHashMap<>(),
+                        List.of(), List.of(why),
+                        souther.compiler.partition.Discharge.NOTHING);
     }
 
     /** The same at the boundaries, which nothing is owed at and which has no plan. */

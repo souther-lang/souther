@@ -92,7 +92,8 @@ class AGenerationThatWentOnDoesNotSayItStoppedTest {
     private static souther.compiler.partition.FillResult stoppedWith(GenerationReason why) {
         souther.compiler.partition.GenerationPlan plan =
                 new souther.compiler.partition.GenerationPlan(subject(), List.of(), List.of());
-        return new souther.compiler.partition.FillResult(plan, Map.of(), List.of(), List.of(why),
+        return new souther.compiler.partition.FillResult(plan, new LinkedHashMap<>(), List.of(),
+                List.of(why),
                 souther.compiler.partition.Discharge.NOTHING);
     }
 

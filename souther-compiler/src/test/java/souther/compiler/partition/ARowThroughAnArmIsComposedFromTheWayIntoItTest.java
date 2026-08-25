@@ -109,7 +109,8 @@ class ARowThroughAnArmIsComposedFromTheWayIntoItTest {
 
         FillResult filled = Generator.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.ANY, model.read(), Generator.Trial.NOTHING_RUNS,
-                List.of(), Set.of(), model.read().arms().keySet(), Budgets.generation());
+                List.of(), List.of(), List.copyOf(model.read().arms().keySet()),
+                Budgets.generation());
 
         assertEquals(List.of(), model.read().interactions(),
                 "nothing in this body consumes two decided values into one");
@@ -135,7 +136,8 @@ class ARowThroughAnArmIsComposedFromTheWayIntoItTest {
 
         FillResult filled = Generator.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.ANY, model.read(), Generator.Trial.NOTHING_RUNS,
-                List.of(), Set.of(), model.read().arms().keySet(), Budgets.generation());
+                List.of(), List.of(), List.copyOf(model.read().arms().keySet()),
+                Budgets.generation());
 
         assertEquals(4, model.read().arms().size(), "two arms in each of the two helpers");
         assertTrue(filled.discharge().arms().values().stream().allMatch(ArmDisposition.Built.class::isInstance),
@@ -165,7 +167,7 @@ class ARowThroughAnArmIsComposedFromTheWayIntoItTest {
         FillResult watched = Generator.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.ANY, model.read(),
                 _ -> new Generator.Watched.Ran(everywhere),
-                List.of(), Set.of(), everyArm, Budgets.generation());
+                List.of(), List.of(), List.copyOf(everyArm), Budgets.generation());
 
         assertEquals(1, watched.rows().size(),
                 () -> "one row was seen going through every arm, so one row is offered: "
@@ -180,7 +182,7 @@ class ARowThroughAnArmIsComposedFromTheWayIntoItTest {
         // is taken off the list by a reading of where a row would go.
         FillResult unwatched = Generator.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.ANY, model.read(), Generator.Trial.NOTHING_RUNS,
-                List.of(), Set.of(), everyArm, Budgets.generation());
+                List.of(), List.of(), List.copyOf(everyArm), Budgets.generation());
         assertTrue(unwatched.rows().size() > 1,
                 () -> "which nothing here does on the strength of the reading: "
                         + inputsOf(unwatched));
@@ -201,7 +203,7 @@ class ARowThroughAnArmIsComposedFromTheWayIntoItTest {
         FillResult filled = Generator.fill(model.subject(), List.of(),
                 // Refuses every value, so every way in is a search that ran and composed nothing.
                 Generator.CandidateCheck.refusing((_, _) -> java.util.Optional.of("no")),
-                model.read(), Generator.Trial.NOTHING_RUNS, List.of(), Set.of(), everyArm,
+                model.read(), Generator.Trial.NOTHING_RUNS, List.of(), List.of(), List.copyOf(everyArm),
                 Budgets.generation());
 
         for (int probe : everyArm) {

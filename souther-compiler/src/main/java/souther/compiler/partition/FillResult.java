@@ -6,6 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.SequencedMap;
 import java.util.Set;
 
 /**
@@ -28,18 +29,19 @@ import java.util.Set;
  * line, and the class's own entry went on holding the line from before the merge.
  *
  * @param plan       what this run was asked for
- * @param composed   the rows, in the order they were composed
+ * @param composed   the rows, in the order they were composed, which is the order a reader is
+ *                   offered them in
  * @param unresolved what each place a row was looked for came to, said once apiece
  * @param reasons    what happened to this run as a whole, which is never an answer about one thing
  *                   the plan named
  * @param discharge  what became of each of them
  */
-public record FillResult(GenerationPlan plan, Map<RowId, ComposedRow> composed,
+public record FillResult(GenerationPlan plan, SequencedMap<RowId, ComposedRow> composed,
                          List<Generator.UnresolvedCombination> unresolved,
                          List<GenerationReason> reasons, Discharge discharge) {
 
     public FillResult {
-        composed = Collections.unmodifiableMap(new LinkedHashMap<>(composed));
+        composed = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(composed));
         unresolved = List.copyOf(unresolved);
         reasons = List.copyOf(reasons);
         if (!discharge.classes().keySet().equals(new LinkedHashSet<>(plan.classesOwed()))) {
@@ -78,7 +80,8 @@ public record FillResult(GenerationPlan plan, Map<RowId, ComposedRow> composed,
 
     /** Nothing asked for, nothing composed, nothing to answer for. */
     public static FillResult nothingAskedOf(GenerationPlan plan) {
-        return new FillResult(plan, Map.of(), List.of(), List.of(), Discharge.NOTHING);
+        return new FillResult(plan, new LinkedHashMap<>(), List.of(), List.of(),
+                Discharge.NOTHING);
     }
 
     /**
@@ -107,7 +110,8 @@ public record FillResult(GenerationPlan plan, Map<RowId, ComposedRow> composed,
             arms.put(owed, new ArmDisposition.Unresolved(
                     List.of(new Generator.UnresolvedCombination(List.of(), why))));
         }
-        return new FillResult(plan, Map.of(), List.of(), reasons, new Discharge(classes, arms));
+        return new FillResult(plan, new LinkedHashMap<>(), List.of(), reasons,
+                new Discharge(classes, arms));
     }
 
     /**
@@ -150,16 +154,5 @@ public record FillResult(GenerationPlan plan, Map<RowId, ComposedRow> composed,
             }
         }
         return new Generator.GeneratedRow(purposes, row.inputs());
-    }
-
-    /**
-     * The same run said the way a generation with no plan says it, for whoever is reading the offer
-     * rather than asking after one thing in it.
-     *
-     * <p>A projection and not a second value: what a reader gets here is what the plan and the
-     * discharge come to, worked out on the way past.
-     */
-    public Generator.GenerationResult asGenerationResult() {
-        return new Generator.GenerationResult(rows(), unresolved, reasons);
     }
 }

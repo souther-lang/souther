@@ -96,7 +96,7 @@ class ARowIsAWitnessForAnArmOnlyByGoingThroughItTest {
                 Generator.CandidateCheck.ANY, model.read(),
                 // Seen doing everything the ways in name, and seen at no arm at all.
                 _ -> new Generator.Watched.Ran(waysWithoutTheArms(model.read())),
-                List.of(), Set.of(), everyArm, Budgets.generation());
+                List.of(), List.of(), List.copyOf(everyArm), Budgets.generation());
 
         for (int probe : everyArm) {
             assertFalse(filled.discharge().at(new Generator.ArmOwed(probe)) instanceof ArmDisposition.Built,
@@ -116,7 +116,7 @@ class ARowIsAWitnessForAnArmOnlyByGoingThroughItTest {
         FillResult filled = Generator.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.ANY, model.read(),
                 _ -> new Generator.Watched.Ran(everywhere(model.read(), everyArm)),
-                List.of(), Set.of(), everyArm, Budgets.generation());
+                List.of(), List.of(), List.copyOf(everyArm), Budgets.generation());
 
         assertTrue(filled.discharge().arms().values().stream().allMatch(ArmDisposition.Built.class::isInstance),
                 () -> "each arm has a row through it: " + filled.discharge().arms().values());

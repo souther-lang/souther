@@ -26,6 +26,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.SequencedMap;
 import java.util.Set;
 
 /**
@@ -786,22 +787,24 @@ public final class Generator {
                                         CandidateCheck check,
                                         souther.compiler.reading.CoverageRead.Read read,
                                         Trial trial, AdequacyPolicy.OfTheGeneration budget) {
+        // Both in the order their own walks reached them: the positions the search fixes them in,
+        // and the numbers the plan gave the arms. Each is what that walk means by its order.
         return fill(planOver(subject, everyClassNoRowSitsIn(subject, existing),
-                        read.arms().keySet()),
+                        List.copyOf(read.arms().keySet())),
                 existing, check, read, trial, List.of(), budget);
     }
 
     /**
      * A plan over what a caller gathered, in the order they gathered it.
      *
-     * <p>For the callers that hand their obligations over as sets, which is what a walk that
-     * gathers each thing once produces. What the plan wants is the order, and the order such a walk
-     * kept is the one to keep.
+     * <p>Ordered, because the plan is. Which order it is belongs to whoever gathered the
+     * obligations: a walk that gathers each thing once knows what its own order means, and a set
+     * handed over here would leave that to whatever collection the caller happened to hold — so
+     * this takes the answer rather than the collection it was kept in.
      */
-    public static GenerationPlan planOver(Subject subject, Set<ClassOwed> classes,
-                                          Set<Integer> arms) {
-        return new GenerationPlan(subject, List.copyOf(classes),
-                arms.stream().map(ArmOwed::new).toList());
+    public static GenerationPlan planOver(Subject subject, List<ClassOwed> classes,
+                                          List<Integer> arms) {
+        return new GenerationPlan(subject, classes, arms.stream().map(ArmOwed::new).toList());
     }
 
     /**
@@ -815,8 +818,8 @@ public final class Generator {
                                         CandidateCheck check,
                                         souther.compiler.reading.CoverageRead.Read read,
                                         Trial trial, List<Baseline> baselines,
-                                        Set<ClassOwed> classesOwed,
-                                        Set<Integer> armsOwed,
+                                        List<ClassOwed> classesOwed,
+                                        List<Integer> armsOwed,
                                         AdequacyPolicy.OfTheGeneration budget) {
         return fill(planOver(subject, classesOwed, armsOwed), existing, check, read, trial,
                 baselines, budget);
@@ -894,8 +897,11 @@ public final class Generator {
      * one element under a line and one over it — and each of them is covered. Read as one class,
      * the rest would be asked for again, which is work the author has already done.
      */
-    public static Set<ClassOwed> everyClassNoRowSitsIn(Subject subject,
+    public static List<ClassOwed> everyClassNoRowSitsIn(Subject subject,
                                                        List<ObservedRow> existing) {
+        // Gathered once apiece and handed over in the order the walk reached them, which is the
+        // order the search fixes the positions in. The set is how "once apiece" is kept; what a
+        // caller is given is the order, because that is what the plan is asking for.
         Set<ClassOwed> out = new LinkedHashSet<>();
         for (Axis axis : ordered(subject)) {
             Set<String> covered = new LinkedHashSet<>();
@@ -911,7 +917,7 @@ public final class Generator {
                 }
             }
         }
-        return out;
+        return List.copyOf(out);
     }
 
     /**
@@ -991,12 +997,15 @@ public final class Generator {
         // fact about the module rather than about the class asking.
         List<ResolvedOrigin> origins = resolve(subject, axes, baselines, check);
 
-        List<GeneratedRow> rows = new ArrayList<>();
+        // The rows this run composes, each numbered where it is composed. The number is an
+        // identity and nothing reads it as a place: what says two obligations were answered by one
+        // line is that both entries name the same one.
+        SequencedMap<RowId, ComposedRow> composed = new LinkedHashMap<>();
         List<ClassAttempt> attempts = new ArrayList<>();
-        // Which row answered which class, by where the row went. A row is a line in the file and
-        // the same line can answer several things, so what says a class was answered is the entry
-        // pointing at the row rather than anything written on the row itself.
-        Map<ClassOwed, Integer> answeredAt = new LinkedHashMap<>();
+        // Which row answered which class. A row is a line in the file and the same line can answer
+        // several things, so what says a class was answered is the entry naming the row rather than
+        // anything written on the row itself.
+        Map<ClassOwed, RowId> answeredAt = new LinkedHashMap<>();
         List<UnresolvedCombination> unresolved = new ArrayList<>();
         List<GenerationReason> reasons = new ArrayList<>(undecided);
         // The classes first. What each is owed is one row, and the arms below are looked for among
@@ -1011,7 +1020,7 @@ public final class Generator {
         int classesLeft = 0;
         for (int i = 0; i < owed.size(); i++) {
             int[] at = owed.get(i);
-            if (rows.size() >= budget.rows()) {
+            if (composed.size() >= budget.rows()) {
                 classesLeft = owed.size() - i;
                 for (int cut = i; cut < owed.size(); cut++) {
                     Axis axis = axes.get(owed.get(cut)[0]);
@@ -1028,11 +1037,12 @@ public final class Generator {
             attempts.add(attempt);
             switch (attempt) {
                 case ClassAttempt.Built made -> {
-                    // Where it went, and not what it was written as. Two classes can be answered by
-                    // rows written the same way and still be two rows the search composed one
-                    // apiece; matched back by their text, the second was read as the first.
-                    answeredAt.put(new ClassOwed(attempt.at(), attempt.classId()), rows.size());
-                    rows.add(made.row());
+                    // Its own row, whatever the ones beside it are written as. Two classes can be
+                    // answered by rows written the same way and are still two rows the search
+                    // composed one apiece — each is offered for its own class, and merging them
+                    // would take one of the two classes its answer.
+                    answeredAt.put(new ClassOwed(attempt.at(), attempt.classId()),
+                            compose(composed, made.row().inputs()));
                 }
                 case ClassAttempt.Unresolved none -> unresolved.add(none.why());
             }
@@ -1044,7 +1054,7 @@ public final class Generator {
         // in first — which is a preference between two answers and not one of them standing in for
         // the other. An arm no combination is over is answered from its way in all the same.
         Set<Integer> left = new LinkedHashSet<>(armsOwed);
-        Map<Integer, Integer> built = new LinkedHashMap<>();
+        Map<Integer, RowId> built = new LinkedHashMap<>();
         Map<Integer, List<UnresolvedCombination>> failed = new LinkedHashMap<>();
         // Arms the row budget ran out before, which is what the search stopping looks like from an
         // arm. Told apart from an arm with nowhere to look, because raising the budget changes one
@@ -1079,7 +1089,7 @@ public final class Generator {
                 continue;
             }
             for (WhereToLook place : whereToLookFor(probe, read, cells, axes)) {
-                if (rows.size() >= budget.rows()) {
+                if (composed.size() >= budget.rows()) {
                     cutOff.add(probe);
                     break;
                 }
@@ -1126,14 +1136,10 @@ public final class Generator {
                         unconfirmed = true;
                     }
                 }
-                // What the row is offered for, said here and not read off what the search happened
-                // to be called with. A cell searched once answers every arm looked for in it, and
-                // the row it composed carries the purpose of whichever arm asked first — so a row
-                // named by that would be offered for one arm and handed to another.
-                List<Purpose> purposes = new ArrayList<>();
-                purposes.add(new Purpose.ForAnArm(probe));
-                also.forEach(each -> purposes.add(new Purpose.ForAnArm(each)));
-                int kept = keep(rows, new GeneratedRow(purposes, row.inputs()));
+                // The row already offering these values where there is one, so that a class's row
+                // an arm also goes through is one line and not two. What each of them is offered for
+                // is the entries naming it, so nothing is written on the row here.
+                RowId kept = keep(composed, row.inputs());
                 built.put(probe, kept);
                 left.remove(probe);
                 also.forEach(each -> {
@@ -1166,24 +1172,14 @@ public final class Generator {
         // cut off carries that beside whatever was tried before it: a place the model refuses says
         // nothing about the ones nobody got to, and an arm answered by the first alone was reported
         // as settled by the model on the strength of a search that stopped.
-        // Which row is which, once the merging is done. A row is a line in the file, so two sets of
-        // values written the same way are one row however many obligations they answer — and what
-        // each of them is for is said by the entries below pointing here.
-        List<RowId> numbered = new ArrayList<>();
-        Map<RowId, ComposedRow> composed = new LinkedHashMap<>();
-        for (GeneratedRow row : rows) {
-            RowId id = new RowId(numbered.size());
-            numbered.add(id);
-            composed.put(id, new ComposedRow(row.inputs()));
-        }
         Map<ArmOwed, ArmDisposition> armAnswers = new LinkedHashMap<>();
         for (int probe : armsOwed) {
-            Integer row = built.get(probe);
+            RowId row = built.get(probe);
             List<UnresolvedCombination> why = new ArrayList<>(
                     failed.getOrDefault(probe, List.of()));
             ArmOwed asked = new ArmOwed(probe);
             if (row != null) {
-                armAnswers.put(asked, new ArmDisposition.Built(numbered.get(row)));
+                armAnswers.put(asked, new ArmDisposition.Built(row));
             } else if (cutOff.contains(probe)) {
                 why.add(new UnresolvedCombination(List.of(),
                         UnresolvedCombination.Reason.SEARCH_LIMIT));
@@ -1238,8 +1234,7 @@ public final class Generator {
         for (ClassAttempt attempt : attempts) {
             ClassOwed key = new ClassOwed(attempt.at(), attempt.classId());
             classAnswers.put(key, switch (attempt) {
-                case ClassAttempt.Built _ -> new ClassDisposition.Built(
-                        numbered.get(answeredAt.get(key)));
+                case ClassAttempt.Built _ -> new ClassDisposition.Built(answeredAt.get(key));
                 case ClassAttempt.Unresolved none -> new ClassDisposition.Unresolved(none.why());
             });
         }
@@ -1414,10 +1409,10 @@ public final class Generator {
      * ways in agree. Written down twice, an author is handed the same line twice and told it
      * answers two different things.
      */
-    private static int keep(List<GeneratedRow> rows, GeneratedRow row) {
-        List<String> written = writtenAs(row);
-        for (int i = 0; i < rows.size(); i++) {
-            GeneratedRow already = rows.get(i);
+    private static RowId keep(SequencedMap<RowId, ComposedRow> composed,
+                              List<FixtureTemplate> inputs) {
+        List<String> written = inputs.stream().map(FixtureTemplate::text).toList();
+        for (Map.Entry<RowId, ComposedRow> already : composed.entrySet()) {
             // Whatever the row beside it was composed for, and not the arms alone. One set of
             // values is one line in the file: a class's row and an arm's row of the same values are
             // one row that fills the class and goes through the arm, and written down twice the
@@ -1426,16 +1421,26 @@ public final class Generator {
             // By what the rows are written as, which is what "the same line" means and is a string
             // to compare. A template also carries the expression it stands for, and holding two
             // rows to that walks two trees for an answer the text already gave.
-            if (!writtenAs(already).equals(written)) {
-                continue;
+            if (already.getValue().writtenAs().equals(written)) {
+                return already.getKey();
             }
-            List<Purpose> both = new ArrayList<>(already.purposes());
-            row.purposes().stream().filter(each -> !both.contains(each)).forEach(both::add);
-            rows.set(i, new GeneratedRow(both, already.inputs()));
-            return i;
         }
-        rows.add(row);
-        return rows.size() - 1;
+        return compose(composed, inputs);
+    }
+
+    /**
+     * A row of these values, numbered where it is composed.
+     *
+     * <p>The number is minted here and read nowhere as a place. What the identity is for is saying
+     * that two entries name one line, and an identity that meant "the nth row offered" would move
+     * with whatever the offer was ordered by — which is the arrangement a row's own account of what
+     * it was composed for came apart under.
+     */
+    private static RowId compose(SequencedMap<RowId, ComposedRow> composed,
+                                 List<FixtureTemplate> inputs) {
+        RowId id = new RowId(composed.size());
+        composed.put(id, new ComposedRow(inputs));
+        return id;
     }
 
     /** What a row is written as, which is what tells one line of a file from another. */

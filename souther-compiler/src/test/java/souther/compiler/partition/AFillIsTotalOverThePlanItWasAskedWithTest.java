@@ -49,7 +49,7 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
     @Test
     void aClassTheRunDidNotAnswerForIsRefused() {
         IllegalStateException refused = assertThrows(IllegalStateException.class,
-                () -> new FillResult(planOver(List.of(A_CLASS), List.of()), Map.of(), List.of(),
+                () -> new FillResult(planOver(List.of(A_CLASS), List.of()), new LinkedHashMap<>(), List.of(),
                         List.of(), Discharge.NOTHING));
 
         assertEquals(true, refused.getMessage().contains("days/low"), refused.getMessage());
@@ -58,14 +58,14 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
     @Test
     void anArmTheRunDidNotAnswerForIsRefused() {
         assertThrows(IllegalStateException.class,
-                () -> new FillResult(planOver(List.of(), List.of(AN_ARM)), Map.of(), List.of(),
+                () -> new FillResult(planOver(List.of(), List.of(AN_ARM)), new LinkedHashMap<>(), List.of(),
                         List.of(), Discharge.NOTHING));
     }
 
     @Test
     void aClassTheRunAnsweredForAndNobodyAskedAboutIsRefused() {
         assertThrows(IllegalStateException.class,
-                () -> new FillResult(planOver(List.of(A_CLASS), List.of()), Map.of(), List.of(),
+                () -> new FillResult(planOver(List.of(A_CLASS), List.of()), new LinkedHashMap<>(), List.of(),
                         List.of(), new Discharge(
                                 Map.of(A_CLASS, new ClassDisposition.Unresolved(NOTHING_CAME_OF_IT),
                                         ANOTHER_CLASS,
@@ -76,7 +76,7 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
     @Test
     void anArmTheRunAnsweredForAndNobodyAskedAboutIsRefused() {
         assertThrows(IllegalStateException.class,
-                () -> new FillResult(planOver(List.of(), List.of(AN_ARM)), Map.of(), List.of(),
+                () -> new FillResult(planOver(List.of(), List.of(AN_ARM)), new LinkedHashMap<>(), List.of(),
                         List.of(), new Discharge(Map.of(),
                                 Map.of(AN_ARM, new ArmDisposition.Unresolved(
                                                 List.of(NOTHING_CAME_OF_IT)),
@@ -87,7 +87,7 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
     @Test
     void anAnswerPointingAtARowTheOfferDoesNotHoldIsRefused() {
         assertThrows(IllegalStateException.class,
-                () -> new FillResult(planOver(List.of(A_CLASS), List.of()), Map.of(), List.of(),
+                () -> new FillResult(planOver(List.of(A_CLASS), List.of()), new LinkedHashMap<>(), List.of(),
                         List.of(), new Discharge(
                                 Map.of(A_CLASS, new ClassDisposition.Built(new RowId(0))),
                                 Map.of())));
@@ -95,7 +95,7 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
 
     @Test
     void aRowNothingPointsAtIsRefused() {
-        Map<RowId, ComposedRow> composed = new LinkedHashMap<>();
+        LinkedHashMap<RowId, ComposedRow> composed = new LinkedHashMap<>();
         composed.put(new RowId(0), new ComposedRow(List.of(FixtureTemplate.integer(1))));
 
         assertThrows(IllegalStateException.class,
@@ -110,7 +110,7 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
      *  like. */
     @Test
     void aRunThatAnsweredForEverythingItWasAskedIsBuilt() {
-        Map<RowId, ComposedRow> composed = new LinkedHashMap<>();
+        LinkedHashMap<RowId, ComposedRow> composed = new LinkedHashMap<>();
         composed.put(new RowId(0), new ComposedRow(List.of(FixtureTemplate.integer(1))));
 
         FillResult filled = new FillResult(planOver(List.of(A_CLASS), List.of(AN_ARM)), composed,

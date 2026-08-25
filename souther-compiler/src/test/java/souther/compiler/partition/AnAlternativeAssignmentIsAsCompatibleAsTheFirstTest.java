@@ -128,7 +128,7 @@ class AnAlternativeAssignmentIsAsCompatibleAsTheFirstTest {
 
         FillResult filled = Generator.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.refusing(AnAlternativeAssignmentIsAsCompatibleAsTheFirstTest::notTheFirst),
-                model.read(), Generator.Trial.NOTHING_RUNS, List.of(), Set.of(), every,
+                model.read(), Generator.Trial.NOTHING_RUNS, List.of(), List.of(), List.copyOf(every),
                 Budgets.generation());
 
         assertEquals(List.of(), filled.unresolved().stream()
