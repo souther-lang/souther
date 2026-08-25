@@ -48,6 +48,32 @@ class WhatACombinationAsksIsItsOwnToSayTest {
     }
 
     /**
+     * A walk that stops at the first reading is stopped, and one that is let run to the end is
+     * exhausted.
+     *
+     * <p>Which is the whole of what a caller reads to say whether it looked everywhere. The
+     * combination says how many readings there are by running out of them, and the caller says how
+     * many it will look at by refusing one — so the answer is about a reading that exists and was
+     * not looked at, rather than about a number a counter reached.
+     */
+    @Test
+    void aWalkSaysWhetherAnyReadingWasLeft() {
+        CellSelection selection = over(leaving(0, 1, 2, 3), leaving(0, 2), leaving(1));
+
+        assertEquals(Traversal.EXHAUSTED, selection.interpretations(_ -> true));
+        assertEquals(Traversal.STOPPED, selection.interpretations(_ -> false));
+    }
+
+    /** Every reading the combination has, for a test asking what they are rather than how many of
+     *  them something looked at. */
+    private static List<Interpretation> everythingAsked(CellSelection selection) {
+        List<Interpretation> out = new java.util.ArrayList<>();
+        assertEquals(Traversal.EXHAUSTED, selection.interpretations(reading -> out.add(reading)),
+                "nothing here refuses a reading, so the walk runs out");
+        return List.copyOf(out);
+    }
+
+    /**
      * A reading says where the positions the combination is about stand, and says nothing anywhere
      * else.
      */
@@ -57,7 +83,7 @@ class WhatACombinationAsksIsItsOwnToSayTest {
                 over(leaving(0, 1, 2, 3), leaving(0, 2), leaving(1));
 
         assertEquals(List.of(Map.of(1, 0, 2, 1), Map.of(1, 2, 2, 1)),
-                selection.interpretations(8).stream().map(Interpretation::pins).toList(),
+                everythingAsked(selection).stream().map(Interpretation::pins).toList(),
                 "the free position is no part of what the combination asks");
     }
 
@@ -73,9 +99,9 @@ class WhatACombinationAsksIsItsOwnToSayTest {
         CellSelection selection =
                 over(leaving(0, 1, 2, 3), leaving(0, 2), leaving(1));
 
-        assertEquals(2, selection.interpretations(3).size(),
+        assertEquals(2, everythingAsked(selection).size(),
                 "two things asked, whatever the free position may hold");
-        assertTrue(selection.interpretations(3).stream()
+        assertTrue(everythingAsked(selection).stream()
                         .allMatch(reading -> reading.at().equals(java.util.Set.of(1, 2))),
                 "and both of them are about the same two positions");
     }
@@ -88,7 +114,7 @@ class WhatACombinationAsksIsItsOwnToSayTest {
      */
     @Test
     void aPositionWithNothingLeftAtItIsNoCombination() {
-        assertEquals(List.of(), over(leaving(0, 1, 2, 3), leaving()).interpretations(3),
+        assertEquals(List.of(), everythingAsked(over(leaving(0, 1, 2, 3), leaving())),
                 "nothing stands at the second position, so there is nothing to look for");
     }
 }

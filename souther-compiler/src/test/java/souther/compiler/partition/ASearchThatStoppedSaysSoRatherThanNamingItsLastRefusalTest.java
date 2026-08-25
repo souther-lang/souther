@@ -19,6 +19,8 @@ import souther.compiler.query.Scopes;
 import souther.compiler.query.Shapes;
 
 import java.util.List;
+import souther.compiler.coverage.Observation;
+
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -28,59 +30,74 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * What a combination comes to when the search for a row at it ran out of room.
  *
  * <p>A combination is looked for at each of the things it can be asking, and each of those is walked
- * outward from where the reading leaves the positions it says nothing about. Both walks are bounded,
- * and a bound is a fact about the search: past it are candidates nothing tried, and one of them may
- * be the row that arrives.
+ * outward from where the reading leaves the positions it says nothing about. What a walk may cost is
+ * counted in runs, because reaching the arm is what a row has to do and only the behavior can say
+ * whether it did.
  *
- * <p>Read off the state the loop ended in, a search that ran out of candidates and one that ran out
- * of budget came out the same. Both ended with rows that had been run and had gone elsewhere, so
- * both said the candidates tried were not witnesses — which over a search that stopped is a claim
- * about the model made on the strength of a limit.
+ * <p>So a bound leaves the search incomplete only where it was reached in front of a run that
+ * nobody did. A candidate the model refuses never reached the behavior; a candidate whose values
+ * something was already watched at has its answer already. Counted per candidate instead, a
+ * combination whose remaining candidates were all values a run had been seen at came back saying
+ * the search had stopped — a claim about the model made on the strength of a limit.
  *
- * <p>The two combinations asked about here are of one model, searched in one run, against runs that
- * all missed alike. What differs between them is how many positions each is about, which is how many
- * the search was left to choose — and so whether the bound was reached. Nothing about the model
- * differs, so what the two answers differ by is the search stopping.
+ * <p>The combinations here are of one model, searched in one run, against runs that all missed
+ * alike. What differs between them is how many positions each is about, which is how many the
+ * search was left to choose, and so how many of its candidates are values nothing has run yet.
  */
 class ASearchThatStoppedSaysSoRatherThanNamingItsLastRefusalTest {
 
+    /** Two decisions and a position free of both, which is eight rows in all. */
+    private static final String ONE_FREE = shipping("rush: Bool");
+
+    /** The same with a second position free of both, which is more values than a reading may run
+     *  for. */
+    private static final String TWO_FREE = shipping("rush: Bool, gift: Bool");
+
+    private static String shipping(String free) {
+        return """
+                module example.shipping
+
+                data Membership = Premium | Standard
+
+                data Delivery = Express | Regular
+
+                data Fee = Int
+                    invariant value >= 0
+
+                behavior shippingFee : (member: Membership, delivery: Delivery, %1$s) -> Fee
+                    constructs Fee
+
+                let baseFee (tier: Membership): Int =
+                    match tier with
+                        | Premium -> 0
+                        | Standard -> 500
+
+                let expressFee (speed: Delivery): Int =
+                    match speed with
+                        | Express -> 500
+                        | Regular -> 0
+
+                let shippingFee (member, delivery, %2$s) =
+                    Fee(baseFee(member) + expressFee(delivery))
+                """.formatted(free, free.replaceAll(": Bool", ""));
+    }
+
     /**
-     * Two decisions and a position free of both.
+     * A combination the bound stopped in front of an unrun candidate says the search stopped.
      *
-     * <p>A combination over both decisions leaves the search one position to choose, and the two
-     * classes of it are inside the bound. A combination over one decision leaves it two, and the
-     * candidates over those run past the bound.
+     * <p>Two positions left to choose is four values, and a reading may be run for three. The fourth
+     * is a set of values nothing has been watched at: what the three that were run came to is those
+     * candidates' news, and offered as the combination's answer it stands for a space this search
+     * never entered.
      */
-    private static final String SHIPPING = """
-            module example.shipping
+    @Test
+    void aCombinationLeftWithAnUnrunCandidateSaysTheSearchStopped() {
+        Generator.GenerationResult filled = fill(Model.of(TWO_FREE, "shippingFee"), _ -> MISSED);
 
-            data Membership = Premium | Standard
-
-            data Delivery = Express | Regular
-
-            data Fee = Int
-                invariant value >= 0
-
-            behavior shippingFee : (member: Membership, delivery: Delivery, rush: Bool) -> Fee
-                constructs Fee
-
-            let baseFee (tier: Membership): Int =
-                match tier with
-                    | Premium -> 0
-                    | Standard -> 500
-
-            let expressFee (speed: Delivery): Int =
-                match speed with
-                    | Express -> 500
-                    | Regular -> 0
-
-            let shippingFee (member, delivery, rush) =
-                Fee(baseFee(member) + expressFee(delivery))
-            """;
-
-    /** A run that did nothing at all, which is a run that missed every combination. */
-    private static final Generator.Watched MISSED =
-            new Generator.Watched.Ran(Observation.NONE);
+        assertEquals(Generator.UnresolvedCombination.Reason.SEARCH_LIMIT,
+                reasonFor(filled, List.of("member=Premium", "delivery=Express")),
+                "a fourth set of values, and no run left to watch it at: " + filled.unresolved());
+    }
 
     /**
      * A combination whose candidates were all tried says the candidates were not witnesses.
@@ -90,31 +107,57 @@ class ASearchThatStoppedSaysSoRatherThanNamingItsLastRefusalTest {
      */
     @Test
     void aCombinationEveryCandidateMissedSaysTheCandidatesWereNotWitnesses() {
-        Generator.GenerationResult filled = fill(Model.of(SHIPPING, "shippingFee"), _ -> MISSED);
+        Generator.GenerationResult filled = fill(Model.of(ONE_FREE, "shippingFee"), _ -> MISSED);
 
         assertEquals(Generator.UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS,
                 reasonFor(filled, List.of("member=Premium", "delivery=Express")),
-                "one position left to choose, and both of its classes were run: "
+                "one position left to choose, and both of its values were run: "
                         + filled.unresolved());
     }
 
     /**
-     * The same run of misses at a combination the bound stopped short of says the search stopped.
+     * A run already watched at some values costs nothing, so a search that ends on them is complete.
      *
-     * <p>Two positions left to choose is more candidates than a reading is run for. What the ones it
-     * did try came to is those candidates' news: offered as the combination's answer it stands for a
-     * space this search never entered, and sends a reader to change a rule over a row it never
-     * tried.
+     * <p>{@code member=Premium} leaves two positions to choose, which is four sets of values — more
+     * than the three a reading may be run for. By the time this combination is looked in, every one
+     * of them is a set something has already been watched at, so the reading spends nothing and
+     * reaches the end of its candidates.
+     *
+     * <p>Counted per candidate, the fourth of them stopped the search and the combination answered
+     * that this run had given up. What it has is four candidates and an answer for each.
      */
     @Test
-    void aCombinationTheBoundStoppedShortOfSaysTheSearchStopped() {
-        Generator.GenerationResult filled = fill(Model.of(SHIPPING, "shippingFee"), _ -> MISSED);
+    void candidatesWhoseValuesAlreadyRanDoNotStopTheSearch() {
+        Generator.GenerationResult filled = fill(Model.of(ONE_FREE, "shippingFee"), _ -> MISSED);
 
-        assertEquals(Generator.UnresolvedCombination.Reason.SEARCH_LIMIT,
+        assertEquals(Generator.UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS,
                 reasonFor(filled, List.of("member=Premium")),
-                "two positions left to choose, and the bound was reached before they ran out: "
+                "more candidates than a reading may run for, and every one of them already run: "
                         + filled.unresolved());
     }
+
+    /**
+     * One run per set of values, however many combinations were looked for at them.
+     *
+     * <p>Eight is every row this behavior has: two memberships, two deliveries, and the position
+     * free of both. Every combination of the body is looked in and none of them is a witness, so the
+     * search reaches all eight — and reaches each of them once.
+     */
+    @Test
+    void aSetOfValuesIsRunOnceHoweverManyCombinationsWantIt() {
+        int[] runs = {0};
+
+        fill(Model.of(ONE_FREE, "shippingFee"), _ -> {
+            runs[0]++;
+            return MISSED;
+        });
+
+        assertEquals(8, runs[0], "one run per set of values this behavior has");
+    }
+
+    /** A run that did nothing at all, which is a run that missed every combination. */
+    private static final Generator.Watched MISSED =
+            new Generator.Watched.Ran(Observation.NONE);
 
     /** What the search made of the one combination named by {@code classes}. */
     private static Generator.UnresolvedCombination.Reason reasonFor(

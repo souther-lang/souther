@@ -1456,45 +1456,35 @@ public final class Generator {
         Axis axis = axes.get(at);
         String classId = axis.classes().get(cls).id();
         String label = label(axis, cls);
-        Attempt last = null;
-        // Every baseline the module states rather than the one this compiler picked. Narrowed to
-        // the only value of a type, a module that states a second one lost the spread from every
-        // row of every behavior taking it — a change somewhere else in the file, answering a
-        // question nobody asked it. What order they are walked in is
-        // {@link #nearestFirst}'s to say.
         // A class is a demand over one position: it asks for that class there and says nothing
         // about anywhere else, which is what every other position being free means. Written as a
         // reading, it goes through the same walk a combination's readings do.
-        Perturbations walk = nearestFirst(axes, new Interpretation(Map.of(at, cls)), origins,
-                (_, _) -> true);
-        for (Candidate candidate : walk.candidates()) {
-            Map<String, FixtureTemplate> given = candidate.from().composes() ? Map.of()
-                    : against(subject, axes, candidate.delta(), candidate.where(),
-                            candidate.from().baseline());
-            if (!candidate.from().composes() && given.isEmpty()) {
-                continue;   // nothing here can be written against the model's value
-            }
-            Attempt made = build(subject, axes, candidate.where(), check, given);
-            if (made.row() == null) {
-                last = made;
-                continue;
-            }
-            if (!inTheClass(subject, axes, at, classId, made.row().inputs(), check)) {
-                last = new Attempt(null, UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS, label,
-                        Optional.empty());
-                continue;
-            }
-            return new ClassAttempt.Built(axis.id(), classId, new GeneratedRow(
-                    new Purpose.ForAClass(axis.id(), classId, label), made.row().inputs()));
+        Interpretation reading = new Interpretation(Map.of(at, cls));
+        // Every baseline the module states rather than the one this compiler picked. Narrowed to
+        // the only value of a type, a module that states a second one lost the spread from every
+        // row of every behavior taking it — a change somewhere else in the file, answering a
+        // question nobody asked it. What order they are walked in is {@link #nearestFirst}'s to
+        // say; how many of them may be built is this class's own budget.
+        Building building = new Building(subject, axes, at, classId, label, check, MOST_REPAIRS);
+        Traversal stated = nearestFirst(axes, reading, origins, (_, _) -> true, building);
+        if (building.found != null) {
+            return new ClassAttempt.Built(axis.id(), classId, building.found);
         }
-        // What the walk came to, added up the way a combination's readings are. A class has the
-        // one reading — its own class at its own position — so what is left to say is whether the
-        // walk over the origins reached the end of itself.
-        Completeness looked = walk.isEmpty()
+        // The composition, whatever the stated values spent, and with a budget of its own.
+        Building composing = new Building(subject, axes, at, classId, label, check, MOST_REPAIRS);
+        Traversal composed = composing(axes, reading, origins, (_, _) -> true, composing);
+        if (composing.found != null) {
+            return new ClassAttempt.Built(axis.id(), classId, composing.found);
+        }
+        // What the walks came to, added up the way a combination's readings are. A class has the
+        // one reading — its own class at its own position — so what is left to say is whether
+        // either walk was stopped in front of work nobody did.
+        Completeness looked = building.builds == 0 && composing.builds == 0
                 ? Completeness.NOTHING_YET : Completeness.NOTHING_YET.searched();
-        if (walk.cutShort()) {
+        if (stated == Traversal.STOPPED || composed == Traversal.STOPPED) {
             looked = looked.cutShort();
         }
+        Attempt last = composing.last == null ? building.last : composing.last;
         UnresolvedCombination why = switch (looked.found()) {
             // Nothing to try: the class cannot stand at its own position beside what the position
             // itself requires, under any origin. Which is the model not having this row rather than
@@ -1502,9 +1492,9 @@ public final class Generator {
             case Completeness.Nothing.NO_READING -> new UnresolvedCombination(List.of(label),
                     UnresolvedCombination.Reason.ONE_POSITION_CANNOT_BE_BOTH, null,
                     Optional.of("nothing this class can stand beside was left to try"));
-            // The search stopped. Said so whatever the last assignment it got to came to: the
-            // refusal of the sixty-fourth candidate is a fact about that candidate, and offered as
-            // the class's answer it stands for a space the search never entered.
+            // The search stopped in front of a candidate it did not build. Said so whatever the ones
+            // it did build came to: the refusal of the sixty-fourth is a fact about that candidate,
+            // and offered as the class's answer it stands for a space the search never entered.
             case Completeness.Nothing.SEARCH_STOPPED -> new UnresolvedCombination(List.of(label),
                     UnresolvedCombination.Reason.SEARCH_LIMIT);
             case Completeness.Nothing.LOOKED_EVERYWHERE -> last == null
@@ -1514,6 +1504,82 @@ public final class Generator {
                             last.said());
         };
         return new ClassAttempt.Unresolved(axis.id(), classId, why);
+    }
+
+    /**
+     * Building the candidates offered for one class, up to what this class may spend.
+     *
+     * <p>What it costs to try a candidate here is one build, so that is what is counted. A candidate
+     * no baseline can be written for costs nothing and is not counted: it is a way of writing a row
+     * that this origin does not have, and the budget is over the rows built rather than over the
+     * walk.
+     *
+     * <p>The bound is refused in front of the candidate rather than taken after it. A consumer that
+     * did exactly as many as it was allowed and then reported having stopped said a candidate was
+     * left where none was ({@link Traversal}).
+     */
+    private static final class Building implements Taking<Candidate> {
+
+        private final Subject subject;
+
+        private final List<Axis> axes;
+
+        private final int at;
+
+        private final String classId;
+
+        private final String label;
+
+        private final CandidateCheck check;
+
+        private final int most;
+
+        /** What the last candidate that composed nothing came to. */
+        private Attempt last;
+
+        /** How many were built, which is what this is allowed so many of. */
+        private int builds;
+
+        /** The row, once one lands in the class. */
+        private GeneratedRow found;
+
+        private Building(Subject subject, List<Axis> axes, int at, String classId, String label,
+                         CandidateCheck check, int most) {
+            this.subject = subject;
+            this.axes = axes;
+            this.at = at;
+            this.classId = classId;
+            this.label = label;
+            this.check = check;
+            this.most = most;
+        }
+
+        @Override
+        public boolean take(Candidate candidate) {
+            Map<String, FixtureTemplate> given = candidate.from().composes() ? Map.of()
+                    : against(subject, axes, candidate.delta(), candidate.where(),
+                            candidate.from().baseline());
+            if (!candidate.from().composes() && given.isEmpty()) {
+                return true;   // nothing here can be written against the model's value
+            }
+            if (builds >= most) {
+                return false;   // this candidate is the work nobody did
+            }
+            builds++;
+            Attempt made = build(subject, axes, candidate.where(), check, given);
+            if (made.row() == null) {
+                last = made;
+                return true;
+            }
+            if (!inTheClass(subject, axes, at, classId, made.row().inputs(), check)) {
+                last = new Attempt(null, UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS, label,
+                        Optional.empty());
+                return true;
+            }
+            found = new GeneratedRow(new Purpose.ForAClass(axes.get(at).id(), classId, label),
+                    made.row().inputs());
+            return false;
+        }
     }
 
     /**
@@ -1576,51 +1642,13 @@ public final class Generator {
     private record Candidate(ResolvedOrigin from, int[] where, Delta delta) {}
 
     /**
-     * The assignments one reading of a demand was given to try, and whether they are all of them.
+     * The assignments written against a value the module states, nearest first, one at a time.
      *
-     * <p><b>The budget is a fact about the search and travels with what the search returned.</b> A
-     * list alone cannot say whether it ran out or was cut off, and a caller reading the end of it
-     * as the end of the space answered a class with the last refusal it saw — "every value tried
-     * was refused" over a search that stopped at the sixty-fourth of them, with a value that builds
-     * one place further on. The same fault as an absent ledger entry: one silence standing for two
-     * pieces of news, and the stronger one read off it.
-     *
-     * <p><b>The composition apart from the rest, and not at the end of them.</b> It is not one of
-     * the values the model states — where it stands is where the classes put it, which the search
-     * itself named — so it is not ordered among them and does not share what they may spend. Handed
-     * back as the tail of one list, a caller that walks the list until its own budget runs out
-     * never reaches it, which is the fault the class walk already had and the arm walk would have
-     * had the day it began counting runs.
-     *
-     * @param stated   the assignments written against a value the module states, nearest first
-     * @param composed the assignments composed from the classes, for a caller none of the stated
-     *                 ones answered
-     * @param cutShort whether a bound stopped this before the assignments ran out
-     */
-    private record Perturbations(List<Candidate> stated, List<Candidate> composed,
-                                 boolean cutShort) {
-
-        /** Both, in the order a caller with one budget over the whole search walks them. */
-        List<Candidate> candidates() {
-            List<Candidate> out = new ArrayList<>(stated);
-            out.addAll(composed);
-            return out;
-        }
-
-        /** Whether there is anything to try, asked without building the pair of them into one
-         *  list. */
-        boolean isEmpty() {
-            return stated.isEmpty() && composed.isEmpty();
-        }
-    }
-
-    /**
-     * The assignments to try for one reading of a demand, nearest what the model already says first.
-     *
-     * <p>Built whole and then walked, rather than walked as four nested loops. The budget is the
-     * length of these lists, so it is a bound on the search rather than a test inside one — nested,
-     * the check that stopped the innermost walk left the three around it turning, and the number
-     * bounded nothing.
+     * <p>Handed over rather than handed back. What a walk may cost is a fact about whoever is paying
+     * — a class counts what it builds, an arm counts what it runs, and a candidate the model refuses
+     * costs neither of them anything — so the bound belongs to the consumer and the order belongs
+     * here. Bounded here instead, one number stood for two kinds of work, and the arm was held to
+     * the class's.
      *
      * <p><b>How much of what the demand is about the origin states, before anything else.</b> A row
      * for a class of {@code to} written against a value of {@code from} has {@code to} composed from
@@ -1645,19 +1673,12 @@ public final class Generator {
      * provenance decided only which origin won a given set of supporting positions, and a later
      * origin that happened to repair on an earlier set beat an earlier origin that repaired on a
      * later one.
-     *
-     * <p><b>And the classes apart, whatever their distance.</b> A composed row is not a nearer
-     * baseline: its distance is measured from values the search itself named, so it is zero by
-     * construction and says nothing about how far the row is from what a reader recognises. Put in
-     * the same order, a row composed from the classes won against every baseline that needed one
-     * supporting field — which is the objective read backwards.
      */
-    private static Perturbations nearestFirst(List<Axis> axes, Interpretation reading,
-                                              List<ResolvedOrigin> origins, Admits admits) {
+    private static Traversal nearestFirst(List<Axis> axes, Interpretation reading,
+                                          List<ResolvedOrigin> origins, Admits admits,
+                                          Taking<Candidate> taking) {
         int[] about = about(reading);
         Set<String> asked = reading.heads(axes);
-        List<Candidate> stated = new ArrayList<>();
-        boolean cutShort = false;
         // The origins that state most of what the demand is about, whole and at every distance,
         // before any that state less of it.
         for (int grounds = asked.size(); grounds >= 0; grounds--) {
@@ -1667,39 +1688,57 @@ public final class Generator {
                     here.add(origin);
                 }
             }
-            if (!here.isEmpty()) {
-                cutShort |= gather(axes, reading, about, here, admits, stated, MOST_REPAIRS);
+            if (!here.isEmpty()
+                    && gather(axes, reading, about, here, admits, taking) == Traversal.STOPPED) {
+                return Traversal.STOPPED;
             }
         }
-        List<Candidate> composed = new ArrayList<>();
-        for (ResolvedOrigin origin : origins) {
-            if (origin.composes()) {
-                cutShort |= gather(axes, reading, about, List.of(origin), admits, composed,
-                        MOST_REPAIRS);
-            }
-        }
-        return new Perturbations(List.copyOf(stated), List.copyOf(composed), cutShort);
+        return Traversal.EXHAUSTED;
     }
 
     /**
-     * Every assignment these origins offer for one reading, nearest first, onto the end of
-     * {@code out}.
+     * The assignments composed from the classes, for a consumer none of the stated ones answered.
      *
-     * <p>Walked by the size of the supporting set and handed out by the distance the assignment
+     * <p><b>Its own walk and not the tail of the other one.</b> A composed row is not a nearer
+     * baseline: its distance is measured from values the search itself named, so it is zero by
+     * construction and says nothing about how far the row is from what a reader recognises. Put in
+     * the same order, a row composed from the classes won against every baseline that needed one
+     * supporting field — which is the objective read backwards.
+     *
+     * <p>And walked whatever the stated values spent. It is not one of them and was not competing
+     * with them for what they may cost, so a consumer that walked one list until its own bound ran
+     * out never reached it — which is what left a class the model can hold a row for saying the
+     * search had stopped.
+     */
+    private static Traversal composing(List<Axis> axes, Interpretation reading,
+                                       List<ResolvedOrigin> origins, Admits admits,
+                                       Taking<Candidate> taking) {
+        int[] about = about(reading);
+        for (ResolvedOrigin origin : origins) {
+            if (origin.composes()
+                    && gather(axes, reading, about, List.of(origin), admits, taking)
+                            == Traversal.STOPPED) {
+                return Traversal.STOPPED;
+            }
+        }
+        return Traversal.EXHAUSTED;
+    }
+
+    /**
+     * Every assignment these origins offer for one reading, nearest first, handed to
+     * {@code taking}.
+     *
+     * <p>Walked by the size of the supporting set and handed over by the distance the assignment
      * came to, which are two numbers and not one. A set of {@code k} positions moves {@code k} of
      * them; the reading may move more, where a class it asks for cannot stand beside where the
      * origin's own value does. So an assignment is never nearer than the set that produced it, and
      * everything at one distance has been produced by the time the walk finishes the sets of that
-     * size — which is what lets this hand them out in distance order without holding the whole
+     * size — which is what lets this hand them over in distance order without holding the whole
      * space to sort it.
-     *
-     * @param cut how large {@code out} may grow before this stops, which is a bound on the search
-     *            and not on the space
-     * @return whether the bound stopped this before the assignments ran out
      */
-    private static boolean gather(List<Axis> axes, Interpretation reading, int[] about,
-                                  List<ResolvedOrigin> origins, Admits admits,
-                                  List<Candidate> out, int cut) {
+    private static Traversal gather(List<Axis> axes, Interpretation reading, int[] about,
+                                    List<ResolvedOrigin> origins, Admits admits,
+                                    Taking<Candidate> taking) {
         // What the demand asks for settled first, and each origin's own classes kept at every
         // position that can keep them beside it. Worked out once per origin: it is where that
         // origin's walk starts from and does not change with how far the walk has gone.
@@ -1711,10 +1750,10 @@ public final class Generator {
             }
         }
         // Produced further away than the set that produced them, kept until the walk reaches that
-        // distance rather than handed out early.
+        // distance rather than handed over early.
         Map<Integer, List<Candidate>> waiting = new LinkedHashMap<>();
         // A set names positions the row is not about, so the largest one is every position but
-        // those. Walked further, the sets are empty and the only thing left to do is hand out what
+        // those. Walked further, the sets are empty and the only thing left to do is hand over what
         // the readings moved beyond them, which is what happens below either way.
         for (int moved = 0; moved <= axes.size() - about.length; moved++) {
             for (Started origin : bases) {
@@ -1731,15 +1770,15 @@ public final class Generator {
             // this one alone: what is due is a fact about the distances, and a walk that read it off
             // the size of the set it had just finished would leave a nearer assignment sitting in
             // the map for as long as the set that produced it was larger than it.
-            if (handOut(waiting, moved, out, cut)) {
-                return true;
+            if (handOut(waiting, moved, taking) == Traversal.STOPPED) {
+                return Traversal.STOPPED;
             }
         }
         // What the readings moved beyond the largest set walked. Nothing generates at these
-        // distances any more, so they are handed out rather than dropped — and handed out the same
+        // distances any more, so they are handed over rather than dropped — and handed over the same
         // way, because which of two candidates one distance apart comes first is one rule and not
         // one per place a candidate leaves this walk.
-        return handOut(waiting, Integer.MAX_VALUE, out, cut);
+        return handOut(waiting, Integer.MAX_VALUE, taking);
     }
 
     /**
@@ -1753,35 +1792,33 @@ public final class Generator {
     private record Started(ResolvedOrigin from, int[] base) {}
 
     /**
-     * Every candidate of {@code waiting} no further than {@code upTo}, nearest first, onto the end
-     * of {@code out}.
+     * Every candidate of {@code waiting} no further than {@code upTo}, nearest first, handed to
+     * {@code taking}.
      *
      * <p>Within one distance the origins keep the order they were gathered in. Sorted rather than
      * generated that way, because an assignment reaches one distance from more than one size of
      * supporting set.
-     *
-     * @return whether {@code cut} stopped this with candidates still waiting
      */
-    private static boolean handOut(Map<Integer, List<Candidate>> waiting, int upTo,
-                                   List<Candidate> out, int cut) {
+    private static Traversal handOut(Map<Integer, List<Candidate>> waiting, int upTo,
+                                     Taking<Candidate> taking) {
         for (int distance : new java.util.TreeSet<>(waiting.keySet())) {
             if (distance > upTo) {
-                return false;
+                return Traversal.EXHAUSTED;
             }
             for (Candidate candidate : sortedByOrigin(waiting.remove(distance))) {
-                if (out.size() >= cut) {
-                    return true;
+                if (!taking.take(candidate)) {
+                    return Traversal.STOPPED;
                 }
-                out.add(candidate);
             }
         }
-        return false;
+        return Traversal.EXHAUSTED;
     }
 
     private static List<Candidate> sortedByOrigin(List<Candidate> due) {
         due.sort(java.util.Comparator.comparingInt(candidate -> candidate.from().index()));
         return due;
     }
+
 
     /**
      * Which positions beside the ones a row is about it may move, {@code moved} at a time.
@@ -2472,47 +2509,27 @@ public final class Generator {
                                       CellSelection selection, CandidateCheck check, Trial trial,
                                       Map<List<String>, Watched> applied, List<Integer> takes,
                                       List<ResolvedOrigin> origins) {
-        InteractionCells.Cell cell = selection.cell();
-        // What the combination can be asking, worked out by the combination. A reading is a class
-        // apiece at the positions it is about; where a row stands anywhere else is this search's own
-        // choice, and counted as a reading it spent the bound on rows that ask the same thing.
-        List<Interpretation> readings = selection.interpretations(MOST_INTERPRETATIONS);
-        Looking looking = new Looking(subject, axes, selection, check, trial, applied, takes);
-        for (Interpretation reading : readings) {
-            Perturbations walk = nearestFirst(axes, reading, origins, cell::admits);
-            if (walk.isEmpty()) {
-                continue;   // this reading is not one value, and another of them may be
-            }
-            // The values the model states first, nearest first, and what they may spend counted in
-            // runs. Then the composition, whatever they spent: it is not one of them and was not
-            // competing with them for their share, and a caller told the stated values were all
-            // refused would go looking for a value the model cannot hold.
-            Witness found = looking.run(walk.stated(), MOST_RUNS_PER_INTERPRETATION);
-            if (found != null) {
-                return found;
-            }
-            found = looking.run(walk.composed(), MOST_RUNS_PER_INTERPRETATION);
-            if (found != null) {
-                return found;
-            }
-            // Stopped where a bound was reached, whether or not a candidate was left. Which of the
-            // two it was cannot be known without composing the next one, and of the two ways to be
-            // wrong only one of them is a claim about the model: said to have looked everywhere, a
-            // search that had not sends a person to change a rule over a row it never tried.
-            looking.reading(walk.cutShort());
-        }
-        return looking.nothing(readings.isEmpty());
+        Reading reading =
+                new Reading(subject, axes, selection, check, trial, applied, takes, origins);
+        Traversal walked = selection.interpretations(reading);
+        return reading.found != null ? reading.found : reading.nothing(walked);
     }
 
     /**
-     * Looking for a row at one combination, across the readings of it.
+     * Looking for a row at one combination, over the readings of what it asks.
      *
-     * <p>Its own value because what the walk leaves behind is read after it: which candidate was
-     * last, whether any row ran and went elsewhere, and whether the search was complete. Kept as
-     * locals across two loops and a helper, the last of those was read off whichever of them the
-     * control flow happened to leave set.
+     * <p>What the combination can be asking is the combination's to enumerate and how many of them
+     * this may look at is this search's to bound, which are two things and were one. Counted off by
+     * the enumeration, the bound was spent on combinations of names before anything asked whether a
+     * value could hold them — so a combination whose first few names cannot be in one value went
+     * unanswered with its readings untried.
+     *
+     * <p>So a reading no value can hold costs nothing here: it is not a reading. What is counted is
+     * the readings this actually searched, and the bound is refused in front of the one after them
+     * — which is a reading that exists and that nobody looked at, and the only thing that makes this
+     * search incomplete.
      */
-    private static final class Looking {
+    private static final class Reading implements Taking<Interpretation> {
 
         private final Subject subject;
 
@@ -2528,6 +2545,15 @@ public final class Generator {
 
         private final List<Integer> takes;
 
+        private final List<ResolvedOrigin> origins;
+
+        /** Whether the combination offered anything at all, which tells a combination the model
+         *  does not have from one whose readings are none of them one value. */
+        private boolean offered;
+
+        /** How many readings were searched, which is what this is allowed so many of. */
+        private int searched;
+
         /** What the last candidate that composed nothing came to, for a search that tried them
          *  all. */
         private Attempt last;
@@ -2538,16 +2564,15 @@ public final class Generator {
         /** Whether a row was composed, run, and seen going somewhere else. */
         private boolean missed;
 
-        /** Whether a bound stopped one of the runs of candidates this reading has had. Held
-         *  across them and cleared when the reading answers, because a reading is stopped if any of
-         *  its runs was — read after the next run instead, the first one's stopping was gone. */
-        private boolean stopped;
-
         private Completeness looked = Completeness.NOTHING_YET;
 
-        private Looking(Subject subject, List<Axis> axes, CellSelection selection,
+        /** The row, once one is seen filling the combination or offered because nothing watched
+         *  it. */
+        private Witness found;
+
+        private Reading(Subject subject, List<Axis> axes, CellSelection selection,
                         CandidateCheck check, Trial trial, Map<List<String>, Watched> applied,
-                        List<Integer> takes) {
+                        List<Integer> takes, List<ResolvedOrigin> origins) {
             this.subject = subject;
             this.axes = axes;
             this.selection = selection;
@@ -2555,102 +2580,63 @@ public final class Generator {
             this.trial = trial;
             this.applied = applied;
             this.takes = takes;
+            this.origins = origins;
         }
 
-        /**
-         * The first of {@code candidates} seen filling the combination, or null where none of the
-         * ones this was allowed to run was.
-         *
-         * @param runs how many of them may be put through the behavior. Counted in runs and not in
-         *             candidates: a candidate the model refuses never reached the behavior, and
-         *             counting it would let a model whose rules refuse a few compositions spend a
-         *             reading's whole share without asking the behavior anything
-         */
-        private Witness run(List<Candidate> candidates, int runs) {
-            int spent = 0;
-            for (Candidate candidate : candidates) {
-                Map<String, FixtureTemplate> given = candidate.from().composes() ? Map.of()
-                        : against(subject, axes, candidate.delta(), candidate.where(),
-                                candidate.from().baseline());
-                if (!candidate.from().composes() && given.isEmpty()) {
-                    continue;   // nothing here can be written against the model's value
-                }
-                where = candidate.where();
-                last = build(subject, axes, candidate.where(), check, given);
-                if (last.row() == null) {
-                    continue;   // nothing composed here; another assignment may compose
-                }
-                // Composed for the arms it was looked for, and not for the combination it was found
-                // at. The combination is where the search went; the arms are what somebody is owed
-                // a row at. One row answering two of them is two answers and not one composite
-                // thing.
-                GeneratedRow named = new GeneratedRow(
-                        takes.stream().map(Purpose.ForAnArm::new).map(Purpose.class::cast).toList(),
-                        last.row().inputs());
-                // Run once per set of values, however many places a row of them was looked for.
-                // What a run of one row did is one fact: two arms searched on their own can come to
-                // the same values, and running them again would be the same row applied twice and
-                // counted twice.
-                //
-                // Keyed by what the row is written as. A template is the text and the expression it
-                // stands for, and the second is a tree whose equality is its own — so a pair of
-                // them makes no key, while the text is the whole of what a row applied twice would
-                // be.
-                Watched watched = applied.computeIfAbsent(
-                        named.inputs().stream().map(FixtureTemplate::text).toList(),
-                        _ -> trial.run(named.inputs()));
-                switch (watched) {
-                    // Nothing can say where it went, so nothing certifies it and nothing refutes
-                    // it. Offered as it was before anything ran, and said to be. Both of the ways
-                    // that happens come here: nothing applied the row, or nothing was recording
-                    // while it was applied.
-                    case Watched.NoAccount _ -> {
-                        return new Witness.Unconfirmed(named, candidate.where());
-                    }
-                    case Watched.Ran ran -> {
-                        // Through the one thing that can say a row filled a combination, which is
-                        // the same thing a row already in the file is put through.
-                        Optional<CellSelection.CertifiedWitness> found =
-                                selection.certifying(candidate.where(), ran.seen());
-                        if (found.isPresent()) {
-                            return new Witness.Certified(named, found.get());
-                        }
-                        missed = true;
-                    }
-                }
-                if (++spent >= runs) {
-                    stopped = true;
-                    return null;
-                }
+        @Override
+        public boolean take(Interpretation reading) {
+            offered = true;
+            int[] about = about(reading);
+            // Whether one value can hold what this reading asks, which is the model's answer and not
+            // the combination's. Asked of the classes it pins alone: what they require is required
+            // whichever value the row is written against, so this does not change with the origin.
+            if (standing(axes, wanting(axes, null, reading), about, selection.cell()::admits)
+                    == null) {
+                return true;   // not a reading, and so no part of what this search is allowed
             }
-            return null;
-        }
-
-        /**
-         * One more reading answered, and whether anything about it was left untried.
-         *
-         * @param cutShort whether the walk had more assignments than it handed over, which is a
-         *                 second way to have stopped beside the runs this counted itself
-         */
-        private void reading(boolean cutShort) {
-            looked = cutShort || stopped ? looked.cutShort() : looked.searched();
-            stopped = false;
+            if (searched >= MOST_INTERPRETATIONS) {
+                return false;   // a reading of this combination that nobody looked at
+            }
+            searched++;
+            // The values the model states first, nearest first, and what they may spend counted in
+            // runs. Then the composition, whatever they spent: it is not one of them and was not
+            // competing with them for their share, and a caller told the stated values were all
+            // refused would go looking for a value the model cannot hold.
+            Running stated = new Running(MOST_RUNS_PER_INTERPRETATION);
+            Traversal walked = nearestFirst(axes, reading, origins, selection.cell()::admits,
+                    stated);
+            if (found != null) {
+                return false;
+            }
+            Running composed = new Running(MOST_RUNS_PER_INTERPRETATION);
+            Traversal composing = composing(axes, reading, origins, selection.cell()::admits,
+                    composed);
+            if (found != null) {
+                return false;
+            }
+            looked = walked == Traversal.STOPPED || composing == Traversal.STOPPED
+                    ? looked.cutShort() : looked.searched();
+            return true;
         }
 
         /** What to say when no reading answered. */
-        private Witness nothing(boolean noReadings) {
+        private Witness nothing(Traversal walked) {
+            if (walked == Traversal.STOPPED) {
+                looked = looked.cutShort();
+            }
             List<String> named =
                     where == null ? List.of() : labels(axes, selection.cell(), where);
             return switch (looked.found()) {
-                // No reading to look at. Either the combination leaves a position nothing, or none
-                // of its readings is one value — and both are the model not having this combination
-                // rather than a search that failed at it.
-                case Completeness.Nothing.NO_READING -> new Witness.NoCombination(
-                        noReadings ? "a position this combination names has nothing left at it"
-                                : "the positions this combination names are not in one value");
-                // A bound stopped one of the readings. Said whatever the candidates it did try came
-                // to: the refusal of the third of them is a fact about that candidate, and offered
-                // as the combination's answer it stands for a space this never entered.
+                // No reading to look at. Either the combination offered nothing, or none of what it
+                // offered is one value — and both are the model not having this combination rather
+                // than a search that failed at it.
+                case Completeness.Nothing.NO_READING -> new Witness.NoCombination(offered
+                        ? "the positions this combination names are not in one value"
+                        : "a position this combination names has nothing left at it");
+                // Something was left undone: a reading nobody looked at, or a candidate nobody ran.
+                // Said as that whatever the ones that were tried came to — the miss of the third of
+                // them is a fact about that candidate, and offered as the combination's answer it
+                // stands for a space this never entered.
                 case Completeness.Nothing.SEARCH_STOPPED -> new Witness.Limited(named);
                 case Completeness.Nothing.LOOKED_EVERYWHERE -> {
                     if (missed) {
@@ -2671,6 +2657,95 @@ public final class Generator {
                             UnresolvedCombination.Reason.NO_REASON_RECORDED, null, Optional.empty());
                 }
             };
+        }
+
+        /**
+         * Running the candidates offered for one reading, up to what that reading may cost.
+         *
+         * <p>Counted in runs, because a run is what this is protecting. Reaching the arm is what a
+         * row for a combination has to do and only the behavior can say whether it did — so a
+         * candidate the model refuses costs nothing, and neither does one whose values a run was
+         * already watched at. Counted per candidate instead, a model whose rules refuse a few
+         * compositions spent a reading's whole share without asking the behavior anything, and a
+         * reading whose remaining candidates were all values something had already run came back
+         * saying the search had stopped.
+         *
+         * <p>So the bound is refused in front of a candidate that needs a run there is none left
+         * for. That candidate is the run nobody did, and it is the only thing here that leaves this
+         * reading incomplete.
+         */
+        private final class Running implements Taking<Candidate> {
+
+            private final int most;
+
+            private int runs;
+
+            private Running(int most) {
+                this.most = most;
+            }
+
+            @Override
+            public boolean take(Candidate candidate) {
+                Map<String, FixtureTemplate> given = candidate.from().composes() ? Map.of()
+                        : against(subject, axes, candidate.delta(), candidate.where(),
+                                candidate.from().baseline());
+                if (!candidate.from().composes() && given.isEmpty()) {
+                    return true;   // nothing here can be written against the model's value
+                }
+                where = candidate.where();
+                last = build(subject, axes, candidate.where(), check, given);
+                if (last.row() == null) {
+                    return true;   // nothing composed here; another assignment may compose
+                }
+                // Composed for the arms it was looked for, and not for the combination it was found
+                // at. The combination is where the search went; the arms are what somebody is owed
+                // a row at. One row answering two of them is two answers and not one composite
+                // thing.
+                GeneratedRow named = new GeneratedRow(
+                        takes.stream().map(Purpose.ForAnArm::new).map(Purpose.class::cast).toList(),
+                        last.row().inputs());
+                // Run once per set of values, however many places a row of them was looked for.
+                // What a run of one row did is one fact: two arms searched on their own can come to
+                // the same values, and running them again would be the same row applied twice and
+                // counted twice.
+                //
+                // Keyed by what the row is written as. A template is the text and the expression it
+                // stands for, and the second is a tree whose equality is its own — so a pair of
+                // them makes no key, while the text is the whole of what a row applied twice would
+                // be.
+                List<String> written = named.inputs().stream().map(FixtureTemplate::text).toList();
+                Watched watched = applied.get(written);
+                if (watched == null) {
+                    if (runs >= most) {
+                        return false;   // this candidate is the run nobody did
+                    }
+                    runs++;
+                    watched = trial.run(named.inputs());
+                    applied.put(written, watched);
+                }
+                switch (watched) {
+                    // Nothing can say where it went, so nothing certifies it and nothing refutes
+                    // it. Offered as it was before anything ran, and said to be. Both of the ways
+                    // that happens come here: nothing applied the row, or nothing was recording
+                    // while it was applied.
+                    case Watched.NoAccount _ -> {
+                        found = new Witness.Unconfirmed(named, candidate.where());
+                        return false;
+                    }
+                    case Watched.Ran ran -> {
+                        // Through the one thing that can say a row filled a combination, which is
+                        // the same thing a row already in the file is put through.
+                        Optional<CellSelection.CertifiedWitness> seen =
+                                selection.certifying(candidate.where(), ran.seen());
+                        if (seen.isPresent()) {
+                            found = new Witness.Certified(named, seen.get());
+                            return false;
+                        }
+                        missed = true;
+                    }
+                }
+                return true;
+            }
         }
     }
 

@@ -57,21 +57,27 @@ public record CellSelection(InteractionCells.Cell cell, List<ControlClaim> claim
     }
 
     /**
-     * The readings of this combination a search may look for a row at, at most {@code most} of them.
+     * The readings of this combination a search may look for a row at, one at a time.
      *
      * <p>What this asks of a row and nothing else: a class apiece at the positions it is about, and
-     * nothing said about the rest. Which positions those are, and how many readings the combination
-     * has, is answered here — a caller that worked it out from the classes each position admits
-     * would be reading this value's own shape, and would have to be rewritten the day a combination
-     * can say something about two positions together that it says about neither alone.
+     * nothing said about the rest. Which positions those are, and what the readings of the
+     * combination are, is answered here — a caller that worked it out from the classes each position
+     * admits would be reading this value's own shape, and would have to be rewritten the day a
+     * combination can say something about two positions together that it says about neither alone.
      *
      * <p>The first is every position at the first class it admits, and the rest are counted off from
      * it in a fixed order, so one model offers the same rows twice.
      *
-     * <p>None where a position this is about admits no class at all, which is not a reading that
-     * failed but a combination the model does not have.
+     * <p><b>No bound here.</b> How many readings a search may look at is a fact about that search,
+     * and which of these are readings at all is the model's answer rather than this value's: a class
+     * apiece that no one value can hold is a combination of names and not a reading. Counted off
+     * here, the bound was spent on those before anything asked, and a combination whose first few
+     * names cannot be in one value went unanswered with its readings untried.
+     *
+     * <p>None handed over where a position this is about admits no class at all, which is not a
+     * reading that failed but a combination the model does not have.
      */
-    public List<Interpretation> interpretations(int most) {
+    public Traversal interpretations(Taking<Interpretation> taking) {
         List<Integer> about = new java.util.ArrayList<>();
         List<List<Integer>> admitted = new java.util.ArrayList<>();
         for (int i = 0; i < cell.allowed().length; i++) {
@@ -85,27 +91,28 @@ public record CellSelection(InteractionCells.Cell cell, List<ControlClaim> claim
                 }
             }
             if (here.isEmpty()) {
-                return List.of();
+                return Traversal.EXHAUSTED;
             }
             about.add(i);
             admitted.add(here);
         }
-        List<Interpretation> out = new java.util.ArrayList<>();
-        for (int index = 0; index < most; index++) {
+        long many = 1;
+        for (List<Integer> here : admitted) {
+            many *= here.size();
+        }
+        for (long index = 0; index < many; index++) {
             java.util.Map<Integer, Integer> pins = new java.util.LinkedHashMap<>();
-            int left = index;
+            long left = index;
             for (int p = 0; p < about.size(); p++) {
                 List<Integer> here = admitted.get(p);
-                pins.put(about.get(p), here.get(left % here.size()));
+                pins.put(about.get(p), here.get((int) (left % here.size())));
                 left /= here.size();
             }
-            Interpretation reading = new Interpretation(pins);
-            if (out.contains(reading)) {
-                break;   // the readings ran out before the bound did
+            if (!taking.take(new Interpretation(pins))) {
+                return Traversal.STOPPED;
             }
-            out.add(reading);
         }
-        return List.copyOf(out);
+        return Traversal.EXHAUSTED;
     }
 
     /**

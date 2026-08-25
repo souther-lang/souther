@@ -111,7 +111,8 @@ class OneDemandOverOnePositionIsOneRowHoweverItIsAskedTest {
             if (at == null) {
                 continue;
             }
-            List<Interpretation> readings = at.interpretations(2);
+            List<Interpretation> readings = new ArrayList<>();
+            at.interpretations(reading -> readings.add(reading));
             if (readings.size() == 1 && readings.get(0).pins().size() == 1) {
                 out.addAll(readings.get(0).pins().entrySet());
             }
