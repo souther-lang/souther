@@ -4,6 +4,8 @@ import souther.compiler.stdlib.Stdlib;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
+import souther.compiler.core.ValueShape;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.DiagnosticRenderer;
@@ -80,7 +82,8 @@ public final class TypeChecker {
                                        Hir.Module lowered, Map<ValueName.Behavior, ReqSig> reqSigs,
                                        Map<ValueName.Behavior, ReqSig> calleeSigs,
                                        Map<String, Type> recursiveHelperFns,
-                                       Map<String, Hir.FnDef> imported, Set<String> settled) {
+                                       Map<String, Hir.FnDef> imported, Set<String> settled,
+                                       Map<TypeSymbol.AtModule, ValueShape> shapes) {
         Elaborated elaborated = new Elaborated();
         List<Unanswerable> abandoned = new ArrayList<>();
         List<CompileException> errors = new ArrayList<>();
@@ -88,7 +91,7 @@ public final class TypeChecker {
         try {
             checkRecovering(module, symbols, policy, sigs, importedInjected, importedUnwritten,
                     lowered, calleeSigs, errors,
-                    elaborated, abandoned, reqSigs, recursiveHelperFns, imported, settled);
+                    elaborated, abandoned, reqSigs, recursiveHelperFns, imported, settled, shapes);
         } catch (Unanswerable e) {
             abandoned.add(e);
             stopped = true;
@@ -120,6 +123,23 @@ public final class TypeChecker {
                                      List<Diagnostic> warnings) {
         return SpecChecker.checkSpecFn(spec, fn, loweredBody, discharge, symbols, policy, calleeSigs, reqSigs,
                 inliner, recursiveHelperFns, recHelperConstructs, warnings);
+    }
+
+    /**
+     * Whether every declaration being checked here had its clauses read.
+     *
+     * <p>Absence and not a count: a data is in {@code shapes} when its clauses elaborated, so a
+     * declaration missing from it is one whose rules this reading may not be built on.
+     */
+    private static boolean everyClauseWasRead(Hir.Module module, Set<String> settled,
+                                              Map<TypeSymbol.AtModule, ValueShape> shapes) {
+        for (Hir.Def def : module.defs()) {
+            if (def instanceof Hir.Data data && settled.contains(def.name())
+                    && !shapes.containsKey(data.declares())) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** The signatures every recursive helper a representation can reach would be called under —
@@ -188,7 +208,8 @@ public final class TypeChecker {
                                         Map<ValueName.Behavior, ReqSig> reqSigs,
                                         Map<String, Type> recursiveHelperFns,
                                         Map<String, Hir.FnDef> publishedToHere,
-                                        Set<String> settled) {
+                                        Set<String> settled,
+                                        Map<TypeSymbol.AtModule, ValueShape> shapes) {
         // Both components, because what reads this walks both: a helper is checked whether the module
         // declared it or took it on to emit, and one missing here is a helper checked against a body
         // it does not have.
@@ -294,7 +315,12 @@ public final class TypeChecker {
         // nothing -- a count read off one refuses a type on the strength of a clause the author has
         // already been told to fix. Only the declarations have been checked at this point, so a
         // mistake in a body further down does not silence this.
-        if (errors.isEmpty()) {
+        //
+        // What says a clause was read is `shapes`: a declaration whose clause could not be
+        // elaborated has no shape there, and elaborating one is what says it states a condition.
+        // That reading is not made here — it is made once, where the clause a construction runs
+        // comes from — so this asks it rather than repeating it.
+        if (errors.isEmpty() && everyClauseWasRead(module, settled, shapes)) {
             List<CompileException> withNoValue = new ArrayList<>();
             collect(errors, abandoned,
                     () -> withNoValue.addAll(

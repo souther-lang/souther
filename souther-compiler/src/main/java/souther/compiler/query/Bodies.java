@@ -2041,12 +2041,18 @@ public final class Bodies {
                 }
                 Answer<souther.compiler.check.Prepared> prepared =
                         db.ask(new Shapes.Prepared(name));
+                // What must hold of a value of each declared data, elaborated once and read here
+                // for the same reason the check reads a body's Core: it is the answer, and asking
+                // for it again would be the second reading this stopped being.
+                Answer<Map<souther.compiler.types.TypeSymbol.AtModule,
+                        souther.compiler.core.ValueShape>> shapes =
+                        db.ask(new Shapes.ValueShapes(name));
                 reported = TypeChecker.checkModule(lowering.value().settled(), scope.value(),
                         db.ask(new Front.Reading()).value(),
                         signatures.present() ? signatures.value() : null,
                         injected.value(), unwritten.value(), lowering.value().lowered(),
                         reqSigs.value(), calleeSigs.value(), sigs.value(), published.value(),
-                        settled);
+                        settled, shapes.present() ? shapes.value() : Map.of());
             } catch (CompileException e) {
                 return Answer.absent(e);
             }
@@ -2059,8 +2065,14 @@ public final class Bodies {
             // cannot be read is a module that does not reach codegen: the reports are that key's and
             // are not repeated, and what is read off them here is whether there was a refusal.
             Answer<Map<String, CheckedEnsures>> contracts = db.ask(new Contracts(name));
+            // And what must hold of a value of each declared data, for the same reason: elaborating
+            // a clause is what says it is a condition, and that elaboration is owned by the key that
+            // answers with it. A module whose clause cannot be read does not reach codegen.
+            Answer<Map<souther.compiler.types.TypeSymbol.AtModule, souther.compiler.core.ValueShape>>
+                    shapes = db.ask(new Shapes.ValueShapes(name));
             boolean sound = reported.errors().isEmpty() && reported.abandoned().isEmpty()
-                    && contracts.present() && !contracts.hasError();
+                    && contracts.present() && !contracts.hasError()
+                    && shapes.present() && !shapes.hasError();
             Map<String, Core> helperBodies = new LinkedHashMap<>();
             reported.emittedHelpers().forEach((h, core) -> helperBodies.put(h, GrowingFold.rewrite(core)));
             return Answer.of(new Of(helperBodies, sound, reported.stopped()), reports);

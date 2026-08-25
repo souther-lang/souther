@@ -15,6 +15,7 @@ import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.ReqSig;
 import souther.compiler.check.Requirements;
 import souther.compiler.core.Contract;
+import souther.compiler.core.ValueShape;
 import souther.compiler.check.Sig;
 import souther.compiler.check.SpecImplementation;
 import souther.compiler.core.EnsuresEnforcement;
@@ -145,11 +146,12 @@ public final class Backend {
                                                Bodies.Elaborated checked,
                                                Map<ValueName.Behavior, Composition> compositions,
                                                Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
+                                               Map<TypeSymbol.AtModule, ValueShape> shapes,
                                                Map<ValueName.Behavior, EnsuresEnforcement> checks,
                                                Map<String, Type> standingCalls) {
         return generate(module, symbols, typePackage, sigs, importedSigs, importedInjected, calleeSigs,
-                requirements, checked, compositions, dischargeInvariants, checks, standingCalls,
-                Instrumentation.NONE);
+                requirements, checked, compositions, dischargeInvariants, shapes, checks,
+                standingCalls, Instrumentation.NONE);
     }
 
     /**
@@ -175,13 +177,14 @@ public final class Backend {
                                                Bodies.Elaborated checked,
                                                Map<ValueName.Behavior, Composition> compositions,
                                                Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
+                                               Map<TypeSymbol.AtModule, ValueShape> shapes,
                                                Map<ValueName.Behavior, EnsuresEnforcement> checks,
                                                Map<String, Type> standingCalls,
                                                Instrumentation instrumentation) {
         try {
             return generating(module, symbols, typePackage, sigs, importedSigs, importedInjected,
-                    calleeSigs, requirements, checked, compositions, dischargeInvariants, checks,
-                    standingCalls, instrumentation);
+                    calleeSigs, requirements, checked, compositions, dischargeInvariants, shapes,
+                    checks, standingCalls, instrumentation);
         } catch (IllegalArgumentException e) {
             // Something the writer would not hold, from a member no definition here claimed — a
             // synthesised class, a shared one. It belongs to the module, which is as near as anything
@@ -200,6 +203,7 @@ public final class Backend {
                                                   Bodies.Elaborated checked,
                                                   Map<ValueName.Behavior, Composition> compositions,
                                                   Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
+                                                  Map<TypeSymbol.AtModule, ValueShape> shapes,
                                                   Map<ValueName.Behavior, EnsuresEnforcement> checks,
                                                   Map<String, Type> standingCalls,
                                                   Instrumentation instrumentation) {
@@ -232,6 +236,7 @@ public final class Backend {
         CodegenContext ctx = new CodegenContext(module.name(), symbols, caseToSums, typePackage,
                 module.exposing().isEmpty(), exposed, recHelpers, standingCalls);
         ctx.setDischargeInvariants(dischargeInvariants);
+        ctx.setValueShapes(shapes);
         ctx.setEnsuresChecks(checks);
         ctx.setCoveragePlan(instrumentation.coverage());
         ctx.setCounting(instrumentation.counting());

@@ -85,7 +85,7 @@ public final class Output {
                         shipped(in), in.scope(), in.typePackages(), in.sigs(), in.imported(),
                         in.injected(),
                         in.callees(), in.requirements(), in.checked(), in.compositions(),
-                        in.dischargeClauses(), in.checks(), in.standingCalls());
+                        in.dischargeClauses(), in.shapes(), in.checks(), in.standingCalls());
                 stamp(db, emitted);
                 return Answer.of(Ordered.map(emitted.byBinaryName()));
             } catch (CompileException e) {
@@ -129,6 +129,8 @@ public final class Output {
                       Bodies.Elaborated checked,
                       Map<ValueName.Behavior, souther.compiler.core.Composition> compositions,
                       Map<TypeSymbol, List<Hir.InvariantClause>> dischargeClauses,
+                      Map<souther.compiler.types.TypeSymbol.AtModule,
+                              souther.compiler.core.ValueShape> shapes,
                       Map<ValueName.Behavior, EnsuresEnforcement> checks,
                       Set<String> rowMethods,
                       Map<String, souther.compiler.types.Type> standingCalls) {}
@@ -159,6 +161,11 @@ public final class Output {
             Answer<Map<TypeSymbol, List<Hir.InvariantClause>>> dischargeClauses =
                     db.ask(new Shapes.InvariantsForDischarge(name));
             Answer<Map<String, CheckedEnsures>> contracts = db.ask(new Bodies.Contracts(name));
+            // What must hold of a value of each declared data, and the binding each field is read
+            // through. Both are the check's answer; the emitter used to elaborate the clauses again
+            // and work the bindings out a second time.
+            Answer<Map<souther.compiler.types.TypeSymbol.AtModule, souther.compiler.core.ValueShape>>
+                    shapes = db.ask(new Shapes.ValueShapes(name));
             // What a call left standing is typed against — the same answer the check typed it
             // against. The emitter re-types the expressions it emits (a clause, a rule), so a
             // signature table of its own would be a second reading of what a name means, and the two
@@ -169,14 +176,14 @@ public final class Output {
                     || !lowering.present() || !scope.present() || !imported.present()
                     || !signatures.present() || !injected.present() || !callees.present()
                     || !prepared.present() || !requirements.present() || !dischargeClauses.present()
-                    || !contracts.present() || !standing.present()) {
+                    || !contracts.present() || !standing.present() || !shapes.present()) {
                 return null;
             }
             return new Inputs(lowering.value().lowered(), scope.value(),
                     prepared.value().importedFrom(), signatures.value(), imported.value(),
                     injected.value(),
                     callees.value(), requirements.value(), checked.value(), compositions.value(),
-                    dischargeClauses.value(),
+                    dischargeClauses.value(), shapes.value(),
                     checksOf(lowering.value().lowered(), injected.value(), contracts.value()),
                     Set.copyOf(prepared.value().operandMethods().values()), standing.value());
         }
@@ -400,7 +407,8 @@ public final class Output {
                         in.lowered(), in.scope(), in.typePackages(), in.sigs(), in.imported(),
                         in.injected(),
                         in.callees(), in.requirements(), in.checked(), in.compositions(),
-                        in.dischargeClauses(), in.checks(), in.standingCalls(), instrumentation);
+                        in.dischargeClauses(), in.shapes(), in.checks(), in.standingCalls(),
+                        instrumentation);
                 Classes.stamp(db, name, emitted);
                 // The classes and what they implement, from the one emission that decided both.
                 return Answer.of(new EvaluationArtifact(Ordered.map(emitted.byBinaryName()),

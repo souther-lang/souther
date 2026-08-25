@@ -124,6 +124,23 @@ final class CodegenContext {
         return dischargeInvariants;
     }
 
+    private Map<TypeSymbol.AtModule, souther.compiler.core.ValueShape> shapes = Map.of();
+
+    void setValueShapes(Map<TypeSymbol.AtModule, souther.compiler.core.ValueShape> shapes) {
+        this.shapes = shapes;
+    }
+
+    /**
+     * What a value of {@code named} is made of and what must hold of one, as the check answered it.
+     *
+     * <p>The fields and the clauses together, because binding a field and running a clause are two
+     * halves of one environment. Null for a data no module here declares — nothing asks, since a
+     * value class is emitted where its type is declared.
+     */
+    souther.compiler.core.ValueShape shapeOf(TypeSymbol.AtModule named) {
+        return shapes.get(named);
+    }
+
     /**
      * The arms to record, where this generation is one that measures. Empty otherwise, which is every
      * generation whose classes are meant to be shipped.

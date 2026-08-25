@@ -3,11 +3,11 @@ package souther.compiler.codegen;
 import souther.compiler.check.Boundary;
 import souther.compiler.check.Symbols;
 import souther.compiler.ast.Hir;
-import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.check.Ordering;
 import souther.compiler.check.TypeOps;
+import souther.compiler.core.ValueShape;
 
 import souther.compiler.jvm.DecoderKind;
 import souther.compiler.jvm.GeneratedClass;
@@ -68,6 +68,37 @@ final class ValueClassGen {
     private ClassDesc jvmType(Type type) { return JvmTypes.jvmType(type, ctx); }
     private ClassDesc[] fieldDescs(Map<String, Type> fields) { return JvmTypes.fieldDescs(fields, ctx); }
 
+    /**
+     * What a value of {@code data} is made of and what must hold of one, as the check answered it.
+     *
+     * <p>Not worked out here. Where a field is read through and what a clause comes to are one
+     * answer of the checker's ({@code Shapes.ValueShapes}), and a data of this module being emitted
+     * with none is this compilation having decided to emit something it never checked.
+     */
+    private ValueShape shapeOf(Hir.Data data) {
+        ValueShape shape = ctx.shapeOf(data.declares());
+        if (shape == null) {
+            throw new IllegalStateException("`" + data.name() + "` is being emitted and the check"
+                    + " answered nothing about what a value of it is");
+        }
+        return shape;
+    }
+
+    /**
+     * The fields into the slots they arrive in, each under the binding a clause reads it through.
+     *
+     * <p>The bindings are the check's and the order is the layout, both off one answer: a field
+     * bound under a binding worked out here would be a second walk of the declarations, and a
+     * clause reading the other one would read a slot nothing put its value in.
+     */
+    private void bindFields(BodyGen gen, Hir.Data data) {
+        int slot = 0;
+        for (ValueShape.Field field : shapeOf(data).fields()) {
+            gen.bind(field.binding(), field.name(), slot, field.type());
+            slot += width(field.type());
+        }
+    }
+
     void generateData(Hir.Data data, Emissions out) {
         ClassDesc cdName = cd(data);
         Map<String, Type> fields = fieldTypes(data);
@@ -121,11 +152,11 @@ final class ValueClassGen {
                 out.put(new GeneratedClass.Encoder(valueOf(data)), codec.generateEncoderClass(cdName, data, enc)));
 
         // A helper for an invariant-bearing newtype: a Raoh-free `boolean check(value)` that runs the
-        // same invariant bytecode as __construct (via gen.expr). Two callers: a constant construction
+        // same invariant bytecode as __construct — the checker's, which both read. Two callers: a constant construction
         // is verified at compile time through it — 金額(-5) is a compile error, not a runtime abort
         // (ADR-0032) — and the derived decoder passes it to Raoh's `refine` for an invariant no
         // constraint states exactly (issue #83).
-        if (data.newtype() && !TypeOps.effectiveInvariants(data, symbols).isEmpty()) {
+        if (data.newtype() && !shapeOf(data).invariants().isEmpty()) {
             emitCtfeCheck(data, fields, out);
         }
     }
@@ -133,7 +164,7 @@ final class ValueClassGen {
     /**
      * The Raoh-free checks of an invariant-bearing newtype: {@code check} for the whole invariant, and
      * {@code check$i} for the clause declared {@code i}th. Both run the same bytecode
-     * {@code __construct} does (via {@code gen.expr}).
+     * {@code __construct} does: the clause the checker elaborated, read here and there.
      *
      * <p>Two callers want the whole invariant — a constant construction verified at compile time
      * (ADR-0032) — and one wants a clause on its own: the derived decoder hands each clause its own
@@ -143,7 +174,7 @@ final class ValueClassGen {
     private void emitCtfeCheck(Hir.Data data, Map<String, Type> fields, Emissions out) {
         ClassDesc cdName = cd(data);
         ClassDesc cdCtfe = cd(new GeneratedClass.Ctfe(valueOf(data)));
-        List<Hir.InvariantClause> clauses = TypeOps.effectiveInvariants(data, symbols);
+        List<ValueShape.Invariant> clauses = shapeOf(data).invariants();
         out.put(new GeneratedClass.Ctfe(valueOf(data)), build(cdCtfe, cb -> {
             cb.withFlags(ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             emitClauseCheck(cb, "check", cdName, data, fields, clauses);
@@ -160,19 +191,13 @@ final class ValueClassGen {
     }
 
     private void emitClauseCheck(ClassBuilder cb, String method, ClassDesc cdName, Hir.Data data,
-                                 Map<String, Type> fields, List<Hir.InvariantClause> clauses) {
+                                 Map<String, Type> fields, List<ValueShape.Invariant> clauses) {
         cb.withMethodBody(method, MethodTypeDesc.of(ConstantDescs.CD_boolean, fieldDescs(fields)),
                 ClassFile.ACC_STATIC | ClassFile.ACC_PUBLIC, code -> {
                     BodyGen gen = new BodyGen(ctx, code, data, cdName, 0);
-                    int slot = 0;
-                    Map<String, BindingId> bound =
-                            TypeOps.fieldBindings(data.declares(), data, symbols);
-                    for (Map.Entry<String, Type> f : fields.entrySet()) {
-                        gen.bind(bound.get(f.getKey()), f.getKey(), slot, f.getValue());
-                        slot += width(f.getValue());
-                    }
-                    for (Hir.InvariantClause clause : clauses) {
-                        gen.expr(clause.expr());       // the same boolean __construct checks
+                    bindFields(gen, data);
+                    for (ValueShape.Invariant clause : clauses) {
+                        gen.genExpr(clause.condition());   // the same boolean __construct checks
                         Label ok = code.newLabel();
                         code.ifne(ok);
                         code.iconst_0();
@@ -700,19 +725,13 @@ final class ValueClassGen {
                             MethodSignature.parseFrom(constructSignature(fields, cdName))));
                     mb.withCode(code -> {
                         BodyGen gen = new BodyGen(ctx, code, data, cdName, 0);
-                        int slot = 0;
-                        Map<String, BindingId> bound =
-                                TypeOps.fieldBindings(data.declares(), data, symbols);
-                        for (Map.Entry<String, Type> f : fields.entrySet()) {
-                            gen.bind(bound.get(f.getKey()), f.getKey(), slot, f.getValue());
-                            slot += width(f.getValue());
-                        }
+                        bindFields(gen, data);
 
                         // Clause by clause, in the order they are declared, stopping at the first that
                         // does not hold: what the failure carries is that clause, so a reordering of
                         // the declaration changes which one a caller is told about.
-                        for (Hir.InvariantClause clause : TypeOps.effectiveInvariants(data, symbols)) {
-                            gen.expr(clause.expr());
+                        for (ValueShape.Invariant clause : shapeOf(data).invariants()) {
+                            gen.genExpr(clause.condition());
                             Label ok = code.newLabel();
                             code.ifne(ok);
                             code.loadConstant(ctx.module());

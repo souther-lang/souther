@@ -4,7 +4,6 @@ import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
-import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.msg.InvariantMessage;
 import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.diag.msg.TypeMessage;
@@ -606,21 +605,10 @@ public final class DataChecker {
             }
         }
 
-        for (Hir.InvariantClause clause : ctx.data().invariants()) {
-            // A total recursive helper — the stdlib fold behind the list quantifiers, or a user helper
-            // proven total — is callable from an invariant, so its signature must be in scope here. A
-            // field of the same name as a helper wins: a bare name in an invariant is a field reference.
-            Scope invEnv = fieldScope(ctx).reaching(recursiveHelperFns);
-            // A clause is the declaration's, not the body's. Reached from a construction, this is
-            // where one tree stops and another starts, so what the tree being walked keeps standing
-            // is left behind: what this one keeps is its own to say, and a permission inherited by
-            // being reached from somewhere is not a permission a representation gave.
-            Type t = Elaborator.typeOf(clause.expr(), invEnv, ctx.inAnotherRepresentation());
-            if (t != Type.BOOL) {
-                throw CompileException.of(Diagnostic.at(clause.expr().pos())
-                                .say(new DeclarationMessage.AnInvariantExpressionIsBool(Type.show(t))).build());
-            }
-        }
+        // That a clause is a condition is not asked here. Elaborating it is what answers that, and
+        // the elaboration a clause has is `Shapes.ValueShapes`'s — which is the one that runs
+        // (issue #1080). Asked here as well, this would be the second reading of the clause, which
+        // is what having one owner is for.
         checkClauseNames(ctx.data(), ctx.symbols());
 
         ctx.data().decoder().ifPresent(dec -> checkDecoder(dec, ctx, fields));
