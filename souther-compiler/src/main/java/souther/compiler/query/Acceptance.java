@@ -5,7 +5,7 @@ import souther.compiler.source.SourceId;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Located;
 import souther.compiler.diag.ReportContext;
-import souther.compiler.examples.ExampleVerifier;
+import souther.compiler.diag.ExampleDiagnostics;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -117,7 +117,7 @@ public final class Acceptance {
         }
         if (!refused.isEmpty()) {
             throw CompileException.ofAllReported(refused,
-                    ExampleVerifier.legacySummary(Located.diagnosticsOf(refused)));
+                    ExampleDiagnostics.legacySummary(Located.diagnosticsOf(refused)));
         }
     }
 }

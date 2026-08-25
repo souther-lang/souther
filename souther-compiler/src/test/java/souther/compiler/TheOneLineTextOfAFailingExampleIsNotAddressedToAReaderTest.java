@@ -1,6 +1,6 @@
 package souther.compiler;
 
-import souther.compiler.examples.ExampleVerifier;
+import souther.compiler.diag.ExampleDiagnostics;
 import souther.compiler.diag.msg.ExampleMessage;
 import org.junit.jupiter.api.Test;
 import souther.compiler.diag.Diagnostic;
@@ -34,7 +34,7 @@ class TheOneLineTextOfAFailingExampleIsNotAddressedToAReaderTest {
     void aFailingExampleSaysWhatTheEnglishCatalogSays() {
         Diagnostic failure = Diagnostic.say(SAID).nowhere().build();
 
-        String said = ExampleVerifier.legacySummary(List.of(failure));
+        String said = ExampleDiagnostics.legacySummary(List.of(failure));
 
         assertEquals(Messages.render(SAID, Locale.ENGLISH), said);
     }
@@ -47,7 +47,7 @@ class TheOneLineTextOfAFailingExampleIsNotAddressedToAReaderTest {
     void theCatalogWouldHaveSaidSomethingElseInJapanese() {
         Diagnostic failure = Diagnostic.say(SAID).nowhere().build();
 
-        String said = ExampleVerifier.legacySummary(List.of(failure));
+        String said = ExampleDiagnostics.legacySummary(List.of(failure));
 
         assertNotEquals(Messages.render(SAID, Locale.JAPANESE), said);
     }

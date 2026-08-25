@@ -22,7 +22,6 @@ import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.diag.msg.ModuleMessage;
-import souther.compiler.diag.DiagnosticRenderer;
 import souther.compiler.evaluate.DepthLimitExceeded;
 import souther.compiler.evaluate.EvaluationContext;
 import souther.compiler.evaluate.StepLimitExceeded;
@@ -651,33 +650,6 @@ public final class ExampleVerifier {
                  COMPARISON, STEP_LIMIT, DEPTH_LIMIT, TIMEOUT, STACK_EXHAUSTED, VALUE_CROSSING ->
                     Incompleteness.Code.ROW_UNDECIDED;
         };
-    }
-
-    /** The one-line form for a set of failures gathered across modules: the count, then the first
-     * one's reason, matching what a single module's aggregate says. */
-    public static String legacySummary(List<Diagnostic> failures) {
-        Diagnostic first = failures.get(0);
-        return failures.size() == 1
-                ? legacyOf(first)
-                : failures.size() + " examples do not hold; " + legacyOf(first);
-    }
-
-    /** A one-line message for a failing example: the body {@code getMessage()} is built from on the
-     * exception these are thrown in. No surface prints it — the CLI, the annotation processor and the LSP all
-     * render the diagnostics, which this exception carries — so what reads it is a caller holding
-     * the exception, and it takes no language for the same reason
-     * {@link DiagnosticRenderer#legacyBody} does not. */
-    private static String legacyOf(Diagnostic d) {
-        if (d.diff() != null) {
-            // JUnit order: the expected value (what the example asserts) first, then what the
-            // behavior actually produced.
-            return "example does not hold: expected " + d.diff().expectedType()
-                    + " but was " + d.diff().actualType();
-        }
-        // A diff-less failure (an input fixture that could not be built, a missing fake, a
-        // non-termination): render the diagnostic's own catalog message so the reason travels
-        // through the annotation processor, rather than collapsing to a bare "example failed".
-        return d.said() == null ? "example failed" : DiagnosticRenderer.legacyBody(d);
     }
 
     private final souther.compiler.check.Prepared.Examples module;
