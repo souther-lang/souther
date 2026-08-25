@@ -58,20 +58,23 @@ public final class SpecImplementation {
     }
 
     /**
-     * The definition implementing a behavior, with its parameters divided the way {@link
-     * #parameters} says they arrive.
+     * The definition implementing a behavior, and which of its parameters are the declared inputs.
      *
-     * <p>Both halves so that no reader slices the list again. {@code inputs} are the behavior's
-     * declared inputs, positionally the signature's; {@code dependencies} are the behaviors it was
-     * declared to depend on, which arrive as the trailing parameters and are injected rather than
-     * passed at a call.
+     * <p>A value rather than the list alone, so that having found a definition and having found one
+     * that takes nothing stay two answers. A behavior of no inputs is implemented by a {@code let}
+     * of no parameters, and a caller handed an empty list for both would have to decide which it
+     * was looking at.
+     *
+     * <p>The inputs and not also the trailing parameters the {@code depends on} clause is answered
+     * by. Nothing reads those as a list: {@link SpecChecker#dependencyBindings} walks them against
+     * the clause, and it runs while E1614 is still being decided — where this refuses a list too
+     * short to divide, that one carries on and lets the diagnostic be the report. Divided here as
+     * well, the two would be one rule with two strictnesses.
      */
-    public record Implemented(Hir.FnDef definition, List<Hir.FnParam> inputs,
-                              List<Hir.FnParam> dependencies) {
+    public record Implemented(Hir.FnDef definition, List<Hir.FnParam> inputs) {
 
         public Implemented {
             inputs = List.copyOf(inputs);
-            dependencies = List.copyOf(dependencies);
         }
     }
 
@@ -88,7 +91,8 @@ public final class SpecImplementation {
      * <p>How many parameters the definition is required to have is {@link SpecChecker}'s, reported
      * as E1614 where it disagrees. Nothing is restated here: what this refuses is the state where
      * the division cannot be made at all, which is not a program being wrong but that check not
-     * having run.
+     * having run. So this is for a reader standing after the check — the emitter, the snapshot — and
+     * not for the checker deciding it.
      */
     public static Implemented implementedBy(Hir.Module module, Hir.SpecBehavior spec) {
         Hir.FnDef definition = null;
@@ -106,8 +110,7 @@ public final class SpecImplementation {
                     + inputs + " and its implementation has " + definition.params().size()
                     + " parameters to divide");
         }
-        return new Implemented(definition, definition.params().subList(0, inputs),
-                definition.params().subList(inputs, definition.params().size()));
+        return new Implemented(definition, definition.params().subList(0, inputs));
     }
 
     /** What an implementation of {@code spec} is required to take, in order. */

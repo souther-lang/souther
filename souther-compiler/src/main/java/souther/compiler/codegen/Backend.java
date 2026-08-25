@@ -314,14 +314,6 @@ public final class Backend {
                 }
             });
         }
-        // Behavior fn bodies arrive with their helper calls already inlined (the Lower stage,
-        // ADR-0021); the backend emits them as-is and never lowers a helper on its own. Which
-        // definition implements a behavior, and which of its parameters are the declared inputs, is
-        // asked of `SpecImplementation` rather than worked out here: the snapshot's assembler reads
-        // the same binders, and two readings of one behavior's parameter list agree until either
-        // moves. Asked of what the module declared, which is where `Requirements` looks for one —
-        // a map keyed over `emitted(module)` let a method this module only took on to emit displace
-        // the `let` of the same name.
         // Injection targets (spec §injected-behavior): a SpecBehavior with no matching fn. Each becomes an
         // abstract base class a Java implementation extends (§java-base-class). Imported injection targets
         // (their base lives in the declaring module) are requirements too, so a composition here
@@ -449,6 +441,12 @@ public final class Backend {
                 }
                 switch (bd) {
                     case Hir.SpecBehavior spec -> {
+                        // Which definition implements it, and which of that definition's parameters
+                        // are the declared inputs, is asked rather than worked out here: the
+                        // snapshot's assembler reads its binders from the same answer, so which
+                        // local an input arrives in cannot be one thing there and another here.
+                        // Bodies arrive with their helper calls already inlined (the Lower stage,
+                        // ADR-0021), and are emitted as-is.
                         SpecImplementation.Implemented implemented =
                                 SpecImplementation.implementedBy(module, spec);
                         if (implemented != null) {
