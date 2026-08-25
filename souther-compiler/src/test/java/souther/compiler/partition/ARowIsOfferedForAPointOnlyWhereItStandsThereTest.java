@@ -96,13 +96,63 @@ class ARowIsOfferedForAPointOnlyWhereItStandsThereTest {
                 "nothing ran the candidate, so nothing says it stands anywhere else");
     }
 
+    /** Two parameters, and a second position under the first so its search has more than one
+     *  candidate to offer — which is what lets a parameter refuse one and still succeed. */
+    private static final String TWO = """
+            module example.bounded
+
+            data Amount = Int
+                invariant value >= 0 && value <= 100
+            data Req = { cost: Amount, note: String }
+            data Other = { n: Int }
+            data Res = { n: Int }
+
+            behavior g : (r: Req, o: Other) -> Res
+            """;
+
+    /**
+     * What one parameter's search found out is not said of another's.
+     *
+     * <p>A candidate turned away for standing elsewhere is news about the parameter it was built
+     * for. Kept for the whole row, the first parameter certifying its second candidate would name
+     * the reason a later parameter failed for — and the later one was refused by the model, which is
+     * the opposite answer: one says every value the rules allow was turned away, and the other says
+     * what was built did not stand where it was built for.
+     */
+    @Test
+    void whatOneParametersSearchFoundOutIsNotSaidOfAnothers() {
+        int[] tried = {0};
+        Generator.BoundaryAttempt attempt = attemptOver(TWO, "g", Count.of(100),
+                (parameter, _) -> {
+                    if (parameter != 0) {
+                        return new Generator.CandidateCheck.Built.Refused("the model refuses it");
+                    }
+                    // The first candidate stands away from the point and the next stands on it, so
+                    // this parameter refuses one and succeeds all the same.
+                    return new Generator.CandidateCheck.Built.Value(
+                            reqWith(++tried[0] == 1 ? 7 : 100));
+                });
+
+        Generator.BoundaryAttempt.Unresolved no = assertInstanceOf(
+                Generator.BoundaryAttempt.Unresolved.class, attempt,
+                "no value of `o` was allowed, so no row builds");
+        assertEquals(Generator.UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED,
+                no.why().reason(),
+                "the second parameter's every candidate was refused by the model, which the first"
+                        + " parameter's uncertified candidate says nothing about");
+    }
+
     /** A check answering every candidate with a {@code Req} whose cost is {@code n}, whatever was
      *  asked for — a construction that does not answer with what it was given. */
     private static Generator.CandidateCheck always(int n) {
-        ObservedValue amount = new ObservedValue.Constructed(declared("Amount"),
-                Map.of("value", new ObservedValue.Integer(n)));
-        return (_, _) -> new Generator.CandidateCheck.Built.Value(
-                new ObservedValue.Constructed(declared("Req"), Map.of("cost", amount)));
+        return (_, _) -> new Generator.CandidateCheck.Built.Value(reqWith(n));
+    }
+
+    private static ObservedValue reqWith(int n) {
+        return new ObservedValue.Constructed(declared("Req"), Map.of("cost",
+                new ObservedValue.Constructed(declared("Amount"),
+                        Map.of("value", new ObservedValue.Integer(n))),
+                "note", new ObservedValue.Text("")));
     }
 
     private static souther.compiler.types.TypeSymbol declared(String name) {
@@ -112,13 +162,20 @@ class ARowIsOfferedForAPointOnlyWhereItStandsThereTest {
 
     private static Generator.BoundaryAttempt attemptAt(souther.compiler.numeric.Place at,
                                                        Generator.CandidateCheck check) {
-        Compilation compilation = Compilation.ofSource(BOUNDED, "Main");
+        return attemptOver(BOUNDED, "f", at, check);
+    }
+
+    private static Generator.BoundaryAttempt attemptOver(String source, String behavior,
+                                                         souther.compiler.numeric.Place at,
+                                                         Generator.CandidateCheck check) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
-        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().get(0);
+        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
+                .filter(each -> each.name().equals(behavior)).findFirst().orElseThrow();
         InputDomain domain = compilation.db()
                 .ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get(spec.name());
         assertNotNull(domain, "the model under test compiles");

@@ -240,6 +240,21 @@ final class ConstructionPlan {
                         { return new Result.Conflict(against.at(), against.one(), against.other()); }
             }
         }
+        // A position said twice. A caller that fixed a value at a position and also requires a
+        // narrowing there has stated the narrowing and fixed a value at it, which ADR-0114 keeps
+        // apart -- the value stands at the narrowed position and is chosen there, so one location is
+        // never decided twice under two names. Nothing a model writes reaches this: the classes that
+        // narrow offer no value to fix, and the ones that offer a value narrow nothing. It is the
+        // arrangement an optional's classes had before they said which narrowing they were, and it
+        // is refused rather than answered by preferring one of the two.
+        for (TermPath fixed : decided) {
+            if (required.at(fixed) != null) {
+                throw new IllegalStateException("`" + fixed + "` is fixed at a value and required to"
+                        + " be " + required.at(fixed).spelled() + "; a narrowing states the"
+                        + " narrowing and does not also fix a value there, so this is the caller"
+                        + " keeping two accounts of one position");
+            }
+        }
         return new Result.Planned(
                 new ConstructionPlan(node(declared, at, symbols, 0, decided, required, least)));
     }
@@ -285,37 +300,28 @@ final class ConstructionPlan {
     private static Node node(Type declared, TermPath at, Symbols symbols, int depth,
                              Set<TermPath> decided, Requirements required,
                              java.util.function.ToIntBiFunction<TermPath, Type> least) {
-        // Before the narrowing, because a position the caller fixed takes the value it was given
-        // whatever a class would have built there.
-        if (decided.contains(at)) {
-            return new Slot(at, declared, List.of(), true);
+        // What the requirements leave standing here, worked out before anything is decided about
+        // the position. Read once and in full: what is built, whether the search chooses it, and
+        // where every path below it hangs all follow from it.
+        Settled settled = settle(declared, at, symbols, required);
+        if (settled.exact() != null) {
+            return new Exact(settled.at(), settled.exact(), settled.outer());
         }
-        Refinement refinement = required.at(at);
-        // The position as the narrowing leaves it, which is where every path below it hangs. A
-        // refinement is not a step into the value and takes no level of the plan; what it changes is
-        // the name of this one position and what may be built at it. Written without it, two cases
-        // spreading one record would put two different positions at one name.
-        TermPath here = refinement == null ? at : at.refine(refinement);
-        // The names the position wore before the narrowing, which are what a value chosen at it is
-        // still missing.
-        List<TypeOps.Layer> outer =
-                refinement == null ? List.of() : TypeView.of(declared, symbols).wrappers();
-        Type building = refined(declared, refinement, symbols);
-        // The absence of an optional settles the value rather than narrowing to something to be
-        // built: `None` is a branch that puts no position anywhere (ADR-0114), so the search has
-        // nothing to look at here. Under the names the position wore, since the value arrives bare.
-        if (building == null) {
-            return new Exact(here, FixtureTemplate.none(), outer);
+        // A position the caller fixed takes the value it was given whatever would have been built
+        // there. Asked at the position as the narrowings leave it, which is the name the caller
+        // wrote it under: a value fixed under a case is fixed at the case.
+        if (decided.contains(settled.at())) {
+            return new Slot(settled.at(), settled.building(), settled.outer(), true);
         }
+        TermPath here = settled.at();
+        Type building = settled.building();
         TypeView view = TypeView.of(building, symbols);
-        // And those with the narrowed type's own after them, which is what a value composed here
-        // bare needs. Both are what the position declares, kept: a value written under the narrowed
-        // type's names alone is of a type the parameter does not declare.
-        List<TypeOps.Layer> worn = refinement == null ? view.wrappers()
-                : outside(outer, view.wrappers());
-        if (refinement != null && decided.contains(here)) {
-            return new Slot(here, building, outer, true);
-        }
+        // The names the position wore before the narrowings, and those with the narrowed type's own
+        // after them — which is what a value composed here bare needs. Both are what the position
+        // declares, kept: a value written under the narrowed type's names alone is of a type the
+        // parameter does not declare.
+        List<TypeOps.Layer> worn = settled.outer().isEmpty() ? view.wrappers()
+                : outside(settled.outer(), view.wrappers());
         // A sequence with something to be placed inside it. Built out of its element rather than
         // chosen whole, since what is being asked for is a list holding a value in a class and no
         // proposal of a whole list can be asked to hold one.
@@ -332,12 +338,75 @@ final class ConstructionPlan {
         // A record with no fields composes nothing out of anything, so it is a value to be chosen
         // like any other and not a position made of positions.
         if (depth >= MAX_DEPTH || children == null || children.under().isEmpty()) {
-            return new Slot(here, building, outer, false);
+            return new Slot(here, building, settled.outer(), false);
         }
         Map<String, Node> under = new LinkedHashMap<>();
         children.under().forEach((field, type) -> under.put(field,
                 node(type, here.then(field), symbols, depth + 1, decided, required, least)));
         return new Built(here, building, children.of(), worn, under);
+    }
+
+    /**
+     * A position with every requirement standing at it applied.
+     *
+     * <p><b>Every one, because a narrowing takes no level.</b> A refinement does not move to another
+     * position (ADR-0114), so a second may stand at the position the first left — an optional
+     * holding a sum is narrowed to what it holds and then to the case that turned out to be there,
+     * and `query.tag@Some@Tag` is one position with two narrowings at it. Read one at a time, the
+     * plan built the sum and the case went missing, which is a value chosen from the wrong type
+     * however carefully the first narrowing was applied.
+     *
+     * @param at       the position as the narrowings leave it, which is the name every path below it
+     *                 hangs from and the name a caller that fixed a value here wrote it under
+     * @param building what is to be built there, or null where {@code exact} settled it instead
+     * @param exact    the value the narrowings settled, or null where they left something to build.
+     *                 Exactly one of the two is null: a narrowing either says which values may stand
+     *                 here or says which value does
+     * @param outer    the names the position wore before the narrowings, which are what a value
+     *                 arriving under the narrowed type is still missing
+     */
+    private record Settled(TermPath at, Type building, FixtureTemplate exact,
+                           List<TypeOps.Layer> outer) {
+
+        Settled {
+            if ((building == null) == (exact == null)) {
+                throw new IllegalArgumentException(
+                        "a settled position either has something to build or is a value: "
+                                + building + " / " + exact);
+            }
+            outer = List.copyOf(outer);
+        }
+    }
+
+    /**
+     * {@code declared} at {@code at}, with the requirements standing there applied in turn.
+     *
+     * <p>Stops where the requirements say nothing more, and where one of them settles the value —
+     * nothing narrows what is not there, so a requirement under an absence would be a caller asking
+     * about a position no value reaches, which {@link Requirements} has already refused by merging.
+     */
+    private static Settled settle(Type declared, TermPath at, Symbols symbols,
+                                  Requirements required) {
+        List<TypeOps.Layer> outer = List.of();
+        Type building = declared;
+        TermPath here = at;
+        for (Refinement refinement = required.at(here); refinement != null;
+                refinement = required.at(here)) {
+            // The names worn before the first narrowing, which is where a value chosen at the
+            // narrowed position is still missing them. Taken once: a narrowing of a narrowing wears
+            // nothing new, since it is the same position read again.
+            if (outer.isEmpty()) {
+                outer = TypeView.of(declared, symbols).wrappers();
+            }
+            here = here.refine(refinement);
+            if (refinement instanceof Refinement.Presence presence && !presence.present()) {
+                // The absence of an optional settles the value rather than narrowing to something to
+                // be built: `None` is a branch that puts no position anywhere.
+                return new Settled(here, null, FixtureTemplate.none(), outer);
+            }
+            building = narrowed(building, refinement, symbols);
+        }
+        return new Settled(here, building, null, outer);
     }
 
     /** {@code outer} and then {@code inner}, which is the order names are put back on a value. */
@@ -380,8 +449,7 @@ final class ConstructionPlan {
     }
 
     /**
-     * The type a value is built at: the declared one, unless a refinement narrowed the position, and
-     * null where the narrowing leaves nothing to build.
+     * The type a value is built at once {@code refinement} has narrowed the position.
      *
      * <p>A narrowing of what stands at the position and not a rereading of the declaration. The
      * position's declared type is still the sum, and the axis still says so — a class of it saying
@@ -389,20 +457,30 @@ final class ConstructionPlan {
      * would have a later reader believe the model declares something it does not. What moves is what
      * is being built.
      *
-     * <p>Null is the one narrowing that settles the value instead of narrowing the type, and it is
-     * read as that by {@link #node} and nowhere else. Answered with the declared type, the position
-     * would be built as the optional and the search would be free to put a value in it; answered
-     * with what the optional holds, it would be built as the value the narrowing says is not there.
+     * <p><b>Only the narrowings that leave something to build reach here.</b> The absence of an
+     * optional is not one of them and is answered by {@link #settle}, where the position is settled
+     * at a value instead. Answered here, it would have to come back as a type — the declared
+     * optional, or what the optional holds — and either is a position built as something the
+     * narrowing said is not there. So this returns a type and never null, and a narrowing that
+     * settles a value is a case {@link #settle} has to name rather than one this can express.
      */
-    private static Type refined(Type declared, Refinement refinement, Symbols symbols) {
+    private static Type narrowed(Type declared, Refinement refinement, Symbols symbols) {
         return switch (refinement) {
-            case null -> declared;
             case Refinement.SumCase one -> Type.ref(one.leaf());
             // What a `Some` leaves at the position is what the optional was declared to hold, which
             // is the same reading the branches under a position are made from
-            // (`StructuralInspection.carried`). And the absence leaves nothing.
-            case Refinement.Presence presence -> presence.present() ? held(declared, symbols) : null;
+            // (`StructuralInspection.carried`).
+            case Refinement.Presence presence -> presence.present() ? held(declared, symbols)
+                    : illegal(declared);
         };
+    }
+
+    /** The absence reaching the one place that cannot express it, which is this compiler
+     *  contradicting itself rather than anything a model can write. */
+    private static Type illegal(Type declared) {
+        throw new IllegalStateException("`" + Type.show(declared) + "` is asked for the type an"
+                + " absence narrows it to; an absence settles the value and narrows no type, so this"
+                + " is the plan reading a settled position as one still to be built");
     }
 
     /**

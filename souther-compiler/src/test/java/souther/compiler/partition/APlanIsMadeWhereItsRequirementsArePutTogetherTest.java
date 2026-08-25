@@ -25,6 +25,7 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -115,6 +116,30 @@ class APlanIsMadeWhereItsRequirementsArePutTogetherTest {
         assertEquals(Set.of("Tag", "NoTag"),
                 Set.of(against.one().spelled(), against.other().spelled()),
                 "and the answer says which two it would have to be");
+    }
+
+    /**
+     * A value fixed at a position that is also required to be narrowed is two accounts of one
+     * location, and is refused.
+     *
+     * <p>What ADR-0114 keeps apart, said as a contract rather than answered by preferring one of
+     * the two: a class that narrows states the narrowing and does not also fix a value there,
+     * because the value stands at the narrowed position and is chosen there. Nothing a model writes
+     * reaches it — the classes that narrow offer no value to fix and the ones that offer a value
+     * narrow nothing — and it is exactly the arrangement an optional's classes had before they said
+     * which narrowing they were, so leaving the API able to express it leaves the next producer able
+     * to write it.
+     */
+    @Test
+    void aValueFixedWhereANarrowingIsRequiredIsTwoAccountsOfOnePosition() {
+        TermPath tag = TermPath.of("query").then("tag");
+
+        IllegalStateException said = assertThrows(IllegalStateException.class,
+                () -> ConstructionPlan.of(typeOf(), TermPath.of("query"), symbols(), Set.of(tag),
+                        Requirements.NONE.and(tag, caseOf("Tag")), (_, _) -> 0));
+
+        assertTrue(said.getMessage().contains("query.tag") && said.getMessage().contains("Tag"),
+                "the answer names the position said twice: " + said.getMessage());
     }
 
     private static ConstructionPlan planned(Set<TermPath> decided, Requirements additional) {
