@@ -622,7 +622,7 @@ final class PathEngine {
 
         @Override
         public void stopped(String path, Type type, GuaranteeWalk.Stop why) {
-            declining(type, path, gathering, borne(why));
+            stopping(type, path, gathering, why);
         }
 
         @Override
@@ -635,16 +635,28 @@ final class PathEngine {
             }
         }
 
-        /** What a stop leaves unread: a rule of every value that stands there, or one of only some.
-         * A stop the reader asked for and a depth it could not afford both leave rules every
-         * construction has to make; the rest stop where no rule holds of every value anyway. */
-        private InvariantChecker.Borne borne(GuaranteeWalk.Stop why) {
-            return switch (why) {
-                case PAST_THE_DEPTH, ASKED_TO_STOP, NO_VALUE_THERE ->
-                        InvariantChecker.Borne.BY_EVERY_VALUE;
-                case NOTHING_DECLARED, ALREADY_ENTERED -> InvariantChecker.Borne.BY_SOME_VALUES;
-            };
-        }
+    }
+
+    /**
+     * What a stop leaves unread: a rule of every value that stands there, or one of only some.
+     *
+     * <p>A stop the reader asked for and a depth it could not afford both leave rules every
+     * construction has to make; the rest stop where no rule holds of every value anyway.
+     *
+     * <p>Asked only of the stops that leave something unread. A stop that hands the rules on
+     * ({@link #handsTheRulesOn}) leaves nothing here for anybody to bear, and answering for it would
+     * put a word in the hands of a reader deciding what to hand on from what a rule is borne by —
+     * which is the reading the two questions are kept apart to refuse.
+     */
+    private static InvariantChecker.Borne borne(GuaranteeWalk.Stop why) {
+        return switch (why) {
+            case PAST_THE_DEPTH, ASKED_TO_STOP, NO_VALUE_THERE ->
+                    InvariantChecker.Borne.BY_EVERY_VALUE;
+            case ALREADY_ENTERED -> InvariantChecker.Borne.BY_SOME_VALUES;
+            case NOTHING_DECLARED -> throw new IllegalArgumentException(
+                    "a stop that hands the rules on leaves nothing unread at the position it "
+                            + "happened at");
+        };
     }
 
     /**
@@ -672,17 +684,49 @@ final class PathEngine {
     }
 
     /**
-     * Tells the reading where it is leaving rules unread.
+     * Tells the reading where it stopped, and which of the two kinds of stop it was.
      *
-     * <p>Every way the walk stops short comes here. Whether a stop costs anything is a question
-     * about the model — is any rule written under what is being left — and asking it of the walk's
-     * own reach would answer that whatever was not read had nothing in it.
+     * <p>Every way the walk stops short comes here. Whether a stop is worth saying anything about is
+     * a question about the model — is any rule written under what is being left — and asking it of
+     * the walk's own reach would answer that whatever was not read had nothing in it. That question
+     * decides whether anything is owed here; it does not decide what is owed, which is the
+     * distinction below.
      */
-    private void declining(Type type, String path, InvariantChecker.Gathering gathering,
-                           InvariantChecker.Borne borne) {
-        if (gathering != null && type != null && guarantees.anyRuleUnder(type)) {
-            gathering.missed(path, borne);
+    private void stopping(Type type, String path, InvariantChecker.Gathering gathering,
+                          GuaranteeWalk.Stop why) {
+        if (gathering == null || type == null || !guarantees.anyRuleUnder(type)) {
+            return;
         }
+        if (handsTheRulesOn(why)) {
+            gathering.handedOn(path);
+        } else {
+            gathering.missed(path, borne(why));
+        }
+    }
+
+    /**
+     * Whether this stop passes the rules under the position to another reading rather than leaving
+     * them unread.
+     *
+     * <p>{@link GuaranteeWalk.Stop#NOTHING_DECLARED} and nothing else. It says there is no
+     * declaration standing here to be read, which is what a container, an optional and a choice
+     * between declarations all are — and what is written under one of those is written about a value
+     * one position down, where a reading of that declaration is opened and a row meets it. So the
+     * rules are not lost by this stop; the responsibility for them is somebody else's, and whoever
+     * walks the positions has to show that somebody took it (#1072).
+     *
+     * <p>Every other stop leaves them unread. {@link GuaranteeWalk.Stop#ALREADY_ENTERED} is the one
+     * worth naming: it stops where the walk could have gone on, so nothing below is opened and
+     * nobody takes the rules over. Read as a handing on, a type holding its own kind would be
+     * discharged by the reading made of it further up.
+     *
+     * <p>Asked of the stop and not of {@link InvariantChecker.Borne}. What a stop leaves unread and
+     * whether the rules pass to another reading are different questions that agree today by
+     * coincidence: every stop that hands on is borne by some values, and one that is borne by some
+     * values need not hand anything on. Read off the second, the coincidence becomes the rule.
+     */
+    private static boolean handsTheRulesOn(GuaranteeWalk.Stop why) {
+        return why == GuaranteeWalk.Stop.NOTHING_DECLARED;
     }
 
 }

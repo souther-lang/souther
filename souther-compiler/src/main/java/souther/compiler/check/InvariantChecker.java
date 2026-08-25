@@ -414,11 +414,14 @@ public final class InvariantChecker {
      *                 into an obligation is one another reading may have taken in whole, and
      *                 borrowing that answer would settle each reading's completeness by a fragment
      *                 that is not its own
+     * @param handedOn the positions this reading ended at with a declaration still to be read under
+     *                 them, which is an obligation on whoever walks the positions rather than
+     *                 anything wrong here — see {@link Gathering#handedOn}
      */
     record Seeded(ConstraintState<FactSubject> constraints, Map<String, FactSubject> atoms, Map<String, FactSubject> keys,
                   Map<String, FieldDomains.Counted> held, Reading reading, ReadingEvidence took,
                   boolean everyClauseRead, Set<String> notGathered,
-                  Set<String> unreadOfEveryValue,
+                  Set<String> unreadOfEveryValue, Set<String> handedOn,
                   Map<RuleRef, Map<Core, PartRead>> readBy,
                   Map<FactSubject, souther.compiler.numeric.Granularity> spacing) {
 
@@ -434,6 +437,7 @@ public final class InvariantChecker {
         public Seeded {
             notGathered = Set.copyOf(notGathered);
             unreadOfEveryValue = Set.copyOf(unreadOfEveryValue);
+            handedOn = Set.copyOf(handedOn);
             // Insertion order, which is the order the declarations write their clauses. `Map.copyOf`
             // iterates in an order salted once per JVM run, and what is read off these is a list of
             // causes a report prints.
@@ -447,7 +451,7 @@ public final class InvariantChecker {
                     new Reading(List.of(), List.of(), Map.of(), Map.of(), Map.of()),
                     new ReadingEvidence(),
                     false, Set.of(FieldDomains.THE_VALUE), Set.of(FieldDomains.THE_VALUE),
-                    Map.of(), Map.of());
+                    Set.of(), Map.of(), Map.of());
         }
 
         /** The numbers alone, for the readers that are about intervals. Whether a value exists is
@@ -540,6 +544,11 @@ public final class InvariantChecker {
         // And of those, the ones a construction cannot get out of: what a position admits and
         // whether an edge of it may be promised are two questions, and a stop answers them apart.
         Set<String> unreadOfEveryValue = new LinkedHashSet<>();
+        // The positions this reading ended at with the rules under them still to be read by
+        // somebody. Kept apart from the stops above because it is an obligation and not a finding:
+        // whether anything took the rules over is settled by whoever walks the positions, and the
+        // answer is not in this reading at all.
+        Set<String> handedOn = new LinkedHashSet<>();
         List<Written> written = new ArrayList<>();
         ReadingEvidence took = new ReadingEvidence();
         // What the bounds are able to state of each rule, as the reading that builds them says it.
@@ -563,6 +572,11 @@ public final class InvariantChecker {
                 if (borne == Borne.BY_EVERY_VALUE) {
                     unreadOfEveryValue.add(path);
                 }
+            }
+
+            @Override
+            public void handedOn(String path) {
+                handedOn.add(path);
             }
 
             @Override
@@ -725,7 +739,8 @@ public final class InvariantChecker {
                 constraints = ConstraintState.settling(constraints, atom, each.getValue(), spaced);
             }
             return new Seeded(constraints, atoms, keys, held, reading, took, read,
-                    Set.copyOf(notGathered), unreadOfEveryValue, readBy, Map.copyOf(spacing));
+                    Set.copyOf(notGathered), unreadOfEveryValue, Set.copyOf(handedOn),
+                    readBy, Map.copyOf(spacing));
         } catch (RuntimeException why) {
             gaveUp("seedFields " + named.name(), why);
             return Seeded.nothingRead();
@@ -944,6 +959,23 @@ public final class InvariantChecker {
          * either way.
          */
         void missed(String path, Borne borne);
+
+        /**
+         * A position where this reading ends and the rules under it become another reading's.
+         *
+         * <p>Not a rule missed. Nothing is declared at the position for this reading to take in —
+         * what stands there is a container, an optional, or a choice between declarations — and what
+         * is written under it is written about a value one position down, where a reading of that
+         * declaration is opened and a row meets it.
+         *
+         * <p>So this is an obligation and not a finding: something has to have taken the rules over,
+         * and whoever walks the positions is the only one who can say whether anything did. Recorded
+         * as a miss, the position above reported a rule nobody could ever discharge, because the
+         * walk had gone to the rule at the position below (#1072). Read as nothing at all, a
+         * position under which no reading was ever opened would claim to have read rules it never
+         * saw.
+         */
+        void handedOn(String path);
 
         /**
          * What the reading that builds the bounds made of one part of {@code rule}, as it read it.

@@ -66,7 +66,8 @@ public final class FieldDomains {
      */
     public static final FieldDomains NONE =
             new FieldDomains(Map.of(), Map.of(), Map.of(), Map.of(), Set.of(), List.of(), List.of(), Map.of(),
-                    Map.of(), new ReadingEvidence(), Map.of(), Set.of(THE_VALUE), NO_POSITIONS,
+                    Map.of(), new ReadingEvidence(), Map.of(), Set.of(THE_VALUE), Set.of(),
+                    NO_POSITIONS,
                     ConstraintState.<FactSubject>top(), null, null, null, null, Map.of(), Set.of(THE_VALUE),
                     Map.of(), Map.of(), Map.of(), Map.of());
 
@@ -107,6 +108,10 @@ public final class FieldDomains {
     /** Where a clause of this value did not reach the readings at all, as the paths the stops
      * happened at — see {@link #admits}. */
     private final Set<String> notGathered;
+    /** Where this reading ended with a declaration still to be read under the position, which is an
+     * obligation on whoever walks the positions rather than anything wrong here — see
+     * {@link #handedOn()}. */
+    private final Set<String> handedOn;
     /** And of those, the positions a construction has to make a value at. What a position admits is
      *  short wherever a rule about it went unread; whether an edge of it may be promised is about
      *  what every value of this has to satisfy, and a rule inside an optional is not that. */
@@ -147,7 +152,7 @@ public final class FieldDomains {
                          Map<RuleRef, Required> raised,
                          Map<RuleRef, Map<Core, Required>> raisedByPart, ReadingEvidence took,
                          Map<String, List<TypeSymbol>> narrowers,
-                         Set<String> notGathered,
+                         Set<String> notGathered, Set<String> handedOn,
                          SequencedMap<FactSubject, String> positions,
                          ConstraintState<FactSubject> constraints, TypeSymbol.AtModule named,
                          Hir.Data data, Symbols symbols, ReadingPolicy policy,
@@ -168,6 +173,7 @@ public final class FieldDomains {
         this.took = took;
         this.narrowers = narrowers;
         this.notGathered = notGathered;
+        this.handedOn = handedOn;
         this.positions = positions;
         this.constraints = constraints;
         this.named = named;
@@ -377,7 +383,7 @@ public final class FieldDomains {
                 Map.copyOf(unread), Set.copyOf(notSeparated), seeded.reading().directs(), seeded.reading().noLines(),
                 seeded.reading().raised(), seeded.reading().raisedByPart(), seeded.took(),
                 seeded.reading().narrowers(),
-                seeded.notGathered(), placeOf,
+                seeded.notGathered(), seeded.handedOn(), placeOf,
                 seeded.constraints(), named, data, symbols, policy, settled,
                 seeded.unreadOfEveryValue(), seeded.atoms(), seeded.held(),
                 seeded.readBy(), seeded.spacing());
@@ -986,7 +992,33 @@ public final class FieldDomains {
      * whether anything is out of sight wants this.
      */
     public boolean everyRuleReachedAt(String path) {
-        for (String stopped : notGathered) {
+        return reaches(notGathered, path) && reaches(handedOn, path);
+    }
+
+    /**
+     * The positions this reading ended at with a declaration still to be read under them.
+     *
+     * <p>Not something wrong with the reading, and not an answer about the position either. What
+     * stands at one of these is a container, an optional, or a choice between declarations, and what
+     * is written under it is written about a value one position down — so the rules pass to whatever
+     * reading is opened there, and whether one was is a fact about the walk over positions rather
+     * than about this reading of a declaration.
+     *
+     * <p>Handed over so that the walk can discharge them, one at a time and against the readings it
+     * actually opened. Answered here instead, the only thing this could say is whether the type
+     * graph has a rule somewhere below — which is what {@link #everyRuleReachedAt} used to be
+     * answering with, and it made the position above short of a rule no row could ever supply
+     * (#1072).
+     */
+    public Set<String> handedOn() {
+        return handedOn;
+    }
+
+    /** Whether {@code path} is out from under every stop in {@code stops}. A stop reaches the
+     *  position it happened at and everything under it, and a stop at {@link #THE_VALUE} is the
+     *  declaration's own clause and reaches every position of it. */
+    private static boolean reaches(Set<String> stops, String path) {
+        for (String stopped : stops) {
             if (stopped.equals(THE_VALUE) || path.equals(stopped)
                     || path.startsWith(stopped + ".")) {
                 return false;
