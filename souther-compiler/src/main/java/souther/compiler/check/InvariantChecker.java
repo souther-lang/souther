@@ -1336,14 +1336,36 @@ public final class InvariantChecker {
      */
     private ClauseStates states(Core clause, Denotations at,
                                 Map<FactSubject, Coordinate> byName) {
+        List<Owed.Subject> found = new ArrayList<>();
+        namedIn(clause, at, byName, found);
+        // What the rule cuts, ahead of what it looks like. Which values a rule restricts is settled
+        // by the quantity its canonical form cuts, and that is the rule `UnreadComparison.why` is
+        // written around one layer down — asked of what the rule cuts, and of the sides only where
+        // that is unreadable. This reader was still asking the sides, so `lo - lo >= 0` came out as
+        // a rule about `lo` and raised the questions a rule about a position raises: which values
+        // may stand there, and where they stop. It states neither, so nothing could answer either.
+        //
+        // Only the empty quantity is read off here. A quantity over positions leaves which of them
+        // the rule is about to the walk, which reads the same clause with the same coordinates, and
+        // where the arithmetic read no quantity there is no fact to outrank a spelling with. The
+        // order is what matters: a semantic answer, wherever this reader has one, comes first — so
+        // the arithmetic growing able to read more moves this classification with it and nothing
+        // below has to be touched.
+        //
+        // And only where the clause names a position at all. `1 >= 0` cuts nothing either, and it
+        // is not a rule that restricts no value of this position — it is a rule about nowhere, said
+        // by the one authority for that question, which is whether the value is mentioned.
+        if (!found.isEmpty() && clause instanceof Core.Binary bin
+                && InvariantBound.ordering(bin.op())
+                && quantityOf(bin, at, byName) instanceof UnreadComparison.Quantity.CutsNothing<?>) {
+            return new ClauseStates.NoRestriction();
+        }
         if (Relates.twoPositions(clause, e -> {
             FactSubject named = nameOf(e, at);
             return named != null && byName.containsKey(named) ? named : null;
         })) {
             return new ClauseStates.ARelation();
         }
-        List<Owed.Subject> found = new ArrayList<>();
-        namedIn(clause, at, byName, found);
         return ClauseStates.SomethingElse.naming(found);
     }
 

@@ -60,6 +60,27 @@ sealed interface ClauseStates {
     record ARelation() implements ClauseStates {}
 
     /**
+     * The clause restricts no value of anything.
+     *
+     * <p>{@code lo - lo >= 0} holds of every row there is. The quantity it cuts is empty — the
+     * position cancels against itself — so there is no value of any position it admits or refuses,
+     * and nothing a measure of coverage could go and check.
+     *
+     * <p><b>Read off what the rule cuts and not off what the spelling names.</b> The position is
+     * written twice in that clause, so counted off the sides it is a rule about the position and
+     * raises the questions a rule about a position raises: which values may stand there, and where
+     * they stop. Nothing can answer either, because the rule states neither — so a clause this
+     * compiler read from end to end and understood completely came out as a question nobody had
+     * answered, and took the measurement to partial with it.
+     *
+     * <p>Its own state and not {@link SomethingElse} with an empty set of positions. That one is a
+     * clause about a position written in a shape this classification does not take further, and it
+     * carries the positions so that whatever reads the clause can be asked about them. This is a
+     * conclusion about the clause: it was read, and there is nothing in it to ask anybody about.
+     */
+    record NoRestriction() implements ClauseStates {}
+
+    /**
      * Something else: the values a rule names, a call, a pattern, an expression the terms do not
      * name.
      *
@@ -97,6 +118,9 @@ sealed interface ClauseStates {
             // A rule about a pair costs neither of them: what it says is not a set of one
             // position's values, so there is nothing about one for anything to have read.
             case ARelation _ -> Set.of();
+            // And a rule that restricts nothing costs nothing anywhere. Not the same as naming no
+            // position — this one names one and says nothing about it.
+            case NoRestriction _ -> Set.of();
         };
     }
 }

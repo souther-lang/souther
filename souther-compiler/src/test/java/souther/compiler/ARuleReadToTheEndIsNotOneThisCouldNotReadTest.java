@@ -122,25 +122,25 @@ class ARuleReadToTheEndIsNotOneThisCouldNotReadTest {
     /**
      * A clause read to the end whose quantity the position does not appear in.
      *
-     * <p>{@code lo - lo >= 0} holds of every row. It is read from end to end, and the sentence a
-     * person is shown says so; the accounting beside it raises a question about which values may
-     * stand at the position and nothing answers it, so a rule this compiler understood completely
-     * comes out as one nobody accounted for and takes the measurement down to partial with it.
+     * <p>{@code lo - lo >= 0} holds of every row, and the position it names cancels against itself.
+     * It costs the measurement what the clause above costs it, which is nothing: no value anywhere
+     * is admitted or refused, so there is no question about the values for anybody to answer.
      *
-     * <p><b>This is what #1047 is about, and these three assertions are what it moves.</b> They are
-     * written against what this does today so that the change is visible as a change; the clause
-     * above raises no question at all and this one has to come to the same place.
+     * <p>The position is written twice, so a classification counting off the sides made it a rule
+     * about {@code lo} raising the questions a rule about a position raises — which nothing could
+     * answer, because the rule states neither of them. A clause this compiler read from end to end
+     * came out as a question nobody had answered and took the measurement to partial with it.
      */
     @Test
-    void aClauseCuttingNothingIsStillCountedAsAQuestionNobodyAnswered() {
+    void aClauseCuttingNothingCostsTheMeasurementNothing() {
         Measured measured = of("    invariant lo - lo >= 0");
 
         assertTrue(measured.says("it was read to the end and cuts nothing this position appears in"),
                 measured.human());
 
-        assertEquals("partial", measured.status());
-        assertEquals(List.of("question_unanswered"), measured.weakening());
-        assertTrue(measured.kinds().contains("rule_unaccounted"), measured.kinds().toString());
+        assertEquals("complete", measured.status());
+        assertEquals(List.of(), measured.weakening());
+        assertFalse(measured.kinds().contains("rule_unaccounted"), measured.kinds().toString());
     }
 
     /**
