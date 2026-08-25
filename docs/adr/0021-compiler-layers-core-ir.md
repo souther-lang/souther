@@ -29,6 +29,21 @@ The normative specification (`[#compiler-pipeline]`, `[#ast-tracking]`) is revis
 change: Core is a typed lowering of behavior bodies, so "no separate IR" no longer describes
 the pipeline.
 
+**What Core carries (issue #1080).** Core is the checked executable representation of an
+expression, and a behavior body was only the first thing to reach a backend as one. A data's
+`invariant` and a behavior's `ensures` are expressions the language states and something runs, and
+each was elaborated twice — once by the check, which asked for the type and dropped what it made,
+and once by the emitter that ran it. Both are Core the checker produced now, and the JVM emits
+them as it emits a body; a checked program carries the same values, so an output other than this
+compiler holds what admits a value and what an answer is held to.
+
+So the rule is about the entry and not about the node. What may turn a written expression into
+Core is the checker, once per condition; a Core-to-Core pass derives from what that produced and
+does not read the tree again. The codec emitters remain the one named exception — a decoder and an
+encoder are still AST when they reach the backend — and the exception has an owner rather than a
+method in reach of the package (`CodecGen`, held by
+`OnlyTheCodecEmitterTurnsAnAstIntoCoreTest`).
+
 ## Context
 
 The MVP compiler carried no intermediate representation. Type checking ran on the

@@ -4,7 +4,6 @@ import souther.compiler.ast.Hir;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.ValueName;
 
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -90,22 +89,19 @@ public final class Lower {
         return bindings;
     }
 
-    /** {@code module} with {@code fns} as its declarations, {@code takenOn} as what it emits without
-     * having declared, and every data invariant desugared — the tree the backend emits from. The two
-     * stay apart down here: both become methods, and only the first is this module's to answer for. */
+    /**
+     * {@code module} with {@code fns} as its declarations and {@code takenOn} as what it emits
+     * without having declared — the tree the backend emits from. The two stay apart down here: both
+     * become methods, and only the first is this module's to answer for.
+     *
+     * <p>The declarations are carried across untouched. This used to desugar every data's invariant
+     * as well, for a backend that elaborated the clause on its way to emitting it; the clause a
+     * construction runs is the checker's now (issue #1080), and a tree of clauses nothing runs is a
+     * second executable-looking form for the next reader to reach for.
+     */
     public static Hir.Module lowered(Hir.Module module, List<Hir.FnDef> fns,
                                      List<Hir.FnDef> takenOn) {
-        List<Hir.Def> defs = new ArrayList<>();
-        for (Hir.Def def : module.defs()) {
-            if (def instanceof Hir.Data d && !d.invariants().isEmpty()) {
-                defs.add(new Hir.Data(d.written(), d.declares(), d.newtype(), d.includes(), d.fields(),
-                        Hir.mapClauses(d.invariants(), Lower::desugar),
-                        d.decoder(), d.encoder(), d.pos()));
-            } else {
-                defs.add(def);
-            }
-        }
-        return module.withDefs(defs).withFns(fns).withTakenOn(takenOn);
+        return module.withFns(fns).withTakenOn(takenOn);
     }
 
     /** Desugars one expression the way a body is desugared, for the paths that hold a single
