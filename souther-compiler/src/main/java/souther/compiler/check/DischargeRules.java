@@ -243,7 +243,7 @@ final class DischargeRules {
      * counted, and what it was given, counted. A form whose arguments this can carry and whose
      * result it cannot is a form it cannot carry.
      *
-     * <p>Asked with {@link Question#isANumber} where the binding asks
+     * <p>Asked with {@link NumericAnswers#isANumber} where the binding asks
      * {@link Question#countsToANumber}. That is the difference between what is true of the
      * operation and what this check can do with it — a date counts and is no number, so
      * {@code Date.daysBetween} is declared and is not carried here.
@@ -255,12 +255,12 @@ final class DischargeRules {
     private static boolean everyPartIsANumber(Stdlib stdlib, ValueName operation) {
         Stdlib.Signature signature =
                 stdlib.entry(((ValueName.Stdlib) operation).qualified()).signature();
-        if (!Question.isANumber(signature.result())) {
+        if (!NumericAnswers.isANumber(signature.result())) {
             return false;
         }
         List<Type> params = signature.params();
         return answersAFormOf(operation).coefs().keySet().stream().allMatch(argument ->
-                Question.isANumber(params.get(CallArguments.positionIn(argument, operation))));
+                NumericAnswers.isANumber(params.get(CallArguments.positionIn(argument, operation))));
     }
 
     /** Those of them the read-through table has, by name, for the test that holds each to a
@@ -533,7 +533,7 @@ final class DischargeRules {
      */
     static void holdNumericResult(Stdlib stdlib, ValueName operation, NumericResult rule) {
         Stdlib.Signature signature = holdTheOperationToTheLibrary(stdlib, operation).signature();
-        Type answers = Question.numberAnsweredBy(signature.result());
+        Type answers = NumericAnswers.in(signature.result());
         List<Arithmetic.Reads> reads = rule.computes().reads();
         if (signature.params().size() != reads.size()) {
             throw new IllegalStateException(operation + " takes " + signature.params().size()
@@ -548,7 +548,7 @@ final class DischargeRules {
         }
         switch (rule.at()) {
             case NumericResult.Answered.Directly ignored ->
-                    holdTheResultToTheDeclaration(stdlib, operation, Question::isANumber,
+                    holdTheResultToTheDeclaration(stdlib, operation, NumericAnswers::isANumber,
                             "a number for the arithmetic it computes to be answered at");
             case NumericResult.Answered.InTheCaseCarrying(Type carried) -> {
                 if (!(signature.result() instanceof Type.Union(Set<TypeSymbol> members))) {
@@ -581,7 +581,7 @@ final class DischargeRules {
         }
         if (rule.unless() != null) {
             holdToTheDeclaration(stdlib, operation, rule.unless().argument(), null,
-                    Question::isANumber, "the argument a failure is decided by");
+                    NumericAnswers::isANumber, "the argument a failure is decided by");
         }
     }
 
@@ -593,7 +593,7 @@ final class DischargeRules {
      */
     static void holdShift(Stdlib stdlib, ValueName operation, OperationFact.ShiftsBy
             shift) {
-        holdToTheDeclaration(stdlib, operation, shift.amount(), null, Question::isANumber,
+        holdToTheDeclaration(stdlib, operation, shift.amount(), null, NumericAnswers::isANumber,
                 "the amount a shift moves by");
         Stdlib.Entry counts = stdlib.entry(shift.measure().qualified());
         if (counts == null) {
@@ -602,7 +602,7 @@ final class DischargeRules {
         }
         Stdlib.Entry shifted = holdTheOperationToTheLibrary(stdlib, operation);
         List<Type> counted = counts.signature().params();
-        if (counted.size() != 2 || !Question.isANumber(counts.signature().result())
+        if (counted.size() != 2 || !NumericAnswers.isANumber(counts.signature().result())
                 || !counted.get(0).equals(shifted.signature().result())
                 || !counted.get(1).equals(shifted.signature().result())) {
             throw new IllegalStateException(shift.measure().qualified()
@@ -615,7 +615,7 @@ final class DischargeRules {
     /** As {@link #bind}, for the arguments a case names: the one it answers, and the two sides of
      * each condition it is reached under. */
     static void holdCase(Stdlib stdlib, ValueName operation, OperationFact.Case one) {
-        holdTheResultToTheDeclaration(stdlib, operation, Question::isANumber,
+        holdTheResultToTheDeclaration(stdlib, operation, NumericAnswers::isANumber,
                 "a number for a case of the definition to answer");
         List<ArgumentRef> named = new ArrayList<>();
         named.add(one.answers());
@@ -623,14 +623,14 @@ final class DischargeRules {
             named.add(stands.left());
             named.add(stands.right());
         });
-        named.forEach(each -> holdToTheDeclaration(stdlib, operation, each, null, Question::isANumber,
+        named.forEach(each -> holdToTheDeclaration(stdlib, operation, each, null, NumericAnswers::isANumber,
                 "an argument a case of the definition names"));
     }
 
     /** As {@link #bind}, for the arguments a bound names: the one the result is bounded against, and
      * the one a condition on the rule reads. Each is a separate claim about a separate argument. */
     static void holdBound(Stdlib stdlib, ValueName operation, ResultBound bound) {
-        holdTheResultToTheDeclaration(stdlib, operation, Question::isANumber,
+        holdTheResultToTheDeclaration(stdlib, operation, NumericAnswers::isANumber,
                 "a number for a bound on the result to hold of");
         List<ArgumentRef> named = new ArrayList<>();
         if (bound.against() != null) {
@@ -641,7 +641,7 @@ final class DischargeRules {
                 constant) {
             named.add(constant.argument());
         }
-        named.forEach(one -> holdToTheDeclaration(stdlib, operation, one, null, Question::isANumber,
+        named.forEach(one -> holdToTheDeclaration(stdlib, operation, one, null, NumericAnswers::isANumber,
                 "an argument a bound on the result names"));
     }
 
@@ -824,7 +824,7 @@ final class DischargeRules {
         // answers at that path is the union — which case it is in is a question this account has no
         // room for. Narrower than the range of whatever asks for such an account, and deliberately:
         // what may be declared and what is asked about are two ranges.
-        holdTheResultToTheDeclaration(stdlib, operation, Question::isANumber,
+        holdTheResultToTheDeclaration(stdlib, operation, NumericAnswers::isANumber,
                 "a number for a term of what it answers to be about");
         // Before the shape below, because it is the operation that is being asked about and not
         // this fact. An account that does not fit the operation is still an account of a number

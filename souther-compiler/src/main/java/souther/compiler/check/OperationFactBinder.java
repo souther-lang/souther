@@ -109,7 +109,7 @@ final class OperationFactBinder {
                 // wrong here (#1027).
                 case OperationFact.EveryAnswerItCanGiveHasASourceValue _ ->
                         DischargeRules.holdTheResultToTheDeclaration(stdlib, each.operation(),
-                                Question::isANumber,
+                                NumericAnswers::isANumber,
                                 "a number for every answer of it to have a value");
                 case OperationFact.AnswersANumberTakenOfTheOneValueItIsGiven taken ->
                         DischargeRules.holdTakenOf(stdlib, declared, each.operation(), taken.how());
