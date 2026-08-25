@@ -14,7 +14,14 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * The number an operation answers is read by one representation.
+ * The number an operation answers is read by at most one representation.
+ *
+ * <p>At most, and the name says so. Nothing read is ordinary — most of what the library answers is
+ * read by nothing at all — and where a reading is owed it is a range that says so, which is a
+ * different proposition asked in {@link AnOperationTheLibraryGainsIsAnsweredForTest}. Named for one
+ * rather than for at most one, this would read as the stronger claim with an exception in it, and
+ * the way to make the name true would be to pull the obligation in here, where it would hold as far
+ * as nothing in particular.
  *
  * <p>A term standing for a call, the form its result is of its arguments, the arithmetic it
  * computes, the body the language writes out — each is an account of the same number, and two of
@@ -27,11 +34,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * with it — and the operations no question asks about today are exactly the ones nobody would think
  * to check by hand.
  *
- * <p>{@code None} is not a failure here. Most of what the library answers is read by nothing, which
- * is ordinary; where a reading is owed it is a question's range that says so, and that is asked in
- * {@code AnOperationTheLibraryGainsIsAnsweredForTest}.
+ * <p>That each account is found where it is declared is not asked here either. This is a negative
+ * property and stays one: an arm the resolver stopped reading would leave the operations that carry
+ * it read by nothing, which is a state this is written to allow. What holds the accounts to being
+ * found is {@link NumericReadingsFindTheAccountsTheLibraryDeclaresTest}.
  */
-class OneNumericAnswerIsReadByOneRepresentationTest {
+class ANumberIsReadByAtMostOneRepresentationTest {
 
     @Test
     void noOperationsNumberIsReadByTwoRepresentations() {
@@ -39,7 +47,8 @@ class OneNumericAnswerIsReadByOneRepresentationTest {
         for (Map.Entry<String, Stdlib.Entry> e : DefaultStdlib.get().entries().entrySet()) {
             ValueName operation = DefaultStdlib.get().operation(e.getKey());
             if (NumericReadings.resolve(DefaultStdlib.get(), OperationFacts.declarations(),
-                    operation) instanceof NumericReadings.Resolution.Multiple(List<NumericReading> readings)) {
+                    operation) instanceof NumericReadings.Resolution.Multiple(
+                            List<NumericReading> readings)) {
                 twice.add(e.getKey() + " — " + String.join(" and ",
                         readings.stream().map(NumericReading::describes).toList()));
             }
@@ -47,23 +56,5 @@ class OneNumericAnswerIsReadByOneRepresentationTest {
         assertEquals(List.of(), twice,
                 "the number each of these answers is read by more than one representation, so which"
                         + " reading a report shows is whichever reader arrived");
-    }
-
-    /**
-     * An operation that answers no number has no reading of one.
-     *
-     * <p>{@code Date.addDays} declares a form and answers a date. The form is about what its
-     * arguments are counted as, which is what lets a date take part in one at all; it is not an
-     * account of a number the operation answered, because it answered none. Counted as one, every
-     * such operation would carry a reading whose subject is missing — and a proposition with no
-     * subject cannot come out false, so the count would look right for the wrong reason.
-     */
-    @Test
-    void anOperationThatAnswersNoNumberIsReadByNothing() {
-        assertEquals(new NumericReadings.Resolution.None(),
-                NumericReadings.resolve(DefaultStdlib.get(), OperationFacts.declarations(),
-                        DefaultStdlib.get().operation("Date.addDays")),
-                "a form over what its arguments are counted as is not a reading of a number this"
-                        + " operation answers, since it answers a date");
     }
 }

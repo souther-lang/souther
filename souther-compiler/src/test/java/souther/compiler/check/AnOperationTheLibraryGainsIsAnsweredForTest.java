@@ -29,7 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * <p>What is <em>not</em> asked here is whether the number an operation answers is read by more than
  * one representation. That is a property of the declarations and holds of every operation, in range
  * of a question or not, so it is held over the declarations themselves
- * ({@link OneNumericAnswerIsReadByOneRepresentationTest}). Asked here, how far the exclusivity
+ * ({@link ANumberIsReadByAtMostOneRepresentationTest}). Asked here, how far the exclusivity
  * reached would be whatever a range happened to cover that week.
  *
  * <p>A question whose answer is read off the declaration ({@link Question#COMBINATOR}) is held the
