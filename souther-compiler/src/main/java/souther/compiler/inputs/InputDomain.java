@@ -510,7 +510,7 @@ public final class InputDomain {
                         policy, found, roots, java.util.Set.of(), handoffs);
             }
             case StructuralInspection.Continuation.Branches branches -> {
-                List<StructuralInspection.Branch> owed = new ArrayList<>();
+                List<StructuralInspection.Branch> standing = new ArrayList<>();
                 List<TermPath> passedTo = new ArrayList<>();
                 for (StructuralInspection.Branch branch : branches.branches()) {
                     // A branch that is the whole of a value puts no position anywhere, and one the
@@ -519,11 +519,11 @@ public final class InputDomain {
                     if (branch.under() == null || !owed(here, branch.refinement())) {
                         continue;
                     }
-                    owed.add(branch);
+                    standing.add(branch);
                     passedTo.add(path.refine(branch.refinement()));
                 }
                 handoffs.passesTo(placed.root(), path, passedTo);
-                for (StructuralInspection.Branch branch : owed) {
+                for (StructuralInspection.Branch branch : standing) {
                     walkBranch(branch, placed.root(), path, depth, symbols, policy, found, roots,
                             visited, handoffs);
                 }
