@@ -139,7 +139,7 @@ public final class ExampleVerifier {
      *
      * @throws IllegalArgumentException where the artifact is of another module
      */
-    public static Observations check(souther.compiler.check.Prepared.ExampleExecution module,
+    public static Observations check(souther.compiler.check.Prepared.Examples module,
                                      Symbols symbols, Map<String, Sig> sigs,
                                      EvaluationArtifact artifact,
                                      Supplier<PublishedClasses> declared,
@@ -153,7 +153,7 @@ public final class ExampleVerifier {
                     + "`'s and the artifact is `" + artifact.implementations().module()
                     + "`'s; what applies a behavior would be looked up in the wrong module");
         }
-        if (module.examples().isEmpty()) {
+        if (module.rows().isEmpty()) {
             return Observations.NONE;
         }
         ExampleVerifier v = evaluating(module, symbols, sigs, artifact, declared, requirements,
@@ -161,7 +161,7 @@ public final class ExampleVerifier {
         List<Diagnostic> failures = new ArrayList<>();
         List<RowOutcome> rows = new ArrayList<>();
         List<Incompleteness> incompleteness = new ArrayList<>();
-        for (souther.compiler.check.Prepared.Rows block : module.examples()) {
+        for (souther.compiler.check.Prepared.Rows block : module.rows()) {
             Hir.Example ex = block.read();
             try {
                 v.checkExample(ex, failures, rows);
@@ -197,7 +197,7 @@ public final class ExampleVerifier {
      * rows against it is what lets the loop belong to a caller — which is what it has to be when
      * what an implementation answers out of changes between one row and the next.
      */
-    public static ExampleVerifier evaluating(souther.compiler.check.Prepared.ExampleExecution module,
+    public static ExampleVerifier evaluating(souther.compiler.check.Prepared.Examples module,
                                       Symbols symbols, Map<String, Sig> sigs,
                                       EvaluationArtifact artifact,
                                       Supplier<PublishedClasses> declared,
@@ -328,7 +328,7 @@ public final class ExampleVerifier {
     private List<StatedRow> recordedRowsOf(BoundExamples of, String behavior,
                                            FixtureReader fixtures, Sig sig) {
         List<StatedRow> found = new ArrayList<>();
-        for (souther.compiler.check.Prepared.Rows block : module.examples()) {
+        for (souther.compiler.check.Prepared.Rows block : module.rows()) {
             Hir.Example written = block.read();
             if (!written.target().equals(behavior)) {
                 continue;
@@ -680,7 +680,7 @@ public final class ExampleVerifier {
         return d.said() == null ? "example failed" : DiagnosticRenderer.legacyBody(d);
     }
 
-    private final souther.compiler.check.Prepared.ExampleExecution module;
+    private final souther.compiler.check.Prepared.Examples module;
     private final Symbols symbols;
     private final Map<String, Sig> sigs;
     /** What each behavior of this module takes injected, in the order its constructor takes it. */
@@ -733,7 +733,7 @@ public final class ExampleVerifier {
     /** What holds a row's values to what the behavior declares of what it answers. */
     private final EnsuresChecks ensures;
 
-    private ExampleVerifier(souther.compiler.check.Prepared.ExampleExecution module,
+    private ExampleVerifier(souther.compiler.check.Prepared.Examples module,
                             Symbols symbols, Map<String, Sig> sigs,
                             Map<String, List<BehaviorRequirement>> requirements,
                             MemoryClassLoader loader, Map<String, Hir.FnDef> values,

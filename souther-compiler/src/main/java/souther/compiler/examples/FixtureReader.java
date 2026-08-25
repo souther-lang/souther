@@ -69,7 +69,7 @@ import java.util.function.Supplier;
  */
 public final class FixtureReader {
 
-    private final souther.compiler.check.Prepared.ExampleExecution module;
+    private final souther.compiler.check.Prepared.Examples module;
     private final Symbols symbols;
     /** The values a row may name: this module's own, and the ones its imports bring in. */
     private final Map<String, Hir.FnDef> values;
@@ -79,7 +79,7 @@ public final class FixtureReader {
     /** What a value looks like in the form a decoder reads — the rules both directions of a row read. */
     private final NeutralForm neutral;
 
-    FixtureReader(souther.compiler.check.Prepared.ExampleExecution module, Symbols symbols, Map<String, Hir.FnDef> values,
+    FixtureReader(souther.compiler.check.Prepared.Examples module, Symbols symbols, Map<String, Hir.FnDef> values,
                   MemoryClassLoader loader) {
         this.module = module;
         this.symbols = symbols;
@@ -132,7 +132,7 @@ public final class FixtureReader {
     }
 
     /** A way to build values against this module's generated classes, without any rows to run. */
-    public static Construction constructing(souther.compiler.check.Prepared.ExampleExecution module, Symbols symbols,
+    public static Construction constructing(souther.compiler.check.Prepared.Examples module, Symbols symbols,
                                             Map<String, byte[]> classes, ClassLoader parent,
                                             Map<String, Hir.FnDef> values) {
         // A reader is the whole of it. There are no rows, so nothing runs on a worker and no budget is

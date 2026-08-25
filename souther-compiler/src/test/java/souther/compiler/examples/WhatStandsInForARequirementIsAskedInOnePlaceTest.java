@@ -122,7 +122,7 @@ class WhatStandsInForARequirementIsAskedInOnePlaceTest {
                         model.execution()));
     }
 
-    private record Model(Hir.ExampleRow row, Prepared.ExampleExecution execution) {}
+    private record Model(Hir.ExampleRow row, Prepared.Examples execution) {}
 
     private static Model modelOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
@@ -130,7 +130,7 @@ class WhatStandsInForARequirementIsAskedInOnePlaceTest {
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         assertNotNull(prepared, "the model under test compiles");
-        Hir.ExampleRow row = prepared.examples().get(0).read().rows().get(0);
+        Hir.ExampleRow row = prepared.rows().get(0).read().rows().get(0);
         return new Model(row, prepared.forExamples());
     }
 }

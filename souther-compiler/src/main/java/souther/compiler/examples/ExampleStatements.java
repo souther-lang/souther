@@ -60,7 +60,7 @@ import java.util.Set;
  */
 public final class ExampleStatements {
 
-    private final souther.compiler.check.Prepared.ExampleExecution module;
+    private final souther.compiler.check.Prepared.Examples module;
     private final Symbols symbols;
     private final Map<String, Sig> sigs;
     private final MemoryClassLoader loader;
@@ -81,7 +81,7 @@ public final class ExampleStatements {
     /** What holds a fake's row to what the dependency declares of what it answers. */
     private final EnsuresChecks ensures;
 
-    private ExampleStatements(souther.compiler.check.Prepared.ExampleExecution module, Symbols symbols, Map<String, Sig> sigs,
+    private ExampleStatements(souther.compiler.check.Prepared.Examples module, Symbols symbols, Map<String, Sig> sigs,
                               MemoryClassLoader loader, Map<String, Hir.FnDef> values,
                               Deadline deadline, EvaluationPolicy policy,
                               Map<String, BehaviorContract> contracts) {
@@ -158,12 +158,12 @@ public final class ExampleStatements {
      * itself dispatches with ({@link Standins#answering}) — the same rule, not a second reading of it — and
      * the two answers are compared as the written values they are built into.
      */
-    public static Readings disagreements(souther.compiler.check.Prepared.ExampleExecution module, Symbols symbols,
+    public static Readings disagreements(souther.compiler.check.Prepared.Examples module, Symbols symbols,
                                          Map<String, Sig> sigs, Map<String, byte[]> classes,
                                          ClassLoader parent, Map<String, Hir.FnDef> values,
                                          Deadline deadline, EvaluationPolicy policy,
                                          Map<String, BehaviorContract> contracts) {
-        if (module.examples().isEmpty()) {
+        if (module.rows().isEmpty()) {
             return Readings.NONE;
         }
         // Which behaviors have both a stand-in and rows of their own, read off the text. Two written
@@ -217,7 +217,7 @@ public final class ExampleStatements {
      * on. Which of them a fake is written in is what its own place says, so the two are never out of
      * step.
      */
-    public static List<Diagnostic> fakeTables(souther.compiler.check.Prepared.ExampleExecution module, Symbols symbols,
+    public static List<Diagnostic> fakeTables(souther.compiler.check.Prepared.Examples module, Symbols symbols,
                                               Map<String, Sig> sigs, Map<String, byte[]> classes,
                                               ClassLoader parent, Map<String, Hir.FnDef> values,
                                               SourceId sourceId,
@@ -424,12 +424,12 @@ public final class ExampleStatements {
 
     /** The behaviors this module both stands in for — the target of a {@code fake}, the dependency a
      * {@code with} that takes no input answers for ({@link #againstWiths}) — and records rows of. */
-    private static Set<String> contested(souther.compiler.check.Prepared.ExampleExecution module, Map<String, Sig> sigs) {
+    private static Set<String> contested(souther.compiler.check.Prepared.Examples module, Map<String, Sig> sigs) {
         Set<String> stoodIn = new LinkedHashSet<>();
         for (souther.compiler.check.Prepared.FakeTable table : module.fakes()) {
             stoodIn.add(table.target());
         }
-        for (souther.compiler.check.Prepared.Rows block : module.examples()) {
+        for (souther.compiler.check.Prepared.Rows block : module.rows()) {
             for (Hir.ExampleRow row : block.read().rows()) {
                 for (Hir.With w : row.withs()) {
                     Sig depSig = sigs.get(w.dep());
@@ -440,7 +440,7 @@ public final class ExampleStatements {
             }
         }
         Set<String> both = new LinkedHashSet<>();
-        for (souther.compiler.check.Prepared.Rows block : module.examples()) {
+        for (souther.compiler.check.Prepared.Rows block : module.rows()) {
             if (stoodIn.contains(block.target())) {
                 both.add(block.target());
             }
@@ -455,8 +455,8 @@ public final class ExampleStatements {
 
     private Readings collectDisagreements(Set<String> contested) {
         Map<String, List<RecordedRow>> recorded = new LinkedHashMap<>();
-        for (int i = 0; i < module.examples().size(); i++) {
-            Hir.Example ex = module.examples().get(i).read();
+        for (int i = 0; i < module.rows().size(); i++) {
+            Hir.Example ex = module.rows().get(i).read();
             if (contested.contains(ex.target())) {
                 readRecorded(ex, recorded);
             }
@@ -477,8 +477,8 @@ public final class ExampleStatements {
                 againstFake(fk, recorded, found, timedOut);
             }
         }
-        for (int i = 0; i < module.examples().size(); i++) {
-            againstWiths(module.examples().get(i).read(), recorded, found);
+        for (int i = 0; i < module.rows().size(); i++) {
+            againstWiths(module.rows().get(i).read(), recorded, found);
         }
         return new Readings(found, timedOut);
     }

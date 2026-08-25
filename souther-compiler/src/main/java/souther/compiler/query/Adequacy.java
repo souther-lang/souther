@@ -2893,7 +2893,7 @@ public final class Adequacy {
             // values that go together, which is more than this can say of one value chosen per
             // position on its own — and it is the set they reached for, which is what makes a row
             // written against it read as one column moved.
-            for (souther.compiler.check.Prepared.Rows block : prepared.examples()) {
+            for (souther.compiler.check.Prepared.Rows block : prepared.rows()) {
                 if (!block.target().equals(spec.name())) {
                     continue;
                 }
@@ -3129,7 +3129,7 @@ public final class Adequacy {
      * nothing. Asking for the uncounted classes instead would generate every one of them again to get
      * the same answers.
      */
-    static FixtureReader.Construction constructing(Db db, String module, souther.compiler.check.Prepared.ExampleExecution written,
+    static FixtureReader.Construction constructing(Db db, String module, souther.compiler.check.Prepared.Examples written,
                                                    Symbols symbols) {
         // The classes alone: building a value applies no behavior, so what the compile implemented is
         // not a question this asks.
@@ -3167,7 +3167,7 @@ public final class Adequacy {
      * row nobody wrote, so a model that does not finish on one is this search's to stop.
      */
     static souther.compiler.examples.RowTrial.Trials trialling(Db db, String module,
-            souther.compiler.check.Prepared.ExampleExecution written, Symbols symbols) {
+            souther.compiler.check.Prepared.Examples written, Symbols symbols) {
         if (!levelOf(db).runsInstrumentedRows()) {
             return null;
         }

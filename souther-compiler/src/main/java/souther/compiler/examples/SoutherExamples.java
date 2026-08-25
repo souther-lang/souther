@@ -193,7 +193,7 @@ public final class SoutherExamples {
             throw new IllegalArgumentException(implementation.getClass().getName()
                     + " implements no behavior of " + sigs.keySet());
         }
-        Prepared.ExampleExecution rows = compilation.db()
+        Prepared.Examples rows = compilation.db()
                 .ask(new Shapes.Prepared(module)).value().forExamples();
         return new BoundExamples(module, rows, ExampleRuns.evaluating(compilation.db(), module,
                 Answering.bound(implementation, Set.copyOf(bound), sigs.get(module))), bound);

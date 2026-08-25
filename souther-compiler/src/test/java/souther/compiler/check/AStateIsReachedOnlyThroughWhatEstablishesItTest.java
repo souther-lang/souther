@@ -169,7 +169,7 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
                 "an example block is projected from the module it is one of");
         assertEquals(Set.of(), waysInto(Prepared.FakeTable.class),
                 "and so is a fake table");
-        assertEquals(Set.of(), waysInto(Prepared.ExampleExecution.class),
+        assertEquals(Set.of(), waysInto(Prepared.Examples.class),
                 "a run is asked for of the module, which is what pairs the rows with the artifact");
     }
 
@@ -252,7 +252,7 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
             // which rows are reported on is `Output.Examples`' question and its key carries the
             // source. What must not take one is the way in, or a route to a part — either would be
             // a module whose contents are a function of which file is being reported on.
-            assertEquals(Prepared.ExampleExecution.class, m.getReturnType(),
+            assertEquals(Prepared.Examples.class, m.getReturnType(),
                     "Prepared." + signature(m) + " takes a name, and the only one it could be "
                             + "is an output's");
         }

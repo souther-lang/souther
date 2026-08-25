@@ -1028,9 +1028,9 @@ public final class Output {
                                         souther.compiler.observe.Incompleteness.Code.INSTRUMENTATION_ABSENT,
                                         souther.compiler.observe.Incompleteness.Scope.MODULE, name))));
             }
-            souther.compiler.check.Prepared.ExampleExecution rows =
+            souther.compiler.check.Prepared.Examples rows =
                     prepared.value().forExamplesWrittenIn(sourceId);
-            if (rows.examples().isEmpty()) {
+            if (rows.rows().isEmpty()) {
                 return Answer.of(Of.NONE);
             }
             Map<String, List<BehaviorRequirement>> requirements =

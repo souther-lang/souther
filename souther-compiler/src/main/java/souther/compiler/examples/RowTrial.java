@@ -77,7 +77,7 @@ public final class RowTrial {
      *              A composed row is not a row anyone wrote, so a model that loops on it is this
      *              search's problem to stop rather than an author's to be told about
      */
-    public static Trials over(souther.compiler.check.Prepared.ExampleExecution module,
+    public static Trials over(souther.compiler.check.Prepared.Examples module,
                               Symbols symbols, Map<String, byte[]> classes, ClassLoader parent,
                               Map<String, Hir.FnDef> values, GeneratedImplementations generated,
                               EvaluationPolicy steps) {
