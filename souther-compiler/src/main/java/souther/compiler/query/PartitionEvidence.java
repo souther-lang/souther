@@ -148,14 +148,14 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
         }
 
         /**
-         * And what it asks it about.
+         * The question itself, which is what it asks and what it asks it about, together.
          *
          * <p>As the reading that raised it named it, and not as words for it: a position, a number
-         * taken of one, and the comparison that drew a border between two moving terms are three
-         * things, and two of them cannot be told apart once they are one string.
+         * of one, and the comparison that drew a border between two moving terms are three things,
+         * and two of them cannot be told apart once they are one string.
          */
-        public souther.compiler.check.Owed.Subject subject() {
-            return asked.owed().subject();
+        public souther.compiler.check.Owed owed() {
+            return asked.owed();
         }
     }
 

@@ -179,9 +179,10 @@ class AQuestionIsAnsweredByWhicheverReadingTookTheRuleInTest {
                     invariant nonEmpty = String.length(value) >= 1
                 """, "Code"), "nonEmpty");
 
-        assertEquals(Set.of("ADMITTED_VALUES at the value", "BOUNDARY at count of the value"),
+        assertEquals(Set.of("ADMITTED_VALUES at the value",
+                        "BOUNDARY at String.length(the value)"),
                 nonEmpty.answers().keySet().stream()
-                        .map(o -> o.obligation() + " at " + o.subject())
+                        .map(o -> o.obligation() + " at " + o)
                         .collect(java.util.stream.Collectors.toSet()));
         assertEquals(Set.of(), nonEmpty.unaccounted());
     }
@@ -270,7 +271,7 @@ class AQuestionIsAnsweredByWhicheverReadingTookTheRuleInTest {
     private static Set<String> unansweredOf(String source, String type) {
         return accountingOf(source, type).values().stream()
                 .flatMap(each -> each.unaccounted().stream())
-                .map(owed -> owed.subject().toString())
+                .map(Object::toString)
                 .collect(java.util.stream.Collectors.toSet());
     }
 
@@ -283,7 +284,7 @@ class AQuestionIsAnsweredByWhicheverReadingTookTheRuleInTest {
                     invariant said = %s
                 """.formatted(clause), "Pair").values().stream()
                 .flatMap(each -> each.unaccounted().stream())
-                .map(owed -> owed.subject().toString())
+                .map(Object::toString)
                 .collect(java.util.stream.Collectors.toSet());
     }
 
@@ -333,7 +334,7 @@ class AQuestionIsAnsweredByWhicheverReadingTookTheRuleInTest {
                 rule(accountingOf(beside("value >= 1 && Int.abs(value) >= 2"), "Length"), "said")
                         .answers().entrySet().stream()
                         .filter(e -> e.getValue() instanceof RuleAccounting.Outcome.Accounted)
-                        .map(e -> e.getKey().obligation() + " at " + e.getKey().subject())
+                        .map(e -> e.getKey().obligation() + " at " + e.getKey())
                         .collect(java.util.stream.Collectors.toSet()),
                 "the line the readable half drew is answered by the reading that placed it");
     }

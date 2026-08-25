@@ -1147,8 +1147,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      */
     private static String subjectOf(souther.compiler.query.PartitionEvidence.Unanswered asked,
                                     SourceNameResolver names, SourceId declaredIn) {
-        if (asked.subject() instanceof souther.compiler.check.Owed.Subject.OfComparison it) {
-            return it.at().said(names, declaredIn);
+        if (asked.owed() instanceof souther.compiler.check.Owed.BoundaryBetween it) {
+            return it.drawnBy().said(names, declaredIn);
         }
         return asked.measure() != null ? asked.measure() : asked.at();
     }
@@ -1661,10 +1661,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * an arm added and not given a word stops the compile rather than arriving in a document as one
      * that already existed.
      */
-    public static String subjectWord(souther.compiler.check.Owed.Subject subject) {
-        return switch (subject) {
-            case souther.compiler.check.Owed.Subject.OfAPosition _ -> "position";
-            case souther.compiler.check.Owed.Subject.OfComparison _ -> "comparison";
+    public static String subjectWord(souther.compiler.check.Owed owed) {
+        return switch (owed) {
+            case souther.compiler.check.Owed.AdmittedValues _,
+                 souther.compiler.check.Owed.Boundary _ -> "position";
+            case souther.compiler.check.Owed.BoundaryBetween _ -> "comparison";
         };
     }
 
@@ -1944,22 +1945,23 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 // side can be — so a consumer telling two of them apart is handed the two places
                 // rather than one sentence twice.
                 ObjectNode about = one.putObject("subject");
-                switch (each.subject()) {
-                    case souther.compiler.check.Owed.Subject.OfAPosition _ -> {
-                        about.put("kind", subjectWord(each.subject()));
+                switch (each.owed()) {
+                    case souther.compiler.check.Owed.AdmittedValues _,
+                         souther.compiler.check.Owed.Boundary _ -> {
+                        about.put("kind", subjectWord(each.owed()));
                         about.put("path", each.at());
                         if (each.measure() != null) {
                             about.put("measure", each.measure());
                         }
                     }
-                    case souther.compiler.check.Owed.Subject.OfComparison it -> {
-                        about.put("kind", subjectWord(each.subject()));
+                    case souther.compiler.check.Owed.BoundaryBetween it -> {
+                        about.put("kind", subjectWord(each.owed()));
                         // Where the comparison is, for every citation this document can point at.
                         // A comparison out of sight has no place a reader here can open, and the
                         // rule beside it is what sends them to the declaration it is written in.
-                        if (it.at() instanceof Citation.Written
-                                || it.at() instanceof Citation.Reached) {
-                            at(about, it.at(), sources);
+                        if (it.drawnBy() instanceof Citation.Written
+                                || it.drawnBy() instanceof Citation.Reached) {
+                            at(about, it.drawnBy(), sources);
                         }
                     }
                 }

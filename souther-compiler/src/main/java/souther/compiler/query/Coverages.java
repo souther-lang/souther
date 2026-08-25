@@ -403,10 +403,13 @@ final class Coverages {
     private static List<PartitionEvidence.Unanswered> unansweredAt(Axis axis) {
         return axis.unanswered().stream()
                 .map(each -> new PartitionEvidence.Unanswered(each, axis.path().toString(),
-                        // The number the line falls on, where it falls on one. Which of the two the
-                        // question is about was settled where it was raised — not here, and not by
-                        // whatever a renderer has to hand.
-                        each.owed().subject().measured() ? axis.term().toString() : null))
+                        // The number the line falls on, where it falls on one taken of the
+                        // position. Still spelled off the axis standing beside it, which is what
+                        // the translation at the input boundary takes away.
+                        each.owed() instanceof souther.compiler.check.Owed.Boundary line
+                                && line.on().kind() instanceof souther.compiler.check.FieldDomains
+                                        .CoordinateKind.OfWhatAnOperationAnswers
+                                ? axis.term().toString() : null))
                 .toList();
     }
 

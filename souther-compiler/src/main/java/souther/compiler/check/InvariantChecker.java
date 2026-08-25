@@ -873,6 +873,13 @@ public final class InvariantChecker {
     record Direct(String path, ValueName by, RuleRef.Invariant from,
                   InvariantBound bound, Core part) {
 
+        /** Which number of the position this end was placed on, which is what a question about a
+         *  line is matched against. */
+        FieldDomains.Coordinate coordinate() {
+            return by == null ? FieldDomains.Coordinate.value(path)
+                    : FieldDomains.Coordinate.takenBy(path, by);
+        }
+
         /** Whether it is a number taken of the position rather than its own values. */
         boolean measured() {
             return by != null;

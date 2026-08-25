@@ -499,9 +499,10 @@ class EverySchemaWordIsAccountedForTest {
     @Test
     void theThirdFieldWithNoEnumBehindItIsWrittenFromWhatAQuestionIsAbout() {
         assertEquals(Set.of(
-                        AdequacyReport.subjectWord(souther.compiler.check.Owed.Subject.at("x")),
-                        AdequacyReport.subjectWord(new souther.compiler.check.Owed.Subject
-                                .OfComparison(souther.compiler.diag.Citation.of(
+                        AdequacyReport.subjectWord(
+                                new souther.compiler.check.Owed.AdmittedValues("x")),
+                        AdequacyReport.subjectWord(new souther.compiler.check.Owed
+                                .BoundaryBetween(souther.compiler.diag.Citation.of(
                                         new souther.compiler.diag.SourcePos(1, 1))))),
                 allowedAt(schema(), List.of("$defs", "partition", "properties", "unanswered",
                         "items", "properties", "subject", "properties", "kind")));
