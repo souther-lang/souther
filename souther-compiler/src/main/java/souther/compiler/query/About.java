@@ -103,6 +103,15 @@ public sealed interface About {
         public APointOfADeclaredBorder {
             java.util.Objects.requireNonNull(debt, "a finding is about something");
             java.util.Objects.requireNonNull(role, "and a border is owed a row in four roles");
+            // Two of the four. A region is not a debt's: where it stops is settled by every other
+            // rule reaching the position it is a region of, so a row well inside one reading is not
+            // a row that could stand at another — and this finding would be about a line while
+            // naming what a position asks.
+            if (!BorderObligationAssessment.AGAINST_THE_LINE.contains(role)) {
+                throw new IllegalArgumentException(
+                        "a line a declaration is owed is owed at the points against it, and "
+                                + role + " is a region of a position");
+            }
         }
 
         /** What became of this point, which is what the finding is about. */

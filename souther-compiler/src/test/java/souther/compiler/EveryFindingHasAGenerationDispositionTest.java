@@ -154,12 +154,17 @@ class EveryFindingHasAGenerationDispositionTest {
     }
 
     /**
-     * A line the declaration is owed is answered too, and says nothing composes a row for it yet.
+     * A line the declaration is owed is answered too, with the row a reading of it already composed.
      *
      * <p>The subject the walk over the behaviors does not reach. A line an {@code invariant} drew is
      * not any behavior's, so the fillings above answer for every finding but those — and one printed
      * in the report and left out of this answer is one an author is told nothing about, while the
      * rows beside it read as though they filled everything.
+     *
+     * <p>And answered with what is known rather than with what has not been arranged. A reading of
+     * the line composed a row standing at the point, and the readings of a debt ask the same of a
+     * row at the points against the line — so that row is the one the debt is offered. Answered
+     * "nothing offers a row" regardless, a block printed the row and then said no row was on offer.
      */
     @Test
     void aLineOwedToADeclarationIsAnsweredForToo() {
@@ -177,8 +182,8 @@ class EveryFindingHasAGenerationDispositionTest {
                         .map(Adequacy.GenerationDisposition::finding).toList(),
                 "every one of them, and each with its own answer");
         assertTrue(answered.stream().allMatch(each ->
-                        each.outcome() instanceof GenerationOutcome.NotSupported),
-                "nothing composes a row for a line owed across its readings yet: " + answered);
+                        each.outcome() instanceof GenerationOutcome.Generated),
+                "a reading of each of these composed a row at the point: " + answered);
     }
 
     /** A guard on an input, whose line is the behavior's own and is owed a row either side. */

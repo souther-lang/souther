@@ -22,6 +22,7 @@ import souther.compiler.query.OutputCaseEvidence;
 import souther.compiler.query.About;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
+import souther.compiler.query.BorderObligationAssessment;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.BehaviorEvidence;
@@ -96,7 +97,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
 
     public record ModuleReport(String module, SourceId declaredIn,
                                List<BehaviorReport> behaviors,
-                               List<Adequacy.Finding> declarations) {
+                               List<Adequacy.Finding> declarations,
+                               List<Adequacy.DeclaredDebt> debts) {
 
         /**
          * What the module is short of that is not any behavior's.
@@ -112,6 +114,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         public ModuleReport {
             behaviors = List.copyOf(behaviors);
             declarations = List.copyOf(declarations);
+            debts = List.copyOf(debts);
         }
 
         /**
@@ -327,12 +330,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                             : claims.getOrDefault(behavior.name(), ClaimAnnotations.NONE),
                     ofBehavior(findings, behavior.name())));
         }
+        List<Adequacy.DeclaredDebt> debts =
+                compilation.db().ask(new Adequacy.DeclaredBorders(name)).value();
         return new ModuleReport(name, compilation.sourceIdOf(name), behaviors,
                 findings == null ? List.of()
                         : findings.stream()
                                 .filter(each -> !(each.subject()
                                         instanceof souther.compiler.query.FindingSubject.OfABehavior))
-                                .toList());
+                                .toList(),
+                debts == null ? List.of() : debts);
     }
 
     /**
@@ -415,8 +421,16 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // discharged by a row written for any behavior carrying the type — so it is work the
             // reader of this report can do, and a verdict that kept a line none of the behaviors
             // shown carries would be a verdict about what the reader cannot see.
+            // And the debts those behaviors carry, for the same reason and by the same question:
+            // a verdict about a line none of them carries is a verdict about what the reader
+            // cannot see.
+            java.util.Set<String> names = behaviors.stream().map(BehaviorReport::name)
+                    .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
             ModuleReport one = new ModuleReport(m.module(), m.declaredIn(), behaviors,
-                    carriedBy(m.declarations(), behaviors));
+                    carriedBy(m.declarations(), behaviors),
+                    m.debts().stream()
+                            .filter(owed -> names.stream().anyMatch(owed.debt()::carriedBy))
+                            .toList());
             kept.add(one);
             overall = overall.union(one.weakenedBy());
         }
@@ -595,9 +609,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     add(measures, behavior.partition().partitioned());
                     behavior.partition().axes().forEach(axis -> add(measures, axis.reached()));
                 }
-                // And of a border's four points, the ones the bar asks for.
+                // And of a border's four points, the ones the bar asks for — of the lines this
+                // behavior is owed. A line a declaration is owed is answered once for the module
+                // below, from every reading of it: read here as well, a row standing at it in one
+                // behavior would be weighed against another behavior having no rows, and the
+                // verdict would hold open what the aggregation had settled (issue #1062).
                 BorderAssessment.pointsOf(behavior.partition().boundaries()).stream()
                         .filter(p -> held.requires(p.role()))
+                        .filter(p -> !p.role().againstTheLine()
+                                || p.border().origin().owedToTheDeclaration().isEmpty())
                         .forEach(p -> add(measures, measurementOf(p.item())));
                 // Which of the four those are is the bar's answer and not a second reading of it
                 // here: a build refusing over a missing IN row and calling a model satisfied while
@@ -609,6 +629,19 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 // question stands for it, which is a fact about the measure's reading — so it
                 // leaves the measure's own answer short of complete, and reading it back off the
                 // list of what was dropped would be this report deciding a measure's status again.
+            }
+            // And what the module's declarations are owed, once each and from every reading.
+            //
+            // The debts and not their findings. A line a row already stands at has no finding, so a
+            // denominator made of the findings is a denominator made of the gaps — which is
+            // satisfied by whatever it does not contain.
+            for (Adequacy.DeclaredDebt owed : module.debts()) {
+                for (souther.compiler.partition.PointRole role
+                        : BorderObligationAssessment.AGAINST_THE_LINE) {
+                    if (held.requires(role)) {
+                        add(measures, measurementOf(owed.debt().at(role)));
+                    }
+                }
             }
         }
         return measures;
@@ -1819,7 +1852,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // `invariant` drew is not any behavior's, so publishing it under one would publish it
             // under whichever a walk reached first — and left out, a consumer counting what a build
             // refuses over would come up short of what the page shows (issue #1062).
-            findings(m.putArray("declarations"), module.declarations(), sources);
+            //
+            // Under the declaration that owes it, the way a behavior's findings are under the
+            // behavior. What a finding says of itself is what the line asks of a row, and two
+            // declarations bounding a string's length at one say it the same way — so published as
+            // one flat list they are two identical objects, and which declaration a reader is being
+            // sent to is exactly what {@link souther.compiler.query.FindingSubject} was introduced
+            // to keep.
+            declarations(m.putArray("declarations"), module.declarations(), sources);
             ArrayNode behaviors = m.putArray("behaviors");
             for (BehaviorReport behavior : module.behaviors()) {
                 ObjectNode b = behaviors.addObject();
@@ -2242,6 +2282,27 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      */
     private void findings(ObjectNode behavior, BehaviorReport of, DocumentSources sources) {
         findings(behavior.putArray("findings"), of.findings(), sources);
+    }
+
+    /**
+     * What each declaration of the module is short of, under the declaration.
+     *
+     * <p>The grouping a human report prints, published. A finding carries which declaration it is
+     * about, so this is a rendering of that and not a second answer: read off the entries alone, the
+     * subject a finding writes is what the line asks of a row, and the declaration it belongs to
+     * would be gone.
+     */
+    private void declarations(ArrayNode out, List<Adequacy.Finding> written,
+                              DocumentSources sources) {
+        Map<String, List<Adequacy.Finding>> byDeclaration = new LinkedHashMap<>();
+        for (Adequacy.Finding each : written) {
+            byDeclaration.computeIfAbsent(each.named(), _ -> new ArrayList<>()).add(each);
+        }
+        byDeclaration.forEach((declaration, findings) -> {
+            ObjectNode one = out.addObject();
+            one.put("name", declaration);
+            findings(one.putArray("findings"), findings, sources);
+        });
     }
 
     /**

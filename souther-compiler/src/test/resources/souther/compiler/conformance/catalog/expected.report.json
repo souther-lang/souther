@@ -223,10 +223,13 @@
     "weakening" : [ "rules_not_reached", "rule_unread" ],
     "incompleteness" : [ ],
     "declarations" : [ {
-      "kind" : "boundary_unmet",
-      "disposition" : "refused",
-      "subject" : "String.length(value) = 1",
-      "code" : "E1916"
+      "name" : "Sku",
+      "findings" : [ {
+        "kind" : "boundary_unmet",
+        "disposition" : "refused",
+        "subject" : "String.length(value) = 1",
+        "code" : "E1916"
+      } ]
     } ],
     "behaviors" : [ {
       "name" : "台帳へ書く",

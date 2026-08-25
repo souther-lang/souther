@@ -228,6 +228,105 @@ class OneAuthoredLineIsOneDebtHoweverManyBehaviorsCarryItTest {
                 "and what the page shows is what the verdict rests on");
     }
 
+    /**
+     * A behavior with no rows does not hold open a line another behavior's row settles.
+     *
+     * <p>The verdict and not the findings. A row at the line makes the debt covered, so there is no
+     * finding to be short of — and a verdict assembled from the readings still had one behavior's
+     * {@code NO_ROWS} in it and came out undetermined about a line something had already settled.
+     * The two answers came from one set of readings folded two ways, which is what a debt is for.
+     *
+     * <p>{@code touch} carries {@code UserId} and is written no rows at all; {@code schedule} is
+     * written one at the boundary. The debt is what they come to together.
+     */
+    @Test
+    void aBehaviorWithNoRowsDoesNotHoldOpenALineAnotherSettles() {
+        Compilation compilation = Compilation.ofSource(ONE_WRITES_ROWS, "Main");
+        // Held to the rows against a line and not to the regions either side, so that what is
+        // measured here is the line and not a region `touch` has no rows in. The regions stay with
+        // the reading whatever the bar, which is the other half of this change.
+        compilation.measure(Adequacy.Asked.fullReport(Adequacy.AdequacyBar.SIMPLIFIED_DOMAIN));
+        compilation.answerEverything();
+        AdequacyReport report = AdequacyReport.of(compilation);
+
+        assertEquals(List.of(), report.adequacyGaps().stream()
+                        .map(each -> each.about().toString()).toList(),
+                () -> "nothing is short of the line: "
+                        + report.human(SourceNameResolver.identity()));
+        assertEquals(AdequacyReport.AdequacyStatus.SATISFIED, report.adequacy(),
+                () -> "and the verdict says so: " + report.human(SourceNameResolver.identity()));
+    }
+
+    /** Two behaviors carrying one type, one of them written a row at the boundary and the other
+     *  written none. */
+    private static final String ONE_WRITES_ROWS = """
+            module example.onewrites
+
+            data UserId = String
+                invariant nonempty = String.length(value) >= 1
+
+            data Draft = { owner: UserId }
+            data Task = { owner: UserId }
+
+            data Ok
+
+            behavior schedule : (d: Draft) -> Ok
+            let schedule (d) = Ok
+
+            behavior touch : (t: Task) -> Ok
+            let touch (t) = Ok
+
+            example schedule
+                | "at the boundary" : (Draft { owner = UserId("x") }) -> Ok
+            """;
+
+    /**
+     * The document says which declaration is short of a line, and not only what the line asks.
+     *
+     * <p>Two declarations bounding a string's length at one ask a row the same thing, so what a
+     * finding says of itself is the same words for both. Published in one flat list they are two
+     * identical objects and a consumer cannot tell which declaration it is being sent to — which is
+     * what a subject was introduced to keep (issue #1062).
+     */
+    @Test
+    void theDocumentSaysWhichDeclarationIsShortOfALine() {
+        Compilation compilation = Compilation.ofSource(TWO_DECLARATIONS, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        String json = AdequacyReport.of(compilation).json(SourceNameResolver.identity());
+        tools.jackson.databind.JsonNode declarations =
+                tools.jackson.databind.json.JsonMapper.builder().build().readTree(json)
+                        .get("modules").get(0).get("declarations");
+
+        List<String> named = new java.util.ArrayList<>();
+        declarations.forEach(each -> named.add(each.get("name").asString()));
+        assertEquals(List.of("UserId", "OrderId"), named,
+                () -> "each line is under the declaration that owes it: " + declarations);
+        declarations.forEach(each -> assertEquals(1, each.get("findings").size(),
+                () -> "and one line apiece: " + declarations));
+    }
+
+    /** Two declarations whose clauses ask a row the same thing. */
+    private static final String TWO_DECLARATIONS = """
+            module example.two
+
+            data UserId = String
+                invariant nonempty = String.length(value) >= 1
+
+            data OrderId = String
+                invariant nonempty = String.length(value) >= 1
+
+            data Draft = { owner: UserId, order: OrderId }
+
+            data Ok
+
+            behavior schedule : (d: Draft) -> Ok
+            let schedule (d) = Ok
+
+            example schedule
+                | "a" : (Draft { owner = UserId("abc"), order = OrderId("def") }) -> Ok
+            """;
+
     /** Every reading of every line of {@code module}, as the measure holds them. */
     private static List<BorderAssessment> readingsOf(String model, String module) {
         Compilation compilation = Compilation.ofSource(model, "Main");

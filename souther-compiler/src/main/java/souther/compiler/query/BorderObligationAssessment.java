@@ -59,8 +59,8 @@ public record BorderObligationAssessment(BorderObligationId id, String axis,
      * <p>The other two are regions of a position rather than values of the line, so they are owed
      * per reading and are not here ({@link PointRole#againstTheLine}).
      */
-    public static final EnumSet<PointRole> AGAINST_THE_LINE =
-            EnumSet.of(PointRole.ON, PointRole.OFF);
+    public static final java.util.Set<PointRole> AGAINST_THE_LINE =
+            java.util.Collections.unmodifiableSet(EnumSet.of(PointRole.ON, PointRole.OFF));
 
     public BorderObligationAssessment {
         if (id == null) {
@@ -202,12 +202,22 @@ public record BorderObligationAssessment(BorderObligationId id, String axis,
                 ItemAssessment.Coverage.acrossTheReadings(coverage), projection, built);
     }
 
-    /** What became of one role. Never null. */
+    /**
+     * What became of one of the points against the line. Never null.
+     *
+     * <p>Refused for a region, which is not something a debt answers for: where a region stops is
+     * settled by every other rule reaching a position, so a debt has no answer to give and a null
+     * would be read as one. A reader wanting a region asks the reading it is a region of.
+     */
     public ItemAssessment at(PointRole role) {
+        if (!AGAINST_THE_LINE.contains(role)) {
+            throw new IllegalArgumentException("a debt answers for the points against its line, and "
+                    + role + " is a region of a position: " + id);
+        }
         return items.get(role);
     }
 
-    /** The measured half of one role, or null where no row is owed there. */
+    /** The measured half of one of those, or null where no row is owed there. */
     public ItemAssessment.Owed owedAt(PointRole role) {
         return at(role) instanceof ItemAssessment.Owed owed ? owed : null;
     }

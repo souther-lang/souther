@@ -104,7 +104,7 @@ public final class GeneratedRows {
             // would be left with a model that still fails and nothing would have said which part
             // was never attempted (issue #1062).
             if (boundaries) {
-                declarations(out, compilation, name);
+                declarations(out, compilation, name, behavior);
             }
         }
         return new Block(out.toString(), rows);
@@ -122,10 +122,22 @@ public final class GeneratedRows {
      * <p>Only where the caller asked for the edges, as the lines about them are: a caller that asked
      * for no boundary rows is not asking about these either.
      */
-    private static void declarations(StringBuilder out, Compilation compilation, String module) {
+    private static void declarations(StringBuilder out, Compilation compilation, String module,
+                                     String behavior) {
         java.util.Set<String> said = new java.util.LinkedHashSet<>();
         for (Adequacy.GenerationDisposition each
                 : Adequacy.generatedForDeclarationsOf(compilation.db(), module)) {
+            // A line the behavior asked about does not carry is not work this block is about, the
+            // way a report narrowed to one behavior keeps the lines that behavior carries and drops
+            // the rest.
+            if (behavior != null && each.finding().about()
+                    instanceof About.APointOfADeclaredBorder(var debt, var _)
+                    && !debt.carriedBy(behavior)) {
+                continue;
+            }
+            // Only where nothing composed one. Where a reading of the line did, the row is already
+            // above — it was composed for that reading's own point — and a sentence saying nothing
+            // offers a row would be printed under it.
             if (each.outcome() instanceof GenerationOutcome.NotSupported none) {
                 say(out, said, String.format("// nothing offers a row for `%s` in `%s`: %s%n",
                         about(each.finding()), each.finding().named(), none.reason().said()));
