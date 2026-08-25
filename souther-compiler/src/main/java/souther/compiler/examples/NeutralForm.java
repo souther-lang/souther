@@ -116,7 +116,7 @@ final class NeutralForm {
             throw new FixtureException(what + " is a " + name
                     + ", which is not a type this example can read");
         }
-        if (!(symbols.declarations().declaration(caseName.key()) instanceof Hir.Data data)) {
+        if (!(symbols.declarations().declaration(caseName) instanceof Hir.Data data)) {
             // a unit case: its name where the position reads one, else the tag its sum's decoder reads
             if (readsABareName(position)) {
                 return caseName.name();
@@ -202,7 +202,7 @@ final class NeutralForm {
         // as a behavior's own answer and has no decoder — and a place nothing reads.
         if (!(position.opened() instanceof Position.At(Type type))
                 || !(type instanceof Type.Ref ref)
-                || !(symbols.declarations().declaration(ref.name().key()) instanceof Hir.SumData)) {
+                || !(symbols.declarations().declaration(ref.name()) instanceof Hir.SumData)) {
             return;
         }
         // What the sum's own decoder reads, read from where that is settled rather than from a copy
@@ -367,7 +367,7 @@ final class NeutralForm {
             // name rather than one spelled at the call.
             for (TypeSymbol caseName : AtomSpace.subjectAtoms(from, symbols)) {
                 if (!caseName.name().equals(written)
-                        || symbols.declarations().declaration(caseName.key()) instanceof Hir.Data) {
+                        || symbols.declarations().declaration(caseName) instanceof Hir.Data) {
                     continue;
                 }
                 if (readsABareName(Position.at(to))) {

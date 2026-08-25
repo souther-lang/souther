@@ -56,7 +56,7 @@ final class TypeGuarantees {
      */
     At at(Core root, Denotations denotations) {
         if (!(root.type() instanceof Type.Ref ref)
-                || !(symbols.declarations().declaration(ref.name().key()) instanceof Hir.Data data)) {
+                || !(symbols.declarations().declaration(ref.name()) instanceof Hir.Data data)) {
             // Either not a declaration of its own — a container or an optional, whose element is a
             // value that need not be there, or a type nothing is written under at all — or a choice
             // between declarations, which is the only kind that reaches here holding a rule at all.
@@ -146,7 +146,7 @@ final class TypeGuarantees {
             if (!seen.add(ref.name())) {
                 return false;
             }
-            return switch (symbols.declarations().declaration(ref.name().key())) {
+            return switch (symbols.declarations().declaration(ref.name())) {
                 // A unit data holds nothing and may write no rule about it (spec §unit-data), so a
                 // sum of them is a type nothing is written under — which is what makes an
                 // enumeration a position this still speaks for.

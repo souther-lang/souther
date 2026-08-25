@@ -3044,7 +3044,7 @@ public final class Generator {
     private static FieldDomains rulesOf(Type type, Symbols symbols, ReadingPolicy policy,
                                         Map<String, Count> settled) {
         return type instanceof Type.Ref ref
-                && symbols.declarations().declaration(ref.name().key()) instanceof Hir.Data data && !data.newtype()
+                && symbols.declarations().declaration(ref.name()) instanceof Hir.Data data && !data.newtype()
                 ? FieldDomains.of(ref.name(), data, symbols, policy, settled) : FieldDomains.NONE;
     }
 

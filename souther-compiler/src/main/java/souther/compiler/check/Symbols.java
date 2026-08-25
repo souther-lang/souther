@@ -131,7 +131,7 @@ public final class Symbols implements NameSense {
     public Map<String, Hir.Def> reachable() {
         Map<String, Hir.Def> reached = new LinkedHashMap<>();
         scope.denotedNames().forEach((spelling, name) -> {
-            Hir.Def def = declarations.declaration(name.key());
+            Hir.Def def = declarations.declaration(name);
             if (def != null) {
                 reached.put(spelling, def);
             }

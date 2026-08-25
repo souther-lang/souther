@@ -96,7 +96,23 @@ public final class Declarations<D> {
         }
     }
 
-    /** The declaration {@code name} names, or null when nothing declares it. */
+    /**
+     * The declaration {@code name} is, or null where the language gives it and nothing declares one.
+     *
+     * <p>Asked with the identity, which is what a reader holding one has. Taking its address apart
+     * to look it up is that reader assembling an address again, and the address-taking method below
+     * is for a reader whose address really did come from outside — a name read off a class file.
+     *
+     * <p>What the language gives answers null, and answers it without an address being made for it.
+     * There is no source that declares {@code Int}, and none that declares the cases beside it
+     * either; a reader asking what one of them is a declaration of is asking about something that
+     * is not a declaration, and the answer is the same as for a name nothing declares.
+     */
+    public D declaration(TypeSymbol name) {
+        return name instanceof TypeSymbol.AtModule at ? declaration(at.key()) : null;
+    }
+
+    /** The declaration at {@code address}, or null when nothing declares one there. */
     public D declaration(TypeKey address) {
         D def = registry.declaration(address);
         return def != null ? def : language.declaration(address);
@@ -121,9 +137,14 @@ public final class Declarations<D> {
     }
 
     /** Whether {@code name} is declared by a module of this compilation — as opposed to a
-     * declaration the language gives (the prelude's runtime-backed data), which resolves and types
-     * like any other but belongs to no module here. The construction discipline asks this: a
-     * construction set holds data a compilation declares, and never the language's vocabulary. */
+     * declaration the language gives, which resolves and types like any other but belongs to no
+     * module here. The construction discipline asks this: a construction set holds data a
+     * compilation declares, and never the language's vocabulary. */
+    public boolean declaredByCompilation(TypeSymbol name) {
+        return name instanceof TypeSymbol.AtModule at && declaredByCompilation(at.key());
+    }
+
+    /** The same, of an address. */
     public boolean declaredByCompilation(TypeKey address) {
         return registry.declaration(address) != null;
     }

@@ -53,7 +53,7 @@ final class ValueUniverse {
         // have values that can be written out. Both go to `TypeOps` for what an enumeration is, so
         // this is one reading of that and not two.
         if (!(base instanceof Type.Ref ref)
-                || !(symbols.declarations().declaration(ref.name().key()) instanceof Hir.SumData _)
+                || !(symbols.declarations().declaration(ref.name()) instanceof Hir.SumData _)
                 || !TypeOps.isUnitOnlySum(base, symbols)) {
             return null;
         }

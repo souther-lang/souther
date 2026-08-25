@@ -134,7 +134,7 @@ public sealed interface Rules {
         if (named == null) {
             return new NoneWritten();
         }
-        return switch (symbols.declarations().declaration(named.key())) {
+        return switch (symbols.declarations().declaration(named)) {
             case Hir.Data data -> new Read(FieldDomains.of(named, data, symbols, policy));
             // A sum names which cases a value can be and carries no clause of its own; a unit data
             // has one value and may write no rule about it (spec §unit-data). Both are declarations

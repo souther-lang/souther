@@ -71,7 +71,7 @@ public final class DataChecker {
     private static void collectConstChecks(Hir.Expr e, Symbols symbols, List<ConstCheck> out) {
         if (e instanceof Hir.NewData nd
                 && nd.typeName().answered() instanceof Hir.Name.Denoting built
-                && symbols.declarations().declaration(built.type().key()) instanceof Hir.Data nt
+                && symbols.declarations().declaration(built.type()) instanceof Hir.Data nt
                 && nt.newtype() && isInvariantBearing(built.type(), symbols)) {
             CallElaborator.newtypeConstantArg(nd).ifPresent(v ->
                     out.add(new ConstCheck(nd.typeName().written(), built.type(), v, nd.pos())));
@@ -80,7 +80,7 @@ public final class DataChecker {
     }
 
     public static boolean isInvariantBearing(TypeSymbol typeName, Symbols symbols) {
-        return typeName != null && symbols.declarations().declaration(typeName.key()) instanceof Hir.Data d
+        return typeName != null && symbols.declarations().declaration(typeName) instanceof Hir.Data d
                 && !TypeOps.effectiveInvariants(d, symbols).isEmpty();
     }
 
@@ -343,7 +343,7 @@ public final class DataChecker {
     private static List<String> sumCycle(TypeSymbol target, Symbols symbols,
                                          LinkedHashSet<TypeSymbol> path) {
         if (!(symbols.declarations().declaration(
-                path.isEmpty() ? target.key() : last(path).key()) instanceof Hir.SumData s)) {
+                path.isEmpty() ? target : last(path)) instanceof Hir.SumData s)) {
             return null;
         }
         for (Hir.Name caseName : s.cases()) {
@@ -360,7 +360,7 @@ public final class DataChecker {
                 out.add(caseName.written());
                 return out;
             }
-            if (symbols.declarations().declaration(names.type().key()) instanceof Hir.SumData
+            if (symbols.declarations().declaration(names.type()) instanceof Hir.SumData
                     && path.add(names.type())) {
                 List<String> found = sumCycle(target, symbols, path);
                 if (found != null) {
@@ -466,7 +466,7 @@ public final class DataChecker {
         }
         List<CompileException> found = new ArrayList<>();
         for (UninhabitableTypes.UninhabitableGroup group : groups) {
-            Hir.Def at = symbols.declarations().declaration(group.reportedAt().key());
+            Hir.Def at = symbols.declarations().declaration(group.reportedAt());
             found.add(CompileException.of(told(Diagnostic.at(at.pos()), at.name(),
                     FieldDomains.THE_VALUE, group.why(),
                     lacks.get(group.reportedAt()) == 1).build()));
@@ -709,7 +709,7 @@ public final class DataChecker {
             case Hir.SetDecRef s -> Type.set(decRefType(s.element(), symbols));
             case Hir.PrimDecRef p -> TypeOps.primType(p.kind());
             case Hir.DataDecRef d -> {
-                if (!hasDecoder(symbols.declarations().declaration(names(d.typeName()).key()))) {
+                if (!hasDecoder(symbols.declarations().declaration(names(d.typeName())))) {
                     throw CompileException.of(Diagnostic.at(d.pos())
                             .say(new CodecMessage.HasNoDecoder(d.typeName().written()))
                             .build());
@@ -799,11 +799,11 @@ public final class DataChecker {
             String sp = read.name();
             Type bound = env.typeOf(read.binding());
             if (bound instanceof Type.Ref ref
-                    && ctx.symbols().declarations().declaration(ref.name().key()) instanceof Hir.SumData sum) {
+                    && ctx.symbols().declarations().declaration(ref.name()) instanceof Hir.SumData sum) {
                 fromSums.add(Type.show(bound));
                 spread.add(new Spread(read, spreadOfSum(sp, sum, bound, pos, ctx)));
             } else if (bound instanceof Type.Ref ref
-                    && ctx.symbols().declarations().declaration(ref.name().key()) instanceof Hir.Data sd) {
+                    && ctx.symbols().declarations().declaration(ref.name()) instanceof Hir.Data sd) {
                 spread.add(new Spread(read, TypeOps.fieldTypes(sd, ctx.symbols())));
             } else {
                 Diagnostic.Builder d = Diagnostic.at(pos)
@@ -941,7 +941,7 @@ public final class DataChecker {
             }
             case Hir.EncodeRaw e -> {
                 if (!hasEncoder(ctx.symbols().declarations()
-                        .declaration(names(e.typeName()).key()))) {
+                        .declaration(names(e.typeName())))) {
                     throw CompileException.of(Diagnostic.at(e.pos())
                             .say(new CodecMessage.HasNoEncoder(e.typeName().written()))
                             .build());
@@ -989,7 +989,7 @@ public final class DataChecker {
             }
             case Hir.DataEnc d -> {
                 // the element may be a product or a sum: `List<事前承認理由>` holds a sum (spec §encoder-derivation)
-                Hir.Def def = symbols.declarations().declaration(names(d.typeName()).key());
+                Hir.Def def = symbols.declarations().declaration(names(d.typeName()));
                 boolean hasEncoder = (def instanceof Hir.Data dd && dd.encoder().isPresent())
                         || def instanceof Hir.SumData;
                 if (!elemType.equals(Type.ref(names(d.typeName()))) || !hasEncoder) {

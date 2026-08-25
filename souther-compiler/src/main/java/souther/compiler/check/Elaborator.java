@@ -207,7 +207,7 @@ public final class Elaborator {
                 case ValueName.Local local when env.typeOf(local.id()) != null ->
                         new Core.Read(v.name(), local.id(), env.typeOf(local.id()), v.pos());
                 case ValueName.OfType named
-                        when ctx.symbols().declarations().declaration(named.type().key()) instanceof Hir.UnitData ->
+                        when ctx.symbols().declarations().declaration(named.type()) instanceof Hir.UnitData ->
                         new Core.UnitValue(named.type(), Type.ref(named.type()), v.pos());
                 // `None` where a `?` field is being given a value: the empty optional (spec §algebraic-types).
                 // What puts it here is the field, which the context says (ADR-0011) — not the expected
@@ -242,7 +242,7 @@ public final class Elaborator {
                     // reported where the name is written; this definition has no meaning to work out
                     throw new Unanswerable(nd.pos());
                 }
-                if (!(ctx.symbols().declarations().declaration(built.type().key()) instanceof Hir.Data owner)) {
+                if (!(ctx.symbols().declarations().declaration(built.type()) instanceof Hir.Data owner)) {
                     throw CompileException.of(Diagnostic
                                     .at(built.name().reportedAt())
                                     .say(new DataMessage.ItCannotBeConstructedHere(built.name().quoted())).build());
@@ -466,7 +466,7 @@ public final class Elaborator {
     static Core elaborateFieldAccess(Hir.FieldAccess fa, Scope env, CheckContext ctx) {
         Core targetCore = elaborate(fa.target(), env, ctx);
         Type target = targetCore.type();
-        if (target instanceof Type.Ref ref && ctx.symbols().declarations().declaration(ref.name().key()) instanceof Hir.Data owner) {
+        if (target instanceof Type.Ref ref && ctx.symbols().declarations().declaration(ref.name()) instanceof Hir.Data owner) {
             Type ft = TypeOps.fieldType(owner, fa.field(), ctx.symbols());
             if (ft != null) {
                 return new Core.FieldAccess(targetCore, fa.field(), ft, fa.pos());
@@ -481,7 +481,7 @@ public final class Elaborator {
             // sealed interface declares the accessor its cases already carry (issue #160). Only a
             // named sum, whose interface this compile emits — an anonymous union's cases are not
             // written together, so nothing declares their shared part.
-            if (target instanceof Type.Ref ref && ctx.symbols().declarations().declaration(ref.name().key()) instanceof Hir.SumData) {
+            if (target instanceof Type.Ref ref && ctx.symbols().declarations().declaration(ref.name()) instanceof Hir.SumData) {
                 Type shared = TypeOps.commonSpreadFields(cases, ctx.symbols()).get(fa.field());
                 if (shared != null) {
                     return new Core.FieldAccess(targetCore, fa.field(), shared, fa.pos());
@@ -492,7 +492,7 @@ public final class Elaborator {
             // field" and "read it in each case", which is what the author has to write.
             List<String> without = new ArrayList<>();
             for (TypeSymbol c : cases) {
-                if (!(ctx.symbols().declarations().declaration(c.key()) instanceof Hir.Data cd)
+                if (!(ctx.symbols().declarations().declaration(c) instanceof Hir.Data cd)
                         || !TypeOps.hasField(cd, fa.field(), ctx.symbols())) {
                     without.add(c.name());
                 }
@@ -1546,7 +1546,7 @@ public final class Elaborator {
         if (!ic.mapsClauses()) {
             return;
         }
-        List<Hir.InvariantClause> clauses = symbols.declarations().declaration(typeName.key()) instanceof Hir.Data data
+        List<Hir.InvariantClause> clauses = symbols.declarations().declaration(typeName) instanceof Hir.Data data
                 ? TypeOps.effectiveInvariants(data, symbols) : List.of();
         LinkedHashSet<String> named = new LinkedHashSet<>();
         boolean unnamed = false;

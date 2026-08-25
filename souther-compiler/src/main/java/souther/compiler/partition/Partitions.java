@@ -977,13 +977,13 @@ public final class Partitions {
         // the same words a class of a sum says it in. Left out, a position holding one was a
         // position nothing could write a value at, which is what a case of a sum narrows to.
         if (type instanceof Type.Ref unit
-                && symbols.declarations().declaration(unit.name().key()) instanceof Hir.UnitData) {
+                && symbols.declarations().declaration(unit.name()) instanceof Hir.UnitData) {
             return symbols.scope().reach(unit.name()) instanceof TypeReachName.Written written
                     ? List.of(FixtureTemplate.unitCase(written)) : List.of();
         }
         // A newtype the model only bounds has no classes — everything outside the bound is refused at
         // construction — but it does have values, and the edge of the bound is one that builds.
-        if (type instanceof Type.Ref ref && symbols.declarations().declaration(ref.name().key()) instanceof Hir.Data data) {
+        if (type instanceof Type.Ref ref && symbols.declarations().declaration(ref.name()) instanceof Hir.Data data) {
             if (!data.newtype()) {
                 return composed(ref.name(), symbols, policy, expanding);
             }
@@ -1040,7 +1040,7 @@ public final class Partitions {
     private static List<FixtureTemplate> composed(TypeSymbol record, Symbols symbols,
                                                   ReadingPolicy policy,
                                                   java.util.Set<TypeSymbol> expanding) {
-        if (expanding.contains(record) || !(symbols.declarations().declaration(record.key()) instanceof Hir.Data data)) {
+        if (expanding.contains(record) || !(symbols.declarations().declaration(record) instanceof Hir.Data data)) {
             return List.of();
         }
         Map<String, Type> fields = TypeOps.fieldTypes(data, symbols);
@@ -1295,7 +1295,7 @@ public final class Partitions {
         if (at != null) {
             candidates.add(at);
         }
-        if (base == Type.STRING && symbols.declarations().declaration(newtype.key()) instanceof Hir.Data data) {
+        if (base == Type.STRING && symbols.declarations().declaration(newtype) instanceof Hir.Data data) {
             for (Hir.InvariantClause clause : TypeOps.effectiveInvariants(data, symbols)) {
                 for (Hir.Expr each : ClauseHelpers.conjunctsOf(clause.expr())) {
                     if (InvariantConstraints.of(each, base).orElse(null)
@@ -1354,7 +1354,7 @@ public final class Partitions {
      */
     static List<FixtureTemplate> inReserve(Type type, Symbols symbols, ReadingPolicy policy,
                                            NumericDomain.Bounds within) {
-        if (!(type instanceof Type.Ref ref) || !(symbols.declarations().declaration(ref.name().key()) instanceof Hir.Data data)
+        if (!(type instanceof Type.Ref ref) || !(symbols.declarations().declaration(ref.name()) instanceof Hir.Data data)
                 || !data.newtype()) {
             return List.of();
         }

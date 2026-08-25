@@ -64,7 +64,7 @@ public final class CrossingNominal {
         if (name instanceof TypeSymbol.OfLanguage) {
             return null;
         }
-        return symbols.declarations().declaredByCompilation(name.key())
+        return symbols.declarations().declaredByCompilation(name)
                 ? new CrossingNominal(name)
                 : null;
     }

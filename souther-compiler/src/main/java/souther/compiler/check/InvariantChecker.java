@@ -814,7 +814,7 @@ public final class InvariantChecker {
             worn = under;
         }
         if (depth > GuaranteeWalk.FIELDS_SEEDED || !(worn instanceof Type.Ref ref)
-                || !(symbols.declarations().declaration(ref.name().key()) instanceof Hir.Data data) || data.newtype()) {
+                || !(symbols.declarations().declaration(ref.name()) instanceof Hir.Data data) || data.newtype()) {
             return;
         }
         for (Map.Entry<String, Type> field : clauses.fieldsOf(data).entrySet()) {
@@ -2008,7 +2008,7 @@ public final class InvariantChecker {
      * what it builds and what each of its fields is given came with it.
      */
     private Judgment judge(Core.Construct made, Known k, Denotations at, boolean attempted) {
-        if (!(symbols.declarations().declaration(made.typeName().key()) instanceof Hir.Data type)) {
+        if (!(symbols.declarations().declaration(made.typeName()) instanceof Hir.Data type)) {
             return null;
         }
         Judgment judged = verdictOf(made, type, k, at);

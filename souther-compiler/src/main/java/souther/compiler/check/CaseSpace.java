@@ -146,7 +146,7 @@ sealed interface CaseSpace {
             return new Cases(subject, "union `" + shown(members) + "`", direct(members, symbols));
         }
         if (subject instanceof Type.Ref ref
-                && symbols.declarations().declaration(ref.name().key()) instanceof Hir.SumData sum) {
+                && symbols.declarations().declaration(ref.name()) instanceof Hir.SumData sum) {
             return new Cases(subject, "data `" + sum.name() + "`",
                     direct(TypeOps.caseNames(sum), symbols));
         }

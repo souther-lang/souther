@@ -1521,7 +1521,7 @@ public final class ExampleVerifier {
             TypeSymbol only = fixtures.caseOnly(row.expected());
             expected = only != null ? null : fixtures.assertedExpected(row.expected(), sig.out());
             evidence = only == null ? new Evidence.Answer(expected.live())
-                    : symbols.declarations().declaration(only.key()) instanceof Hir.UnitData
+                    : symbols.declarations().declaration(only) instanceof Hir.UnitData
                             ? new Evidence.Answer(fixtures.buildFixture(row.expected(), sig.out()).value())
                             : new Evidence.Case(only);
         } catch (FixtureException fe) {

@@ -118,7 +118,7 @@ record UniversalElementFacts(Map<String, Bounds> byPath) {
      */
     static Map<String, Bounds> guaranteed(Type type, Symbols symbols, ReadingPolicy policy) {
         if (!(type instanceof Type.Ref ref)
-                || !(symbols.declarations().declaration(ref.name().key()) instanceof Hir.Data data)) {
+                || !(symbols.declarations().declaration(ref.name()) instanceof Hir.Data data)) {
             return Map.of();
         }
         InvariantChecker.Seeded seeded = seededOf(ref.name(), data, symbols, policy);

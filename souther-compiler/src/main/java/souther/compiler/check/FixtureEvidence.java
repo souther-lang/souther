@@ -144,14 +144,14 @@ public record FixtureEvidence(Symbols symbols, Map<String, Hir.FnDef> values,
      */
     public static boolean isNewtype(TypeSymbol name, Symbols symbols) {
         return name != null
-                && symbols.declarations().declaration(name.key()) instanceof Hir.Data d && d.newtype();
+                && symbols.declarations().declaration(name) instanceof Hir.Data d && d.newtype();
     }
 
     /** The written form of what a newtype wraps, kept whole so a generic base
      *  ({@code data 在庫 = Map<商品ID, Int>}) keeps its type arguments. */
     public static Hir.TypeRef newtypeBaseType(TypeSymbol name, Symbols symbols) {
         return name != null
-                && symbols.declarations().declaration(name.key()) instanceof Hir.Data d && d.newtype()
+                && symbols.declarations().declaration(name) instanceof Hir.Data d && d.newtype()
                 && d.fields().size() == 1 && d.fields().get(0).type() instanceof Hir.TypeRef base
                 ? base : null;
     }
@@ -159,7 +159,7 @@ public record FixtureEvidence(Symbols symbols, Map<String, Hir.FnDef> values,
     /** A data's fields by name, following the {@code ...includes} it composes in (spec §data). */
     public static Map<String, Hir.TypeRef> fieldTypes(TypeSymbol typeName, Symbols symbols) {
         Map<String, Hir.TypeRef> out = new LinkedHashMap<>();
-        if (symbols.declarations().declaration(typeName.key()) instanceof Hir.Data d) {
+        if (symbols.declarations().declaration(typeName) instanceof Hir.Data d) {
             for (Hir.Name inc : d.includes()) {
                 // A spread naming nothing brings in no fields; it is reported where it is written.
                 if (inc.answered() instanceof Hir.Name.Denoting named) {
