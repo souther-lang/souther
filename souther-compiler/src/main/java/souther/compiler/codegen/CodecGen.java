@@ -1,9 +1,12 @@
 package souther.compiler.codegen;
 
 import souther.compiler.check.Boundary;
+import souther.compiler.check.Elaborator;
+import souther.compiler.check.Lower;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.ClauseHelpers;
 import souther.compiler.ast.Hir;
+import souther.compiler.types.BindingId;
 import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.CaseShape;
 import souther.compiler.types.LeafScalar;
@@ -590,7 +593,7 @@ final class CodecGen {
             emitDefaultCtor(cb);
             // Raoh Decoder SAM: decode(Object in, Path path) -> Result. this=0, in=1, path=2.
             cb.withMethodBody("decode", MTD_Rdecode, ClassFile.ACC_PUBLIC, code -> {
-                BodyGen gen = new BodyGen(ctx, code, data, cdName, 3);
+                AstExpressions gen = new AstExpressions(new BodyGen(ctx, code, data, cdName, 3));
                 switch (dec) {
                     case Hir.PrimDecoder prim ->
                             emitPrimDecode(code, gen, cdName, prim, fields, src, invariants);
@@ -993,7 +996,7 @@ final class CodecGen {
         emitToTheSecond(code, temporal);
     }
 
-    private void emitPrimDecode(CodeBuilder code, BodyGen gen, ClassDesc cdName, Hir.PrimDecoder prim,
+    private void emitPrimDecode(CodeBuilder code, AstExpressions gen, ClassDesc cdName, Hir.PrimDecoder prim,
                                 Map<String, Type> fields, Src src, Invariants invariants) {
         Type inputType = TypeOps.primType(prim.from());
         ClassDesc leaf = srcLeafOwner(src);
@@ -1050,7 +1053,7 @@ final class CodecGen {
      * result in X (spec §newtype). Same Err short-circuit as {@link #emitPrimDecode}, but the leaf is
      * Y's decoder rather than a primitive one.
      */
-    private void emitNewtypeDecode(CodeBuilder code, BodyGen gen, ClassDesc cdName, Hir.NewtypeDecoder dec,
+    private void emitNewtypeDecode(CodeBuilder code, AstExpressions gen, ClassDesc cdName, Hir.NewtypeDecoder dec,
                                    Map<String, Type> fields, Src src, Invariants invariants) {
         if (dec.inner() instanceof Hir.MapDecRef mp) {
             // The map's own decoder, then its two halves of invariant either side of the key remap.
@@ -1162,7 +1165,7 @@ final class CodecGen {
         code.labelBinding(ok);
     }
 
-    private void emitObjectDecode(CodeBuilder code, BodyGen gen, ClassDesc cdName, Hir.ObjectDecoder obj,
+    private void emitObjectDecode(CodeBuilder code, AstExpressions gen, ClassDesc cdName, Hir.ObjectDecoder obj,
                                   Map<String, Type> fields, Src src) {
         emitObjectGuard(code, src, gen.slot(Type.STRING));
         List<Hir.Bind> binds = obj.binds();
@@ -1556,7 +1559,7 @@ final class CodecGen {
      * {@code emitPrimDecode}, {@code emitNewtypeDecode}, {@code emitObjectDecode} — are all such
      * bodies whose {@code BodyGen} locals start above slot 2, so slot 2 always holds the path.
      */
-    private void emitConstructCall(CodeBuilder code, BodyGen gen, ClassDesc cdName, Hir.Construct construct,
+    private void emitConstructCall(CodeBuilder code, AstExpressions gen, ClassDesc cdName, Hir.Construct construct,
                                    Map<String, Type> fields) {
         // The decoder is still AST-level; elaborate its field inits so the shared emitFieldValues
         // consumes one representation, with the type the checker decides for each (ADR-0021, #81).
@@ -1619,7 +1622,7 @@ final class CodecGen {
             emitDefaultCtor(cb);
             emitSharedInstance(cb, cdEnc);
             cb.withMethodBody("encode", MTD_Rencode, ClassFile.ACC_PUBLIC, code -> {
-                BodyGen gen = new BodyGen(ctx, code, data, cdName, 2);
+                AstExpressions gen = new AstExpressions(new BodyGen(ctx, code, data, cdName, 2));
                 code.aload(1);
                 code.checkcast(cdName);
                 int selfSlot = gen.slot(Type.ref(data.declares()));
@@ -1631,7 +1634,7 @@ final class CodecGen {
         });
     }
 
-    private void emitRawExpr(CodeBuilder code, BodyGen gen, Hir.RawExpr raw) {
+    private void emitRawExpr(CodeBuilder code, AstExpressions gen, Hir.RawExpr raw) {
         switch (raw) {
             case Hir.TextRaw t -> gen.expr(t.arg());                 // String is a neutral value
             case Hir.IntRaw i -> {
@@ -1726,7 +1729,7 @@ final class CodecGen {
      * the key entirely rather than writing {@code null} (spec §encoder-derivation). The map is on the stack on
      * entry and left on the stack on exit, so both the Some and None branches converge on it.
      */
-    private void emitOptionalEntry(CodeBuilder code, BodyGen gen, String key, Hir.OptionRaw o) {
+    private void emitOptionalEntry(CodeBuilder code, AstExpressions gen, String key, Hir.OptionRaw o) {
         Type at = gen.expr(o.access());                 // map, opt
         Type elemType = ((Type.OptionOf) at).element();
         code.dup();                                     // map, opt, opt
@@ -2082,5 +2085,55 @@ final class CodecGen {
             case DATETIME -> "dateTime";
             case INSTANT -> "iso8601";
         };
+    }
+
+    /**
+     * An AST expression emitted through the checker.
+     *
+     * <p>The one AST-level path this backend has, and the whole of it. A decoder and an encoder are
+     * still written as AST when they reach here (ADR-0021), so their expressions are typed at the
+     * environment the slots hold and emitted from what that produced; everything else the backend
+     * emits — a body, a data's invariant, a behavior's rule — arrives as the Core the checker made,
+     * and {@link BodyGen} has no way in from an AST at all.
+     *
+     * <p>Here rather than beside the emitter it uses, so that what may turn an AST into Core inside
+     * this package is one type in one file, and adding a second is a thing somebody has to write
+     * rather than a method already in reach ({@code
+     * souther.compiler.codegen.OnlyTheCodecEmitterTurnsAnAstIntoCoreTest}).
+     */
+    private static final class AstExpressions {
+
+        private final BodyGen body;
+
+        AstExpressions(BodyGen body) {
+            this.body = body;
+        }
+
+        /** Emits an AST expression: elaborated here, and emitted from what that produced. */
+        Type expr(Hir.Expr e) {
+            return body.genExpr(elaborate(e, null));
+        }
+
+        /**
+         * Elaborates an AST expression at this body's environment. It is desugared first, by the
+         * same rewrite a body gets, so a surface form with no Core node of its own (a comprehension)
+         * reaches the emitter in the shape it emits from. {@code expected} is the type the position
+         * wants, as the checker pushes a field's declared type into its initialiser.
+         */
+        Core elaborate(Hir.Expr e, Type expected) {
+            return Elaborator.elaborate(Lower.desugarExpr(e), body.scope(), body.context(), expected);
+        }
+
+        int slot(Type type) {
+            return body.slot(type);
+        }
+
+        void bind(BindingId binding, String name, int slot, Type type) {
+            body.bind(binding, name, slot, type);
+        }
+
+        void emitFieldValues(Map<String, Type> fields, List<Core.FieldValue> values) {
+            body.emitFieldValues(fields, values);
+        }
     }
 }
