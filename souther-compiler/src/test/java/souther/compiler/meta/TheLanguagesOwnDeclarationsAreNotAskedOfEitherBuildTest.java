@@ -136,8 +136,12 @@ class TheLanguagesOwnDeclarationsAreNotAskedOfEitherBuildTest {
 
         assertEquals(List.of(), ours.reserved(), "the module being evaluated is not asked");
         assertEquals(List.of(), theirs.reserved(), "and neither is the answer");
+        // The denominator, for both sides. An empty list of reserved names is what a crossing that
+        // asked nothing at all also answers, and each side is read separately.
         assertTrue(ours.asked.contains("probe.uni.$Module"),
                 () -> "that is not a crossing at all: " + ours.asked);
+        assertTrue(theirs.asked.contains("probe.uni.$Module"),
+                () -> "the answer's classes were never read: " + theirs.asked);
     }
 
     /**

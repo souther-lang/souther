@@ -110,9 +110,13 @@ public final class DeclarationAgreement {
         Agreement heldFrom(ValueName.Behavior behavior) {
             // Compared, not reached. What `reach` decides is which of the things a walk finds a
             // crossing follows, and the behavior asked about was not found — it is what this was
-            // given. Put through `reach`, a root it declined would come back held while nothing had
-            // been held at all; the only root it declines is one of the language's own namespace,
-            // which is a caller's mistake and is said as one by `notInSight`.
+            // given. Put through `reach`, a root it declined would come back `Agree` while nothing
+            // had been held at all, which is an answer this may not give.
+            //
+            // No caller reaches that today: the one there is passes the module being evaluated,
+            // which a compilation refuses to let take a reserved name. So this is what the method
+            // says rather than a case anything meets, and the root it would decline is said as a
+            // mistake by `notInSight` instead of answered.
             Reached root = new Reached.ABehavior(behavior);
             reached.add(root);
             toCompare.addLast(root);
