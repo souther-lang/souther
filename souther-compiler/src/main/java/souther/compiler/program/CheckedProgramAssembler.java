@@ -5,8 +5,10 @@ import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.check.CoreBinders;
 import souther.compiler.check.Lower;
 import souther.compiler.check.Sig;
+import souther.compiler.check.SpecImplementation;
 import souther.compiler.check.TypeOps;
 import souther.compiler.core.Composition;
+import souther.compiler.core.Core;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Acceptance;
 import souther.compiler.query.Bodies;
@@ -71,7 +73,7 @@ final class CheckedProgramAssembler {
         for (Hir.BehaviorDef declared : lowered.behaviors()) {
             ValueName.Behavior named = new ValueName.Behavior(module, declared.name());
             behaviors.add(new CheckedBehavior(named, signatureOf(signatures.get(declared.name())),
-                    implementationOf(named, declared.name(), implementations, checked,
+                    implementationOf(named, declared, lowered, implementations, checked,
                             compositions)));
         }
         return new CheckedModule(module, behaviors, helpersOf(module, lowered, checked));
@@ -98,9 +100,10 @@ final class CheckedProgramAssembler {
      * not something to infer from an absence.
      */
     private static CheckedImplementation implementationOf(
-            ValueName.Behavior named, String name,
+            ValueName.Behavior named, Hir.BehaviorDef declared, Hir.Module lowered,
             Map<String, BehaviorImplementation> implementations, Bodies.Elaborated checked,
             Map<ValueName.Behavior, Composition> compositions) {
+        String name = declared.name();
         BehaviorImplementation state = implementations.get(name);
         if (state == null || state == BehaviorImplementation.UNIMPLEMENTED) {
             return new CheckedImplementation.Unwritten();
@@ -112,7 +115,43 @@ final class CheckedProgramAssembler {
         if (composed != null) {
             return new CheckedImplementation.Composed(composed);
         }
-        return new CheckedImplementation.Body(checked.behaviorBodies().get(name));
+        return new CheckedImplementation.Body(inputBindersOf(named, declared, lowered),
+                checked.behaviorBodies().get(name));
+    }
+
+    /**
+     * The bindings this behavior's body reads its declared inputs through.
+     *
+     * <p>Read off the definition that implements it, and divided from what that definition takes by
+     * {@link SpecImplementation} — which is the same reading the JVM emitter binds its parameters
+     * from, so the snapshot and the emitted program cannot come to disagree about which local an
+     * input arrives in. The division is that rule's and not this one's: a definition's trailing
+     * parameters are the behaviors it depends on, and an assembler slicing the list itself would be
+     * a second place that knew so.
+     *
+     * <p>Sliced by what the behavior declares and not by how long its signature is. Sliced by the
+     * signature the two lengths would be equal by construction, and {@link CheckedBehavior}'s check
+     * of them would be comparing an answer with itself — the disagreement it is there to refuse
+     * would arrive instead as a dependency's binder handed over as an input's.
+     */
+    private static List<Core.Binder> inputBindersOf(ValueName.Behavior named,
+                                                    Hir.BehaviorDef declared, Hir.Module lowered) {
+        SpecImplementation.Implemented implemented =
+                declared instanceof Hir.SpecBehavior spec
+                        ? SpecImplementation.implementedBy(lowered, spec)
+                        : null;
+        if (implemented == null) {
+            // This behavior was taken as implemented here and by a body of its own, and the module
+            // has no definition to read one from. Nothing here can put that right, and letting it
+            // through would hand an output a body whose reads resolve to nothing it was given.
+            throw new IllegalStateException("`" + named.module() + "." + named.name()
+                    + "` was taken as having a body and has no definition to read it from");
+        }
+        List<Core.Binder> binders = new ArrayList<>();
+        for (Hir.FnParam input : implemented.inputs()) {
+            binders.add(CoreBinders.of(input.binder()));
+        }
+        return binders;
     }
 
     /**

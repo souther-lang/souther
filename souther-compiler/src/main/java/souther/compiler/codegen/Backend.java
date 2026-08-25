@@ -16,6 +16,7 @@ import souther.compiler.check.ReqSig;
 import souther.compiler.check.Requirements;
 import souther.compiler.check.BehaviorContract;
 import souther.compiler.check.Sig;
+import souther.compiler.check.SpecImplementation;
 import souther.compiler.check.EnsuresEnforcement;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -314,11 +315,13 @@ public final class Backend {
             });
         }
         // Behavior fn bodies arrive with their helper calls already inlined (the Lower stage,
-        // ADR-0021); the backend emits them as-is and never lowers a helper on its own.
-        Map<String, Hir.FnDef> fns = new HashMap<>();
-        for (Hir.FnDef fn : emitted(module)) {
-            fns.put(fn.name(), fn);
-        }
+        // ADR-0021); the backend emits them as-is and never lowers a helper on its own. Which
+        // definition implements a behavior, and which of its parameters are the declared inputs, is
+        // asked of `SpecImplementation` rather than worked out here: the snapshot's assembler reads
+        // the same binders, and two readings of one behavior's parameter list agree until either
+        // moves. Asked of what the module declared, which is where `Requirements` looks for one —
+        // a map keyed over `emitted(module)` let a method this module only took on to emit displace
+        // the `let` of the same name.
         // Injection targets (spec §injected-behavior): a SpecBehavior with no matching fn. Each becomes an
         // abstract base class a Java implementation extends (§java-base-class). Imported injection targets
         // (their base lives in the declaring module) are requirements too, so a composition here
@@ -446,12 +449,13 @@ public final class Backend {
                 }
                 switch (bd) {
                     case Hir.SpecBehavior spec -> {
-                        Hir.FnDef fn = fns.get(spec.name());
-                        if (fn != null) {
+                        SpecImplementation.Implemented implemented =
+                                SpecImplementation.implementedBy(module, spec);
+                        if (implemented != null) {
                             // a fn-implemented behavior: the $Impl holds the logic, the public interface
                             // (behaviorClass) is what Java code declares (spec §jvm-anonymous-union).
                             out.put(new GeneratedClass.BehaviorImpl(module.name(), spec.name()),
-                                    b.generateSpecFn(spec, fn, requiredNames, requiredSuccess, requiredParam));
+                                    b.generateSpecFn(spec, implemented, requiredNames, requiredSuccess, requiredParam));
                             List<Type> pts = new ArrayList<>();
                             for (Hir.Param p : spec.params()) {
                                 pts.add(b.successType(p.type()));
@@ -1249,7 +1253,7 @@ public final class Backend {
      * leading parameters name the inputs (their types come from the behavior); the trailing ones
      * name the injected behaviors and are resolved as inline calls, not bound as locals.
      */
-    private byte[] generateSpecFn(Hir.SpecBehavior spec, Hir.FnDef fn,
+    private byte[] generateSpecFn(Hir.SpecBehavior spec, SpecImplementation.Implemented implemented,
                                   Set<ValueName.Behavior> requiredNames,
                                   Map<ValueName.Behavior, Type> requiredSuccess,
                                   Map<ValueName.Behavior, List<Type>> requiredParam) {
@@ -1286,17 +1290,17 @@ public final class Backend {
                 gen.injectsInto(successType(spec.ret()));
                 gen.requireds(requiredNames, requiredSuccess, requiredParam, injected);
                 for (int i = 0; i < n; i++) {
-                    // the fn's leading param names the input; its type comes from the behavior
+                    // the definition's input names the binding; its type comes from the behavior
                     Type pt = successType(spec.params().get(i).type());
                     code.aload(i + 1);
                     int slot = gen.slot(pt);
                     unbox(code, pt, slot);
-                    gen.bind(fn.params().get(i).binder().binding(), fn.params().get(i).binder().name(),
-                            slot, pt);
+                    Hir.Binder binder = implemented.inputs().get(i).binder();
+                    gen.bind(binder.binding(), binder.name(), slot, pt);
                 }
                 // thread the behavior's declared output so a tail-position fold over an empty seed
                 // materialises its step at the output type, not a bottom (issue #70)
-                gen.emitTail(elaborated(checked.behaviorBodies(), fn.name()),
+                gen.emitTail(elaborated(checked.behaviorBodies(), implemented.definition().name()),
                         cdB, requiredNames, requiredSuccess, successType(spec.ret()));
             });
             if (n != 1) {

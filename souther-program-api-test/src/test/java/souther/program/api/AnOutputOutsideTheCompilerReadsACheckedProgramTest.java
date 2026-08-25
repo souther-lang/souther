@@ -9,6 +9,7 @@ import souther.compiler.program.CheckedHelper;
 import souther.compiler.program.CheckedImplementation;
 import souther.compiler.program.CheckedModule;
 import souther.compiler.program.CheckedProgram;
+import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
@@ -19,6 +20,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -264,6 +266,123 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
         Type answers = composed.answers();
         assertInstanceOf(Type.Union.class, answers, "a composition that drops a case answers a sum");
         return ((Type.Union) answers).members().stream().map(TypeSymbol::name).sorted().toList();
+    }
+
+    /**
+     * A body's parameter reads resolve to the parameters the snapshot says it has.
+     *
+     * <p>What a helper's body already allowed. A read carries the binding it was answered with, and
+     * until now nothing said which parameter that binding was: an output emitting {@code $sum}
+     * could see the read and not know which of its locals it names.
+     *
+     * <p>An equality and not the absence of an unresolved read. {@code combine}'s body binds
+     * nothing of its own, so every read in it is a parameter read, and a body whose reads all
+     * resolved because it had none would answer the same as this one.
+     */
+    @Test
+    void everyParameterReadInABodyResolvesToAParameter() {
+        CheckedModule demo = CheckedProgram.of(List.of(TAKES_TWO)).module("demo");
+        CheckedBehavior combine = named(demo, "combine");
+        CheckedImplementation.Body body =
+                (CheckedImplementation.Body) combine.implementation();
+
+        assertEquals(2, body.parameters().size(), "as many bindings as it takes");
+        assertEquals(combine.signature().takes().size(), body.parameters().size(),
+                "so the ith input is parameters().get(i) and takes().get(i)");
+        assertEquals(body.parameters().stream().map(Core.Binder::binding)
+                        .collect(Collectors.toSet()),
+                readsIn(body.body()),
+                "every read in this body is a read of one of them");
+        assertFalse(readsIn(body.body()).isEmpty(), "and it reads them");
+    }
+
+    /**
+     * And in the order the signature is in.
+     *
+     * <p>A set would answer the same for a list assembled backwards, and the two inputs of
+     * {@code combine} are both {@code Int}s — so a reader zipping the binders with
+     * {@code takes()} would be handed the wrong local with nothing to say so.
+     */
+    @Test
+    void theBindersAreInTheOrderTheInputsWereDeclared() {
+        CheckedBehavior combine =
+                named(CheckedProgram.of(List.of(TAKES_TWO)).module("demo"), "combine");
+        CheckedImplementation.Body body = (CheckedImplementation.Body) combine.implementation();
+
+        assertEquals(List.of("first", "second"),
+                body.parameters().stream().map(Core.Binder::name).toList(),
+                "the definition's parameters, in the order it wrote them");
+        // and the body's first read is the first parameter: `first.value - second.value`
+        assertEquals(body.parameters().get(0).binding(), firstReadIn(body.body()).binding());
+    }
+
+    private static final String TAKES_TWO = """
+            module demo
+
+            data Amount = Int
+            data Gap    = { gap: Int }
+
+            behavior combine : (first: Amount, second: Amount) -> Gap constructs Gap
+
+            let combine (first, second) = Gap { gap = first.value - second.value }
+            """;
+
+    /**
+     * An injected dependency is not one of these.
+     *
+     * <p>The definition implementing a behavior takes its declared inputs and then the behaviors it
+     * depends on, and only the first are what a call supplies. A snapshot handing over the whole
+     * parameter list would put a dependency at an index the signature has no type for, and
+     * {@code takes()} would go on saying the behavior takes one.
+     */
+    @Test
+    void aBehaviorsInjectedDependenciesAreNotAmongItsParameters() {
+        CheckedModule demo = CheckedProgram.of(List.of(DEPENDS_ON)).module("demo");
+        CheckedBehavior report = named(demo, "report");
+        CheckedImplementation.Body body = (CheckedImplementation.Body) report.implementation();
+
+        assertEquals(1, report.signature().takes().size(), "one input, as it was declared");
+        assertEquals(List.of("amount"), body.parameters().stream().map(Core.Binder::name).toList(),
+                "the input, and not the behavior it depends on");
+        assertEquals(body.parameters().stream().map(Core.Binder::binding)
+                        .collect(Collectors.toSet()),
+                readsIn(body.body()),
+                "the dependency is reached by name, so nothing in the body reads it as a binding");
+    }
+
+    private static final String DEPENDS_ON = """
+            module demo
+
+            data Amount = Int
+            data Line   = { line: String }
+
+            behavior render : (a: Amount) -> Line constructs Line
+
+            behavior report : (amount: Amount) -> Line
+                depends on render
+
+            let report (amount, render) = render(amount)
+            """;
+
+    /** The binding of every {@code Core.Read} in {@code body}. */
+    private static Set<BindingId> readsIn(Core body) {
+        Set<BindingId> read = new LinkedHashSet<>();
+        for (Core node : everyNodeOf(body)) {
+            if (node instanceof Core.Read r) {
+                read.add(r.binding());
+            }
+        }
+        return read;
+    }
+
+    /** The first read the walk reaches, which for a body of one expression is its leftmost. */
+    private static Core.Read firstReadIn(Core body) {
+        for (Core node : everyNodeOf(body)) {
+            if (node instanceof Core.Read r) {
+                return r;
+            }
+        }
+        throw new AssertionError("this body reads a parameter");
     }
 
     /**
