@@ -393,21 +393,20 @@ public final class FieldDomains {
      * and at nothing else (ADR-0090), so handing back the range instead would make a relational rule
      * into a partition of a position it never mentioned.
      *
-     * @param path     where the coordinate sits, read from the value these are of
-     * @param measured whether the coordinate is a count taken of the position rather than its value
-     * @param from     the rule that placed the end, which is what names the line. An invariant's,
-     *                 and said so: these are the ends the clauses of a declaration place, and no
-     *                 other kind of rule reaches this reading
-     * @param lower    whether this bounds the coordinate below; otherwise above
+     * @param at    which number of which position the end is on. The number and not a path beside
+     *              a flag: one position carries more than one, and which of them an end is on is
+     *              what the operation beside the path says
+     * @param from  the rule that placed the end, which is what names the line. An invariant's,
+     *              and said so: these are the ends the clauses of a declaration place, and no
+     *              other kind of rule reaches this reading
+     * @param lower whether this bounds the coordinate below; otherwise above
      */
-    public record Placed(String path, ValueName by, RuleRef.Invariant from,
-                         boolean lower, Endpoint end) {
+    public record Placed(Coordinate at, RuleRef.Invariant from, boolean lower, Endpoint end) {
 
-        /** Whether it is a number taken of the position rather than its own values, which is what
-         *  the readings of this value's own clauses ask each other. Derived and not stored: which
-         *  number it is, is {@link #by}, and a stored answer beside it would be a second one. */
-        public boolean measured() {
-            return by != null;
+        /** Where in the value the end sits. Never which number it is on: that is {@link #at}, and
+         *  reading one off the other is what the pair exists to stop. */
+        public String path() {
+            return at.path();
         }
     }
 
@@ -438,19 +437,12 @@ public final class FieldDomains {
      * @param why  what would have to change before this rule could be a line, in this compiler's
      *             own terms
      */
-    public record Unread(String path, ValueName by, RuleRef.Invariant from,
+    public record Unread(Coordinate at, RuleRef.Invariant from,
                          Core part, souther.compiler.inputs.BlockReason.AboutARule why) {
 
-        /** Which number of the position the end was to have been on, which is what a question about
-         *  a line is matched against. */
-        public Coordinate coordinate() {
-            return by == null ? Coordinate.value(path) : Coordinate.takenBy(path, by);
-        }
-
-        /** Whether it is a number taken of the position rather than its own values, derived for the
-         *  reason {@link Placed#measured} gives. */
-        public boolean measured() {
-            return by != null;
+        /** Where in the value the end was to have been placed. */
+        public String path() {
+            return at.path();
         }
     }
 
@@ -755,7 +747,7 @@ public final class FieldDomains {
                 continue;
             }
             if (directs.stream().noneMatch(d -> d.from().equals(rule) && d.part() == part.getKey()
-                    && d.coordinate().equals(where))) {
+                    && d.at().equals(where))) {
                 return unreadAnswerFor(rule, part.getKey(), where);
             }
         }
@@ -766,7 +758,7 @@ public final class FieldDomains {
     private RuleAccounting.Outcome unreadAnswerFor(RuleRef rule, Core part, Coordinate where) {
         for (Unread said : unread) {
             if (said.from().equals(rule) && said.part() == part
-                    && said.coordinate().equals(where)) {
+                    && said.at().equals(where)) {
                 return new RuleAccounting.Outcome.Unaccounted(
                         new RuleAccounting.Why.TheEndReadingSays(said.why()));
             }
@@ -819,7 +811,7 @@ public final class FieldDomains {
     /** Every end the rules place, wherever it is. */
     public List<Placed> placed() {
         return directs.stream()
-                .map(each -> new Placed(each.path(), each.by(), each.from(),
+                .map(each -> new Placed(each.at(), each.from(),
                         each.bound().lower(), each.bound().end()))
                 .toList();
     }

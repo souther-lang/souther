@@ -870,19 +870,13 @@ public final class InvariantChecker {
      *                 one value are two rules a row could be owed to, and held as declarations
      *                 they came back as one
      */
-    record Direct(String path, ValueName by, RuleRef.Invariant from,
+    record Direct(FieldDomains.Coordinate at, RuleRef.Invariant from,
                   InvariantBound bound, Core part) {
 
-        /** Which number of the position this end was placed on, which is what a question about a
-         *  line is matched against. */
-        FieldDomains.Coordinate coordinate() {
-            return by == null ? FieldDomains.Coordinate.value(path)
-                    : FieldDomains.Coordinate.takenBy(path, by);
-        }
-
-        /** Whether it is a number taken of the position rather than its own values. */
-        boolean measured() {
-            return by != null;
+        /** Where in the value the end was placed. Never which end it is: one position carries more
+         *  than one number and {@link #at} is what says which of them this is. */
+        String path() {
+            return at.path();
         }
     }
 
@@ -1068,20 +1062,12 @@ public final class InvariantChecker {
      *                position no line is drawn on named nothing, and the reading that could say so
      *                had never heard of the position
      */
-    private record Coordinate(String path, ValueName by, Carrier carrier) {
+    private record Coordinate(FieldDomains.Coordinate at, Carrier carrier) {
 
-        /** Which number of the position this is, as the one type that tells two numbers at one path
-         *  apart. Built from what was recorded rather than from a flag: the operation is what makes
-         *  two of them two, and a reader handed only that one was taken has to ask somewhere else
-         *  which. */
-        FieldDomains.Coordinate coordinate() {
-            return by == null ? FieldDomains.Coordinate.value(path)
-                    : FieldDomains.Coordinate.takenBy(path, by);
-        }
-
-        /** Whether it is a number taken of the position rather than the position's own values. */
-        boolean measured() {
-            return by != null;
+        /** Where in the value it sits. Never what it is: two numbers can be taken at one path, and
+         *  {@link #at} is what tells them apart. */
+        String path() {
+            return at.path();
         }
     }
 
@@ -1118,10 +1104,10 @@ public final class InvariantChecker {
         Map<FactSubject, Coordinate> byName = new LinkedHashMap<>();
         keys.forEach((path, key) -> {
             Carrier carrier = Carrier.ofValue(typeAt.get(path), symbols);
-            byName.put(key, new Coordinate(path, null, carrier));
+            byName.put(key, new Coordinate(FieldDomains.Coordinate.value(path), carrier));
             FactSubject atom = atoms.get(path);
             if (atom != null) {
-                byName.put(atom, new Coordinate(path, null, carrier));
+                byName.put(atom, new Coordinate(FieldDomains.Coordinate.value(path), carrier));
             }
         });
         // A count is a whole number whatever it counts, so nothing about the container decides how
@@ -1129,7 +1115,8 @@ public final class InvariantChecker {
         // it: dropped here and rebuilt as "a number was taken", two operations over one path were
         // one coordinate and a report could not tell them apart.
         held.forEach((path, counted) -> byName.put(counted.atom(),
-                new Coordinate(path, counted.by(), Carrier.WHOLE)));
+                new Coordinate(FieldDomains.Coordinate.takenBy(path, counted.by()),
+                        Carrier.WHOLE)));
         List<Direct> out = new ArrayList<>();
         List<FieldDomains.Unread> unread = new ArrayList<>();
         Map<String, List<TypeSymbol>> narrowers = new LinkedHashMap<>();
@@ -1302,7 +1289,7 @@ public final class InvariantChecker {
             // And the number the line is on, which is the coordinate this reading already holds. Not
             // rebuilt from the path: which of a position's numbers a line is on is what the operation
             // beside it says, and a reader handed the path alone has to go and ask something else.
-            shape = new ClauseStates.ABound(about.coordinate(), positions);
+            shape = new ClauseStates.ABound(about.at(), positions);
         }
         settle(bin, from, shape, end, at, byName, raised, took, typeAt, parts, raisedByPart);
         if (end instanceof InvariantBound.Read.NoEnd) {
@@ -1325,7 +1312,7 @@ public final class InvariantChecker {
             return;
         }
         if (end instanceof InvariantBound.Read.AnEnd placed) {
-            out.add(new Direct(found.path(), found.by(), from, placed.bound(), bin));
+            out.add(new Direct(found.at(), from, placed.bound(), bin));
         }
     }
 
@@ -1498,7 +1485,7 @@ public final class InvariantChecker {
                 place -> carrierAt(place, left, right) != null);
         for (Coordinate each : coordinatesIn(comparison, at, byName)) {
             FieldDomains.Unread said =
-                    new FieldDomains.Unread(each.path(), each.by(), from, comparison, why);
+                    new FieldDomains.Unread(each.at(), from, comparison, why);
             if (!out.contains(said)) {
                 out.add(said);
             }

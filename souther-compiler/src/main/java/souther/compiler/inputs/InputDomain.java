@@ -522,6 +522,17 @@ public final class InputDomain {
         return false;
     }
 
+    /** The position's own value, as the reading of one coordinate names it. */
+    private static final souther.compiler.check.FieldDomains.CoordinateKind ITS_OWN_VALUE =
+            new souther.compiler.check.FieldDomains.CoordinateKind.OfItsOwnValue();
+
+    /** The number {@code operation} answers of what stands at a position. */
+    private static souther.compiler.check.FieldDomains.CoordinateKind answeredBy(
+            ValueName operation) {
+        return new souther.compiler.check.FieldDomains.CoordinateKind
+                .OfWhatAnOperationAnswers(operation);
+    }
+
     /**
      * The reading of one position.
      *
@@ -568,9 +579,9 @@ public final class InputDomain {
                             + ", which is not what its type is measured by: " + Type.show(type));
         }
         DeclaredBounds.Bounds own = bySize
-                ? DeclaredBounds.and(ofType, DeclaredBounds.placed(stated, true, Carrier.WHOLE))
+                ? DeclaredBounds.and(ofType, DeclaredBounds.placed(stated, answeredBy(taken), Carrier.WHOLE))
                 : carried == null ? null
-                        : DeclaredBounds.and(valueOfType, DeclaredBounds.placed(stated, false, carried));
+                        : DeclaredBounds.and(valueOfType, DeclaredBounds.placed(stated, ITS_OWN_VALUE, carried));
         // A value whose rules contradict has no positions to cover: every edge of every field of it
         // is a row nobody can write, which is not the same answer as a field nothing bounds.
         boolean nothingExists = placed.bounds().infeasible();
@@ -596,10 +607,7 @@ public final class InputDomain {
                 // Where the position actually stops, which the ends as written do not say: a clause
                 // placing one at 0 beside a clause that takes the 0 away leaves a position whose
                 // first value is 1, and a line drawn at the 0 is drawn at no value of it.
-                placed.leftAt(path, bySize
-                        ? new souther.compiler.check.FieldDomains.CoordinateKind
-                                .OfWhatAnOperationAnswers(taken)
-                        : new souther.compiler.check.FieldDomains.CoordinateKind.OfItsOwnValue()),
+                placed.leftAt(path, bySize ? answeredBy(taken) : ITS_OWN_VALUE),
                 placed.narrowedBy(path, true), placed.narrowedBy(path, false), nothingExists,
                 placed.projection(), declared, reading,
                 ObligationDomain.of(reading, declared), admitted.completeness(),
@@ -679,7 +687,7 @@ public final class InputDomain {
         if (stated(valueOfType)) {
             return false;
         }
-        return taken != null && stated(DeclaredBounds.placed(stated, true, Carrier.WHOLE));
+        return taken != null && stated(DeclaredBounds.placed(stated, answeredBy(taken), Carrier.WHOLE));
     }
 
     /**
@@ -702,7 +710,7 @@ public final class InputDomain {
                     // two. What is undecided is which of them the position is measured at, and that
                     // is a fact about the position rather than about either rule — this reading has
                     // chosen no term for the position, and each rule chose one for itself.
-                    filedAt(path, each.by(), type, symbols),
+                    filedAt(path, each.at(), type, symbols),
                     new BlockReason.CompetingCoordinates());
             if (out.stream().noneMatch(had -> had.sameAs(said))) {
                 out.add(said);
@@ -729,11 +737,14 @@ public final class InputDomain {
      * and the reading of the position disagreeing about what stands here — which is this compiler
      * contradicting itself rather than something the model left out.
      */
-    private static FilingCoordinate filedAt(TermPath path, ValueName by, Type type,
-                                            Symbols symbols) {
-        if (by == null) {
+    private static FilingCoordinate filedAt(TermPath path,
+                                            souther.compiler.check.FieldDomains.Coordinate at,
+                                            Type type, Symbols symbols) {
+        if (!(at.kind() instanceof souther.compiler.check.FieldDomains.CoordinateKind
+                .OfWhatAnOperationAnswers answered)) {
             return FilingCoordinate.of(new NumericTerm.ValueOf(path));
         }
+        ValueName by = answered.operation();
         // The operation a count is taken by is one the library declares, which is what the reading
         // that recorded the count went to. Anything else here is that reading and this one holding
         // different ideas of what an operation is.
@@ -765,8 +776,8 @@ public final class InputDomain {
                                        Carrier carried) {
         return !stated(ofType) && !stated(valueOfType)
                 && taken != null && carried != null
-                && stated(DeclaredBounds.placed(stated, true, Carrier.WHOLE))
-                && stated(DeclaredBounds.placed(stated, false, carried));
+                && stated(DeclaredBounds.placed(stated, answeredBy(taken), Carrier.WHOLE))
+                && stated(DeclaredBounds.placed(stated, ITS_OWN_VALUE, carried));
     }
 
     private static boolean stated(DeclaredBounds.Bounds bounds) {
@@ -804,7 +815,7 @@ public final class InputDomain {
             // or the other, and it is only the line that nothing came of.
             UnreadRule said = new UnreadRule(each.from(),
                     souther.compiler.check.RuleCitation.named(each.from()),
-                    filedAt(path, each.by(), type, symbols),
+                    filedAt(path, each.at(), type, symbols),
                     each.why());
             if (out.stream().noneMatch(had -> had.sameAs(said))) {
                 out.add(said);
