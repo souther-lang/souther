@@ -1,10 +1,10 @@
 package souther.compiler.partition;
 
 import souther.compiler.types.BinOp;
-import souther.compiler.check.BehaviorContract;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.StatedContract;
 import souther.compiler.check.Symbols;
+import souther.compiler.core.Contract;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.InputDomain;
@@ -313,9 +313,9 @@ public final class EnsuresThresholds {
      * so a clause of an injected behavior draws its lines like any other, and there is no body for
      * a reading to have taken them from.
      */
-    private static Map<BindingId, String> rootsOf(List<BehaviorContract.ContractParam> params) {
+    private static Map<BindingId, String> rootsOf(List<Contract.Param> params) {
         Map<BindingId, String> roots = new LinkedHashMap<>();
-        for (BehaviorContract.ContractParam param : params) {
+        for (Contract.Param param : params) {
             roots.putIfAbsent(param.binding(), param.name());
         }
         return roots;

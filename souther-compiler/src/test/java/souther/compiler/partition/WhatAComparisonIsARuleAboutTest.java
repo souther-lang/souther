@@ -2,7 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.check.BehaviorContract;
+import souther.compiler.core.Contract;
 import souther.compiler.check.StatedContract;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
@@ -72,7 +72,7 @@ class WhatAComparisonIsARuleAboutTest {
                 () -> clause + " arrives as a comparison");
 
         Map<BindingId, String> roots = new LinkedHashMap<>();
-        for (BehaviorContract.ContractParam param : stated.params()) {
+        for (Contract.Param param : stated.params()) {
             roots.putIfAbsent(param.binding(), param.name());
         }
         return ComparisonAssessment.of("f", comparison,

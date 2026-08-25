@@ -21,7 +21,7 @@ import souther.compiler.check.Ordering;
 import souther.compiler.core.Core;
 import souther.compiler.core.GrowingFold;
 
-import souther.compiler.check.EnsuresEnforcement;
+import souther.compiler.core.EnsuresEnforcement;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.types.Refinement;
 import souther.compiler.types.ValueName;

@@ -1,7 +1,7 @@
 package souther.compiler.check;
 
-import souther.compiler.check.BehaviorContract.ContractParam;
-import souther.compiler.check.BehaviorContract.Guard;
+import souther.compiler.core.Contract.Param;
+import souther.compiler.core.Contract.Guard;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.ResolvedCase;
 import souther.compiler.types.TypeSymbol;
@@ -74,7 +74,7 @@ public record ContractDischarge(List<RuleDischarge> rules,
         // — entered as locations, and nothing is seeded of them, since what the rule states is the
         // question.
         Set<BindingId> named = new LinkedHashSet<>();
-        for (ContractParam param : contract.params()) {
+        for (Param param : contract.params()) {
             named.add(param.binding());
         }
         named.add(rule.value());

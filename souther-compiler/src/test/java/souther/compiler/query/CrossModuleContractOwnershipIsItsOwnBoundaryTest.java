@@ -1,7 +1,7 @@
 package souther.compiler.query;
 
 import souther.compiler.Compiler;
-import souther.compiler.check.EnsuresEnforcement;
+import souther.compiler.core.EnsuresEnforcement;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.types.ValueName;
 

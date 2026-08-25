@@ -1,9 +1,9 @@
 package souther.compiler.codegen;
 
-import souther.compiler.check.BehaviorContract;
-import souther.compiler.check.BehaviorContract.ContractParam;
-import souther.compiler.check.BehaviorContract.Guard;
-import souther.compiler.check.BehaviorContract.Rule;
+import souther.compiler.core.Contract;
+import souther.compiler.core.Contract.Guard;
+import souther.compiler.core.Contract.Param;
+import souther.compiler.core.Contract.Rule;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.RuntimeCaseToken;
 import souther.compiler.jvm.SoutherJvmAbi;
@@ -68,7 +68,7 @@ final class EnsuresGen {
     }
 
     /** The class carrying {@code contract}'s check. */
-    byte[] generate(BehaviorContract contract) {
+    byte[] generate(Contract contract) {
         ClassDesc cd = ctx.cd(new GeneratedClass.Ensures(
                 new GeneratedClass.BehaviorInterface(contract.behavior().module(),
                         contract.behavior().name())));
@@ -98,7 +98,7 @@ final class EnsuresGen {
      * carrier, and every rule asks it again. What a rule reads {@code value} as is the case's own,
      * and is put in a slot of its own where that rule needs it.
      */
-    private void emitCheck(CodeBuilder code, ClassDesc cd, BehaviorContract contract) {
+    private void emitCheck(CodeBuilder code, ClassDesc cd, Contract contract) {
         // The answer's argument, which is the last one. Held before the parameters take their slots,
         // so nothing below has to work out where it went.
         int answer = contract.params().size();
@@ -120,10 +120,13 @@ final class EnsuresGen {
      * <p>A rule names a parameter by its binding, and both checks are handed the same parameters in
      * the same argument positions. What follows them differs and this does not.
      */
-    private BodyGen bindParams(CodeBuilder code, ClassDesc cd, BehaviorContract contract) {
+    private BodyGen bindParams(CodeBuilder code, ClassDesc cd, Contract contract) {
         BodyGen gen = new BodyGen(ctx, code, null, cd, contract.params().size() + 1);
-        for (ContractParam param : contract.params()) {
-            code.aload(param.index());
+        // The ith parameter arrives in the ith argument, which is this method's convention and not
+        // something the declaration says: every argument here is a reference and takes one slot.
+        for (int i = 0; i < contract.params().size(); i++) {
+            Param param = contract.params().get(i);
+            code.aload(i);
             int slot = gen.slot(param.type());
             unbox(code, param.type(), slot, ctx);
             gen.bind(param.binding(), param.name(), slot, param.type());
@@ -145,7 +148,7 @@ final class EnsuresGen {
      * leaves its arm answers for — worked out from the declarations rather than tested against a
      * class, since there is no value to test.
      */
-    private void emitCheckByCase(CodeBuilder code, ClassDesc cd, BehaviorContract contract) {
+    private void emitCheckByCase(CodeBuilder code, ClassDesc cd, Contract contract) {
         int named = contract.params().size();
 
         BodyGen gen = bindParams(code, cd, contract);
@@ -213,7 +216,7 @@ final class EnsuresGen {
      * <p>The guard is a jump past this rule and not a choice between rules — the rule after it is
      * emitted whether or not this one applied, which is what makes the clause a conjunction.
      */
-    private void emitRule(CodeBuilder code, BodyGen gen, BehaviorContract contract, Rule rule,
+    private void emitRule(CodeBuilder code, BodyGen gen, Contract contract, Rule rule,
                           int answer, int answered) {
         Label next = code.newLabel();
         ResolvedCase selected =
@@ -250,10 +253,10 @@ final class EnsuresGen {
      * on the stack. It is run only here — on the path that refuses — so what it costs is paid by a
      * call that was going to abort anyway.
      */
-    private void emitStatement(CodeBuilder code, BodyGen gen, BehaviorContract contract, Rule rule,
+    private void emitStatement(CodeBuilder code, BodyGen gen, Contract contract, Rule rule,
                                Label next, ResolvedCase selected, int answered,
                                Runnable fillAnswered) {
-        gen.expr(rule.statement());
+        gen.genExpr(rule.condition());
         code.ifne(next);
         emitAbort(code, contract, rule, selected, answered, fillAnswered);
         code.labelBinding(next);
@@ -266,7 +269,7 @@ final class EnsuresGen {
      * branches, and a half-made object sitting on the operand stack across a branch is a shape to
      * keep out of the emitter — so nothing is built until there is nothing left to decide.
      */
-    private void emitAbort(CodeBuilder code, BehaviorContract contract, Rule rule,
+    private void emitAbort(CodeBuilder code, Contract contract, Rule rule,
                            ResolvedCase selected, int answered, Runnable fillAnswered) {
         if (selected != null) {
             fillAnswered.run();
@@ -275,7 +278,7 @@ final class EnsuresGen {
         code.dup();
         code.ldc(contract.behavior().module());
         code.ldc(contract.behavior().name());
-        pushOrNull(code, contract.clauseOf(rule).name().orElse(null));
+        pushOrNull(code, rule.clause().orElse(null));
         if (selected == null) {
             code.aconst_null();
             code.aconst_null();

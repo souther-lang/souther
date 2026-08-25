@@ -227,7 +227,8 @@ class WhetherAnythingAppliesABehaviorIsTheRunsAnswerTest {
                         Deadline.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis()),
                         EvaluationPolicy.DEFAULT,
                         Answering.generatedHere(),
-                        mine.db().ask(new Bodies.Contracts(name)).value()));
+                        souther.compiler.check.CheckedEnsures.executable(
+                                mine.db().ask(new Bodies.Contracts(name)).value())));
 
         assertTrue(refused.getMessage().contains("example.applying")
                         && refused.getMessage().contains("example.elsewhere"),
@@ -321,7 +322,7 @@ class WhetherAnythingAppliesABehaviorIsTheRunsAnswerTest {
                 Deadline.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis()),
                 EvaluationPolicy.DEFAULT,
                 answering,
-                c.db().ask(new Bodies.Contracts(name)).value());
+                souther.compiler.check.CheckedEnsures.executable(c.db().ask(new Bodies.Contracts(name)).value()));
     }
 
     private static Compilation compiled() {

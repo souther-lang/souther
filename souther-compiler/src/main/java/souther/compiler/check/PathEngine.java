@@ -2,7 +2,8 @@ package souther.compiler.check;
 
 import souther.compiler.semantics.NumericResult;
 import souther.compiler.ast.Hir;
-import souther.compiler.check.BehaviorContract.Guard;
+import souther.compiler.core.Contract;
+import souther.compiler.core.Contract.Guard;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.CaseSelector;
@@ -440,8 +441,11 @@ final class PathEngine {
             return null;
         }
         Map<BindingId, Core> given = new HashMap<>();
-        for (BehaviorContract.ContractParam param : answered.stated().params()) {
-            given.put(param.binding(), args.get(param.index()));
+        List<Contract.Param> params = answered.stated().params();
+        for (int i = 0; i < params.size(); i++) {
+            // Which parameter this is, is where it stands: a signature takes them in that order and
+            // a call hands its arguments over in it.
+            given.put(params.get(i).binding(), args.get(i));
         }
         given.put(rule.value(), answer);
         return given;

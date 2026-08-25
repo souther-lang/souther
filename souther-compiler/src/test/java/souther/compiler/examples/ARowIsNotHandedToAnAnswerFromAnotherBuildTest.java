@@ -318,7 +318,7 @@ class ARowIsNotHandedToAnAnswerFromAnotherBuildTest {
                 Deadline.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis()),
                 EvaluationPolicy.DEFAULT,
                 answering,
-                c.db().ask(new Bodies.Contracts(name)).value());
+                souther.compiler.check.CheckedEnsures.executable(c.db().ask(new Bodies.Contracts(name)).value()));
     }
 
     /** The classes one build of {@code source} emits, read for what they were stamped with. */

@@ -1,7 +1,7 @@
 package souther.compiler.execute;
 
 import souther.compiler.ast.Hir;
-import souther.compiler.check.BehaviorContract;
+import souther.compiler.core.Contract;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
@@ -44,14 +44,14 @@ public final class ExampleExecution {
     private final Map<String, Sig> signatures;
     private final Map<String, List<BehaviorRequirement>> requirements;
     private final Map<String, Hir.FnDef> definitions;
-    private final Map<String, BehaviorContract> contracts;
+    private final Map<String, Contract> contracts;
     private final Deadline deadline;
     private final EvaluationPolicy policy;
 
     public ExampleExecution(Prepared prepared, Symbols symbols, Map<String, Sig> signatures,
                             Map<String, List<BehaviorRequirement>> requirements,
                             Map<String, Hir.FnDef> definitions,
-                            Map<String, BehaviorContract> contracts,
+                            Map<String, Contract> contracts,
                             Deadline deadline, EvaluationPolicy policy) {
         this.prepared = prepared;
         this.symbols = symbols;
@@ -104,7 +104,7 @@ public final class ExampleExecution {
 
     /** What each behavior declares of what it answers, which is what holds a row's values to
      *  something. */
-    public Map<String, BehaviorContract> contracts() {
+    public Map<String, Contract> contracts() {
         return contracts;
     }
 

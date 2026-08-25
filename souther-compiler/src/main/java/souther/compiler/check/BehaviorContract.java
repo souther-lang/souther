@@ -3,9 +3,9 @@ package souther.compiler.check;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.core.Contract;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
-import souther.compiler.types.ResolvedCase;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
@@ -31,24 +31,13 @@ import java.util.Optional;
  * once is the resolving, the typing and the specialization; which tree a reader gets is that
  * reader's own question and is answered from the same rule.
  */
-public record BehaviorContract(ValueName.Behavior behavior, List<ContractParam> params, Type output,
-                        List<Clause> clauses) {
+public record BehaviorContract(ValueName.Behavior behavior, List<Contract.Param> params,
+                        Type output, List<Clause> clauses) {
 
     public BehaviorContract {
         params = List.copyOf(params);
         clauses = List.copyOf(clauses);
     }
-
-    /**
-     * A parameter as a rule names it: where it is bound, what the author calls it, what it holds, and
-     * which one it is.
-     *
-     * <p>A rule names it by its binding and never by the spelling. The spelling is carried for a
-     * reader — a diagnostic quoting the parameter a rule could not be read against, and an editor
-     * showing what a behavior states — which is the reason it is here rather than looked up on the
-     * declaration by whoever needs to show one.
-     */
-    public record ContractParam(BindingId binding, String name, Type type, int index) {}
 
     /** One `ensures`, with the rules its arms state. A violation is reported by the clause, so this
      *  is what carries the name a reader is given. */
@@ -66,7 +55,7 @@ public record BehaviorContract(ValueName.Behavior behavior, List<ContractParam> 
      * is read as what that case holds and the cases hold different things. So a reader does not
      * specialize again, and the identity of what it is reading is the rule's own.
      *
-     * <p>What a {@link Guard.Case}'s selector is named by is the type the case is declared as, never
+     * <p>What a {@link Contract.Guard.Case}'s selector is named by is the type the case is declared as, never
      * the arm's spelling: the selectors come from the output's own declarations, and the arm is
      * matched against them by the type its name resolved to. A reader carrying that name out —
      * into a failure a run leaves behind, into a report — is carrying the case and not the text.
@@ -76,12 +65,13 @@ public record BehaviorContract(ValueName.Behavior behavior, List<ContractParam> 
      * holds of an answer that is a {@code NotFound}, and a reader that wants the second asks the
      * answer.
      */
-    public record Rule(Guard guard, BindingId value, Hir.Expr statement, RuleId id, SourcePos pos) {
+    public record Rule(Contract.Guard guard, BindingId value, Hir.Expr statement, RuleId id,
+                       SourcePos pos) {
 
         /** What {@code value} is read as here: what the case holds, or the whole answer where the
          *  rule applies to every answer. */
         public Type valueType(Type output) {
-            return guard instanceof Guard.Case c ? c.selected().bound() : output;
+            return guard instanceof Contract.Guard.Case c ? c.selected().bound() : output;
         }
 
         /**
@@ -110,28 +100,6 @@ public record BehaviorContract(ValueName.Behavior behavior, List<ContractParam> 
             Hir.forEachChild(expr, child -> found[0] |= reads(child, binding));
             return found[0];
         }
-    }
-
-    /**
-     * When a rule applies.
-     *
-     * <p>Rules are not tried in order and one answer may satisfy several guards — a data may be a
-     * case of two sums declared in its module — so every rule whose guard holds is a rule the answer
-     * is held to. That is what a declaration says; taking the first is what a {@code match} does,
-     * and a declaration has no order to read.
-     */
-    public sealed interface Guard {
-
-        /** The rule applies to every answer: the form written where the answer has no cases. */
-        public record Always() implements Guard {}
-
-        /** The rule applies where the answer is this case.
-         *
-         * <p>The case as this compile resolved it and not the selector alone: a reader deciding
-         * whether one rule's case is inside another's is asking about what each covers, and going
-         * back to the declarations for that is the second reading {@link CaseSpace} exists to stop.
-         */
-        public record Case(ResolvedCase selected) implements Guard {}
     }
 
     /**

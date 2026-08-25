@@ -1,4 +1,4 @@
-package souther.compiler.check;
+package souther.compiler.core;
 
 import souther.compiler.types.ValueName;
 
@@ -7,6 +7,11 @@ import java.util.Set;
 
 /**
  * What is being done about a behavior's {@code ensures}, answered once for the whole compilation.
+ *
+ * <p>Here rather than beside the check, because where a clause is checked is a decision the
+ * language made and an output other than this compiler's own reads it. What rides it is the
+ * executable reading of the declaration ({@link Contract}), which is the same value the emitter
+ * runs and the same one a checked program is given.
  *
  * <p>One value rather than a pair of questions. Asked as "does the callee check" and "does a
  * crossing check", the two are complements in arithmetic and independent in the program: four
@@ -31,7 +36,7 @@ public sealed interface EnsuresEnforcement {
      * <p>Its body is here, so this is the one place every application goes through — a Souther
      * caller, a Java caller, a pipeline stage — and a caller emits nothing.
      */
-    record AtTheCallee(BehaviorContract contract) implements EnsuresEnforcement {
+    record AtTheCallee(Contract contract) implements EnsuresEnforcement {
 
         public AtTheCallee {
             if (contract == null) {
@@ -51,7 +56,7 @@ public sealed interface EnsuresEnforcement {
      * own Java calls has no crossing in this compilation and gets no check emitted — a count of
      * crossings, and not an answer of its own.
      */
-    record AtEachCrossing(BehaviorContract contract) implements EnsuresEnforcement {
+    record AtEachCrossing(Contract contract) implements EnsuresEnforcement {
 
         public AtEachCrossing {
             if (contract == null) {
@@ -98,10 +103,10 @@ public sealed interface EnsuresEnforcement {
      * there is a check to emit next to a table with nothing under that name, or a contract for a
      * behavior the answer said states nothing.
      */
-    default BehaviorContract contract() {
+    default Contract contract() {
         return switch (this) {
-            case AtTheCallee(BehaviorContract c) -> c;
-            case AtEachCrossing(BehaviorContract c) -> c;
+            case AtTheCallee(Contract c) -> c;
+            case AtEachCrossing(Contract c) -> c;
             case NoContract ignored -> null;
             case NotDecidedHere ignored -> null;
         };
@@ -122,8 +127,8 @@ public sealed interface EnsuresEnforcement {
      * of there being four cases is that a combination nothing means cannot be written; a miss
      * standing for two unlike things would put one back in by the side door.
      */
-    static EnsuresEnforcement in(Map<ValueName.Behavior, EnsuresEnforcement> decided,
-                                 String module, ValueName.Behavior behavior) {
+    public static EnsuresEnforcement in(Map<ValueName.Behavior, EnsuresEnforcement> decided,
+                                        String module, ValueName.Behavior behavior) {
         EnsuresEnforcement answered = decided.get(behavior);
         if (answered != null) {
             return answered;
@@ -146,10 +151,10 @@ public sealed interface EnsuresEnforcement {
      * reaches as a dependency joins it, and a reader arriving afterwards would find a bodied
      * behavior sitting among the injected ones.
      */
-    static EnsuresEnforcement of(ValueName.Behavior behavior,
-                                 Map<String, BehaviorContract> contracts,
-                                 Set<ValueName.Behavior> injected) {
-        BehaviorContract contract = contracts.get(behavior.name());
+    public static EnsuresEnforcement of(ValueName.Behavior behavior,
+                                        Map<String, Contract> contracts,
+                                        Set<ValueName.Behavior> injected) {
+        Contract contract = contracts.get(behavior.name());
         if (contract == null) {
             return NoContract.INSTANCE;
         }

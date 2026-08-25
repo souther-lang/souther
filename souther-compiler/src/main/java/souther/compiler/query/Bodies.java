@@ -5,6 +5,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.BehaviorChecker;
 import souther.compiler.check.BehaviorContract;
+import souther.compiler.check.CheckedEnsures;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.ClausesForDischarge;
 import souther.compiler.check.StatedContract;
@@ -384,14 +385,14 @@ public final class Bodies {
      * re-raises them: a reader asks for the contracts and what the reading found comes with them,
      * which is why the reading is not repeated at the reader that happens to be first.
      */
-    public record Contracts(String name) implements Key<Map<String, BehaviorContract>> {
+    public record Contracts(String name) implements Key<Map<String, CheckedEnsures>> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Map<String, BehaviorContract>> compute(Db db) {
+        public Answer<Map<String, CheckedEnsures>> compute(Db db) {
             Answer<Lower.Lowered> lowering = db.ask(new Lowering(name));
             Answer<Symbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<String, Sig>> signatures = db.ask(new Signatures(name));
@@ -400,7 +401,7 @@ public final class Bodies {
                     || !helpers.present()) {
                 return Answer.absent();
             }
-            Map<String, BehaviorContract> contracts = new LinkedHashMap<>();
+            Map<String, CheckedEnsures> contracts = new LinkedHashMap<>();
             List<Report> reports = new ArrayList<>();
             for (Hir.BehaviorDef behavior : lowering.value().settled().behaviors()) {
                 if (!(behavior instanceof Hir.SpecBehavior spec) || spec.ensures().isEmpty()) {
@@ -2057,7 +2058,7 @@ public final class Bodies {
             // contracts and what reading them found. Asked here so that a module with a clause that
             // cannot be read is a module that does not reach codegen: the reports are that key's and
             // are not repeated, and what is read off them here is whether there was a refusal.
-            Answer<Map<String, BehaviorContract>> contracts = db.ask(new Contracts(name));
+            Answer<Map<String, CheckedEnsures>> contracts = db.ask(new Contracts(name));
             boolean sound = reported.errors().isEmpty() && reported.abandoned().isEmpty()
                     && contracts.present() && !contracts.hasError();
             Map<String, Core> helperBodies = new LinkedHashMap<>();

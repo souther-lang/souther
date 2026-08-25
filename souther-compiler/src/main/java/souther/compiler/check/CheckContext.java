@@ -152,6 +152,35 @@ public record CheckContext(Symbols symbols, Hir.Data data, Map<ValueName.Behavio
         return new CheckContext(symbols, null, Map.of(), Map.of());
     }
 
+    /**
+     * The context a data's invariant is elaborated in — the one reading of it that runs.
+     *
+     * <p>Every field named and nothing else. A clause may name the fields, the language's own
+     * operations and a {@code let} it reaches, and it may not call a behavior (spec
+     * §invariant-expressions), so there is nothing for {@code reqs} or {@code callees} to answer:
+     * a table of behaviors here would be a permission the language does not give, offered to a
+     * reading that cannot use it. It makes no optional — a clause states a condition rather than
+     * building a value — and it keeps no call standing, which is what an executable reading is.
+     *
+     * <p>Named rather than written out where it is needed. This context and the one below decide
+     * what a clause means; assembled twice they were assembled differently, which is what put a
+     * behavior table on the emitter's reading and left it off the checker's.
+     */
+    public static CheckContext executableInvariant(Symbols symbols, Hir.Data data) {
+        return new CheckContext(symbols, data, Map.of(), Map.of(), false, Preserved.NONE);
+    }
+
+    /**
+     * The context a behavior's {@code ensures} is elaborated in — the one reading of it that runs.
+     *
+     * <p>No {@code data}: a rule is written against the behavior's parameters and its answer, and
+     * the fields it reaches it reaches through them. Otherwise the invariant fragment unchanged
+     * (spec §ensures), so the rest is what {@link #executableInvariant} says.
+     */
+    public static CheckContext executableEnsures(Symbols symbols) {
+        return new CheckContext(symbols, null, Map.of(), Map.of(), false, Preserved.NONE);
+    }
+
     /** The same context checking a different {@code data}'s invariant, decoder, or encoder. */
     public CheckContext forData(Hir.Data other) {
         return same().data(other);

@@ -15,7 +15,7 @@ import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.ValueName;
-import souther.compiler.check.BehaviorContract.Guard;
+import souther.compiler.core.Contract.Guard;
 import souther.compiler.check.BehaviorContract.RuleId;
 
 import org.junit.jupiter.api.Test;

@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.check.BehaviorContract;
+import souther.compiler.check.CheckedEnsures;
 import souther.compiler.check.ClauseDischarge;
 import souther.compiler.check.ContractDischarge;
 import souther.compiler.check.ContractDischarge.RuleDischarge;
@@ -84,7 +85,7 @@ class AClassificationIsPlacedInsideTheClauseItIsAboutTest {
     @Test
     void everyRuleIsPlacedInsideTheEnsuresItIsWrittenUnder() {
         Compilation c = compiled();
-        Map<String, BehaviorContract> contracts = c.db().ask(new Bodies.Contracts("m.a")).value();
+        Map<String, CheckedEnsures> contracts = c.db().ask(new Bodies.Contracts("m.a")).value();
         Map<String, ContractDischarge> classified =
                 c.db().ask(new Bodies.ContractCapabilities("m.a")).value();
         assertNotNull(contracts);
@@ -96,7 +97,7 @@ class AClassificationIsPlacedInsideTheClauseItIsAboutTest {
                 "one answer per conjunct the author wrote: the helper's own `&&` is not theirs");
         for (RuleDischarge rule : discharge.rules()) {
             BehaviorContract.Clause clause =
-                    contracts.get("findIt").clauses().get(rule.rule().clause());
+                    contracts.get("findIt").read().clauses().get(rule.rule().clause());
             enclosedBy(clause.region(), rule.capability(), "rule of clause " + rule.rule().clause());
         }
     }

@@ -316,6 +316,6 @@ class WhereARowStopsIsDecidedByWhichHalfOfTheSeamItReachedTest {
                 Deadline.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis()),
                 EvaluationPolicy.DEFAULT,
                 (generated, compiled) -> answerer,
-                c.db().ask(new Bodies.Contracts(name)).value());
+                souther.compiler.check.CheckedEnsures.executable(c.db().ask(new Bodies.Contracts(name)).value()));
     }
 }

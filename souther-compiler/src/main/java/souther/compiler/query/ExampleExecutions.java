@@ -1,11 +1,12 @@
 package souther.compiler.query;
 
 import souther.compiler.ast.Hir;
-import souther.compiler.check.BehaviorContract;
 import souther.compiler.check.BehaviorRequirement;
+import souther.compiler.check.CheckedEnsures;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
+import souther.compiler.core.Contract;
 import souther.compiler.execute.ExampleExecution;
 
 import java.util.List;
@@ -55,10 +56,13 @@ public final class ExampleExecutions {
         // whose requirements are not settled is not one to read statements off yet.
         Map<String, List<BehaviorRequirement>> requirements =
                 db.ask(new Bodies.Requirements(module)).value();
-        Map<String, BehaviorContract> contracts = db.ask(new Bodies.Contracts(module)).value();
-        if (requirements == null || contracts == null) {
+        Map<String, CheckedEnsures> declared = db.ask(new Bodies.Contracts(module)).value();
+        if (requirements == null || declared == null) {
             return null;
         }
+        // The reading that runs. What decides a row is the emitted check (spec §example-ensures),
+        // and this is what that check was emitted from.
+        Map<String, Contract> contracts = CheckedEnsures.executable(declared);
         // The one part that may be empty rather than missing. A module defining no value of its own
         // reaches none by name, which is a module rather than an unanswered question.
         Map<String, Hir.FnDef> values = db.ask(new Bodies.ModuleDefinitions(module)).value();

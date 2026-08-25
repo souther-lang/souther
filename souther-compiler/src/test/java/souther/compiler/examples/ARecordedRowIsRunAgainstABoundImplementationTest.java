@@ -357,7 +357,7 @@ class ARecordedRowIsRunAgainstABoundImplementationTest {
                 // supplied for at all is `SoutherExamples.bind`'s rule; this is the seam below it.
                 Answering.bound(bound, java.util.Set.of("findTodo"),
                         c.db().ask(new Bodies.Signatures(name)).value()),
-                c.db().ask(new Bodies.Contracts(name)).value());
+                souther.compiler.check.CheckedEnsures.executable(c.db().ask(new Bodies.Contracts(name)).value()));
     }
 
     /** What the module's rows are written for, as this compile emitted it. */

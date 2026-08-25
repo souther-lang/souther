@@ -240,7 +240,7 @@ class AnAnswererInAnotherLoaderRunsARowTest {
                 Deadline.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis()),
                 EvaluationPolicy.DEFAULT,
                 answerer.asAnswering(classes, parent),
-                c.db().ask(new Bodies.Contracts(name)).value());
+                souther.compiler.check.CheckedEnsures.executable(c.db().ask(new Bodies.Contracts(name)).value()));
     }
 
     private static Class<?> loaded(ClassLoader loader, String name) {

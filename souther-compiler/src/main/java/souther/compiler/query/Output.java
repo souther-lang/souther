@@ -15,7 +15,8 @@ import souther.compiler.execute.ProgramExecution;
 import souther.compiler.execute.WrittenValue;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
-import souther.compiler.check.BehaviorContract;
+import souther.compiler.check.CheckedEnsures;
+import souther.compiler.core.Contract;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.DataChecker;
 import souther.compiler.check.Lower;
@@ -24,7 +25,7 @@ import souther.compiler.check.Requirements;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
-import souther.compiler.check.EnsuresEnforcement;
+import souther.compiler.core.EnsuresEnforcement;
 import souther.compiler.codegen.Backend;
 import souther.compiler.codegen.Emissions;
 import souther.compiler.codegen.Instrumentation;
@@ -157,7 +158,7 @@ public final class Output {
             // is written against the operations an author wrote — which the lowered module no longer has.
             Answer<Map<TypeSymbol, List<Hir.InvariantClause>>> dischargeClauses =
                     db.ask(new Shapes.InvariantsForDischarge(name));
-            Answer<Map<String, BehaviorContract>> contracts = db.ask(new Bodies.Contracts(name));
+            Answer<Map<String, CheckedEnsures>> contracts = db.ask(new Bodies.Contracts(name));
             // What a call left standing is typed against — the same answer the check typed it
             // against. The emitter re-types the expressions it emits (a clause, a rule), so a
             // signature table of its own would be a second reading of what a name means, and the two
@@ -195,14 +196,18 @@ public final class Output {
          */
         private static Map<ValueName.Behavior, EnsuresEnforcement> checksOf(
                 Hir.Module lowered, Set<ValueName.Behavior> importedInjected,
-                Map<String, BehaviorContract> contracts) {
+                Map<String, CheckedEnsures> contracts) {
             Set<ValueName.Behavior> injected =
                     Requirements.injectedNames(lowered, importedInjected);
+            // What runs, which is what a check is emitted from. Where each rule was written stays
+            // with the declaration; an emitter given that as well would be holding a value an
+            // unrelated edit moves.
+            Map<String, Contract> executable = CheckedEnsures.executable(contracts);
             Map<ValueName.Behavior, EnsuresEnforcement> checks = new LinkedHashMap<>();
             for (Hir.BehaviorDef behavior : lowered.behaviors()) {
                 ValueName.Behavior named =
                         new ValueName.Behavior(lowered.name(), behavior.name());
-                checks.put(named, EnsuresEnforcement.of(named, contracts, injected));
+                checks.put(named, EnsuresEnforcement.of(named, executable, injected));
             }
             return Map.copyOf(checks);
         }

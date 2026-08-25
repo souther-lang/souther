@@ -14,10 +14,10 @@ import souther.compiler.ast.WrittenName;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.ReqSig;
 import souther.compiler.check.Requirements;
-import souther.compiler.check.BehaviorContract;
+import souther.compiler.core.Contract;
 import souther.compiler.check.Sig;
 import souther.compiler.check.SpecImplementation;
-import souther.compiler.check.EnsuresEnforcement;
+import souther.compiler.core.EnsuresEnforcement;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.check.TypeOps;
@@ -433,7 +433,7 @@ public final class Backend {
                 // caller's bytecode and calls this one, so the rule has one home and a caller has
                 // nothing of it to restate.
                 ValueName.Behavior named = new ValueName.Behavior(module.name(), bd.name());
-                BehaviorContract contract = b.checkOf(named).contract();
+                Contract contract = b.checkOf(named).contract();
                 if (contract != null) {
                     out.put(new GeneratedClass.Ensures(
                                     new GeneratedClass.BehaviorInterface(module.name(), bd.name())),
@@ -1278,7 +1278,7 @@ public final class Backend {
             // implements its public interface (which itself extends Behavior for a single-input one)
             cb.withInterfaceSymbols(cdBehavior(spec.name()));
             emitInjection(cb, cdB, injected);
-            if (where instanceof EnsuresEnforcement.AtTheCallee(BehaviorContract contract)) {
+            if (where instanceof EnsuresEnforcement.AtTheCallee(Contract contract)) {
                 emitCheckingApply(cb, cdB, spec, contract, mtdApply, n);
             }
             cb.withMethodBody(bodyMethod, mtdApply, bodyFlags, code -> {
@@ -1334,7 +1334,7 @@ public final class Backend {
      * this wrapper stands between a behavior and its own recursion.
      */
     private void emitCheckingApply(ClassBuilder cb, ClassDesc cdB, Hir.SpecBehavior spec,
-                                   BehaviorContract contract, MethodTypeDesc mtdApply, int n) {
+                                   Contract contract, MethodTypeDesc mtdApply, int n) {
         ClassDesc cdEnsures = ctx.cd(new GeneratedClass.Ensures(
                 new GeneratedClass.BehaviorInterface(ctx.pkg, spec.name())));
         List<TypeSymbol> bridged = ctx.bridgedMembers(successType(spec.ret()));
