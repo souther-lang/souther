@@ -1,12 +1,18 @@
 package souther.compiler.query;
 
+import souther.compiler.execute.ExampleExecution;
+import souther.compiler.observe.WrittenStatements;
+import souther.compiler.observe.Observations;
+import souther.compiler.observe.ArmObservation;
 import souther.compiler.source.SourceId;
 
 import souther.compiler.generated.EvaluationArtifact;
 import souther.compiler.generated.GeneratedImplementations;
 import souther.compiler.generated.MemoryClassLoader;
-import souther.compiler.jvm.GeneratedClass;
-import souther.compiler.jvm.SoutherJvmAbi;
+import souther.compiler.execute.ConstantConstruction;
+import souther.compiler.execute.ConstantOutcome;
+import souther.compiler.execute.ProgramExecution;
+import souther.compiler.execute.WrittenValue;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.BehaviorContract;
@@ -347,16 +353,6 @@ public final class Output {
         }
     }
 
-    /** How much of what an evaluation goes through is recorded as it goes. */
-    public enum CoverageMode {
-
-        /** Nothing. What an evaluation asks for when nobody is measuring it. */
-        NONE,
-
-        /** Which arm of each of the module's bodies the rows took. */
-        ARMS
-    }
-
     /**
      * One module's classes, counting what they go through — and, where asked, recording which arms
      * they took.
@@ -366,16 +362,16 @@ public final class Output {
      * decision of whether a jar refers to the compiler inside a parameter. These are never stamped and
      * never written out.
      *
-     * <p>Counting is not optional the way coverage is. Every evaluation runs against counted classes,
-     * because what holds a row to a budget it cannot exceed is the counting itself — a row evaluated
-     * against uncounted classes has nothing but a clock behind it.
+     * <p>Counting is not optional the way recording the arms is. Every evaluation runs against
+     * counted classes, because what holds a row to a budget it cannot exceed is the counting itself
+     * — a row evaluated against uncounted classes has nothing but a clock behind it.
      *
-     * <p>Absent where {@link CoverageMode#ARMS} is asked for and the plan and the bodies do not line
-     * up, which is the one thing this must not paper over: emitting a body an arm short reports the
+     * <p>Absent where {@link ArmObservation#RECORD} is asked for and the plan and the bodies do not
+     * line up, which is the one thing this must not paper over: emitting a body an arm short reports the
      * arm that ran as one nothing reaches, and that reads as a gap in the model rather than a fault in
      * the measurement.
      */
-    public record Evaluated(String name, CoverageMode coverage)
+    public record Evaluated(String name, ArmObservation arms)
             implements Key<EvaluationArtifact> {
         @Override
         public String module() {
@@ -389,7 +385,7 @@ public final class Output {
                 return Answer.absent();
             }
             Instrumentation instrumentation = Instrumentation.COUNTING;
-            if (coverage == CoverageMode.ARMS) {
+            if (arms == ArmObservation.RECORD) {
                 instrumentation = instrumentation.measuring(
                         CoverageSites.of(in.checked().behaviorBodies(),
                                 in.checked().decisions(), in.checked().supplied()));
@@ -439,7 +435,7 @@ public final class Output {
      * under two definitions of them. {@link #evaluationLoader} takes the path's classes whole and
      * counts them on the way in, so the counting still does not stop at the import.
      */
-    public record EvaluationLinked(String name, CoverageMode coverage)
+    public record EvaluationLinked(String name, ArmObservation arms)
             implements Key<EvaluationArtifact> {
         @Override
         public String module() {
@@ -473,7 +469,7 @@ public final class Output {
                     continue;
                 }
                 Answer<EvaluationArtifact> classes = db.ask(new Evaluated(reached,
-                        reached.equals(name) ? coverage : CoverageMode.NONE));
+                        reached.equals(name) ? arms : ArmObservation.OMIT));
                 // A module this compilation declares and could not generate makes this absent rather
                 // than making the set one class short. Evaluating against a set with a hole in it
                 // produces a class that will not load, or a stale one found further up the loader
@@ -626,33 +622,20 @@ public final class Output {
             if (checks.isEmpty()) {
                 return Answer.of(Boolean.TRUE);
             }
-            Map<String, byte[]> classes = db.ask(new Linked(name)).value();
-            if (classes == null) {
-                return Answer.absent();
-            }
-            ClassLoader loader = loader(db, classes);
+            ProgramExecution execution = db.execution();
             List<Report> reports = new ArrayList<>();
             for (DataChecker.ConstCheck check : checks) {
-                boolean holds;
-                Class<?> ctfe;
-                try {
-                    ctfe = Class.forName(SoutherJvmAbi.nameOf(new GeneratedClass.Ctfe(
-                            new GeneratedClass.Value(check.type()))).binaryName(), true, loader);
-                    holds = (boolean) ctfe.getMethod("check", paramClass(check.value()))
-                            .invoke(null, check.value());
-                } catch (ReflectiveOperationException | LinkageError _) {
-                    continue;   // cannot evaluate at compile time; the run-time check still applies
-                }
-                if (!holds) {
-                    String shown = check.typeName() + "("
-                            + (check.value() instanceof String s ? "\"" + s + "\"" : check.value()) + ")";
-                    String clause = failingClause(db, check, ctfe);
+                ConstantConstruction written = asked(db, check);
+                // The other two answers say nothing here. A construction that holds is a
+                // construction nobody is told about, and one this compile could not evaluate is
+                // left to the check that runs when the program does (ADR-0032).
+                if (execution.check(written) instanceof ConstantOutcome.Violates(var clause)) {
                     reports.add(Report.raised(Diagnostic.at(check.pos())
-                                    .say(clause == null
+                                    .say(clause.isEmpty()
                                             ? new DataMessage.TheWrittenValueViolatesTheInvariant(
-                                                    shown)
+                                                    shown(written))
                                             : new DataMessage.TheWrittenValueViolatesTheClause(
-                                                    shown, clause))
+                                                    shown(written), clause.get()))
                                     .build()));
                 }
             }
@@ -660,16 +643,28 @@ public final class Output {
         }
 
         /**
-         * The name of the clause this constant breaks, or null where the clause carries none or the
-         * declaration cannot be read here. The same run-time checks the decoder refines with are asked
-         * one at a time, in declaration order, so the clause named is the one a construction would
-         * report.
+         * The construction as a question about the program: what was written, and what the type it
+         * builds is declared to hold of its values.
+         *
+         * <p>The clauses are read here and not by whatever runs the check. They are the declaration
+         * of the module that declares the type, which is this compiler's to answer for; a runner
+         * that read them itself would be reaching back into the query graph in the middle of
+         * running, which is the arrangement this boundary replaces.
          */
-        private String failingClause(Db db, DataChecker.ConstCheck check, Class<?> ctfe) {
-            Answer<souther.compiler.check.Prepared> declaring = db.ask(new Shapes.Prepared(check.type().module()));
+        private ConstantConstruction asked(Db db, DataChecker.ConstCheck check) {
+            return new ConstantConstruction(name, check.typeName(), check.type(),
+                    writtenValue(check.value()), clausesOf(db, check), check.pos());
+        }
+
+        /** What the type is declared to hold of its values, in declaration order, or none where the
+         *  declaring module cannot be read here. */
+        private static List<ConstantConstruction.Clause> clausesOf(Db db,
+                DataChecker.ConstCheck check) {
+            Answer<souther.compiler.check.Prepared> declaring =
+                    db.ask(new Shapes.Prepared(check.type().module()));
             Answer<Symbols> scope = Names.derivedSymbols(db, check.type().module());
             if (!declaring.present() || !scope.present()) {
-                return null;
+                return List.of();
             }
             List<Hir.InvariantClause> clauses = null;
             for (souther.compiler.check.Derived.Def declared : declaring.value().defs()) {
@@ -678,30 +673,42 @@ public final class Output {
                 }
             }
             if (clauses == null) {
-                return null;
+                return List.of();
             }
-            for (int i = 0; i < clauses.size(); i++) {
-                try {
-                    boolean holds = (boolean) ctfe.getMethod(Backend.clauseCheck(i),
-                            paramClass(check.value())).invoke(null, check.value());
-                    if (!holds) {
-                        return clauses.get(i).name().orElse(null);
-                    }
-                } catch (ReflectiveOperationException | LinkageError _) {
-                    return null;
-                }
+            List<ConstantConstruction.Clause> named = new ArrayList<>();
+            for (Hir.InvariantClause clause : clauses) {
+                named.add(new ConstantConstruction.Clause(clause.name()));
             }
-            return null;
+            return named;
         }
 
-        private Class<?> paramClass(Object v) {
-            if (v instanceof Long) {
-                return long.class;
-            }
-            if (v instanceof Boolean) {
-                return boolean.class;
-            }
-            return v.getClass();   // String, BigDecimal
+        /**
+         * The constant in the four a source can write it as.
+         *
+         * <p>A fold answers with the object it happened to make, and which of them it is is what
+         * the language wrote. Anything else is this compiler having folded to something no source
+         * states, which is not a fact about the program being compiled.
+         */
+        private static WrittenValue writtenValue(Object value) {
+            return switch (value) {
+                case Long whole -> new WrittenValue.Whole(whole);
+                case Boolean truth -> new WrittenValue.Truth(truth);
+                case String text -> new WrittenValue.Text(text);
+                case java.math.BigDecimal decimal -> new WrittenValue.Decimal(decimal);
+                default -> throw new IllegalStateException("a constant folded to "
+                        + value.getClass().getName()
+                        + ", which is not one of the four a source can write");
+            };
+        }
+
+        /** The construction as the source wrote it, for the message that quotes it. */
+        private static String shown(ConstantConstruction written) {
+            return written.typeName() + "(" + switch (written.value()) {
+                case WrittenValue.Text(String text) -> "\"" + text + "\"";
+                case WrittenValue.Whole(long whole) -> String.valueOf(whole);
+                case WrittenValue.Truth(boolean truth) -> String.valueOf(truth);
+                case WrittenValue.Decimal(java.math.BigDecimal decimal) -> decimal.toString();
+            } + ")";
         }
     }
 
@@ -720,7 +727,7 @@ public final class Output {
      * disagreements says that with the same empty list it says agreement with.
      */
     public record Disagreements(String name)
-            implements Key<souther.compiler.examples.ExampleStatements.Readings> {
+            implements Key<WrittenStatements.Readings> {
 
         @Override
         public String module() {
@@ -728,39 +735,22 @@ public final class Output {
         }
 
         @Override
-        public Answer<souther.compiler.examples.ExampleStatements.Readings> compute(Db db) {
-            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
-            Answer<Symbols> scope = Names.derivedSymbols(db, name);
-            Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
-            if (!prepared.present() || !scope.present() || !sigs.present()) {
-                return Answer.absent();
-            }
+        public Answer<WrittenStatements.Readings> compute(Db db) {
+            // Asked ahead of the reading environment, and answered rather than left absent: a
+            // module that did not check states nothing yet, which is a different answer from one
+            // this could not read.
             if (!db.ask(new Bodies.Checked(name)).present()) {
-                // a module that did not check states nothing yet
-                return Answer.of(souther.compiler.examples.ExampleStatements.Readings.NONE);
+                return Answer.of(WrittenStatements.Readings.NONE);
             }
-            // The classes alone: nothing here applies a behavior, so what the compile implemented is
-            // not a question this asks.
-            EvaluationArtifact artifact =
-                    db.ask(new EvaluationLinked(name, CoverageMode.NONE)).value();
-            Map<String, byte[]> classes = artifact == null ? null : artifact.classes();
-            Map<String, List<BehaviorRequirement>> requirements =
-                    db.ask(new Bodies.Requirements(name)).value();
-            if (classes == null || requirements == null) {
+            ExampleExecution asked = ExampleExecutions.of(db, name);
+            if (asked == null) {
                 return Answer.absent();
             }
-            Map<String, Hir.FnDef> values = db.ask(new Bodies.ModuleDefinitions(name)).value();
-            Map<String, BehaviorContract> contracts = db.ask(new Bodies.Contracts(name)).value();
-            if (contracts == null) {
-                return Answer.absent();
+            if (!(db.execution().statements(asked)
+                    instanceof souther.compiler.observe.StatementReading.Read(var said))) {
+                return Answer.absent();   // nothing was read, so nothing is said
             }
-            // `requirements` is asked for above as a readiness condition — a module whose
-            // requirements are not settled is not one to read statements off yet — rather than
-            // because reading them needs it. Nothing here applies a behavior.
-            return Answer.of(souther.compiler.examples.ExampleStatements.disagreements(
-                    prepared.value().forExamples(),
-                    scope.value(), sigs.value(), classes, evaluationLoader(db),
-                    values == null ? Map.of() : values, deadlineOf(db), policyOf(db), contracts));
+            return Answer.of(said);
         }
     }
 
@@ -800,7 +790,7 @@ public final class Output {
 
         @Override
         public Answer<Boolean> compute(Db db) {
-            souther.compiler.examples.ExampleStatements.Readings read =
+            WrittenStatements.Readings read =
                     db.ask(new Disagreements(name)).value();
             if (read == null) {
                 return Answer.of(true);
@@ -808,20 +798,20 @@ public final class Output {
             List<Report> reports = new ArrayList<>();
             // Each is filed under the source its own caret is in, which is what a report with
             // nothing beside its place is filed under.
-            for (souther.compiler.examples.ExampleStatements.Disagreement d : read.disagreements()) {
+            for (WrittenStatements.Disagreement d : read.disagreements()) {
                 reports.add(Report.of(said(d)));
             }
-            for (souther.compiler.examples.ExampleStatements.UnreadFake f : read.unread()) {
+            for (WrittenStatements.UnreadFake f : read.unread()) {
                 reports.add(Report.of(unread(f)));
             }
             return Answer.of(true, reports);
         }
 
         /** One fake that could not be read: the caret on the behavior it names, and what stopped. */
-        private static Diagnostic unread(souther.compiler.examples.ExampleStatements.UnreadFake f) {
+        private static Diagnostic unread(WrittenStatements.UnreadFake f) {
             // Which of the three it was travels into the message, because what to do about them
             // differs — and one of them is not about the model at all.
-            souther.compiler.examples.ExampleStatements.Unread why = f.why();
+            WrittenStatements.Unread why = f.why();
             Diagnostic.Builder said = Diagnostic.at(f.at(), f.width())
                     .say(why.isDepth()
                             ? new ExampleMessage.NotComparedTheTableReachedItsDepthLimit(
@@ -846,9 +836,9 @@ public final class Output {
 
         /** One disagreement: the caret on the recorded row, a second region on the stand-in in
          * whichever file it was written in, and what each of them answers. */
-        private static Diagnostic said(souther.compiler.examples.ExampleStatements.Disagreement d) {
-            souther.compiler.examples.ExampleStatements.Statement recorded = d.recorded();
-            souther.compiler.examples.ExampleStatements.Statement standIn = d.standIn();
+        private static Diagnostic said(WrittenStatements.Disagreement d) {
+            WrittenStatements.Statement recorded = d.recorded();
+            WrittenStatements.Statement standIn = d.standIn();
             boolean viaWith = d.viaWith();
             // The region says which file it is in, and whether that is worth printing is the
             // renderer's — it already leaves the name out where it matches the one in the heading.
@@ -875,7 +865,7 @@ public final class Output {
      * failure stops a compile, so a change to a widely-imported data says how far it reaches in one
      * compile rather than one module per round.
      */
-    public record Examples(String name, SourceId sourceId, CoverageMode coverage)
+    public record Examples(String name, SourceId sourceId, ArmObservation arms)
             implements Key<Examples.Of> {
 
         /**
@@ -892,7 +882,7 @@ public final class Output {
          * that measure the same thing should not be two compiles.
          */
         public static Examples asked(Db db, String name, SourceId sourceId) {
-            return new Examples(name, sourceId, Adequacy.coverageAsked(db));
+            return new Examples(name, sourceId, Adequacy.armsAsked(db));
         }
 
         /**
@@ -934,9 +924,20 @@ public final class Output {
          */
         @Override
         public Answer<Of> compute(Db db) {
-            Answer<Of> ran = evaluate(db, name, sourceId,
-                    db.ask(new EvaluationLinked(name, coverage)).value(), coverage);
-            List<Diagnostic> wrong = fakeTables(db, name, sourceId);
+            Answer<Of> ran = evaluate(db, name, sourceId, arms);
+            if (!(fakeTables(db, name, sourceId)
+                    instanceof souther.compiler.observe.TableBuild.Built(
+                            List<Diagnostic> wrong))) {
+                // The tables this source's fakes state were not built, so this key did not answer
+                // for the source. A fake is a statement about a behavior the way a row is, and an
+                // answer that carried the rows and said nothing about the fakes reads as fakes that
+                // are fine — which is what a source writing only fakes got, because its rows are
+                // empty and nothing else here had anything to say.
+                //
+                // Absent is how a source that produced no observation is said; the reading that
+                // counts it names it for what it is (`OBSERVATION_ABSENT`, of the source).
+                return Answer.absent(ran.reports());
+            }
             if (wrong.isEmpty()) {
                 return ran;
             }
@@ -960,104 +961,47 @@ public final class Output {
          * written for one dependency answers is a fact about the module, so the reading that knows
          * that is the one that picks what this source's share of them is.
          */
-        private static List<Diagnostic> fakeTables(Db db, String name, SourceId sourceId) {
-            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
-            Answer<Symbols> scope = Names.derivedSymbols(db, name);
-            Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
-            if (!prepared.present() || !scope.present() || !sigs.present()) {
-                return List.of();
-            }
-            if (!db.ask(new Bodies.Checked(name)).present()) {
-                return List.of();   // a module that did not check has nothing to build a value with
-            }
-            // As above: building a table applies no behavior, so only the classes are read.
-            EvaluationArtifact artifact =
-                    db.ask(new EvaluationLinked(name, CoverageMode.NONE)).value();
-            Map<String, byte[]> classes = artifact == null ? null : artifact.classes();
-            Map<String, List<BehaviorRequirement>> requirements =
-                    db.ask(new Bodies.Requirements(name)).value();
-            if (classes == null || requirements == null) {
-                return List.of();
-            }
-            Map<String, Hir.FnDef> values = db.ask(new Bodies.ModuleDefinitions(name)).value();
-            Map<String, BehaviorContract> contracts = db.ask(new Bodies.Contracts(name)).value();
-            if (contracts == null) {
-                return List.of();
-            }
-            // As above: `requirements` says this module is ready to be read, not what to read.
-            return souther.compiler.examples.ExampleStatements.fakeTables(
-                    prepared.value().forExamples(), scope.value(),
-                    sigs.value(), classes, evaluationLoader(db),
-                    values == null ? Map.of() : values, sourceId,
-                    deadlineOf(db), policyOf(db), contracts);
+        private static souther.compiler.observe.TableBuild fakeTables(Db db, String name,
+                SourceId sourceId) {
+            ExampleExecution asked = ExampleExecutions.of(db, name);
+            return asked == null
+                    ? new souther.compiler.observe.TableBuild.NotBuiltHere()
+                    : db.execution().fakeTables(asked, sourceId);
         }
 
         /**
-         * The rows of one source, run against {@code classes}.
+         * The rows of one source, run.
          *
-         * <p>Which classes is the only thing that varies between running rows to compile a module and
-         * running them to measure it, and it is passed in rather than decided here so the two cannot
-         * become two evaluations. A row that held under one and failed under the other would be a
-         * difference in the measurement, not in the model, and the report has no way to tell.
+         * <p>What varies between running rows to compile a module and running them to measure it is
+         * what the run records, and that is what is passed. Which classes carry it is the runner's,
+         * so the two cannot become two evaluations by a caller reaching for a different set: a row
+         * that held under one and failed under the other would be a difference in the measurement
+         * and not in the model, and the report has no way to tell.
          */
-        static Answer<Of> evaluate(Db db, String name, SourceId sourceId, EvaluationArtifact artifact,
-                                   CoverageMode coverage) {
-            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
-            Answer<Symbols> scope = Names.derivedSymbols(db, name);
-            Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
-            if (!prepared.present() || !scope.present() || !sigs.present()) {
-                return Answer.absent();
+        static Answer<Of> evaluate(Db db, String name, SourceId sourceId, ArmObservation arms) {
+            ExampleExecution asked = ExampleExecutions.of(db, name);
+            if (asked == null) {
+                return Answer.absent();   // nothing here can have its examples evaluated yet
             }
-            if (!db.ask(new Bodies.Checked(name)).present()) {
-                return Answer.absent();   // a module that did not check has nothing to run
-            }
-            if (artifact == null) {
-                // Arms were asked for and the instrumented classes could not be made. Falling back to
-                // uncounted ones is not open: what holds a row to a budget is the counting, so a row
-                // run against them would be back on the clock. Nothing was observed, and that travels
-                // in the channel every other reason travels in.
-                return coverage == CoverageMode.NONE ? Answer.absent()
-                        : Answer.of(new Of(List.of(), List.of(
-                                souther.compiler.observe.Incompleteness.of(
-                                        souther.compiler.observe.Incompleteness.Code.INSTRUMENTATION_ABSENT,
-                                        souther.compiler.observe.Incompleteness.Scope.MODULE, name))));
-            }
-            souther.compiler.check.Prepared.ExampleExecution rows =
-                    prepared.value().forExamplesWrittenIn(sourceId);
-            if (rows.examples().isEmpty()) {
+            if (asked.rowsWrittenIn(sourceId).rows().isEmpty()) {
                 return Answer.of(Of.NONE);
-            }
-            Map<String, List<BehaviorRequirement>> requirements =
-                    db.ask(new Bodies.Requirements(name)).value();
-            if (requirements == null) {
-                return Answer.absent();
             }
             List<Report> reports = new ArrayList<>(alreadyDeclared(db, name, sourceId));
             if (!reports.isEmpty()) {
                 return Answer.absent(reports);   // a row naming one would read the other declaration
             }
-            Map<String, Hir.FnDef> values = db.ask(new Bodies.ModuleDefinitions(name)).value();
-            // What the module's behaviors declare of what they answer, which is what says a row's
-            // values have something to be held to.
-            Map<String, BehaviorContract> contracts = db.ask(new Bodies.Contracts(name)).value();
-            if (contracts == null) {
-                return Answer.absent();
+            if (!(db.execution().run(asked, sourceId, arms)
+                    instanceof souther.compiler.observe.RowRun.Ran(Observations observed))) {
+                // Nothing ran. Where the arms were wanted, that is a measurement nobody made and it
+                // is said so — falling back to a run that records nothing is not open, because what
+                // holds a row to a budget is the counting and a row run without it is back on the
+                // clock. Where they were not, nothing was worked out at all.
+                return arms == ArmObservation.OMIT ? Answer.absent()
+                        : Answer.of(new Of(List.of(), List.of(
+                                souther.compiler.observe.Incompleteness.of(
+                                        souther.compiler.observe.Incompleteness.Code.INSTRUMENTATION_ABSENT,
+                                        souther.compiler.observe.Incompleteness.Scope.MODULE, name))));
             }
-            souther.compiler.examples.ExampleVerifier.Observations observed =
-                    souther.compiler.examples.ExampleVerifier.check(rows, scope.value(), sigs.value(),
-                            artifact,
-                            // What this compile can read declarations of, for holding an answer's own
-                            // against. Asked for only if something has to be held: a compile's own
-                            // answers are of the module being evaluated by being of this compile of
-                            // it, and every answer this run has is one of those today.
-                            () -> declarationsRead(db),
-                            requirements, evaluationLoader(db),
-                            values == null ? Map.of() : values, deadlineOf(db),
-                            policyOf(db),
-                            // What applies a behavior here is what this compile emitted. A compile has
-                            // nothing else to run a row against; something supplied from outside one
-                            // arrives through the same seam and brings its own classes.
-                            souther.compiler.examples.Answering.generatedHere(), contracts);
             for (Diagnostic failure : observed.failures()) {
                 reports.add(Report.of(failure));
             }

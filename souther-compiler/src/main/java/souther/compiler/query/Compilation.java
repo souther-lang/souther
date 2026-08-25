@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.execute.jvm.JvmProgramImages;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.source.SourceId;
 
@@ -37,6 +38,19 @@ import java.util.Set;
 public final class Compilation {
 
     private final Db db = new Db();
+    /**
+     * Where the JVM implementation gets this compilation's classes.
+     *
+     * <p>One of them, and held here rather than made where it is wanted. Two adapters over one store
+     * would read the same answers today and still be wrong: the run that decides whether the rows
+     * hold and the run a Java binding drives have to be against one program, and what makes them one
+     * is that there is one thing they both ask. It is the reason {@link #loader()} keeps the loader
+     * it made rather than making another over the same classes.
+     *
+     * <p>Named for the machine it is of. What a compilation holds for the JVM is not the general
+     * shape of holding something for a backend, and a second one would want the name.
+     */
+    private final JvmProgramImages jvmProgramImages = new QueryJvmProgramImages(db);
     /** Which source each id was, for a caller that identifies sources by index. */
     private final Map<SourceId, Integer> indexOfId = new LinkedHashMap<>();
     /** The sources this compilation currently has, so one that goes away can be forgotten. */
@@ -62,6 +76,24 @@ public final class Compilation {
         // this one, so a behavior measured twice in one compilation is measured under the same
         // limits both times.
         db.set(new Front.Adequacy(), Front.Adequacy.STANDARD);
+        // And the one place the implementation that runs this compile's programs is named. What
+        // decides whether a constant construction holds and whether a row holds has to run the
+        // program, and ADR-0032 settles that it is run as the program that will ship. Which
+        // implementation that is belongs here, so that nothing deciding whether the language
+        // accepts a program names one.
+        db.running(new souther.compiler.execute.jvm.JvmProgramExecution(jvmProgramImages));
+    }
+
+    /**
+     * Where the JVM gets this compilation's classes, for a caller binding Java to its rows.
+     *
+     * <p>What acceptance asks is asked of a capability and reaches it through the store, because a
+     * query key is handed nothing but the store. This is the other side of the same wiring: a caller
+     * that brings its own implementation of an injected behavior holds the compilation itself, so it
+     * is handed this rather than made to go through the store to reach it.
+     */
+    public JvmProgramImages jvmProgramImages() {
+        return jvmProgramImages;
     }
 
     /** A compile of several sources identified by their position, the way a build hands them over.

@@ -1,5 +1,7 @@
 package souther.compiler.examples;
 
+import souther.compiler.observe.Observations;
+import souther.compiler.observe.ArmObservation;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.Diagnostic;
@@ -135,7 +137,7 @@ class ARecordedRowIsRunAgainstABoundImplementationTest {
      */
     @Test
     void whatAnInjectedImplementationAnsweredIsHeldToWhatTheBehaviorDeclares() throws Exception {
-        ExampleVerifier.Observations observed = evaluated(DECLARING, ANSWERS_ABOUT_ANOTHER);
+        Observations observed = evaluated(DECLARING, ANSWERS_ABOUT_ANOTHER);
 
         RowOutcome stored = named(observed, "a todo that is stored");
         assertEquals(Disposition.FAILED, stored.disposition());
@@ -147,7 +149,7 @@ class ARecordedRowIsRunAgainstABoundImplementationTest {
     /** The control: the same declaration, kept. */
     @Test
     void anImplementationThatKeepsTheDeclarationIsNotStoppedByIt() throws Exception {
-        ExampleVerifier.Observations observed = evaluated(DECLARING, ANSWERS);
+        Observations observed = evaluated(DECLARING, ANSWERS);
 
         assertEquals(List.of(), reasons(observed));
         for (RowOutcome row : observed.rows()) {
@@ -158,7 +160,7 @@ class ARecordedRowIsRunAgainstABoundImplementationTest {
     /** The row it owes, held against what the implementation answered. */
     @Test
     void aPendingRowIsDecidedByTheImplementationTheEvaluationWasGiven() throws Exception {
-        ExampleVerifier.Observations observed = evaluated(ANSWERS);
+        Observations observed = evaluated(ANSWERS);
 
         assertEquals(List.of(), reasons(observed), "the implementation answers what it owes");
         assertEquals(2, observed.rows().size());
@@ -201,7 +203,7 @@ class ARecordedRowIsRunAgainstABoundImplementationTest {
     /** The row that would catch the defect catches it, and the one that would not stays held. */
     @Test
     void anImplementationThatAnswersOtherwiseFailsTheRowThatSaysSo() throws Exception {
-        ExampleVerifier.Observations observed = evaluated(MISMAPS);
+        Observations observed = evaluated(MISMAPS);
 
         RowOutcome stored = named(observed, "a todo that is stored");
         RowOutcome missing = named(observed, "an id nothing is stored under");
@@ -309,22 +311,22 @@ class ARecordedRowIsRunAgainstABoundImplementationTest {
         return c.db().ask(new Output.All()).value();
     }
 
-    private static RowOutcome named(ExampleVerifier.Observations observed, String name) {
+    private static RowOutcome named(Observations observed, String name) {
         return observed.rows().stream()
                 .filter(r -> r.identity().shown().equals(name))
                 .findFirst().orElseThrow(() -> new AssertionError("no row named `" + name + "`"));
     }
 
-    private static List<String> reasons(ExampleVerifier.Observations observed) {
+    private static List<String> reasons(Observations observed) {
         return observed.failures().stream().map(f -> String.valueOf(f.code())).toList();
     }
 
     /** The module's rows, run against {@code implementation} as a build that is not this one's. */
-    private static ExampleVerifier.Observations evaluated(String implementation) throws Exception {
+    private static Observations evaluated(String implementation) throws Exception {
         return evaluated(MODEL, implementation);
     }
 
-    private static ExampleVerifier.Observations evaluated(String model, String implementation)
+    private static Observations evaluated(String model, String implementation)
             throws Exception {
         Compilation c = Compilation.ofSource(model, "Main");
         c.db().ask(new Output.All());
@@ -333,7 +335,7 @@ class ARecordedRowIsRunAgainstABoundImplementationTest {
                 "the model whose rows are run compiles");
         String name = c.modules().get(0);
         EvaluationArtifact artifact = c.db()
-                .ask(new Output.EvaluationLinked(name, Output.CoverageMode.NONE)).value();
+                .ask(new Output.EvaluationLinked(name, ArmObservation.OMIT)).value();
         assertEquals(List.of(), c.diagnostics().values().stream().flatMap(List::stream)
                         .map(d -> String.valueOf(d.diagnostic().code())).toList(),
                 "the model whose rows are run compiles");

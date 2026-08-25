@@ -1,5 +1,6 @@
 package souther.compiler.examples;
 
+import souther.compiler.execute.BoundaryValues;
 import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.AtomSpace;
@@ -60,7 +61,7 @@ import java.util.function.Supplier;
  * loader and the built value, and both readers above need it — left in either, the other would grow
  * a second copy.
  *
- * <p>Public for one thing only: {@link Construction}, which the adequacy report asks to find out
+ * <p>Public for one thing only: {@link BoundaryValues}, which the adequacy report asks to find out
  * whether a value composed elsewhere builds at this module's boundary. That is this class's own
  * question — putting a value through the decoder a row's fixture goes through is the whole of the
  * answer — and it used to be asked of a row evaluator built with signatures, requirements and a
@@ -69,7 +70,7 @@ import java.util.function.Supplier;
  */
 public final class FixtureReader {
 
-    private final souther.compiler.check.Prepared.ExampleExecution module;
+    private final souther.compiler.check.Prepared.Examples module;
     private final Symbols symbols;
     /** The values a row may name: this module's own, and the ones its imports bring in. */
     private final Map<String, Hir.FnDef> values;
@@ -79,7 +80,7 @@ public final class FixtureReader {
     /** What a value looks like in the form a decoder reads — the rules both directions of a row read. */
     private final NeutralForm neutral;
 
-    FixtureReader(souther.compiler.check.Prepared.ExampleExecution module, Symbols symbols, Map<String, Hir.FnDef> values,
+    FixtureReader(souther.compiler.check.Prepared.Examples module, Symbols symbols, Map<String, Hir.FnDef> values,
                   MemoryClassLoader loader) {
         this.module = module;
         this.symbols = symbols;
@@ -89,50 +90,8 @@ public final class FixtureReader {
         this.neutral = new NeutralForm(symbols);
     }
 
-    /**
-     * Whether a value composed elsewhere can be built at this module's boundary.
-     *
-     * <p>The question a generator cannot answer for itself. Which values a type admits together is the
-     * derived decoder's business — an invariant relating two fields refuses a pair that each field
-     * would have accepted alone — so the only way to know is to put the value through the decoder that
-     * a row's own fixture goes through.
-     */
-    @FunctionalInterface
-    public interface Construction {
-
-        /**
-         * What building the value at a position came to: what was built, or why nothing was.
-         *
-         * <p>Both, because the one thing that builds a value is the only thing that can say what it
-         * came to be. Answered as whether it was refused, a caller that wanted to know where the
-         * value landed had to work it out from what it had asked for — and what it asked for is a
-         * reading, while what was built went through the decoders and the invariants and is what a
-         * row would carry.
-         *
-         * <p>Throws {@link LinkageError} where the runtime is absent, which is not a fact about the
-         * value.
-         */
-        Built build(BoundaryInput at, Hir.Expr fixture);
-
-        /** Whether the value was refused, for a caller that has nothing to do with what it is. */
-        default java.util.Optional<String> refuse(BoundaryInput at, Hir.Expr fixture) {
-            return build(at, fixture) instanceof Built.Refused refused
-                    ? java.util.Optional.of(refused.why()) : java.util.Optional.empty();
-        }
-
-        /** What came of building one value. */
-        sealed interface Built {
-
-            /** It built, and this is what it came to. */
-            record Value(ObservedValue observed) implements Built {}
-
-            /** It did not, and why. Never a claim that no value of the shape can be built. */
-            record Refused(String why) implements Built {}
-        }
-    }
-
     /** A way to build values against this module's generated classes, without any rows to run. */
-    public static Construction constructing(souther.compiler.check.Prepared.ExampleExecution module, Symbols symbols,
+    public static BoundaryValues constructing(souther.compiler.check.Prepared.Examples module, Symbols symbols,
                                             Map<String, byte[]> classes, ClassLoader parent,
                                             Map<String, Hir.FnDef> values) {
         // A reader is the whole of it. There are no rows, so nothing runs on a worker and no budget is
@@ -2051,19 +2010,19 @@ public final class FixtureReader {
         return new ValueRendering(neutral).typeShown(v, position);
     }
 
-    Construction.Built building(BoundaryInput at, Hir.Expr fixture) {
+    BoundaryValues.Built building(BoundaryInput at, Hir.Expr fixture) {
         try {
             // What it came to, and not only that it came to something. Read through the same walk
             // a row's own inputs are read through, so where a candidate lands is answered the way
             // where a written row lands is.
-            return new Construction.Built.Value(observed(built(fixture, at)));
+            return new BoundaryValues.Built.Value(observed(built(fixture, at)));
         } catch (FixtureException e) {
-            return new Construction.Built.Refused(e.getMessage());
+            return new BoundaryValues.Built.Refused(e.getMessage());
         } catch (RuntimeException e) {
             if (souther.compiler.evaluate.EvaluationContext.overspending(e)) {
                 throw e;   // the evaluation ran out; whether the fixture is refused is still unread
             }
-            return new Construction.Built.Refused(String.valueOf(e.getMessage()));
+            return new BoundaryValues.Built.Refused(String.valueOf(e.getMessage()));
         }
     }
 }

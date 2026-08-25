@@ -1,5 +1,10 @@
 package souther.compiler.examples;
 
+import souther.compiler.observe.WrittenStatements.Disagreement;
+import souther.compiler.observe.WrittenStatements.Readings;
+import souther.compiler.observe.WrittenStatements.Statement;
+import souther.compiler.observe.WrittenStatements.Unread;
+import souther.compiler.observe.WrittenStatements.UnreadFake;
 import souther.compiler.source.SourceId;
 
 import souther.compiler.generated.MemoryClassLoader;
@@ -13,7 +18,6 @@ import souther.compiler.check.TypeOps;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.diag.SourcePos;
-import souther.compiler.diag.Region;
 import souther.compiler.evaluate.DepthLimitExceeded;
 import souther.compiler.evaluate.EvaluationContext;
 import souther.compiler.evaluate.StepLimitExceeded;
@@ -56,7 +60,7 @@ import java.util.Set;
  */
 public final class ExampleStatements {
 
-    private final souther.compiler.check.Prepared.ExampleExecution module;
+    private final souther.compiler.check.Prepared.Examples module;
     private final Symbols symbols;
     private final Map<String, Sig> sigs;
     private final MemoryClassLoader loader;
@@ -77,7 +81,7 @@ public final class ExampleStatements {
     /** What holds a fake's row to what the dependency declares of what it answers. */
     private final EnsuresChecks ensures;
 
-    private ExampleStatements(souther.compiler.check.Prepared.ExampleExecution module, Symbols symbols, Map<String, Sig> sigs,
+    private ExampleStatements(souther.compiler.check.Prepared.Examples module, Symbols symbols, Map<String, Sig> sigs,
                               MemoryClassLoader loader, Map<String, Hir.FnDef> values,
                               Deadline deadline, EvaluationPolicy policy,
                               Map<String, BehaviorContract> contracts) {
@@ -154,12 +158,12 @@ public final class ExampleStatements {
      * itself dispatches with ({@link Standins#answering}) — the same rule, not a second reading of it — and
      * the two answers are compared as the written values they are built into.
      */
-    public static Readings disagreements(souther.compiler.check.Prepared.ExampleExecution module, Symbols symbols,
+    public static Readings disagreements(souther.compiler.check.Prepared.Examples module, Symbols symbols,
                                          Map<String, Sig> sigs, Map<String, byte[]> classes,
                                          ClassLoader parent, Map<String, Hir.FnDef> values,
                                          Deadline deadline, EvaluationPolicy policy,
                                          Map<String, BehaviorContract> contracts) {
-        if (module.examples().isEmpty()) {
+        if (module.rows().isEmpty()) {
             return Readings.NONE;
         }
         // Which behaviors have both a stand-in and rows of their own, read off the text. Two written
@@ -189,6 +193,42 @@ public final class ExampleStatements {
     }
 
     /**
+     * The tables a source is the one to build: what its {@code fake} rows state and nothing else
+     * does.
+     *
+     * <p>Its own answer because two things ask it. Building them asks it to know what to walk, and
+     * whatever runs the building asks it to know whether there is anything to run — and a caller
+     * that worked the second one out for itself would be deciding again which tables answer. Which
+     * they are is not obvious: a module's fakes are read in one order and the first table for a
+     * dependency is the one that answers, so whether this source builds anything depends on what
+     * the sources before it wrote.
+     *
+     * <p>Of the module and then of the source, in that order, for the same reason: the answering
+     * table is picked across the whole module, and only then is it asked which file it is written
+     * in.
+     */
+    public static List<souther.compiler.check.Prepared.FakeTable> tablesBuiltIn(
+            souther.compiler.check.Prepared.Examples module, Map<String, Sig> sigs,
+            SourceId sourceId) {
+        List<souther.compiler.check.Prepared.FakeTable> building = new ArrayList<>();
+        Set<String> answering = new LinkedHashSet<>();
+        for (souther.compiler.check.Prepared.FakeTable table : module.fakes()) {
+            Hir.Fake fk = table.read();
+            if (!answering.add(fk.target())) {
+                continue;   // a second table for one dependency answers nothing, here as anywhere
+            }
+            if (!fk.pos().isIn(sourceId)) {
+                continue;   // written in another source, and built by that source's own reading
+            }
+            if (sigs.get(fk.target()) == null) {
+                continue;   // a fake for no behavior of this module; its target is its own question
+            }
+            building.add(table);
+        }
+        return building;
+    }
+
+    /**
      * What building this module's fake tables says about the ones {@code sourceId} wrote, each built
      * once.
      *
@@ -213,31 +253,23 @@ public final class ExampleStatements {
      * on. Which of them a fake is written in is what its own place says, so the two are never out of
      * step.
      */
-    public static List<Diagnostic> fakeTables(souther.compiler.check.Prepared.ExampleExecution module, Symbols symbols,
+    public static List<Diagnostic> fakeTables(souther.compiler.check.Prepared.Examples module, Symbols symbols,
                                               Map<String, Sig> sigs, Map<String, byte[]> classes,
                                               ClassLoader parent, Map<String, Hir.FnDef> values,
                                               SourceId sourceId,
                                               Deadline deadline, EvaluationPolicy policy,
                                               Map<String, BehaviorContract> contracts) {
-        if (module.fakes().isEmpty()) {
+        List<souther.compiler.check.Prepared.FakeTable> building =
+                tablesBuiltIn(module, sigs, sourceId);
+        if (building.isEmpty()) {
             return List.of();
         }
         ExampleStatements v = new ExampleStatements(module, symbols, sigs,
                 new MemoryClassLoader(classes, parent), values, deadline, policy, contracts);
         List<Diagnostic> said = new ArrayList<>();
-        Set<String> answering = new LinkedHashSet<>();
-        for (int i = 0; i < module.fakes().size(); i++) {
-            Hir.Fake fk = module.fakes().get(i).read();
-            if (!answering.add(fk.target())) {
-                continue;   // a second table for one dependency answers nothing, here as anywhere
-            }
-            if (!fk.pos().isIn(sourceId)) {
-                continue;   // written in another source, and built by that source's own reading
-            }
+        for (souther.compiler.check.Prepared.FakeTable table : building) {
+            Hir.Fake fk = table.read();
             Sig sig = sigs.get(fk.target());
-            if (sig == null) {
-                continue;   // a fake for no behavior of this module; its target is its own question
-            }
             // Within a budget of its own, for the reason a row and a reading each have one: a row of
             // the table applies helpers, and a `partial` one may not stop. Nothing before this change
             // built the table of a fake nothing reads, so this is the first thing that would run it.
@@ -420,12 +452,12 @@ public final class ExampleStatements {
 
     /** The behaviors this module both stands in for — the target of a {@code fake}, the dependency a
      * {@code with} that takes no input answers for ({@link #againstWiths}) — and records rows of. */
-    private static Set<String> contested(souther.compiler.check.Prepared.ExampleExecution module, Map<String, Sig> sigs) {
+    private static Set<String> contested(souther.compiler.check.Prepared.Examples module, Map<String, Sig> sigs) {
         Set<String> stoodIn = new LinkedHashSet<>();
         for (souther.compiler.check.Prepared.FakeTable table : module.fakes()) {
             stoodIn.add(table.target());
         }
-        for (souther.compiler.check.Prepared.Rows block : module.examples()) {
+        for (souther.compiler.check.Prepared.Rows block : module.rows()) {
             for (Hir.ExampleRow row : block.read().rows()) {
                 for (Hir.With w : row.withs()) {
                     Sig depSig = sigs.get(w.dep());
@@ -436,7 +468,7 @@ public final class ExampleStatements {
             }
         }
         Set<String> both = new LinkedHashSet<>();
-        for (souther.compiler.check.Prepared.Rows block : module.examples()) {
+        for (souther.compiler.check.Prepared.Rows block : module.rows()) {
             if (stoodIn.contains(block.target())) {
                 both.add(block.target());
             }
@@ -451,8 +483,8 @@ public final class ExampleStatements {
 
     private Readings collectDisagreements(Set<String> contested) {
         Map<String, List<RecordedRow>> recorded = new LinkedHashMap<>();
-        for (int i = 0; i < module.examples().size(); i++) {
-            Hir.Example ex = module.examples().get(i).read();
+        for (int i = 0; i < module.rows().size(); i++) {
+            Hir.Example ex = module.rows().get(i).read();
             if (contested.contains(ex.target())) {
                 readRecorded(ex, recorded);
             }
@@ -473,8 +505,8 @@ public final class ExampleStatements {
                 againstFake(fk, recorded, found, timedOut);
             }
         }
-        for (int i = 0; i < module.examples().size(); i++) {
-            againstWiths(module.examples().get(i).read(), recorded, found);
+        for (int i = 0; i < module.rows().size(); i++) {
+            againstWiths(module.rows().get(i).read(), recorded, found);
         }
         return new Readings(found, timedOut);
     }
@@ -699,122 +731,6 @@ public final class ExampleStatements {
             }
         }
         return values;
-    }
-
-    /**
-     * One written statement about what a behavior answers, and where it is written.
-     *
-     * <p>{@code answer} is rendered here rather than at the report, because reading it needs the
-     * decoders and the module's classes and the report has neither.
-     */
-    public record Statement(Region region, String answer) {}
-
-    /**
-     * One input for which two written statements about a behavior answer differently.
-     *
-     * <p>Neither side is derived from the other: the recorded row says what the behavior will owe, the
-     * stand-in says what it answers while some other behavior's row runs. Which is right is not
-     * readable here — a model being migrated onto may run against a stand-in while the real answer is
-     * still being harvested, and that is written the way a mistake is. So both are named and neither
-     * is ranked.
-     *
-     * <p>Independent of which source is being reported: one disagreement is projected onto both of the
-     * sources its two statements are written in.
-     *
-     * @param viaWith whether the stand-in is a {@code with} rather than a {@code fake} row — the
-     *                report names the form the author wrote, so it has to be told which one it is
-     */
-    public record Disagreement(String behavior, Statement recorded, Statement standIn,
-                               boolean viaWith) {}
-
-    /**
-     * A fake whose table did not finish being built within the budget, so what it states and what the
-     * rows recorded for the behavior state were never compared.
-     *
-     * <p>Carries what it takes to report it. The position and its width are measured here, where the
-     * text is, the way a {@link Statement}'s are; the budget is the one the wait was actually held to,
-     * rather than a second reading of the setting taken later, which a budget that stops being one
-     * number for the whole compile would make wrong with nothing to say so.
-     *
-     * @param at where the fake names the behavior it stands in for, which is what the report marks
-     */
-    public record UnreadFake(String target, SourcePos at, int width, Unread why) {}
-
-    /**
-     * Why a written statement was not read.
-     *
-     * <p>Two things a report must not say in one voice. Spending the budget is an answer about the
-     * statements, reached the same way on every host; not answering is an answer about the host, and
-     * a model it is said of may be perfectly good. A single "it timed out" made a reader guess which,
-     * and the guess was usually the wrong one for the model.
-     */
-    public sealed interface Unread {
-
-        /** The reading spent the counted budget the policy allows. */
-        record Overspent(FailurePhase which, long limit) implements Unread {}
-
-        /** The stack ran out before the counted depth limit was reached. */
-        record StackRanOut(int depthLimit) implements Unread {}
-
-        /** The reading stopped answering within the wait it was given. */
-        record DidNotAnswer(long budgetMs) implements Unread {}
-
-        /** {@link Overspent} for whichever budget {@code which} names. */
-        static Unread overspending(FailurePhase which, long limit) {
-            return new Overspent(which, limit);
-        }
-
-        /**
-         * Which of the three this is, as the middle of a message key.
-         *
-         * <p>Three messages rather than one with a reason substituted in, because the sentence is
-         * mostly about what to do and that differs: a loop is bounded, a recursion is made
-         * structural, and an evaluation that stopped answering is not the model's fault at all.
-         *
-         * <p>Callers spell out the whole key rather than build it from this, so that every key the
-         * compiler names can be found by looking for it. What this saves them is the choosing.
-         */
-        default boolean isDepth() {
-            return this instanceof Overspent(FailurePhase which, long _)
-                    && which == FailurePhase.DEPTH_LIMIT;
-        }
-
-        default boolean isSteps() {
-            return this instanceof Overspent(FailurePhase which, long _)
-                    && which == FailurePhase.STEP_LIMIT;
-        }
-
-        default boolean isStack() {
-            return this instanceof StackRanOut;
-        }
-
-        /** The limit, as written rather than as a number a locale groups: {@code 2,000} is not a
-         * budget anyone set, and the settings that name these take the ungrouped form. */
-        default String limitShown() {
-            return switch (this) {
-                case Overspent(FailurePhase _, long limit) -> Long.toString(limit);
-                case StackRanOut(int depthLimit) -> Integer.toString(depthLimit);
-                case DidNotAnswer(long budgetMs) -> Long.toString(budgetMs);
-            };
-        }
-    }
-
-    /**
-     * What reading a module's written statements against each other came to.
-     *
-     * <p>Both lists, because a reading that did not finish and a reading that found nothing are
-     * different answers and an empty list of disagreements is what the second one looks like. Which
-     * of the two a compile got can otherwise turn on machine load, between a build and the next
-     * keystroke in the editor.
-     */
-    public record Readings(List<Disagreement> disagreements, List<UnreadFake> unread) {
-
-        public static final Readings NONE = new Readings(List.of(), List.of());
-
-        public Readings {
-            disagreements = List.copyOf(disagreements);
-            unread = List.copyOf(unread);
-        }
     }
 
     /**

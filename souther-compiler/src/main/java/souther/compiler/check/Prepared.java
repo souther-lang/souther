@@ -195,7 +195,7 @@ public final class Prepared {
 
     /** The example blocks attached to this module, from its own file and from every file naming
      * it, each of them read the way this module reaches its names. */
-    public List<Rows> examples() {
+    public List<Rows> rows() {
         return examples;
     }
 
@@ -231,8 +231,8 @@ public final class Prepared {
     /**
      * This module's artifact with all of its rows — what an example run over the module is given.
      */
-    public ExampleExecution forExamples() {
-        return new ExampleExecution(this, examples);
+    public Examples forExamples() {
+        return new Examples(this, examples);
     }
 
     /**
@@ -247,14 +247,14 @@ public final class Prepared {
      * the same answer kept somewhere else, and a caller holding one that had fallen out of step had
      * no way to know.
      */
-    public ExampleExecution forExamplesWrittenIn(SourceId sourceId) {
+    public Examples forExamplesWrittenIn(SourceId sourceId) {
         List<Rows> mine = new ArrayList<>();
         for (Rows block : examples) {
             if (block.read().pos().isIn(sourceId)) {
                 mine.add(block);
             }
         }
-        return new ExampleExecution(this, mine);
+        return new Examples(this, mine);
     }
 
     /**
@@ -349,12 +349,12 @@ public final class Prepared {
      * <p>What it claims is about its input and not about its outcome. Nothing here says a row
      * agreed with anything; that is what running them answers.
      */
-    public static final class ExampleExecution {
+    public static final class Examples {
 
         private final Prepared module;
         private final List<Rows> rows;
 
-        private ExampleExecution(Prepared module, List<Rows> rows) {
+        private Examples(Prepared module, List<Rows> rows) {
             this.module = module;
             this.rows = List.copyOf(rows);
         }
@@ -395,7 +395,7 @@ public final class Prepared {
         }
 
         /** The rows this run is over. */
-        public List<Rows> examples() {
+        public List<Rows> rows() {
             return rows;
         }
 

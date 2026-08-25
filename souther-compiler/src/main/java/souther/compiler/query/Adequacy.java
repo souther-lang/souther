@@ -1,5 +1,9 @@
 package souther.compiler.query;
 
+import souther.compiler.execute.BoundaryValues;
+import souther.compiler.execute.ExampleExecution;
+import souther.compiler.execute.RowTrials;
+import souther.compiler.observe.ArmObservation;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.source.SourceId;
 
@@ -11,7 +15,6 @@ import souther.compiler.diag.Citation;
 import souther.compiler.examples.FixtureReader;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.AtomSpace;
-import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
@@ -397,9 +400,9 @@ public final class Adequacy {
      * only whether the arms are wanted. Two levels that want the same thing are then one evaluation,
      * and asking for a wider report does not re-run the rows.
      */
-    static Output.CoverageMode coverageAsked(Db db) {
+    static ArmObservation armsAsked(Db db) {
         return levelOf(db).runsInstrumentedRows()
-                ? Output.CoverageMode.ARMS : Output.CoverageMode.NONE;
+                ? ArmObservation.RECORD : ArmObservation.OMIT;
     }
 
     /**
@@ -1323,7 +1326,7 @@ public final class Adequacy {
                             symbols, policy);
             return Answer.of(Coverages.searched(measured, inputs,
                     probing(spec.name(), divided, sig, symbols, policy, parameters,
-                            constructing(db, name, prepared.value().forExamples(), symbols),
+                            constructing(db, name),
                             domain),
                     domain.quantities(symbols), divided.reaching()));
         }
@@ -1340,7 +1343,7 @@ public final class Adequacy {
                 String behavior,
                 souther.compiler.partition.Partitions.Partitioning partitioning, Sig sig,
                 Symbols symbols, souther.compiler.check.ReadingPolicy policy,
-                List<String> parameters, FixtureReader.Construction building, InputDomain domain) {
+                List<String> parameters, BoundaryValues building, InputDomain domain) {
             if (building == null) {
                 return null;
             }
@@ -2497,9 +2500,9 @@ public final class Adequacy {
                                 prepared.value(), symbols),
                         divided, bodies.get(behavior), plan,
                         Rows.readingFor(byTarget, behavior),
-                        constructing(db, name, prepared.value().forExamples(), symbols),
+                        constructing(db, name),
                         domain,
-                        runningRowsOf(trialling(db, name, prepared.value().forExamples(), symbols),
+                        runningRowsOf(trialling(db, name),
                                 behavior, sig),
                         levelOf(db).runsInstrumentedRows(),
                         db.ask(new Front.Adequacy()).value().generation());
@@ -2867,11 +2870,11 @@ public final class Adequacy {
          * generator has is a template it composed. Neither has to know the other's word for a row.
          */
         private static Generator.Trial runningRowsOf(
-                souther.compiler.examples.RowTrial.Trials trials, String behavior, Sig sig) {
+                RowTrials trials, String behavior, Sig sig) {
             if (trials == null) {
                 return Generator.Trial.NOTHING_RUNS;
             }
-            souther.compiler.examples.RowTrial.Application application =
+            RowTrials.OfBehavior application =
                     trials.forBehavior(behavior, sig);
             return inputs -> application
                     .run(inputs.stream()
@@ -2903,7 +2906,7 @@ public final class Adequacy {
             // values that go together, which is more than this can say of one value chosen per
             // position on its own — and it is the set they reached for, which is what makes a row
             // written against it read as one column moved.
-            for (souther.compiler.check.Prepared.Rows block : prepared.examples()) {
+            for (souther.compiler.check.Prepared.Rows block : prepared.rows()) {
                 if (!block.target().equals(spec.name())) {
                     continue;
                 }
@@ -3005,7 +3008,7 @@ public final class Adequacy {
                 souther.compiler.partition.Partitions.Partitioning partitioning,
                 souther.compiler.core.Core body,
                 souther.compiler.coverage.CoverageSites.Plan plan, RowReading observed,
-                FixtureReader.Construction building, InputDomain domain,
+                BoundaryValues building, InputDomain domain,
                 Generator.Trial trial, boolean recording,
                 souther.compiler.partition.AdequacyPolicy.OfTheGeneration budget) {
             if (observed.someRowsUnseen()) {
@@ -3120,11 +3123,11 @@ public final class Adequacy {
      * mapping is here and nowhere else, so a shape added on either side has one place to be
      * answered rather than as many as there are callers.
      */
-    private static Generator.CandidateCheck.Built built(FixtureReader.Construction.Built what) {
+    private static Generator.CandidateCheck.Built built(BoundaryValues.Built what) {
         return switch (what) {
-            case FixtureReader.Construction.Built.Value(var observed) ->
+            case BoundaryValues.Built.Value(var observed) ->
                     new Generator.CandidateCheck.Built.Value(observed);
-            case FixtureReader.Construction.Built.Refused(var why) ->
+            case BoundaryValues.Built.Refused(var why) ->
                     new Generator.CandidateCheck.Built.Refused(why);
         };
     }
@@ -3139,29 +3142,9 @@ public final class Adequacy {
      * nothing. Asking for the uncounted classes instead would generate every one of them again to get
      * the same answers.
      */
-    static FixtureReader.Construction constructing(Db db, String module, souther.compiler.check.Prepared.ExampleExecution written,
-                                                   Symbols symbols) {
-        // The classes alone: building a value applies no behavior, so what the compile implemented is
-        // not a question this asks.
-        //
-        // And uncounted, said outright rather than taken from what the build happens to be
-        // measuring. Which arms a row goes through is recorded by instrumenting the bodies, and a
-        // value is built by the decoders without one of them running — so asking for the recorded
-        // classes here would make composing a value fail wherever the plan and the bodies do not
-        // line up, which is a fault in a measurement nothing here is making.
-        souther.compiler.generated.EvaluationArtifact artifact =
-                db.ask(new Output.EvaluationLinked(module, Output.CoverageMode.NONE)).value();
-        Map<String, List<BehaviorRequirement>> requirements =
-                db.ask(new Bodies.Requirements(module)).value();
-        if (artifact == null || requirements == null) {
-            return null;
-        }
-        Map<String, byte[]> classes = artifact.classes();
-        Map<String, Hir.FnDef> values = db.ask(new Bodies.ModuleDefinitions(module)).value();
-        // `requirements` is asked above as a readiness condition, not as an input: whether a
-        // value builds at this module's boundary is the decoder's answer, and nothing here runs.
-        return FixtureReader.constructing(written, symbols, classes,
-                Output.evaluationLoader(db), values == null ? Map.of() : values);
+    static BoundaryValues constructing(Db db, String module) {
+        ExampleExecution asked = ExampleExecutions.of(db, module);
+        return asked == null ? null : db.execution().values(asked);
     }
 
     /**
@@ -3176,24 +3159,14 @@ public final class Adequacy {
      * <p>A budget is installed here, unlike where values are only built. A row this composed is a
      * row nobody wrote, so a model that does not finish on one is this search's to stop.
      */
-    static souther.compiler.examples.RowTrial.Trials trialling(Db db, String module,
-            souther.compiler.check.Prepared.ExampleExecution written, Symbols symbols) {
+    static RowTrials trialling(Db db, String module) {
+        // Whether this compile is measuring at all is read here and not there: it is what the build
+        // was asked to be held to, which is not a question about running anything.
         if (!levelOf(db).runsInstrumentedRows()) {
             return null;
         }
-        souther.compiler.generated.EvaluationArtifact artifact =
-                db.ask(new Output.EvaluationLinked(module, coverageAsked(db))).value();
-        if (artifact == null || artifact.implementations() == null) {
-            return null;
-        }
-        Map<String, Hir.FnDef> values = db.ask(new Bodies.ModuleDefinitions(module)).value();
-        souther.compiler.examples.EvaluationPolicy steps = db.ask(new Front.Policy()).value();
-        if (steps == null) {
-            return null;
-        }
-        return souther.compiler.examples.RowTrial.over(written, symbols, artifact.classes(),
-                Output.evaluationLoader(db), values == null ? Map.of() : values,
-                artifact.implementations(), steps);
+        ExampleExecution asked = ExampleExecutions.of(db, module);
+        return asked == null ? null : db.execution().trials(asked, armsAsked(db));
     }
 
     /**

@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.observe.ArmObservation;
 import souther.compiler.source.SourceId;
 
 import souther.compiler.examples.EvaluationPolicy;
@@ -88,7 +89,7 @@ class TheStepBudgetHasRoomOverWhatModelsActuallySpendTest {
         List<RowOutcome> rows = new ArrayList<>();
         for (SourceId sourceId : compilation.exampleSourcesOf("example.census")) {
             Output.Examples.Of observed = compilation.db()
-                    .ask(new Output.Examples("example.census", sourceId, Output.CoverageMode.NONE))
+                    .ask(new Output.Examples("example.census", sourceId, ArmObservation.OMIT))
                     .value();
             rows.addAll(observed.rows());
         }

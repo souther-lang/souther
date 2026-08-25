@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.observe.ArmObservation;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceNameResolver;
@@ -55,10 +56,10 @@ class WhatAWitnessRunDoesNotPayForTest {
 
         assertTrue(report.contains("border"), "the whole of a witness run was asked for: " + report);
         assertFalse(compilation.db().isComputed(
-                        new Output.EvaluationLinked("example.trip", Output.CoverageMode.ARMS)),
+                        new Output.EvaluationLinked("example.trip", ArmObservation.RECORD)),
                 "witness asked for the instrumented classes");
         assertFalse(compilation.db().isComputed(
-                        new Output.Evaluated("example.trip", Output.CoverageMode.ARMS)),
+                        new Output.Evaluated("example.trip", ArmObservation.RECORD)),
                 "witness ran the rows against them");
     }
 
@@ -71,6 +72,6 @@ class WhatAWitnessRunDoesNotPayForTest {
         AdequacyReport.of(compilation).human(SourceNameResolver.identity());
 
         assertTrue(compilation.db().isComputed(
-                new Output.Evaluated("example.trip", Output.CoverageMode.ARMS)));
+                new Output.Evaluated("example.trip", ArmObservation.RECORD)));
     }
 }

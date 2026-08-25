@@ -1,5 +1,6 @@
 package souther.compiler.coverage;
 
+import souther.compiler.observe.ArmObservation;
 import souther.compiler.Emitted;
 import org.junit.jupiter.api.Test;
 
@@ -61,7 +62,7 @@ class ProbedBytecodeTest {
     private static Map<String, byte[]> probed(Compilation compilation) {
         souther.compiler.generated.EvaluationArtifact artifact = compilation.db()
                 .ask(new Output.Evaluated(compilation.modules().get(0),
-                        Output.CoverageMode.ARMS)).value();
+                        ArmObservation.RECORD)).value();
         assertNotNull(artifact, "the model under test compiles");
         return artifact.classes();
     }
@@ -204,9 +205,9 @@ class ProbedBytecodeTest {
         String module = compilation.modules().get(0);
         Map<String, byte[]> plain = compilation.db().ask(new Output.Linked(module)).value();
         Map<String, byte[]> measured = compilation.db()
-                .ask(new Output.Evaluated(module, Output.CoverageMode.ARMS)).value().classes();
+                .ask(new Output.Evaluated(module, ArmObservation.RECORD)).value().classes();
         Map<String, byte[]> linked = compilation.db()
-                .ask(new Output.EvaluationLinked(module, Output.CoverageMode.ARMS)).value().classes();
+                .ask(new Output.EvaluationLinked(module, ArmObservation.RECORD)).value().classes();
         assertNotNull(plain);
         assertNotNull(linked);
 

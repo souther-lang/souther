@@ -6,7 +6,6 @@ import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.diag.SourcePos;
 
-import java.util.List;
 import java.util.Optional;
 
 /**
@@ -213,9 +212,17 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at) {
         return behavior().map(behavior::equals).orElse(true);
     }
 
-    /** What makes two of these the same reason. A module's classes failing to be instrumented is one
-     * fact however many sources went looking for them. */
-    public Object identity() {
-        return List.of(code, target);
+    /**
+     * What makes two of these the same reason: what happened, and what it happened to.
+     *
+     * <p>Where it was said is not part of it. A module's classes failing to be instrumented is one
+     * fact however many sources went looking for them, and each of those cites it somewhere else.
+     */
+    public Fact identity() {
+        return new Fact(code, target);
     }
+
+    /** A reason with the place it was said left out, which is the whole of what makes two of them
+     *  one. */
+    public record Fact(Code code, Target target) {}
 }

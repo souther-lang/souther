@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.observe.ArmObservation;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.codegen.Backend;
@@ -112,7 +113,7 @@ class ProbeMappingTest {
         Compilation emitting = compiled();
         String module = emitting.modules().get(0);
 
-        assertNotNull(emitting.db().ask(new Output.Evaluated(module, Output.CoverageMode.ARMS)).value());
+        assertNotNull(emitting.db().ask(new Output.Evaluated(module, ArmObservation.RECORD)).value());
     }
 
     /** The query turns that into an answer with nothing in it. What reads it reports a measurement it
@@ -121,7 +122,7 @@ class ProbeMappingTest {
     void theQueryAnswersWithNothingRatherThanWithAHole() {
         Compilation emitting = compiled();
         Answer<souther.compiler.generated.EvaluationArtifact> probed =
-                emitting.db().ask(new Output.Evaluated("no.such.module", Output.CoverageMode.ARMS));
+                emitting.db().ask(new Output.Evaluated("no.such.module", ArmObservation.RECORD));
 
         assertTrue(!probed.present() || probed.value() == null);
     }

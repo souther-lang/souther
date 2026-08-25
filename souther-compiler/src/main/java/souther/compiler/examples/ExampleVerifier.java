@@ -1,5 +1,6 @@
 package souther.compiler.examples;
 
+import souther.compiler.observe.Observations;
 import souther.compiler.generated.EvaluationArtifact;
 import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.check.AtomSpace;
@@ -21,7 +22,6 @@ import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.diag.msg.ModuleMessage;
-import souther.compiler.diag.DiagnosticRenderer;
 import souther.compiler.evaluate.DepthLimitExceeded;
 import souther.compiler.evaluate.EvaluationContext;
 import souther.compiler.evaluate.StepLimitExceeded;
@@ -138,7 +138,7 @@ public final class ExampleVerifier {
      *
      * @throws IllegalArgumentException where the artifact is of another module
      */
-    public static Observations check(souther.compiler.check.Prepared.ExampleExecution module,
+    public static Observations check(souther.compiler.check.Prepared.Examples module,
                                      Symbols symbols, Map<String, Sig> sigs,
                                      EvaluationArtifact artifact,
                                      Supplier<PublishedClasses> declared,
@@ -152,7 +152,7 @@ public final class ExampleVerifier {
                     + "`'s and the artifact is `" + artifact.implementations().module()
                     + "`'s; what applies a behavior would be looked up in the wrong module");
         }
-        if (module.examples().isEmpty()) {
+        if (module.rows().isEmpty()) {
             return Observations.NONE;
         }
         ExampleVerifier v = evaluating(module, symbols, sigs, artifact, declared, requirements,
@@ -160,7 +160,7 @@ public final class ExampleVerifier {
         List<Diagnostic> failures = new ArrayList<>();
         List<RowOutcome> rows = new ArrayList<>();
         List<Incompleteness> incompleteness = new ArrayList<>();
-        for (souther.compiler.check.Prepared.Rows block : module.examples()) {
+        for (souther.compiler.check.Prepared.Rows block : module.rows()) {
             Hir.Example ex = block.read();
             try {
                 v.checkExample(ex, failures, rows);
@@ -196,7 +196,7 @@ public final class ExampleVerifier {
      * rows against it is what lets the loop belong to a caller — which is what it has to be when
      * what an implementation answers out of changes between one row and the next.
      */
-    public static ExampleVerifier evaluating(souther.compiler.check.Prepared.ExampleExecution module,
+    public static ExampleVerifier evaluating(souther.compiler.check.Prepared.Examples module,
                                       Symbols symbols, Map<String, Sig> sigs,
                                       EvaluationArtifact artifact,
                                       Supplier<PublishedClasses> declared,
@@ -327,7 +327,7 @@ public final class ExampleVerifier {
     private List<StatedRow> recordedRowsOf(BoundExamples of, String behavior,
                                            FixtureReader fixtures, Sig sig) {
         List<StatedRow> found = new ArrayList<>();
-        for (souther.compiler.check.Prepared.Rows block : module.examples()) {
+        for (souther.compiler.check.Prepared.Rows block : module.rows()) {
             Hir.Example written = block.read();
             if (!written.target().equals(behavior)) {
                 continue;
@@ -652,53 +652,7 @@ public final class ExampleVerifier {
         };
     }
 
-    /**
-     * What evaluating a source's rows turned up: the diagnostics it reports, the observation each row
-     * left, and what stopped it from observing.
-     *
-     * <p>Not named {@code Result} because {@code net.unit8.raoh.Result} is what a decoder answers with
-     * here, and a nested type of that name would take the spelling away from it.
-     */
-    public record Observations(List<Diagnostic> failures, List<RowOutcome> rows,
-                               List<Incompleteness> incompleteness) {
-
-        public static final Observations NONE = new Observations(List.of(), List.of(), List.of());
-
-        public Observations {
-            failures = List.copyOf(failures);
-            rows = List.copyOf(rows);
-            incompleteness = List.copyOf(incompleteness);
-        }
-    }
-
-    /** The one-line form for a set of failures gathered across modules: the count, then the first
-     * one's reason, matching what a single module's aggregate says. */
-    public static String legacySummary(List<Diagnostic> failures) {
-        Diagnostic first = failures.get(0);
-        return failures.size() == 1
-                ? legacyOf(first)
-                : failures.size() + " examples do not hold; " + legacyOf(first);
-    }
-
-    /** A one-line message for a failing example: the body {@code getMessage()} is built from on the
-     * exception these are thrown in. No surface prints it — the CLI, the annotation processor and the LSP all
-     * render the diagnostics, which this exception carries — so what reads it is a caller holding
-     * the exception, and it takes no language for the same reason
-     * {@link DiagnosticRenderer#legacyBody} does not. */
-    private static String legacyOf(Diagnostic d) {
-        if (d.diff() != null) {
-            // JUnit order: the expected value (what the example asserts) first, then what the
-            // behavior actually produced.
-            return "example does not hold: expected " + d.diff().expectedType()
-                    + " but was " + d.diff().actualType();
-        }
-        // A diff-less failure (an input fixture that could not be built, a missing fake, a
-        // non-termination): render the diagnostic's own catalog message so the reason travels
-        // through the annotation processor, rather than collapsing to a bare "example failed".
-        return d.said() == null ? "example failed" : DiagnosticRenderer.legacyBody(d);
-    }
-
-    private final souther.compiler.check.Prepared.ExampleExecution module;
+    private final souther.compiler.check.Prepared.Examples module;
     private final Symbols symbols;
     private final Map<String, Sig> sigs;
     /** What each behavior of this module takes injected, in the order its constructor takes it. */
@@ -751,7 +705,7 @@ public final class ExampleVerifier {
     /** What holds a row's values to what the behavior declares of what it answers. */
     private final EnsuresChecks ensures;
 
-    private ExampleVerifier(souther.compiler.check.Prepared.ExampleExecution module,
+    private ExampleVerifier(souther.compiler.check.Prepared.Examples module,
                             Symbols symbols, Map<String, Sig> sigs,
                             Map<String, List<BehaviorRequirement>> requirements,
                             MemoryClassLoader loader, Map<String, Hir.FnDef> values,

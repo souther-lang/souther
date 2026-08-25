@@ -1,5 +1,6 @@
 package souther.compiler.reading;
 
+import souther.compiler.observe.ArmObservation;
 import souther.compiler.Emitted;
 import org.junit.jupiter.api.Test;
 
@@ -153,7 +154,7 @@ class AClaimIsWhatARunThatSettledItWouldBeSeenToDoTest {
             InputDomain inputs =
                     compilation.db().ask(new Adequacy.Inputs(module)).value().get(name);
             souther.compiler.generated.EvaluationArtifact artifact = compilation.db()
-                    .ask(new Output.Evaluated(module, Output.CoverageMode.ARMS)).value();
+                    .ask(new Output.Evaluated(module, ArmObservation.RECORD)).value();
             assertNotNull(artifact, "the model under test emits measured classes");
             return new Model(CoverageRead.of(name, body, plan, inputs, symbols).interactions(),
                     new Behavior(artifact.classes(), module, name));

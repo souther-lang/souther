@@ -29,13 +29,13 @@ import java.util.List;
 public final class BoundExamples {
 
     private final String module;
-    private final Prepared.ExampleExecution rows;
+    private final Prepared.Examples rows;
     private final ExampleVerifier verifier;
 
     /** The behaviors the bound instance implements, worked out once from the instance. */
     private final List<String> bound;
 
-    BoundExamples(String module, Prepared.ExampleExecution rows, ExampleVerifier verifier,
+    BoundExamples(String module, Prepared.Examples rows, ExampleVerifier verifier,
                   List<String> bound) {
         this.module = module;
         this.rows = rows;
@@ -52,7 +52,7 @@ public final class BoundExamples {
      */
     public List<RecordedRow> rows() {
         List<RecordedRow> found = new ArrayList<>();
-        for (Prepared.Rows block : rows.examples()) {
+        for (Prepared.Rows block : rows.rows()) {
             Hir.Example written = block.read();
             if (!bound.contains(written.target())) {
                 continue;

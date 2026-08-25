@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.observe.ArmObservation;
 import souther.compiler.source.SourceId;
 
 import souther.compiler.generated.MemoryClassLoader;
@@ -80,7 +81,7 @@ class AnEvaluationRunsTheClassesThisCompileGeneratedTest {
 
         SourceId sourceId = compilation.exampleSourcesOf("example.stale").getFirst();
         List<RowOutcome> rows = compilation.db()
-                .ask(new Output.Examples("example.stale", sourceId, Output.CoverageMode.NONE))
+                .ask(new Output.Examples("example.stale", sourceId, ArmObservation.OMIT))
                 .value().rows();
 
         assertEquals(1, rows.size(), rows.toString());

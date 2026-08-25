@@ -1,5 +1,7 @@
 package souther.compiler.examples;
 
+import souther.compiler.observe.Observations;
+import souther.compiler.observe.ArmObservation;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Scopes;
@@ -72,7 +74,7 @@ class ARowIsNotHandedToAnAnswerFromAnotherBuildTest {
     void aRowIsRecordedUndecidedWhenTheAnswerIsOfAnotherBuild() {
         Answering older = answeringFrom(NARROWED);
 
-        ExampleVerifier.Observations observed = evaluated(MODEL, older);
+        Observations observed = evaluated(MODEL, older);
 
         assertEquals(2, observed.rows().size());
         for (RowOutcome row : observed.rows()) {
@@ -110,7 +112,7 @@ class ARowIsNotHandedToAnAnswerFromAnotherBuildTest {
     void anAnswerThatSaysNothingAboutItsBuildIsRefusedRatherThanTakenForThisOne() {
         Silent silent = new Silent();
 
-        ExampleVerifier.Observations observed = evaluated(MODEL, silent.asAnswering());
+        Observations observed = evaluated(MODEL, silent.asAnswering());
 
         assertFalse(silent.handed, "no row reached it");
         assertEquals(2, observed.rows().size());
@@ -160,7 +162,7 @@ class ARowIsNotHandedToAnAnswerFromAnotherBuildTest {
      */
     @Test
     void theDisagreementIsReportedOncePerBehaviorAndNamesWhatMoved() {
-        ExampleVerifier.Observations observed = evaluated(MODEL, answeringFrom(NARROWED));
+        Observations observed = evaluated(MODEL, answeringFrom(NARROWED));
 
         assertEquals(1, observed.failures().size(),
                 "one answer and one module disagree, whatever the rows were");
@@ -189,7 +191,7 @@ class ARowIsNotHandedToAnAnswerFromAnotherBuildTest {
                   | "again" : (Title("bbbb")) -> Title("bbbb")
                 """);
 
-        ExampleVerifier.Observations observed =
+        Observations observed =
                 evaluated(twoBlocks, answeringFrom(NARROWED.replace("""
                         example shout
                           | "one"   : (Title("aaaa")) -> Title("aaaa")
@@ -216,7 +218,7 @@ class ARowIsNotHandedToAnAnswerFromAnotherBuildTest {
      */
     @Test
     void aMeasureIsToldTheRowsCouldNotBeDecided() {
-        ExampleVerifier.Observations observed = evaluated(MODEL, answeringFrom(NARROWED));
+        Observations observed = evaluated(MODEL, answeringFrom(NARROWED));
 
         List<Incompleteness.Code> codes =
                 observed.incompleteness().stream().map(Incompleteness::code).toList();
@@ -240,7 +242,7 @@ class ARowIsNotHandedToAnAnswerFromAnotherBuildTest {
             throw new AssertionError("a run of this compile's own answers read declarations");
         };
 
-        ExampleVerifier.Observations observed =
+        Observations observed =
                 evaluated(MODEL, Answering.generatedHere(), refuses);
 
         assertEquals(List.of(), observed.failures().stream().map(f -> f.code()).toList());
@@ -288,17 +290,17 @@ class ARowIsNotHandedToAnAnswerFromAnotherBuildTest {
     }
 
     /** The rows of {@code source}, run against {@code answering}. */
-    private static ExampleVerifier.Observations evaluated(String source, Answering answering) {
+    private static Observations evaluated(String source, Answering answering) {
         return evaluated(source, answering, () -> declarationsOf(source));
     }
 
-    private static ExampleVerifier.Observations evaluated(String source, Answering answering,
+    private static Observations evaluated(String source, Answering answering,
                                                           Supplier<PublishedClasses> declared) {
         Compilation c = Compilation.ofSource(source, "Main");
         c.db().ask(new Output.All());
         String name = c.modules().get(0);
         EvaluationArtifact artifact = c.db()
-                .ask(new Output.EvaluationLinked(name, Output.CoverageMode.NONE)).value();
+                .ask(new Output.EvaluationLinked(name, ArmObservation.OMIT)).value();
         // Held to compiling: a model that did not is one whose rows were never emitted, and every
         // question below would be answered by that instead of by what is being measured.
         assertEquals(List.of(), c.diagnostics().values().stream().flatMap(List::stream)
