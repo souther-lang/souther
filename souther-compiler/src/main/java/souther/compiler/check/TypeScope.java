@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.types.Denotation;
 import souther.compiler.types.TypeKey;
+import souther.compiler.types.LanguageCaseId;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeReachName;
 
@@ -166,8 +167,14 @@ public final class TypeScope {
      * nothing wherever it was put.
      */
     public TypeReachName reach(TypeSymbol type) {
-        if (type.isPrimitive() || type.equals(names.of(type.name()) instanceof Denotation.Denotes d
-                ? d.type() : null)) {
+        // A primitive's spelling, and `Some` and `None` beside it: written bare wherever they are
+        // written, there being nothing else they could be written as. And any type whose bare
+        // spelling means this very declaration here.
+        if (type instanceof TypeSymbol.Primitive
+                || type instanceof TypeSymbol.LanguageCase(LanguageCaseId id)
+                        && (id == LanguageCaseId.SOME || id == LanguageCaseId.NONE)
+                || type.equals(names.of(type.name()) instanceof Denotation.Denotes d
+                        ? d.type() : null)) {
             return new TypeReachName.Bare(type);
         }
         if (TypeSymbol.RUNTIME.equals(type.module())) {
@@ -176,18 +183,19 @@ public final class TypeScope {
             return inScope(type.name()) ? new TypeReachName.Unnameable(type)
                     : new TypeReachName.Bare(type);
         }
-        if (!exposes(type.module(), type.name())) {
+        // What is left is reached through the module that declares it, so what is left has one.
+        if (!(type instanceof TypeSymbol.AtModule at) || !exposes(at.module(), at.name())) {
             return new TypeReachName.Unnameable(type);
         }
         String alias = null;
         for (String each : names.aliases()) {
-            if (type.module().equals(names.moduleOfAlias(each))
+            if (at.module().equals(names.moduleOfAlias(each))
                     && (alias == null || each.compareTo(alias) < 0)) {
                 alias = each;
             }
         }
-        return alias != null ? new TypeReachName.ViaAlias(alias, type)
-                : new TypeReachName.ViaModule(type);
+        return alias != null ? new TypeReachName.ViaAlias(alias, at)
+                : new TypeReachName.ViaModule(at);
     }
 
     /**

@@ -172,9 +172,32 @@ public sealed interface TypeSymbol extends Comparable<TypeSymbol> {
         return this instanceof Primitive p ? p.primitive() : null;
     }
 
+    /**
+     * By the name written, and then by what tells two of that name apart.
+     *
+     * <p>The name first, because that is what a reader of an ordered list is looking down. Two
+     * modules declaring one spelling are told apart by the module, as they always were; a module's
+     * and the language's are told apart by which they are, there being no module on one side to
+     * compare.
+     */
     @Override
     default int compareTo(TypeSymbol other) {
-        return key().compareTo(other.key());
+        int byName = name().compareTo(other.name());
+        if (byName != 0) {
+            return byName;
+        }
+        if (this instanceof AtModule mine && other instanceof AtModule theirs) {
+            return mine.module().compareTo(theirs.module());
+        }
+        return Integer.compare(rank(this), rank(other));
+    }
+
+    private static int rank(TypeSymbol type) {
+        return switch (type) {
+            case AtModule _ -> 0;
+            case Primitive _ -> 1;
+            case LanguageCase _ -> 2;
+        };
     }
 
     /** A primitive case name ({@code Int}) as it appears in a union.

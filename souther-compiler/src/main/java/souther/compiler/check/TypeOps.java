@@ -351,15 +351,18 @@ public final class TypeOps {
      * sum. A {@code fold} whose seed is a case ({@code PricedCart}) and whose step grows and matches the
      * accumulator at the sum ({@code PricedCart | NotFound}) is typed at that sum, not the seed case. */
     public static Type enclosingSum(Type t, Symbols symbols) {
-        if (!(t instanceof Type.Ref ref) || symbols.declarations().declaration(ref.name()) instanceof Hir.SumData) {
+        // A case of a primitive-headed union belongs to no named sum: nothing declares it, so no
+        // module holds a sum it is a case of.
+        if (!(t instanceof Type.Ref(TypeSymbol.AtModule named))
+                || symbols.declarations().declaration(named) instanceof Hir.SumData) {
             return null;
         }
         // A sum and its cases are declared together, so only that module can hold the sum this case
         // belongs to. A case may belong to more than one; pick by name so the choice is deterministic
         // across runs rather than dependent on the symbol map's iteration order.
         Hir.SumData chosen = null;
-        for (Hir.Def d : symbols.declarations().declaredIn(ref.name().module()).values()) {
-            if (d instanceof Hir.SumData sum && caseNames(sum).contains(ref.name())
+        for (Hir.Def d : symbols.declarations().declaredIn(named.module()).values()) {
+            if (d instanceof Hir.SumData sum && caseNames(sum).contains(named)
                     && (chosen == null || sum.name().compareTo(chosen.name()) < 0)) {
                 chosen = sum;
             }
@@ -869,12 +872,18 @@ public final class TypeOps {
      * {@code match} arm names and what the {@code "type"} discriminator carries — a sum contributes
      * its cases, not itself.
      */
-    static TypeSymbol[] ambiguousMembers(Type out, Symbols symbols) {
-        Map<String, TypeSymbol> byName = new LinkedHashMap<>();
-        for (TypeSymbol member : AtomSpace.subjectAtoms(out, symbols)) {
-            TypeSymbol seen = byName.put(member.name(), member);
+    static TypeSymbol.AtModule[] ambiguousMembers(Type out, Symbols symbols) {
+        Map<String, TypeSymbol.AtModule> byName = new LinkedHashMap<>();
+        // Only a module's declarations can collide by spelling here: a module may not declare a
+        // name the language gives, so a union holding one holds it under a spelling nothing else
+        // in it has.
+        for (TypeSymbol atom : AtomSpace.subjectAtoms(out, symbols)) {
+            if (!(atom instanceof TypeSymbol.AtModule member)) {
+                continue;
+            }
+            TypeSymbol.AtModule seen = byName.put(member.name(), member);
             if (seen != null && !seen.equals(member)) {
-                return new TypeSymbol[] {seen, member};
+                return new TypeSymbol.AtModule[] {seen, member};
             }
         }
         return null;
@@ -1184,7 +1193,7 @@ public final class TypeOps {
      * is every declaration another module made, since what travels is the settled form.
      */
     public static List<Hir.InvariantClause> effectiveInvariants(
-            TypeSymbol named, Hir.Data data, Symbols symbols,
+            TypeSymbol.AtModule named, Hir.Data data, Symbols symbols,
             Function<TypeSymbol, List<Hir.InvariantClause>> form) {
         List<Hir.InvariantClause> invs = new ArrayList<>();
         for (Declared one : declaredInvariants(named, data, symbols, form)) {
@@ -1208,7 +1217,8 @@ public final class TypeOps {
      * of a declaration writes its clauses in the order they were written, so the number means the
      * same thing in each.
      */
-    public record Declared(TypeSymbol declaredOn, int ordinal, Hir.InvariantClause clause) {}
+    public record Declared(TypeSymbol.AtModule declaredOn, int ordinal,
+                           Hir.InvariantClause clause) {}
 
     /**
      * The same clauses {@link #effectiveInvariants} answers, each with the declaration it was written
@@ -1219,13 +1229,15 @@ public final class TypeOps {
      * taken from it rather than walked again.
      */
     public static List<Declared> declaredInvariants(
-            TypeSymbol named, Hir.Data data, Symbols symbols,
+            TypeSymbol.AtModule named, Hir.Data data, Symbols symbols,
             Function<TypeSymbol, List<Hir.InvariantClause>> form) {
         List<Declared> invs = new ArrayList<>();
         for (Hir.Name inc : data.includes()) {
             Hir.Data id = spreadTarget(inc, symbols);
             if (id != null) {
-                invs.addAll(declaredInvariants(inc.answered().type(), id, symbols, form));
+                invs.addAll(declaredInvariants(
+                        inc.answered().type() instanceof TypeSymbol.AtModule at ? at : null,
+                        id, symbols, form));
             }
         }
         List<Hir.InvariantClause> own = named == null ? null : form.apply(named);
@@ -1439,13 +1451,15 @@ public final class TypeOps {
             }
             return shared;
         }
-        if (!(t instanceof Type.Ref ref)) {
+        // What the language gives is declared by no module, so no module holds an enumeration
+        // listing it; the lookups below answered nothing for one before they were asked this way.
+        if (!(t instanceof Type.Ref(TypeSymbol.AtModule named))) {
             return null;
         }
-        if (symbols.declarations().declaration(ref.name()) instanceof Hir.SumData sum) {
-            return isUnitOnlySum(sum, symbols) ? Set.of(ref.name()) : null;
+        if (symbols.declarations().declaration(named) instanceof Hir.SumData sum) {
+            return isUnitOnlySum(sum, symbols) ? Set.of(named) : null;
         }
-        if (!(symbols.declarations().declaration(ref.name()) instanceof Hir.UnitData)) {
+        if (!(symbols.declarations().declaration(named) instanceof Hir.UnitData)) {
             return null;
         }
         // A sum and its cases are declared together (a case declared elsewhere cannot join a union
@@ -1453,9 +1467,9 @@ public final class TypeOps {
         // that module rather than what is visible keeps the answer the same in every module that
         // reads the value.
         Set<TypeSymbol> owners = new LinkedHashSet<>();
-        for (Hir.Def def : symbols.declarations().declaredIn(ref.name().module()).values()) {
+        for (Hir.Def def : symbols.declarations().declaredIn(named.module()).values()) {
             if (def instanceof Hir.SumData s && isUnitOnlySum(s, symbols)
-                    && AtomSpace.subjectAtoms(Type.ref(s.declares()), symbols).contains(ref.name())) {
+                    && AtomSpace.subjectAtoms(Type.ref(s.declares()), symbols).contains(named)) {
                 owners.add(s.declares());
             }
         }

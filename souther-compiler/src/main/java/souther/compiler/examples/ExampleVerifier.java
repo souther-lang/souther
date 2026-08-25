@@ -1680,7 +1680,7 @@ public final class ExampleVerifier {
             return result;
         }
         for (TypeSymbol member : AtomSpace.subjectAtoms(out, symbols)) {
-            if (!member.isPrimitive() && member.module().equals(module.name())) {
+            if (member instanceof TypeSymbol.AtModule at && at.module().equals(module.name())) {
                 continue;
             }
             if (SoutherJvmAbi.nameOf(new GeneratedClass.BridgeCase(module.name(), member)).is(result.getClass())) {

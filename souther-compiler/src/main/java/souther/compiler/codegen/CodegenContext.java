@@ -417,7 +417,7 @@ final class CodegenContext {
     /** Whether {@code member} is a type this module declares, and so carries its result unions
      * itself. A primitive never is; nor is a type another module emitted. */
     boolean isLocalMember(TypeSymbol member) {
-        return !member.isPrimitive() && member.module().equals(pkg);
+        return member instanceof TypeSymbol.AtModule at && at.module().equals(pkg);
     }
 
     /** The members of {@code out} that reach their union through a bridge case, in the order the
@@ -440,7 +440,7 @@ final class CodegenContext {
         }
         List<TypeSymbol> bridged = new ArrayList<>();
         for (TypeSymbol member : AtomSpace.subjectAtoms(out, symbols)) {
-            if (member.isPrimitive() || !member.module().equals(module)) {
+            if (!(member instanceof TypeSymbol.AtModule at) || !at.module().equals(module)) {
                 bridged.add(member);
             }
         }

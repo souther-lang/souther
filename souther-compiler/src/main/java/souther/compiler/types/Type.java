@@ -457,7 +457,10 @@ public sealed interface Type permits Type.Leaf, Type.Compound {
 
     /** {@code name}, written with its module when the simple name is one of {@code qualify}. */
     private static String showName(TypeSymbol name, java.util.Set<String> qualify) {
-        return qualify.contains(name.name()) ? name.qualified() : name.name();
+        // What the language gives has no module to write, and two of them never share a spelling,
+        // so a name of one is never the ambiguous one this is disambiguating.
+        return qualify.contains(name.name()) && name instanceof TypeSymbol.AtModule at
+                ? at.key().qualified() : name.name();
     }
 
     private static String show(Type t, java.util.Set<String> qualify) {

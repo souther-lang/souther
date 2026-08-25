@@ -38,7 +38,7 @@ final class Clauses {
     /** Remembered per declaration, not per clause: a clause an include brings in is one expression
      * reached under two names, and what it types to is read against the fields of the one asking. */
     private final Map<TypeSymbol, Map<Hir.Expr, TypedClause>> typed = new HashMap<>();
-    private final Map<TypeSymbol, List<Hir.InvariantClause>> effective = new HashMap<>();
+    private final Map<TypeSymbol.AtModule, List<Hir.InvariantClause>> effective = new HashMap<>();
     /** Which of a declaration's own fields each typed clause reads — what a construction has to have
      * filled for the clause to be read at all. */
     private final Map<Core, Set<BindingId>> readsFields = new IdentityHashMap<>();
@@ -64,7 +64,8 @@ final class Clauses {
                 TypeOps.effectiveInvariants(name, data, symbols, inTheAnalysisRepresentation::get));
     }
 
-    private final Map<TypeSymbol, List<TypeOps.Declared>> declaredClauses = new HashMap<>();
+    private final Map<TypeSymbol.AtModule, List<TypeOps.Declared>> declaredClauses =
+            new HashMap<>();
 
     /** What {@code data}'s fields are. */
     Map<String, Type> fieldsOf(Hir.Data data) {

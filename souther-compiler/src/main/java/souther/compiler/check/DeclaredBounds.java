@@ -5,6 +5,7 @@ import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Place;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -116,8 +117,13 @@ public final class DeclaredBounds {
             // The clauses with the declaration each was written on, which is what names the line
             // (ADR-0090). Read flat, every clause a spread brought in was named after the type that
             // spread it, and two clauses of one declaration were one rule.
+            // A layer wraps a declaration a module wrote, which is what having a `Hir.Data` for it
+            // says; the pattern is where the layer's name says so.
+            if (!(layer.named() instanceof TypeSymbol.AtModule named)) {
+                continue;
+            }
             for (TypeOps.Declared declared
-                    : TypeOps.declaredInvariants(layer.named(), layer.data(), symbols, _ -> null)) {
+                    : TypeOps.declaredInvariants(named, layer.data(), symbols, _ -> null)) {
                 RuleRef.Invariant rule = new RuleRef.Invariant(Clause.Ref.of(declared));
                 for (Hir.Expr each : ClauseHelpers.conjunctsOf(declared.clause().expr())) {
                     // An end and nothing else. A rule this reads no end from narrows nothing here,

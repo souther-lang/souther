@@ -712,7 +712,7 @@ public final class Names {
                     continue;
                 }
                 for (TypeSymbol reached : declared.getValue().reaches()) {
-                    if (reached.module().equals(name)) {
+                    if (reached instanceof TypeSymbol.AtModule at && at.module().equals(name)) {
                         continue;
                     }
                     Set<String> there = elsewhere.computeIfAbsent(reached.module(),
@@ -733,7 +733,8 @@ public final class Names {
                         continue;
                     }
                     for (TypeSymbol reached : declared.getValue().reaches()) {
-                        if (reached.module().equals(name) && unbuilt.contains(reached.name())) {
+                        if (reached instanceof TypeSymbol.AtModule at && at.module().equals(name)
+                                && unbuilt.contains(at.name())) {
                             unbuilt.add(declared.getKey());
                             more = true;
                             break;
@@ -950,7 +951,11 @@ public final class Names {
         }
         Set<Use> used = new HashSet<>();
         for (Resolve.TypeUse d : facts.value().types()) {
-            used.add(new Use(d.written().canonical(), d.denotes().module(), d.denotes().name()));
+            // A name the language gives is in scope everywhere and comes in on no import line, so
+            // writing one is not a use of anything a module brought in.
+            if (d.denotes() instanceof TypeSymbol.AtModule at) {
+                used.add(new Use(d.written().canonical(), at.module(), at.name()));
+            }
         }
         for (Resolve.ValueUse v : facts.value().values()) {
             switch (v.denotes()) {
@@ -1360,7 +1365,7 @@ public final class Names {
     }
 
     /** The occurrence of a type's own name, in the declaration that declares it. */
-    public record DeclaredAt(TypeSymbol denoted) implements Key<WrittenName> {
+    public record DeclaredAt(TypeSymbol.AtModule denoted) implements Key<WrittenName> {
         @Override
         public String module() {
             return denoted.module();

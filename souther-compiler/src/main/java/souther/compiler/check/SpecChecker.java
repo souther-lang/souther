@@ -473,7 +473,7 @@ public final class SpecChecker {
             if (sig == null) {
                 continue;
             }
-            TypeSymbol[] clash = TypeOps.ambiguousMembers(sig.outputType(), symbols);
+            TypeSymbol.AtModule[] clash = TypeOps.ambiguousMembers(sig.outputType(), symbols);
             if (clash == null) {
                 continue;
             }

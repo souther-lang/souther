@@ -1569,7 +1569,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // The clause, by the declaration it is written on and its place among that
             // declaration's clauses — which is how somebody reading the declaration counts them.
             case souther.compiler.check.RuleRef.Invariant it -> {
-                into.put("declaredIn", it.clause().id().declaredOn().key().module());
+                into.put("declaredIn", it.clause().id().declaredOn().module());
                 into.put("declaredOn", it.clause().id().declaredOn().name());
                 into.put("clause", it.clause().id().ordinal());
             }

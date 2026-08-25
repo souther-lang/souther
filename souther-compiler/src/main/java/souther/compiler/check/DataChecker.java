@@ -46,7 +46,8 @@ public final class DataChecker {
      * {@code type} says which module declared it — the check runs that module's generated class, not
      * one named after the module the construction is written in. {@code typeName} is what was
      * written, which is what the message quotes. */
-    public record ConstCheck(String typeName, TypeSymbol type, Object value, SourcePos pos) {}
+    public record ConstCheck(String typeName, TypeSymbol.AtModule type, Object value,
+                             SourcePos pos) {}
 
     /**
      * Every {@code 金額(constant)} in the module: a newtype construction whose argument folds to a
@@ -71,10 +72,11 @@ public final class DataChecker {
     private static void collectConstChecks(Hir.Expr e, Symbols symbols, List<ConstCheck> out) {
         if (e instanceof Hir.NewData nd
                 && nd.typeName().answered() instanceof Hir.Name.Denoting built
-                && symbols.declarations().declaration(built.type()) instanceof Hir.Data nt
-                && nt.newtype() && isInvariantBearing(built.type(), symbols)) {
+                && built.type() instanceof TypeSymbol.AtModule constructed
+                && symbols.declarations().declaration(constructed) instanceof Hir.Data nt
+                && nt.newtype() && isInvariantBearing(constructed, symbols)) {
             CallElaborator.newtypeConstantArg(nd).ifPresent(v ->
-                    out.add(new ConstCheck(nd.typeName().written(), built.type(), v, nd.pos())));
+                    out.add(new ConstCheck(nd.typeName().written(), constructed, v, nd.pos())));
         }
         TypeChecker.forEachChild(e, c -> collectConstChecks(c, symbols, out));
     }
@@ -175,7 +177,7 @@ public final class DataChecker {
     }
 
     /** Whether {@code nd} arrived here already made, rather than being written here. */
-    private static boolean carried(Hir.NewData nd, TypeSymbol built) {
+    private static boolean carried(Hir.NewData nd, TypeSymbol.AtModule built) {
         return nd.origin().carried(built);
     }
 
@@ -208,8 +210,9 @@ public final class DataChecker {
                 // A construction naming nothing builds no type to record; it is reported where the
                 // name is written, and the fields written under it are still walked.
                 if (nd.typeName().answered() instanceof Hir.Name.Denoting built) {
-                    Map<TypeSymbol, String> side = carried(nd, built.type())
-                            ? out.carried() : out.originated();
+                    Map<TypeSymbol, String> side =
+                            built.type() instanceof TypeSymbol.AtModule made && carried(nd, made)
+                                    ? out.carried() : out.originated();
                     side.putIfAbsent(built.type(), nd.typeName().name().quoted());
                 }
                 for (Hir.FieldInit init : nd.inits()) {

@@ -973,7 +973,7 @@ public final class Backend {
             String what = owner.name();
             TypeSymbol sameName = byBridgeName.put(cls, member);
             if (sameName != null) {
-                throw CompileException.of(Diagnostic.say(new ModuleMessage.TwoMembersJoinThroughOneCaseClass(sameName.qualified(), member.qualified(), bridge))
+                throw CompileException.of(Diagnostic.say(new ModuleMessage.TwoMembersJoinThroughOneCaseClass(String.valueOf(sameName), String.valueOf(member), bridge))
                                 .at(pos)
                                 .hint(new ModuleMessage.AMemberGoesByItsOwnNameWithCaseAfterIt()).build());
             }

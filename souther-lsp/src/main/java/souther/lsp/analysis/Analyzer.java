@@ -1234,10 +1234,15 @@ public final class Analyzer {
     /** Where a type is declared, as the compiler answers it. */
     private Optional<Location> declarationOf(Compilation compilation, TypeSymbol target,
                                              ModuleGraph graph) {
+        // Nothing the language gives is written in a source anyone can be sent to: there is no
+        // `.sou` that declares `Int`, and the library's own are not this project's.
+        if (!(target instanceof TypeSymbol.AtModule declared)) {
+            return Optional.empty();
+        }
         // Which module, which name and where it was written is the compiler's answer — the part a
         // spelling match gets wrong.
-        WrittenName at = compilation.db().ask(new Names.DeclaredAt(target)).value();
-        return nameAt(at, uriOf(compilation.sourceIdOf(target.module())), graph);
+        WrittenName at = compilation.db().ask(new Names.DeclaredAt(declared)).value();
+        return nameAt(at, uriOf(compilation.sourceIdOf(declared.module())), graph);
     }
 
     /**
