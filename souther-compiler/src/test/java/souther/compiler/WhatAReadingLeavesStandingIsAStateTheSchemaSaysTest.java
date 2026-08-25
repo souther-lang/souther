@@ -86,14 +86,17 @@ class WhatAReadingLeavesStandingIsAStateTheSchemaSaysTest {
                 if length.value >= 50 then 1 else 2
             """;
 
-    /** Rules the walk never reached, behind an option. */
+    /** A clause of the value this reading owns that reached no reading at all, beside one it read
+     *  to the end. What is out of sight is a rule of the very position the classes are at: a rule
+     *  handed to the reading one position down is that reading's and is read there (#1072). */
     private static final String RULES_OUT_OF_SIGHT = """
             module o
 
             data Assignee = String
-                invariant String.length(value) >= 1
+                invariant named = value == "ada" || value == "bob"
+                invariant unreadable = value == 1
 
-            data Issue = { assignee: Assignee? }
+            data Issue = { assignee: Assignee }
             data Accepted = { at: Int }
 
             behavior classify : (i: Issue) -> Accepted
@@ -105,6 +108,16 @@ class WhatAReadingLeavesStandingIsAStateTheSchemaSaysTest {
             assertNotNull(in, "adequacy-schema-7.json ships beside the compiler");
             return JSON.readTree(new String(in.readAllBytes(), StandardCharsets.UTF_8));
         }
+    }
+
+    /** The axis about {@code path}, which is what these are asked of. */
+    private static JsonNode axisAt(JsonNode partition, String path) {
+        for (JsonNode axis : partition.get("axes")) {
+            if (path.equals(axis.get("path").asString())) {
+                return axis;
+            }
+        }
+        throw new AssertionError(path + " is not among " + partition.get("axes"));
     }
 
     private static JsonNode partitionOf(String source, String behavior) {
@@ -172,9 +185,10 @@ class WhatAReadingLeavesStandingIsAStateTheSchemaSaysTest {
             module m
 
             data Inner = String
-                invariant String.length(value) >= 1
+                invariant named = value == "ada" || value == "bob"
+                invariant unreadable = value == 1
 
-            data R = { n: Int, deep: Inner? }
+            data R = { n: Int, deep: Inner }
                 invariant odd = n * n >= 4
 
             data Ok = { at: Int }
@@ -189,24 +203,32 @@ class WhatAReadingLeavesStandingIsAStateTheSchemaSaysTest {
      * The two facts are independent, and a position carries the one that is true of it.
      *
      * <p>They were arms of one type, which said they could not both be so. Nothing grounds that:
-     * what a reading could not read and what a walk never reached are different facts about
+     * what a reading could not read and what a reading never reached are different facts about
      * different rules, and here they fall at two positions of one value. Whether one position can
      * carry both is not shown by this — the model and the schema allow it, and no input is known
      * that produces it.
+     *
+     * <p><b>Both rules belong to the readings that report them.</b> {@code odd} is written on
+     * {@code R} and is short at {@code R}'s own position; {@code unreadable} is written on
+     * {@code Inner} and is short where {@code Inner} is read. A rule handed to a reading one
+     * position down is that reading's and is reported there, so neither of these is a position
+     * answering for somebody else's rule (#1072).
      */
     @Test
     void aRuleNothingTookInAndRulesOutOfSightAreIndependent() {
         JsonNode partition = partitionOf(BOTH_FACTS, "f");
-        JsonNode axes = partition.get("axes");
 
-        JsonNode number = axes.get(0).get("read");
-        assertEquals("partial", number.get("extent").asString(), number.toString());
-        assertFalse(number.has("rulesNotReached"), number.toString());
+        // The rule nothing took in, at the position it is about. Asked of the questions rather than
+        // of an axis: where a rule of the model went unread the border measure declines, and the
+        // classes at `r.n` are ones a comparison in the body draws — so the position that carries
+        // this fact has no axis in this model, and the fact is the model's either way.
         assertEquals(1, partition.get("unanswered").size(), partition.toString());
+        assertEquals("r.n", partition.get("unanswered").get(0).get("at").asString());
         assertEquals("admitted_values",
                 partition.get("unanswered").get(0).get("question").asString());
 
-        JsonNode held = axes.get(1).get("read");
+        // And the rules out of sight, at the other position, which raises no question at all.
+        JsonNode held = axisAt(partition, "r.deep").get("read");
         assertTrue(held.get("rulesNotReached").asBoolean(), held.toString());
     }
 

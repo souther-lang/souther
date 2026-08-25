@@ -20,6 +20,7 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Which values a position is left, and whether that is the whole of what its rules leave it.
@@ -540,16 +541,21 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
     }
 
     /**
-     * A type the walk does not enter leaves its rules unread, and that is said too.
+     * A type the walk does not enter is a position whose own values this reading is not short of.
      *
      * <p>The walk goes through a field's own type and stops at what wraps one — an optional, a
-     * collection, a sum of records — so a rule written inside one of those reaches no reading here.
-     * A position whose values those rules narrow is not one this can speak for, however plainly the
-     * clauses it did read were read.
+     * collection, a sum of records. A rule written inside one of those is not a rule about the
+     * position holding the wrapper: it is about a value one position down, which is a value that may
+     * not be there at all. So what this reading says of the position above is the whole of what its
+     * own rules leave it, and the rules under it are handed on rather than missed (#1072).
+     *
+     * <p>Said as a widening, the position above was short of a rule no row could reach: what a
+     * {@code Some} holds is measured where the narrowing puts it, and the measure that reported the
+     * gap was the same one that had already read the rule (#1063).
      */
     @Test
-    void aRuleUnderSomethingTheWalkDoesNotEnterIsARuleUnread() {
-        asFarAsRead(ValueSet.ANY, UnreadReason.NOT_REACHED, of("""
+    void aRuleUnderSomethingTheWalkDoesNotEnterIsHandedOnAndNotMissed() {
+        handsOn(of("""
                 module demo
 
                 data Inner = String
@@ -557,7 +563,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
 
                 data Outer = { inner: Inner? }
                 """, "Outer"), "inner");
-        asFarAsRead(ValueSet.ANY, UnreadReason.NOT_REACHED, of("""
+        handsOn(of("""
                 module demo
 
                 data Inner = String
@@ -565,7 +571,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
 
                 data Outer = { inners: List<Inner> }
                 """, "Outer"), "inners");
-        asFarAsRead(ValueSet.ANY, UnreadReason.NOT_REACHED, of("""
+        handsOn(of("""
                 module demo
 
                 data Yes = { n: Int }
@@ -575,6 +581,18 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
 
                 data Outer = { answer: Answer }
                 """, "Outer"), "answer");
+    }
+
+    /** Every value the position holds is left to it, and the rules under it are somebody else's to
+     *  read. Both, because either alone is half the claim: a position said to be handed on and
+     *  narrowed anyway would be one this reading spoke for after all, and one read in full with no
+     *  handoff recorded would be a subtree nobody is ever asked about. */
+    private static void handsOn(FieldDomains read, String path) {
+        wholly(ValueSet.ANY, read, path);
+        assertTrue(read.handedOn().contains(path),
+                () -> path + " hands its rules on, and " + read.handedOn() + " says who does");
+        assertTrue(read.everyRuleReachedAt(path),
+                () -> path + " is short of nothing: what is under it was never addressed to it");
     }
 
     /**
@@ -591,16 +609,16 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
      */
     @Test
     void aStopUnderOneFieldDoesNotSpoilTheFieldBesideIt() {
-        FieldDomains read = of("""
+        FieldDomains read = ofRefused("""
                 module demo
 
                 data Inner = String
-                    invariant only = value == "A"
+                    invariant no = value == 1
 
-                data Forecast = { inners: List<Inner>, dealCount: Int }
+                data Forecast = { inner: Inner, dealCount: Int }
                 """, "Forecast");
 
-        asFarAsRead(ValueSet.ANY, UnreadReason.NOT_REACHED, read, "inners");
+        asFarAsRead(ValueSet.ANY, UnreadReason.NOT_REACHED, read, "inner");
         wholly(ValueSet.ANY, read, "dealCount");
     }
 

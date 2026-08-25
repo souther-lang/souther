@@ -52,6 +52,15 @@ record ReadPosition(TermPath path, TypeView view, NumericTerm term,
     }
 
     @Override
+    public Position shortOfRulesNobodyTookOver() {
+        return rulesNotReached ? this
+                : new ReadPosition(path, view, term, numericDomain, ownEnds, narrowedEnds,
+                        rangeLeft, narrowedLower, narrowedUpper, nothingExists, projection,
+                        declared, reading, obligations, completeness, valuesUnread,
+                        rulesWithoutALine, unansweredQuestions, true, structure);
+    }
+
+    @Override
     public List<TypeSymbol> narrowedBy(boolean lower) {
         return lower ? narrowedLower : narrowedUpper;
     }

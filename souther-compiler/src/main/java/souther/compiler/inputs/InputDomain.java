@@ -137,6 +137,11 @@ public final class InputDomain {
         List<Position> found = new ArrayList<>();
         List<RuleRoot> roots = new ArrayList<>();
         Map<BindingId, String> read = new LinkedHashMap<>();
+        // Where a reading ended with the rules under a position still to be read, and what took
+        // them over. Kept across the whole walk because the two halves happen at different steps of
+        // it: the reading says it stopped as the position is read, and the descent says who took
+        // the rules as it opens the reading that did.
+        RuleHandoffs handoffs = new RuleHandoffs();
         for (Parameter parameter : parameters) {
             if (parameter.binding() != null) {
                 read.putIfAbsent(parameter.binding(), parameter.name());
@@ -145,9 +150,18 @@ public final class InputDomain {
             roots.add(new RuleRoot(at, parameter.type()));
             walk(at, parameter.type(), 0, symbols, policy,
                     PlacedRules.of(at, parameter.type(), symbols, policy), found, roots,
-                    java.util.Set.of());
+                    java.util.Set.of(), handoffs);
         }
-        return found.isEmpty() ? NONE : new InputDomain(found, read, parameters, roots, policy);
+        // And only now, because a handoff is discharged by a descent that happens after the
+        // position above it has been read. Held the other way round, every position that hands its
+        // rules on would have to be read after everything under it, and the order positions are
+        // reported in is the order they are declared and descended into.
+        List<Position> settled = found.stream()
+                .map(each -> handoffs.unresolvedAt(each.path())
+                        ? each.shortOfRulesNobodyTookOver() : each)
+                .toList();
+        return settled.isEmpty() ? NONE
+                : new InputDomain(settled, read, parameters, roots, policy);
     }
 
     /**
@@ -403,7 +417,8 @@ public final class InputDomain {
      */
     private static void walk(TermPath path, Type type, int depth, Symbols symbols,
                              ReadingPolicy policy, PlacedRules placed, List<Position> found,
-                             List<RuleRoot> roots, java.util.Set<Type> visited) {
+                             List<RuleRoot> roots, java.util.Set<Type> visited,
+                             RuleHandoffs handoffs) {
         // The proof first, and before anything is read off the position. A shape a reading is not
         // made of is this compiler disagreeing with itself about what may stand at a position, and
         // it is refused here rather than arriving further down as a position nothing divides.
@@ -416,18 +431,23 @@ public final class InputDomain {
                 StructuralInspection.of(input.shape(), depth < MAX_DEPTH, declared);
         Position here = read(input, path, symbols, placed, structure, declared);
         found.add(here);
+        // Said as the position is read and before anything under it is walked, so that a descent
+        // that never happens leaves the obligation standing rather than never making one.
+        if (placed.handsTheRulesOnAt(path)) {
+            handoffs.owes(placed.root(), path);
+        }
         switch (structure) {
             case StructuralInspection.Decomposed decomposed -> {
                 for (Map.Entry<String, Type> field : decomposed.under().entrySet()) {
                     walk(path.then(field.getKey()), field.getValue(), depth + 1, symbols, policy,
                             // A field is a value of its own, so a sum met under it is one this walk
                             // has not taken apart however many were taken apart above.
-                            placed, found, roots, java.util.Set.of());
+                            placed, found, roots, java.util.Set.of(), handoffs);
                 }
             }
             case StructuralInspection.Retained retained ->
                     under(retained.continuation(), here, path, depth, symbols, policy, placed,
-                            found, roots, visited);
+                            found, roots, visited, handoffs);
         }
     }
 
@@ -437,28 +457,6 @@ public final class InputDomain {
      * <p>Beside the position and never instead of it: what a list holds is read, and the list is
      * still a position with a length of its own that this reading has already answered for; a case
      * puts positions under the sum, and the sum still divides into its cases.
-     */
-    private static void under(StructuralInspection.Continuation continuation, Position here,
-                              TermPath path, int depth, Symbols symbols, ReadingPolicy policy,
-                              PlacedRules placed, List<Position> found, List<RuleRoot> roots,
-                              java.util.Set<Type> visited) {
-        switch (continuation) {
-            case StructuralInspection.Continuation.None _,
-                 StructuralInspection.Continuation.Blocked _ -> { }
-            case StructuralInspection.Continuation.Elements elements ->
-                    walk(path.element(), elements.element(), depth + 1, symbols, policy, placed,
-                            found, roots, java.util.Set.of());
-            case StructuralInspection.Continuation.Branches branches -> {
-                for (StructuralInspection.Branch branch : branches.branches()) {
-                    walkBranch(branch, here, path, depth, symbols, policy, found, roots,
-                            visited);
-                }
-            }
-        }
-    }
-
-    /**
-     * One branch of a position, where the reading still owes it and something stands under it.
      *
      * <p><b>Owed and not merely declared.</b> A case the rules refuse has no positions to cover —
      * every field of it is a row nobody can write — and the branches walked are the ones the
@@ -466,6 +464,77 @@ public final class InputDomain {
      * under it come from one reading of it. Which is also why the widening the obligations may have
      * applied travels with them: where the rules were set aside, they are set aside for the
      * positions under the case as much as for the case.
+     *
+     * <p>And it is where the rules the position handed on are passed to somebody. Which positions
+     * they are passed to is settled here, from the branches this position is owed at — never worked
+     * out afterwards from the readings that exist, since a reading opened under the position for
+     * some other reason is not one anybody handed anything to.
+     */
+    private static void under(StructuralInspection.Continuation continuation, Position here,
+                              TermPath path, int depth, Symbols symbols, ReadingPolicy policy,
+                              PlacedRules placed, List<Position> found, List<RuleRoot> roots,
+                              java.util.Set<Type> visited, RuleHandoffs handoffs) {
+        switch (continuation) {
+            // Nothing is opened under the position, so a handoff made there stays standing. Which
+            // is the answer whichever of the two this is: a shape this compiler does not enter and
+            // a depth this walk stops at both leave the rules under it read by nobody.
+            case StructuralInspection.Continuation.None _,
+                 StructuralInspection.Continuation.Blocked _ -> { }
+            case StructuralInspection.Continuation.Elements elements -> {
+                TermPath at = path.element();
+                handoffs.passesTo(placed.root(), path, List.of(at));
+                takeTheRulesOver(placed.root(), path, at, elements.element(), depth + 1, symbols,
+                        policy, found, roots, java.util.Set.of(), handoffs);
+            }
+            case StructuralInspection.Continuation.Branches branches -> {
+                List<StructuralInspection.Branch> owed = new ArrayList<>();
+                List<TermPath> passedTo = new ArrayList<>();
+                for (StructuralInspection.Branch branch : branches.branches()) {
+                    // A branch that is the whole of a value puts no position anywhere, and one the
+                    // rules leave nothing at has no row to be written at it. Neither is a place the
+                    // rules were passed to, so neither is owed a reading.
+                    if (branch.under() == null || !owed(here, branch.refinement())) {
+                        continue;
+                    }
+                    owed.add(branch);
+                    passedTo.add(path.refine(branch.refinement()));
+                }
+                handoffs.passesTo(placed.root(), path, passedTo);
+                for (StructuralInspection.Branch branch : owed) {
+                    walkBranch(branch, placed.root(), path, depth, symbols, policy, found, roots,
+                            visited, handoffs);
+                }
+            }
+        }
+    }
+
+    /**
+     * Open a reading at a position the rules were passed to, and say that it took them.
+     *
+     * <p>The one way a reading of a value begins under another. What a case of a sum holds and what
+     * a sequence holds are values with declarations of their own, and a clause is not written across
+     * either boundary: what {@code Tag} says about itself is written in {@code Tag}, whether the
+     * position is reached by narrowing an optional or by being one of however many a list holds. So
+     * both cross here, and a shape this compiler learns to walk later is a shape whose rules are
+     * read only if it comes through this too.
+     *
+     * <p>Taking the rules over is said here and not worked out afterwards from the readings that
+     * exist. A reading opened under a position for some other reason is not one anybody handed
+     * anything to, and letting it discharge the obligation would read the absence of a failure as
+     * evidence that something was read (#1072).
+     */
+    private static void takeTheRulesOver(TermPath by, TermPath at, TermPath opened, Type type,
+                                         int depth, Symbols symbols, ReadingPolicy policy,
+                                         List<Position> found, List<RuleRoot> roots,
+                                         java.util.Set<Type> visited, RuleHandoffs handoffs) {
+        roots.add(new RuleRoot(opened, type));
+        handoffs.accepts(by, at, opened);
+        walk(opened, type, depth, symbols, policy,
+                PlacedRules.of(opened, type, symbols, policy), found, roots, visited, handoffs);
+    }
+
+    /**
+     * One branch of a position, where the reading still owes it and something stands under it.
      *
      * <p><b>A narrowing takes no level.</b> {@code query@GlobalQuery.limit} is the same distance
      * from the parameter as {@code query.limit} is under a record parameter, because naming which
@@ -476,15 +545,10 @@ public final class InputDomain {
      * {@code GlobalQuery} says about its {@code tag} is written in {@code GlobalQuery}, so a new
      * root begins here and the reading of the sum's own value has nothing to say below it.
      */
-    private static void walkBranch(StructuralInspection.Branch branch, Position here, TermPath path,
+    private static void walkBranch(StructuralInspection.Branch branch, TermPath by, TermPath path,
                                    int depth, Symbols symbols, ReadingPolicy policy,
                                    List<Position> found, List<RuleRoot> roots,
-                                   java.util.Set<Type> visited) {
-        // Nothing stands under a branch that is the whole of a value. A unit case is one, and a
-        // position for it would be a report naming a place with nothing in it once per case.
-        if (branch.under() == null || !owed(here, branch.refinement())) {
-            return;
-        }
+                                   java.util.Set<Type> visited, RuleHandoffs handoffs) {
         // <b>A descent that costs no level stops only where it returns to a value it has already
         // been at without a step into one.</b> That is the whole of the rule, and what it is keyed
         // on is the value reached and never the narrowing taken: a narrowing is an edge and the
@@ -495,15 +559,18 @@ public final class InputDomain {
         //
         // Kept per branch of the walk and dropped at every step into a value, because a value met
         // under a field is one this walk has been nowhere near.
+        //
+        // And no reading is opened, so nothing takes the rules of this case over and the handoff
+        // above stays standing. The rules were read where the value was first met, at a position
+        // this walk already reported; saying they were read here as well would be one reading
+        // discharging an obligation raised somewhere it never went.
         if (visited.contains(branch.under())) {
             return;
         }
         java.util.Set<Type> deeper = new java.util.LinkedHashSet<>(visited);
         deeper.add(branch.under());
-        TermPath at = path.refine(branch.refinement());
-        roots.add(new RuleRoot(at, branch.under()));
-        walk(at, branch.under(), depth, symbols, policy,
-                PlacedRules.of(at, branch.under(), symbols, policy), found, roots, deeper);
+        takeTheRulesOver(by, path, path.refine(branch.refinement()), branch.under(), depth, symbols,
+                policy, found, roots, deeper, handoffs);
     }
 
     /**

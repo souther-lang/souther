@@ -44,21 +44,27 @@ class WhatWasNotReadIsSaidByWhoeverKnowsWhichRuleTest {
     /**
      * A position whose rules the reading never arrived at.
      *
-     * <p>The clause states a relation of every element and is held as a quantifier over the clause
-     * it was written in; nothing places one at the position it is about. So there is a rule and no
-     * reader that reached it, which is what leaves a position with no rule to name.
+     * <p>The clause states nothing that could be typed, so it is gone before any reading of the
+     * value sees it and which position it governed goes with it. So there is a rule and no reader
+     * that reached it, which is what leaves a position with no rule to name.
+     *
+     * <p>It used to be a relation stated of every element, held as a quantifier over the clause it
+     * was written in. That clause is written about the sequence and is now short where it is
+     * written, which is a question the model raised and nothing answered rather than a position
+     * nothing read (#1072).
      */
     private static final String A_POSITION = """
             module m
 
             data Ok
-            data Item = { charge: Int }
-            data Basket = List<Item>
-                invariant charged = List.all(i -> i.charge >= 1, value)
+            data Item = String
+                invariant unreadable = value == 1
 
-            behavior f : (items: Basket) -> Ok
+            data Basket = { item: Item }
+
+            behavior f : (b: Basket) -> Ok
                 constructs Ok
-            let f (items) = Ok
+            let f (b) = Ok
             """;
 
     /** A rule finding names the rule, and is told under the word for a rule. */
@@ -75,10 +81,9 @@ class WhatWasNotReadIsSaidByWhoeverKnowsWhichRuleTest {
     /**
      * And a position finding names no rule, because nothing observed one.
      *
-     * <p>The clause is stated of every element, and what holds it is the quantifier rather than
-     * the position — so what stopped this is the reading and not any one clause, and what is said
-     * is the position alone. The shape has nowhere to put a rule, which is what stops one being
-     * invented.
+     * <p>The clause reached no reading at all, so what stopped this is the reading and not any one
+     * clause it can name, and what is said is the position alone. The shape has nowhere to put a
+     * rule, which is what stops one being invented.
      */
     @Test
     void aPositionTheReadingDidNotReachNamesNoRule() {
@@ -104,7 +109,7 @@ class WhatWasNotReadIsSaidByWhoeverKnowsWhichRuleTest {
     void theTwoAreWrittenApart() {
         assertTrue(human(A_RULE).contains("not read: comparison@"), human(A_RULE));
         assertFalse(human(A_RULE).contains("not read: n "), human(A_RULE));
-        assertTrue(human(A_POSITION).contains("not read: items[*].charge ("), human(A_POSITION));
+        assertTrue(human(A_POSITION).contains("not read: b.item ("), human(A_POSITION));
     }
 
     private static List<Adequacy.Kind> kinds(String model) {

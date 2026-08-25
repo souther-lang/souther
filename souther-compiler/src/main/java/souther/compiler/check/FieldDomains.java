@@ -992,7 +992,7 @@ public final class FieldDomains {
      * whether anything is out of sight wants this.
      */
     public boolean everyRuleReachedAt(String path) {
-        return reaches(notGathered, path) && reaches(handedOn, path);
+        return reaches(notGathered, path);
     }
 
     /**

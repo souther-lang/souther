@@ -52,13 +52,10 @@ class AWordTheSchemaAdmitsIsOneADocumentCarriesTest {
     /**
      * A position the walk reached, whose rules it did not.
      *
-     * <p>What a list holds is a position, and nothing this reading does places a rule at it. The
-     * elements a combinator hands a closure are named where the operation still stands, so a
-     * comparison written inside one is read; a relation stated of every element by an
-     * {@code invariant} is held as a quantifier over the clause and is not, and the model below has
-     * only the second. So the word is the one for a position whose rules were never arrived at, and
-     * not the one for values held inside something the walk does not reach into: the reaching was
-     * made.
+     * <p>The clause below states nothing that could be typed, so it never reaches a reading and
+     * which position it governed is exactly what is unknown about it. So the word is the one for a
+     * position whose rules were never arrived at, and not the one for values held inside something
+     * the walk does not reach into: the reaching was made.
      *
      * <p>This model used to carry {@code unsupported_traversal}, and it was the only model here
      * that did. What is left carrying that word is an {@code Option} and a {@code Map}, and no
@@ -73,11 +70,11 @@ class AWordTheSchemaAdmitsIsOneADocumentCarriesTest {
         String json = reportOf("""
                 module demo
                 data Ok
-                data Item = { charge: Int }
-                data Basket = List<Item>
-                    invariant List.all(i -> i.charge >= 1, value)
-                behavior run : (items: Basket) -> Ok
-                let run (items) = Ok
+                data Item = String
+                    invariant unreadable = value == 1
+                data Basket = { item: Item }
+                behavior run : (b: Basket) -> Ok
+                let run (b) = Ok
                 """);
 
         assertTrue(json.contains("\"rules_not_read_at_all\""), json);

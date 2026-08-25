@@ -121,14 +121,20 @@ class WhatASequenceHoldsIsAPositionTest {
     }
 
     /**
-     * Where a clause does state something of every element, that is what is short.
+     * Where a clause does state something of every element, it is the sequence that is short of it.
      *
      * <p>A relation over every element is held as a quantifier over the clause it was written in,
-     * and nothing here places one at the position it is about — so the position's rules were not
-     * reached, and an absence may not follow from finding no division at it.
+     * and nothing here places one at the position it is about. What that leaves is a question the
+     * model raised about the sequence and nothing answered — and the sequence is where the clause is
+     * written, which is what an author would edit.
+     *
+     * <p>Said at the element instead, one rule was short at two positions: the elements carry
+     * readings of their own now, and what {@code Person} states about itself is read there. So an
+     * element reported as a position nothing had read was reporting the container's clause under the
+     * element's name, and no row written at the element could ever discharge it (#1072).
      */
     @Test
-    void aClauseStatedOfEveryElementIsWhatGoesUnreached() {
+    void aClauseStatedOfEveryElementIsShortAtTheSequenceItIsWrittenAbout() {
         Compilation compilation = Compilation.ofSource("""
                 module example.roster
 
@@ -148,10 +154,12 @@ class WhatASequenceHoldsIsAPositionTest {
         InputDomain read = compilation.db().ask(new Adequacy.Inputs(MODULE)).value().get("roster");
         assertNotNull(read, "the model under test compiles");
 
-        assertTrue(read.at(pathTo("people", "[*]")).rulesNotReached(),
-                "the clause states something of every element and nothing placed it there");
+        assertFalse(read.at(pathTo("people", "[*]")).rulesNotReached(),
+                "the element is read by a reading of its own, and this clause is not its");
         assertFalse(read.positions().get(0).rulesNotReached(),
-                "while the list itself was read: the clause is written about it");
+                "and the list itself was read: the clause is written about it and arrived");
+        assertFalse(read.positions().get(0).unansweredQuestions().isEmpty(),
+                "what the clause leaves is a question about the list that nothing answered");
     }
 
     /** {@code head} with the steps spelled, for a lookup by the coordinate a report names. */

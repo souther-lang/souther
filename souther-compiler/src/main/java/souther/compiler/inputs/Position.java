@@ -152,14 +152,36 @@ public sealed interface Position permits ReadPosition {
     List<StandingQuestion> unansweredQuestions();
 
     /**
-     * Whether the walk never reached the rules written about this position.
+     * Whether a rule this position was owed went unread.
      *
      * <p>Beside {@link #unansweredQuestions()} and not among them. A rule nothing took in is a rule
      * this compiler saw and made nothing of; here nothing was seen, so there is no rule to name and
      * no question to raise — and an empty list of questions says every rule was accounted for,
      * which is the opposite (issue #791).
+     *
+     * <p><b>Owed, which is narrower than written underneath.</b> Two things are true here and only
+     * these two: the reading that owns this position lost a clause of its own, or this position
+     * handed its rules on and no reading was opened to take them ({@link RuleHandoffs}). A rule
+     * written under a container, a case, or an optional is not one of them — it is read where it
+     * governs, one position down, and a row meets it there. Said here, the measure was short of
+     * something nobody could supply, because the walk had already gone to it (#1072).
      */
     boolean rulesNotReached();
+
+    /**
+     * The same position, with the rules it handed on counted as unread because nothing took them.
+     *
+     * <p>Said after the position is read, because it is not something the reading of this position
+     * knows. A reading of a value ends where no declaration stands to be read and the rules under
+     * the position become another reading's; whether one was opened is settled by the descent past
+     * this position, which happens after this position has been read and reported. So the reading
+     * answers for itself, and this is where the walk's answer is put beside it.
+     *
+     * <p>Answered here rather than by the walk consulting whether a reading exists somewhere under
+     * the path: an obligation discharged by whatever happens to be below it is one no descent ever
+     * had to meet (#1072, {@link RuleHandoffs}).
+     */
+    Position shortOfRulesNobodyTookOver();
 
     /**
      * What stopped the reading of which values this position may hold, or null where nothing did.
