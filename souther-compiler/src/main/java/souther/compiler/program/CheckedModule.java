@@ -72,8 +72,14 @@ public final class CheckedModule {
         return helperByName.get(name);
     }
 
-    /** What it declares, in the order it declares them — a case a sum declares rather than being
-     *  written on its own standing after the sum that declares it. */
+    /**
+     * What it declares.
+     *
+     * <p>No order is answered for. A declaration is reached by its name —
+     * {@link #data(TypeSymbol.AtModule)} — and where one stands among the others is a fact about
+     * how the module was read rather than one the language decided. The orders that are decided
+     * are inside a declaration: the fields a value lays out, and the cases it can be.
+     */
     public List<CheckedData> data() {
         return data;
     }

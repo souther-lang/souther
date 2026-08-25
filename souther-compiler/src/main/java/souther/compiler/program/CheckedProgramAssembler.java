@@ -78,20 +78,26 @@ final class CheckedProgramAssembler {
             // means the two readings of whether this program checked have come apart.
             throw new IllegalStateException("`" + module + "` was taken as checked and is not");
         }
-        Hir.Module lowered = lowering.lowered();
+        // Two trees and each is read for what it is the tree for: a declaration comes off the
+        // settled one and a body off the lowered one, which is the division `Lower.Lowered` states.
+        // They are both `Hir.Module`, so nothing but the name at the call below says which is
+        // being handed over — and a declaration read off the tree the backend emits from would
+        // agree with the checker only for as long as lowering left declarations alone.
+        Hir.Module declarations = lowering.settled();
+        Hir.Module bodies = lowering.lowered();
         List<CheckedBehavior> behaviors = new ArrayList<>();
-        for (Hir.BehaviorDef declared : lowered.behaviors()) {
+        for (Hir.BehaviorDef declared : bodies.behaviors()) {
             ValueName.Behavior named = new ValueName.Behavior(module, declared.name());
             behaviors.add(new CheckedBehavior(named, signatureOf(signatures.get(declared.name())),
-                    implementationOf(named, declared, lowered, implementations, checked,
+                    implementationOf(named, declared, bodies, implementations, checked,
                             compositions)));
         }
-        return new CheckedModule(module, behaviors, helpersOf(module, lowered, checked),
-                dataOf(lowered, symbols));
+        return new CheckedModule(module, behaviors, helpersOf(module, bodies, checked),
+                dataOf(declarations, symbols));
     }
 
     /**
-     * What the module declares, in the order the declarations are written.
+     * What the module declares.
      *
      * <p>Each of the three forms is materialised from the answer this compiler already has for it,
      * and neither walk is written again here. A product's fields are
@@ -106,15 +112,16 @@ final class CheckedProgramAssembler {
      * the answer decided, passed through something that does not keep one, comes out as an order
      * nothing decided.
      *
-     * <p>Walked over the module's own declarations rather than looked up one at a time, because
-     * that is where an order of them exists. A declaration world answers which declaration a name
-     * is and states no order over them, so a reader that iterated one would publish whichever order
-     * its map happened to be in. What a name means is still asked of that world, which is what
-     * {@code symbols} is here for.
+     * <p>The list is what the module holds and its order is not answered for. A declaration written
+     * on its own and one a sum's case list declares reach {@code defs} by different routes, so
+     * where either stands among them is how the front end put them there rather than something the
+     * language decided. The two orders that are decided are inside a declaration —
+     * {@link CheckedData.Product#fields} and {@link CheckedData.Sum#cases} — and those are the
+     * ones said out loud.
      */
-    private static List<CheckedData> dataOf(Hir.Module lowered, Symbols symbols) {
+    private static List<CheckedData> dataOf(Hir.Module declarations, Symbols symbols) {
         List<CheckedData> declared = new ArrayList<>();
-        for (Hir.Def def : lowered.defs()) {
+        for (Hir.Def def : declarations.defs()) {
             declared.add(switch (def) {
                 case Hir.Data product -> productOf(product, symbols);
                 case Hir.SumData sum -> new CheckedData.Sum(sum.declares(),

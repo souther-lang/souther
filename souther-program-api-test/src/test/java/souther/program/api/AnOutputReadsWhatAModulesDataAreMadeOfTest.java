@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -119,21 +120,23 @@ class AnOutputReadsWhatAModulesDataAreMadeOfTest {
     }
 
     /**
-     * Every declaration the module has, in the order it declares them.
+     * Every declaration the module has, and no other.
      *
-     * <p>The whole list and in order, because both are what is claimed. {@code Plain} and
-     * {@code Express} are declared by {@code Kind}'s case list rather than written on their own, and
-     * they stand after the declarations that are written — which is a thing a reader walking this
-     * list meets and nothing else would tell it.
+     * <p>The whole set, because the whole set is what is claimed — a reader that walks this list to
+     * lay out a program is told here that it has met everything. Not the order: a declaration
+     * written on its own and one a sum's case list declares ({@code Plain}, {@code Express}) reach
+     * the list by different routes, and nothing decided which of the two comes first. Fixing that
+     * here would make how the module was read into something a reader could build on.
      */
     @Test
-    void aModuleAnswersWithEveryDeclarationItHasInTheOrderItDeclaresThem() {
+    void aModuleAnswersWithEveryDeclarationItHasAndNoOther() {
         CheckedModule module = demo();
 
         assertEquals(
-                List.of("Amount", "Common", "Wide", "Only", "Both", "First", "Middle", "Last",
+                Set.of("Amount", "Common", "Wide", "Only", "Both", "First", "Middle", "Last",
                         "Left", "Right", "Reach", "Kind", "Plain", "Express"),
-                names(module.data()));
+                Set.copyOf(names(module.data())));
+        assertEquals(14, module.data().size(), "one entry per declaration");
     }
 
     /**
@@ -264,7 +267,8 @@ class AnOutputReadsWhatAModulesDataAreMadeOfTest {
             collect(body, Core.Construct.class, constructions);
         }
 
-        assertTrue(constructions.size() >= 2, () -> "found " + constructions.size());
+        assertEquals(2, constructions.size(), () -> "the constructions this module writes: "
+                + constructions.stream().map(each -> each.typeName().name()).toList());
         for (Core.Construct construction : constructions) {
             CheckedData.Product built = assertInstanceOf(CheckedData.Product.class,
                     module.data(construction.typeName()), construction.typeName()::toString);
@@ -290,7 +294,8 @@ class AnOutputReadsWhatAModulesDataAreMadeOfTest {
             collect(body, Core.FieldAccess.class, reads);
         }
 
-        assertTrue(reads.size() >= 2, () -> "found " + reads.size());
+        assertEquals(2, reads.size(), () -> "the field reads this module writes: "
+                + reads.stream().map(Core.FieldAccess::field).toList());
         int offSums = 0;
         int offProducts = 0;
         List<Core.FieldAccess> unaccounted = new ArrayList<>();
@@ -307,7 +312,9 @@ class AnOutputReadsWhatAModulesDataAreMadeOfTest {
                 }
                 case CheckedData.Sum sum -> {
                     offSums++;
-                    assertTrue(!sum.cases().isEmpty(), () -> "no cases on " + named);
+                    assertEquals(List.of("Wide", "Only"),
+                            sum.cases().stream().map(TypeSymbol::name).toList(),
+                            () -> "the cases " + named + " is read across");
                     for (TypeSymbol leaf : sum.cases()) {
                         CheckedData.Product carrying = assertInstanceOf(CheckedData.Product.class,
                                 module.data(assertInstanceOf(TypeSymbol.AtModule.class, leaf)),
@@ -321,7 +328,7 @@ class AnOutputReadsWhatAModulesDataAreMadeOfTest {
             }
         }
         assertEquals(1, offSums, "the read off a sum is the one this module writes");
-        assertTrue(offProducts >= 1, () -> "no read off a product among " + reads.size());
+        assertEquals(1, offProducts, "the read off a product is the one this module writes");
         // Every read is accounted for, so a read of a shape this does not know how to place cannot
         // pass by being skipped. The two arms above are what the language admits reading a field
         // off; a read that arrived at neither would be the finding, and going quiet about it is
