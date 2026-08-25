@@ -152,12 +152,19 @@ public sealed interface Position permits ReadPosition {
     List<StandingQuestion> unansweredQuestions();
 
     /**
-     * Whether the walk never reached the rules written about this position.
+     * Whether a rule this position was owed went unread.
      *
      * <p>Beside {@link #unansweredQuestions()} and not among them. A rule nothing took in is a rule
      * this compiler saw and made nothing of; here nothing was seen, so there is no rule to name and
      * no question to raise — and an empty list of questions says every rule was accounted for,
      * which is the opposite (issue #791).
+     *
+     * <p><b>Owed, which is narrower than written underneath.</b> Two things are true here and only
+     * these two: the reading that owns this position lost a clause of its own, or this position
+     * handed its rules on and no reading was opened to take them ({@link RuleHandoffs}). A rule
+     * written under a container, a case, or an optional is not one of them — it is read where it
+     * governs, one position down, and a row meets it there. Said here, the measure was short of
+     * something nobody could supply, because the walk had already gone to it (#1072).
      */
     boolean rulesNotReached();
 

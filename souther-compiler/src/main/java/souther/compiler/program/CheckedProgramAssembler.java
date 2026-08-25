@@ -1,11 +1,13 @@
 package souther.compiler.program;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.AtomSpace;
 import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.check.CoreBinders;
 import souther.compiler.check.Lower;
 import souther.compiler.check.Sig;
 import souther.compiler.check.SpecImplementation;
+import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.core.Composition;
 import souther.compiler.core.Core;
@@ -15,6 +17,8 @@ import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Compositions;
 import souther.compiler.query.Db;
+import souther.compiler.query.Names;
+import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -62,21 +66,78 @@ final class CheckedProgramAssembler {
                 db.ask(new Bodies.Implementation(module)).value();
         Map<ValueName.Behavior, Composition> compositions =
                 db.ask(new Compositions.Of(module)).value();
+        // What the module's names mean over the derived declarations, which is what a declaration's
+        // fields and a sum's cases are read against. It is a way of reaching the compiler's answers
+        // and not one of them: it holds a registry that asks `db` for each declaration, so it is
+        // read here and dropped here, and nothing it was reached through is carried into what is
+        // made.
+        Symbols symbols = Names.derivedSymbols(db, module).value();
         if (checked == null || lowering == null || signatures == null || implementations == null
-                || compositions == null) {
+                || compositions == null || symbols == null) {
             // Not a report: the failure above is what a caller is told, and reaching here past it
             // means the two readings of whether this program checked have come apart.
             throw new IllegalStateException("`" + module + "` was taken as checked and is not");
         }
-        Hir.Module lowered = lowering.lowered();
+        // Two trees and each is read for what it is the tree for: a declaration comes off the
+        // settled one and a body off the lowered one, which is the division `Lower.Lowered` states.
+        // They are both `Hir.Module`, so nothing but the name at the call below says which is
+        // being handed over — and a declaration read off the tree the backend emits from would
+        // agree with the checker only for as long as lowering left declarations alone.
+        Hir.Module declarations = lowering.settled();
+        Hir.Module bodies = lowering.lowered();
         List<CheckedBehavior> behaviors = new ArrayList<>();
-        for (Hir.BehaviorDef declared : lowered.behaviors()) {
+        for (Hir.BehaviorDef declared : bodies.behaviors()) {
             ValueName.Behavior named = new ValueName.Behavior(module, declared.name());
             behaviors.add(new CheckedBehavior(named, signatureOf(signatures.get(declared.name())),
-                    implementationOf(named, declared, lowered, implementations, checked,
+                    implementationOf(named, declared, bodies, implementations, checked,
                             compositions)));
         }
-        return new CheckedModule(module, behaviors, helpersOf(module, lowered, checked));
+        return new CheckedModule(module, behaviors, helpersOf(module, bodies, checked),
+                dataOf(declarations, symbols));
+    }
+
+    /**
+     * What the module declares.
+     *
+     * <p>Each of the three forms is materialised from the answer this compiler already has for it,
+     * and neither walk is written again here. A product's fields are
+     * {@link TypeOps#fieldTypes}, which flattens what an include brought in; a sum's cases are
+     * {@link AtomSpace#subjectAtoms}, which descends a case that is itself a sum and reaches one
+     * case once. Both are decisions the language made, and an assembler with a walk of its own
+     * would be the second place that made them — which is the thing a reader outside this compiler
+     * is being given these to avoid.
+     *
+     * <p>{@code fieldTypes} answers in the order a value lays its fields out, and that order is
+     * carried straight into the list. Nothing between the two holds the fields as a set: an order
+     * the answer decided, passed through something that does not keep one, comes out as an order
+     * nothing decided.
+     *
+     * <p>The list is what the module holds and its order is not answered for. A declaration written
+     * on its own and one a sum's case list declares reach {@code defs} by different routes, so
+     * where either stands among them is how the front end put them there rather than something the
+     * language decided. The two orders that are decided are inside a declaration —
+     * {@link CheckedData.Product#fields} and {@link CheckedData.Sum#cases} — and those are the
+     * ones said out loud.
+     */
+    private static List<CheckedData> dataOf(Hir.Module declarations, Symbols symbols) {
+        List<CheckedData> declared = new ArrayList<>();
+        for (Hir.Def def : declarations.defs()) {
+            declared.add(switch (def) {
+                case Hir.Data product -> productOf(product, symbols);
+                case Hir.SumData sum -> new CheckedData.Sum(sum.declares(),
+                        AtomSpace.subjectAtoms(Type.ref(sum.declares()), symbols));
+                case Hir.UnitData unit -> new CheckedData.Unit(unit.declares());
+            });
+        }
+        return declared;
+    }
+
+    /** One product, its fields in the order {@link TypeOps#fieldTypes} lays them out. */
+    private static CheckedData productOf(Hir.Data product, Symbols symbols) {
+        List<CheckedData.Field> fields = new ArrayList<>();
+        TypeOps.fieldTypes(product, symbols)
+                .forEach((field, type) -> fields.add(new CheckedData.Field(field, type)));
+        return new CheckedData.Product(product.declares(), fields);
     }
 
     /**

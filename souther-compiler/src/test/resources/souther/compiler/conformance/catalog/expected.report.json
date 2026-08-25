@@ -2,7 +2,7 @@
   "schemaVersion" : 7,
   "compilerVersion" : "<version>",
   "status" : "partial",
-  "weakening" : [ "rule_unread", "rules_not_reached" ],
+  "weakening" : [ "rule_unread" ],
   "adequacy" : "not_satisfied",
   "modules" : [ {
     "module" : "conformance.catalog",
@@ -220,7 +220,7 @@
   }, {
     "module" : "conformance.shipping",
     "status" : "partial",
-    "weakening" : [ "rules_not_reached", "rule_unread" ],
+    "weakening" : [ "rule_unread" ],
     "incompleteness" : [ ],
     "declarations" : [ {
       "name" : "Sku",
@@ -236,8 +236,7 @@
       "implementation" : "injected",
       "rows" : 6,
       "pending" : 6,
-      "status" : "partial",
-      "weakening" : [ "rules_not_reached" ],
+      "status" : "complete",
       "signature" : {
         "status" : "complete",
         "output" : {
@@ -257,12 +256,10 @@
       },
       "partition" : {
         "axesMeasure" : {
-          "status" : "partial",
-          "weakening" : [ "rules_not_reached" ]
+          "status" : "complete"
         },
         "boundariesMeasure" : {
-          "status" : "partial",
-          "weakening" : [ "rules_not_reached" ]
+          "status" : "complete"
         },
         "axes" : [ {
           "axis" : "台帳へ書く/指示.区分",
@@ -371,17 +368,18 @@
           "provenInfeasible" : 0,
           "unknown" : 0
         },
-        "notDerivable" : [ "指示.受付日", "指示.締切", "指示.集荷時刻", "指示.記録時刻" ],
-        "notRead" : [ {
-          "position" : "指示.品目",
-          "reason" : "rules_not_read_at_all"
-        } ]
+        "notDerivable" : [ "指示.品目", "指示.受付日", "指示.締切", "指示.集荷時刻", "指示.記録時刻" ],
+        "notRead" : [ ]
       },
       "branch" : {
         "status" : "unavailable",
         "reason" : "no_body"
       },
       "findings" : [ {
+        "kind" : "partition_not_derivable",
+        "disposition" : "reported",
+        "subject" : "指示.品目"
+      }, {
         "kind" : "partition_not_derivable",
         "disposition" : "reported",
         "subject" : "指示.受付日"
@@ -397,11 +395,6 @@
         "kind" : "partition_not_derivable",
         "disposition" : "reported",
         "subject" : "指示.記録時刻"
-      }, {
-        "kind" : "partition_not_read",
-        "disposition" : "reported",
-        "subject" : "指示.品目",
-        "reason" : "rules_not_read_at_all"
       } ]
     }, {
       "name" : "出荷する",
@@ -409,7 +402,7 @@
       "rows" : 10,
       "pending" : 0,
       "status" : "partial",
-      "weakening" : [ "rule_unread", "rules_not_reached" ],
+      "weakening" : [ "rule_unread" ],
       "signature" : {
         "status" : "complete",
         "output" : {
@@ -430,11 +423,11 @@
       "partition" : {
         "axesMeasure" : {
           "status" : "partial",
-          "weakening" : [ "rule_unread", "rules_not_reached" ]
+          "weakening" : [ "rule_unread" ]
         },
         "boundariesMeasure" : {
           "status" : "partial",
-          "weakening" : [ "rule_unread", "rules_not_reached" ]
+          "weakening" : [ "rule_unread" ]
         },
         "axes" : [ {
           "axis" : "出荷する/指示.重量",
@@ -643,7 +636,7 @@
           "provenInfeasible" : 0,
           "unknown" : 5
         },
-        "notDerivable" : [ "指示.記録時刻" ],
+        "notDerivable" : [ "指示.品目", "指示.記録時刻" ],
         "notRead" : [ {
           "position" : "指示.受付日",
           "reason" : "rule_about_a_derived_value",
@@ -666,9 +659,6 @@
             "ordinal" : 4,
             "lowered" : 0
           }
-        }, {
-          "position" : "指示.品目",
-          "reason" : "rules_not_read_at_all"
         } ]
       },
       "branch" : {
@@ -693,6 +683,10 @@
         "disposition" : "refused",
         "subject" : "出荷する/Time.hour(指示.集荷時刻) = 12",
         "code" : "E1916"
+      }, {
+        "kind" : "partition_not_derivable",
+        "disposition" : "reported",
+        "subject" : "指示.品目"
       }, {
         "kind" : "partition_not_derivable",
         "disposition" : "reported",
@@ -721,11 +715,6 @@
           "lowered" : 0
         },
         "reason" : "rule_about_a_derived_value"
-      }, {
-        "kind" : "partition_not_read",
-        "disposition" : "reported",
-        "subject" : "指示.品目",
-        "reason" : "rules_not_read_at_all"
       } ]
     } ]
   } ],

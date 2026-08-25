@@ -44,21 +44,27 @@ class WhatWasNotReadIsSaidByWhoeverKnowsWhichRuleTest {
     /**
      * A position whose rules the reading never arrived at.
      *
-     * <p>The clause states a relation of every element and is held as a quantifier over the clause
-     * it was written in; nothing places one at the position it is about. So there is a rule and no
-     * reader that reached it, which is what leaves a position with no rule to name.
+     * <p>The clause states nothing that could be typed, so it is gone before any reading of the
+     * value sees it and which position it governed goes with it. So there is a rule and no reader
+     * that reached it, which is what leaves a position with no rule to name.
+     *
+     * <p>It used to be a relation stated of every element, held as a quantifier over the clause it
+     * was written in. That clause is written about the sequence and is now short where it is
+     * written, which is a question the model raised and nothing answered rather than a position
+     * nothing read (#1072).
      */
     private static final String A_POSITION = """
             module m
 
             data Ok
-            data Item = { charge: Int }
-            data Basket = List<Item>
-                invariant charged = List.all(i -> i.charge >= 1, value)
+            data Item = String
+                invariant unreadable = value == 1
 
-            behavior f : (items: Basket) -> Ok
+            data Basket = { item: Item }
+
+            behavior f : (b: Basket) -> Ok
                 constructs Ok
-            let f (items) = Ok
+            let f (b) = Ok
             """;
 
     /** A rule finding names the rule, and is told under the word for a rule. */
@@ -75,10 +81,9 @@ class WhatWasNotReadIsSaidByWhoeverKnowsWhichRuleTest {
     /**
      * And a position finding names no rule, because nothing observed one.
      *
-     * <p>The clause is stated of every element, and what holds it is the quantifier rather than
-     * the position — so what stopped this is the reading and not any one clause, and what is said
-     * is the position alone. The shape has nowhere to put a rule, which is what stops one being
-     * invented.
+     * <p>The clause reached no reading at all, so what stopped this is the reading and not any one
+     * clause it can name, and what is said is the position alone. The shape has nowhere to put a
+     * rule, which is what stops one being invented.
      */
     @Test
     void aPositionTheReadingDidNotReachNamesNoRule() {
@@ -104,7 +109,7 @@ class WhatWasNotReadIsSaidByWhoeverKnowsWhichRuleTest {
     void theTwoAreWrittenApart() {
         assertTrue(human(A_RULE).contains("not read: comparison@"), human(A_RULE));
         assertFalse(human(A_RULE).contains("not read: n "), human(A_RULE));
-        assertTrue(human(A_POSITION).contains("not read: items[*].charge ("), human(A_POSITION));
+        assertTrue(human(A_POSITION).contains("not read: b.item ("), human(A_POSITION));
     }
 
     private static List<Adequacy.Kind> kinds(String model) {
@@ -132,4 +137,32 @@ class WhatWasNotReadIsSaidByWhoeverKnowsWhichRuleTest {
         compilation.answerEverything();
         return AdequacyReport.of(compilation);
     }
+    /**
+     * And the model that leaves a rule unread at a position it measured is one this compiler
+     * refuses.
+     *
+     * <p>Said out loud, because it is what the word means now and not an accident of the fixture.
+     * A rule written under a container, a case or an optional is read where it governs, one position
+     * down (#1072); a rule this compiler cannot find a value for is a shortfall of its own. What is
+     * left is a clause the front end could not type — and a model carrying one is refused, so a
+     * document that says a measured position went short of a rule is a document about a model that
+     * did not compile.
+     *
+     * <p>A tripwire and not a preference. The day a clause can go unread in a model that compiles,
+     * this fails and whoever made it so is the one who should decide what the word means then.
+     */
+    @Test
+    void theModelThatSaysSoIsOneThisCompilerRefuses() {
+        assertTrue(isRefused(A_POSITION), A_POSITION);
+        assertFalse(isRefused(A_RULE), "and a rule read and given up on is not that");
+    }
+
+    /** Whether this compiler refuses {@code source}, which is what the fixture above turns on. */
+    private static boolean isRefused(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.answerEverything();
+        return !compilation.diagnostics().values().stream()
+                .flatMap(java.util.List::stream).toList().isEmpty();
+    }
+
 }

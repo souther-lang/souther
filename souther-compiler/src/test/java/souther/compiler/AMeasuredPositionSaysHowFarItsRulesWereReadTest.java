@@ -31,17 +31,25 @@ class AMeasuredPositionSaysHowFarItsRulesWereReadTest {
     /**
      * A position the axes measure whose rules were not read in full.
      *
-     * <p>The option divides `i.assignee` into `None` and `Some`, so the position is measured. What
-     * `Assignee` says about the value inside is behind the option, and this reading does not go
-     * there.
+     * <p>Two clauses about one value, and this reading owns both. The first names the values, so the
+     * position divides into them and is measured; the second states nothing that could be typed, so
+     * it reached no reading here and which values it would have refused is unknown. The classes are
+     * what the model was read to say and the rule that went unread may yet refuse one of them.
+     *
+     * <p><b>A rule this reading owns, and not one it handed on.</b> The fixture used to be an
+     * {@code Assignee?}, whose rules the reading below the option reads and the position above was
+     * told it had not reached — which is the defect this measure was reporting rather than a state a
+     * model can be in (#1072). What inhabits this word is a reader that got as far as deriving the
+     * classes and then lost a clause of its own.
      */
     private static final String MEASURED_IN_PART = """
             module o
 
             data Assignee = String
-                invariant String.length(value) >= 1
+                invariant named = value == "ada" || value == "bob"
+                invariant unreadable = value == 1
 
-            data Issue = { assignee: Assignee? }
+            data Issue = { assignee: Assignee }
             data Accepted = { at: Int }
 
             behavior classify : (i: Issue) -> Accepted
@@ -87,9 +95,9 @@ class AMeasuredPositionSaysHowFarItsRulesWereReadTest {
         assertEquals(2, axis.get("classes").size(), axis.toString());
         assertEquals("partial", axis.get("read").get("extent").asString(),
                 "the axis says that something about its position's rules is left standing");
-        // Which of the two it is, and not only that there is one. Nothing here reached the rules
-        // behind the option — which is not a rule this read and could not use, and saying so would
-        // publish a cause this was not observed to have.
+        // Which of the two it is, and not only that there is one. The clause that went unread
+        // reached no reading at all, so there is no rule this read and could not use, and saying so
+        // would publish a cause this was not observed to have.
         assertTrue(axis.get("read").get("rulesNotReached").asBoolean(), axis.toString());
         assertFalse(axis.get("read").has("unanswered"),
                 "there is no rule to name, because nothing was seen: " + axis);
@@ -126,4 +134,33 @@ class AMeasuredPositionSaysHowFarItsRulesWereReadTest {
                 && (line.contains("not read: " + position + " ")
                         || line.contains("about `" + position + "`")));
     }
+    /**
+     * And the model that leaves a rule unread at a position it measured is one this compiler
+     * refuses.
+     *
+     * <p>Said out loud, because it is what the word means now and not an accident of the fixture.
+     * A rule written under a container, a case or an optional is read where it governs, one position
+     * down (#1072); a rule this compiler cannot find a value for is a shortfall of its own. What is
+     * left is a clause the front end could not type — and a model carrying one is refused, so a
+     * document that says a measured position went short of a rule is a document about a model that
+     * did not compile.
+     *
+     * <p>A tripwire and not a preference. The day a clause can go unread in a model that compiles,
+     * this fails and whoever made it so is the one who should decide what the word means then.
+     */
+    @Test
+    void theModelThatSaysSoIsOneThisCompilerRefuses() {
+        assertTrue(isRefused(MEASURED_IN_PART),
+                "a measured position short of a rule takes a clause nothing could type");
+        assertFalse(isRefused(READ_IN_FULL), "and the control is a model that compiles");
+    }
+
+    /** Whether this compiler refuses {@code source}, which is what the fixtures above turn on. */
+    private static boolean isRefused(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.answerEverything();
+        return !compilation.diagnostics().values().stream()
+                .flatMap(java.util.List::stream).toList().isEmpty();
+    }
+
 }

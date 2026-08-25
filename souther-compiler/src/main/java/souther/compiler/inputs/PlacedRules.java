@@ -112,19 +112,25 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules) {
      * answer where {@link #at} is.
      */
     AdmissibleSet admits(TermPath path) {
+        return rules.admits(under(path));
+    }
+
+    /**
+     * Whether this reading ended at {@code path} with a declaration still to be read under it.
+     *
+     * <p>Not a shortfall. Nothing is declared at the position for these rules to state anything
+     * about every value of — what stands there is a container, an optional, or a choice between
+     * declarations — so what is written under it is written about a value one position down, and
+     * this reading is done here rather than short here.
+     *
+     * <p>What a caller does with it is show that something took the rules over
+     * ({@link RuleHandoffs}). Answered instead by asking whether the type graph has a rule
+     * somewhere below, the position above was short of a rule no row could reach: the walk had gone
+     * to it, one position down (#1072).
+     */
+    boolean handsTheRulesOnAt(TermPath path) {
         String where = keyOf(path);
-        if (where != null) {
-            return rules.admits(where);
-        }
-        // Inside a sequence. Where a clause of the value states something about what the container
-        // holds and nothing placed it, this reading did not reach the rules of the position — which
-        // is not the same answer as reading them and finding none. Where the container carries no
-        // such clause there was nothing to reach, and every value is admitted as it is anywhere
-        // else nothing is written.
-        return everyRuleReachedAt(path)
-                ? AdmissibleSet.complete(souther.compiler.values.ValueSet.ANY)
-                : AdmissibleSet.partial(souther.compiler.values.ValueSet.ANY,
-                        souther.compiler.values.UnreadReason.NOT_REACHED);
+        return where != null && bounds().handedOn().contains(where);
     }
 
     /**
@@ -173,21 +179,24 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules) {
      * another reason won it.
      */
     boolean everyRuleReachedAt(TermPath path) {
+        return rules.everyRuleReachedAt(under(path));
+    }
+
+    /**
+     * What the rules of this value call {@code path}, for the questions every position answers.
+     *
+     * <p>Every position under this reading's root has a name here, the root's own included. What a
+     * sequence holds is not one of them: an element is a value with a declaration of its own and a
+     * reading is opened at it, so a path under this root never steps into one — and a position this
+     * reading is not of is not a position it may be asked about.
+     */
+    private String under(TermPath path) {
         String where = keyOf(path);
-        if (where != null) {
-            return rules.everyRuleReachedAt(where);
+        if (where == null) {
+            throw new IllegalArgumentException(
+                    path + " is not a position of the value read at " + root);
         }
-        // Inside a sequence, where no clause of the value is written and so none can go unplaced on
-        // its own account. What can is a clause written about the container: a relation stated of
-        // every element is held as a quantifier over the clause holding it, and this gathering
-        // places none of it at the position it is about.
-        //
-        // So the answer is the container's, and whether the container has a rule nothing accounted
-        // for. Said unconditionally, every element of every list came back as a position nothing
-        // had read — including in models whose lists carry no clause at all, where there is nothing
-        // for a reading to have missed.
-        return everyRuleReachedAt(path.containingSequence())
-                && unanswered(path.containingSequence()).isEmpty();
+        return where;
     }
 
     /** The ends the clauses reaching this value place on the coordinates at {@code path}, which is

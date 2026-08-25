@@ -34,10 +34,16 @@ import java.util.Map;
  * carries it is how an accepted one is obtained, and that moves when what acceptance runs a program
  * with stops being named by the thing that asks.
  *
- * <p>Only the modules this compile checked are here. A call in a body may name a behavior of a
- * module read off the path, and that module is not among {@link #modules()}: what such a call
- * carries is the identity resolution gave it, and neither the behavior's own signature nor its
- * body is part of this snapshot.
+ * <p>Only the modules this compile checked are here. A checked body may name something a module
+ * read off the path declares — a behavior it calls, a data whose field it reads — and that module
+ * is not among {@link #modules()}. What the body carries is the identity resolution gave it; what
+ * the declaring module says about that identity is not part of this snapshot. A call carries no
+ * signature and no body, and a name carries no fields and no cases.
+ *
+ * <p>Which module a name belongs to is therefore asked before what it is. {@link #module} answers
+ * null for a module this compile did not check, and a module answers null for a name it does not
+ * declare, so the two absences are separate answers and neither reads as the other. Nothing here
+ * shortens that into one question: shortened, a single null would carry both.
  */
 public final class CheckedProgram {
 

@@ -134,6 +134,14 @@ final class TypeGuarantees {
      * <p>A question about the model and not about any walk, which is what makes it the right one to
      * ask where a reader stops: the reader's own reach is what is being decided, so reading that
      * would answer that whatever was not read had nothing in it.
+     *
+     * <p><b>Whether anything is owed here, and never what became of it.</b> A reader that stopped
+     * asks this to find out if there is anything to hand on: a field of a plain {@code Int} leaves
+     * nothing under it and owes nobody a reading. What became of what was handed on is a fact about
+     * the walk over positions and is settled there
+     * ({@link souther.compiler.inputs.RuleHandoffs}). Answered as that, a position was reported
+     * short of a rule the walk had already gone to one position down, and no row could ever
+     * discharge it (#1072).
      */
     boolean anyRuleUnder(Type type) {
         return anyRuleUnder(type, new HashSet<>());

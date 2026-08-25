@@ -49,9 +49,14 @@ public enum UnreadReason {
      * The reading never reached the rules about this position.
      *
      * <p>A different thing from a rule it read and could not use. The walk that gathers clauses
-     * stopped — at a depth, at a type it had already been through, at one with no declaration to
-     * read — or a clause could not be typed and so never arrived. Which of those it was is not
-     * recorded: none of them is a fact about the rule, and all of them leave the same hole.
+     * stopped — at a depth, at a type it had already been through — or a clause could not be typed
+     * and so never arrived. Which of those it was is not recorded: none of them is a fact about the
+     * rule, and all of them leave the same hole.
+     *
+     * <p>Not every way a walk can stop. One of them hands the rules to a reading one position down,
+     * where a row meets them, and the position above admits what it admits (#1072). Which stops
+     * those are is settled in one place and not restated here — see {@code PathEngine.leftBy} in
+     * {@code souther.compiler.check}, which this package may not name.
      */
     NOT_REACHED
 }

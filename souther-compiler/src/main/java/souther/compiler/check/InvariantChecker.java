@@ -396,10 +396,12 @@ public final class InvariantChecker {
      *                        then weaker than what the declaration actually says, and a caller
      *                        turning one into an obligation has to know that
      * @param notGathered where a clause of the value did not reach the readings at all, as the
-     *                 paths the stops happened at. A clause that could not be typed, and a walk
-     *                 that declined to go further: in both, a rule of the declaration is one no
-     *                 reading here ever saw, so no reading can say it took that part of the
-     *                 declaration in.
+     *                 paths the stops happened at. A clause that could not be typed, and a walk that
+     *                 stopped leaving rules nobody else reads ({@link PathEngine#leftBy}): in both,
+     *                 a rule of the declaration is one no reading here ever saw, so no reading can
+     *                 say it took that part of the declaration in. Not a walk that handed the rules
+     *                 on — those are {@link #handedOn()}, and they are somebody's to read rather
+     *                 than nobody's
      *
      *                 <p>Where and not whether, because a rule that narrows a position names it,
      *                 and a clause written under one field can name no position outside that field.
@@ -414,11 +416,14 @@ public final class InvariantChecker {
      *                 into an obligation is one another reading may have taken in whole, and
      *                 borrowing that answer would settle each reading's completeness by a fragment
      *                 that is not its own
+     * @param handedOn the positions this reading ended at with a declaration still to be read under
+     *                 them, which is an obligation on whoever walks the positions rather than
+     *                 anything wrong here — see {@link Gathering#handedOn}
      */
     record Seeded(ConstraintState<FactSubject> constraints, Map<String, FactSubject> atoms, Map<String, FactSubject> keys,
                   Map<String, FieldDomains.Counted> held, Reading reading, ReadingEvidence took,
                   boolean everyClauseRead, Set<String> notGathered,
-                  Set<String> unreadOfEveryValue,
+                  Set<String> unreadOfEveryValue, Set<String> handedOn,
                   Map<RuleRef, Map<Core, PartRead>> readBy,
                   Map<FactSubject, souther.compiler.numeric.Granularity> spacing) {
 
@@ -434,6 +439,7 @@ public final class InvariantChecker {
         public Seeded {
             notGathered = Set.copyOf(notGathered);
             unreadOfEveryValue = Set.copyOf(unreadOfEveryValue);
+            handedOn = Set.copyOf(handedOn);
             // Insertion order, which is the order the declarations write their clauses. `Map.copyOf`
             // iterates in an order salted once per JVM run, and what is read off these is a list of
             // causes a report prints.
@@ -447,7 +453,7 @@ public final class InvariantChecker {
                     new Reading(List.of(), List.of(), Map.of(), Map.of(), Map.of()),
                     new ReadingEvidence(),
                     false, Set.of(FieldDomains.THE_VALUE), Set.of(FieldDomains.THE_VALUE),
-                    Map.of(), Map.of());
+                    Set.of(), Map.of(), Map.of());
         }
 
         /** The numbers alone, for the readers that are about intervals. Whether a value exists is
@@ -540,6 +546,11 @@ public final class InvariantChecker {
         // And of those, the ones a construction cannot get out of: what a position admits and
         // whether an edge of it may be promised are two questions, and a stop answers them apart.
         Set<String> unreadOfEveryValue = new LinkedHashSet<>();
+        // The positions this reading ended at with the rules under them still to be read by
+        // somebody. Kept apart from the stops above because it is an obligation and not a finding:
+        // whether anything took the rules over is settled by whoever walks the positions, and the
+        // answer is not in this reading at all.
+        Set<String> handedOn = new LinkedHashSet<>();
         List<Written> written = new ArrayList<>();
         ReadingEvidence took = new ReadingEvidence();
         // What the bounds are able to state of each rule, as the reading that builds them says it.
@@ -563,6 +574,11 @@ public final class InvariantChecker {
                 if (borne == Borne.BY_EVERY_VALUE) {
                     unreadOfEveryValue.add(path);
                 }
+            }
+
+            @Override
+            public void handedOn(String path) {
+                handedOn.add(path);
             }
 
             @Override
@@ -725,7 +741,8 @@ public final class InvariantChecker {
                 constraints = ConstraintState.settling(constraints, atom, each.getValue(), spaced);
             }
             return new Seeded(constraints, atoms, keys, held, reading, took, read,
-                    Set.copyOf(notGathered), unreadOfEveryValue, readBy, Map.copyOf(spacing));
+                    Set.copyOf(notGathered), unreadOfEveryValue, Set.copyOf(handedOn),
+                    readBy, Map.copyOf(spacing));
         } catch (RuntimeException why) {
             gaveUp("seedFields " + named.name(), why);
             return Seeded.nothingRead();
@@ -885,17 +902,22 @@ public final class InvariantChecker {
     private record Written(RuleRef.Invariant from, Core clause) {}
 
     /**
-     * Whether the value a stop was taken at is one every value of what is being read has.
+     * Whether the value a stop left unread is one every value of what is being read has.
      *
-     * <p>Two questions are asked of one stop and they do not have one answer. What a position
-     * admits is short wherever a rule about it went unread, however the value it is written under is
-     * reached — a rule inside an optional narrows that value when there is one. Whether an edge may
-     * be promised is about what a construction has to satisfy, and a rule about a value the
-     * construction need not make refuses nothing at an edge of a field it must.
+     * <p>Two questions are asked of one stop and they do not have one answer. What a position admits
+     * is short wherever a rule about it went unread; whether an edge may be promised is about what a
+     * construction has to satisfy, and a rule about a value the construction need not make refuses
+     * nothing at an edge of a field it must.
      *
      * <p>Which of the two a stop was is known where the stop is taken and nowhere after it, so it is
      * said there. Read off the path instead, a reader would be deciding from a spelling what the
      * walk knew.
+     *
+     * <p><b>Asked only of the stops that leave rules unread.</b> Which those are is
+     * {@link PathEngine#leftBy}'s answer and is not restated here: a stop that hands the rules to a
+     * reading one position down leaves nothing for anybody to bear ({@link Gathering#handedOn}).
+     * Nothing here decides what is handed on, so the day these two questions stop agreeing is a day
+     * nothing was resting on their agreeing (#1072).
      */
     enum Borne {
 
@@ -903,11 +925,17 @@ public final class InvariantChecker {
         BY_EVERY_VALUE,
 
         /**
-         * It may be absent or empty, or is a type already met on the way down.
+         * A value the construction need not make, so a rule under it refuses no construction.
          *
          * <p>The same reach {@link #everyRuleRead} has, and for the same reason: a rule four records
          * down the required chain refuses the outermost construction exactly as one on its own
-         * fields does, and one inside a collection is about a value that need not be there.
+         * fields does.
+         *
+         * <p>Which stops leave this is {@link PathEngine#leftBy}'s answer. What is worth knowing
+         * here is that a required field of a type already entered comes back with this word and is
+         * borne by every value: such a value cannot be built — a record that must hold its own kind
+         * has no values — so no construction and no edge is decided by the answer. A model that
+         * could be built there is one this would have to be told apart from.
          */
         BY_SOME_VALUES
     }
@@ -944,6 +972,23 @@ public final class InvariantChecker {
          * either way.
          */
         void missed(String path, Borne borne);
+
+        /**
+         * A position where this reading ends and the rules under it become another reading's.
+         *
+         * <p>Not a rule missed. Nothing is declared at the position for this reading to take in,
+         * and what is written under it is written about a value one position down, where a reading
+         * of that declaration is opened and a row meets it. Which stops arrive here is
+         * {@link PathEngine#leftBy}'s answer.
+         *
+         * <p>So this is an obligation and not a finding: something has to have taken the rules over,
+         * and whoever walks the positions is the only one who can say whether anything did. Recorded
+         * as a miss, the position above reported a rule nobody could ever discharge, because the
+         * walk had gone to the rule at the position below (#1072). Read as nothing at all, a
+         * position under which no reading was ever opened would claim to have read rules it never
+         * saw.
+         */
+        void handedOn(String path);
 
         /**
          * What the reading that builds the bounds made of one part of {@code rule}, as it read it.
