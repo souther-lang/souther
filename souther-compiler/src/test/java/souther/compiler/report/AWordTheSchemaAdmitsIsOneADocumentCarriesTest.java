@@ -65,19 +65,41 @@ class AWordTheSchemaAdmitsIsOneADocumentCarriesTest {
      * what still holds it to meaning one thing is the projection that writes it
      * ({@link souther.compiler.partition.ReportedReason}), tested where that is.
      */
+    private static final String RULES_NEVER_ARRIVED_AT = """
+            module demo
+            data Ok
+            data Item = String
+                invariant unreadable = value == 1
+            data Basket = { item: Item }
+            behavior run : (b: Basket) -> Ok
+            let run (b) = Ok
+            """;
+
     @Test
     void aPositionWhoseRulesTheReadingNeverArrivedAtIsWrittenAsThatWord() {
-        String json = reportOf("""
-                module demo
-                data Ok
-                data Item = String
-                    invariant unreadable = value == 1
-                data Basket = { item: Item }
-                behavior run : (b: Basket) -> Ok
-                let run (b) = Ok
-                """);
+        String json = reportOf(RULES_NEVER_ARRIVED_AT);
 
         assertTrue(json.contains("\"rules_not_read_at_all\""), json);
         assertFalse(json.contains("\"unsupported_traversal\""), json);
     }
+    /**
+     * And the model that carries the word is one this compiler refuses.
+     *
+     * <p>Said out loud, because it is what the word means now and not an accident of the fixture.
+     * A rule written under a container, a case or an optional is read where it governs, one position
+     * down (#1072). What is left that can go unread at a position this reading arrived at is a
+     * clause the front end could not type, and a model carrying one is refused.
+     *
+     * <p>A tripwire and not a preference. The day a clause can go unread in a model that compiles,
+     * this fails and whoever made it so is the one who should decide what the word means then.
+     */
+    @Test
+    void theModelThatCarriesThatWordIsOneThisCompilerRefuses() {
+        Compilation compilation = Compilation.ofSource(RULES_NEVER_ARRIVED_AT, "Main");
+        compilation.answerEverything();
+        assertFalse(compilation.diagnostics().values().stream()
+                        .flatMap(java.util.List::stream).toList().isEmpty(),
+                "a position whose rules never arrived takes a clause nothing could type");
+    }
+
 }

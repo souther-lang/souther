@@ -134,4 +134,33 @@ class AMeasuredPositionSaysHowFarItsRulesWereReadTest {
                 && (line.contains("not read: " + position + " ")
                         || line.contains("about `" + position + "`")));
     }
+    /**
+     * And the model that leaves a rule unread at a position it measured is one this compiler
+     * refuses.
+     *
+     * <p>Said out loud, because it is what the word means now and not an accident of the fixture.
+     * A rule written under a container, a case or an optional is read where it governs, one position
+     * down (#1072); a rule this compiler cannot find a value for is a shortfall of its own. What is
+     * left is a clause the front end could not type — and a model carrying one is refused, so a
+     * document that says a measured position went short of a rule is a document about a model that
+     * did not compile.
+     *
+     * <p>A tripwire and not a preference. The day a clause can go unread in a model that compiles,
+     * this fails and whoever made it so is the one who should decide what the word means then.
+     */
+    @Test
+    void theModelThatSaysSoIsOneThisCompilerRefuses() {
+        assertTrue(isRefused(MEASURED_IN_PART),
+                "a measured position short of a rule takes a clause nothing could type");
+        assertFalse(isRefused(READ_IN_FULL), "and the control is a model that compiles");
+    }
+
+    /** Whether this compiler refuses {@code source}, which is what the fixtures above turn on. */
+    private static boolean isRefused(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.answerEverything();
+        return !compilation.diagnostics().values().stream()
+                .flatMap(java.util.List::stream).toList().isEmpty();
+    }
+
 }
