@@ -381,32 +381,71 @@ final class ConstructionPlan {
     /**
      * {@code declared} at {@code at}, with the requirements standing there applied in turn.
      *
-     * <p>Stops where the requirements say nothing more, and where one of them settles the value —
-     * nothing narrows what is not there, so a requirement under an absence would be a caller asking
-     * about a position no value reaches, which {@link Requirements} has already refused by merging.
+     * <p>A fold and not a walk with a running total beside it. What one narrowing does is two
+     * things at once — it changes what stands at the position, and it takes a name off that a value
+     * chosen under the narrowed type is then missing — and they are one step. Kept as two locals
+     * updated on their own, the second stopped after the first narrowing while the first went on:
+     * a case that is a newtype over an optional narrowed to what the optional holds and the case's
+     * own name was never put back, so the row carried a value of a type the parameter does not
+     * declare. The state is a {@link Settled}, so a step cannot move one half and leave the other.
      */
     private static Settled settle(Type declared, TermPath at, Symbols symbols,
                                   Requirements required) {
-        List<TypeOps.Layer> outer = List.of();
-        Type building = declared;
-        TermPath here = at;
-        for (Refinement refinement = required.at(here); refinement != null;
-                refinement = required.at(here)) {
-            // The names worn before the first narrowing, which is where a value chosen at the
-            // narrowed position is still missing them. Taken once: a narrowing of a narrowing wears
-            // nothing new, since it is the same position read again.
-            if (outer.isEmpty()) {
-                outer = TypeView.of(declared, symbols).wrappers();
+        Settled settled = new Settled(at, declared, null, List.of());
+        for (Refinement refinement = required.at(settled.at()); refinement != null;
+                refinement = required.at(settled.at())) {
+            settled = applying(settled, refinement, symbols, required);
+            // Nothing narrows what is not there, so a narrowing that settled the value is the end
+            // of the chain whatever else was written.
+            if (settled.exact() != null) {
+                return settled;
             }
-            here = here.refine(refinement);
-            if (refinement instanceof Refinement.Presence presence && !presence.present()) {
-                // The absence of an optional settles the value rather than narrowing to something to
-                // be built: `None` is a branch that puts no position anywhere.
-                return new Settled(here, null, FixtureTemplate.none(), outer);
-            }
-            building = narrowed(building, refinement, symbols);
         }
-        return new Settled(here, building, null, outer);
+        return settled;
+    }
+
+    /**
+     * One narrowing applied to a settled position: what stands there afterwards, and the name it
+     * took off.
+     *
+     * <p>Both, here, because they are one step. What the position wears now is what a value chosen
+     * under the narrowed type will be missing, and it is read from what stands here rather than
+     * from the declaration — a narrowing may leave a position wearing a name the next one takes off
+     * in turn, and the declaration wore neither.
+     */
+    private static Settled applying(Settled settled, Refinement refinement, Symbols symbols,
+                                    Requirements required) {
+        List<TypeOps.Layer> outer = outside(settled.outer(),
+                TypeView.of(settled.building(), symbols).wrappers());
+        TermPath here = settled.at().refine(refinement);
+        if (refinement instanceof Refinement.Presence presence && !presence.present()) {
+            // The absence of an optional settles the value rather than narrowing to something to be
+            // built: `None` is a branch that puts no position anywhere (ADR-0114).
+            refuseWhatWouldStandUnder(here, required);
+            return new Settled(here, null, FixtureTemplate.none(), outer);
+        }
+        return new Settled(here, narrowed(settled.building(), refinement, symbols), null, outer);
+    }
+
+    /**
+     * That nothing is required below a position an absence settled.
+     *
+     * <p>A requirement under one names a position no value reaches, which is a caller asking about
+     * somewhere inside a value it has just said is not there. Refused here rather than left to
+     * {@link Requirements#merge}: that answers whether one position is asked to be two things, and
+     * {@code x} being absent and {@code x@None.y} being narrowed are two keys it has no quarrel
+     * with. Nothing a model writes reaches it — the absence puts no position anywhere, so nothing
+     * derives one to require — and a claim that somebody else refuses it is a guarantee this is not
+     * in a position to make.
+     */
+    private static void refuseWhatWouldStandUnder(TermPath absent, Requirements required) {
+        for (TermPath each : required.refinements().keySet()) {
+            if (!each.equals(absent) && each.isAtOrUnder(absent)) {
+                throw new IllegalStateException("`" + each + "` is required to be "
+                        + required.at(each).spelled() + " under `" + absent + "`, which holds no"
+                        + " value; nothing stands under an absence for a requirement to be about");
+            }
+        }
     }
 
     /** {@code outer} and then {@code inner}, which is the order names are put back on a value. */
