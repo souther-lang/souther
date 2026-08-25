@@ -6,22 +6,20 @@ package souther.compiler.check;
  * <p><b>The question and its subject are one thing and not two beside each other.</b> The
  * obligations do not share a subject — what values may stand somewhere is about a position, where a
  * line falls is about a number of one — and a rule bounding a {@code String} on its length raises
- * both, the values being the string's and the line being on the length. Carried as an obligation
- * beside a subject, the pair was a product every combination of which was constructible, so
- * "which values may stand at the place a comparison drew" was a value of this type and was fenced
- * off with a throw at the one reader that would have met it. Which subject an obligation has does
- * not vary: it is the arm.
+ * both, the values being the string's and the line being on the length. Which subject an obligation
+ * has does not vary, so it is the arm. Carried as an obligation beside a subject, the pair was a
+ * product every combination of which was a value of this type, and the reader that would have met
+ * one nothing raises fenced it off with a throw.
  *
  * <p>Which arm a clause raises follows from the clause and is settled where the question is raised,
  * so no reader downstream chooses between a path and a number.
  *
- * <p><b>Two arms, because two are what anything raises.</b> A place a comparison of two moving
- * things draws was a third: the line {@code r.a <= r.b + 1} draws is on neither side and is named by
- * the comparison rather than written out. Nothing ever built one. {@link CoverageObligation} says
- * why and always did — a comparison this compiler reads owes the rows either side of its line by
- * having been read, so no such demand is ever outstanding, and those live where the partition's
- * geometry does. An arm nothing raises is a question every model answers by nobody having asked it,
- * and a completeness counted over such a set says more than it knows.
+ * <p><b>Two arms, because two are what anything raises.</b> The place a comparison of two moving
+ * things draws was a third and nothing ever built one. {@link CoverageObligation} says why and
+ * always did: such a line owes the rows either side of it by having been read, so no demand about
+ * it is ever outstanding, and what it owes lives where the partition's geometry does. An arm
+ * nothing raises is a question every model answers by nobody having asked it, and a completeness
+ * counted over such a set says more than it knows.
  */
 public sealed interface Owed {
 

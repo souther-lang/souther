@@ -22,7 +22,6 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A question about a number taken of a position names that number.
@@ -138,12 +137,17 @@ class AQuestionAboutANumberNamesTheNumberTest {
      *  position is measured by. */
     @Test
     void thePositionsOwnQuestionIsAskedOnce() {
-        assertEquals(1, standingIn(A_RULE_ABOUT_A_LENGTH).stream()
-                        .filter(each -> each.startsWith("admitted_values")).count(),
-                () -> "one rule, one question about the values: "
-                        + standingIn(A_RULE_ABOUT_A_LENGTH));
-        assertNull(partitionOf(A_RULE_ABOUT_A_LENGTH).get("unanswered").get(0).get("subject")
-                        .get("measure"),
+        List<JsonNode> admitted = new ArrayList<>();
+        for (JsonNode each : partitionOf(A_RULE_ABOUT_A_LENGTH).get("unanswered")) {
+            if (each.get("question").asString().equals("admitted_values")) {
+                admitted.add(each);
+            }
+        }
+
+        assertEquals(1, admitted.size(),
+                () -> "one rule, one question about the values, however many numbers the position"
+                        + " is measured by: " + admitted);
+        assertNull(admitted.get(0).get("subject").get("measure"),
                 "and no number beside it, because it is not about one");
     }
 
@@ -181,8 +185,8 @@ class AQuestionAboutANumberNamesTheNumberTest {
                 "where a line falls on a position's own values is not which values may stand there");
         assertEquals(at, new InputQuestion.AboutANumber(new NumericTerm.ValueOf(at)).path(),
                 "and both say where they sit, which is what an axis is matched on");
-        assertTrue(new InputQuestion.AboutANumber(new NumericTerm.ValueOf(at)).obligation()
-                        != new InputQuestion.AboutAPosition(at).obligation(),
+        assertNotEquals(new InputQuestion.AboutANumber(new NumericTerm.ValueOf(at)).obligation(),
+                new InputQuestion.AboutAPosition(at).obligation(),
                 "what each asks follows from which it is, and is not carried beside it");
     }
 }

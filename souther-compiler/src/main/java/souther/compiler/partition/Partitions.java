@@ -204,6 +204,13 @@ public final class Partitions {
             // What the rules of this position raise that nothing answered, gathered from the
             // reading that found it. Once per position and not once per axis: a question is the
             // model's, and which axis is standing beside it is this compiler's business.
+            //
+            // At every position the reading found, including one this drew no axis at. A position
+            // given up in favour of its fields has none, and read off the axes its questions would
+            // be dropped for the position having been decomposed — which is a fact about this
+            // compiler deciding what a document says the model left standing. Nothing writes one
+            // there today; it is gathered here so that the day something does, the question is
+            // reported rather than lost.
             standing.addAll(position.unansweredQuestions());
         }
         // Every position the reading found, including the ones nothing divides: a report names what

@@ -149,19 +149,10 @@ final class Coverages {
         List<PartitionEvidence.AxisCoverage> axes = new ArrayList<>();
 
         List<Axis> divided = new ArrayList<>();
-        // Said once, before any axis is looked at. What the model asked and nothing answered is the
-        // model's, and whether a position could be measured is a separate answer that `undivided`
-        // below carries.
-        List<PartitionEvidence.Unanswered> standing =
-                new ArrayList<>(unansweredIn(partitioning));
         Readings readings = Readings.of(rows, where, partitioning.axes(),
                 observed.gaps().stream()
                         .filter(gap -> gap.code().leftNoRowRead()).toList());
         for (Axis axis : partitioning.axes()) {
-            // What the model asked about this position and nothing answered, said before anything
-            // here decides whether the position could be measured. The questions are the model's;
-            // `undivided` below explains why no evidence came back, which is a nothing of its own
-            // and carries no word about what was written there.
             if (!axis.measurable()) {
                 continue;   // said by `undivided`, which also says which kind of nothing it is
             }
@@ -179,7 +170,11 @@ final class Coverages {
                 BoundaryDerivation.of(boundaries, partitioning.borderClosure()),
                 pairsOf(behavior.name(), divided, readings, level.readsRows(), budget),
                 partitioning.undivided(), partitioning.unread(), partitioning.blocked(),
-                partitioning.notSeparated(), List.copyOf(standing),
+                // What the model asked and nothing answered, taken whole and not gathered as the
+                // axes are walked. The questions are the model's; whether a position could be
+                // measured is the separate answer `undivided` beside them carries, and a position
+                // no axis came back for still has whatever was written about it.
+                partitioning.notSeparated(), unansweredIn(partitioning),
                 whyUnclassified(readings.byRow(),
                         partitioning.axes().stream().map(Axis::id).toList()));
     }

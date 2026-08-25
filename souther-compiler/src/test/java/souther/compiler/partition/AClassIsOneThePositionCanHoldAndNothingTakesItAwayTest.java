@@ -90,12 +90,6 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
                 guards.unread(), guards.singled(), guards.between()));
     }
 
-    /** The one axis, whichever phase produced it. */
-    private static Axis only(Partitions.Partitioning partitioning) {
-        assertEquals(1, partitioning.axes().size(), partitioning.axes().toString());
-        return partitioning.axes().get(0);
-    }
-
     /**
      * The classes of the parameter's own position, which is the first axis read.
      *

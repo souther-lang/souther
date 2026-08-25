@@ -155,10 +155,6 @@ public sealed interface Required {
         return out;
     }
 
-    private static Owed admittedValues(String path) {
-        return new Owed.AdmittedValues(path);
-    }
-
     /**
      * What an invariant clause raises, from what a reader found it to state.
      *
@@ -182,7 +178,7 @@ public sealed interface Required {
             // A `LinkedHashSet` and not `Set.of`, which iterates in an order salted once per JVM
             // run — the questions reach a document in the order they are written here.
             case ClauseStates.ABound bound -> {
-                Set<Owed> owed = bound.positions().stream().map(Required::admittedValues)
+                Set<Owed> owed = bound.positions().stream().map(Owed.AdmittedValues::new)
                         .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
                 owed.add(new Owed.Boundary(bound.line()));
                 yield new Some(owed);
@@ -192,7 +188,7 @@ public sealed interface Required {
             case ClauseStates.SomethingElse other -> other.positions().isEmpty()
                     ? new Irrelevant(Set.of(Because.IT_NAMES_NO_POSITION))
                     : new Some(other.positions().stream()
-                            .map(Required::admittedValues).collect(java.util.stream.Collectors
+                            .map(Owed.AdmittedValues::new).collect(java.util.stream.Collectors
                                     .toCollection(LinkedHashSet::new)));
             case ClauseStates.ARelation _ -> new Irrelevant(Set.of(Because.IT_RELATES_TWO_POSITIONS));
         };
