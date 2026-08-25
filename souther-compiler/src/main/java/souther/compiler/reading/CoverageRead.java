@@ -10,7 +10,6 @@ import souther.compiler.inputs.InputReads;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 /**
  * One reading of a body's decisions: where a run can get to, and what holds on the way.
@@ -118,13 +117,21 @@ public final class CoverageRead {
      *                     way round a fork above it a row goes
      * @param arms         one answer per arm of the behavior, by the number the plan gave it. Total
      *                     over the plan's arms: a key that is not there is not a thing to interpret,
-     *                     because there is no such key
+     *                     because there is no such key.
+     *
+     *                     <p>In the order the plan holds them, which a caller composing a row at
+     *                     each takes as the order to ask in — so what carries the order is the type
+     *                     and not a habit of whatever map was handed over. Written as any map, an
+     *                     unordered one was as admissible, and the order a plan is asked in would
+     *                     have come from wherever that map put its keys
      */
-    public record Read(List<Interaction> interactions, Map<Integer, PathAccess> arms) {
+    public record Read(List<Interaction> interactions,
+                       java.util.SequencedMap<Integer, PathAccess> arms) {
 
         public Read {
             interactions = List.copyOf(interactions);
-            arms = java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(arms));
+            arms = java.util.Collections.unmodifiableSequencedMap(
+                    new java.util.LinkedHashMap<>(arms));
         }
 
         /** How arm {@code probe} is reached, by the number the plan gave it. */

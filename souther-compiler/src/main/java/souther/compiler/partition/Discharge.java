@@ -1,7 +1,5 @@
 package souther.compiler.partition;
 
-import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -26,8 +24,11 @@ public record Discharge(Map<Generator.ClassOwed, ClassDisposition> classes,
     public static final Discharge NOTHING = new Discharge(Map.of(), Map.of());
 
     public Discharge {
-        classes = Collections.unmodifiableMap(new LinkedHashMap<>(classes));
-        arms = Collections.unmodifiableMap(new LinkedHashMap<>(arms));
+        // Neither half of an entry missing. A key with nothing under it is an obligation that was
+        // asked about and not answered for, which is the absence every value here is arranged to
+        // have none of — and it satisfied a check written over the keys alone.
+        classes = Ordered.copyOf(classes);
+        arms = Ordered.copyOf(arms);
     }
 
     /** What became of one class, or null where this run was not asked about it. */

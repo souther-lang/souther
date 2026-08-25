@@ -84,6 +84,43 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
                                                 List.of(NOTHING_CAME_OF_IT))))));
     }
 
+    /**
+     * A key with nothing under it is not an answer.
+     *
+     * <p>The check is over the obligations and what became of them, and holding it over the keys
+     * alone let the absence back in one layer down: the plan named the class, the discharge held
+     * the class, and what a reader looking it up got was the null every one of these values is
+     * arranged to have none of.
+     */
+    @Test
+    void aClassWithNothingUnderItIsNotAnAnswer() {
+        Map<Generator.ClassOwed, ClassDisposition> nothing = new LinkedHashMap<>();
+        nothing.put(A_CLASS, null);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> new Discharge(nothing, Map.of()),
+                "a class the run was asked about and did not answer for");
+    }
+
+    @Test
+    void anArmWithNothingUnderItIsNotAnAnswer() {
+        Map<Generator.ArmOwed, ArmDisposition> nothing = new LinkedHashMap<>();
+        nothing.put(AN_ARM, null);
+
+        assertThrows(IllegalArgumentException.class, () -> new Discharge(Map.of(), nothing));
+    }
+
+    /** And the rows the answers point at, for the same reason: an id under nothing is not a row. */
+    @Test
+    void aRowIdWithNothingUnderItIsNotARow() {
+        LinkedHashMap<RowId, ComposedRow> nothing = new LinkedHashMap<>();
+        nothing.put(new RowId(0), null);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> new FillResult(planOver(List.of(), List.of()), nothing, List.of(), List.of(),
+                        Discharge.NOTHING));
+    }
+
     @Test
     void anAnswerPointingAtARowTheOfferDoesNotHoldIsRefused() {
         assertThrows(IllegalStateException.class,

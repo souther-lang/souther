@@ -1,7 +1,6 @@
 package souther.compiler.partition;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -41,7 +40,7 @@ public record FillResult(GenerationPlan plan, SequencedMap<RowId, ComposedRow> c
                          List<GenerationReason> reasons, Discharge discharge) {
 
     public FillResult {
-        composed = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(composed));
+        composed = Ordered.copyOf(composed);
         unresolved = List.copyOf(unresolved);
         reasons = List.copyOf(reasons);
         if (!discharge.classes().keySet().equals(new LinkedHashSet<>(plan.classesOwed()))) {

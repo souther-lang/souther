@@ -753,7 +753,8 @@ public final class Generator {
                                         CandidateCheck check,
                                         AdequacyPolicy.OfTheGeneration budget) {
         return fill(subject, existing, check,
-                new souther.compiler.reading.CoverageRead.Read(List.of(), Map.of()), budget);
+                new souther.compiler.reading.CoverageRead.Read(List.of(),
+                        new LinkedHashMap<>()), budget);
     }
 
     /**

@@ -59,8 +59,9 @@ class NoAxesByItselfIsNotAGenerationReasonTest {
                 new BehaviorInputs(List.of("days"), List.of(Type.INT), SYMBOLS,
                         ReadAs.THE_COMPILATION_DOES),
                 List.of(), HeldCounts.NONE);
-        CoverageRead.Read read =
-                new CoverageRead.Read(List.of(), Map.of(1, NOT_ENUMERABLE));
+        java.util.SequencedMap<Integer, PathAccess> ways = new java.util.LinkedHashMap<>();
+        ways.put(1, NOT_ENUMERABLE);
+        CoverageRead.Read read = new CoverageRead.Read(List.of(), ways);
 
         return Generator.fill(subject, List.of(), Generator.CandidateCheck.ANY, read,
                 Generator.Trial.NOTHING_RUNS, List.of(), List.of(), List.of(1),

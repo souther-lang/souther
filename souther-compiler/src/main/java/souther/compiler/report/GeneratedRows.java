@@ -501,8 +501,9 @@ public final class GeneratedRows {
                                 behavior, saidOf(why))));
                 // Told apart from the one above it in its own words. A strategy that tried and
                 // composed nothing and a finding nothing takes are different pieces of news: the
-                // first says a row may still be writable by hand, the second says no run of this
-                // will offer one until something is written for it.
+                // first says what the attempt came to, and whether a row can be written at all is
+                // its reason's to say; the second says no run of this will offer one until
+                // something is written for it.
                 case GenerationOutcome.NotSupported none -> say(out, said,
                         String.format("// nothing offers a row for `%s` in `%s`: %s%n",
                                 about(each.finding()), behavior, none.reason().said()));

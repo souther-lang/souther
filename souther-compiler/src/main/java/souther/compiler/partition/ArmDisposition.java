@@ -17,7 +17,14 @@ import java.util.List;
 public sealed interface ArmDisposition {
 
     /** A row was composed for a combination that takes it, or along the way into it. */
-    record Built(RowId row) implements ArmDisposition {}
+    record Built(RowId row) implements ArmDisposition {
+
+        public Built {
+            if (row == null) {
+                throw new IllegalArgumentException("an arm a row was composed for names the row");
+            }
+        }
+    }
 
     /**
      * No row, and the reasons there is none.
@@ -54,6 +61,10 @@ public sealed interface ArmDisposition {
     record NoWayIn(PathAccess access) implements ArmDisposition {
 
         public NoWayIn {
+            if (access == null) {
+                throw new IllegalArgumentException(
+                        "an arm nothing was tried at says what the reading made of it");
+            }
             if (access instanceof PathAccess.Ways) {
                 throw new IllegalArgumentException(
                         "an arm with ways into it is one this search had somewhere to look");

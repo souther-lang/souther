@@ -14,9 +14,24 @@ package souther.compiler.partition;
 public sealed interface ClassDisposition {
 
     /** A row was composed for it, which is this row. */
-    record Built(RowId row) implements ClassDisposition {}
+    record Built(RowId row) implements ClassDisposition {
 
-    /** No row came of it, and why. Never a statement that none exists. */
+        public Built {
+            if (row == null) {
+                throw new IllegalArgumentException("a class a row was composed for names the row");
+            }
+        }
+    }
+
+    /**
+     * No row came of it, and why.
+     *
+     * <p>Which of the two kinds of news that is belongs to the reason and not to this. A strategy
+     * took the class and composed nothing: sometimes because the rules leave no value there, which
+     * a reader may act on, and sometimes because this compiler fell short, which they may not.
+     * Said here as though it were always the second, a reason that settles the question would be
+     * printed under a sentence denying it.
+     */
     record Unresolved(Generator.UnresolvedCombination why) implements ClassDisposition {
 
         public Unresolved {
