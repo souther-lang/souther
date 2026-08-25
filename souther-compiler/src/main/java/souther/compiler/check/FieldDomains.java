@@ -712,8 +712,6 @@ public final class FieldDomains {
         return switch (owed) {
             case Owed.AdmittedValues it -> admissionAnswered(rule, it.path());
             case Owed.Boundary it -> boundaryAnswered(rule, it.on());
-            case Owed.BoundaryBetween it -> throw new IllegalStateException(
-                    "a clause of a value asks about a position of it: " + it);
         };
     }
 
@@ -1280,9 +1278,6 @@ public final class FieldDomains {
                         switch (owed) {
                             case Owed.AdmittedValues it -> said.add(it.path());
                             case Owed.Boundary it -> said.add(it.on().path());
-                            // On neither position, so there is no position of this value to say it
-                            // of.
-                            case Owed.BoundaryBetween _ -> { }
                         }
                     });
                 }

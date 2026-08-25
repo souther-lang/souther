@@ -148,8 +148,6 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules) {
                         .filter(each -> switch (each.owed()) {
                             case Owed.AdmittedValues it -> it.path().equals(where);
                             case Owed.Boundary it -> it.on().path().equals(where);
-                            // On neither position, so it is not at this one.
-                            case Owed.BoundaryBetween _ -> false;
                         })
                         .forEach(out::add));
         return List.copyOf(out);

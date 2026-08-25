@@ -14,6 +14,14 @@ package souther.compiler.check;
  *
  * <p>Which arm a clause raises follows from the clause and is settled where the question is raised,
  * so no reader downstream chooses between a path and a number.
+ *
+ * <p><b>Two arms, because two are what anything raises.</b> A place a comparison of two moving
+ * things draws was a third: the line {@code r.a <= r.b + 1} draws is on neither side and is named by
+ * the comparison rather than written out. Nothing ever built one. {@link CoverageObligation} says
+ * why and always did — a comparison this compiler reads owes the rows either side of its line by
+ * having been read, so no such demand is ever outstanding, and those live where the partition's
+ * geometry does. An arm nothing raises is a question every model answers by nobody having asked it,
+ * and a completeness counted over such a set says more than it knows.
  */
 public sealed interface Owed {
 
@@ -64,37 +72,6 @@ public sealed interface Owed {
     }
 
     /**
-     * The place a comparison of two moving things draws, named by that comparison.
-     *
-     * <p>Where the two sides hold one count, which is on neither of them. {@code r.a <= r.b + 1}
-     * draws a line where the two sides meet; filing it under either would name a place that rule
-     * never stopped. Nor is it spelled: writing the place out needs both sides in a vocabulary this
-     * compiler has, and it does not have one for {@code r.b + 1} — so a spelled subject is how far a
-     * pretty-printer got rather than what the question is about, and {@code r.b + 1} and
-     * {@code r.b + 2} come out as one place. The comparison that drew the line is what the question
-     * is about, and that this compiler can always name exactly.
-     *
-     * <p>Beside {@link RuleCitation} and not a copy of it. A citation is how a reader finds the
-     * rule — the place a comparison is written, the name an {@code ensures} clause was given — and
-     * this is the comparison that drew the line. For a rule that is one comparison the two point at
-     * one place and answer different questions; a clause stating two comparisons has one citation
-     * and two of these.
-     */
-    record BoundaryBetween(souther.compiler.diag.Citation drawnBy) implements Owed {
-
-        public BoundaryBetween {
-            if (drawnBy == null) {
-                throw new IllegalArgumentException("a comparison is somewhere");
-            }
-        }
-
-        @Override
-        public String toString() {
-            return "where the relation changes";
-        }
-    }
-
-    /**
      * What this question asks, which is the arm and is derived rather than carried.
      *
      * <p>Stored beside the subject, the two could disagree — and one of the two combinations that
@@ -103,7 +80,7 @@ public sealed interface Owed {
     default CoverageObligation obligation() {
         return switch (this) {
             case AdmittedValues _ -> CoverageObligation.ADMITTED_VALUES;
-            case Boundary _, BoundaryBetween _ -> CoverageObligation.BOUNDARY;
+            case Boundary _ -> CoverageObligation.BOUNDARY;
         };
     }
 }
