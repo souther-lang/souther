@@ -236,12 +236,17 @@ public final class Output {
             // like a helper; and it is read before the invariants are settled, since settling
             // inlines the very calls this is looking for.
             Answer<souther.compiler.ast.Hir.Module> resolved = db.ask(new Names.Resolved(name));
+            // How this module writes a type down, which is what a computed signature is published
+            // in. Asked of the module rather than taken off the type: what a declaration is and
+            // what this module calls it are two things, and only the second may be published.
+            Answer<Symbols> scope = Names.derivedSymbols(db, name);
             if (written == null || !sigs.present() || implementations == null
-                    || !resolved.present()) {
+                    || !resolved.present() || !scope.present()) {
                 return;
             }
             ModuleMetadata.stamp(classes, written.module(), resolved.value(),
-                    written.slices(), sigs.value(), implementations);
+                    written.slices(), sigs.value(), implementations,
+                    scope.value().scope()::reach);
         }
 
     }
