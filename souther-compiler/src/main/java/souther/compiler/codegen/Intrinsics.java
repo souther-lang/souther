@@ -3,7 +3,6 @@ package souther.compiler.codegen;
 import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeSymbol;
 import souther.compiler.core.Core;
 
 import java.lang.constant.ClassDesc;
