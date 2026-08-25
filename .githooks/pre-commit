@@ -1,0 +1,63 @@
+#!/bin/sh
+# Stops a commit that adds an unused import.
+#
+# CI answers the same question with Error Prone, but only after the push and only on a `clean`
+# build. This runs Checkstyle over the staged Java files alone, which is a parse and costs about
+# two seconds.
+#
+# What it reads is the staged content — `git show :path`, written to a temporary directory — and
+# not the working tree, so a `git add -p` that stages half a file is judged on the half being
+# committed. Line numbers in a violation are that content's.
+#
+# `git commit --no-verify` skips it.
+set -eu
+
+root=$(git rev-parse --show-toplevel)
+
+staged=$(git diff --cached --name-only --diff-filter=ACM -- '*.java')
+[ -n "$staged" ] || exit 0
+
+tmp=$(mktemp -d)
+log="$tmp.log"
+trap 'rm -rf "$tmp" "$log"' EXIT INT TERM
+
+printf '%s\n' "$staged" | while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    mkdir -p "$tmp/$(dirname "$f")"
+    git show ":$f" > "$tmp/$f"
+done
+
+run() {
+    mvn "$@" -q -N -f "$root/pom.xml" checkstyle:check \
+        -Dcheckstyle.staged.dir="$tmp" > "$log" 2>&1
+}
+
+status=0
+# Offline first, because that is the ordinary build here. A checkout that has never resolved the
+# plugin has nothing to be offline about, so that one case tries again with the network.
+if ! run -o; then
+    if grep -qE "offline|Plugin not found in any plugin repository" "$log"; then
+        run || status=1
+    else
+        status=1
+    fi
+fi
+
+if [ "$status" -ne 0 ]; then
+    # The paths Checkstyle prints are inside the temporary directory. Rewritten to the path in the
+    # working tree, so an editor's jump-to-error lands on the file to edit.
+    out=$(sed -e "s|[^ ]*$tmp/|$root/|" "$log")
+    violations=$(printf '%s\n' "$out" | grep -E ':\[[0-9]+,[0-9]+\]' || true)
+    if [ -n "$violations" ]; then
+        printf '%s\n' "$violations"
+        echo
+        echo "pre-commit: fix the imports above, or commit with --no-verify."
+    else
+        # Not a violation: Maven itself did not run. The whole log, since nothing here knows what
+        # part of it matters.
+        printf '%s\n' "$out"
+        echo
+        echo "pre-commit: Checkstyle did not run. Commit with --no-verify to go ahead anyway."
+    fi
+    exit 1
+fi
