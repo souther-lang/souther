@@ -30,6 +30,21 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>Asked of the document and of the sentence a person reads, because the two are written by
  * different code from the same evidence and this is the seam every round of #1029 and #1047 went
  * wrong at. The reason type told the two halves apart and the words underneath it did not.
+ *
+ * <p>What these hold to, said once so that a later reader has it:
+ *
+ * <ul>
+ *   <li>What a rule cuts outranks how it is spelled. Which positions a rule restricts is settled by
+ *       the quantity its canonical form cuts, and the spelling answers only where there is no
+ *       quantity to be had.</li>
+ *   <li>A rule that cuts nothing raises no coverage obligation.</li>
+ *   <li>A rule read to the end that draws no line is never a question nobody answered.</li>
+ *   <li>Every question nobody answered is one whose reading actually stopped, which
+ *       {@code RuleAccounting.Unaccounted} takes only a stop for.</li>
+ *   <li>One comparison may come to different answers from different readings without being two
+ *       rules, and the document still writes one word for it
+ *       ({@code OneRuleReadTwoWaysIsTwoAnswersAndOneWordTest}).</li>
+ * </ul>
  */
 class ARuleReadToTheEndIsNotOneThisCouldNotReadTest {
 
