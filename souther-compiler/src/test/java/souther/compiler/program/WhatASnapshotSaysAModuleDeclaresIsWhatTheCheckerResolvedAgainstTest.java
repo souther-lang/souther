@@ -3,6 +3,7 @@ package souther.compiler.program;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
+import souther.compiler.core.ValueShape;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Names;
@@ -100,7 +101,7 @@ class WhatASnapshotSaysAModuleDeclaresIsWhatTheCheckerResolvedAgainstTest {
                         new ArrayList<>(TypeOps.fieldTypes(data, read.symbols()).keySet()),
                         assertInstanceOf(CheckedData.Product.class, published,
                                 declared.getKey()::toString)
-                                .fields().stream().map(CheckedData.Field::name).toList(),
+                                .fields().stream().map(ValueShape.Field::name).toList(),
                         () -> "the fields of " + declared.getKey());
                 case Hir.SumData sum -> assertEquals(
                         souther.compiler.check.AtomSpace.subjectAtoms(

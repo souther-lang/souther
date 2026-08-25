@@ -2,6 +2,7 @@ package souther.program.api;
 
 import souther.compiler.core.Core;
 import souther.compiler.program.CheckedBehavior;
+import souther.compiler.core.ValueShape;
 import souther.compiler.program.CheckedData;
 import souther.compiler.program.CheckedHelper;
 import souther.compiler.program.CheckedImplementation;
@@ -116,7 +117,7 @@ class AnOutputReadsWhatAModulesDataAreMadeOfTest {
     }
 
     private static List<String> fieldNames(CheckedData.Product product) {
-        return product.fields().stream().map(CheckedData.Field::name).toList();
+        return product.fields().stream().map(ValueShape.Field::name).toList();
     }
 
     /**
@@ -153,7 +154,7 @@ class AnOutputReadsWhatAModulesDataAreMadeOfTest {
         assertEquals(List.of("id", "tag", "extra"), fieldNames(product(module, "Wide")));
         assertEquals(List.of("id", "tag"), fieldNames(product(module, "Common")));
         assertEquals(List.of(Type.INT, Type.STRING, Type.INT),
-                product(module, "Wide").fields().stream().map(CheckedData.Field::type).toList());
+                product(module, "Wide").fields().stream().map(ValueShape.Field::type).toList());
     }
 
     /**

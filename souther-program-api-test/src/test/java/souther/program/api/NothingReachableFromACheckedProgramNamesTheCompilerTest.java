@@ -31,11 +31,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class NothingReachableFromACheckedProgramNamesTheCompilerTest {
 
-    /** How this compiler answers its own questions, what it emits with, and what it parsed into.
-     *  None of the three is a fact about a Souther program. */
+    /** How this compiler answers its own questions, what it emits with, what it parsed into, and
+     *  how it decided. None of the four is a fact about a Souther program.
+     *
+     *  <p>{@code check} is on the list since #1080. What a behavior declares of its answer and what
+     *  must hold of a value of a data are decisions the language makes, and the values that carry
+     *  them used to be the check's own — reachable here without naming anything on this list, and
+     *  holding a syntax tree two hops down. They are {@code core} values now, and this is what says
+     *  the next one will be too. */
     private static final List<String> THE_COMPILERS_OWN = List.of(
             "souther.compiler.query.",
             "souther.compiler.codegen.",
+            "souther.compiler.check.",
             "souther.compiler.ast.");
 
     /**
@@ -53,6 +60,13 @@ class NothingReachableFromACheckedProgramNamesTheCompilerTest {
         assertTrue(reached.contains("souther.compiler.core.Core"), () -> "no Core in " + reached);
         assertTrue(reached.contains("souther.compiler.core.Composition"),
                 () -> "no Composition in " + reached);
+        // And the two conditions the language states, which are what #1080 put here. Each is
+        // reached through the arm that carries it — a clause off a product, a rule off what a
+        // behavior declares — which is the walk going through the model rather than past it.
+        assertTrue(reached.contains("souther.compiler.core.ValueShape$Invariant"),
+                () -> "no invariant clause in " + reached);
+        assertTrue(reached.contains("souther.compiler.core.Contract$Rule"),
+                () -> "no ensures rule in " + reached);
         assertTrue(reached.size() > 50, () -> "the walk reached only " + reached.size());
     }
 

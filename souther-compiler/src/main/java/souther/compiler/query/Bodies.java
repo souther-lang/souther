@@ -6,6 +6,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.BehaviorChecker;
 import souther.compiler.check.BehaviorContract;
 import souther.compiler.check.CheckedEnsures;
+import souther.compiler.core.EnsuresEnforcement;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.ClausesForDischarge;
 import souther.compiler.check.StatedContract;
@@ -2292,6 +2293,56 @@ public final class Bodies {
                     new Elaborated(bodies, module.value().emittedHelpers(), claims, elements, read,
                             handed),
                     contradicted(db, name, claims));
+        }
+    }
+
+    /**
+     * Where each of this module's behaviors has its {@code ensures} checked.
+     *
+     * <p>A decision the language makes, answered once and read by everything that acts on it: the
+     * emitter, which puts the check where this says, and a checked program, which says what a
+     * behavior declares of its answer and where that is held to. Each reader making it from the
+     * contracts and the injected set would be two answers to one question, and the second of them
+     * would be made from a set the emitter goes on adding to — a behavior this module gives a body
+     * to but reaches as a dependency joins the injected ones, and a reader arriving afterwards
+     * finds a bodied behavior among them.
+     *
+     * <p>{@link souther.compiler.check.Requirements#injectedNames} is the set as the requirements pass answered it, which
+     * is the reading the decision is owed.
+     *
+     * <p>Every behavior this module declares is in here, which is what makes a miss an answer
+     * ({@link EnsuresEnforcement#in}) rather than a table that was not filled.
+     */
+    public record EnsuresChecks(String name) implements Key<Map<ValueName.Behavior,
+            EnsuresEnforcement>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<ValueName.Behavior, EnsuresEnforcement>> compute(Db db) {
+            Answer<Lower.Lowered> lowering = db.ask(new Lowering(name));
+            Answer<Set<ValueName.Behavior>> importedInjected = db.ask(new ImportedInjected(name));
+            Answer<Map<String, CheckedEnsures>> contracts = db.ask(new Contracts(name));
+            if (!lowering.present() || !importedInjected.present() || !contracts.present()) {
+                return Answer.absent();
+            }
+            Hir.Module lowered = lowering.value().lowered();
+            Set<ValueName.Behavior> injected =
+                    souther.compiler.check.Requirements.injectedNames(
+                            lowered, importedInjected.value());
+            // What runs, which is what a check is made from. Where each rule was written stays with
+            // the declaration; a reader given that as well would hold a value an unrelated edit
+            // moves.
+            Map<String, souther.compiler.core.Contract> executable =
+                    CheckedEnsures.executable(contracts.value());
+            Map<ValueName.Behavior, EnsuresEnforcement> checks = new LinkedHashMap<>();
+            for (Hir.BehaviorDef behavior : lowered.behaviors()) {
+                ValueName.Behavior named = new ValueName.Behavior(lowered.name(), behavior.name());
+                checks.put(named, EnsuresEnforcement.of(named, executable, injected));
+            }
+            return Answer.of(Ordered.map(checks));
         }
     }
 }

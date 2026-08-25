@@ -1,5 +1,6 @@
 package souther.compiler.program;
 
+import souther.compiler.core.EnsuresEnforcement;
 import souther.compiler.types.ValueName;
 
 /**
@@ -16,9 +17,10 @@ public final class CheckedBehavior {
     private final ValueName.Behavior name;
     private final CheckedSignature signature;
     private final CheckedImplementation implementation;
+    private final EnsuresEnforcement ensures;
 
     CheckedBehavior(ValueName.Behavior name, CheckedSignature signature,
-                    CheckedImplementation implementation) {
+                    CheckedImplementation implementation, EnsuresEnforcement ensures) {
         // The one place the two readings of what a behavior takes meet, and so the one place they
         // are held to each other. A signature says the inputs as types and a body says the bindings
         // they arrive in; a reader is offered them as one parameter at each index, and lists of
@@ -31,6 +33,7 @@ public final class CheckedBehavior {
         this.name = name;
         this.signature = signature;
         this.implementation = implementation;
+        this.ensures = ensures;
     }
 
     /**
@@ -52,6 +55,26 @@ public final class CheckedBehavior {
     /** Where the implementation comes from. */
     public CheckedImplementation implementation() {
         return implementation;
+    }
+
+    /**
+     * What this behavior declares about its answer, and where that is held to.
+     *
+     * <p>The two together, because an output needs both and neither is worth having alone: a
+     * contract with nowhere to check it is a rule nothing runs, and a placement with no rule is a
+     * check with nothing in it. {@link EnsuresEnforcement.AtTheCallee} is checked where the
+     * behavior answers, so a caller emits nothing;
+     * {@link EnsuresEnforcement.AtEachCrossing} is a behavior whose answer arrives from outside, so
+     * every crossing into what this program emits checks it;
+     * {@link EnsuresEnforcement.NoContract} is a behavior that declares nothing.
+     *
+     * <p>{@link EnsuresEnforcement.NotDecidedHere} is for a behavior another module declared, and
+     * no behavior of this program is one — every module here was compiled together. It is an arm of
+     * the answer all the same, because collapsing it would make "there is no check" and "nobody
+     * decided" one sentence.
+     */
+    public EnsuresEnforcement ensures() {
+        return ensures;
     }
 
     @Override
