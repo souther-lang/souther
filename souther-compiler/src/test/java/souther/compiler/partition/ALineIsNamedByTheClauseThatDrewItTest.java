@@ -101,9 +101,11 @@ class ALineIsNamedByTheClauseThatDrewItTest {
                 at1.origins().stream().map(OriginRef::named).toList(),
                 "one cut, two rules that drew it");
 
+        // Under the declaration that drew them, and named in the terms it wrote: the line is owed
+        // once over every behavior carrying the type (issue #1062).
         String human = humanOf(TWO_CLAUSES_AT_ONE_VALUE);
-        assertTrue(human.contains("price/length = 1 (invariant Length (floorA))"), human);
-        assertTrue(human.contains("price/length = 1 (invariant Length (floorB))"), human);
+        assertTrue(human.contains("value = 1 (invariant Length (floorA))"), human);
+        assertTrue(human.contains("value = 1 (invariant Length (floorB))"), human);
     }
 
     /**
@@ -118,8 +120,8 @@ class ALineIsNamedByTheClauseThatDrewItTest {
     void aLineNamesTheClauseTheAuthorWrote() {
         String human = humanOf(NAMED_CLAUSES);
 
-        assertTrue(human.contains("price/length = 1 (invariant Length (floor))"), human);
-        assertTrue(human.contains("price/length = 100 (invariant Length (ceiling))"), human);
+        assertTrue(human.contains("value = 1 (invariant Length (floor))"), human);
+        assertTrue(human.contains("value = 100 (invariant Length (ceiling))"), human);
     }
 
     /**
@@ -134,8 +136,8 @@ class ALineIsNamedByTheClauseThatDrewItTest {
     void oneClauseIsOneRuleAndAnUnnamedOneIsNamedByItsDeclaration() {
         String human = humanOf(ONE_UNNAMED_CLAUSE);
 
-        assertTrue(human.contains("price/length = 1 (invariant Length #1)"), human);
-        assertTrue(human.contains("price/length = 100 (invariant Length #1)"), human);
+        assertTrue(human.contains("value = 1 (invariant Length #1)"), human);
+        assertTrue(human.contains("value = 100 (invariant Length #1)"), human);
 
         Axis length = axis(ONE_UNNAMED_CLAUSE);
         assertEquals(1, cutAt(length, 1L).origins().size(),

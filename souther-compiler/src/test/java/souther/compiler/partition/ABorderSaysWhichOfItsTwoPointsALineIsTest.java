@@ -143,8 +143,8 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
     void aBoundsPointComesFromItsEndAndNotFromItsOperator() {
         String report = report(bounded("Int", "> 5"));
 
-        assertTrue(report.contains("the ON point take/h.a = 6"), report);
-        assertFalse(report.contains("take/h.a = 5"), report);
+        assertTrue(report.contains("the ON point value = 6"), report);
+        assertFalse(report.contains("value = 5"), report);
     }
 
     /**
@@ -164,8 +164,8 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
         String closed = report(bounded("Int", ">= 5"));
         String strict = report(bounded("Int", "> 5"));
 
-        assertTrue(closed.contains("the ON point take/h.a = 5"), closed);
-        assertTrue(strict.contains("the ON point take/h.a = 6"), strict);
+        assertTrue(closed.contains("the ON point value = 5"), closed);
+        assertTrue(strict.contains("the ON point value = 6"), strict);
         // And neither owes a row over the line. A bound leaves nothing outside itself, so the two
         // points out there are excluded — said in those words rather than left out, because a border
         // showing two of four items and nothing beside them reads as this compiler being short.

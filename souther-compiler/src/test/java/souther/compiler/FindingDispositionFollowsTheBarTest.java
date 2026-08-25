@@ -155,13 +155,22 @@ class FindingDispositionFollowsTheBarTest {
     @Test
     void theJsonCarriesEveryFindingAndWhatABuildDoesAboutIt() {
         AdequacyReport report = report();
-        JsonNode ship = JSON.readTree(report.json(SourceNameResolver.identity()))
-                .get("modules").get(0).get("behaviors").get(0);
+        JsonNode module = JSON.readTree(report.json(SourceNameResolver.identity()))
+                .get("modules").get(0);
+        JsonNode ship = module.get("behaviors").get(0);
         JsonNode findings = ship.get("findings");
+        // What the declarations are short of, beside what the bodies are. A line an `invariant`
+        // drew is not any behavior's, so it is published under the module and not under one of
+        // them — and counted only over the behaviors, this said the document carried every finding
+        // while one of them was missing from it (issue #1062).
+        JsonNode declared = module.get("declarations");
 
         assertNotNull(findings, "the behavior's findings are published");
-        assertEquals(report.findings().size(), findings.size());
-        assertEquals(report.adequacyGaps().size(), refused(findings).size(), findings.toString());
+        assertNotNull(declared, "and so are the declarations'");
+        assertEquals(report.findings().size(), findings.size() + declared.size());
+        assertEquals(report.adequacyGaps().size(),
+                refused(findings).size() + refused(declared).size(),
+                findings.toString() + declared.toString());
 
         // The pair the issue is about, in the document. The position is written with the class
         // because two parameters of one type produce two findings a class name alone cannot tell

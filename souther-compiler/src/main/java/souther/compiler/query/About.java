@@ -84,6 +84,34 @@ public sealed interface About {
     }
 
     /**
+     * A point of a line a declaration drew, that no row anywhere in the module stands at.
+     *
+     * <p>Beside {@link APointOfABorder} rather than among its findings, and the difference is which
+     * question was answered. That one is about a line as one position of one behavior met it, and a
+     * row written for that behavior answers it. This one is about the line itself: {@code UserId}
+     * says a user id is a string of one character or more, whether the compiler believes a row
+     * standing at length 1 is a question about {@code UserId}, and the answer cannot differ between
+     * the behaviors carrying it. One row anywhere settles it.
+     *
+     * <p>Which is why it carries the debt and not one of the readings. Over {@code crm} one clause
+     * of {@code UserId} is read at 126 positions; a finding naming one of them would name whichever
+     * the walk reached first, and an author sent there would be sent to a body that says nothing
+     * about the length of a user id (issue #1062).
+     */
+    record APointOfADeclaredBorder(BorderObligationAssessment debt,
+                                   souther.compiler.partition.PointRole role) implements About {
+        public APointOfADeclaredBorder {
+            java.util.Objects.requireNonNull(debt, "a finding is about something");
+            java.util.Objects.requireNonNull(role, "and a border is owed a row in four roles");
+        }
+
+        /** What became of this point, which is what the finding is about. */
+        public ItemAssessment item() {
+            return debt.at(role);
+        }
+    }
+
+    /**
      * A finding about one rule of the model, which is what carries its identity.
      *
      * <p>Which findings these are is answered here and nowhere else. Read off a list of kinds, a

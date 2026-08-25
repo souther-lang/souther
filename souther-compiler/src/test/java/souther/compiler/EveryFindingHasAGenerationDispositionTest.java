@@ -142,9 +142,9 @@ class EveryFindingHasAGenerationDispositionTest {
 
     @Test
     void aBoundaryARowWasComposedForIsAnsweredWithThatRow() {
-        Compilation compilation = compiled(POLICY);
+        Compilation compilation = compiled(GUARDED);
         List<Adequacy.GenerationDisposition> answered =
-                filling(compilation, "example.policy", "fee").generation().stream()
+                filling(compilation, "example.guarded", "band").generation().stream()
                         .filter(d -> d.finding().kind() == Adequacy.Kind.BOUNDARY_UNMET).toList();
 
         assertEquals(2, answered.size(), "both edges");
@@ -152,6 +152,52 @@ class EveryFindingHasAGenerationDispositionTest {
                         d -> d.outcome() instanceof GenerationOutcome.Generated),
                 "a strategy applies to a boundary and it composed a row: " + answered);
     }
+
+    /**
+     * A line the declaration is owed is answered too, and says nothing composes a row for it yet.
+     *
+     * <p>The subject the walk over the behaviors does not reach. A line an {@code invariant} drew is
+     * not any behavior's, so the fillings above answer for every finding but those — and one printed
+     * in the report and left out of this answer is one an author is told nothing about, while the
+     * rows beside it read as though they filled everything.
+     */
+    @Test
+    void aLineOwedToADeclarationIsAnsweredForToo() {
+        Compilation compilation = compiled(POLICY);
+        List<Adequacy.Finding> declared =
+                compilation.db().ask(new Adequacy.Findings("example.policy")).value().stream()
+                        .filter(each -> each.subject()
+                                instanceof souther.compiler.query.FindingSubject.OfADeclaration)
+                        .toList();
+        assertFalse(declared.isEmpty(), "the model under test has lines its declarations are owed");
+
+        List<Adequacy.GenerationDisposition> answered =
+                Adequacy.generatedForDeclarationsOf(compilation.db(), "example.policy");
+        assertEquals(declared, answered.stream()
+                        .map(Adequacy.GenerationDisposition::finding).toList(),
+                "every one of them, and each with its own answer");
+        assertTrue(answered.stream().allMatch(each ->
+                        each.outcome() instanceof GenerationOutcome.NotSupported),
+                "nothing composes a row for a line owed across its readings yet: " + answered);
+    }
+
+    /** A guard on an input, whose line is the behavior's own and is owed a row either side. */
+    private static final String GUARDED = """
+            module example.guarded
+
+            data Ok
+            data No
+            data Verdict = Ok | No
+
+            behavior band : (days: Int) -> Verdict
+            let band (days) = {
+                guard days <= 30 else No
+                Ok
+            }
+
+            example band
+                | "well inside" : (5) -> Ok
+            """;
 
     /** A body whose decisions read two positions together, so the combinations reach its arms. */
     private static final String SHIPPING = """

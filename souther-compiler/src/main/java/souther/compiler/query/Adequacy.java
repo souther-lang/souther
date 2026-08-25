@@ -1411,7 +1411,13 @@ public final class Adequacy {
      */
     public static GenerationOutcome whereNoRowCouldAnswer(About about) {
         return switch (about) {
-            case About.APointOfABorder _, About.ACaseNoRowAppliesItTo _, About.AClassNoRowIsIn _,
+            // A row stands at a line whoever the line is owed to, so a line a declaration is owed
+            // is answered here the way a line a body drew is. Whether anything composes that row is
+            // the other question and is the generation's ({@link #generatedForDeclarationsOf});
+            // answered here, the two would be one and a reader asking whether a row could settle
+            // this would be told what the search happens to be arranged to do.
+            case About.APointOfABorder _, About.APointOfADeclaredBorder _,
+                 About.ACaseNoRowAppliesItTo _, About.AClassNoRowIsIn _,
                  About.AnArmNoRowGoesThrough _ -> null;
             case About.ACaseNoRowExpects _ -> new GenerationOutcome.NotSupported(
                     GenerationOutcome.NotSupported.Reason.NO_STRATEGY_FOR_AN_OUTPUT_CASE);
@@ -1471,6 +1477,39 @@ public final class Adequacy {
             }
         }
         return Ordered.map(out);
+    }
+
+    /**
+     * What the generator can do about what the module's declarations are short of.
+     *
+     * <p>Beside {@link #generatedOf}, which answers per behavior. A line an {@code invariant} drew is
+     * not any behavior's, so a walk over the behaviors answers for every finding but those — and a
+     * block that printed only what it managed would read as though it had filled everything, which
+     * is the whole reason a disposition is kept beside each finding rather than dropped.
+     *
+     * <p>Every one of them, and each with the answer its own shape gets. Nothing composes a row for
+     * one of these yet: a row is composed by walking one behavior's inputs and this line is owed
+     * once over every behavior carrying the type, so which reading composes the one row it is owed
+     * is a search over the readings and not a fold of them.
+     */
+    public static List<GenerationDisposition> generatedForDeclarationsOf(Db db, String module) {
+        List<Finding> findings = db.ask(new Findings(module)).value();
+        if (findings == null) {
+            return List.of();
+        }
+        List<GenerationDisposition> out = new ArrayList<>();
+        for (Finding finding : findings) {
+            if (!(finding.subject() instanceof FindingSubject.OfADeclaration)) {
+                continue;
+            }
+            // One answer, and it is about the search rather than about the line: a row is composed
+            // by walking one behavior's inputs, and which reading composes the one row a debt is
+            // owed is a search over the readings rather than a fold of them.
+            out.add(new GenerationDisposition(finding, new GenerationOutcome.NotSupported(
+                    GenerationOutcome.NotSupported.Reason
+                            .NO_SEARCH_IS_ASKED_FOR_A_LINE_ACROSS_ITS_READINGS)));
+        }
+        return List.copyOf(out);
     }
 
     /** The same, with a value composed at every point worth one — which is a request, and costs what
@@ -2563,7 +2602,10 @@ public final class Adequacy {
                             case About.AClassNoRowIsIn(var missing) -> atClass(missing, composed);
                             case About.AnArmNoRowGoesThrough(var arm) -> atArm(arm, composed);
                             // The eight above, which is what `none` was not null for.
-                            case About.ACaseNoRowExpects _, About.ACaseNothingWasSeenToProduce _,
+                            // A line a declaration is owed is not one of this behavior's findings,
+                            // so nothing reaches here with one.
+                            case About.APointOfADeclaredBorder _,
+                                    About.ACaseNoRowExpects _, About.ACaseNothingWasSeenToProduce _,
                                     About.APositionNoLineDivides _,
                                     About.APositionThisCouldNotRead _,
                                     About.ARuleWithoutALine _,
@@ -3397,6 +3439,11 @@ public final class Adequacy {
                 case About.ACaseNothingWasSeenToProduce _ -> Kind.OUTPUT_CASE_UNVERIFIED;
                 case About.ACaseNoRowAppliesItTo _ -> Kind.INPUT_CASE_UNSPECIFIED;
                 case About.AClassNoRowIsIn _ -> Kind.AXIS_CLASS_UNCOVERED;
+                // The same two rules, asked of the role. A line owed once over its readings and a
+                // line owed at one of them are the same technique's item and are told apart under
+                // the same two codes.
+                case About.APointOfADeclaredBorder(var _, var role) -> role.againstTheLine()
+                        ? Kind.BOUNDARY_UNMET : Kind.DOMAIN_POINT_UNCOVERED;
                 case About.APointOfABorder(var point) -> point.role().againstTheLine()
                         ? Kind.BOUNDARY_UNMET : Kind.DOMAIN_POINT_UNCOVERED;
                 case About.APositionNoLineDivides _ -> Kind.PARTITION_NOT_DERIVABLE;
@@ -3493,7 +3540,132 @@ public final class Adequacy {
                 armFindings(behavior,
                         branches == null ? null : branches.get(behavior.name()), out);
             }
+            declaredFindings(db, name, partitions, out);
             return Answer.of(List.copyOf(out));
+        }
+
+        /**
+         * What the module's own declarations are short of, from every reading of every line.
+         *
+         * <p>One finding per authored line and not per reading of it. A clause of a {@code data}
+         * says something about the type wherever the type is carried, so a row standing at the line
+         * is evidence about the type and the behaviors carrying it have nothing to add: over
+         * {@code crm} one clause of {@code UserId} is read at 126 positions of 74 behaviors, and
+         * discharging what that asked for meant writing 126 rows that each stand at the same point
+         * (issue #1062).
+         *
+         * <p>After the behaviors and over all of them at once, because that is the reach: a row
+         * written for any behavior carrying the type settles the line for every one of them, and a
+         * walk that answered per behavior could not see the row beside it.
+         *
+         * <p>The line is named in the terms the declaration wrote
+         * ({@link souther.compiler.check.DeclaredBorders}) and not in the terms of whichever reading
+         * this reached first, which is the same mistake one step along.
+         */
+        private static void declaredFindings(Db db, String module,
+                                             Map<String, PartitionEvidence> partitions,
+                                             List<Finding> out) {
+            if (partitions == null) {
+                return;
+            }
+            Map<String, List<BorderAssessment>> readings = new LinkedHashMap<>();
+            partitions.forEach((behavior, evidence) -> {
+                for (BorderAssessment line : evidence.boundaries()) {
+                    if (line.border().origin().owedToTheDeclaration().isPresent()) {
+                        readings.computeIfAbsent(behavior, _ -> new ArrayList<>()).add(line);
+                    }
+                }
+            });
+            if (readings.isEmpty()) {
+                return;
+            }
+            Symbols symbols = Names.derivedSymbols(db, module).value();
+            souther.compiler.check.ReadingPolicy policy = db.ask(new Front.Reading()).value();
+            if (symbols == null || policy == null) {
+                return;
+            }
+            Map<TypeSymbol, souther.compiler.check.DeclaredBorders> declared = new LinkedHashMap<>();
+            for (BorderObligationAssessment debt : BorderObligationAssessment.across(readings,
+                    id -> axisOf(id, declared, symbols, policy))) {
+                TypeSymbol declaredOn = debt.origin().owedToTheDeclaration().orElseThrow();
+                Citation at = citationOf(symbols, declaredOn);
+                for (souther.compiler.partition.PointRole role
+                        : BorderObligationAssessment.AGAINST_THE_LINE) {
+                    ItemAssessment item = debt.at(role);
+                    if (!item.isUnmetGap()) {
+                        continue;
+                    }
+                    out.add(Finding.by(new FindingSubject.OfADeclaration(declaredOn),
+                            item.weakeningSource(), at,
+                            new About.APointOfADeclaredBorder(debt, role)));
+                }
+            }
+        }
+
+        /**
+         * What a debt's line is on, as the declaration wrote it.
+         *
+         * <p>One reading of each declaration, kept, because a declaration draws as many lines as its
+         * clauses have ends and each of them would otherwise read the declaration again.
+         *
+         * <p>The value a newtype wraps is written {@code value}, which is what the author writes in
+         * the clause. A coordinate spells an empty path as "the value", which is what it is called
+         * where a sentence says it rather than where a line is named.
+         */
+        private static String axisOf(souther.compiler.partition.BorderObligationId id,
+                                     Map<TypeSymbol, souther.compiler.check.DeclaredBorders> read,
+                                     Symbols symbols, souther.compiler.check.ReadingPolicy policy) {
+            TypeSymbol declaredOn = id.origin().owedToTheDeclaration().orElse(null);
+            if (declaredOn == null) {
+                return id.origin().named();
+            }
+            souther.compiler.check.FieldDomains.Coordinate at =
+                    read.computeIfAbsent(declaredOn,
+                            each -> souther.compiler.check.DeclaredBorders.of(each, symbols, policy))
+                            .at(ruleOf(id), conjunctOf(id));
+            // A clause whose end this could not read from the declaration has no form to print, and
+            // the rule's own name is the whole of what there is to call the line.
+            return at == null ? id.origin().named() : written(at);
+        }
+
+        /** The coordinate as a line is named by, which spells the value a newtype wraps the way the
+         *  clause does. */
+        private static String written(souther.compiler.check.FieldDomains.Coordinate at) {
+            String where = at.path().isEmpty() ? "value" : at.path();
+            return at.kind() instanceof souther.compiler.check.FieldDomains
+                    .CoordinateKind.OfWhatAnOperationAnswers taken
+                    ? taken.operation() + "(" + where + ")" : where;
+        }
+
+        /** Which clause of which declaration drew the line, and which of its conjuncts. */
+        private static souther.compiler.check.RuleRef.Invariant ruleOf(
+                souther.compiler.partition.BorderObligationId id) {
+            return ((souther.compiler.check.RuleRef.Invariant) id.origin().rule());
+        }
+
+        private static int conjunctOf(souther.compiler.partition.BorderObligationId id) {
+            return conjunctOf(id.origin());
+        }
+
+        private static int conjunctOf(souther.compiler.partition.OriginRef origin) {
+            return switch (origin) {
+                case souther.compiler.partition.OriginRef.InvariantOrigin it -> it.conjunct();
+                case souther.compiler.partition.OriginRef.NarrowedOrigin it ->
+                        conjunctOf(it.bound());
+                case souther.compiler.partition.OriginRef.ComparisonOrigin _,
+                     souther.compiler.partition.OriginRef.EnsuresOrigin _ ->
+                        throw new IllegalStateException(
+                                "a line owed to a declaration is a declaration's clause: " + origin);
+            };
+        }
+
+        /** Where the declaration is written, which is where a reader is sent. */
+        private static Citation citationOf(Symbols symbols, TypeSymbol declaredOn) {
+            // Asked of the declaration world rather than of this module's own list, because a type
+            // another module wrote is a declaration all the same and a reader sent to it is sent to
+            // where it is written.
+            return symbols.declarations().declaration(declaredOn) instanceof Hir.Data data
+                    ? Citation.of(data.pos()) : null;
         }
 
         /**
@@ -3594,6 +3766,19 @@ public final class Adequacy {
                 // where the model does, and a row at it may be one nobody can write. A point
                 // nobody is owed a row at is not a gap either, and it says so as its own shape.
                 if (!point.item().isUnmetGap()) {
+                    continue;
+                }
+                // A line the declaration is owed is answered once for the module, from every
+                // reading of it. Left here as well, one clause of `UserId` is 126 findings over
+                // `crm` — one per position of every behavior carrying the type — for a rule the
+                // author wrote once (issue #1062). Asked of the rule rather than matched on which
+                // kind it is: which of them are the declaration's is the rule's own answer.
+                // The two points against the line only. The two away from it are regions of this
+                // position — where a region stops is settled by every other rule reaching the
+                // position — so a row well inside one reading is not a row that could stand at
+                // another at all, and the point is this behavior's as it was.
+                if (point.role().againstTheLine()
+                        && point.border().origin().owedToTheDeclaration().isPresent()) {
                     continue;
                 }
                 // The point itself, and one finding for either kind. Which of the two a build is
@@ -3735,6 +3920,36 @@ public final class Adequacy {
         }
 
         /**
+         * What a row at one point of a border shows, as a hint.
+         *
+         * <p>Asked of the role, and in the role's own vocabulary. A hint saying which side of the
+         * line the value falls on would be keyed on the border being closed or open rather than on
+         * the role — {@code n <= 100} is at its ON point on the line and {@code n < 100} is at its
+         * OFF point there — so it would be a second reading of one finding, sitting under a sentence
+         * that just named the role.
+         *
+         * <p>One place, because two questions raise these. A line owed at one reading of it and a
+         * line owed once over all of them are the same technique's item, and what a row at the point
+         * shows is the same thing to say about either.
+         */
+        private static void hintFor(souther.compiler.partition.PointRole role,
+                                    souther.compiler.diag.Diagnostic.Builder built) {
+            switch (role) {
+                case ON -> built.hint(
+                        new ExampleMessage.ARowJustInsideShowsTheBorderIsNotFurtherIn());
+                case OFF -> built.hint(
+                        new ExampleMessage.ARowJustOutsideShowsTheBorderIsNotFurtherOut());
+                // Said only to a build held to reliable domain coverage, which is where the two
+                // kinds part. In its own words: what a row well inside shows is not what a row a
+                // step over shows, and the neighbour's hint would send an author to the wrong value.
+                case IN -> built.hint(
+                        new ExampleMessage.ARowWellInsideShowsTheBorderIsWhatDivides());
+                case OUT -> built.hint(
+                        new ExampleMessage.ARowWellOutsideShowsTheBorderIsWhatDivides());
+            }
+        }
+
+        /**
          * One finding as the warning a build reads.
          *
          * <p>The message keys are written out per kind rather than derived from the code's name, so
@@ -3768,6 +3983,19 @@ public final class Adequacy {
                         // Which of the two rules this is, is the role's answer, exactly as the kind
                         // is: a point against the line and a point away from it are owed by
                         // different criteria and are told under different codes.
+                        // A line owed once over every reading of it. The rule has a name — a
+                        // declaration's clause always does — so there is one sentence and not two,
+                        // and what the line is on is what the declaration wrote rather than the
+                        // position some behavior met it at (issue #1062).
+                        case About.APointOfADeclaredBorder(var debt, var role) ->
+                                role.againstTheLine()
+                                        ? new ExampleMessage.NoRowIsAtThePointOfTheBorderARuleDrew(
+                                                role.name(), debt.axis(), debt.against(role),
+                                                debt.origin().named())
+                                        : new ExampleMessage
+                                                .NoRowIsAtThePointAwayFromTheBorderARuleDrew(
+                                                role.name(), debt.axis(), debt.against(role),
+                                                debt.origin().named());
                         case About.APointOfABorder(var point) ->
                                 point.role().againstTheLine()
                                         ? point.border().origin().isWrittenRatherThanNamed()
@@ -3812,26 +4040,16 @@ public final class Adequacy {
             switch (said) {
                 case About.ACaseNoRowExpects(var missing) ->
                         built.hint(new ExampleMessage.WriteARowExpectingThatCase(missing.name()));
+                // The same hints, asked of the role. What a row at each point shows is a fact
+                // about the point and not about which of the two questions raised it.
+                case About.APointOfADeclaredBorder(var _, var role) -> hintFor(role, built);
                 case About.APointOfABorder(var point) -> {
                     // Asked of the point, and in the point's own vocabulary. A hint saying which
                     // side of the line the value falls on would be keyed on the border being closed
                     // or open rather than on the role — `n <= 100` is at its ON point on the line
                     // and `n < 100` is at its OFF point there — so it would be a second reading of
                     // one finding, sitting under a sentence that just named the role.
-                    switch (point.role()) {
-                        case ON -> built.hint(
-                                new ExampleMessage.ARowJustInsideShowsTheBorderIsNotFurtherIn());
-                        case OFF -> built.hint(
-                                new ExampleMessage.ARowJustOutsideShowsTheBorderIsNotFurtherOut());
-                        // Said only to a build held to reliable domain coverage, which is where
-                        // the two kinds part. In its own words: what a row well inside shows is not
-                        // what a row a step over shows, and the neighbour's hint would send an
-                        // author to the wrong value.
-                        case IN -> built.hint(
-                                new ExampleMessage.ARowWellInsideShowsTheBorderIsWhatDivides());
-                        case OUT -> built.hint(
-                                new ExampleMessage.ARowWellOutsideShowsTheBorderIsWhatDivides());
-                    }
+                    hintFor(point.role(), built);
                     // Where the rule has a place rather than a name, the place is a second region
                     // and not words in the sentence: a renderer resolves what to call its file,
                     // and a body written out of sight says so off its own coordinate.

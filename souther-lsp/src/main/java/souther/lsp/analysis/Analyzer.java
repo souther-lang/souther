@@ -775,12 +775,34 @@ public final class Analyzer {
         if (findings == null) {
             return false;
         }
-        // This behavior's own. A finding about a declaration is not one writing a row for this
-        // behavior answers — what {@code UserId} says is the same wherever the type is carried —
-        // so the offer beside a behavior is about the behavior's own (issue #1062).
-        return findings.stream().filter(each -> each.subject().isBehavior(behavior))
-                .anyMatch(each -> souther.compiler.query.Adequacy
-                        .whereNoRowCouldAnswer(each.about()) == null);
+        // This behavior's own, and the lines its type declarations are owed that a row written
+        // here would settle. A line an `invariant` drew is not this behavior's — what `UserId` says
+        // is the same wherever the type is carried — but a row written for a behavior carrying the
+        // type is what discharges it, so an offer standing beside that behavior is an offer to do
+        // this work (issue #1062). Read as the behavior's own alone, the offer went quiet as soon
+        // as the only work left was a line a declaration is owed.
+        for (souther.compiler.query.Adequacy.Finding each : findings) {
+            if (each.subject().isBehavior(behavior)
+                    && souther.compiler.query.Adequacy.whereNoRowCouldAnswer(each.about()) == null) {
+                return true;
+            }
+            // A line a declaration is owed that this behavior carries. It is not this behavior's
+            // finding — what `UserId` says is the same wherever the type is carried — and a row
+            // written here is what discharges it, so an offer standing beside this behavior is an
+            // offer to do that work (issue #1062). Read as the behavior's own alone, the offer went
+            // quiet as soon as the only work left was a line a declaration is owed.
+            //
+            // Asked of the finding and never of what a search has composed. Whether a value has
+            // been built turns on how much the build was measuring, and an offer that read it would
+            // appear at one level and not at another for work that is there either way.
+            if (each.about() instanceof souther.compiler.query.About
+                    .APointOfADeclaredBorder(var debt, var _)
+                    && debt.carriedBy(behavior)
+                    && souther.compiler.query.Adequacy.whereNoRowCouldAnswer(each.about()) == null) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

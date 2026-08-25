@@ -108,6 +108,11 @@ class ARuleReadToTheEndIsNotOneThisCouldNotReadTest {
         behavior.path("weakening").forEach(each -> weakening.add(each.asString()));
         List<String> kinds = new ArrayList<>();
         behavior.path("findings").forEach(each -> kinds.add(each.get("kind").asString()));
+        // And what the module's declarations are short of. A line an `invariant` drew is not any
+        // behavior's, so it is published under the module — read off the behavior alone, a clause
+        // this drew a line from would look like one nothing measured (issue #1062).
+        document.get("modules").get(0).path("declarations")
+                .forEach(each -> kinds.add(each.get("kind").asString()));
         return new Measured(behavior.get("status").asString(), weakening, kinds,
                 report.human(SourceNameResolver.identity()));
     }

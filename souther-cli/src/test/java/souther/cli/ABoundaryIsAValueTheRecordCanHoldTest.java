@@ -12,6 +12,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -75,13 +76,48 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
                 | "a" : (Band { low = Ratio(0.1m), high = Ratio(0.9m) }) -> Ok
             """;
 
+    /**
+     * Every point of every line that no row of the model stands at, said per position.
+     *
+     * <p>Read off the measure and not off the report. A line an {@code invariant} drew is owed once
+     * over every position carrying the type, and the report says it once and names it in the terms
+     * the declaration wrote (issue #1062) — so which positions reach a line is a question the report
+     * stopped answering when the debt stopped being a position's. It is answered here, where the
+     * lines are still one per position, which is what these tests are about: whether the value a
+     * record's rules leave a field at is the value the line is drawn at.
+     *
+     * <p>Written the way the report writes it, so that what the tests say is unchanged.
+     */
     private static List<String> boundariesOf(String model) throws Exception {
-        return reportOn(model).lines()
-                .map(String::trim)
-                // The sentence, whichever mark it is printed under. What a build does about a finding
-                // is said by the mark and held by the test that owns it.
-                .filter(line -> line.contains("no row is at"))
-                .toList();
+        souther.compiler.query.Compilation compilation =
+                souther.compiler.query.Compilation.ofSource(model, "Main");
+        compilation.measure(souther.compiler.query.Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        String module = compilation.modules().get(0);
+        java.util.Map<String, List<souther.compiler.query.BorderAssessment>> borders =
+                // The searched reading, which is what the report is written from: whether a value
+                // at a point could be built is part of what tells a line no row stands at from one
+                // no row could stand at, and the plain measure does not compose one.
+                souther.compiler.query.Adequacy.searchedBoundariesOf(compilation.db(), module);
+        assertNotNull(borders, "the model under test compiles");
+        souther.compiler.diag.SourceNameResolver names =
+                souther.compiler.diag.SourceNameResolver.identity();
+        List<String> out = new java.util.ArrayList<>();
+        borders.forEach((behavior, lines) -> lines.forEach(line -> {
+            for (souther.compiler.query.BorderAssessment.Point point : line.points()) {
+                if (!point.item().isUnmetGap()) {
+                    continue;
+                }
+                out.add(point.role().againstTheLine()
+                        ? "no row is at the " + point.role() + " point " + behavior + "/"
+                                + line.axis() + " = " + point.against()
+                                + " (" + line.describe(names, null) + ")"
+                        : "no row is at an " + point.role() + " point of " + behavior + "/"
+                                + line.axis() + ", " + point.against()
+                                + " (" + line.describe(names, null) + ")");
+            }
+        }));
+        return List.copyOf(out);
     }
 
     /**
@@ -412,7 +448,9 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
         // settled by building one. Two kinds of witness, and the projection proves neither.
         assertTrue(report.contains("border      borders 2   coverage items 2/4   excluded 4"),
                 () -> "the row at 0 is met, and 10 was built and is owed:\n" + report);
-        assertTrue(report.contains("no row is at the ON point f/r.a = 10"), () -> report);
+        // Under the declaration that drew it, in the terms it wrote: the line is owed once over
+        // every position carrying the type (issue #1062).
+        assertTrue(report.contains("no row is at the ON point value = 10"), () -> report);
     }
 
     /**

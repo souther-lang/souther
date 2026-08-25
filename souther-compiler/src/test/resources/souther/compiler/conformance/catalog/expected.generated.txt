@@ -70,3 +70,4 @@
 //         }
 //     )
 //         -> <?>
+// nothing offers a row for `String.length(value) = 1` in `Sku`: a row is composed by walking one behavior's inputs, and this line is owed once over every behavior carrying the type

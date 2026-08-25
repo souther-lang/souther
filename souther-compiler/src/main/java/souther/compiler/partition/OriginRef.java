@@ -300,6 +300,34 @@ public sealed interface OriginRef {
     }
 
     /**
+     * The declaration this line is owed to, where it is a declaration's line rather than a body's.
+     *
+     * <p>Whose debt a row at the line is. A clause of a {@code data} says something about the type
+     * wherever the type is carried, so a row standing at the line is evidence about the type and the
+     * behaviors carrying it have nothing to add — one line, owed once, at the declaration that wrote
+     * it. A comparison and an {@code ensures} clause are written in a body and say something about
+     * that body at that position, so they are owed per behavior, as they were.
+     *
+     * <p>Asked of the rule rather than matched on which kind it is. Read by a caller as "is this an
+     * invariant", the question would be asked again wherever a report, a build's refusal or an
+     * editor wanted it, and a rule added later would be whatever the arm it was written next to
+     * happened to say (issue #1062).
+     *
+     * <p>A narrowed end is the bound's declaration. The declarations that took it in are what
+     * {@link #describe} says beside the rule, and each of them is one where taking any away leaves
+     * the end where it is — so there is no one of them to send a reader to, and the rule that placed
+     * the end is where the line came from.
+     */
+    default java.util.Optional<TypeSymbol> owedToTheDeclaration() {
+        return switch (this) {
+            case InvariantOrigin i ->
+                    java.util.Optional.of(i.rule().clause().id().declaredOn());
+            case ComparisonOrigin _, EnsuresOrigin _ -> java.util.Optional.empty();
+            case NarrowedOrigin n -> n.bound().owedToTheDeclaration();
+        };
+    }
+
+    /**
      * Which comparison a row has to get an answer out of, for a rule that meeting takes more than
      * writing the value.
      *

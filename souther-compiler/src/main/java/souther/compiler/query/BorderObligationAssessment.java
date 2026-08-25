@@ -21,9 +21,23 @@ import java.util.Map;
  * Answered from an occurrence, one clause of {@code UserId} was 126 things to write a row for over
  * {@code crm} (issue #1062).
  *
- * <p><b>Total over {@link PointRole}, the way an occurrence is.</b> A line answers for every role
- * and so does this, so a reader asking what one of them came to is never answered by an entry that
- * is not there.
+ * <p><b>The two points against the line, and not the four an occurrence answers for.</b> {@code ON}
+ * and {@code OFF} are values of the quantity the rule cut: whether a row standing at length 1 is
+ * believed is a question about {@code UserId} and the same question wherever the type is carried.
+ * {@code IN} and {@code OUT} are not values but the two <em>regions</em> either side of the line,
+ * and where a region stops is settled by every other rule reaching that position — {@code Cm}'s
+ * lower end at 0 runs to 150 at a {@code parcel.length} the record caps and runs on at an
+ * {@code order.straw} nothing else bounds. A row well inside one is not a row that could stand at
+ * the other at all, so evidence there is not interchangeable and the point is owed per reading, as
+ * it was.
+ *
+ * <p>Which is the split {@link PointRole#againstTheLine} already names, and the one the two halves
+ * of this technique were counted under before they were brought together: the regions were the
+ * measure that counts the classes a position is divided into, and a class of a position is the
+ * position's.
+ *
+ * <p>Total over the roles it does answer for, so a reader asking what one of them came to is never
+ * answered by an entry that is not there.
  *
  * <p><b>What is owed is the same at every reading, and that is checked rather than folded.</b> A
  * {@link Demand} is what the line asks — a criterion over the levels of the quantity it cut, or a
@@ -33,9 +47,20 @@ import java.util.Map;
  * merged — that mistake would come out as a report asking for a row at a point some other line
  * owns.
  */
-public record BorderObligationAssessment(BorderObligationId id, Map<PointRole, Demand> demands,
+public record BorderObligationAssessment(BorderObligationId id, String axis,
+                                         Map<PointRole, Demand> demands,
                                          Map<PointRole, ItemAssessment> items,
-                                         List<BorderAssessment> readings) {
+                                         List<BorderAssessment> readings,
+                                         List<String> carriedBy) {
+
+    /**
+     * The roles a debt answers for: the two the line names a value at.
+     *
+     * <p>The other two are regions of a position rather than values of the line, so they are owed
+     * per reading and are not here ({@link PointRole#againstTheLine}).
+     */
+    public static final EnumSet<PointRole> AGAINST_THE_LINE =
+            EnumSet.of(PointRole.ON, PointRole.OFF);
 
     public BorderObligationAssessment {
         if (id == null) {
@@ -45,12 +70,17 @@ public record BorderObligationAssessment(BorderObligationId id, Map<PointRole, D
             throw new IllegalArgumentException(
                     "a debt is what its readings came to, and this is none of them: " + id);
         }
-        if (demands == null || !demands.keySet().equals(EnumSet.allOf(PointRole.class))
-                || items == null || !items.keySet().equals(EnumSet.allOf(PointRole.class))) {
+        if (demands == null || !demands.keySet().equals(AGAINST_THE_LINE)
+                || items == null || !items.keySet().equals(AGAINST_THE_LINE)) {
             throw new IllegalArgumentException(
-                    "a debt answering for some of its point roles and not others: " + id);
+                    "a debt answering for some of the points against its line and not others: "
+                            + id + " " + (demands == null ? null : demands.keySet()));
+        }
+        if (axis == null) {
+            throw new IllegalArgumentException("a line is a line on something: " + id);
         }
         readings = List.copyOf(readings);
+        carriedBy = List.copyOf(carriedBy);
         demands = java.util.Collections.unmodifiableMap(new EnumMap<>(demands));
         items = java.util.Collections.unmodifiableMap(new EnumMap<>(items));
     }
@@ -63,27 +93,43 @@ public record BorderObligationAssessment(BorderObligationId id, Map<PointRole, D
      * nothing here: a caller that grouped by anything else — the label, the rule, the position —
      * would be deciding what a debt is a second time and somewhere else.
      */
-    public static List<BorderObligationAssessment> across(List<BorderAssessment> readings) {
+    public static List<BorderObligationAssessment> across(
+            Map<String, List<BorderAssessment>> byBehavior,
+            java.util.function.Function<BorderObligationId, String> named) {
         Map<BorderObligationId, List<BorderAssessment>> byDebt = new LinkedHashMap<>();
-        for (BorderAssessment reading : readings) {
-            byDebt.computeIfAbsent(reading.border().obligation(), _ -> new ArrayList<>())
-                    .add(reading);
-        }
+        Map<BorderObligationId, java.util.LinkedHashSet<String>> carriers = new LinkedHashMap<>();
+        byBehavior.forEach((behavior, readings) -> {
+            for (BorderAssessment reading : readings) {
+                BorderObligationId id = reading.border().obligation();
+                byDebt.computeIfAbsent(id, _ -> new ArrayList<>()).add(reading);
+                carriers.computeIfAbsent(id, _ -> new java.util.LinkedHashSet<>()).add(behavior);
+            }
+        });
         List<BorderObligationAssessment> out = new ArrayList<>();
-        byDebt.forEach((id, of) -> out.add(of(id, of)));
+        byDebt.forEach((id, of) ->
+                out.add(of(id, named.apply(id), of, List.copyOf(carriers.get(id)))));
         return List.copyOf(out);
     }
 
-    /** One debt, from the readings of it. */
-    public static BorderObligationAssessment of(BorderObligationId id,
-                                                List<BorderAssessment> readings) {
+    /**
+     * One debt, from the readings of it, called {@code axis}.
+     *
+     * <p>What the line is on is handed in rather than taken from a reading, because that is the
+     * whole of what a debt is not. A reading names the position it met the line at — {@code
+     * String.length(draft.owner)} — and there are as many of those as there are positions carrying
+     * the type; what the author wrote is {@code String.length(value)}, and it is read from the
+     * declaration ({@link souther.compiler.check.DeclaredBorders}).
+     */
+    public static BorderObligationAssessment of(BorderObligationId id, String axis,
+                                                List<BorderAssessment> readings,
+                                                List<String> carriedBy) {
         Map<PointRole, Demand> demands = new EnumMap<>(PointRole.class);
         Map<PointRole, ItemAssessment> items = new EnumMap<>(PointRole.class);
-        for (PointRole role : EnumSet.allOf(PointRole.class)) {
+        for (PointRole role : AGAINST_THE_LINE) {
             demands.put(role, asked(id, role, readings));
             items.put(role, at(role, readings, demands.get(role)));
         }
-        return new BorderObligationAssessment(id, demands, items, readings);
+        return new BorderObligationAssessment(id, axis, demands, items, readings, carriedBy);
     }
 
     /**
@@ -112,16 +158,24 @@ public record BorderObligationAssessment(BorderObligationId id, Map<PointRole, D
     /**
      * What the readings came to in one role.
      *
-     * <p>The coverage is folded ({@link ItemAssessment.Coverage#acrossTheReadings}); what building a
-     * value came to is not here at all. A row offered for a point is offered once for the debt and
-     * not once per reading, and choosing which reading composes it is a search rather than a fold —
-     * so it stays where the readings are until there is something to say about it.
+     * <p>The coverage is folded ({@link ItemAssessment.Coverage#acrossTheReadings}). So is what
+     * building a value came to, and it is here for one thing: that a value at the point was built
+     * is evidence the point exists, and whether a point exists is what tells a line no row stands at
+     * from one no row could stand at ({@link ItemAssessment#isUnmetGap}). The two points a debt
+     * answers for ask the same of a row at every reading — which is checked, not assumed — so a
+     * value built at one of them is a value at this point.
+     *
+     * <p><b>Not the row a debt is offered.</b> A row is offered once for a line, and which reading
+     * composes it is a search over the readings rather than a fold of them: the row here is written
+     * in one behavior's terms and choosing it as the one to offer would be choosing a
+     * representative, which is the mistake this whole value exists to undo.
      */
     private static ItemAssessment at(PointRole role, List<BorderAssessment> readings, Demand asked) {
         if (asked instanceof Demand.NotOwed not) {
             return new ItemAssessment.NotOwed(not.reason());
         }
         List<Measurement<ItemAssessment.Coverage>> coverage = new ArrayList<>();
+        ItemAssessment.Attempt built = null;
         // Whether a value at the point exists is a fact about the line and not about the reading
         // that reached it: one reading proving it proves it. The other two states are what a reading
         // says about itself, so the weaker of them stands only where nothing proved anything.
@@ -134,6 +188,9 @@ public record BorderObligationAssessment(BorderObligationId id, Map<PointRole, D
                         "a reading owing nothing at a point its line owes one at: " + role);
             }
             coverage.add(owed.coverage());
+            if (built == null && owed.attempt() instanceof ItemAssessment.Attempt.Built) {
+                built = owed.attempt();
+            }
             if (owed.projection().proves()) {
                 projection = ItemAssessment.WritabilityProjection.PROVEN;
             } else if (projection != ItemAssessment.WritabilityProjection.PROVEN
@@ -142,7 +199,7 @@ public record BorderObligationAssessment(BorderObligationId id, Map<PointRole, D
             }
         }
         return new ItemAssessment.Owed(asked.criterion(),
-                ItemAssessment.Coverage.acrossTheReadings(coverage), projection, null);
+                ItemAssessment.Coverage.acrossTheReadings(coverage), projection, built);
     }
 
     /** What became of one role. Never null. */
@@ -155,8 +212,46 @@ public record BorderObligationAssessment(BorderObligationId id, Map<PointRole, D
         return at(role) instanceof ItemAssessment.Owed owed ? owed : null;
     }
 
+    /**
+     * Which behaviors read this line, in the order the module declares them.
+     *
+     * <p>Not part of what the debt is — a line is owed once however many behaviors carry the type —
+     * and here because an editor's offer stands beside a behavior. What a row written for that
+     * behavior settles is this debt, so an offer there has to know the debt is one of the things it
+     * would answer. Without it the offer beside a behavior went quiet as soon as the only work left
+     * was a line the declaration is owed (issue #1062).
+     */
+    public boolean carriedBy(String behavior) {
+        return carriedBy.contains(behavior);
+    }
+
     /** The rule that drew the line, as the readings met it. */
     public souther.compiler.partition.OriginRef origin() {
         return id.origin();
+    }
+
+    /**
+     * What one point of the line asks of a row, as a report writes it.
+     *
+     * <p>The same sentence a reading's point writes ({@link BorderAssessment.Point#said}), on what
+     * the declaration wrote rather than on the position a reading met it at. The two are joined by
+     * a consumer against one of a border's items, so they are spelled by one rule and not two.
+     */
+    public String said(PointRole role) {
+        return role.againstTheLine() ? axis + " = " + against(role)
+                : axis + " " + operator(role) + " " + against(role);
+    }
+
+    /** How one point relates a row's value to what it is against, or null where none is owed. */
+    public String operator(PointRole role) {
+        souther.compiler.partition.Criterion criterion = demands.get(role).criterion();
+        return criterion == null ? null : criterion.operator();
+    }
+
+    /** What a row at one point of it would have to do, as a report writes it, or null where no row
+     *  is owed there. */
+    public String against(PointRole role) {
+        souther.compiler.partition.Criterion criterion = demands.get(role).criterion();
+        return criterion == null ? null : criterion.written(readings.get(0).border().cut().of());
     }
 }

@@ -113,7 +113,7 @@ class CompileAdequacyWarningTest {
     @Test
     void aBoundaryIsToldWhereItsOwnMeasureCouldBeMade() {
         assertEquals(List.of("invariant Amount #1"), bordersWarnedAbout(Adequacy.Level.WITNESS));
-        assertEquals(List.of("invariant Amount #1", "cost <= 100", "cost <= 100"),
+        assertEquals(List.of("cost <= 100", "cost <= 100", "invariant Amount #1"),
                 bordersWarnedAbout(Adequacy.Level.ALL));
     }
 
