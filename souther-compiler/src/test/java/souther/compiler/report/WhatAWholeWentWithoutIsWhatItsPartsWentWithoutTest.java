@@ -44,6 +44,15 @@ class WhatAWholeWentWithoutIsWhatItsPartsWentWithoutTest {
      * <p>Each is a different way for a fact to arrive, and a whole that dropped one of them is what
      * this is looking for — so a model producing only one kind would hold the rule over one path
      * and say nothing about the rest.
+     *
+     * <p>The mapping is what leaves a reading short. What it holds is a value this compiler does not
+     * name a position for, so {@code Amount}'s rule is written under a position no reading is ever
+     * opened at — and nothing a row does reaches it.
+     *
+     * <p>It used to be an {@code Assignee?} with a clause behind the option. That clause is read at
+     * the narrowing, where a row meets it and a border is owed against it, so the model went short of
+     * nothing (#1072). What is wanted here is a reading that really did not happen, which is what a
+     * mapping still is.
      */
     private static final String MODEL = """
             module example.whole
@@ -51,9 +60,9 @@ class WhatAWholeWentWithoutIsWhatItsPartsWentWithoutTest {
             data Draft = { n: Int }
             data Done = { n: Int }
             data Small = { n: Int }
-            data Assignee = String
-                invariant String.length(value) >= 1
-            data Issue = { assignee: Assignee? }
+            data Amount = Int
+                invariant ranged = value >= 0
+            data Issue = { cost: Map<String, Amount> }
 
             partial let spin (n: Int): Int = spin(n)
 
