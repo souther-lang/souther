@@ -24,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class SoutherJvmAbiTest {
 
-    private static final TypeSymbol ORDER = TypeSymbols.declared(new TypeKey("shop", "Order"));
+    private static final TypeSymbol.AtModule ORDER = TypeSymbols.declared(new TypeKey("shop", "Order"));
 
     /** The specification, as a table: an identity and what it is called. */
     private static List<Object[]> abi() {

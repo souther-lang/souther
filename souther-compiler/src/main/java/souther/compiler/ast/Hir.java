@@ -820,7 +820,7 @@ public interface Hir {
          * declaration here whatever the name came from, which is what issues #464, #696 and #700
          * each were.
          */
-        TypeSymbol declares();
+        TypeSymbol.AtModule declares();
 
         /** What the declaration is called. */
         default String name() {
@@ -863,7 +863,7 @@ public interface Hir {
      * representation differs.
      */
     record Data(WrittenName written,
-                TypeSymbol declares,
+                TypeSymbol.AtModule declares,
                 boolean newtype,
                 List<Name> includes,
                 List<Field> fields,
@@ -919,12 +919,12 @@ public interface Hir {
      * separate path (#994).
      */
     record SumData(WrittenName written,
-                   TypeSymbol declares,
+                   TypeSymbol.AtModule declares,
                    List<Name> cases,
                    SourcePos pos) implements Def {}
 
     /** A unit data definition {@code data U} with no fields. */
-    record UnitData(WrittenName written, TypeSymbol declares, SourcePos pos) implements Def {}
+    record UnitData(WrittenName written, TypeSymbol.AtModule declares, SourcePos pos) implements Def {}
 
 
     /** A field: a role name and its type. */

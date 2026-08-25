@@ -242,7 +242,9 @@ public final class Elaborator {
                     // reported where the name is written; this definition has no meaning to work out
                     throw new Unanswerable(nd.pos());
                 }
-                if (!(ctx.symbols().declarations().declaration(built.type()) instanceof Hir.Data owner)) {
+                if (!(built.type() instanceof TypeSymbol.AtModule constructed)
+                        || !(ctx.symbols().declarations().declaration(constructed)
+                                instanceof Hir.Data owner)) {
                     throw CompileException.of(Diagnostic
                                     .at(built.name().reportedAt())
                                     .say(new DataMessage.ItCannotBeConstructedHere(built.name().quoted())).build());
@@ -264,7 +266,7 @@ public final class Elaborator {
                 List<Core.FieldValue> values = DataChecker.checkConstruction(built.written(),
                         nd.inits(), spreads, nd.pos(),
                         TypeOps.fieldTypes(owner, ctx.symbols()), env, ctx, nd.fields());
-                yield new Core.Construct(built.type(), values, Type.ref(built.type()), nd.pos());
+                yield new Core.Construct(constructed, values, Type.ref(constructed), nd.pos());
             }
             case Hir.Match m -> MatchElaborator.elaborateMatch(m, env, ctx, expected);
             case Hir.If iff -> {

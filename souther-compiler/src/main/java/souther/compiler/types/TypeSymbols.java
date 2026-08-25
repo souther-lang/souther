@@ -52,7 +52,7 @@ public final class TypeSymbols {
      * ({@code Declarations.declaredByCompilation}), because what a compilation may construct is
      * governed by {@code constructs} and the language's vocabulary is not.
      */
-    public static TypeSymbol declared(TypeKey key) {
+    public static TypeSymbol.AtModule declared(TypeKey key) {
         return new TypeSymbol.AtModule(key);
     }
 

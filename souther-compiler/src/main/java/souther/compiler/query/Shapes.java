@@ -398,7 +398,7 @@ public final class Shapes {
                 Map<TypeSymbol, List<ClauseDischarge>> out = new LinkedHashMap<>();
                 for (Hir.Data data : declaring.declarationsThatState()) {
                     List<ClauseDischarge> clauses = new ArrayList<>();
-                    TypeSymbol named = data.declares();
+                    TypeSymbol.AtModule named = data.declares();
                     // A declared clause is one rule to depart by and may still be several conjuncts to
                     // discharge, so `a && b` under one name is classified twice under that name: what
                     // discharges each half is what an author needs, and the name is what a caller reads.

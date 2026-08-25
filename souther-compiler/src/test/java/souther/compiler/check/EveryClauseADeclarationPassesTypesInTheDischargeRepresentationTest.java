@@ -120,7 +120,7 @@ class EveryClauseADeclarationPassesTypesInTheDischargeRepresentationTest {
                 if (!(def instanceof Hir.Data data)) {
                     continue;
                 }
-                TypeSymbol named = TypeSymbols.declared(new TypeKey(module, data.name()));
+                TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, data.name()));
                 for (Hir.InvariantClause clause : clauses.of(named, data)) {
                     assertNotNull(clauses.typed(clause.expr(), named, data),
                             "`" + data.name() + "` declares a clause this check could not type:\n"

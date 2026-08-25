@@ -42,7 +42,7 @@ class WhatWasWrittenIsFoundByFollowingWhatANameWasGivenTest {
     private static final SourcePos POS = new SourcePos(1, 1);
     private static final BindingOwner OWNER = new BindingOwner.OfValue("demo", "f");
     private static final ValueName.Behavior FIND = new ValueName.Behavior("demo", "findIt");
-    private static final TypeSymbol FOUND = TypeSymbols.declared(new TypeKey("demo", "Found"));
+    private static final TypeSymbol.AtModule FOUND = TypeSymbols.declared(new TypeKey("demo", "Found"));
 
     private final Hir.Binders binders = new Hir.Binders(OWNER);
     private final PathEngine engine =

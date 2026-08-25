@@ -120,7 +120,7 @@ class APublishedSignatureIsWrittenInNamesItsModuleHasTest {
      */
     @Test
     void aTypeTheModuleHasNoNameForIsAFailureOfThisCompilerAndNotOfAProgram() {
-        TypeSymbol hidden = TypeSymbols.declared(new TypeKey("far.a", "Hidden"));
+        TypeSymbol.AtModule hidden = TypeSymbols.declared(new TypeKey("far.a", "Hidden"));
         Type type = new Type.Ref(hidden);
 
         assertEquals("Hidden",

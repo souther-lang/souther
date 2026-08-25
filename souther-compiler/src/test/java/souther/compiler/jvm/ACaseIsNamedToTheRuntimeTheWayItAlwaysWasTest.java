@@ -34,7 +34,7 @@ class ACaseIsNamedToTheRuntimeTheWayItAlwaysWasTest {
 
     @Test
     void aDeclarationOfAModuleIsNamedByThatModule() {
-        TypeSymbol denied = TypeSymbols.declared(new TypeKey("foo.bar", "Denied"));
+        TypeSymbol.AtModule denied = TypeSymbols.declared(new TypeKey("foo.bar", "Denied"));
 
         assertEquals(new RuntimeCaseToken("foo.bar", "Denied"), SoutherJvmAbi.caseTokenOf(denied));
         assertEquals("foo.bar.Denied", SoutherJvmAbi.caseTokenOf(denied).qualified());

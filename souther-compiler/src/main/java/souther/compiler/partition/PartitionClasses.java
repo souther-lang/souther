@@ -199,13 +199,18 @@ final class PartitionClasses {
         if (!(symbols.scope().reach(leaf) instanceof TypeReachName.Written names)) {
             return PartitionClass.ungeneratable(idOfCase(leaf), leaf.name(), is, notExposed(leaf));
         }
-        if (!(symbols.declarations().declaration(leaf) instanceof Hir.Data data)) {
+        // A case of a primitive-headed union is a primitive or one of the language's own, which
+        // no module declares and nothing composes field by field: naming it builds it, the same as
+        // a unit data. So the two are told apart here, where the declaration is asked for.
+        if (!(leaf instanceof TypeSymbol.AtModule declared)
+                || !(symbols.declarations().declaration(declared) instanceof Hir.Data data)) {
             return PartitionClass.of(idOfCase(leaf), leaf.name(), is,   // naming it builds it
                     RepresentativeSource.under(writes,
                             RepresentativeSource.of(FixtureTemplate.unitCase(names))));
         }
         if (data.newtype()) {
-            List<FixtureTemplate> inner = Partitions.insideTheNewtype(leaf, symbols, policy);
+            List<FixtureTemplate> inner =
+                    Partitions.insideTheNewtype(declared, symbols, policy);
             return inner.isEmpty()
                     ? PartitionClass.ungeneratable(idOfCase(leaf), leaf.name(), is,
                             "nothing here composed a value of what `" + leaf.name() + "` wraps")
@@ -219,7 +224,7 @@ final class PartitionClasses {
         // way: what is composed is an `Approved`, and what the row writes is `DecisionN(Approved
         // { id = 1 })`.
         return PartitionClass.of(idOfCase(leaf), leaf.name(), is,
-                RepresentativeSource.under(writes, new RepresentativeSource.Composed(leaf)));
+                RepresentativeSource.under(writes, new RepresentativeSource.Composed(declared)));
     }
 
     private PartitionClasses() {}

@@ -135,7 +135,12 @@ public sealed interface Rules {
             return new NoneWritten();
         }
         return switch (symbols.declarations().declaration(named)) {
-            case Hir.Data data -> new Read(FieldDomains.of(named, data, symbols, policy));
+            // A data is a declaration a module wrote, and this asked the declaration world with
+            // the identity to get one, so the test below never decides anything. It is how the
+            // name says which kind it is rather than a reader assuming it.
+            case Hir.Data data -> named instanceof TypeSymbol.AtModule at
+                    ? new Read(FieldDomains.of(at, data, symbols, policy))
+                    : Declared.notAModules(named, data);
             // A sum names which cases a value can be and carries no clause of its own; a unit data
             // has one value and may write no rule about it (spec §unit-data). Both are declarations
             // this looked at and found nothing written on, which is not the same as not having

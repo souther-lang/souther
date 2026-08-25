@@ -152,7 +152,10 @@ class NoPublicWayToTurnASpellingIntoATypeIdentityTest {
                     continue;
                 }
                 String named = c.getSimpleName() + "." + m.getName();
-                (TypeSymbol.class.equals(m.getReturnType()) ? exchanging : asking).add(named);
+                // Any of the sum's cases counts as handing back an identity: what is being held
+                // is that an address was exchanged for one, not which case came out.
+                (TypeSymbol.class.isAssignableFrom(m.getReturnType()) ? exchanging : asking)
+                        .add(named);
             }
             for (java.lang.reflect.Constructor<?> k : c.getConstructors()) {
                 if (List.of(k.getParameterTypes()).contains(souther.compiler.types.TypeKey.class)) {

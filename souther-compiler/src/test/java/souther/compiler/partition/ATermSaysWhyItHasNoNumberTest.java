@@ -38,7 +38,7 @@ class ATermSaysWhyItHasNoNumberTest {
             ValueName.Stdlib.operation("String", "length"), TermPath.of("x"),
             souther.compiler.types.Type.STRING,
             souther.compiler.check.Symbols.none(souther.compiler.DefaultStdlib.get()));
-    private static final TypeSymbol WRAPPER = TypeSymbols.declared(new TypeKey("example", "Wrapped"));
+    private static final TypeSymbol.AtModule WRAPPER = TypeSymbols.declared(new TypeKey("example", "Wrapped"));
 
     /** The two orders a whole-number position stands on, which are one order. */
     private static final souther.compiler.inputs.TermOrders AS_A_NUMBER =

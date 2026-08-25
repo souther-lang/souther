@@ -66,7 +66,7 @@ public sealed interface BindingOwner {
      * so the pass that resolves the invariant and the pass that emits it agree without either
      * repeating the other.
      */
-    record OfFields(TypeSymbol declared) implements BindingOwner {
+    record OfFields(TypeSymbol.AtModule declared) implements BindingOwner {
 
         @Override
         public String toString() {
@@ -75,7 +75,7 @@ public sealed interface BindingOwner {
     }
 
     /** What a data declaration writes for itself: an invariant, a decoder, an encoder. */
-    record OfData(TypeSymbol declared) implements BindingOwner {
+    record OfData(TypeSymbol.AtModule declared) implements BindingOwner {
 
         @Override
         public String toString() {

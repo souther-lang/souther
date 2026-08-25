@@ -941,8 +941,8 @@ public final class TypeOps {
      * resolve against nothing. A caller reading its own declaration passes {@link Symbols#own}; a
      * caller reading one it reached passes the name it reached it by.
      */
-    public static Map<String, BindingId> fieldBindings(TypeSymbol declared, Hir.Data data,
-                                                       Symbols symbols) {
+    public static Map<String, BindingId> fieldBindings(TypeSymbol.AtModule declared,
+                                                       Hir.Data data, Symbols symbols) {
         Map<String, BindingId> bindings = new LinkedHashMap<>();
         walkFields(data, declared, symbols, new LinkedHashSet<>(), bindings);
         return bindings;
@@ -957,8 +957,8 @@ public final class TypeOps {
      * already answered. A reader after the pass cannot reach this one, so an unanswered include
      * cannot be repaired from characters by anything that met one.
      */
-    static Map<String, BindingId> fieldBindingsAsWritten(TypeSymbol declared, Ast.Data data,
-                                                         SyntaxSymbols symbols) {
+    static Map<String, BindingId> fieldBindingsAsWritten(TypeSymbol.AtModule declared,
+                                                         Ast.Data data, SyntaxSymbols symbols) {
         Map<String, BindingId> bindings = new LinkedHashMap<>();
         walkWrittenFields(data, declared, symbols, new LinkedHashSet<>(), bindings);
         return bindings;
@@ -978,7 +978,7 @@ public final class TypeOps {
      * that names nothing is skipped, and a name an include repeats keeps the declaration's own —
      * both are refused where the declaration is checked, and refusing them twice says nothing more.
      */
-    private static void walkFields(Hir.Data data, TypeSymbol declared, Symbols symbols,
+    private static void walkFields(Hir.Data data, TypeSymbol.AtModule declared, Symbols symbols,
                                    Set<TypeSymbol> seen, Map<String, BindingId> out) {
         BindingOwner owner = new BindingOwner.OfFields(declared);
         int ordinal = 0;
@@ -992,16 +992,18 @@ public final class TypeOps {
                 // saying so again here would be a second report about the one mistake.
                 case Hir.Name.Unanswered _ -> null;
             };
-            if (source != null && seen.add(source)
-                    && symbols.declarations().declaration(source) instanceof Hir.Data included) {
-                walkFields(included, source, symbols, seen, out);
+            // An include names a data, which a module declares; what the language gives is
+            // no declaration to walk, and the lookup below already answered nothing for one.
+            if (source instanceof TypeSymbol.AtModule at && seen.add(at)
+                    && symbols.declarations().declaration(at) instanceof Hir.Data included) {
+                walkFields(included, at, symbols, seen, out);
             }
         }
     }
 
     /** The same walk over a declaration as it was written: an include is a spelling, and what it
      *  denotes is asked of the scope the declaration was written in. */
-    private static void walkWrittenFields(Ast.Data data, TypeSymbol declared, SyntaxSymbols symbols,
+    private static void walkWrittenFields(Ast.Data data, TypeSymbol.AtModule declared, SyntaxSymbols symbols,
                                           Set<TypeSymbol> seen, Map<String, BindingId> out) {
         BindingOwner owner = new BindingOwner.OfFields(declared);
         int ordinal = 0;
@@ -1010,9 +1012,9 @@ public final class TypeOps {
         }
         for (Ast.Name include : data.includes()) {
             TypeSymbol source = symbols.scope().resolve(include.name()).type();
-            if (source != null && seen.add(source)
-                    && symbols.declarations().declaration(source) instanceof Ast.Data included) {
-                walkWrittenFields(included, source, symbols, seen, out);
+            if (source instanceof TypeSymbol.AtModule at && seen.add(at)
+                    && symbols.declarations().declaration(at) instanceof Ast.Data included) {
+                walkWrittenFields(included, at, symbols, seen, out);
             }
         }
     }

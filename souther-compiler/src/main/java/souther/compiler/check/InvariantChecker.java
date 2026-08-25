@@ -257,7 +257,7 @@ public final class InvariantChecker {
      * in the representation the check reads.
      */
     public static ClauseDischarge capabilityOf(ClausesForDischarge.ClauseReading clause,
-                                               TypeSymbol named, Hir.Data data, Symbols symbols,
+                                               TypeSymbol.AtModule named, Hir.Data data, Symbols symbols,
                                                ReadingPolicy policy) {
         InvariantChecker c = new InvariantChecker(symbols, Map.of(), policy);
         // Read over the declaration's own fields, each standing for itself: a construction hands one
@@ -496,7 +496,7 @@ public final class InvariantChecker {
      * nothing about, which is the same answer as a declaration with no rules — so nothing about the
      * declaration throws. {@link Terms.OneTermTwoKinds} is not about the declaration and is not
      * caught ({@link #gaveUp}). */
-    static Seeded seedFields(TypeSymbol named, Hir.Data data, Symbols symbols,
+    static Seeded seedFields(TypeSymbol.AtModule named, Hir.Data data, Symbols symbols,
                              ReadingPolicy policy) {
         return seedFields(named, data, symbols, policy, Map.of());
     }
@@ -508,7 +508,7 @@ public final class InvariantChecker {
      * field is one more assertion into it — so what comes back is the range each remaining field can
      * still take, which is where a row completing that assignment has to look.
      */
-    static Seeded seedFields(TypeSymbol named, Hir.Data data, Symbols symbols,
+    static Seeded seedFields(TypeSymbol.AtModule named, Hir.Data data, Symbols symbols,
                              ReadingPolicy policy, Map<FieldDomains.Coordinate, Count> settled) {
         return seedFields(named, data, symbols, policy, settled, Reach.EVERYTHING);
     }
@@ -523,7 +523,7 @@ public final class InvariantChecker {
      * declaration was holding. Supposing a declaration has values is the other thing {@code reach}
      * says, and it is not that one — see {@link Reach}.
      */
-    static Seeded seedFields(TypeSymbol named, Hir.Data data, Symbols symbols,
+    static Seeded seedFields(TypeSymbol.AtModule named, Hir.Data data, Symbols symbols,
                              ReadingPolicy policy, Map<FieldDomains.Coordinate, Count> settled,
                              Reach reach) {
         InvariantChecker c = new InvariantChecker(symbols, Map.of(), policy);
@@ -2121,7 +2121,7 @@ public final class InvariantChecker {
 
     /** The discharge verdict for a construction of {@code type} whose fields are being given
      * {@code given}. */
-    private Judgment verdictOf(TypeSymbol named, Hir.Data type, Map<BindingId, Core> given, Known k,
+    private Judgment verdictOf(TypeSymbol.AtModule named, Hir.Data type, Map<BindingId, Core> given, Known k,
                                Denotations at, boolean decidesFalse) {
         // What the construction hands over that no clause may be read against. A clause naming one of
         // them is left to the run-time check, and one that is decided outright is still decided: what

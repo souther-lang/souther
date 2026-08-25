@@ -55,8 +55,8 @@ final class TypeGuarantees {
      * owed differ only in direction.
      */
     At at(Core root, Denotations denotations) {
-        if (!(root.type() instanceof Type.Ref ref)
-                || !(symbols.declarations().declaration(ref.name()) instanceof Hir.Data data)) {
+        if (!(root.type() instanceof Type.Ref(TypeSymbol.AtModule named))
+                || !(symbols.declarations().declaration(named) instanceof Hir.Data data)) {
             // Either not a declaration of its own — a container or an optional, whose element is a
             // value that need not be there, or a type nothing is written under at all — or a choice
             // between declarations, which is the only kind that reaches here holding a rule at all.
@@ -65,7 +65,7 @@ final class TypeGuarantees {
             return new At.Undeclared();
         }
         Map<String, Type> fields = clauses.fieldsOf(data);
-        Map<String, BindingId> bindings = clauses.bindingsOf(ref.name(), data);
+        Map<String, BindingId> bindings = clauses.bindingsOf(named, data);
         Map<BindingId, Core> given = new HashMap<>();
         fields.forEach((name, type) -> {
             BindingId field = bindings.get(name);
@@ -73,12 +73,12 @@ final class TypeGuarantees {
                 given.put(field, new Core.FieldAccess(root, name, type, root.pos()));
             }
         });
-        Clauses.StatedClauses stated = clauses.statedAt(ref.name(), data, given);
+        Clauses.StatedClauses stated = clauses.statedAt(named, data, given);
         List<TypeGuarantee> guarantees = new ArrayList<>();
         for (Clauses.Stated one : stated.clauses()) {
             guarantees.add(read(one, denotations));
         }
-        return new At.Declared(ref.name(), List.copyOf(guarantees), stated.everyClauseStated(),
+        return new At.Declared(named, List.copyOf(guarantees), stated.everyClauseStated(),
                 beneath(data, fields, bindings, given));
     }
 
@@ -146,14 +146,19 @@ final class TypeGuarantees {
             if (!seen.add(ref.name())) {
                 return false;
             }
-            return switch (symbols.declarations().declaration(ref.name())) {
+            // What the language declares has no rule written under it here, which is what the
+            // lookup below answered for one before it was asked with the identity.
+            if (!(ref.name() instanceof TypeSymbol.AtModule named)) {
+                return false;
+            }
+            return switch (symbols.declarations().declaration(named)) {
                 // A unit data holds nothing and may write no rule about it (spec §unit-data), so a
                 // sum of them is a type nothing is written under — which is what makes an
                 // enumeration a position this still speaks for.
                 case Hir.UnitData _ -> false;
                 case Hir.SumData sum -> AtomSpace.subjectAtoms(Type.ref(sum.declares()), symbols).stream()
                         .anyMatch(each -> anyRuleUnder(Type.ref(each), seen));
-                case Hir.Data data -> !clauses.declared(ref.name(), data).isEmpty()
+                case Hir.Data data -> !clauses.declared(named, data).isEmpty()
                         || TypeOps.fieldTypes(data, symbols).values().stream()
                                 .anyMatch(each -> anyRuleUnder(each, seen));
                 case null, default -> false;

@@ -562,7 +562,8 @@ public final class Resolve {
         // where that is decided again: reading them here would mean answering for a declaration
         // nothing else in the compilation has, which can only be done by making up an identity for
         // it.
-        for (Map.Entry<TypeSymbol, Ast.Def> declared : symbols.declaredHere().entrySet()) {
+        for (Map.Entry<TypeSymbol.AtModule, Ast.Def> declared
+                : symbols.declaredHere().entrySet()) {
             int failedBefore = r.failed;
             int denotedBefore = r.denotations.size();
             Hir.Def resolved = r.def(declared.getKey(), declared.getValue());
@@ -973,7 +974,7 @@ public final class Resolve {
 
     /** {@code def} resolved as {@code declared}, which is the identity the module's declarations
      * were indexed under and is handed in rather than worked out here. */
-    private Hir.Def def(TypeSymbol declared, Ast.Def def) {
+    private Hir.Def def(TypeSymbol.AtModule declared, Ast.Def def) {
         owner = new BindingOwner.OfData(declared);
         return switch (def) {
             case Ast.UnitData u -> new Hir.UnitData(u.written(), declared, u.pos());
@@ -1022,7 +1023,7 @@ public final class Resolve {
      * includes it reads these fields in <em>its</em> invariant, and the binding a field is stays the
      * declaring declaration's, so this is where an editor is answered from either way.
      */
-    private void declareFields(Ast.Data d, TypeSymbol declared) {
+    private void declareFields(Ast.Data d, TypeSymbol.AtModule declared) {
         Map<String, BindingId> bindings = TypeOps.fieldBindingsAsWritten(declared, d, symbols);
         for (Ast.Field field : d.fields()) {
             BindingId binding = bindings.get(field.name());
@@ -1037,7 +1038,7 @@ public final class Resolve {
      * the ones a spread brings in, which are as much this declaration's fields as the written ones
      * (and are what a spread-in invariant was written against).
      */
-    private Bindings boundFields(Ast.Data d, TypeSymbol declared) {
+    private Bindings boundFields(Ast.Data d, TypeSymbol.AtModule declared) {
         Bindings bound = Bindings.NONE;
         // which binding each field is is answered in one place, so the pass that emits this
         // invariant reaches the same ones without working them out again

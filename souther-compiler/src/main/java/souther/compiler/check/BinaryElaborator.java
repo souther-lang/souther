@@ -292,12 +292,14 @@ public final class BinaryElaborator {
     private static Core arithmetic(Hir.Binary bin, Core left, Core right, Type result,
                                    CheckContext ctx) {
         Type base = TypeOps.directNumericNewtypeBase(result, ctx.symbols());
-        if (base == null) {
+        // A newtype is a declaration a module wrote, which is what having a base says of it; the
+        // pattern is what used to be an unchecked cast below.
+        if (base == null || !(result instanceof Type.Ref(TypeSymbol.AtModule wrapper))) {
             return new Core.Binary(bin.op(), left, right, bin.origin(), result, bin.pos());
         }
         Core computed = new Core.Binary(bin.op(), opened(left, ctx), opened(right, ctx), bin.origin(),
                 base, bin.pos());
-        return new Core.Construct(((Type.Ref) result).name(),
+        return new Core.Construct(wrapper,
                 List.of(new Core.FieldValue(WRAPPED, computed, bin.pos())), result, bin.pos());
     }
 

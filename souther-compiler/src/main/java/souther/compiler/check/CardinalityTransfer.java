@@ -73,7 +73,12 @@ final class CardinalityTransfer {
         return switch (def) {
             case Hir.UnitData _ -> Cardinality.atMost(1);
             case Hir.SumData sum -> ofCases(namedCases(sum), answers);
-            case Hir.Data data -> ofData(named, data, symbols, policy, answers, granted);
+            // A data is a declaration a module wrote. What the language gives never answers with
+            // one, so a name reaching here that is not a module's is a declaration world and a
+            // graph of names that have stopped agreeing.
+            case Hir.Data data -> named instanceof TypeSymbol.AtModule at
+                    ? ofData(at, data, symbols, policy, answers, granted)
+                    : Declared.notAModules(named, data);
         };
     }
 
@@ -118,7 +123,7 @@ final class CardinalityTransfer {
         return across != null ? across : Cardinality.none(new Emptiness.AcrossEveryCase(without));
     }
 
-    private static Cardinality ofData(TypeSymbol named, Hir.Data data, Symbols symbols,
+    private static Cardinality ofData(TypeSymbol.AtModule named, Hir.Data data, Symbols symbols,
                                       ReadingPolicy policy, Answers answers,
                                       Predicate<TypeSymbol> granted) {
         // Rules that cannot all hold leave nothing to count, and the ends they would have been

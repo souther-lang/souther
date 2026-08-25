@@ -76,8 +76,8 @@ class TwoReadingsOfOneClauseAgreeOrTheModelIsWrongTest {
         assertEquals(viaOne, Clause.merge(viaTwo, viaOne));
     }
 
-    private static final TypeSymbol BOUND = TypeSymbols.declared(new TypeKey("demo", "Bound"));
-    private static final TypeSymbol OTHER = TypeSymbols.declared(new TypeKey("demo", "Other"));
+    private static final TypeSymbol.AtModule BOUND = TypeSymbols.declared(new TypeKey("demo", "Bound"));
+    private static final TypeSymbol.AtModule OTHER = TypeSymbols.declared(new TypeKey("demo", "Other"));
 
     private static final Clause.Id FIRST = new Clause.Id(BOUND, 0);
     private static final Clause.Id SECOND = new Clause.Id(BOUND, 1);

@@ -119,7 +119,7 @@ public final class FieldDomains {
      * what a caller is after. */
     private final ConstraintState<FactSubject> constraints;
     /** What this was read from, so that it can be read again without one declaration's clauses. */
-    private final TypeSymbol named;
+    private final TypeSymbol.AtModule named;
     private final Hir.Data data;
     private final Symbols symbols;
     private final Map<Coordinate, Count> settled;
@@ -149,7 +149,7 @@ public final class FieldDomains {
                          Map<String, List<TypeSymbol>> narrowers,
                          Set<String> notGathered,
                          SequencedMap<FactSubject, String> positions,
-                         ConstraintState<FactSubject> constraints, TypeSymbol named,
+                         ConstraintState<FactSubject> constraints, TypeSymbol.AtModule named,
                          Hir.Data data, Symbols symbols, ReadingPolicy policy,
                          Map<Coordinate, Count> settled,
                          Set<String> unreadOfEveryValue,
@@ -229,7 +229,7 @@ public final class FieldDomains {
     }
 
     /** What {@code data}, declared as {@code named}, leaves its fields able to hold. */
-    public static FieldDomains of(TypeSymbol named, Hir.Data data, Symbols symbols,
+    public static FieldDomains of(TypeSymbol.AtModule named, Hir.Data data, Symbols symbols,
                                   ReadingPolicy policy) {
         return of(named, data, symbols, policy, Map.of());
     }
@@ -242,7 +242,7 @@ public final class FieldDomains {
      * not read off {@code endsAt}'s own range — which still runs from 1 — but off what is left of it
      * once the other end is fixed, which is 1440 and nothing else.
      */
-    public static FieldDomains of(TypeSymbol named, Hir.Data data, Symbols symbols,
+    public static FieldDomains of(TypeSymbol.AtModule named, Hir.Data data, Symbols symbols,
                                   ReadingPolicy policy, Map<String, Count> settled) {
         return of(named, data, symbols, policy, atValues(settled),
                 InvariantChecker.Reach.EVERYTHING);
@@ -265,7 +265,7 @@ public final class FieldDomains {
      * record holding it is otherwise told it holds nothing by the very rules the supposing was
      * about.
      */
-    static FieldDomains granting(TypeSymbol named, Hir.Data data, Symbols symbols,
+    static FieldDomains granting(TypeSymbol.AtModule named, Hir.Data data, Symbols symbols,
                                  ReadingPolicy policy,
                                  java.util.function.Predicate<TypeSymbol> granted) {
         return of(named, data, symbols, policy, Map.of(),
@@ -273,7 +273,7 @@ public final class FieldDomains {
     }
 
     /** The same, reading only as far as {@code reach} says — see {@link #narrowedBy}. */
-    private static FieldDomains of(TypeSymbol named, Hir.Data data, Symbols symbols,
+    private static FieldDomains of(TypeSymbol.AtModule named, Hir.Data data, Symbols symbols,
                                    ReadingPolicy policy, Map<Coordinate, Count> settled,
                                    InvariantChecker.Reach reach) {
         // A newtype is read the same way, and only its bounds are not worth handing back: its value
@@ -852,7 +852,7 @@ public final class FieldDomains {
      * bottom out, and a reader that guessed would refuse a type somebody can write.
      *
      */
-    public static boolean mayHoldNothingAt(TypeSymbol named, Hir.Data data, String path,
+    public static boolean mayHoldNothingAt(TypeSymbol.AtModule named, Hir.Data data, String path,
                                            Symbols symbols, ReadingPolicy policy) {
         // A count is never below none, so leaving it no room above none is leaving it at none.
         return OccurrenceCounts.of(named, data, symbols, policy).mayHoldAtMost(path, 0);

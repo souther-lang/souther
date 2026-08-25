@@ -44,7 +44,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AFieldIsBoundByTheDeclarationThatWroteItTest {
 
-    private static final TypeSymbol RANGE = TypeSymbols.declared(new TypeKey("up", "Range"));
+    private static final TypeSymbol.AtModule RANGE = TypeSymbols.declared(new TypeKey("up", "Range"));
 
     private static final String DECLARING = """
             module up exposing ( Range )
@@ -179,7 +179,7 @@ class AFieldIsBoundByTheDeclarationThatWroteItTest {
         Compilation c = compiled(Reached.BESIDE_THE_READERS_OWN);
         Clauses read = readBy(c, "demo");
 
-        TypeSymbol ours = TypeSymbols.declared(new TypeKey("demo", "Range"));
+        TypeSymbol.AtModule ours = TypeSymbols.declared(new TypeKey("demo", "Range"));
         Hir.Data mine = (Hir.Data) c.db().ask(new Names.ResolvedDeclaration(ours.key())).value();
 
         assertTrue(Collections.disjoint(read.bindingsOf(RANGE, range(c)).values(),

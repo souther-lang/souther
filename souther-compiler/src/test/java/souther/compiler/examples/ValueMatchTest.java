@@ -186,7 +186,7 @@ class ValueMatchTest {
     @Test
     void aValueUnderANameIsNotTheBaseItWraps() {
         // The whole of #653, at the level the comparison works at: one representation, two types.
-        TypeSymbol amount = TypeSymbols.declared(new TypeKey("demo", "AmountN"));
+        TypeSymbol.AtModule amount = TypeSymbols.declared(new TypeKey("demo", "AmountN"));
         ObservedValue wrapped = new ObservedValue.Constructed(amount,
                 java.util.Map.of("value", n(1)));
         ValueMatch.Mismatch m = differs(said(n(1)), wrapped, Type.ref(amount));

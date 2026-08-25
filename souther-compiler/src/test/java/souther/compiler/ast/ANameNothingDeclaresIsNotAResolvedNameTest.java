@@ -38,7 +38,7 @@ class ANameNothingDeclaresIsNotAResolvedNameTest {
 
     private static final SourcePos POS = new SourcePos(1, 1);
 
-    private static final TypeSymbol DECLARED = TypeSymbols.declared(new TypeKey("demo", "Invoice"));
+    private static final TypeSymbol.AtModule DECLARED = TypeSymbols.declared(new TypeKey("demo", "Invoice"));
 
     /** Before the pass runs, a name is what it is written as and nothing else. */
     @Test
