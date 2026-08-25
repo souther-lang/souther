@@ -1,7 +1,6 @@
 package souther.compiler.semantics;
 
 import souther.compiler.types.BinOp;
-import souther.compiler.types.Type;
 
 import java.util.List;
 
@@ -82,7 +81,16 @@ public sealed interface Arithmetic {
         }
     }
 
-    /** What one argument of a numeric operation is, as far as a fact about it needs to know. */
+    /**
+     * What one argument of a numeric operation is, as far as a fact about it needs to know.
+     *
+     * <p>What each of these <em>is</em>, said once. Which declaration answers to one, and whether
+     * the library's signature agrees, is a question about the library and is asked where the
+     * library is — {@code check.DischargeRules}, which holds every one of these facts to what the
+     * library declares before a call is read. It used to be asked here, by comparing the argument's
+     * type against a name written down beside it, which is a second answer to which type that is
+     * (ADR-0087) and a backend's spelling in a package that is neutral about all of them (#1039).
+     */
     enum Reads {
 
         /** A number of the kind the operation answers. */
@@ -92,24 +100,6 @@ public sealed interface Arithmetic {
         A_SCALE,
 
         /** Which way it rounds there. */
-        A_ROUNDING_MODE;
-
-        /** The declaration that rule is about, by the address the library declares it under. Still
-         *  a spelling this reads, which is the debt #1039 names; what has moved is that it is the
-         *  address the library writes and no longer the package a backend ships it in. */
-        private static final souther.compiler.types.TypeKey ROUNDING_MODE =
-                new souther.compiler.types.TypeKey("souther.decimal", "RoundingMode");
-
-        /** Whether an argument declared {@code at} is this, for an operation answering
-         *  {@code answered}. */
-        public boolean heldBy(Type at, Type answered) {
-            return switch (this) {
-                case THE_NUMBER_IT_ANSWERS -> at.equals(answered);
-                case A_SCALE -> at == Type.Prim.INT;
-                case A_ROUNDING_MODE ->
-                        at instanceof Type.Ref(souther.compiler.types.TypeSymbol.AtModule name)
-                                && name.key().equals(ROUNDING_MODE);
-            };
-        }
+        A_ROUNDING_MODE
     }
 }
