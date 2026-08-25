@@ -22,6 +22,12 @@ public sealed interface TableBuild {
         }
     }
 
-    /** Nothing was built, so nothing is known about them from here. */
+    /**
+     * There were tables to build and none of them was, so nothing is known about them from here.
+     *
+     * <p>Of the tables and not of the machine. A source that states none is not a source whose
+     * tables could not be built — it built all none of them — and answering this where there was
+     * nothing to do would tell a caller that the file was not answered for at all.
+     */
     record NotBuiltHere() implements TableBuild {}
 }

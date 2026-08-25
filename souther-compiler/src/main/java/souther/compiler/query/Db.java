@@ -145,9 +145,9 @@ public final class Db {
      * <p>Set once because nothing here would notice it changing. What a key read to run a program
      * is not a read this store recorded — the runner is beside the memos, not in them — so an
      * answer worked out under one runner is not invalidated by a second being named, and the store
-     * would go on handing out the first one's answers for as long as they stood. A field that may
-     * only be written before anything has been asked is the whole of what makes that safe, and
-     * saying so here is cheaper than a rule nobody can see.
+     * would go on handing out the first one's answers for as long as they stood. What is held here
+     * is that there is never a second one; naming it before anything is asked is the caller's to
+     * get right, and a compilation does it where it is set up.
      *
      * @throws IllegalStateException where one has already been named
      */

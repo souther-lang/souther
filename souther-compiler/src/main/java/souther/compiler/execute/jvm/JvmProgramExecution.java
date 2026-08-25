@@ -65,6 +65,14 @@ public final class JvmProgramExecution implements ProgramExecution {
 
     @Override
     public TableBuild fakeTables(ExampleExecution asked, SourceId source) {
+        if (ExampleStatements.tablesBuiltIn(asked.rows(), asked.signatures(), source).isEmpty()) {
+            // Nothing this source states is a table this source builds, so there is nothing here
+            // that went unbuilt. Asked the other way round — is there a program to build against —
+            // a file that wrote no fake at all would answer that its tables could not be built,
+            // and a caller reading that as "this source was not answered for" would lose whatever
+            // its rows had to say.
+            return new TableBuild.Built(List.of());
+        }
         JvmProgramImage image = images.evaluating(asked.module(), ArmObservation.OMIT);
         if (image == null) {
             return new TableBuild.NotBuiltHere();

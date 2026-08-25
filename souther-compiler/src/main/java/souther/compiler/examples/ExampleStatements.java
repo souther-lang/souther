@@ -193,6 +193,42 @@ public final class ExampleStatements {
     }
 
     /**
+     * The tables a source is the one to build: what its {@code fake} rows state and nothing else
+     * does.
+     *
+     * <p>Its own answer because two things ask it. Building them asks it to know what to walk, and
+     * whatever runs the building asks it to know whether there is anything to run — and a caller
+     * that worked the second one out for itself would be deciding again which tables answer. Which
+     * they are is not obvious: a module's fakes are read in one order and the first table for a
+     * dependency is the one that answers, so whether this source builds anything depends on what
+     * the sources before it wrote.
+     *
+     * <p>Of the module and then of the source, in that order, for the same reason: the answering
+     * table is picked across the whole module, and only then is it asked which file it is written
+     * in.
+     */
+    public static List<souther.compiler.check.Prepared.FakeTable> tablesBuiltIn(
+            souther.compiler.check.Prepared.Examples module, Map<String, Sig> sigs,
+            SourceId sourceId) {
+        List<souther.compiler.check.Prepared.FakeTable> building = new ArrayList<>();
+        Set<String> answering = new LinkedHashSet<>();
+        for (souther.compiler.check.Prepared.FakeTable table : module.fakes()) {
+            Hir.Fake fk = table.read();
+            if (!answering.add(fk.target())) {
+                continue;   // a second table for one dependency answers nothing, here as anywhere
+            }
+            if (!fk.pos().isIn(sourceId)) {
+                continue;   // written in another source, and built by that source's own reading
+            }
+            if (sigs.get(fk.target()) == null) {
+                continue;   // a fake for no behavior of this module; its target is its own question
+            }
+            building.add(table);
+        }
+        return building;
+    }
+
+    /**
      * What building this module's fake tables says about the ones {@code sourceId} wrote, each built
      * once.
      *
@@ -223,25 +259,17 @@ public final class ExampleStatements {
                                               SourceId sourceId,
                                               Deadline deadline, EvaluationPolicy policy,
                                               Map<String, BehaviorContract> contracts) {
-        if (module.fakes().isEmpty()) {
+        List<souther.compiler.check.Prepared.FakeTable> building =
+                tablesBuiltIn(module, sigs, sourceId);
+        if (building.isEmpty()) {
             return List.of();
         }
         ExampleStatements v = new ExampleStatements(module, symbols, sigs,
                 new MemoryClassLoader(classes, parent), values, deadline, policy, contracts);
         List<Diagnostic> said = new ArrayList<>();
-        Set<String> answering = new LinkedHashSet<>();
-        for (int i = 0; i < module.fakes().size(); i++) {
-            Hir.Fake fk = module.fakes().get(i).read();
-            if (!answering.add(fk.target())) {
-                continue;   // a second table for one dependency answers nothing, here as anywhere
-            }
-            if (!fk.pos().isIn(sourceId)) {
-                continue;   // written in another source, and built by that source's own reading
-            }
+        for (souther.compiler.check.Prepared.FakeTable table : building) {
+            Hir.Fake fk = table.read();
             Sig sig = sigs.get(fk.target());
-            if (sig == null) {
-                continue;   // a fake for no behavior of this module; its target is its own question
-            }
             // Within a budget of its own, for the reason a row and a reading each have one: a row of
             // the table applies helpers, and a `partial` one may not stop. Nothing before this change
             // built the table of a fake nothing reads, so this is the first thing that would run it.
