@@ -328,6 +328,28 @@ public sealed interface OriginRef {
     }
 
     /**
+     * Which authored line of a declaration this is, where it is a declaration's line.
+     *
+     * <p>The clause and the conjunct that drew the end, which together name one line the author
+     * wrote — a clause places as many as it has conjuncts with an end in them, and they are not each
+     * other's ({@link souther.compiler.check.DeclaredBorders}).
+     *
+     * <p>Here rather than at the reader that needs it, for the reason {@link #owedToTheDeclaration}
+     * is: a caller taking the clause and the conjunct apart has to know which arms have them, and a
+     * rule added later is then answered by whichever arm it was written beside. Both questions are
+     * the rule's, so both are asked of it.
+     */
+    default java.util.Optional<souther.compiler.check.DeclaredBorders.Key> declaredLine() {
+        return switch (this) {
+            case InvariantOrigin i ->
+                    java.util.Optional.of(
+                            new souther.compiler.check.DeclaredBorders.Key(i.rule(), i.conjunct()));
+            case ComparisonOrigin _, EnsuresOrigin _ -> java.util.Optional.empty();
+            case NarrowedOrigin n -> n.bound().declaredLine();
+        };
+    }
+
+    /**
      * Which comparison a row has to get an answer out of, for a rule that meeting takes more than
      * writing the value.
      *

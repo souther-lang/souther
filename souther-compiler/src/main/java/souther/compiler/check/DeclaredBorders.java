@@ -66,6 +66,12 @@ public record DeclaredBorders(Map<Key, FieldDomains.Coordinate> forms) {
      * line but the rule's own name.
      */
     public FieldDomains.Coordinate at(RuleRef.Invariant rule, int conjunct) {
-        return forms.get(new Key(rule, conjunct));
+        return at(new Key(rule, conjunct));
+    }
+
+    /** The same, for a caller holding the key the rule handed it
+     *  ({@code OriginRef.declaredLine}). */
+    public FieldDomains.Coordinate at(Key line) {
+        return forms.get(line);
     }
 }

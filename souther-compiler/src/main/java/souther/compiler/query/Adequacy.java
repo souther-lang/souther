@@ -3582,7 +3582,12 @@ public final class Adequacy {
             Symbols symbols = Names.derivedSymbols(db, module).value();
             souther.compiler.check.ReadingPolicy policy = db.ask(new Front.Reading()).value();
             if (symbols == null || policy == null) {
-                return;
+                // What names a line is what the declaration wrote, and neither of these is
+                // something a finding can go without. Answered by leaving the declarations' lines
+                // out, a module would be reported as short of only what its bodies are short of —
+                // which is the shortfall this whole change is about, arriving from the other side.
+                throw new IllegalStateException("the lines " + module
+                        + "'s declarations draw were read, and what they were read with is gone");
             }
             Map<TypeSymbol, souther.compiler.check.DeclaredBorders> declared = new LinkedHashMap<>();
             for (BorderObligationAssessment debt : BorderObligationAssessment.across(readings,
@@ -3622,7 +3627,10 @@ public final class Adequacy {
             souther.compiler.check.FieldDomains.Coordinate at =
                     read.computeIfAbsent(declaredOn,
                             each -> souther.compiler.check.DeclaredBorders.of(each, symbols, policy))
-                            .at(ruleOf(id), conjunctOf(id));
+                            // Which line of the declaration this is, asked of the rule. Taken
+                            // apart here, a reader would be deciding which rules have a clause and
+                            // a conjunct, which is the rule's own answer.
+                            .at(id.origin().declaredLine().orElseThrow());
             // A clause whose end this could not read from the declaration has no form to print, and
             // the rule's own name is the whole of what there is to call the line.
             return at == null ? id.origin().named() : written(at);
@@ -3637,35 +3645,20 @@ public final class Adequacy {
                     ? taken.operation() + "(" + where + ")" : where;
         }
 
-        /** Which clause of which declaration drew the line, and which of its conjuncts. */
-        private static souther.compiler.check.RuleRef.Invariant ruleOf(
-                souther.compiler.partition.BorderObligationId id) {
-            return ((souther.compiler.check.RuleRef.Invariant) id.origin().rule());
-        }
-
-        private static int conjunctOf(souther.compiler.partition.BorderObligationId id) {
-            return conjunctOf(id.origin());
-        }
-
-        private static int conjunctOf(souther.compiler.partition.OriginRef origin) {
-            return switch (origin) {
-                case souther.compiler.partition.OriginRef.InvariantOrigin it -> it.conjunct();
-                case souther.compiler.partition.OriginRef.NarrowedOrigin it ->
-                        conjunctOf(it.bound());
-                case souther.compiler.partition.OriginRef.ComparisonOrigin _,
-                     souther.compiler.partition.OriginRef.EnsuresOrigin _ ->
-                        throw new IllegalStateException(
-                                "a line owed to a declaration is a declaration's clause: " + origin);
-            };
-        }
-
         /** Where the declaration is written, which is where a reader is sent. */
         private static Citation citationOf(Symbols symbols, TypeSymbol declaredOn) {
             // Asked of the declaration world rather than of this module's own list, because a type
             // another module wrote is a declaration all the same and a reader sent to it is sent to
             // where it is written.
-            return symbols.declarations().declaration(declaredOn) instanceof Hir.Data data
-                    ? Citation.of(data.pos()) : null;
+            if (symbols.declarations().declaration(declaredOn) instanceof Hir.Data data) {
+                return Citation.of(data.pos());
+            }
+            // A line is owed to this declaration because a clause of it was read, so there is a
+            // declaration to point at. Said here rather than answered with nothing: a citation is
+            // built from a place, and a null one reaches a reader as a switch over the arms a
+            // citation has — which is a failure with nothing in it about the type this was for.
+            throw new IllegalStateException("a line is owed to " + declaredOn.name()
+                    + ", whose clause was read, and this compile has no declaration for it");
         }
 
         /**

@@ -48,7 +48,7 @@ class AnEndIsWhereItsRuleStopsTest {
     void anEdgeIsNotAtAValueNoRuleNamed() throws Exception {
         String report = reportOn(MODEL);
 
-        assertFalse(report.contains("take/h.p = 1"),
+        assertFalse(report.contains("point value = 1"),
                 () -> "`value > 0m` says nothing about one:\n" + report);
     }
 

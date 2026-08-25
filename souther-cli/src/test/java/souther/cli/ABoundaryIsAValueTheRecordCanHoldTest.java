@@ -528,8 +528,11 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
 
         List<String> owed = boundariesOf(holed);
 
-        assertFalse(report.contains("f/n = 0"),
-                () -> "0 is no value of `N`, so it is no line of it: " + report);
+        // Asked of the lines the positions have and not of the report, for the reason
+        // `boundariesOf` is: the report names a declaration's line once and in the declaration's
+        // own terms, so a position's absence of one is not a sentence it can be short of.
+        assertFalse(owed.stream().anyMatch(l -> l.contains("f/n = 0")),
+                () -> "0 is no value of `N`, so it is no line of it: " + owed);
         assertTrue(owed.stream().anyMatch(l -> l.contains("f/n = 1")),
                 () -> "the line `within` placed is at the first value the rules leave: " + owed);
         assertTrue(owed.stream().anyMatch(l -> l.contains("f/n = 10")),

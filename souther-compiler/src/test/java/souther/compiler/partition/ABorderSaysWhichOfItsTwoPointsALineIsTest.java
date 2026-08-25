@@ -177,7 +177,11 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
             assertTrue(report.contains("excluded — the rules leave no value there"), report);
             assertFalse(report.contains("no row is at the OFF point"), report);
         }
-        assertFalse(strict.contains("take/h.a = 5"), strict);
+        // Asked of the value the line is named by, which is how a bound is written now: a line a
+        // declaration is owed is named in the terms it wrote and never by the position a behavior
+        // met it at (issue #1062). Left as `take/h.a = 5`, this refused a string the report has no
+        // way of printing and said nothing about where the line is.
+        assertFalse(strict.contains("point value = 5"), strict);
     }
 
     /**

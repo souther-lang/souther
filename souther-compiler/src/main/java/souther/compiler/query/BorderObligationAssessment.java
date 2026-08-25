@@ -248,8 +248,16 @@ public record BorderObligationAssessment(BorderObligationId id, String axis,
         return criterion == null ? null : criterion.operator();
     }
 
-    /** What a row at one point of it would have to do, as a report writes it, or null where no row
-     *  is owed there. */
+    /**
+     * What a row at one point of it would have to do, as a report writes it, or null where no row
+     * is owed there.
+     *
+     * <p>Written on a reading's quantity, and any of them will do. What a criterion writes is the
+     * level in the terms of the order that level is on, and which order that is, is part of what a
+     * debt is — the readings of one debt cut one carrier at one place, which is checked where their
+     * demands are. So this is not a reading standing in for the rest; it is the one answer they all
+     * give.
+     */
     public String against(PointRole role) {
         souther.compiler.partition.Criterion criterion = demands.get(role).criterion();
         return criterion == null ? null : criterion.written(readings.get(0).border().cut().of());
