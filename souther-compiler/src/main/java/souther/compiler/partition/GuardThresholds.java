@@ -11,6 +11,7 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.UnreadRule;
 import souther.compiler.numeric.Place;
 import souther.compiler.check.Symbols;
@@ -198,7 +199,7 @@ public final class GuardThresholds {
                 continue;
             }
             InputReads reads = reading.reads();
-            List<UnreadRule.Coordinate> named = filedAt(binary, reads, symbols);
+            List<FilingCoordinate> named = filedAt(binary, reads, symbols);
             final BlockReason.AboutARule why = why(binary, reads, symbols);
             // The rule the author wrote, read off the source. Which comparison it is is the
             // behavior and the construct the source wrote; where a reader is sent is where it is
@@ -213,9 +214,9 @@ public final class GuardThresholds {
             if (named.isEmpty()) {
                 List<TermPath> from = new ArrayList<>();
                 cameFrom(binary, reads, symbols, from);
-                from.forEach(each -> named.add(UnreadRule.Coordinate.at(each)));
+                from.forEach(each -> named.add(FilingCoordinate.at(each)));
             }
-            for (UnreadRule.Coordinate each : named) {
+            for (FilingCoordinate each : named) {
                 // One per position the comparison names, and told from its neighbours by the rule as
                 // well as the place. Kept by position alone, the second comparison of one condition
                 // about one position was dropped as a repeat of the first — which is the defect this
@@ -467,25 +468,26 @@ public final class GuardThresholds {
      * string alone; a side it does not name is a position the walk met inside something else, and
      * what was wanted of it is the position's own values.
      */
-    static List<UnreadRule.Coordinate> filedAt(Core.Binary comparison, InputReads reads,
+    static List<FilingCoordinate> filedAt(Core.Binary comparison, InputReads reads,
                                                Symbols symbols) {
-        List<UnreadRule.Coordinate> out = new ArrayList<>();
+        List<FilingCoordinate> out = new ArrayList<>();
         for (Core side : List.of(comparison.left(), comparison.right())) {
             Named named = namedBy(side, reads, symbols);
             if (named != null) {
-                add(new UnreadRule.Coordinate(named.term().path(),
-                        named.term() instanceof NumericTerm.SizeOf), out);
+                // The term itself, because this side named one: a rule about a length that nothing
+                // could read leaves the length short and the string's own values alone.
+                add(FilingCoordinate.of(named.term()), out);
             }
         }
         for (TermPath each : mentionedIn(comparison, reads, symbols)) {
             if (out.stream().noneMatch(had -> had.path().equals(each))) {
-                add(UnreadRule.Coordinate.at(each), out);
+                add(FilingCoordinate.at(each), out);
             }
         }
         return out;
     }
 
-    private static void add(UnreadRule.Coordinate here, List<UnreadRule.Coordinate> out) {
+    private static void add(FilingCoordinate here, List<FilingCoordinate> out) {
         if (!out.contains(here)) {
             out.add(here);
         }
@@ -621,8 +623,8 @@ public final class GuardThresholds {
         // Whose positions these are is the assessment's answer, not this reader's: a rule that was
         // read is filed at its quantity's coordinates and one that stopped at the positions the
         // walk met.
-        List<UnreadRule.Coordinate> named = read.filedAt(comparison, reads, symbols);
-        for (UnreadRule.Coordinate at : named) {
+        List<FilingCoordinate> named = read.filedAt(comparison, reads, symbols);
+        for (FilingCoordinate at : named) {
             UnreadRule said = new UnreadRule(rule, cited, at, why);
             if (out.stream().noneMatch(had -> had.sameAs(said))) {
                 out.add(said);
@@ -679,10 +681,14 @@ public final class GuardThresholds {
      * names, and a boundary on it could not be looked for in a row.
      */
     static NumericTerm termOf(Core e, InputReads reads, Symbols symbols) {
-        NumericMeasures.Measured measured = NumericMeasures.measureIn(e);
+        NumericMeasures.Measured measured = NumericMeasures.takenIn(e);
         if (measured != null) {
             TermPath of = reads.pathOf(measured.of(), symbols);
-            return of == null ? null : new NumericTerm.SizeOf(measured.operation(), of);
+            // Null where the call names a location the operation is not taken of, which a guard can
+            // write and the type checker has already refused elsewhere. Answered here as "no term",
+            // which is what every reader of one is ready for.
+            return of == null ? null : NumericTerm.TakenOf.of(measured.operation(), of,
+                    reads.read().typeAt(of, symbols), symbols);
         }
         TermPath path = reads.pathOf(e, symbols);
         return path == null ? null : new NumericTerm.ValueOf(path);
@@ -700,7 +706,13 @@ public final class GuardThresholds {
      * @param term  what the expression names
      * @param order what it is counted on
      */
-    record Named(NumericTerm term, Carrier order) {}
+    record Named(NumericTerm term, souther.compiler.inputs.TermOrders orders) {
+
+        /** What a line on it is measured on, which is what most readers of a pair want. */
+        Carrier order() {
+            return orders.answered();
+        }
+    }
 
     /**
      * The same, or null where the expression names no number this can put an order under.
@@ -722,8 +734,8 @@ public final class GuardThresholds {
         if (term == null) {
             return null;
         }
-        Carrier order = reads.read().carrierOf(term, symbols);
-        return order == null ? null : new Named(term, order);
+        souther.compiler.inputs.TermOrders orders = reads.read().ordersOf(term, symbols);
+        return orders.answered() == null ? null : new Named(term, orders);
     }
 
     private GuardThresholds() {}

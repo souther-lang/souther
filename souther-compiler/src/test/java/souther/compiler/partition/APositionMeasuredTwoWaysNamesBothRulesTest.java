@@ -79,7 +79,7 @@ class APositionMeasuredTwoWaysNamesBothRulesTest {
         assertEquals(2, rules(ORDER_FIRST).size(), said::toString);
         // Each at the coordinate its own rule is about, which is what makes them two rules rather
         // than one said twice: the position is measured two ways and one clause took each.
-        assertEquals(List.of("v.s", "count of v.s"),
+        assertEquals(List.of("v.s", "String.length(v.s)"),
                 said.stream().map(PartitionEvidence.NotRead::at).toList());
     }
 

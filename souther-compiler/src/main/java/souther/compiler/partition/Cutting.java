@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import souther.compiler.check.Carrier;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
@@ -119,7 +118,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         Cutting drawn = atAPosition(behavior, ComparedLine.fromTheForm(read, reads, symbols),
                 quantities);
         if (drawn == null) {
-            drawn = apart(behavior, ComparedTerms.fromTheForm(read, reads, symbols), quantities);
+            drawn = apart(behavior, ComparedTerms.fromTheForm(read, reads, symbols), read.claim(),
+                    quantities);
         }
         if (drawn != null) {
             return new Read.Cuts(drawn);
@@ -148,7 +148,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         Cutting drawn = atAPosition(behavior, ComparedLine.asWritten(comparison, reads, symbols),
                 quantities);
         if (drawn == null) {
-            drawn = apart(behavior, ComparedTerms.asWritten(comparison, reads, symbols), quantities);
+            drawn = apart(behavior, ComparedTerms.asWritten(comparison, reads, symbols),
+                    ComparisonClaim.of(comparison.op()), quantities);
         }
         if (drawn != null) {
             return new Read.Cuts(drawn);
@@ -165,22 +166,21 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             return null;
         }
         return made(new BorderQuantity.OfACoordinate(AxisId.of(behavior, drawn.term()),
-                        drawn.term(), drawn.carrier()),
-                new Level.OnACarrier(drawn.carrier(), drawn.value()), claimOf(drawn), quantities);
+                        drawn.term(), drawn.orders()),
+                new Level.OnACarrier(drawn.orders().answered(), drawn.value()), claimOf(drawn),
+                quantities);
     }
 
     /** How far two positions stand apart, cut where the reading found the line, or null on the same
      *  two counts. */
-    private static Cutting apart(String behavior, ComparedTerms drawn,
+    private static Cutting apart(String behavior, ComparedTerms drawn, ComparisonClaim claim,
                                  souther.compiler.inputs.Quantities quantities) {
         if (drawn == null) {
             return null;
         }
         return made(new BorderQuantity.Apart(behavior, drawn.on(), drawn.against(),
                         drawn.carriers()),
-                new Level.ACount(drawn.stepsApart()),
-                new ComparisonClaim.Cut(drawn.valueBelongsBelow(), drawn.holdsAtTheLine()),
-                quantities);
+                new Level.ACount(drawn.stepsApart()), claim, quantities);
     }
 
     /**
@@ -231,7 +231,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         if (read == null || read.claim() instanceof ComparisonClaim.Nothing) {
             return null;
         }
-        java.util.Map<NumericTerm, Carrier> on = read.carriers(reads, symbols);
+        java.util.Map<NumericTerm, souther.compiler.inputs.TermOrders> on =
+                read.carriers(reads, symbols);
         if (on == null) {
             return null;
         }
@@ -381,15 +382,15 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * 10} is {@code a + c <= 10}, and a note filed at {@code b} would say the rule relates a
      * position it does not mention.
      */
-    java.util.List<souther.compiler.inputs.UnreadRule.Coordinate> over() {
+    java.util.List<souther.compiler.inputs.FilingCoordinate> over() {
         // By the position's own name, which is the one thing about a form that does not depend on
         // how it was written — the same order {@link AffineReading#ordered} puts a form's
         // coefficients in. Read off the map instead, the entries come back in an order salted once
         // per run, and a report is a document compared against the one written last time.
         return AffineReading.ordered(direction(of)).stream()
                 .map(java.util.Map.Entry::getKey)
-                .map(each -> new souther.compiler.inputs.UnreadRule.Coordinate(each.path(),
-                        each instanceof NumericTerm.SizeOf))
+                .<souther.compiler.inputs.FilingCoordinate>map(
+                        souther.compiler.inputs.FilingCoordinate::of)
                 .distinct().toList();
     }
 

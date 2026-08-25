@@ -416,11 +416,20 @@ public final class InvariantChecker {
      *                 that is not its own
      */
     record Seeded(ConstraintState<FactSubject> constraints, Map<String, FactSubject> atoms, Map<String, FactSubject> keys,
-                  Map<String, FactSubject> held, Reading reading, ReadingEvidence took,
+                  Map<String, FieldDomains.Counted> held, Reading reading, ReadingEvidence took,
                   boolean everyClauseRead, Set<String> notGathered,
                   Set<String> unreadOfEveryValue,
                   Map<RuleRef, Map<Core, PartRead>> readBy,
                   Map<FactSubject, souther.compiler.numeric.Granularity> spacing) {
+
+        /** The atom each count is recorded against, for a reader that wants the subject and not
+         *  which operation it is a count of. Projected rather than kept beside {@link #held()}: two
+         *  maps of one thing are what this pair was before (#1027). */
+        Map<String, FactSubject> heldAtoms() {
+            Map<String, FactSubject> out = new LinkedHashMap<>();
+            held.forEach((path, counted) -> out.put(path, counted.atom()));
+            return out;
+        }
 
         public Seeded {
             notGathered = Set.copyOf(notGathered);
@@ -609,7 +618,7 @@ public final class InvariantChecker {
             }
             Map<String, FactSubject> atoms = new LinkedHashMap<>();
             Map<String, Type> typeAt = new LinkedHashMap<>();
-            Map<String, FactSubject> held = new LinkedHashMap<>();
+            Map<String, FieldDomains.Counted> held = new LinkedHashMap<>();
             Map<String, FactSubject> keys = new LinkedHashMap<>();
             for (Map.Entry<String, BindingId> field : bindings.entrySet()) {
                 Type type = fields.get(field.getKey());
@@ -687,16 +696,24 @@ public final class InvariantChecker {
                     spacing.put(atom, c.terms.granularityOf(type));
                 }
             });
-            held.forEach((path, atom) ->
-                    spacing.put(atom, souther.compiler.numeric.Granularity.DISCRETE));
+            held.forEach((path, counted) ->
+                    spacing.put(counted.atom(), souther.compiler.numeric.Granularity.DISCRETE));
             for (Map.Entry<FieldDomains.Coordinate, Count> each : settled.entrySet()) {
                 FieldDomains.Coordinate where = each.getKey();
                 // The number the caller settled, which is the position's own value or the count
                 // taken of it. Two coordinates at one path and two atoms: a reading that resolved
                 // only the first left a rule over two counts unconditioned while the same rule was
                 // read whole when it was asked about.
-                FactSubject atom = where.measured()
-                        ? held.get(where.path()) : atoms.get(where.path());
+                FactSubject atom = switch (where.kind()) {
+                    case FieldDomains.CoordinateKind.OfItsOwnValue _ -> atoms.get(where.path());
+                    // A count and nothing else. What a clause of a value has words for is the
+                    // position and how much it holds; a number some other operation answers of the
+                    // same location is a quantity the declarations never mention, so what they say
+                    // about it is nothing rather than whatever stands in the count's slot (#1027).
+                    case FieldDomains.CoordinateKind.OfWhatAnOperationAnswers taken ->
+                            NumericMeasures.isMeasure(taken.operation())
+                                    ? atomOf(held.get(where.path())) : null;
+                };
                 if (atom == null) {
                     continue;
                 }
@@ -713,6 +730,18 @@ public final class InvariantChecker {
             gaveUp("seedFields " + named.name(), why);
             return Seeded.nothingRead();
         }
+    }
+
+    /** The atom of a count that may not be there, which every lookup of one wants. */
+    private static FactSubject atomOf(FieldDomains.Counted counted) {
+        return counted == null ? null : counted.atom();
+    }
+
+    /** The same over a whole reading, for the readers that take the map. */
+    private static Map<String, FactSubject> heldAtomsOf(Map<String, FieldDomains.Counted> held) {
+        Map<String, FactSubject> out = new LinkedHashMap<>();
+        held.forEach((path, counted) -> out.put(path, counted.atom()));
+        return out;
     }
 
     /** How many alternatives a reading came to, a reading that admits nothing holding none. */
@@ -738,7 +767,7 @@ public final class InvariantChecker {
      */
     private void name(Core value, String path, Type type, Denotations at, Symbols symbols,
                       int depth, Map<String, FactSubject> atoms, Map<String, Type> typeAt,
-                      Map<String, FactSubject> held, Map<String, FactSubject> keys) {
+                      Map<String, FieldDomains.Counted> held, Map<String, FactSubject> keys) {
         // What the position is called, and the atom it is. Asked together, because where a position
         // is a number the domain carries the two are one identity read once — and this asks it of
         // every level of a chain, so reading it twice costs more than the chain is long.
@@ -760,9 +789,15 @@ public final class InvariantChecker {
         // And what a rule counting this position spoke about, which is not what the position is. A
         // list is no number and has no atom above; the count of it has one, and a reader asking how
         // much the position holds is asking about that one.
-        FactSubject counted = terms.takenAtomOf(value, type, at);
+        // The atom and the operation it counts by, which are one value. What the clauses of a value
+        // have words for is the position and how much it holds, and the second of those is one
+        // operation — the one that counts what the position's type holds. A coordinate that recorded
+        // only "not the value" brought a count and a number some other operation answers of the same
+        // location to one name (#1027).
+        ValueName countsIt = NumericMeasures.takenOf(type, symbols);
+        FactSubject counted = countsIt == null ? null : terms.takenAtomOf(value, type, at);
         if (counted != null) {
-            held.put(path, counted);
+            held.put(path, new FieldDomains.Counted(counted, countsIt));
         }
         // Through the names, to the value that has the fields. Each is read at the path it is worn
         // under, since wearing a name is not being somewhere else. How far the names reach is
@@ -835,8 +870,14 @@ public final class InvariantChecker {
      *                 one value are two rules a row could be owed to, and held as declarations
      *                 they came back as one
      */
-    record Direct(String path, boolean measured, RuleRef.Invariant from,
-                  InvariantBound bound, Core part) {}
+    record Direct(String path, ValueName by, RuleRef.Invariant from,
+                  InvariantBound bound, Core part) {
+
+        /** Whether it is a number taken of the position rather than its own values. */
+        boolean measured() {
+            return by != null;
+        }
+    }
 
     /** One clause reaching a value, rebased onto the positions of that value, and which clause it
      * is. */
@@ -1008,13 +1049,25 @@ public final class InvariantChecker {
     /**
      * A coordinate a clause reaching this value could be about.
      *
+     * <p>The term itself, and not a path beside a flag saying a number was taken of it. A number
+     * taken of a position is taken <em>by an operation</em>, and this reading knows which — a
+     * {@code Counted} is recorded with it. Summarised as a boolean on the way out, two operations
+     * over one path came back as one coordinate, and every reader downstream had a path and a flag
+     * where the model had a term.
+     *
      * @param carrier what its values are ordered on, or null where nothing here draws a line on
      *                them. Here rather than left out, because a coordinate is a coordinate whether
      *                or not an end can be read on it: gated on having one, a rule written about a
      *                position no line is drawn on named nothing, and the reading that could say so
      *                had never heard of the position
      */
-    private record Coordinate(String path, boolean measured, Carrier carrier) {}
+    private record Coordinate(String path, ValueName by, Carrier carrier) {
+
+        /** Whether it is a number taken of the position rather than the position's own values. */
+        boolean measured() {
+            return by != null;
+        }
+    }
 
     /**
      * What the clauses of one value place on its coordinates, and which declarations relate each of
@@ -1043,20 +1096,24 @@ public final class InvariantChecker {
 
     private Reading directsIn(List<Written> stated, Denotations at,
                                    Map<String, FactSubject> atoms, Map<String, FactSubject> keys,
-                                   Map<String, FactSubject> held, Map<String, Type> typeAt,
+                                   Map<String, FieldDomains.Counted> held,
+                                   Map<String, Type> typeAt,
                                    ReadingEvidence took, PartsRead parts) {
         Map<FactSubject, Coordinate> byName = new LinkedHashMap<>();
         keys.forEach((path, key) -> {
             Carrier carrier = Carrier.ofValue(typeAt.get(path), symbols);
-            byName.put(key, new Coordinate(path, false, carrier));
+            byName.put(key, new Coordinate(path, null, carrier));
             FactSubject atom = atoms.get(path);
             if (atom != null) {
-                byName.put(atom, new Coordinate(path, false, carrier));
+                byName.put(atom, new Coordinate(path, null, carrier));
             }
         });
         // A count is a whole number whatever it counts, so nothing about the container decides how
-        // its sizes are spaced.
-        held.forEach((path, atom) -> byName.put(atom, new Coordinate(path, true, Carrier.WHOLE)));
+        // its sizes are spaced. The operation it is a count of comes from the reading that recorded
+        // it: dropped here and rebuilt as "a number was taken", two operations over one path were
+        // one coordinate and a report could not tell them apart.
+        held.forEach((path, counted) -> byName.put(counted.atom(),
+                new Coordinate(path, counted.by(), Carrier.WHOLE)));
         List<Direct> out = new ArrayList<>();
         List<FieldDomains.Unread> unread = new ArrayList<>();
         Map<String, List<TypeSymbol>> narrowers = new LinkedHashMap<>();
@@ -1250,7 +1307,7 @@ public final class InvariantChecker {
             return;
         }
         if (end instanceof InvariantBound.Read.AnEnd placed) {
-            out.add(new Direct(found.path(), found.measured(), from, placed.bound(), bin));
+            out.add(new Direct(found.path(), found.by(), from, placed.bound(), bin));
         }
     }
 
@@ -1424,7 +1481,7 @@ public final class InvariantChecker {
                 place -> carrierAt(place, left, right) != null);
         for (Coordinate each : coordinatesIn(comparison, at, byName)) {
             FieldDomains.Unread said =
-                    new FieldDomains.Unread(each.path(), each.measured(), from, comparison, why);
+                    new FieldDomains.Unread(each.path(), each.by(), from, comparison, why);
             if (!out.contains(said)) {
                 out.add(said);
             }

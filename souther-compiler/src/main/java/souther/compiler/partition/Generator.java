@@ -11,7 +11,6 @@ import souther.compiler.reading.PathAccess;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
-import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.observe.Classification;
 import souther.compiler.types.Type;
@@ -2002,7 +2001,11 @@ public final class Generator {
      */
     private static Edge edgeAt(Subject subject, Carrier carrier, NumericTerm term, Place at,
                                boolean besideAnother) {
-        if (besideAnother && term instanceof NumericTerm.SizeOf) {
+        // A number met by several values can offer only one of them beside a second position being
+        // fixed as well. Whether it is met by several is the realization's question and not the kind
+        // of term's: an operation whose inverse is single-valued would be the same kind of term and
+        // would have been turned away here with nothing saying so (#1027).
+        if (besideAnother && !TermRealizations.onlyOneValueAnswersIt(term)) {
             return Edge.none(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
         for (Axis axis : subject.axes()) {
@@ -2011,17 +2014,21 @@ public final class Generator {
             }
         }
         // No axis at this position, which a behavior whose inputs nothing bounds has none of while
-        // its body still draws lines between them. A count taken of a location is not writable this
-        // way: four is not what goes at the position, it is four characters somebody has to choose.
-        Type declared = term instanceof NumericTerm.SizeOf ? null : declaredAt(subject, term.path());
+        // its body still draws lines between them. What this path writes is the number itself at the
+        // position, and a number an operation answered is not that: four is not what goes there, it
+        // is four characters — or some time within the fourth hour — somebody has to choose.
+        //
+        // Which something could now do, since building such a value is `TermRealizations`' answer
+        // and it needs no axis to give it. Left refused so that moving the building out of here
+        // changed nothing; removing it is its own answer to give, beside the limit above.
+        Type declared = term instanceof NumericTerm.TakenOf ? null : declaredAt(subject, term.path());
         if (declared == null) {
             return Edge.none(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
-        FixtureTemplate standing = Witnesses.wrapped(declared,
-                FixtureTemplate.on(carrier, at, subject.symbols().scope()::reach),
-                subject.symbols());
-        return standing == null ? Edge.none(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)
-                : new Edge(List.of(standing), null, at, null);
+        return edgeFrom(TermRealizations.at(term, declared,
+                new souther.compiler.inputs.TermOrders(
+                        term.observedOn(declared, subject.symbols()), carrier),
+                at, subject.symbols(), subject.inputs().policy()), term, at);
     }
 
     /** The type declared at a position this subject has no axis for, which is a bare parameter and
@@ -3315,32 +3322,36 @@ public final class Generator {
      */
     private static Edge edgeOf(Axis axis, Carrier carrier, Place at, Symbols symbols,
                                ReadingPolicy policy) {
-        if (!(axis.term() instanceof NumericTerm.SizeOf)) {
-            // Written by the carrier the line was drawn on, and wearing every name the position
-            // declares. Read off the boundary's own shape instead, a count on one carrier could be
-            // written as a literal of another — which is how a date-time's second count reached a
-            // row as an `Int`, and the decoder refused it with the report saying only that every
-            // value tried had been refused.
-            FixtureTemplate standing = Witnesses.wrapped(axis.type(),
-                    FixtureTemplate.on(carrier, at, symbols.scope()::reach), symbols);
-            return standing == null
-                    ? Edge.none(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)
-                    : new Edge(List.of(standing), null, at, null);
-        }
-        int size = CountDomain.asCount(at);
-        if (size < 0) {
-            return Edge.none(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
-        }
-        Type holder = TypeOps.base(axis.type(), symbols);
-        Witnesses.Sized built = Witnesses.ofSize(holder, size, symbols, policy, Set.of());
-        if (built.values().isEmpty()) {
-            return Edge.none(Witnesses.reasonForSize(holder, size, policy, symbols));
-        }
-        List<FixtureTemplate> out = new ArrayList<>();
-        for (FixtureTemplate each : built.values()) {
-            out.add(Witnesses.wrapped(axis.type(), each, symbols));
-        }
-        return new Edge(out, null, null, built.heldBack());
+        // The order the line was drawn on is the caller's — a cut carries the one the rule was read
+        // on — and the order the value at the position is written on is the position's. Both, so
+        // neither stands in for the other.
+        return edgeFrom(
+                TermRealizations.at(axis.term(), axis.type(),
+                        new souther.compiler.inputs.TermOrders(
+                                axis.term().observedOn(axis.type(), symbols), carrier),
+                        at, symbols, policy),
+                axis.term(), at);
+    }
+
+    /**
+     * One realization as an edge of the search.
+     *
+     * <p>Where the position itself is settled, and where it is not. A term that is a location's
+     * content is fixed at the place the line was drawn on; a term that is what an operation answered
+     * leaves the position free — three characters is not the position standing at three — so what
+     * the search records as settled is the one and not the other. The one question here the variant
+     * genuinely settles, and asked of the variant.
+     */
+    private static Edge edgeFrom(TermRealizations.Realization made, NumericTerm term, Place at) {
+        Place settled = switch (term) {
+            case NumericTerm.ValueOf _ -> at;
+            case NumericTerm.TakenOf _ -> null;
+        };
+        return switch (made) {
+            case TermRealizations.Realization.BuiltNone none -> Edge.none(none.why());
+            case TermRealizations.Realization.Built built ->
+                    new Edge(built.values(), null, settled, built.heldBack());
+        };
     }
 
     private Generator() {}

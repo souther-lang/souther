@@ -112,7 +112,7 @@ class WhatStoppedAComparisonIsReadOffWhatItIsTest {
                 "String.length(s) > Int.multiply(String.length(s), String.length(s))");
 
         assertEquals(List.of(UndividedPosition.Reason.UNSUPPORTED_SYNTAX),
-                whyAt(measured, "count of s"));
+                whyAt(measured, "String.length(s)"));
         assertEquals(List.of(), whyAt(measured, "s"),
                 "the string's own values are not what the rule is about");
     }

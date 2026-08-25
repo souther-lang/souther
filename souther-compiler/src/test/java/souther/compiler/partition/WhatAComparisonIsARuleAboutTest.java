@@ -177,6 +177,30 @@ class WhatAComparisonIsARuleAboutTest {
     }
 
     /**
+     * A value singled out over two positions is read on orders that do not count, too.
+     *
+     * <p>The place two strings meet is exactly the one number their order has, so {@code s == t} is
+     * a value singled out on that order. What made it unreachable was the two readings of a
+     * two-position quantity being split on different axes: one took the pair and refused the
+     * operator, the other took the operator and required counting orders — so an equality over a
+     * non-counting pair fell between them and came back as a comparison this compiler cannot read.
+     */
+    @Test
+    void anEqualityOverTwoPositionsIsReadOnAnOrderThatDoesNotCount() {
+        assertEquals("AcrossPositions", named(about("(s: String, t: String)", "s == t")),
+                "two strings are equal or they are not, which is a value on the order between them");
+        assertEquals(ComparisonAssessment.Places.AT_THE_VALUE,
+                places(about("(s: String, t: String)", "s == t")),
+                "and the place they meet is the one number that order holds");
+        assertEquals(ComparisonAssessment.Places.AT_THE_VALUE,
+                places(about("(s: String, t: String)", "s /= t")),
+                "a rule refusing it places the same thing and selects the other class");
+        assertEquals(ComparisonAssessment.Places.AT_THE_VALUE,
+                places(about("(g: Grade, h: Grade)", "g == h")),
+                "an enumeration's cases are the same case or they are not");
+    }
+
+    /**
      * The orders a line can be drawn on, which are not the numeric ones alone.
      *
      * <p>Two strings stand no measurable distance apart and one is still above the other, so a rule

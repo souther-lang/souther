@@ -10,6 +10,7 @@ import souther.compiler.semantics.ElementLineage;
 import souther.compiler.semantics.ElementShape;
 import souther.compiler.semantics.NumericResult;
 import souther.compiler.semantics.OperationFact;
+import souther.compiler.ast.Hir;
 import souther.compiler.semantics.OperationFacts;
 import souther.compiler.semantics.PositiveOrder;
 import souther.compiler.semantics.ResultBound;
@@ -725,6 +726,64 @@ final class DischargeRules {
     }
 
     /**
+     * Holds a declared account of what an operation takes of the one value it is given.
+     *
+     * <p>Three things at once, because a term of this kind rests on all three and none of them is
+     * checked anywhere else. The operation takes exactly one value, since what such a term is read
+     * off is one location and a term names one path. It answers a number, since a boundary is drawn
+     * on one. And what it takes it of is the shape the account is written for — a count is taken of
+     * something that holds things, a magnitude of the operation's own kind of number.
+     *
+     * <p>Held here rather than trusted at the reader. The reader applies the account to whatever
+     * observation stands at the path, so an account declared of an operation it is not the shape of
+     * is a row read as a number nobody named, with nothing about it looking like a failure (#1027).
+     * Refused where the declaration is written, that reading cannot be reached.
+     */
+    static void holdTakenOf(Stdlib stdlib, ValueName operation,
+            souther.compiler.semantics.TakenAs how) {
+        Stdlib.Entry entry = holdTheOperationToTheLibrary(stdlib, operation);
+        Stdlib.Signature signature = entry.signature();
+        String named = ((ValueName.Stdlib) operation).qualified();
+        // A call the reading expands is a call the reading already understands. `Int.abs` is an
+        // ordinary `let` over `<` and `-`, so a body reading takes the comparison inside it and
+        // draws the line the definition draws; a term standing for the call would be a second
+        // reading of the same call, and which of the two a report showed would be whichever reader
+        // arrived. Refused here, so the exclusivity is a property of what can be declared rather
+        // than of which operations somebody thought to leave out (#1027).
+        if (!(entry.declaration().body() instanceof Hir.FnBody.Intrinsic)) {
+            throw new IllegalStateException(named + " is written in the language, so its body is"
+                    + " read where it is called and a term of what it answers would be a second"
+                    + " reading of the same call");
+        }
+        // And a call some other representation already reads is one this must not read too. A form
+        // says what the result is in the arguments' own counts, which is more than a term standing
+        // for it can say; declared as both, `Decimal.fromInt(n)` would be `n` to one reader and an
+        // opaque number to another.
+        if (OperationFacts.answersAFormOfItsArguments(operation) != null) {
+            throw new IllegalStateException(named + " already answers a form of its arguments, which"
+                    + " says more about what it answers than a term standing for it can");
+        }
+        if (OperationFacts.computesANumber(operation) != null) {
+            throw new IllegalStateException(named + " already computes an arithmetic this reads,"
+                    + " which says more about what it answers than a term standing for it can");
+        }
+        if (signature.params().size() != 1) {
+            throw new IllegalStateException(named + " takes " + signature.params().size()
+                    + " arguments, and a number taken of the one value an operation is given is"
+                    + " taken of one");
+        }
+        holdTheResultToTheDeclaration(stdlib, operation, Question::isANumber,
+                "a number for a term of what it answers to be about");
+        Type source = signature.params().get(0);
+        Type answered = signature.result();
+        if (!how.takenOf(source, answered)) {
+            throw new IllegalStateException(named + " is declared to answer "
+                    + how.getClass().getSimpleName() + " of a " + Type.show(source)
+                    + ", which is not what that is taken of");
+        }
+    }
+
+    /**
      * Holds a declared form to the library: what it answers counts, and so does every argument it
      * is written over.
      *
@@ -849,8 +908,24 @@ final class DischargeRules {
         return projection == null ? null : new Projection(call, reads, projection);
     }
 
+    /** Whether {@code operation} counts what it is given, which is the narrow question the size
+     *  machinery asks: what a container holds, and what an emptiness check means. */
     static boolean isSize(ValueName operation) {
         return NumericMeasures.isMeasure(operation);
+    }
+
+    /**
+     * Whether what {@code operation} answers is a number taken of the one value it was given.
+     *
+     * <p>The wider question, and the one a vocabulary asks. Whether the check has something to say
+     * about a call is not whether the call is a size: {@code Time.hour(t)} answers a number of
+     * {@code t} the way {@code String.length(s)} answers one of {@code s}, and what is declared of
+     * each is declared under the same proposition. Spelled as "is it a size", the vocabulary was the
+     * size machinery's own predicate read for a second purpose, and the first operation that
+     * answered a number without counting anything was left out of it silently (#1027).
+     */
+    static boolean answersANumberTakenOfItsArgument(ValueName operation) {
+        return OperationFacts.takenAs(operation) != null;
     }
 
     static boolean isQuantifier(ValueName operation) {
@@ -896,7 +971,7 @@ final class DischargeRules {
     /** Whether the check has a rule about what a call answers, rather than only about how to render
      * it. */
     static boolean readsAsATerm(ValueName operation) {
-        return isSize(operation) || builtOperations().contains(operation)
+        return answersANumberTakenOfItsArgument(operation) || builtOperations().contains(operation)
                 || carryingOperations().contains(operation) || isQuantifier(operation)
                 || NOT.equals(operation);
     }

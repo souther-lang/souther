@@ -98,9 +98,10 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules) {
      * Where the position at {@code path} stops once every rule reaching this value has been taken
      * in, which is not the same as what {@link #at} projects onto it.
      */
-    NumericDomain.Bounds leftAt(TermPath path, boolean measured) {
+    NumericDomain.Bounds leftAt(TermPath path,
+                                souther.compiler.check.FieldDomains.CoordinateKind kind) {
         String where = keyOf(path);
-        return where == null ? null : bounds().leftAt(where, measured);
+        return where == null ? null : bounds().leftAt(where, kind);
     }
 
     /**

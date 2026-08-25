@@ -241,10 +241,11 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
      */
     @Test
     void twoPositionsComparedWithEachOtherSayWhichLimitThatIs() {
+        // Both sides name a position by itself, so the reading named a term for each.
         assertEquals(List.of(
-                        new Said(TermPath.of("p").then("x"),
+                        Said.named(TermPath.of("p").then("x"),
                                 new BlockReason.ComparisonBetweenPositions()),
-                        new Said(TermPath.of("p").then("y"),
+                        Said.named(TermPath.of("p").then("y"),
                                 new BlockReason.ComparisonBetweenPositions())),
                 said(read("p: Pair", "p.x < p.y").unread()));
     }
@@ -287,8 +288,11 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
      */
     @Test
     void aRelationTheArithmeticStoppedOnIsNamedForTheForm() {
+        // The left side names a position by itself, so the reading named a term for it; the right
+        // is where the reading stopped, and `p.y` there is a position the walk met inside the
+        // product rather than a number the rule was read for.
         assertEquals(List.of(
-                        new Said(TermPath.of("p").then("x"),
+                        Said.named(TermPath.of("p").then("x"),
                                 new BlockReason.UnreadComparisonForm()),
                         new Said(TermPath.of("p").then("y"),
                                 new BlockReason.UnreadComparisonForm())),
@@ -305,7 +309,7 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
      */
     @Test
     void aReadableCarrierAgainstAnUnreadableSideIsNotACarrierProblem() {
-        assertEquals(List.of(new Said(TermPath.of("p").then("x"),
+        assertEquals(List.of(Said.named(TermPath.of("p").then("x"),
                         new BlockReason.UnreadComparisonForm())),
                 said(read("p: Pair", "p.x < Int.min(1, 2)").unread()));
     }
@@ -316,11 +320,19 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
      * <p>Spelled out where every entry is about one rule and what is being read is the position and
      * the limit. Which rule it was has its own test, because it is its own question.
      */
-    private record Said(UnreadRule.Coordinate at, BlockReason why) {
+    private record Said(souther.compiler.inputs.FilingCoordinate at, BlockReason why) {
 
-        /** The same, where the reading was after the position's own values. */
+        /** The same, where the reading named no number of the position — a position the walk met
+         *  inside something it could not take apart. */
         Said(TermPath at, BlockReason why) {
-            this(UnreadRule.Coordinate.at(at), why);
+            this(souther.compiler.inputs.FilingCoordinate.at(at), why);
+        }
+
+        /** And where it did name one: the position's own values, which is what a side naming the
+         *  position by itself comes to. */
+        static Said named(TermPath at, BlockReason why) {
+            return new Said(souther.compiler.inputs.FilingCoordinate.of(
+                    new souther.compiler.inputs.NumericTerm.ValueOf(at)), why);
         }
     }
 

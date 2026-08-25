@@ -7,7 +7,7 @@ import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
-import souther.compiler.inputs.UnreadRule;
+import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.numeric.Place;
 import souther.compiler.types.BindingId;
 
@@ -130,7 +130,7 @@ sealed interface ComparisonAssessment {
      * @param filedAt where the reading was looking, which is a diagnostic position and never the
      *                subject of a question. What such a rule is about is the part that was not read
      */
-    record Unread(BlockReason.ReadingStopped why, List<UnreadRule.Coordinate> filedAt)
+    record Unread(BlockReason.ReadingStopped why, List<FilingCoordinate> filedAt)
             implements ComparisonAssessment {
 
         public Unread {
@@ -156,7 +156,7 @@ sealed interface ComparisonAssessment {
         if (readsAnswer(comparison, answer)) {
             return new AnswerDependent();
         }
-        List<UnreadRule.Coordinate> filedAt = GuardThresholds.filedAt(comparison, reads, symbols);
+        List<FilingCoordinate> filedAt = GuardThresholds.filedAt(comparison, reads, symbols);
         if (filedAt.isEmpty()) {
             return aboutNoPosition(comparison, reads, symbols);
         }
@@ -189,7 +189,7 @@ sealed interface ComparisonAssessment {
             return new NoInput();
         }
         return new Unread(new BlockReason.RuleAboutADerivedValue(),
-                from.stream().map(UnreadRule.Coordinate::at).toList());
+                from.stream().map(FilingCoordinate::at).toList());
     }
 
     /** What a line comes to on the input space, from the quantity it is on. */
@@ -248,7 +248,7 @@ sealed interface ComparisonAssessment {
      * for the walk's positions because that was the helper in hand, and a rule read from end to end
      * was filed at a position its arithmetic had cancelled.
      */
-    default List<UnreadRule.Coordinate> filedAt(Core.Binary comparison, InputReads reads,
+    default List<FilingCoordinate> filedAt(Core.Binary comparison, InputReads reads,
                                                 Symbols symbols) {
         return switch (this) {
             case AcrossPositions over -> over.cutting().over();

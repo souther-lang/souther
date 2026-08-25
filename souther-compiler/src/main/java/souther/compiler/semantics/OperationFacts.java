@@ -78,13 +78,37 @@ public final class OperationFacts {
             about("DateTime", "fromDateAndTime",
                     answers(form(at(0), 86400).plus(form(at(1), 1)))),
 
-            // The operations whose result is a number taken of the one value they are given.
-            about("List", "length", new OperationFact.CountsWhatItIsGiven()),
-            about("String", "length", new OperationFact.CountsWhatItIsGiven()),
-            about("Set", "size", new OperationFact.CountsWhatItIsGiven()),
-            about("Map", "size", new OperationFact.CountsWhatItIsGiven()),
+            // The operations whose result is a number taken of the one value they are given, and
+            // what each takes of it. The arm is the whole of what is said here: where the number
+            // runs is declared below with the other bounds, and what it is measured by is the
+            // operation's own result type.
+            about("List", "length", takenAs(new TakenAs.HowManyItHolds())),
+            about("String", "length", takenAs(new TakenAs.HowManyItHolds())),
+            about("Set", "size", takenAs(new TakenAs.HowManyItHolds())),
+            about("Map", "size", takenAs(new TakenAs.HowManyItHolds())),
+            // `Int.abs` and `Decimal.abs` are not here and cannot be. They are ordinary `let`s over
+            // `<` and `-`, so a body reading expands them and reads the comparison inside; a term
+            // standing for the call would be a second reading of the same call, which is what the
+            // exclusivity below refuses.
+            about("Time", "hour", takenAs(new TakenAs.PartOfTime(TakenAs.TimePart.HOUR))),
+
+            // A count is never negative, and each of these says so itself. Derived from the arm
+            // instead, the arm would be where a bound is really declared and every operation
+            // sharing it would carry the same one — which is what a term saying "a size is never
+            // negative" was, one level down (#1027). `everyMeasureAnswersACountThatIsNotNegative`
+            // is what holds the four of them to it.
+            about("List", "length", bounded(Rel.GE, 0)),
+            about("String", "length", bounded(Rel.GE, 0)),
+            about("Set", "size", bounded(Rel.GE, 0)),
+            about("Map", "size", bounded(Rel.GE, 0)),
+
+            // And the ones every answer of which some value it could be given answers. A string of
+            // any length is written by repeating a character; every hour of the day is an hour some
+            // time falls in. The counts over an element the language may have none of are not here,
+            // and say why where the fact is declared.
             about("String", "length",
-                    new OperationFact.EveryCountItGivesIsACountSomeValueHas()),
+                    new OperationFact.EveryAnswerItCanGiveHasASourceValue()),
+            about("Time", "hour", new OperationFact.EveryAnswerItCanGiveHasASourceValue()),
 
             // What holds of a result wherever the call is written. Each is a fact about the
             // operation, so it is stated at every call and not only where something was guarded:
@@ -283,7 +307,6 @@ public final class OperationFacts {
         //
         // One way round, and it is not a closure over the facts. A count is bounded at nought; a
         // result bounded at nought is not a count — `Int.abs` answers one and counts nothing.
-        out.addAll(theBoundEveryCountHas(List.copyOf(out)));
 
         // What a construction keeps of what it read, where the answer is nothing. Each group is
         // a reason about what a shape can say, not about the operation being uninteresting.
@@ -396,18 +419,6 @@ public final class OperationFacts {
         return List.copyOf(out);
     }
 
-    /** The bound each operation that counts what it was given answers under, as a declaration of its
-     *  own — one per such declaration, so that an operation gaining the one gains the other. */
-    private static List<Declared> theBoundEveryCountHas(List<Declared> declared) {
-        List<Declared> out = new ArrayList<>();
-        for (Declared each : declared) {
-            if (each.fact() instanceof OperationFact.CountsWhatItIsGiven) {
-                out.add(new Declared(each.operation(), bounded(Rel.GE, 0)));
-            }
-        }
-        return out;
-    }
-
     /** How many whole minutes the first date-time and the last stand apart, which is as far apart as
      *  a count of minutes between two of them reaches either way. Read off the counts the carrier
      *  runs between: what a date-time can be written as is answered there, and a number written here
@@ -464,6 +475,10 @@ public final class OperationFacts {
 
     private static OperationFact reads(ArgumentRef container, ElementShape... through) {
         return new OperationFact.ReadsItsContainer(container, java.util.Set.of(through));
+    }
+
+    private static OperationFact takenAs(TakenAs how) {
+        return new OperationFact.AnswersANumberTakenOfTheOneValueItIsGiven(how);
     }
 
     private static OperationFact meansSizeOf(String module, String size) {
@@ -655,14 +670,39 @@ public final class OperationFacts {
         return Index.SILENCES.getOrDefault(subject, java.util.Set.of());
     }
 
-    /** The operations that answer a number taken of the one value they are given. */
-    public static java.util.Set<ValueName> countsWhatItIsGiven() {
-        return Index.COUNTS;
+    /** What {@code operation} takes of the one value it is given, or null where the number it
+     *  answers is not taken of one value. */
+    public static TakenAs takenAs(ValueName operation) {
+        return Index.TAKEN_AS.get(operation);
     }
 
-    /** Whether every count {@code operation} could give is a count some value of the type has. */
-    public static boolean everyCountItGivesIsACountSomeValueHas(ValueName operation) {
-        return Index.EVERY_COUNT_HAS_A_VALUE.contains(operation);
+    /** The operations that answer a number taken of the one value they are given. */
+    public static java.util.Set<ValueName> answersANumberTakenOfItsArgument() {
+        return Index.TAKEN_AS.keySet();
+    }
+
+    /**
+     * The operations that count what they are given, which is the narrower vocabulary a size is
+     * asked for under.
+     *
+     * <p>Read off the arm rather than declared beside it. Being a size is being taken as how many
+     * the value holds, so a second list would be the same statement written twice and would drift
+     * the way the two lists of measures this package was made out of did.
+     */
+    public static java.util.Set<ValueName> countsWhatItIsGiven() {
+        java.util.Set<ValueName> out = new java.util.LinkedHashSet<>();
+        Index.TAKEN_AS.forEach((operation, how) -> {
+            if (how instanceof TakenAs.HowManyItHolds) {
+                out.add(operation);
+            }
+        });
+        return java.util.Set.copyOf(out);
+    }
+
+    /** Whether every number {@code operation} could answer is one some value it could be given
+     *  answers. */
+    public static boolean everyAnswerItCanGiveHasASourceValue(ValueName operation) {
+        return Index.EVERY_ANSWER_HAS_A_SOURCE.contains(operation);
     }
 
     /** The indexes, read off the declarations on the first ask. */
@@ -699,11 +739,12 @@ public final class OperationFacts {
         private static final java.util.Set<ValueName> QUANTIFIERS =
                 stating(OperationFact.StatesItsPredicateOfEveryElement.class);
 
-        private static final java.util.Set<ValueName> COUNTS =
-                stating(OperationFact.CountsWhatItIsGiven.class);
+        private static final Map<ValueName, TakenAs> TAKEN_AS =
+                index(OperationFact.AnswersANumberTakenOfTheOneValueItIsGiven.class,
+                        OperationFact.AnswersANumberTakenOfTheOneValueItIsGiven::how);
 
-        private static final java.util.Set<ValueName> EVERY_COUNT_HAS_A_VALUE =
-                stating(OperationFact.EveryCountItGivesIsACountSomeValueHas.class);
+        private static final java.util.Set<ValueName> EVERY_ANSWER_HAS_A_SOURCE =
+                stating(OperationFact.EveryAnswerItCanGiveHasASourceValue.class);
 
         /** The silences, by what they are about. */
         private static final Map<OperationSubject, java.util.Set<ValueName>> SILENCES = silences();

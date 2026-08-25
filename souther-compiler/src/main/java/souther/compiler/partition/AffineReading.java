@@ -1,7 +1,6 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.AffineForms;
-import souther.compiler.check.Carrier;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.Location;
 import souther.compiler.check.Symbols;
@@ -292,11 +291,16 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
      * <p>What is asked is only that each position has an order, and that the order has counts under
      * it: a position with no number is one a sum has nothing to add.
      */
-    java.util.Map<NumericTerm, Carrier> carriers(InputReads reads, Symbols symbols) {
-        java.util.Map<NumericTerm, Carrier> on = new java.util.LinkedHashMap<>();
+    java.util.Map<NumericTerm, souther.compiler.inputs.TermOrders> carriers(
+            InputReads reads, Symbols symbols) {
+        java.util.Map<NumericTerm, souther.compiler.inputs.TermOrders> on =
+                new java.util.LinkedHashMap<>();
         for (NumericTerm term : form.coefs().keySet()) {
-            Carrier here = reads.read().carrierOf(term, symbols);
-            if (here == null || !here.counts()) {
+            // Both ends of the term, because a reader of a row wants the one it is decoded on and a
+            // reader of a line wants the one the answer is measured on. Carried together so neither
+            // stands in for the other (#1027).
+            souther.compiler.inputs.TermOrders here = reads.read().ordersOf(term, symbols);
+            if (here.answered() == null || !here.answered().counts()) {
                 return null;
             }
             on.put(term, here);

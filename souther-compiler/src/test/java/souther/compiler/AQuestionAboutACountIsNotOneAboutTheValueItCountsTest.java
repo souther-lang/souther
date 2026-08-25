@@ -67,7 +67,7 @@ class AQuestionAboutACountIsNotOneAboutTheValueItCountsTest {
                     | "one" : (Code { text = "a" }) -> 2
                 """, "price");
 
-        assertEquals(List.of("count of c.text"), readFor(partition),
+        assertEquals(List.of("String.length(c.text)"), readFor(partition),
                 () -> "the rule was read for the count and not for the string's own values: "
                         + partition.notRead());
     }
@@ -91,7 +91,7 @@ class AQuestionAboutACountIsNotOneAboutTheValueItCountsTest {
                     | "one" : (Code { text = "a" }) -> TooShort
                 """, "price");
 
-        assertEquals(List.of("count of c.text"), readFor(partition),
+        assertEquals(List.of("String.length(c.text)"), readFor(partition),
                 () -> "read the same way wherever the rule is written: " + partition.notRead());
     }
 

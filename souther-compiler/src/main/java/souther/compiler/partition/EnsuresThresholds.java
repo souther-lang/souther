@@ -9,6 +9,7 @@ import souther.compiler.core.Core;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.UnreadRule;
 import souther.compiler.types.BindingId;
 
@@ -178,7 +179,7 @@ public final class EnsuresThresholds {
             reportUnread(new RuleRef.Ensures(rule.id(), clause), e, rule.value(),
                     new BlockReason.UnreadComparisonForm(),
                     GuardThresholds.mentionedIn(e, reads, symbols).stream()
-                            .map(UnreadRule.Coordinate::at).toList(),
+                            .map(FilingCoordinate::at).toList(),
                     out.unread());
             return;
         }
@@ -284,14 +285,14 @@ public final class EnsuresThresholds {
      */
     private static void reportUnread(RuleRef.Ensures rule, Core statement, BindingId answer,
                                      BlockReason.AboutARule why,
-                                     List<UnreadRule.Coordinate> at,
+                                     List<FilingCoordinate> at,
                                      List<UnreadRule> unread) {
         if (ComparisonAssessment.readsAnswer(statement, answer)) {
             return;
         }
         souther.compiler.check.RuleCitation cited =
                 souther.compiler.check.RuleCitation.named(rule);
-        for (UnreadRule.Coordinate named : at) {
+        for (FilingCoordinate named : at) {
             UnreadRule here = new UnreadRule(rule, cited, named, why);
             if (unread.stream().noneMatch(had -> had.sameAs(here))) {
                 unread.add(here);

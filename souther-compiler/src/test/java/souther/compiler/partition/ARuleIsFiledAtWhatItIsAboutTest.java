@@ -49,6 +49,26 @@ class ARuleIsFiledAtWhatItIsAboutTest {
                 .map(PartitionEvidence.NotRead::at).sorted().toList();
     }
 
+    /** The same over a list, for the rules whose quantity has a range of its own. */
+    private static PartitionEvidence overAList(String clause) {
+        Compilation compilation = Compilation.ofSource("""
+                module m
+
+                data Ok = { n: Int }
+
+                behavior f : (xs: List<Int>, b: Int) -> Ok
+                    constructs Ok
+                    ensures %s
+                let f (xs, b) = Ok { n = b }
+
+                example f
+                    | "one" : ([1], 2) -> Ok { n = 2 }
+                """.formatted(clause), "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        return AdequacyReport.of(compilation).modules().get(0).behaviors().get(0).partition();
+    }
+
     /** A position the arithmetic cancels is not one the rule that was read is filed at. */
     @Test
     void aRuleThatWasReadIsFiledAtTheQuantityItCuts() {
@@ -56,11 +76,24 @@ class ARuleIsFiledAtWhatItIsAboutTest {
                 "the rule is `a + c <= 10`, and it says nothing about `b`");
     }
 
-    /** And one whose line the quantity never reaches is filed the same way. */
+    /**
+     * And one whose line the quantity never reaches is filed the same way, and says so.
+     *
+     * <p>A length is never negative, so {@code List.length(xs) + b - b <= -1} is read in full, its
+     * quantity is found, and its line falls outside what that quantity ever holds. What it is about
+     * is the length and nothing else: {@code b} is written into the clause and cancels, and a note
+     * at {@code b} would say the rule states something about a position it does not mention.
+     */
     @Test
     void andSoIsOneWhoseLineTheQuantityNeverReaches() {
-        assertEquals(List.of("a", "c"), filedAt("a + b - b + c <= 10 && a + c >= 11"),
-                "both conjuncts are about the same two positions");
+        PartitionEvidence measured = overAList("List.length(xs) + b - b <= -1");
+
+        assertEquals(List.of("List.length(xs)"),
+                measured.notRead().stream().map(PartitionEvidence.NotRead::at).toList(),
+                "the quantity is the length, and the position that cancels is not part of it");
+        assertEquals(List.of(UndividedPosition.Reason.RULE_CUTS_OUTSIDE_WHAT_THE_QUANTITY_HOLDS),
+                measured.notRead().stream().map(PartitionEvidence.NotRead::reason).toList(),
+                "read to the end, and the line is outside where a length goes");
     }
 
     /**

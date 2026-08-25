@@ -15,6 +15,8 @@ import souther.compiler.numeric.Count;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import souther.compiler.types.ValueName;
+
 import java.util.Optional;
 import java.util.SequencedMap;
 import java.util.List;
@@ -128,7 +130,7 @@ public final class FieldDomains {
     /** The atom a range is taken of at each position: the position's own value, and the count of
      *  one where a count is taken. A position with neither has no range to be exact about. */
     private final Map<String, FactSubject> atomAt;
-    private final Map<String, FactSubject> countAt;
+    private final Map<String, Counted> countAt;
     /** What the reading that builds the bounds made of each part of each rule. Per part, because a
      *  rule is represented where every part of it is. */
     private final Map<RuleRef, Map<Core, InvariantChecker.PartRead>> readBy;
@@ -151,7 +153,7 @@ public final class FieldDomains {
                          Hir.Data data, Symbols symbols, ReadingPolicy policy,
                          Map<Coordinate, Count> settled,
                          Set<String> unreadOfEveryValue,
-                         Map<String, FactSubject> atomAt, Map<String, FactSubject> countAt,
+                         Map<String, FactSubject> atomAt, Map<String, Counted> countAt,
                          Map<RuleRef, Map<Core, InvariantChecker.PartRead>> readBy,
                          Map<FactSubject, souther.compiler.numeric.Granularity> spacing) {
         this.byField = byField;
@@ -250,7 +252,7 @@ public final class FieldDomains {
      *  path means is the value there; a count taken of one is a coordinate it has to name. */
     private static Map<Coordinate, Count> atValues(Map<String, Count> settled) {
         Map<Coordinate, Count> out = new LinkedHashMap<>();
-        settled.forEach((path, at) -> out.put(new Coordinate(path, false), at));
+        settled.forEach((path, at) -> out.put(Coordinate.value(path), at));
         return out;
     }
 
@@ -349,7 +351,7 @@ public final class FieldDomains {
         // and means nothing once the reading that named it is gone, so a caller holding one could
         // only ask the domain it came from — which is this one, while it is still here.
         Map<String, NumericDomain.Bounds> holds = new LinkedHashMap<>();
-        seeded.held().forEach((field, atom) -> {
+        seeded.heldAtoms().forEach((field, atom) -> {
             if (field.isEmpty()) {
                 return;
             }
@@ -398,8 +400,14 @@ public final class FieldDomains {
      *                 other kind of rule reaches this reading
      * @param lower    whether this bounds the coordinate below; otherwise above
      */
-    public record Placed(String path, boolean measured, RuleRef.Invariant from,
-                         boolean lower, Endpoint end) {}
+    public record Placed(String path, ValueName by, RuleRef.Invariant from,
+                         boolean lower, Endpoint end) {
+
+        /** Whether it is a number taken of the position rather than its own values. */
+        public boolean measured() {
+            return by != null;
+        }
+    }
 
     /**
      * A rule about where one coordinate's values stop that this reading placed no end from, and
@@ -428,8 +436,14 @@ public final class FieldDomains {
      * @param why  what would have to change before this rule could be a line, in this compiler's
      *             own terms
      */
-    public record Unread(String path, boolean measured, RuleRef.Invariant from,
-                         Core part, souther.compiler.inputs.BlockReason.AboutARule why) {}
+    public record Unread(String path, ValueName by, RuleRef.Invariant from,
+                         Core part, souther.compiler.inputs.BlockReason.AboutARule why) {
+
+        /** Whether it is a number taken of the position rather than its own values. */
+        public boolean measured() {
+            return by != null;
+        }
+    }
 
     /**
      * The declaration whose clause could have moved where the coordinate at {@code path} stops, or
@@ -528,8 +542,7 @@ public final class FieldDomains {
         ConstraintState<FactSubject> taken = constraints;
         for (Map.Entry<Coordinate, Count> each : fixed.entrySet()) {
             Coordinate where = each.getKey();
-            FactSubject atom = where.measured()
-                    ? countAt.get(where.path()) : atomAt.get(where.path());
+            FactSubject atom = subjectAt(where.path(), where.kind());
             souther.compiler.numeric.Granularity spaced =
                     atom == null ? null : spacing.get(atom);
             // A coordinate no range is taken of here settles nothing, which is less than the caller
@@ -554,10 +567,10 @@ public final class FieldDomains {
         private final ConstraintState<FactSubject> constraints;
         private final SequencedMap<FactSubject, String> positions;
         private final Map<String, FactSubject> atomAt;
-        private final Map<String, FactSubject> countAt;
+        private final Map<String, Counted> countAt;
 
         private Settled(ConstraintState<FactSubject> constraints, SequencedMap<FactSubject, String> positions,
-                        Map<String, FactSubject> atomAt, Map<String, FactSubject> countAt) {
+                        Map<String, FactSubject> atomAt, Map<String, Counted> countAt) {
             this.constraints = constraints;
             this.positions = positions;
             this.atomAt = atomAt;
@@ -599,8 +612,9 @@ public final class FieldDomains {
         public <B> Carried<B> constraintsOver(java.util.function.Function<Coordinate, B> named,
                                               java.util.function.Function<Object, B> otherwise) {
             Map<FactSubject, Coordinate> where = new LinkedHashMap<>();
-            atomAt.forEach((path, atom) -> at(where, atom, new Coordinate(path, false)));
-            countAt.forEach((path, atom) -> at(where, atom, new Coordinate(path, true)));
+            atomAt.forEach((path, atom) -> at(where, atom, Coordinate.value(path)));
+            countAt.forEach((path, counted) -> at(where, counted.atom(),
+                    Coordinate.takenBy(path, counted.by())));
             InjectiveRenaming<FactSubject, B> naming = InjectiveRenaming.of(atom -> {
                 Coordinate coordinate = where.get(atom);
                 return coordinate == null ? otherwise.apply(atom) : named.apply(coordinate);
@@ -797,7 +811,7 @@ public final class FieldDomains {
     /** Every end the rules place, wherever it is. */
     public List<Placed> placed() {
         return directs.stream()
-                .map(each -> new Placed(each.path(), each.measured(), each.from(),
+                .map(each -> new Placed(each.path(), each.by(), each.from(),
                         each.bound().lower(), each.bound().end()))
                 .toList();
     }
@@ -1030,12 +1044,52 @@ public final class FieldDomains {
      * clause placing an end at 0 beside one that takes the 0 away leaves a position whose first
      * value is 1, and the end as written is not where the position starts.
      */
-    public NumericDomain.Bounds leftAt(String path, boolean measured) {
+    public NumericDomain.Bounds leftAt(String path, CoordinateKind kind) {
         // The axis the caller is on, and not whichever of the two this position happens to have. A
         // `String` is measured two ways — its own order, and the length of it — and answering with
         // the wrong one clamps a line drawn on one axis by the range of the other.
-        FactSubject atom = measured ? countAt.get(path) : atomAt.get(path);
+        FactSubject atom = subjectAt(path, kind);
         return atom == null ? null : constraints.numbers().boundsOf(atom);
+    }
+
+    /**
+     * A count one path has: the atom the clauses name it by, and the operation it is a count of.
+     *
+     * <p>One value and not two maps. The atom is what a rule about the count is recorded against and
+     * the operation is what a coordinate names it by, and they are true of the same count — held
+     * apart, a path could have one and not the other, and the pairing would be whatever the two
+     * fill sites remembered. That is the shape of defect this whole change is about (#1027), and it
+     * arrived here as part of the repair for it.
+     */
+    public record Counted(FactSubject atom, ValueName by) {
+
+        public Counted {
+            java.util.Objects.requireNonNull(atom, "a count is recorded against an atom");
+            java.util.Objects.requireNonNull(by, "and is a count of some operation");
+        }
+    }
+
+    /** The atom of a count this reading may not have, which is what every lookup of one wants. */
+    private static FactSubject atomOf(Counted counted) {
+        return counted == null ? null : counted.atom();
+    }
+
+    /**
+     * The subject the clauses of a value write one coordinate of it under, or null where they write
+     * none.
+     *
+     * <p>Null for an operation the clause vocabulary has no word for, which is not a gap. What a
+     * clause is written about is a position's value or how much it holds; a guard bounding
+     * {@code Time.hour(t)} names a number the declarations never mention, so what they say about it
+     * is nothing — and nothing is what a lookup finding no subject already means everywhere here.
+     */
+    private FactSubject subjectAt(String path, CoordinateKind kind) {
+        return switch (kind) {
+            case CoordinateKind.OfItsOwnValue _ -> atomAt.get(path);
+            case CoordinateKind.OfWhatAnOperationAnswers taken ->
+                    souther.compiler.check.NumericMeasures.isMeasure(taken.operation())
+                            ? atomOf(countAt.get(path)) : null;
+        };
     }
 
     /**
@@ -1045,11 +1099,49 @@ public final class FieldDomains {
      * positions can be. A position measured two ways is two coordinates at one path, and a form
      * naming the other one is a form about another quantity.
      */
-    public record Coordinate(String path, boolean measured) {
+    public record Coordinate(String path, CoordinateKind kind) {
 
         public Coordinate {
             if (path == null) {
                 throw new IllegalArgumentException("a coordinate sits at a path");
+            }
+            java.util.Objects.requireNonNull(kind, "and is some number of what is there");
+        }
+
+        /** The position's own value. */
+        public static Coordinate value(String path) {
+            return new Coordinate(path, new CoordinateKind.OfItsOwnValue());
+        }
+
+        /** The number {@code operation} answers of what is there. */
+        public static Coordinate takenBy(String path, ValueName operation) {
+            return new Coordinate(path, new CoordinateKind.OfWhatAnOperationAnswers(operation));
+        }
+    }
+
+    /**
+     * Which number of a position a coordinate is.
+     *
+     * <p>A boolean while a position had two numbers — its value and the count taken of it — and the
+     * count was the only thing anything ever took. It is not: {@code Int.abs(x)} is a third number
+     * at the same path, and told apart by a flag it would arrive as the count of {@code x} and be
+     * read against clauses written about how many {@code x} holds. Two terms coming to one name is
+     * what a coordinate exists to stop, so what makes them two is carried rather than summarised
+     * (#1027).
+     *
+     * <p>The operation as it resolved and not as it was written. Two spellings that reach one
+     * operation are one coordinate, and comparing renderings is reading a name back out of its text.
+     */
+    public sealed interface CoordinateKind {
+
+        /** What the location holds. */
+        record OfItsOwnValue() implements CoordinateKind {}
+
+        /** What an operation answers of what the location holds. */
+        record OfWhatAnOperationAnswers(ValueName operation) implements CoordinateKind {
+
+            public OfWhatAnOperationAnswers {
+                java.util.Objects.requireNonNull(operation, "this one names the operation");
             }
         }
     }
@@ -1077,7 +1169,7 @@ public final class FieldDomains {
 
     private static NumericDomain.Bounds boundsOfForm(ConstraintState<FactSubject> constraints,
                                                      Map<String, FactSubject> atomAt,
-                                                     Map<String, FactSubject> countAt,
+                                                     Map<String, Counted> countAt,
                                                      Map<Coordinate, java.math.BigDecimal> form) {
         if (form.isEmpty()) {
             return null;
@@ -1085,7 +1177,12 @@ public final class FieldDomains {
         Map<FactSubject, java.math.BigDecimal> coefs = new LinkedHashMap<>();
         for (Map.Entry<Coordinate, java.math.BigDecimal> each : form.entrySet()) {
             Coordinate at = each.getKey();
-            FactSubject atom = at.measured() ? countAt.get(at.path()) : atomAt.get(at.path());
+            FactSubject atom = switch (at.kind()) {
+                case CoordinateKind.OfItsOwnValue _ -> atomAt.get(at.path());
+                case CoordinateKind.OfWhatAnOperationAnswers taken ->
+                        NumericMeasures.isMeasure(taken.operation())
+                                ? atomOf(countAt.get(at.path())) : null;
+            };
             if (atom == null) {
                 return null;
             }
@@ -1125,7 +1222,7 @@ public final class FieldDomains {
         // narrowed one of these is in the bounds; a rule that narrowed only an atom standing for an
         // arithmetic this cannot carry narrowed nothing anybody reads off them.
         Set<FactSubject> ranged = new LinkedHashSet<>(atomAt.values());
-        ranged.addAll(countAt.values());
+        countAt.values().forEach(counted -> ranged.add(counted.atom()));
         // Asked of every rule the reading was handed, and not of the questions the rules raise. A
         // pattern raises none — which values may stand somewhere and where a line falls are not what
         // it is about — and it is still a way the value can be refused at an edge of the number

@@ -451,6 +451,18 @@
           "status" : "complete",
           "covered" : [ "冷蔵", "通常", "速達" ],
           "unclassifiedRows" : 0
+        }, {
+          "axis" : "出荷する/Time.hour(指示.集荷時刻)",
+          "path" : "Time.hour(指示.集荷時刻)",
+          "read" : {
+            "extent" : "complete"
+          },
+          "classes" : [ "Time.hour(指示.集荷時刻)/0 <= x < 12", "Time.hour(指示.集荷時刻)/12 <= x <= 23" ],
+          "excluded" : [ ],
+          "unprovenClaims" : [ ],
+          "status" : "complete",
+          "covered" : [ "Time.hour(指示.集荷時刻)/0 <= x < 12", "Time.hour(指示.集荷時刻)/12 <= x <= 23" ],
+          "unclassifiedRows" : 0
         } ],
         "claimsOffAxis" : [ ],
         "boundaries" : [ {
@@ -575,14 +587,52 @@
             "status" : "complete",
             "hit" : false
           } ]
+        }, {
+          "axis" : "出荷する/Time.hour(指示.集荷時刻)",
+          "origin" : "comparison@1:54:50",
+          "kind" : "at_value",
+          "value" : "12",
+          "items" : [ {
+            "point" : "on",
+            "relation" : "=",
+            "against" : "11",
+            "knownWritable" : true,
+            "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+            "status" : "complete",
+            "hit" : false
+          }, {
+            "point" : "off",
+            "relation" : "=",
+            "against" : "12",
+            "knownWritable" : true,
+            "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+            "status" : "complete",
+            "hit" : false
+          }, {
+            "point" : "in",
+            "relation" : "in",
+            "against" : "0 <= Time.hour(指示.集荷時刻) < 11",
+            "knownWritable" : true,
+            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
+          }, {
+            "point" : "out",
+            "relation" : "in",
+            "against" : "12 < Time.hour(指示.集荷時刻) <= 23",
+            "knownWritable" : true,
+            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
+          } ]
         } ],
         "pairs" : {
-          "total" : 6,
+          "total" : 16,
           "status" : "complete",
-          "covered" : 4,
-          "witnessedFeasible" : 4,
+          "covered" : 11,
+          "witnessedFeasible" : 11,
           "provenInfeasible" : 0,
-          "unknown" : 2
+          "unknown" : 5
         },
         "notDerivable" : [ "指示.記録時刻" ],
         "notRead" : [ {
@@ -608,17 +658,6 @@
             "lowered" : 0
           }
         }, {
-          "position" : "指示.集荷時刻",
-          "reason" : "rule_about_a_derived_value",
-          "rule" : "comparison@1:54:50",
-          "ruleId" : {
-            "kind" : "comparison",
-            "declaredIn" : "conformance.shipping",
-            "behavior" : "出荷する",
-            "ordinal" : 5,
-            "lowered" : 0
-          }
-        }, {
           "position" : "指示.品目",
           "reason" : "rules_not_read_at_all"
         } ]
@@ -640,6 +679,16 @@
         "disposition" : "refused",
         "subject" : "出荷する/指示.重量 in 30001 < 指示.重量",
         "code" : "E1917"
+      }, {
+        "kind" : "boundary_unmet",
+        "disposition" : "refused",
+        "subject" : "出荷する/Time.hour(指示.集荷時刻) = 11",
+        "code" : "E1916"
+      }, {
+        "kind" : "boundary_unmet",
+        "disposition" : "refused",
+        "subject" : "出荷する/Time.hour(指示.集荷時刻) = 12",
+        "code" : "E1916"
       }, {
         "kind" : "partition_not_derivable",
         "disposition" : "reported",
@@ -665,18 +714,6 @@
           "declaredIn" : "conformance.shipping",
           "behavior" : "出荷する",
           "ordinal" : 4,
-          "lowered" : 0
-        },
-        "reason" : "rule_about_a_derived_value"
-      }, {
-        "kind" : "partition_not_read",
-        "disposition" : "reported",
-        "subject" : "指示.集荷時刻",
-        "ruleId" : {
-          "kind" : "comparison",
-          "declaredIn" : "conformance.shipping",
-          "behavior" : "出荷する",
-          "ordinal" : 5,
           "lowered" : 0
         },
         "reason" : "rule_about_a_derived_value"

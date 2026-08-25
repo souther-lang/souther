@@ -227,10 +227,42 @@ public final class InputDomain {
      * narrowing, and what it holds there is what a row writes; walking the declaration again would
      * answer with what the field was declared as before anything narrowed it.
      */
-    public Carrier carrierOf(NumericTerm term, Symbols symbols) {
-        Position position = at(term.path());
-        return term.carrierAt(
-                position != null ? position.type() : declaredAt(term.path(), symbols), symbols);
+    public Carrier answeredOn(NumericTerm term, Symbols symbols) {
+        return ordersOf(term, symbols).answered();
+    }
+
+    /**
+     * The order a value at {@code term}'s path is read off a row on, or null where nothing orders
+     * it.
+     *
+     * <p>The other end of the same term, and never the one above. What a term answers and what it is
+     * read off are two orders for every term that is what an operation answered and one order for
+     * every term that is not — so a caller handed a single carrier had whichever of the two the
+     * caller before it meant, and the day the two part is the day a row is decoded on a count the
+     * value is not written in (#1027).
+     */
+    public Carrier observedOn(NumericTerm term, Symbols symbols) {
+        return ordersOf(term, symbols).observed();
+    }
+
+    /** Both ends of one term, taken together from the one reading of where it sits. */
+    public TermOrders ordersOf(NumericTerm term, Symbols symbols) {
+        return term.ordersAt(typeAt(term.path(), symbols), symbols);
+    }
+
+    /**
+     * What stands at {@code path} as this reading has it, or null where it reaches nothing there.
+     *
+     * <p>The position first and the declarations only where there is none, which is the one
+     * resolution of where a term sits. A caller that walked the declarations itself would answer
+     * with what a field was declared as before anything narrowed it, and a caller that took the
+     * position alone would have nothing under {@link #MAX_DEPTH}. Both readers of this — what a term
+     * is measured on, and whether an operation may be taken of it — get the same answer because
+     * there is one.
+     */
+    public Type typeAt(TermPath path, Symbols symbols) {
+        Position position = at(path);
+        return position != null ? position.type() : declaredAt(path, symbols);
     }
 
     /**
@@ -524,11 +556,17 @@ public final class InputDomain {
         // could name the position and nothing else, which is what it is for.
         List<UnreadRule> competing = List.of();
         if (undecidable(ofType, valueOfType, stated, taken, carried)) {
-            competing = competingCoordinates(stated, path);
+            competing = competingCoordinates(stated, path, taken, type, symbols);
             stated = List.of();
         }
         boolean bySize = measuredHere(ofType, valueOfType, stated, taken);
-        NumericTerm term = bySize ? new NumericTerm.SizeOf(taken, path) : new NumericTerm.ValueOf(path);
+        NumericTerm term = bySize ? NumericTerm.TakenOf.of(taken, path, type, symbols)
+                : new NumericTerm.ValueOf(path);
+        if (term == null) {
+            throw new IllegalStateException(
+                    "this reading decided " + path + " is measured by " + taken
+                            + ", which is not what its type is measured by: " + Type.show(type));
+        }
         DeclaredBounds.Bounds own = bySize
                 ? DeclaredBounds.and(ofType, DeclaredBounds.placed(stated, true, Carrier.WHOLE))
                 : carried == null ? null
@@ -550,7 +588,7 @@ public final class InputDomain {
         // own type draws a line, because a clause relating two fields is not a partition of one.
         NumericDomain.Bounds admissible = nothingExists ? null
                 : TypeBounds.admissible(own, projected, term);
-        List<UnreadRule> unread = unreadRulesAt(placed, path, competing);
+        List<UnreadRule> unread = unreadRulesAt(placed, path, term, competing);
 
         ReadingResult reading = crossed(declared, view, admissible, admitted, symbols, unread,
                 nothingExists, type);
@@ -558,7 +596,10 @@ public final class InputDomain {
                 // Where the position actually stops, which the ends as written do not say: a clause
                 // placing one at 0 beside a clause that takes the 0 away leaves a position whose
                 // first value is 1, and a line drawn at the 0 is drawn at no value of it.
-                placed.leftAt(path, bySize),
+                placed.leftAt(path, bySize
+                        ? new souther.compiler.check.FieldDomains.CoordinateKind
+                                .OfWhatAnOperationAnswers(taken)
+                        : new souther.compiler.check.FieldDomains.CoordinateKind.OfItsOwnValue()),
                 placed.narrowedBy(path, true), placed.narrowedBy(path, false), nothingExists,
                 placed.projection(), declared, reading,
                 ObligationDomain.of(reading, declared), admitted.completeness(),
@@ -651,12 +692,20 @@ public final class InputDomain {
      * what the key settles.
      */
     private static List<UnreadRule> competingCoordinates(List<FieldDomains.Placed> stated,
-                                                         TermPath path) {
+                                                         TermPath path, ValueName.Stdlib taken,
+                                                         Type type, Symbols symbols) {
         List<UnreadRule> out = new ArrayList<>();
         for (FieldDomains.Placed each : stated) {
             UnreadRule said = new UnreadRule(each.from(),
                     souther.compiler.check.RuleCitation.named(each.from()),
-                    new UnreadRule.Coordinate(path, each.measured()),
+                    // Each rule at the coordinate that rule is about, which is what makes the two
+                    // two. What is undecided is which of them the position is measured at, and that
+                    // is a fact about the position rather than about either rule — this reading has
+                    // chosen no term for the position, and each rule chose one for itself.
+                    each.measured()
+                            ? FilingCoordinate.of(
+                                    NumericTerm.TakenOf.of(taken, path, type, symbols))
+                            : FilingCoordinate.of(new NumericTerm.ValueOf(path)),
                     new BlockReason.CompetingCoordinates());
             if (out.stream().noneMatch(had -> had.sameAs(said))) {
                 out.add(said);
@@ -709,14 +758,22 @@ public final class InputDomain {
      * of them was dropped as a repeat of the first.
      */
     private static List<UnreadRule> unreadRulesAt(PlacedRules placed, TermPath path,
-                                                  List<UnreadRule> competing) {
+                                                  NumericTerm term, List<UnreadRule> competing) {
         List<UnreadRule> out = new ArrayList<>(competing);
         for (FieldDomains.Unread each : placed.unreadAt(path)) {
             // The rule the reading of ends was holding when it gave up, carried rather than left
             // behind. It is a clause of an invariant, so it has a name and the handle is that name.
+            //
+            // The term where this reading is of the number that rule is about, and the position
+            // alone where it is not. The clause's reading knows which operation a count is of and
+            // holds the path as a spelling; this one holds the path itself. Neither can name the
+            // term without the other, and a path parsed back out of a spelling is one this compiler
+            // made up.
             UnreadRule said = new UnreadRule(each.from(),
                     souther.compiler.check.RuleCitation.named(each.from()),
-                    new UnreadRule.Coordinate(path, each.measured()), each.why());
+                    each.measured() == (term instanceof NumericTerm.TakenOf)
+                            ? FilingCoordinate.of(term) : FilingCoordinate.at(path),
+                    each.why());
             if (out.stream().noneMatch(had -> had.sameAs(said))) {
                 out.add(said);
             }

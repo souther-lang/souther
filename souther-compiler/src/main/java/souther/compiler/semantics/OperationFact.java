@@ -233,27 +233,55 @@ public sealed interface OperationFact {
 
     /**
      * The operation answers a number taken of the one value it is given: how long a string is, how
-     * many a container holds.
+     * many a container holds, which hour of its day a time falls in.
      *
      * <p>One list, because a reader that answers "does this rule bound a number" has to give the
      * same answer wherever it is asked. The discharge procedure keys an atom on one of these over
      * its argument's path and a partition draws a boundary on one — and where those two disagreed,
      * a rule discharged in one place was reported in the other as a rule the model does not state.
+     *
+     * <p><b>What it is taken as, and nothing else.</b> A size is never negative, a count is a whole
+     * number, and a string of any length exists: three propositions about {@code String.length} that
+     * are declared as themselves — {@link BoundsItsResult}, the operation's own result type, {@link
+     * EveryAnswerItCanGiveHasASourceValue} — rather than read off the arm. Written into the arm,
+     * each would be true of the operations that share it and of no others, which is what a term
+     * standing for one operation and answering for a kind of operation already was (#1027).
+     *
+     * <p>The one value is the whole of what such a term can be about. A number taken of two
+     * locations is not one of these: what it would be read off is a pair, and a term names one
+     * path. An operation over several whose result the model can state says so as the form it
+     * answers ({@link AnswersAFormOfItsArguments}) and is read into that form instead, which is why
+     * the two cannot both be declared of one operation.
      */
-    record CountsWhatItIsGiven() implements OperationFact {}
+    record AnswersANumberTakenOfTheOneValueItIsGiven(TakenAs how) implements OperationFact {
+
+        public AnswersANumberTakenOfTheOneValueItIsGiven {
+            java.util.Objects.requireNonNull(how, "this one says what the number is taken as");
+        }
+    }
 
     /**
-     * Every count this operation could give is a count some value of the type has.
+     * Every number this operation could answer is one some value it could be given answers.
      *
-     * <p>Only a string's length. A string of any length is written by repeating a character and a
-     * character is always to be had, so what the rules leave is what some value has.
+     * <p>Not a property of how the number is taken. A string of any length is written by repeating
+     * a character and a character is always to be had; every hour of the day is an hour some time
+     * falls in. Two different accounts of why, and one proposition — which is why it is asked of the
+     * operation rather than derived from {@link TakenAs}, where the answer would have to be the same
+     * for every operation sharing an arm: a {@code List.length} and a {@code String.length} share
+     * one and only the second of them has it.
      *
-     * <p>Every other measure counts things that may not be there. A {@code Set<Bool>} is capped at
-     * two by how many booleans there are; a {@code List<T>} of one needs a {@code T}, and a
-     * {@code T} nothing inhabits has none. Whether such a value exists is a question about the
-     * element and not about the count.
+     * <p>What is left out is what a count over an element the language may have none of leaves. A
+     * {@code Set<Bool>} is capped at two by how many booleans there are; a {@code List<T>} of one
+     * needs a {@code T}, and a {@code T} nothing inhabits has none. Whether such a value exists is
+     * a question about the element and not about the number, so those operations declare nothing
+     * here and an edge on one of them is settled by a row rather than by an argument.
+     *
+     * <p>Beside the building and not the same statement as it. That a value answering the number
+     * exists is this; that the generator can write one down is what the generator answers, and an
+     * operation may satisfy the first while the second is held back by how much it is worth
+     * building.
      */
-    record EveryCountItGivesIsACountSomeValueHas() implements OperationFact {}
+    record EveryAnswerItCanGiveHasASourceValue() implements OperationFact {}
 
     /**
      * There is nothing to say of this operation under {@code subject}.

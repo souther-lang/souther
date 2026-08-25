@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
+import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
@@ -40,7 +41,7 @@ public sealed interface BorderQuantity {
      * values. A line here divides the position into classes, which is why this one has an axis and
      * the others do not.
      */
-    record OfACoordinate(AxisId axis, NumericTerm term, Carrier of) implements BorderQuantity {
+    record OfACoordinate(AxisId axis, NumericTerm term, TermOrders of) implements BorderQuantity {
 
         public OfACoordinate {
             if (axis == null || term == null || of == null) {
@@ -51,29 +52,33 @@ public sealed interface BorderQuantity {
 
         @Override
         public LevelSpace levels() {
-            return LevelSpace.onACarrier(of);
+            return LevelSpace.onACarrier(of.answered());
         }
 
         /** Its one position's, and nothing about any other. */
         @Override
         public Carrier carrierOf(NumericTerm asked) {
-            return term.equals(asked) ? of : null;
+            return term.equals(asked) ? of.answered() : null;
         }
 
         @Override
         public Stands standsAt(Criterion where, Observation row) {
+            // Read on the order the value is written on and asked on the order the answer is
+            // measured on. The two are one carrier for a position's own content and part for a term
+            // that is what an operation answered — a time counts the seconds of its day and its hour
+            // counts by one, so a reader handed the second decodes the first as nothing (#1027).
             return switch (term.read(row.at(term.path()), of)) {
                 case NumericTerm.Reading.Missing _ -> Stands.UNREADABLE;
                 case NumericTerm.Reading.NotNumber _ -> Stands.NO;
                 case NumericTerm.Reading.Number number ->
-                        where.holds(new Level.OnACarrier(of, number.value()))
+                        where.holds(new Level.OnACarrier(of.answered(), number.value()))
                                 ? Stands.YES : Stands.NO;
             };
         }
 
         @Override
         public Standing standingAt(Criterion where) {
-            return new Standing.OfOneCoordinate(term, of, where);
+            return new Standing.OfOneCoordinate(term, of.answered(), where);
         }
 
         @Override
@@ -89,7 +94,7 @@ public sealed interface BorderQuantity {
         /** The carrier's own spelling. A day count is a date here and nowhere else. */
         @Override
         public String writtenAt(Level level) {
-            return of.written(placeOf(level));
+            return of.answered().written(placeOf(level));
         }
 
         @Override
@@ -140,7 +145,7 @@ public sealed interface BorderQuantity {
      * where a conversion between two orders is written.
      */
     record Apart(String behavior, NumericTerm on, NumericTerm against,
-                 Map<NumericTerm, Carrier> carriers) implements BorderQuantity {
+                 Map<NumericTerm, TermOrders> carriers) implements BorderQuantity {
 
         public Apart {
             if (behavior == null || on == null || against == null || carriers == null) {
@@ -161,8 +166,8 @@ public sealed interface BorderQuantity {
                         + " each on one order: " + java.util.Set.of(on, against) + " against "
                         + carriers.keySet());
             }
-            Carrier here = carriers.get(on);
-            Carrier there = carriers.get(against);
+            Carrier here = carriers.get(on).answered();
+            Carrier there = carriers.get(against).answered();
             if (!here.standsAgainst(there)) {
                 throw new IllegalArgumentException("a distance is between two orders a value of"
                         + " one stands somewhere on: " + here + " against " + there);
@@ -171,12 +176,12 @@ public sealed interface BorderQuantity {
 
         /** The order the first position is read and written on. */
         private Carrier onCarrier() {
-            return carriers.get(on);
+            return carriers.get(on).answered();
         }
 
         /** The order the other position is read and written on. */
         private Carrier againstCarrier() {
-            return carriers.get(against);
+            return carriers.get(against).answered();
         }
 
         /** Whether the two positions stand on one order, which is every pair a rule names itself and
@@ -209,7 +214,8 @@ public sealed interface BorderQuantity {
             if (!counts()) {
                 return LevelSpace.onlyWhereTheyMeet();
             }
-            return LevelSpace.addedUpOver(carriers.values())
+            return LevelSpace.addedUpOver(carriers.values().stream()
+                    .map(TermOrders::answered).toList())
                     == souther.compiler.numeric.Granularity.DISCRETE
                     ? LevelSpace.steppingBy(java.math.BigDecimal.ONE) : LevelSpace.dense();
         }
@@ -217,7 +223,8 @@ public sealed interface BorderQuantity {
         /** That position's own, which is what it is read off a row and written back on. */
         @Override
         public Carrier carrierOf(NumericTerm asked) {
-            return carriers.get(asked);
+            TermOrders orders = carriers.get(asked);
+            return orders == null ? null : orders.answered();
         }
 
         /**
@@ -237,8 +244,9 @@ public sealed interface BorderQuantity {
             // Each on its own order. Read on one order for the pair, a position written back
             // differently from the other was read as a value it does not hold — a date read as a
             // whole number is no number at all, and the row stood at nothing (#1018).
-            NumericTerm.Reading here = on.read(row.at(on.path()), onCarrier());
-            NumericTerm.Reading there = against.read(row.at(against.path()), againstCarrier());
+            NumericTerm.Reading here = on.read(row.at(on.path()), carriers.get(on));
+            NumericTerm.Reading there =
+                    against.read(row.at(against.path()), carriers.get(against));
             if (here instanceof NumericTerm.Reading.Missing
                     || there instanceof NumericTerm.Reading.Missing) {
                 return Stands.UNREADABLE;
@@ -298,7 +306,7 @@ public sealed interface BorderQuantity {
             }
             return new Standing.OfAForm(
                     LinearForm.<NumericTerm>atom(on).minus(LinearForm.atom(against)),
-                    carriers, levels(), where);
+                    answeredOn(carriers), levels(), where);
         }
 
         @Override
@@ -352,7 +360,7 @@ public sealed interface BorderQuantity {
      * the values {@code 2 * a} takes would be the even numbers under one spelling and the odd ones
      * shifted by nine under another.
      */
-    record OverAForm(String behavior, LinearForm<NumericTerm> form, Map<NumericTerm, Carrier> on)
+    record OverAForm(String behavior, LinearForm<NumericTerm> form, Map<NumericTerm, TermOrders> on)
             implements BorderQuantity {
 
         public OverAForm {
@@ -377,7 +385,8 @@ public sealed interface BorderQuantity {
             // form, and a rule here would be written without the coefficients. `b + a` over two
             // dates is the same orders in the same numbers as `b - a - n`, and only the second is a
             // count of days — which is the form issue #949 asks for.
-            for (Carrier each : on.values()) {
+            for (TermOrders orders : on.values()) {
+                Carrier each = orders.answered();
                 if (!each.counts()) {
                     throw new IllegalArgumentException(
                             "a form adds its positions up, and this order has no number under it: "
@@ -416,14 +425,16 @@ public sealed interface BorderQuantity {
          * apiece they were free to disagree about a pair of orders that step differently.
          */
         souther.compiler.numeric.Granularity spacing() {
-            return LevelSpace.addedUpOver(on.values());
+            return LevelSpace.addedUpOver(on.values().stream()
+                    .map(TermOrders::answered).toList());
         }
 
         /** The order that position is read and written on, and null for a position not in the
          *  form. */
         @Override
         public Carrier carrierOf(NumericTerm asked) {
-            return on.get(asked);
+            TermOrders orders = on.get(asked);
+            return orders == null ? null : orders.answered();
         }
 
         @Override
@@ -433,7 +444,8 @@ public sealed interface BorderQuantity {
                 // Each on its own order. Read on one order for the whole form, a position written
                 // back differently from its neighbour was read as a value it does not hold.
                 NumericTerm.Reading read =
-                        each.getKey().read(row.at(each.getKey().path()), on.get(each.getKey()));
+                        each.getKey().read(row.at(each.getKey().path()),
+                                on.get(each.getKey()));
                 if (read instanceof NumericTerm.Reading.Missing) {
                     return Stands.UNREADABLE;
                 }
@@ -448,7 +460,7 @@ public sealed interface BorderQuantity {
 
         @Override
         public Standing standingAt(Criterion where) {
-            return new Standing.OfAForm(form, on, levels(), where);
+            return new Standing.OfAForm(form, answeredOn(on), levels(), where);
         }
 
         @Override
@@ -516,6 +528,13 @@ public sealed interface BorderQuantity {
      * the form; this layer does not decide that again.
      */
     Carrier carrierOf(NumericTerm term);
+
+    /** What each of a form's terms is measured on, for a reader of a line rather than of a row. */
+    static Map<NumericTerm, Carrier> answeredOn(Map<NumericTerm, TermOrders> orders) {
+        Map<NumericTerm, Carrier> out = new java.util.LinkedHashMap<>();
+        orders.forEach((term, on) -> out.put(term, on.answered()));
+        return Map.copyOf(out);
+    }
 
     /** Whether a row stands at one item of a border on this quantity, or whether it could not be
      *  read. */
