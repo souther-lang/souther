@@ -1,6 +1,9 @@
 package souther.compiler.query;
 
+import souther.compiler.execute.jvm.JvmProgramImage;
 import souther.compiler.execute.jvm.JvmProgramImages;
+import souther.compiler.generated.EvaluationArtifact;
+import souther.compiler.observe.ArmObservation;
 
 import java.util.Map;
 
@@ -28,5 +31,18 @@ final class QueryJvmProgramImages implements JvmProgramImages {
     public ClassLoader compileTimeLoader(String module) {
         Map<String, byte[]> classes = db.ask(new Output.Linked(module)).value();
         return classes == null ? null : Output.loader(db, classes);
+    }
+
+    @Override
+    public JvmProgramImage evaluating(String module, ArmObservation arms) {
+        EvaluationArtifact program = db.ask(new Output.EvaluationLinked(module, arms)).value();
+        if (program == null) {
+            return null;
+        }
+        // Read when something has to be held to a declaration rather than now: a compile's own
+        // answers are of the module being evaluated by being of this compile of it, and every
+        // answer a run has today is one of those.
+        return new JvmProgramImage(program, Output.evaluationLoader(db),
+                () -> Output.declarationsRead(db));
     }
 }

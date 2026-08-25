@@ -24,4 +24,13 @@ public interface JvmProgramImages {
      * not decided here, and the check that runs when the program does still applies.
      */
     ClassLoader compileTimeLoader(String module);
+
+    /**
+     * The program {@code module}'s rows are evaluated against, recording the arms or not as
+     * {@code arms} says.
+     *
+     * <p>Null where this compile could not make it. The rows are then not run, which is not a fault
+     * of the model they are about — the caller says what that means for what it was asked.
+     */
+    JvmProgramImage evaluating(String module, souther.compiler.observe.ArmObservation arms);
 }

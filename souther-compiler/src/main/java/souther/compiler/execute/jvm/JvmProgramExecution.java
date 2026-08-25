@@ -5,8 +5,15 @@ import souther.compiler.execute.ConstantConstruction;
 import souther.compiler.execute.ConstantOutcome;
 import souther.compiler.execute.ProgramExecution;
 import souther.compiler.execute.WrittenValue;
+import souther.compiler.examples.Answering;
+import souther.compiler.examples.ExampleVerifier;
+import souther.compiler.execute.ExampleExecution;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.SoutherJvmAbi;
+import souther.compiler.observe.ArmObservation;
+import souther.compiler.observe.Observations;
+import souther.compiler.observe.RowRun;
+import souther.compiler.source.SourceId;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -31,6 +38,22 @@ public final class JvmProgramExecution implements ProgramExecution {
             throw new IllegalArgumentException("a run of the JVM program needs its classes");
         }
         this.images = images;
+    }
+
+    @Override
+    public RowRun run(ExampleExecution asked, SourceId source, ArmObservation arms) {
+        JvmProgramImage image = images.evaluating(asked.module(), arms);
+        if (image == null) {
+            return new RowRun.NotRunHere();
+        }
+        Observations observed = ExampleVerifier.check(asked.rowsWrittenIn(source), asked.symbols(),
+                asked.signatures(), image.program(), image.published(), asked.requirements(),
+                image.around(), asked.definitions(), asked.deadline(), asked.policy(),
+                // What applies a behavior here is what this compile emitted. A compile has nothing
+                // else to run a row against; something supplied from outside one arrives through
+                // the same seam and brings its own classes.
+                Answering.generatedHere(), asked.contracts());
+        return new RowRun.Ran(observed);
     }
 
     @Override

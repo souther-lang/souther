@@ -930,8 +930,7 @@ public final class Output {
          */
         @Override
         public Answer<Of> compute(Db db) {
-            Answer<Of> ran = evaluate(db, name, sourceId,
-                    db.ask(new EvaluationLinked(name, arms)).value(), arms);
+            Answer<Of> ran = evaluate(db, name, sourceId, arms);
             List<Diagnostic> wrong = fakeTables(db, name, sourceId);
             if (wrong.isEmpty()) {
                 return ran;
@@ -975,54 +974,38 @@ public final class Output {
         }
 
         /**
-         * The rows of one source, run against {@code classes}.
+         * The rows of one source, run.
          *
-         * <p>Which classes is the only thing that varies between running rows to compile a module and
-         * running them to measure it, and it is passed in rather than decided here so the two cannot
-         * become two evaluations. A row that held under one and failed under the other would be a
-         * difference in the measurement, not in the model, and the report has no way to tell.
+         * <p>What varies between running rows to compile a module and running them to measure it is
+         * what the run records, and that is what is passed. Which classes carry it is the runner's,
+         * so the two cannot become two evaluations by a caller reaching for a different set: a row
+         * that held under one and failed under the other would be a difference in the measurement
+         * and not in the model, and the report has no way to tell.
          */
-        static Answer<Of> evaluate(Db db, String name, SourceId sourceId, EvaluationArtifact artifact,
-                                   ArmObservation arms) {
+        static Answer<Of> evaluate(Db db, String name, SourceId sourceId, ArmObservation arms) {
             ExampleExecution asked = ExampleExecutions.of(db, name);
             if (asked == null) {
                 return Answer.absent();   // nothing here can have its examples evaluated yet
             }
-            if (artifact == null) {
-                // Arms were asked for and the instrumented classes could not be made. Falling back to
-                // uncounted ones is not open: what holds a row to a budget is the counting, so a row
-                // run against them would be back on the clock. Nothing was observed, and that travels
-                // in the channel every other reason travels in.
-                return arms == ArmObservation.OMIT ? Answer.absent()
-                        : Answer.of(new Of(List.of(), List.of(
-                                souther.compiler.observe.Incompleteness.of(
-                                        souther.compiler.observe.Incompleteness.Code.INSTRUMENTATION_ABSENT,
-                                        souther.compiler.observe.Incompleteness.Scope.MODULE, name))));
-            }
-            souther.compiler.check.Prepared.Examples rows = asked.rowsWrittenIn(sourceId);
-            if (rows.rows().isEmpty()) {
+            if (asked.rowsWrittenIn(sourceId).rows().isEmpty()) {
                 return Answer.of(Of.NONE);
             }
             List<Report> reports = new ArrayList<>(alreadyDeclared(db, name, sourceId));
             if (!reports.isEmpty()) {
                 return Answer.absent(reports);   // a row naming one would read the other declaration
             }
-            Observations observed =
-                    souther.compiler.examples.ExampleVerifier.check(rows, asked.symbols(),
-                            asked.signatures(),
-                            artifact,
-                            // What this compile can read declarations of, for holding an answer's own
-                            // against. Asked for only if something has to be held: a compile's own
-                            // answers are of the module being evaluated by being of this compile of
-                            // it, and every answer this run has is one of those today.
-                            () -> declarationsRead(db),
-                            asked.requirements(), evaluationLoader(db),
-                            asked.definitions(), asked.deadline(),
-                            asked.policy(),
-                            // What applies a behavior here is what this compile emitted. A compile has
-                            // nothing else to run a row against; something supplied from outside one
-                            // arrives through the same seam and brings its own classes.
-                            souther.compiler.examples.Answering.generatedHere(), asked.contracts());
+            if (!(db.execution().run(asked, sourceId, arms)
+                    instanceof souther.compiler.observe.RowRun.Ran(Observations observed))) {
+                // Nothing ran. Where the arms were wanted, that is a measurement nobody made and it
+                // is said so — falling back to a run that records nothing is not open, because what
+                // holds a row to a budget is the counting and a row run without it is back on the
+                // clock. Where they were not, nothing was worked out at all.
+                return arms == ArmObservation.OMIT ? Answer.absent()
+                        : Answer.of(new Of(List.of(), List.of(
+                                souther.compiler.observe.Incompleteness.of(
+                                        souther.compiler.observe.Incompleteness.Code.INSTRUMENTATION_ABSENT,
+                                        souther.compiler.observe.Incompleteness.Scope.MODULE, name))));
+            }
             for (Diagnostic failure : observed.failures()) {
                 reports.add(Report.of(failure));
             }

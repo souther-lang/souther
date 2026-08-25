@@ -1,5 +1,9 @@
 package souther.compiler.execute;
 
+import souther.compiler.observe.ArmObservation;
+import souther.compiler.observe.RowRun;
+import souther.compiler.source.SourceId;
+
 /**
  * The questions the language can only answer by running the program.
  *
@@ -38,4 +42,18 @@ public interface ProgramExecution {
      * run-time check stands.
      */
     ConstantOutcome check(ConstantConstruction written);
+
+    /**
+     * What running the rows written in {@code source} came to.
+     *
+     * <p>The rows of one file, and the module they are rows of, are both in {@code asked}: they came
+     * from one preparation, so which module's program a row is run against is not something a caller
+     * can state wrongly here.
+     *
+     * <p>{@code arms} is what the run is to record beside the counting, which is the one thing that
+     * varies between running a module's rows to compile it and running them to measure it. It is
+     * said in what the run is to observe rather than in what it is to be built from, because which
+     * classes those are is not a fact about the program.
+     */
+    RowRun run(ExampleExecution asked, SourceId source, ArmObservation arms);
 }
