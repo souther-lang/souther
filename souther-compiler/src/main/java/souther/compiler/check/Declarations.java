@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.Reserved;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.stdlib.Stdlib;
@@ -154,12 +155,16 @@ public final class Declarations<D> {
      *
      * <p>Both worlds, because a standard-library module is a module: {@code souther.decimal}
      * declares {@code RoundingMode}, and a reader asking what that module declares is asking about
-     * a declaration no compilation of it made. A module of the compilation and a module of the
-     * library are never the same name — the library's are the reserved namespace — so the two
-     * cannot answer over each other.
+     * a declaration no compilation of it made.
+     *
+     * <p>Which world by the name and not by which answered something. The reserved namespace is the
+     * library's and nothing of a compilation is in it (ADR-0028), so this is a decision about who
+     * owns the name rather than a first world tried and a second fallen back to — a module of the
+     * compilation that declares no types would reach the fallback and be answered for by whatever
+     * happened to be under its name.
      */
     public Map<String, D> declaredIn(String moduleName) {
-        Map<String, D> declared = registry.declaredIn(moduleName);
-        return declared.isEmpty() ? language.declaredIn(moduleName) : declared;
+        return Reserved.isNamespace(moduleName)
+                ? language.declaredIn(moduleName) : registry.declaredIn(moduleName);
     }
 }

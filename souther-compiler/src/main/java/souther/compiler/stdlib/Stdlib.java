@@ -97,6 +97,9 @@ public final class Stdlib {
     private final Map<TypeKey, Hir.Def> language;
     /** The bare spelling a source writes each of them as, which is the only way one is written. */
     private final Map<String, TypeKey> bareTypes;
+    /** And the same declarations by the library module that writes them, worked out once with
+     *  everything else rather than gathered on each ask. */
+    private final Map<String, Map<String, Hir.Def>> byModule;
     private final Map<String, Intrinsic> intrinsics;
     private final Map<String, Hir.FnDef> helpers;
     private final Set<String> published;
@@ -117,11 +120,17 @@ public final class Stdlib {
         this.language = language;
         Map<String, TypeKey> bare = new LinkedHashMap<>();
         Map<String, TypeSymbol> identities = new LinkedHashMap<>();
-        for (TypeKey address : language.keySet()) {
+        Map<String, Map<String, Hir.Def>> grouped = new LinkedHashMap<>();
+        for (Map.Entry<TypeKey, Hir.Def> e : language.entrySet()) {
+            TypeKey address = e.getKey();
             bare.put(address.name(), address);
             identities.put(address.name(), TypeSymbols.declared(address));
+            grouped.computeIfAbsent(address.module(), _ -> new LinkedHashMap<>())
+                    .put(address.name(), e.getValue());
         }
         this.bareTypes = Collections.unmodifiableMap(bare);
+        grouped.replaceAll((_, defs) -> Collections.unmodifiableMap(defs));
+        this.byModule = Collections.unmodifiableMap(grouped);
         this.intrinsics = intrinsics;
         this.helpers = helpers;
         this.published = published;
@@ -233,13 +242,7 @@ public final class Stdlib {
     /** What the language declares in {@code moduleName}, keyed by the name written there. Empty
      *  where no module of the library is called that. */
     public Map<String, Hir.Def> languageDeclarationsIn(String moduleName) {
-        Map<String, Hir.Def> out = new LinkedHashMap<>();
-        for (Map.Entry<TypeKey, Hir.Def> e : language.entrySet()) {
-            if (e.getKey().module().equals(moduleName)) {
-                out.put(e.getKey().name(), e.getValue());
-            }
-        }
-        return Collections.unmodifiableMap(out);
+        return byModule.getOrDefault(moduleName, Map.of());
     }
 
     /** The address the language declares under the bare spelling {@code bare}, or null. */

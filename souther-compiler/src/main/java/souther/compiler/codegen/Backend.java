@@ -973,6 +973,10 @@ public final class Backend {
             String what = owner.name();
             TypeSymbol sameName = byBridgeName.put(cls, member);
             if (sameName != null) {
+                // Each written as the identity it is: a module's with its module, and a primitive
+                // as itself. Which is what tells the two members apart, and what a reader has to
+                // see to know which pair collided — the class name they share is the third part.
+                // Not `Type.show`, which writes a simple name and would print one name twice.
                 throw CompileException.of(Diagnostic.say(new ModuleMessage.TwoMembersJoinThroughOneCaseClass(String.valueOf(sameName), String.valueOf(member), bridge))
                                 .at(pos)
                                 .hint(new ModuleMessage.AMemberGoesByItsOwnNameWithCaseAfterIt()).build());

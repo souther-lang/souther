@@ -172,24 +172,25 @@ public final class TypeScope {
      * nothing wherever it was put.
      */
     public TypeReachName reach(TypeSymbol type) {
-        // A primitive's spelling, and `Some` and `None` beside it: written bare wherever they are
-        // written, there being nothing else they could be written as. And any type whose bare
-        // spelling means this very declaration here.
+        // A primitive's spelling, which nothing may take: `Int` is written `Int` everywhere. And
+        // any type whose bare spelling means this very declaration here.
         if (type instanceof TypeSymbol.Primitive
-                || type instanceof TypeSymbol.LanguageCase(LanguageCaseId id)
-                        && (id == LanguageCaseId.SOME || id == LanguageCaseId.NONE)
                 || type.equals(names.of(type.name()) instanceof Denotation.Denotes d
                         ? d.type() : null)) {
             return new TypeReachName.Bare(type);
         }
-        // What the library declares is written bare and only bare, and only while nothing else
-        // here is: the module that writes one is not a qualifier a source names it by, so a module
-        // declaring the spelling leaves it with no name at all. Asked of the library rather than
-        // read off the identity's module — that a declaration is the library's is one fact, and how
-        // a source may write it is another, and reading the second off the first is what tied a
-        // naming rule to a spelling.
-        if (type.equals(languageNames.get(type.name()))
-                || type instanceof TypeSymbol.LanguageCase) {
+        // What the language and its library declare is written bare and only bare, and only while
+        // nothing else here is: the module that writes one is not a qualifier a source names it by,
+        // so a module declaring the spelling leaves it with no name at all. Asked of the library
+        // rather than read off the identity's module — that a declaration is the library's is one
+        // fact, and how a source may write it is another, and reading the second off the first is
+        // what tied a naming rule to a spelling.
+        //
+        // One branch for both kinds. `Some` and `None` were answered a second time above, bare
+        // whatever else was in scope, which is the same answer everywhere a module may not take
+        // the spelling and the wrong one anywhere it may.
+        if (type instanceof TypeSymbol.LanguageCase
+                || type.equals(languageNames.get(type.name()))) {
             return inScope(type.name()) ? new TypeReachName.Unnameable(type)
                     : new TypeReachName.Bare(type);
         }

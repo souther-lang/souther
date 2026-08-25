@@ -181,6 +181,30 @@ class AReachedNameResolvesBackToWhatItWasAskedAboutTest {
         }
     }
 
+    /**
+     * And {@code Some} and {@code None} are written as themselves too, which no loop above covers.
+     *
+     * <p>Their own test because {@code resolveCase} is not their reader — an {@code Option} arm is
+     * answered where the match is resolved ({@code Resolve}, through
+     * {@link TypeSymbol#optionCase}) — so what is held of them here is only how they are written.
+     *
+     * <p>They were filed beside the primitives under a module name nothing declares, so a reader
+     * that asked "is this a primitive" got them for free. Asked of the identity that is two
+     * questions, and this is the one nothing else here was asking: the loop above reads the
+     * primitives and an error case, and neither is these.
+     */
+    @Test
+    void optionsTwoCasesAreWrittenAsThemselvesToo() {
+        Symbols symbols = scopeOf("app", LIB, APP);
+
+        for (TypeSymbol option : List.of(TypeSymbol.SOME, TypeSymbol.NONE)) {
+            TypeReachName.Written written = assertInstanceOf(TypeReachName.Written.class,
+                    symbols.scope().reach(option), option.toString());
+
+            assertEquals(option.name(), written.rendered());
+        }
+    }
+
     /** A spelling this test composes, as the resolver takes one: a name no source wrote,
      *  which is what a reach name rendered back is. */
     private static WrittenName spelled(String spelling) {
