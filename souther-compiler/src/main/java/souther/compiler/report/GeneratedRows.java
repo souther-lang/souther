@@ -10,6 +10,8 @@ import souther.compiler.partition.Generator;
 import souther.compiler.query.About;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.DeclaredRows;
+import souther.compiler.query.GenerationScope;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -95,16 +97,26 @@ public final class GeneratedRows {
             if (filling == null) {
                 continue;
             }
-            Block one = of(name, filling, WrittenEnsures.of(compilation.db(), name),
+            // And what the module's own declarations are owed, which is no behavior's and so is in
+            // none of the fillings above. The rows go in beside the rest — a line is one piece of
+            // work and is offered once, in the terms of whichever reading composed it — and what
+            // nothing composed a row for is said afterwards, for the reason every other disposition
+            // is said: a block that printed only what it managed reads as though it filled
+            // everything (issue #1062).
+            //
+            // Only where the caller asked for the edges, as the lines about them are: a caller that
+            // asked for no boundary rows is not asking about these either.
+            DeclaredRows declared = boundaries
+                    ? Adequacy.generatedForDeclarationsOf(compilation.db(), name,
+                            behavior == null ? new GenerationScope.Module()
+                                    : new GenerationScope.Behavior(behavior))
+                    : null;
+            Block one = of(name, filling, declared, WrittenEnsures.of(compilation.db(), name),
                     boundaries, names);
             out.append(one.text());
             rows += one.rows();
-            // And what the module's own declarations are short of, which is no behavior's and so
-            // is in none of the fillings above. Left out, an author who took every row this offers
-            // would be left with a model that still fails and nothing would have said which part
-            // was never attempted (issue #1062).
-            if (boundaries) {
-                declarations(out, compilation, name, behavior);
+            if (declared != null) {
+                declarations(out, declared);
             }
         }
         return new Block(out.toString(), rows);
@@ -113,35 +125,27 @@ public final class GeneratedRows {
     /**
      * What nothing offers a row for among the module's declarations.
      *
-     * <p>A line an {@code invariant} drew is owed once over every behavior carrying the type, and a
-     * row is composed by walking one behavior's inputs — so which reading composes the one row a
-     * line is owed is a search over the readings, and nothing does it yet. Said rather than left
-     * out, for the reason every other disposition is said: a block that printed only what it managed
-     * reads as though it filled everything.
+     * <p>Read off the same resolutions the rows above were, so the two cannot disagree: a line whose
+     * row is printed two lines up is not one this says nothing offers a row for.
      *
-     * <p>Only where the caller asked for the edges, as the lines about them are: a caller that asked
-     * for no boundary rows is not asking about these either.
+     * <p>Which lines this is about was settled where the search was, and is not asked again here. A
+     * renderer that filtered by what the behavior carries would be deciding the request's own
+     * question a second time, and would be free to decide it differently.
+     *
+     * <p>Asked of what the walks came to and not of the findings. A finding stands where something
+     * has shown a row can be written at the point; a line the search failed at with nothing yet
+     * promising a row raises none, and the block would go quiet about work it had just tried — which
+     * is the same rule the rows beside these are offered under.
      */
-    private static void declarations(StringBuilder out, Compilation compilation, String module,
-                                     String behavior) {
+    private static void declarations(StringBuilder out, DeclaredRows declared) {
         java.util.Set<String> said = new java.util.LinkedHashSet<>();
-        for (Adequacy.GenerationDisposition each
-                : Adequacy.generatedForDeclarationsOf(compilation.db(), module, behavior)) {
-            // A line the behavior asked about does not carry is not work this block is about, the
-            // way a report narrowed to one behavior keeps the lines that behavior carries and drops
-            // the rest.
-            if (behavior != null && each.finding().about()
-                    instanceof About.APointOfADeclaredBorder(var debt, var _)
-                    && !debt.carriedBy(behavior)) {
-                continue;
-            }
-            // Only where nothing composed one. Where a reading of the line did, the row is already
-            // above — it was composed for that reading's own point — and a sentence saying nothing
-            // offers a row would be printed under it.
-            if (each.outcome() instanceof GenerationOutcome.NotSupported none) {
-                say(out, said, String.format("// nothing offers a row for `%s` in `%s`: %s%n",
-                        about(each.finding()), each.finding().named(), none.reason().said()));
-            }
+        // Each of what was tried, because they are not one fact: a reading whose rules leave no
+        // value at the point and one whose search stopped are different news, and a line carrying
+        // whichever came first would carry the order the walk took. Repeats are dropped by the
+        // words, so a line many readings failed at the same way is said once.
+        for (DeclaredRows.Note note : declared.unresolved()) {
+            say(out, said, String.format("// no row for `%s` owed by `%s`: %s%n",
+                    note.why().subject(), note.owedBy(), saidOf(note.why())));
         }
     }
 
@@ -150,6 +154,11 @@ public final class GeneratedRows {
      *
      * @param module     the module the rows are about, which an attached file names in its header
      * @param generated  one filling per behavior, keyed the way a report keys them
+     * @param declared   the rows the module's declarations are owed, or null where the caller asked
+     *                   for no boundary rows. One row per point of a line however many behaviors
+     *                   carry the type, and under the behavior whose reading composed it — how many
+     *                   there are was settled where the search was resolved, and this puts each in
+     *                   the block its terms belong to
      * @param ensures    what each behavior has written in its {@code ensures}, in the author's own
      *                   words and keyed as {@code generated} is. Read before this is called and
      *                   handed over: what the source says is not something a renderer works out, and
@@ -158,14 +167,26 @@ public final class GeneratedRows {
      * @param names      what the caller calls its sources, for the notes that name one
      */
     public static Block of(String module, Map<String, Adequacy.Filling> generated,
-                           Map<String, List<String>> ensures,
+                           DeclaredRows declared, Map<String, List<String>> ensures,
                            boolean boundaries, SourceNameResolver names) {
+        Map<String, List<Generator.GeneratedRow>> owed = declared == null
+                ? Map.of() : declared.rowsByCarrier();
         List<Map.Entry<String, Composed>> asked = new ArrayList<>();
         for (Map.Entry<String, Adequacy.Filling> behavior : generated.entrySet()) {
             asked.add(Map.entry(behavior.getKey(),
                     new Composed(behavior.getValue().composed().rows(),
-                            boundaries ? behavior.getValue().boundaries().rows() : List.of(),
+                            boundaries ? atTheLines(behavior.getValue(), owed.get(behavior.getKey()))
+                                    : List.of(),
                             armNames(behavior.getValue()))));
+        }
+        // A behavior with nothing of its own to fill can still be the one reading that composed the
+        // row a declaration is owed. Left out, that row would be resolved and then dropped on the
+        // way to the block.
+        for (Map.Entry<String, List<Generator.GeneratedRow>> carrier : owed.entrySet()) {
+            if (!generated.containsKey(carrier.getKey())) {
+                asked.add(Map.entry(carrier.getKey(),
+                        new Composed(List.of(), carrier.getValue(), Map.of())));
+            }
         }
         // Written once and then read three times — printed, counted, and asked whether there is
         // anything to answer. Counting the candidates instead gives a number about work a reader
@@ -285,6 +306,25 @@ public final class GeneratedRows {
      */
     private record Composed(List<Generator.GeneratedRow> cells, List<Generator.GeneratedRow> lines,
                             Map<Integer, String> armNames) {}
+
+    /**
+     * The rows at one behavior's lines: the ones its own readings are owed, and the ones a
+     * declaration is owed that this behavior's reading composed.
+     *
+     * <p>Two sources and one list, because they are one kind of row — a value standing at a line —
+     * and what tells them apart is who owes the line rather than anything a reader of the block
+     * would act on. Where they coincide the block offers one row, which is what it already does for
+     * two of a behavior's own lines that meet.
+     */
+    private static List<Generator.GeneratedRow> atTheLines(Adequacy.Filling filling,
+                                                           List<Generator.GeneratedRow> owed) {
+        if (owed == null || owed.isEmpty()) {
+            return filling.boundaries().rows();
+        }
+        List<Generator.GeneratedRow> out = new ArrayList<>(filling.boundaries().rows());
+        out.addAll(owed);
+        return List.copyOf(out);
+    }
 
     /**
      * What each arm of one behavior is called, by the probe the plan gave it.

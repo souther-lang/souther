@@ -6,7 +6,6 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -107,10 +106,13 @@ class ANarrowingMayStandWhereAnotherLeftThePositionTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        Map<String, Adequacy.Filling> all =
-                Adequacy.generatedOf(compilation.db(), compilation.modules().get(0));
-        assertNotNull(all, "the model under test compiles");
-        return all.get("look").boundaries().rows().stream()
+        assertNotNull(Adequacy.generatedOf(compilation.db(), compilation.modules().get(0)),
+                "the model under test compiles");
+        // Both of what a person is offered at this behavior's lines. A line an `invariant` drew is
+        // the declaration's and is resolved once for the module (issue #1076); a line this body
+        // drew is its own.
+        return souther.compiler.OfferedAtTheLines.of(compilation,
+                        compilation.modules().get(0), "look").rows().stream()
                 .filter(row -> row.purposes().stream().anyMatch(p -> p.toString().contains(point)))
                 .map(row -> String.join(", ", row.inputs().stream().map(i -> i.text()).toList()))
                 .toList();

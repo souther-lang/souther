@@ -150,7 +150,10 @@ at.coverage().made().orElseThrow());
         String block = souther.compiler.report.GeneratedRows.of(
                 compilation, "example.proven", "place", true, SourceNameResolver.identity()).text();
 
-        assertTrue(block.contains("no row for `amount = 0` in `place`"), block);
+        // Owed by the declaration and said as that. The line is `Amount`'s wherever the type is
+        // carried, and a note naming the behavior would say the work is that behavior's
+        // (issue #1076).
+        assertTrue(block.contains("no row for `amount = 0` owed by `Amount`"), block);
         assertTrue(block.contains("every value tried was refused"), block);
     }
 

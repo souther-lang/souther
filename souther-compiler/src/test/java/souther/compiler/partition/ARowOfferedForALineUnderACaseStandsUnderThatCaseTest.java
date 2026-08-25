@@ -6,7 +6,6 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -29,7 +28,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ARowOfferedForALineUnderACaseStandsUnderThatCaseTest {
 
-    /** A `Tag` behind a case of a sum, with the length invariant that draws the line. */
+    /**
+     * A `Tag` behind a case of a sum, with the length invariant that draws the line.
+     *
+     * <p>One position carrying the type and no sibling. The line is the declaration's and is owed
+     * once over every reading of it, so a record with a second `Tag` field would have the row
+     * composed at whichever reading the search reached first (issue #1076) — and this is about what
+     * a row composed under the case holds, which takes the row being composed there.
+     */
     private static String filteredBy(String cases) {
         return """
                 module example.filter
@@ -40,14 +46,14 @@ class ARowOfferedForALineUnderACaseStandsUnderThatCaseTest {
                 data NoTag
                 data Filter = %s
 
-                data Query = { tag: Filter, other: Tag }
+                data Query = { tag: Filter }
                 data Page = { count: Int }
 
                 behavior readArticles : (query: Query) -> Page
 
                 example readArticles
-                    | "no filter" : (Query { tag = NoTag, other = Tag("x") }) -> Page { count = 0 }
-                    | "a tag"     : (Query { tag = Tag("dragons"), other = Tag("x") }) -> Page { count = 1 }
+                    | "no filter" : (Query { tag = NoTag }) -> Page { count = 0 }
+                    | "a tag"     : (Query { tag = Tag("dragons") }) -> Page { count = 1 }
                 """.formatted(cases);
     }
 
@@ -71,10 +77,13 @@ class ARowOfferedForALineUnderACaseStandsUnderThatCaseTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        Map<String, Adequacy.Filling> all =
-                Adequacy.generatedOf(compilation.db(), compilation.modules().get(0));
-        assertNotNull(all, "the model under test compiles");
-        return all.get("readArticles").boundaries().rows().stream()
+        assertNotNull(Adequacy.generatedOf(compilation.db(), compilation.modules().get(0)),
+                "the model under test compiles");
+        // Both of what a person is offered at this behavior's lines. A line an `invariant` drew is
+        // the declaration's and is resolved once for the module (issue #1076); a line this body
+        // drew is its own.
+        return souther.compiler.OfferedAtTheLines.of(compilation,
+                        compilation.modules().get(0), "readArticles").rows().stream()
                 .filter(row -> row.purposes().stream().anyMatch(p -> p.toString().contains(point)))
                 .map(row -> String.join(", ", row.inputs().stream().map(i -> i.text()).toList()))
                 .toList();

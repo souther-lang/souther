@@ -7,7 +7,6 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -55,9 +54,12 @@ class WhetherASizeCanBeBuiltIsAnsweredByWhatBuildsItTest {
         compilation.answerEverything();
         assertEquals(List.of(), compilation.diagnostics().values().stream()
                 .flatMap(List::stream).toList(), "the model under test compiles");
-        Map<String, Adequacy.Filling> all = Adequacy.generatedOf(compilation.db(), compilation.modules().get(0));
-        assertNotNull(all, "the rows come back");
-        return all.get("label").boundaries();
+        assertNotNull(Adequacy.generatedOf(compilation.db(), compilation.modules().get(0)),
+                "the rows come back");
+        // Both authorities, because the lines here are an `invariant`'s: one is owed once over
+        // every behavior carrying the type and is resolved for the module, and what a person
+        // reading the block beside `label` sees is that row beside the behavior's own.
+        return OfferedAtTheLines.of(compilation, compilation.modules().get(0), "label");
     }
 
     /** The row offered at {@code edge}, as the text an author is handed for its first input. */

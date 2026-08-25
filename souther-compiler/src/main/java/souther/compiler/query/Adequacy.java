@@ -1480,84 +1480,121 @@ public final class Adequacy {
     }
 
     /**
-     * What the generator can do about what the module's declarations are short of.
+     * The rows the module's declarations are owed, one answer per point of each authored line.
      *
      * <p>Beside {@link #generatedOf}, which answers per behavior. A line an {@code invariant} drew is
      * not any behavior's, so a walk over the behaviors answers for every finding but those — and a
      * block that printed only what it managed would read as though it had filled everything, which
      * is the whole reason a disposition is kept beside each finding rather than dropped.
      *
-     * <p>Every one of them, and each with the answer its own shape gets. Nothing composes a row for
-     * one of these yet: a row is composed by walking one behavior's inputs and this line is owed
-     * once over every behavior carrying the type, so which reading composes the one row it is owed
-     * is a search over the readings and not a fold of them.
+     * <p><b>A search over the readings and not a fold of them.</b> A row is composed by walking one
+     * behavior's inputs and the line is owed once over every behavior carrying the type, so the
+     * readings are walked in the order the module declares them and the walk stops at the first that
+     * composed a row (issue #1076). A reading that composes nothing is not the line composing
+     * nothing: a record narrowing the position may refuse the value the line names where a plain
+     * field takes it.
+     *
+     * <p>Which readings are walked is {@code scope}'s to say, and it settles the lines this is about
+     * as well: a line no reading the request admits carries is not a question this was put. The
+     * work is done here rather than in a key of its own, because what it costs is
+     * {@link BoundarySearch} — which is keyed, so a reading is searched once however many lines are
+     * resolved from it, and a request about one behavior spends nothing on the rest.
      */
-    public static List<GenerationDisposition> generatedForDeclarationsOf(Db db, String module,
-                                                                        String behavior) {
-        List<Finding> findings = db.ask(new Findings(module)).value();
-        if (findings == null) {
-            return List.of();
+    public static DeclaredRows generatedForDeclarationsOf(Db db, String module,
+                                                          GenerationScope scope) {
+        List<DeclaredDebt> debts = db.ask(new DeclaredBorders(module)).value();
+        java.util.SequencedMap<souther.compiler.partition.BorderObligationPoint,
+                DeclaredRows.Answer> resolved = new LinkedHashMap<>();
+        if (debts == null) {
+            return new DeclaredRows(scope, resolved);
         }
-        // What this request searched, and never what the measurement happened to have composed. The
-        // two are both called an attempt and they answer different questions: a measurement builds a
-        // value where the level asks it to, and says whether the point exists; a generation is asked
-        // afterwards and composes the row an author is offered. Read from the measurement, a build
-        // at `witness` composes nothing, and a block that had just printed a row would say nothing
-        // offers one — which is the sentence this whole answer exists to stop saying.
-        Map<String, List<BorderAssessment>> searched = behavior == null
-                ? searchedBoundariesOf(db, module)
-                : searchedFor(db, module, behavior);
-        List<GenerationDisposition> out = new ArrayList<>();
-        for (Finding finding : findings) {
-            if (!(finding.about()
-                    instanceof About.APointOfADeclaredBorder(var debt, var role))) {
+        for (DeclaredDebt owed : debts) {
+            BorderObligationAssessment debt = owed.debt();
+            // Which lines this request is about, settled once and here. A line no reading the
+            // request asked about carries is not a question this was put — read further down, a
+            // renderer would be deciding a second time what the request had already decided.
+            if (debt.carriedBy().stream().noneMatch(scope::admits)) {
                 continue;
             }
-            // Which reading composes it where none has is a search over the readings and not a fold
-            // of them, and nothing does that yet: the answer is then about the search rather than
-            // about the line.
-            Generator.GeneratedRow row = composed(searched, debt, role);
-            out.add(new GenerationDisposition(finding,
-                    row != null ? new GenerationOutcome.Generated(List.of(row))
-                            : new GenerationOutcome.NotSupported(
-                                    GenerationOutcome.NotSupported.Reason
-                                            .NO_SEARCH_IS_ASKED_FOR_A_LINE_ACROSS_ITS_READINGS)));
+            for (souther.compiler.partition.PointRole role
+                    : BorderObligationAssessment.AGAINST_THE_LINE) {
+                ItemAssessment.Owed at = debt.owedAt(role);
+                if (at == null) {
+                    continue;   // no row is owed at this point of the line
+                }
+                String said = debt.said(role);
+                resolved.put(new souther.compiler.partition.BorderObligationPoint(debt.id(), role),
+                        new DeclaredRows.Answer(said, owed.declaration().name(),
+                                DeclarationResolver.resolveAt(said, at, debt.carriedBy(),
+                                        carrier -> readingOf(db, module, scope, debt, role,
+                                                carrier))));
+            }
         }
-        return List.copyOf(out);
+        return new DeclaredRows(scope, resolved);
     }
 
     /**
-     * The row this request composed at one point of one line, or null where it composed none.
+     * What one behavior's reading of one line holds at one of its points.
      *
-     * <p>Found among the readings this request searched, which is what makes it the row the debt is
-     * offered: the readings of a debt ask the same of a row at the points against the line — checked
-     * where their demands are — so a row standing at one of them stands at the line.
+     * <p>Asked of {@link BoundarySearch} and never of the measurement. The two are both called an
+     * attempt and they answer different questions: a measurement builds a value where the level asks
+     * it to, and says whether the point exists; a generation is asked afterwards and composes the
+     * row an author is offered. Read from the measurement, a build at {@code witness} composes
+     * nothing, and a block that had just printed a row would say nothing offers one.
      *
-     * <p>Null is this request having composed none, and says nothing about whether another could.
-     * Which reading to search next is the question {@code --generate} does not ask yet.
+     * <p>Asked only where the scope admits the behavior, so a request about one behavior spends
+     * nothing on the rest — which is what a search per reading was costing an editor.
+     *
+     * <p>A behavior can meet one line at more than one position, and those are readings too: the
+     * first of them that composed a row answers, since a row standing at any of them stands at the
+     * line. Where none did, the first outcome stands for the behavior — they are its readings, and
+     * what each of them came to is the search's to have recorded.
      */
-    private static Generator.GeneratedRow composed(Map<String, List<BorderAssessment>> searched,
-                                                   BorderObligationAssessment debt,
-                                                   souther.compiler.partition.PointRole role) {
-        for (List<BorderAssessment> lines : searched.values()) {
-            for (BorderAssessment line : lines) {
-                if (!line.border().obligation().equals(debt.id())) {
-                    continue;
-                }
-                ItemAssessment.Owed owed = line.owedAt(role);
-                if (owed != null && owed.attempt() instanceof ItemAssessment.Attempt.Built built) {
-                    return built.row();
-                }
+    private static DeclarationResolver.ReadingEvidence readingOf(
+            Db db, String module, GenerationScope scope, BorderObligationAssessment debt,
+            souther.compiler.partition.PointRole role, String carrier) {
+        if (!scope.admits(carrier)) {
+            return new DeclarationResolver.ReadingEvidence.OutOfScope();
+        }
+        List<BorderAssessment> searched = db.ask(new BoundarySearch(module, carrier)).value();
+        if (searched == null) {
+            return new DeclarationResolver.ReadingEvidence.NoAnswer();
+        }
+        ItemAssessment.Attempt first = null;
+        boolean met = false;
+        for (BorderAssessment line : searched) {
+            if (!line.border().obligation().equals(debt.id())) {
+                continue;
+            }
+            met = true;
+            ItemAssessment.Owed here = line.owedAt(role);
+            if (here == null) {
+                throw new IllegalStateException("a reading owing nothing at a point its line owes"
+                        + " one at: " + debt.id() + " " + role + " in `" + carrier + "`");
+            }
+            if (here.attempt() == null) {
+                // The search answered about this behavior and looked for nothing here, at a point
+                // the line says is worth searching. That is the search and the debt disagreeing
+                // about one point rather than evidence of anything, and a state read as either
+                // would report our own bookkeeping as an answer about the line.
+                throw new IllegalStateException("nothing was searched for at " + debt.said(role)
+                        + ", which the line says is worth searching, in `" + carrier + "`");
+            }
+            if (here.attempt() instanceof ItemAssessment.Attempt.Built) {
+                return new DeclarationResolver.ReadingEvidence.Searched(here.attempt());
+            }
+            if (first == null) {
+                first = here.attempt();
             }
         }
-        return null;
-    }
-
-    /** The lines one behavior was searched at, keyed the way every behavior's are. */
-    private static Map<String, List<BorderAssessment>> searchedFor(Db db, String module,
-                                                                   String behavior) {
-        List<BorderAssessment> lines = db.ask(new BoundarySearch(module, behavior)).value();
-        return lines == null ? Map.of() : Map.of(behavior, lines);
+        if (!met) {
+            // The behavior carries the line and its own search does not hold it. The two are made
+            // from one reading of one module and cannot honestly differ, so this is a defect here
+            // rather than a reading with nothing to say.
+            throw new IllegalStateException("a behavior carrying a line whose search does not hold"
+                    + " it: " + debt.id() + " in `" + carrier + "`");
+        }
+        return new DeclarationResolver.ReadingEvidence.Searched(first);
     }
 
     /** The same, with a value composed at every point worth one — which is a request, and costs what
@@ -2611,7 +2648,7 @@ public final class Adequacy {
                         List.of(new souther.compiler.partition.GenerationReason
                                 .LinkageFailed(behavior)));
             }
-            return Answer.of(new Filling(composed, offered(behavior, edges),
+            return Answer.of(new Filling(composed, offeredHere(behavior, edges),
                     dispositions(owed, edges, composed, spec)));
         }
 
@@ -2899,16 +2936,32 @@ public final class Adequacy {
          * behavior no row names has no gap at any of its lines while every one of them is still a
          * row worth offering. Keying what is offered on what a build refuses would leave a model
          * with no rows at all — the one an author most wants rows for — with nothing.
+         *
+         * <p><b>The points this reading is owed a row at, and no others.</b> The two points against
+         * a line an {@code invariant} drew are the declaration's — one row settles the line however
+         * many positions carry the type — and they are offered once, where the line is resolved
+         * ({@link DeclaredRows}). Offered from here as well, one authored line came out as a row per
+         * position of every behavior that carries it (issue #1076). The regions either side stay,
+         * because where a region stops is settled by every other rule reaching this position.
          */
-        private static Generator.GenerationResult offered(String behavior,
+        private static Generator.GenerationResult offeredHere(String behavior,
                                                           List<BorderAssessment> boundaries) {
             List<Generator.GeneratedRow> rows = new ArrayList<>();
             List<Generator.UnresolvedCombination> unresolved = new ArrayList<>();
             List<souther.compiler.partition.GenerationReason> stopped = new ArrayList<>();
             for (BorderAssessment border : boundaries) {
-              for (souther.compiler.partition.PointRole role
-                      : souther.compiler.partition.PointRole.values()) {
-                if (!(border.at(role) instanceof ItemAssessment.Owed each)) {
+              for (BorderAssessment.Point point : border.points()) {
+                souther.compiler.partition.PointRole role = point.role();
+                // The points this reading is owed a row at, which is what a filling is the answer
+                // about. A line an `invariant` drew is owed once over every behavior carrying the
+                // type, so the two points against it are the declaration's — offered from here as
+                // well, one authored line came out as a row per position of every behavior that
+                // carries it (issue #1076). They are offered once, where the line is resolved
+                // ({@link DeclaredRows}).
+                if (!point.owedHere()) {
+                    continue;
+                }
+                if (!(point.item() instanceof ItemAssessment.Owed each)) {
                     continue;   // nothing is owed here, so nothing was tried and nothing is offered
                 }
                 switch (each.attempt()) {

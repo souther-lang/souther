@@ -68,7 +68,7 @@ class ARowIsOfferedForEveryCombinationOfTheDecisionsOneValueIsMadeOfTest {
         compilation.answerEverything();
         Map<String, Adequacy.Filling> filling = Adequacy.generatedOf(compilation.db(), compilation.modules().get(0));
         assertNotNull(filling, "the model under test compiles");
-        return GeneratedRows.of(compilation.modules().get(0), filling, Map.of(), false,
+        return GeneratedRows.of(compilation.modules().get(0), filling, null, Map.of(), false,
                 SourceNameResolver.identity()).text();
     }
 

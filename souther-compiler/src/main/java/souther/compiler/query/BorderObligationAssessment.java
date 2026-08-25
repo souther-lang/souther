@@ -166,9 +166,11 @@ public record BorderObligationAssessment(BorderObligationId id, String axis,
      * value built at one of them is a value at this point.
      *
      * <p><b>Not the row a debt is offered.</b> A row is offered once for a line, and which reading
-     * composes it is a search over the readings rather than a fold of them: the row here is written
-     * in one behavior's terms and choosing it as the one to offer would be choosing a
-     * representative, which is the mistake this whole value exists to undo.
+     * composes it is a search over the readings rather than a fold of them ({@link
+     * DeclarationResolver}): the row here is written in one behavior's terms and choosing it as the
+     * one to offer would be choosing a representative, which is the mistake this whole value exists
+     * to undo. What it is here for is that a value at the point was built, which is evidence the
+     * point exists.
      */
     private static ItemAssessment at(PointRole role, List<BorderAssessment> readings, Demand asked) {
         if (asked instanceof Demand.NotOwed not) {
