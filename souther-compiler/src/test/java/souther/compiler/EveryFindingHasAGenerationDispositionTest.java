@@ -471,6 +471,29 @@ class EveryFindingHasAGenerationDispositionTest {
             let anywhere (w) = Ok
             """;
 
+    /**
+     * A block says what a reading came to as that reading's, and says nothing about the line.
+     *
+     * <p>The sentence a reader may act on is that no row can be written at the line, and it takes
+     * every reading of it having been searched. A request about {@code held} leaves {@code
+     * anywhere} unwalked — and {@code anywhere} is where the row is — so whatever {@code held}
+     * found is a fact about {@code held}. Written under the declaration's own name, an author is
+     * told a row cannot be written where the next behavior writes one.
+     */
+    @Test
+    void whatOneReadingCameToIsSaidAsThatReadings() {
+        Compilation compilation = compiled(NARROWED);
+
+        String block = GeneratedRows.of(compilation, "example.narrowed", "held", true,
+                SourceNameResolver.identity()).text();
+
+        assertTrue(block.contains("in `held`"),
+                "what the reading this asked about came to, named as its own: " + block);
+        assertFalse(block.contains("no row can be written at"),
+                "and nothing said about the line, which this walk did not see the whole of: "
+                        + block);
+    }
+
     private static DeclaredRows resolved(Compilation compilation, String module,
                                          GenerationScope scope) {
         return Adequacy.generatedForDeclarationsOf(compilation.db(), module, scope);

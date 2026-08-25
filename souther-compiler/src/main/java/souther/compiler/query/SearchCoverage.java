@@ -5,7 +5,6 @@ import souther.compiler.query.BorderObligationAssessment.Reading;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.SequencedMap;
 
@@ -87,10 +86,14 @@ public record SearchCoverage(List<Reading> readings, SequencedMap<Reading, Readi
             throw new IllegalArgumentException("a line nothing reads is not a line");
         }
         came = java.util.Collections.unmodifiableSequencedMap(new LinkedHashMap<>(came));
-        if (!came.keySet().equals(new LinkedHashSet<>(readings))) {
+        // In order and not merely the same set. What the map is ordered by is the order the module
+        // declares the readings in, which is what makes "the first that composed a row" one answer
+        // rather than whichever the walk happened to reach — checked as a set, that half of the
+        // contract was a convention. A repeated reading is refused by the same comparison.
+        if (!List.copyOf(came.keySet()).equals(readings)) {
             throw new IllegalStateException(
-                    "a coverage of a line that leaves one of its readings out: " + readings
-                            + " against " + came.keySet());
+                    "a coverage of a line that is not what its readings are, in their order: "
+                            + readings + " against " + came.keySet());
         }
     }
 

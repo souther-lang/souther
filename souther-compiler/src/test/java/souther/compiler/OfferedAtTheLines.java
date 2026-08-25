@@ -38,7 +38,15 @@ public final class OfferedAtTheLines {
         List<Generator.GeneratedRow> rows = souther.compiler.report.GeneratedRows.atTheLines(
                 own.rows(), declared.rowsByCarrier().get(behavior));
         List<Generator.UnresolvedCombination> unresolved = new ArrayList<>(own.unresolved());
-        declared.unresolved().forEach(note -> unresolved.add(note.why()));
+        declared.unmet().forEach(unmet -> {
+            switch (unmet) {
+                case DeclaredRows.Unmet.TheLineCannotBeWritten(var _, var _, var proving) ->
+                        proving.forEach(at -> unresolved.add(at.why()));
+                case DeclaredRows.Unmet.WhatTheReadingsCameTo(var _, var _, var came) ->
+                        came.forEach(at -> unresolved.add(at.why()));
+                case DeclaredRows.Unmet.NothingWasSearched(var _, var _) -> { }
+            }
+        });
         return new Generator.GenerationResult(rows, unresolved, own.reasons());
     }
 

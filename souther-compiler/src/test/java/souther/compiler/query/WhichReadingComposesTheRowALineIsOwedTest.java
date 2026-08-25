@@ -132,6 +132,29 @@ class WhichReadingComposesTheRowALineIsOwedTest {
                 "every value tried being refused is a fact about the values tried");
     }
 
+    /**
+     * Two readings in one behavior are two readings, and one of them proving nothing is enough.
+     *
+     * <p>The carrier is one behavior and the line is met twice in it — {@code { a: Code, b: Code }}
+     * — so a walk that took the behavior as the unit would hold one of the two answers, chosen by
+     * the order it walked. Where the one it kept is the reading that proves there is nothing at its
+     * own position, the line is reported as unwritable over a position that was merely refused.
+     */
+    @Test
+    void twoReadingsInOneBehaviorAreTwoReadings() {
+        Reading first = new Reading("one", "String.length(x.a)");
+        Reading second = new Reading("one", "String.length(x.b)");
+        SearchCoverage coverage = coverageOf(Map.of(
+                        first, new SearchCoverage.ReadingSearch.Attempted(nothingThere()),
+                        second, new SearchCoverage.ReadingSearch.Attempted(refused())),
+                List.of(first, second));
+
+        assertTrue(coverage.walkedEveryReading(), "both were searched");
+        assertFalse(coverage.provesTheLineCannotBeWritten(),
+                "and the second proves nothing about the line, whatever the first proved of its"
+                        + " own position");
+    }
+
     /** One reading is enough for the claim where the line has one reading, whoever asked. */
     @Test
     void aLineWithOneReadingIsWalkedToTheEndByOneReading() {
@@ -141,6 +164,23 @@ class WhichReadingComposesTheRowALineIsOwedTest {
 
         assertTrue(alone.walkedEveryReading());
         assertTrue(alone.provesTheLineCannotBeWritten());
+    }
+
+    /**
+     * A coverage whose readings are in another order than the line's cannot be made.
+     *
+     * <p>The order is half the contract: it is what makes "the first that composed a row" one
+     * answer rather than whichever the walk reached. Checked as a set, that half was a convention
+     * and a walk that came back in its own order would have been accepted as the line's.
+     */
+    @Test
+    void aCoverageOutOfTheReadingsOrderIsRefused() {
+        SequencedMap<Reading, SearchCoverage.ReadingSearch> backwards = new LinkedHashMap<>();
+        backwards.put(at("elsewhere"), new SearchCoverage.ReadingSearch.Attempted(refused()));
+        backwards.put(at("here"), new SearchCoverage.ReadingSearch.Attempted(refused()));
+
+        assertThrows(IllegalStateException.class,
+                () -> new SearchCoverage(List.of(at("here"), at("elsewhere")), backwards));
     }
 
     /** A coverage that leaves one of the line's readings out cannot be made. */

@@ -150,10 +150,11 @@ at.coverage().made().orElseThrow());
         String block = souther.compiler.report.GeneratedRows.of(
                 compilation, "example.proven", "place", true, SourceNameResolver.identity()).text();
 
-        // Owed by the declaration and said as that. The line is `Amount`'s wherever the type is
-        // carried, and a note naming the behavior would say the work is that behavior's
-        // (issue #1076).
-        assertTrue(block.contains("no row for `amount = 0` owed by `Amount`"), block);
+        // In the behavior, because that is what this says. Every value tried at the point was
+        // refused where a `Yen` is constructed, which is a fact about that reading and not about
+        // the line — another reading of it may compose a row. The declaration's own name is
+        // reserved for the sentence a walk over every reading licenses (issue #1076).
+        assertTrue(block.contains("no row for `amount = 0` in `place`"), block);
         assertTrue(block.contains("every value tried was refused"), block);
     }
 

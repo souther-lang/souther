@@ -115,9 +115,6 @@ public final class GeneratedRows {
                     boundaries, names);
             out.append(one.text());
             rows += one.rows();
-            if (declared != null) {
-                declarations(out, declared);
-            }
         }
         return new Block(out.toString(), rows);
     }
@@ -136,16 +133,38 @@ public final class GeneratedRows {
      * has shown a row can be written at the point; a line the search failed at with nothing yet
      * promising a row raises none, and the block would go quiet about work it had just tried — which
      * is the same rule the rows beside these are offered under.
+     *
+     * <p><b>Which sentence a line gets is the answer's shape and not this reader's choice.</b> What
+     * a search of one reading came to is a fact about that reading and is said as one, naming the
+     * behavior the way every other note here does. That no row can be written at the line is a
+     * claim about every reading of it, and only an answer that passed the gate carries it — so it
+     * is said once, under the declaration that drew the line, and cannot be written from evidence
+     * that does not support it.
      */
     private static void declarations(StringBuilder out, DeclaredRows declared) {
         java.util.Set<String> said = new java.util.LinkedHashSet<>();
-        // Each of what was tried, because they are not one fact: a reading whose rules leave no
-        // value at the point and one whose search stopped are different news, and a line carrying
-        // whichever came first would carry the order the walk took. Repeats are dropped by the
-        // words, so a line many readings failed at the same way is said once.
-        for (DeclaredRows.Note note : declared.unresolved()) {
-            say(out, said, String.format("// no row for `%s` owed by `%s`: %s%n",
-                    note.why().subject(), note.owedBy(), saidOf(note.why())));
+        for (DeclaredRows.Unmet unmet : declared.unmet()) {
+            switch (unmet) {
+                // Said once, of the line, and in the declaration's own words. What each reading
+                // proved it of is not repeated: they agree, which is what let this be said at all.
+                case DeclaredRows.Unmet.TheLineCannotBeWritten(var owedBy, var asked, var _) ->
+                        say(out, said, String.format(
+                                "// no row can be written at `%s` owed by `%s`: every reading of the"
+                                        + " line was searched and the rules leave no value at it%n",
+                                asked, owedBy));
+                // One line per reading, because they are not one fact: a reading whose rules leave
+                // nothing at its own position and one whose search stopped are different news, and
+                // a line carrying whichever came first would carry the order the walk took.
+                case DeclaredRows.Unmet.WhatTheReadingsCameTo(var _, var _, var came) ->
+                        came.forEach(at -> say(out, said, String.format(
+                                "// no row for `%s` in `%s`: %s%n", at.why().subject(),
+                                at.reading().behavior(), saidOf(at.why()))));
+                case DeclaredRows.Unmet.NothingWasSearched(var owedBy, var asked) ->
+                        say(out, said, String.format(
+                                "// no row for `%s` owed by `%s`: %s%n", asked, owedBy,
+                                why(Generator.UnresolvedCombination.Reason
+                                        .NO_READING_OF_THE_LINE_COULD_BE_SEARCHED)));
+            }
         }
     }
 
@@ -207,6 +226,14 @@ public final class GeneratedRows {
         }
         for (Map.Entry<String, Adequacy.Filling> behavior : generated.entrySet()) {
             notes(out, behavior.getKey(), behavior.getValue(), boundaries, names);
+        }
+        // And what the module's declarations are owed that nothing composed a row for. Here rather
+        // than after this returns, because what this builds is the block: a caller that rendered
+        // through it and appended the rest itself would be a second place that knows what a block
+        // holds, and the one that forgot would print rows with nothing said about the work beside
+        // them.
+        if (declared != null) {
+            declarations(out, declared);
         }
         // The count leaves with the text. It was worked out here and thrown away, and the one
         // caller that needed it read the text instead.
