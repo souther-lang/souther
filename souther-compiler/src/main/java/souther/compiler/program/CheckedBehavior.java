@@ -19,6 +19,15 @@ public final class CheckedBehavior {
 
     CheckedBehavior(ValueName.Behavior name, CheckedSignature signature,
                     CheckedImplementation implementation) {
+        // The one place the two readings of what a behavior takes meet, and so the one place they
+        // are held to each other. A signature says the inputs as types and a body says the bindings
+        // they arrive in; a reader is offered them as one parameter at each index, and lists of
+        // different lengths would make that reading wrong at some index rather than refused.
+        if (implementation instanceof CheckedImplementation.Body body
+                && body.parameters().size() != signature.takes().size()) {
+            throw new IllegalArgumentException("`" + name.module() + "." + name.name() + "` takes "
+                    + signature.takes().size() + " and its body binds " + body.parameters().size());
+        }
         this.name = name;
         this.signature = signature;
         this.implementation = implementation;
