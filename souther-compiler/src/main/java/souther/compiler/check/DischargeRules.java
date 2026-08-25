@@ -244,7 +244,7 @@ final class DischargeRules {
      * result it cannot is a form it cannot carry.
      *
      * <p>Asked with {@link NumericAnswers#isANumber} where the binding asks
-     * {@link Question#countsToANumber}. That is the difference between what is true of the
+     * {@link Carrier#countsToANumber}. That is the difference between what is true of the
      * operation and what this check can do with it — a date counts and is no number, so
      * {@code Date.daysBetween} is declared and is not carried here.
      *
@@ -864,10 +864,10 @@ final class DischargeRules {
      */
     static void holdAFormOfItsArguments(Stdlib stdlib, ValueName operation,
             souther.compiler.numeric.NumericDomain.LinearForm<ArgumentRef> form) {
-        holdTheResultToTheDeclaration(stdlib, operation, Question::countsToANumber,
+        holdTheResultToTheDeclaration(stdlib, operation, Carrier::countsToANumber,
                 "a value with a count for a form of its arguments to be about");
         for (ArgumentRef argument : form.coefs().keySet()) {
-            holdToTheDeclaration(stdlib, operation, argument, null, Question::countsToANumber,
+            holdToTheDeclaration(stdlib, operation, argument, null, Carrier::countsToANumber,
                     "an argument the result is a form of");
         }
     }

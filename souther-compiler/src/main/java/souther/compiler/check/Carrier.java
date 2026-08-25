@@ -157,6 +157,25 @@ public sealed interface Carrier {
     }
 
     /**
+     * Whether values of {@code type} count to a number.
+     *
+     * <p>Wider than {@link NumericAnswers#isANumber} and asked where the arithmetic is over counts
+     * rather than over numbers a model wrote: a date is not a number and counts days, so a
+     * difference of two of them is a number of days. Answered here because this is the one table
+     * saying which types have an order with counts under it. Answered beside a reader instead, the
+     * reader owns a classification it also consumes, and the next reader either borrows from it or
+     * writes a second table — and a type that is a carrier to one of them and not to the other is
+     * what that costs.
+     *
+     * <p>Asked without the declarations, as {@link #ofPrimitive} is: the type settles it and a name
+     * comes back unanswered. What that leaves out is measured there.
+     */
+    static boolean countsToANumber(Type type) {
+        Carrier carrier = ofPrimitive(type);
+        return carrier != null && carrier.counts();
+    }
+
+    /**
      * The carrier a location's own content is counted on, or null where nothing here orders it.
      *
      * <p>Asked of what the names wrap, so a newtype answers as the value it carries — which is what

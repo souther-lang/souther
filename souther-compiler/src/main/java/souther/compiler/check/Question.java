@@ -451,8 +451,8 @@ enum Question {
     FORM("what it answers, counted, in what its arguments are counted as") {
         @Override
         boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
-            return countsToANumber(signature.result())
-                    && signature.params().stream().anyMatch(Question::countsToANumber);
+            return Carrier.countsToANumber(signature.result())
+                    && signature.params().stream().anyMatch(Carrier::countsToANumber);
         }
 
         @Override
@@ -624,26 +624,6 @@ enum Question {
             return NumericAnswers.isANumber(entry.signature().result()) && counted.size() == 2
                     && counted.get(0).equals(t) && counted.get(1).equals(t);
         });
-    }
-
-    /**
-     * Whether values of {@code t} count to a number.
-     *
-     * <p>Wider than {@link NumericAnswers#isANumber} and asked where the arithmetic is over counts
-     * rather than over numbers a model wrote: a date is not a number and counts days, so a
-     * difference of two of them is a number of days. Asked of {@link Carrier}, which is the one
-     * table saying which types have an order with counts under it — a second answer here would be a
-     * second table, and a type that is a carrier to one of them and not to the other is what that
-     * costs.
-     *
-     * <p>Asked without the declarations, which is what a reading of the library's own signatures
-     * has: {@link Carrier#ofPrimitive} answers where the type settles it and leaves a name
-     * unanswered. The names in those signatures are the error unions and {@code RoundingMode}, and
-     * a form is written over none of them.
-     */
-    static boolean countsToANumber(Type t) {
-        Carrier carrier = Carrier.ofPrimitive(t);
-        return carrier != null && carrier.counts();
     }
 
     /** Whether {@code t} is something the check can name the size of — a container, or a string. */
