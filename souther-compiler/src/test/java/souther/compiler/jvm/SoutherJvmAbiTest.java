@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * What every class this compiler invents is called. The one place a generated class's name is written
@@ -126,11 +127,15 @@ class SoutherJvmAbiTest {
      */
     @Test
     void andAValueClassNameSaysWhichTypeItWouldBe() {
-        for (TypeSymbol type : List.of(ORDER, TypeSymbols.declared(new TypeKey("在庫", "金額")),
-                TypeSymbols.declared(new TypeKey("a.b.c", "Deep")), TypeSymbol.primitive("Int"))) {
+        for (TypeSymbol.AtModule type : List.of(ORDER, TypeSymbols.declared(new TypeKey("在庫", "金額")),
+                TypeSymbols.declared(new TypeKey("a.b.c", "Deep")))) {
             assertEquals(type.key(), SoutherJvmAbi.valueTypeCandidate(
                     SoutherJvmAbi.nameOf(new GeneratedClass.Value(type)).binaryName()));
         }
+        // A primitive is carried as its boxed class and is a value class of nothing here, so there
+        // is no name to ask for rather than a name that reads back.
+        assertThrows(IllegalStateException.class,
+                () -> SoutherJvmAbi.nameOf(new GeneratedClass.Value(TypeSymbol.primitive("Int"))));
         assertEquals(new TypeKey("shop", "FindOrder$Impl"),
                 SoutherJvmAbi.valueTypeCandidate("shop.FindOrder$Impl"),
                 "an address for the name, and no claim about what is under it");

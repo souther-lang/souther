@@ -712,12 +712,14 @@ public final class Names {
                     continue;
                 }
                 for (TypeSymbol reached : declared.getValue().reaches()) {
-                    if (reached instanceof TypeSymbol.AtModule at && at.module().equals(name)) {
+                    // What the language gives is declared by no module, so there is no module to
+                    // ask whether it was built there.
+                    if (!(reached instanceof TypeSymbol.AtModule at) || at.module().equals(name)) {
                         continue;
                     }
-                    Set<String> there = elsewhere.computeIfAbsent(reached.module(),
+                    Set<String> there = elsewhere.computeIfAbsent(at.module(),
                             m -> unbuiltIn(db, m));
-                    if (there.contains(reached.name())) {
+                    if (there.contains(at.name())) {
                         unbuilt.add(declared.getKey());
                         break;
                     }

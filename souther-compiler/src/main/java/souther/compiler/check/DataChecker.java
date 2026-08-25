@@ -405,11 +405,13 @@ public final class DataChecker {
         // being a member: no value satisfies the type and an exhaustive switch over it has no arms
         // (ADR-0057, the declared-sum counterpart of E1606).
         for (Hir.Name c : sum.cases()) {
-            if (symbols.scope().isForeign(names(c))) {
+            // A case the language gives is declared by no module and so by none of this one's;
+            // the module a case is declared in is what the message is about, and it has one.
+            if (names(c) instanceof TypeSymbol.AtModule at && symbols.scope().isForeign(at)) {
                 throw CompileException.of(Diagnostic
                                 .at(c.name().reportedAt())
                                 
-                                .hint(new BehaviorMessage.ASumsCasesAreDeclaredWithIt(c.written())).say(new BehaviorMessage.ACaseIsDeclaredInAnotherModule(c.written(), sum.name(), names(c).module())).build());
+                                .hint(new BehaviorMessage.ASumsCasesAreDeclaredWithIt(c.written())).say(new BehaviorMessage.ACaseIsDeclaredInAnotherModule(c.written(), sum.name(), at.module())).build());
             }
         }
         List<String> cycle = sumCycle(sum.declares(), symbols, new LinkedHashSet<>());

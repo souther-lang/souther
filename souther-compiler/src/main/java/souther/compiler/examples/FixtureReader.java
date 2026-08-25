@@ -374,9 +374,14 @@ public final class FixtureReader {
             default -> null;
         };
         String is = value.getClass().getName();
-        return TypeSymbol.PRIMITIVE.equals(candidate.module())
-                ? carried != null && carried.equals(is)
-                : is.equals(candidate.qualified());
+        if (candidate instanceof TypeSymbol.Primitive) {
+            return carried != null && carried.equals(is);
+        }
+        // What class a declaration is is the backend's answer and not the identity's spelling.
+        // `Some` and `None` are named by no class at all, so no live value's class is theirs.
+        return (candidate instanceof TypeSymbol.AtModule
+                        || SoutherJvmAbi.providedByTheRuntime(candidate))
+                && is.equals(SoutherJvmAbi.nameOf(new GeneratedClass.Value(candidate)).binaryName());
     }
 
     /**

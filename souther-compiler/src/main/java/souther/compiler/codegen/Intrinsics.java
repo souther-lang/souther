@@ -214,7 +214,7 @@ final class Intrinsics {
         // names its class, and what that class is called is the ABI's to say. Spelled from the
         // identity here, this was the one route from a Souther name to a JVM one that did not go
         // through `SoutherJvmAbi` — which is the place that exists to be the only one.
-        if (t instanceof Type.Ref r && TypeSymbol.RUNTIME.equals(r.name().module())) {
+        if (t instanceof Type.Ref r && SoutherJvmAbi.providedByTheRuntime(r.name())) {
             return SoutherJvmAbi.nameOfLanguageDeclaration(r.name()).classDesc();
         }
         return CD_Object;   // Ref, Var, Tuple, Union, Nothing

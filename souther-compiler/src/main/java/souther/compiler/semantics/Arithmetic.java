@@ -94,6 +94,12 @@ public sealed interface Arithmetic {
         /** Which way it rounds there. */
         A_ROUNDING_MODE;
 
+        /** The declaration that rule is about, by the address the library declares it under. Still
+         *  a spelling this reads, which is the debt #1039 names; what has moved is that it is the
+         *  address the library writes and no longer the package a backend ships it in. */
+        private static final souther.compiler.types.TypeKey ROUNDING_MODE =
+                new souther.compiler.types.TypeKey("souther.decimal", "RoundingMode");
+
         /** Whether an argument declared {@code at} is this, for an operation answering
          *  {@code answered}. */
         public boolean heldBy(Type at, Type answered) {
@@ -101,9 +107,8 @@ public sealed interface Arithmetic {
                 case THE_NUMBER_IT_ANSWERS -> at.equals(answered);
                 case A_SCALE -> at == Type.Prim.INT;
                 case A_ROUNDING_MODE ->
-                        at instanceof Type.Ref(souther.compiler.types.TypeSymbol name)
-                                && name.module().equals(souther.compiler.types.TypeSymbol.RUNTIME)
-                                && name.name().equals("RoundingMode");
+                        at instanceof Type.Ref(souther.compiler.types.TypeSymbol.AtModule name)
+                                && name.key().equals(ROUNDING_MODE);
             };
         }
     }

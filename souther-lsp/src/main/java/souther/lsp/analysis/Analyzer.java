@@ -1100,8 +1100,13 @@ public final class Analyzer {
         // instead — leaving both modules uncompilable.
         Compilation compilation = compileOf(graph);
         TypeSymbol type = typeUnderCursor(compilation, uri, pos);
+        // What the language gives is exposed by no module and imported by nobody, so there is no
+        // `exposing` line and no `import` line naming it to edit.
+        if (type instanceof TypeSymbol.AtModule at) {
+            addExposingAndImportSites(compilation, at.name(), at.module(), graph, byUri);
+            return byUri;
+        }
         if (type != null) {
-            addExposingAndImportSites(compilation, type.name(), type.module(), graph, byUri);
             return byUri;
         }
         ValueName value = valueUnderCursor(compilation, uri, pos);

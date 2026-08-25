@@ -61,8 +61,8 @@ public final class Declarations<D> {
         /** The declaration this identity names, or null where the language declares none. */
         D declaration(TypeKey address);
 
-        /** Everything it declares, keyed by bare name. */
-        Map<String, D> declaredIn();
+        /** What it declares in {@code moduleName}, keyed by the name written there. */
+        Map<String, D> declaredIn(String moduleName);
 
         /** The language's own vocabulary, as a resolved compilation reads it: what {@code stdlib}
          *  declares of its own rather than through any module of the compilation. */
@@ -74,8 +74,8 @@ public final class Declarations<D> {
                 }
 
                 @Override
-                public Map<String, Hir.Def> declaredIn() {
-                    return stdlib.languageDeclarations();
+                public Map<String, Hir.Def> declaredIn(String moduleName) {
+                    return stdlib.languageDeclarationsIn(moduleName);
                 }
             };
         }
@@ -89,7 +89,7 @@ public final class Declarations<D> {
                 }
 
                 @Override
-                public Map<String, Ast.Def> declaredIn() {
+                public Map<String, Ast.Def> declaredIn(String moduleName) {
                     return Map.of();
                 }
             };
@@ -149,12 +149,17 @@ public final class Declarations<D> {
         return registry.declaration(address) != null;
     }
 
-    /** Every definition of one module, keyed by the name written there. The runtime namespace
-     * answers with the prelude's runtime-backed data. */
+    /**
+     * Every definition of one module, keyed by the name written there.
+     *
+     * <p>Both worlds, because a standard-library module is a module: {@code souther.decimal}
+     * declares {@code RoundingMode}, and a reader asking what that module declares is asking about
+     * a declaration no compilation of it made. A module of the compilation and a module of the
+     * library are never the same name — the library's are the reserved namespace — so the two
+     * cannot answer over each other.
+     */
     public Map<String, D> declaredIn(String moduleName) {
-        if (souther.compiler.types.TypeSymbol.RUNTIME.equals(moduleName)) {
-            return language.declaredIn();
-        }
-        return registry.declaredIn(moduleName);
+        Map<String, D> declared = registry.declaredIn(moduleName);
+        return declared.isEmpty() ? language.declaredIn(moduleName) : declared;
     }
 }

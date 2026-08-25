@@ -98,11 +98,15 @@ class NoPublicWayToTurnASpellingIntoATypeIdentityTest {
      * An identity is named from a spelling only for what the language declares, and every one of
      * those is here by name.
      *
-     * <p>{@code Int} and {@code DivisionByZero} are declared by no module, so nothing indexes them
-     * and there is nothing to look one up in — naming them is how they are reached, and the module
-     * they belong to is the language's own rather than anything a caller supplies. What must not
-     * join them is a spelling paired with a module of the compilation: an identity for a declaration
-     * that address may not name, arrived at without the declaration world having said it does.
+     * <p>{@code Int} and {@code Some} are declared by no module, so nothing indexes them and there
+     * is nothing to look one up in — naming them is how they are reached, and what comes back is a
+     * case of a closed set rather than a pair of strings a caller supplied. What must not join them
+     * is a spelling paired with a module: an identity for a declaration that address may not name,
+     * arrived at without the declaration world having said it does.
+     *
+     * <p>{@code runtime} used to be here, and what it minted was a spelling paired with a module
+     * name no module has. The library's declarations are addressed by the module that writes them
+     * now, and the cases beside them are a closed set, so there is nothing left for it to do.
      */
     @Test
     void aSpellingNamesAnIdentityOnlyForWhatTheLanguageDeclares() {
@@ -114,7 +118,7 @@ class NoPublicWayToTurnASpellingIntoATypeIdentityTest {
                 naming.add(m.getName());
             }
         }
-        assertEquals(Set.of("primitive", "runtime", "optionCase"), naming,
+        assertEquals(Set.of("primitive", "optionCase"), naming,
                 "a spelling and a module of the compilation do not make an identity between them");
     }
 
@@ -204,9 +208,15 @@ class NoPublicWayToTurnASpellingIntoATypeIdentityTest {
                         "Scoping.java: own.declaredKey()",
                         "Scoping.java: declared.declaredKey()",
                         "ModuleMetadata.java: def.declaredKey()",
+                        // The library's own declarations, each under the module of the library that
+                        // writes it. `souther.decimal` declares `RoundingMode`, and that is the
+                        // identity — what a source may write it as is a separate answer, and
+                        // `LibraryNames` is where that one is.
+                        "StdlibLoader.java: def.declaredKey()",
                         // The address a declaration world has just been asked about and answered for.
                         "Registry.java: address",
-                        "Declarations.java: address"),
+                        "Declarations.java: address",
+                        "Stdlib.java: address"),
                 handed,
                 "an identity is exchanged for a declaration, or for an address one was found at");
     }

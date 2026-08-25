@@ -133,36 +133,6 @@ public sealed interface TypeSymbol extends Comparable<TypeSymbol> {
         }
     }
 
-    // --- transitional, and removed with the readers that still ask ---
-
-    /** The module of a primitive case name, and of {@code Some} and {@code None}. */
-    String PRIMITIVE = "souther";
-
-    /** The module the language's other declarations are filed under. */
-    String RUNTIME = "souther.runtime";
-
-    /** Which module this is filed under, as the readers still ask it. */
-    default String module() {
-        return switch (this) {
-            case AtModule at -> at.key().module();
-            case Primitive _ -> PRIMITIVE;
-            case LanguageCase c -> switch (c.id()) {
-                case SOME, NONE -> PRIMITIVE;
-                case DIVISION_BY_ZERO, NOT_A_NUMBER, NOT_A_DATE, NOT_A_TIME -> RUNTIME;
-            };
-        };
-    }
-
-    /** Which declaration this is, written down. */
-    default TypeKey key() {
-        return this instanceof AtModule at ? at.key() : new TypeKey(module(), name());
-    }
-
-    /** The fully qualified form, {@code probe.b.金額}. */
-    default String qualified() {
-        return key().qualified();
-    }
-
     default boolean isPrimitive() {
         return this instanceof Primitive;
     }
@@ -214,15 +184,6 @@ public sealed interface TypeSymbol extends Comparable<TypeSymbol> {
     /** The same, minted from the primitive itself. */
     static TypeSymbol primitive(Type.Prim prim) {
         return new Primitive(prim);
-    }
-
-    /** A declaration filed under the runtime namespace: one of the language's own cases, or one the
-     *  standard library declares and this still anchors there. */
-    static TypeSymbol runtime(String name) {
-        LanguageCaseId id = LanguageCaseId.named(name);
-        return id != null && id != LanguageCaseId.SOME && id != LanguageCaseId.NONE
-                ? new LanguageCase(id)
-                : TypeSymbols.ofLanguage(RUNTIME, name);
     }
 
     /** {@code Some} / {@code None}: written in a match arm over an {@code Option}, declared by no

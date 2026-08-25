@@ -10,6 +10,7 @@ import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.Denotation;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.ValueName;
 
 import java.io.IOException;
@@ -144,21 +145,26 @@ public final class StdlibLoader {
      * and what {@code Resolve} reads back as the module's declarations. Given the whole library to
      * both, every module would come back declaring what its neighbours declare.
      *
-     * <p>The declarations are the language's own vocabulary and are anchored to the runtime
-     * namespace, which is where the language's error cases already live. Anchoring happens here and
-     * nowhere else, and every reader below reads what this wrote.
+     * <p>Each declaration is the declaration of the library module that writes it, and says so:
+     * {@code souther.decimal} declares {@code RoundingMode}, so that is its identity. What a source
+     * writes it as is a separate question and a separate answer ({@link LibraryNames#identityOf}),
+     * because the module that declares one is not a qualifier anybody names it by.
      */
     private static SyntaxSymbols symbolsFor(Parsed source, Map<String, Ast.Def> declares) {
         Map<String, Denotation> scope = new HashMap<>();
-        for (String name : declares.keySet()) {
-            scope.put(name, new Denotation.Denotes(TypeSymbol.runtime(name)));
+        Map<String, TypeSymbol> identities = new HashMap<>();
+        for (Ast.Def def : declares.values()) {
+            TypeSymbol declared = TypeSymbols.declared(def.declaredKey());
+            scope.put(def.name(), new Denotation.Denotes(declared));
+            identities.put(def.name(), declared);
         }
-        return SyntaxSymbols.overTheseLibraryNames(TypeSymbol.RUNTIME,
-                Registry.ofRead(Map.of(TypeSymbol.RUNTIME, new Registry.Declared<>(
+        String module = source.declared().moduleName();
+        return SyntaxSymbols.overTheseLibraryNames(module,
+                Registry.ofRead(Map.of(module, new Registry.Declared<>(
                         source.indexed().declarations(),
                         Registry.baseNames(source.module().exposing())))),
                 Denoting.of(scope, Map.of()),
-                LibraryNames.ofTheLibraryBeingLoaded(declares.keySet()));
+                LibraryNames.ofTheLibraryBeingLoaded(identities));
     }
 
     /** What one library resource declares, as it was written.

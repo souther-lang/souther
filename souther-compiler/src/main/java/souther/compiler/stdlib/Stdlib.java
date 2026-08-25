@@ -5,6 +5,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -93,7 +94,9 @@ public final class Stdlib {
     private final Set<String> privateNames;
     private final Map<String, ValueName.Stdlib> operations;
     private final Map<String, Rewrite> sugars;
-    private final Map<String, Hir.Def> language;
+    private final Map<TypeKey, Hir.Def> language;
+    /** The bare spelling a source writes each of them as, which is the only way one is written. */
+    private final Map<String, TypeKey> bareTypes;
     private final Map<String, Intrinsic> intrinsics;
     private final Map<String, Hir.FnDef> helpers;
     private final Set<String> published;
@@ -104,7 +107,7 @@ public final class Stdlib {
 
     private Stdlib(Map<String, Entry> entries, Set<String> privateNames,
                    Map<String, ValueName.Stdlib> operations, Map<String, Rewrite> sugars,
-                   Map<String, Hir.Def> language, Map<String, Intrinsic> intrinsics,
+                   Map<TypeKey, Hir.Def> language, Map<String, Intrinsic> intrinsics,
                    Map<String, Hir.FnDef> helpers, Set<String> published,
                    Map<String, List<String>> candidates) {
         this.entries = entries;
@@ -112,13 +115,20 @@ public final class Stdlib {
         this.operations = operations;
         this.sugars = sugars;
         this.language = language;
+        Map<String, TypeKey> bare = new LinkedHashMap<>();
+        Map<String, TypeSymbol> identities = new LinkedHashMap<>();
+        for (TypeKey address : language.keySet()) {
+            bare.put(address.name(), address);
+            identities.put(address.name(), TypeSymbols.declared(address));
+        }
+        this.bareTypes = Collections.unmodifiableMap(bare);
         this.intrinsics = intrinsics;
         this.helpers = helpers;
         this.published = published;
         this.candidates = candidates;
         Set<String> named = new LinkedHashSet<>(entries.keySet());
         named.addAll(sugars.keySet());
-        this.names = new LibraryNames(language.keySet(), privateNames, named, candidates);
+        this.names = new LibraryNames(identities, privateNames, named, candidates);
     }
 
     /** The library's entry for {@code qualifiedName}, or null where the library declares no such
@@ -212,7 +222,7 @@ public final class Stdlib {
      * asked here.
      */
     public Hir.Def languageDeclaration(TypeKey address) {
-        return TypeSymbol.RUNTIME.equals(address.module()) ? language.get(address.name()) : null;
+        return language.get(address);
     }
 
     /** What resolving a module against this library takes. */
@@ -220,9 +230,21 @@ public final class Stdlib {
         return names;
     }
 
-    /** Everything the language declares, keyed by bare name. */
-    public Map<String, Hir.Def> languageDeclarations() {
-        return language;
+    /** What the language declares in {@code moduleName}, keyed by the name written there. Empty
+     *  where no module of the library is called that. */
+    public Map<String, Hir.Def> languageDeclarationsIn(String moduleName) {
+        Map<String, Hir.Def> out = new LinkedHashMap<>();
+        for (Map.Entry<TypeKey, Hir.Def> e : language.entrySet()) {
+            if (e.getKey().module().equals(moduleName)) {
+                out.put(e.getKey().name(), e.getValue());
+            }
+        }
+        return Collections.unmodifiableMap(out);
+    }
+
+    /** The address the language declares under the bare spelling {@code bare}, or null. */
+    public TypeKey languageAddressOf(String bare) {
+        return bareTypes.get(bare);
     }
 
     /**
@@ -284,7 +306,8 @@ public final class Stdlib {
         private final Map<String, Entry> entries = new LinkedHashMap<>();
         private final Set<String> privateNames = new LinkedHashSet<>();
         private final Map<String, ValueName.Stdlib> operations = new LinkedHashMap<>();
-        private final Map<String, Hir.Def> language = new LinkedHashMap<>();
+        private final Map<TypeKey, Hir.Def> language = new LinkedHashMap<>();
+        private final Map<String, TypeKey> declaredBare = new LinkedHashMap<>();
 
         private Builder() {
         }
@@ -316,11 +339,19 @@ public final class Stdlib {
          * @throws IllegalStateException where the name is already declared, for the reason
          *     {@link #declares} is refused twice. */
         public Builder languageDeclares(Hir.Def def) {
-            if (language.containsKey(def.name())) {
-                throw new IllegalStateException(
-                        "the standard library declares `" + def.name() + "` twice");
+            // Kept by address, and refused by spelling. What a source may write one as is its bare
+            // name, so two of the library's modules declaring one spelling would publish two
+            // declarations under one word and nothing at a type position could choose. That is a
+            // rule about what the library may declare and not a property of how this is stored,
+            // which is why the store is the address and the refusal is written out.
+            TypeKey address = def.declares().key();
+            if (declaredBare.containsKey(address.name())) {
+                throw new IllegalStateException("the standard library declares `" + address.name()
+                        + "` in both " + declaredBare.get(address.name()).module() + " and "
+                        + address.module());
             }
-            language.put(def.name(), def);
+            declaredBare.put(address.name(), address);
+            language.put(address, def);
             return this;
         }
 

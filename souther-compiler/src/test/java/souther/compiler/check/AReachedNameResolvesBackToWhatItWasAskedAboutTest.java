@@ -9,6 +9,7 @@ import souther.compiler.ast.WrittenName;
 import souther.compiler.types.Denotation;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
+import souther.compiler.types.LanguageCaseId;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeReachName;
 
@@ -83,7 +84,7 @@ class AReachedNameResolvesBackToWhatItWasAskedAboutTest {
         for (String each : List.of("Own", "RoundingMode", "In")) {
             named.add(TypeSymbols.declared(new TypeKey("app", each)));
         }
-        named.add(TypeSymbol.runtime("RoundingMode"));
+        named.add(TypeSymbols.declared(new TypeKey("souther.decimal", "RoundingMode")));
         return named;
     }
 
@@ -117,10 +118,11 @@ class AReachedNameResolvesBackToWhatItWasAskedAboutTest {
             }
         }
 
-        assertEquals(List.of(TypeSymbols.declared(new TypeKey("lib", "Hidden")), TypeSymbol.runtime("RoundingMode")),
+        assertEquals(List.of(TypeSymbols.declared(new TypeKey("lib", "Hidden")),
+                        TypeSymbols.declared(new TypeKey("souther.decimal", "RoundingMode"))),
                 unnameable, "one its module keeps to itself, one this module took the spelling of");
         for (TypeSymbol type : unnameable) {
-            for (String spelling : List.of(type.name(), type.qualified(),
+            for (String spelling : List.of(type.name(), ((TypeSymbol.AtModule) type).key().qualified(),
                     "up." + type.name(), "lib." + type.name())) {
                 assertFalse(type.equals(symbols.scope().resolve(spelled(spelling)).type()),
                         "`" + spelling + "` reaches " + type + " after all");
@@ -135,7 +137,7 @@ class AReachedNameResolvesBackToWhatItWasAskedAboutTest {
      */
     @Test
     void aRuntimeBackedTypeThisModuleTookTheSpellingOfHasNoNameHere() {
-        TypeSymbol language = TypeSymbol.runtime("RoundingMode");
+        TypeSymbol language = TypeSymbols.declared(new TypeKey("souther.decimal", "RoundingMode"));
 
         assertInstanceOf(TypeReachName.Unnameable.class, scopeOf("app", LIB, APP).scope().reach(language));
         assertEquals(TypeSymbols.declared(new TypeKey("app", "RoundingMode")),
@@ -146,7 +148,7 @@ class AReachedNameResolvesBackToWhatItWasAskedAboutTest {
     @Test
     void aRuntimeBackedTypeNothingHereShadowsIsWrittenBare() {
         Symbols symbols = scopeOf("lib", LIB, APP);
-        TypeSymbol language = TypeSymbol.runtime("RoundingMode");
+        TypeSymbol language = TypeSymbols.declared(new TypeKey("souther.decimal", "RoundingMode"));
 
         assertEquals("RoundingMode", assertInstanceOf(TypeReachName.Written.class,
                 symbols.scope().reach(language)).rendered());
@@ -167,7 +169,7 @@ class AReachedNameResolvesBackToWhatItWasAskedAboutTest {
         Symbols symbols = scopeOf("app", LIB, APP);
 
         for (TypeSymbol vocabulary : List.of(TypeSymbol.primitive("Int"),
-                TypeSymbol.runtime("DivisionByZero"))) {
+                new TypeSymbol.LanguageCase(LanguageCaseId.DIVISION_BY_ZERO))) {
             TypeReachName.Written written = assertInstanceOf(TypeReachName.Written.class,
                     symbols.scope().reach(vocabulary), vocabulary.toString());
 

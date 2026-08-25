@@ -249,7 +249,7 @@ class ResolvedValueNamesTest {
 
         ValueName.OfType denoted = assertInstanceOf(ValueName.OfType.class,
                 denotationOf(source, "Approved"));
-        assertEquals("m.a", denoted.type().module());
+        assertEquals("m.a", ((souther.compiler.types.TypeSymbol.AtModule) denoted.type()).module());
         assertEquals("Approved", denoted.type().name());
     }
 

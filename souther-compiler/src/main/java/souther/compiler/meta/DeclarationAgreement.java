@@ -200,7 +200,9 @@ public final class DeclarationAgreement {
         private void follow(List<Object> parts) {
             walk(parts, new IdentityHashMap<>(), part -> {
                 switch (part) {
-                    case TypeSymbol type -> reach(new Reached.ADeclaration(type));
+                    // A declaration a module wrote is what crosses; what the language gives is
+                    // there in every project and is not part of what an artifact agrees about.
+                    case TypeSymbol.AtModule type -> reach(new Reached.ADeclaration(type));
                     case ValueName.Behavior behavior -> reach(new Reached.ABehavior(behavior));
                     case ValueName.Helper helper -> reach(new Reached.AHelper(helper));
                     default -> { }
@@ -243,7 +245,7 @@ public final class DeclarationAgreement {
          *  thing. */
         List<Object> partsIn(Hir.Module m);
 
-        record ADeclaration(TypeSymbol type) implements Reached {
+        record ADeclaration(TypeSymbol.AtModule type) implements Reached {
 
             @Override
             public String module() {
