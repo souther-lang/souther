@@ -54,11 +54,16 @@ class ANarrowingIsSpelledByTheOneThatOwnsItTest {
         assertEquals(Refinement.sumCase(TypeSymbol.primitive("Int")),
                 Refinement.of(new Case.SumCase(TypeSymbol.primitive("Int"), false)),
                 "one case read two ways is one narrowing");
-        assertEquals(2, java.util.Arrays.stream(Refinement.class.getDeclaredMethods())
-                        .filter(each -> Modifier.isStatic(each.getModifiers()))
-                        .count(),
-                "a third way to spell a narrowing is a decision, not an accident: "
-                        + java.util.Arrays.toString(Refinement.class.getDeclaredMethods()));
+        // Named rather than counted. A count is tripped by a private helper, which is nobody's way
+        // in, and the reading of it that fits is to raise the number — which lets a way in be added
+        // later with nothing having said so.
+        assertEquals(java.util.Set.of("of", "sumCase"),
+                java.util.Arrays.stream(Refinement.class.getDeclaredMethods())
+                        .filter(each -> Modifier.isStatic(each.getModifiers())
+                                && !Modifier.isPrivate(each.getModifiers()))
+                        .map(java.lang.reflect.Method::getName)
+                        .collect(java.util.stream.Collectors.toSet()),
+                "a third way to spell a narrowing is a decision, not an accident");
     }
 
     /**

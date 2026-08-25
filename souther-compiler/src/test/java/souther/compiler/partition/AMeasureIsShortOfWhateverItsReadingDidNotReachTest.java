@@ -9,6 +9,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -41,9 +42,12 @@ class AMeasureIsShortOfWhateverItsReadingDidNotReachTest {
      * used to be short of both is short of one, and a fixture kept for its numbers would have gone
      * on being called a position nothing reached into.
      *
-     * <p>The {@code Bool} beside it is what the partition measures. Without it nothing here divides
-     * at all and that measure says so instead, which is the other way of having no number and not
-     * the one this is about.
+     * <p><b>The {@code Bool} is what makes the model say two things.</b> This is about the two
+     * measures answering apart, and a position has to be measured for one of them to be the answer
+     * it is: the optional divided into holding something and holding nothing and was that position
+     * itself, and a mapping divides nothing. Without it both measures say the same word for
+     * different reasons, and the test would pass over the two being merged. So the field is part of
+     * what is being said and is asserted below rather than left standing as scenery.
      */
     private static final String RULES_NOT_REACHED = """
             module example.notreached
@@ -94,6 +98,14 @@ class AMeasureIsShortOfWhateverItsReadingDidNotReachTest {
     @Test
     void aPositionTheWalkDidNotReachIntoLeavesBothMeasuresShort() {
         PartitionEvidence evidence = evidenceFor(RULES_NOT_REACHED, "f");
+
+        // What the partition did measure, so that the two answers below are one model saying two
+        // things rather than one measure with nothing in it. A fixture whose every position is out
+        // of reach says `NOT_MEASURED` on both sides for two different reasons, and reading that as
+        // this would be the merge this exists to catch.
+        assertEquals(List.of("r.flag"),
+                evidence.axes().stream().map(PartitionEvidence.AxisCoverage::path).toList(),
+                () -> "the mapping divides nothing, so the `Bool` is the position measured here");
 
         assertEquals(MeasurementStatus.PARTIAL, AdequacyReport.statusOf(evidence.partitioned()),
                 () -> "partition: " + evidence.partitioned());

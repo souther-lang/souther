@@ -2294,6 +2294,9 @@ public final class Generator {
         // came back as one every value tried was refused at.
         Map<TermPath, Place> settled = new LinkedHashMap<>();
         Map<TermPath, UnresolvedCombination.Reason> heldBack = new LinkedHashMap<>();
+        // Per term, because a fixing names one order pair per position and a row is certified
+        // against the one its own value was built on.
+        Map<NumericTerm, souther.compiler.inputs.TermOrders> builtOn = new LinkedHashMap<>();
         for (Map.Entry<NumericTerm, Place> each : fixing.entrySet()) {
             // The order this position is written back on, which is the position's own. Handed one
             // order for the whole fixing, a form over positions written back differently wrote each
@@ -2318,18 +2321,24 @@ public final class Generator {
                         UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE));
             }
             decided.put(at, edge.values());
+            // The orders the value was built against, kept so that reading it back asks the
+            // question building it asked rather than a second reading of the same position.
+            builtOn.put(each.getKey(), edge.on());
             if (edge.settledAt() != null) {
                 settled.put(at, edge.settledAt());
             }
             heldBack.put(at, edge.refused());
         }
         List<FixtureTemplate> inputs = new ArrayList<>();
-        // Whether a candidate was turned away for standing somewhere else, which is what tells a
-        // search that ran out of candidates from one that certified none of the ones it had.
-        boolean[] uncertified = {false};
-        CandidateCheck certified = certifying(check, subject, fixing, on, uncertified);
         for (int p = 0; p < subject.parameters().size() && p < subject.types().size(); p++) {
             String head = subject.parameters().get(p);
+            // Whether a candidate was turned away for standing somewhere else, which is what tells
+            // a search that ran out of candidates from one that certified none of the ones it had.
+            // Per parameter, since it is this parameter's search the answer is about: shared, a
+            // candidate turned away under one parameter would name the reason another failed for.
+            boolean[] uncertified = {false};
+            CandidateCheck certified =
+                    certifying(check, subject, p, fixing, builtOn, uncertified);
             Map<TermPath, List<FixtureTemplate>> here = new LinkedHashMap<>();
             for (NumericTerm term : fixing.keySet()) {
                 if (term.path().head().equals(head)) {
@@ -2382,26 +2391,23 @@ public final class Generator {
      * @param refused set where a candidate was turned away for this and nothing else, which is what
      *                tells a search that ran out of candidates from one that certified none
      */
-    private static CandidateCheck certifying(CandidateCheck check, Subject subject,
+    private static CandidateCheck certifying(CandidateCheck check, Subject subject, int parameter,
                                              Map<NumericTerm, Place> fixing,
-                                             java.util.function.Function<NumericTerm, Carrier> on,
+                                             Map<NumericTerm, souther.compiler.inputs.TermOrders> builtOn,
                                              boolean[] refused) {
-        return (parameter, candidate) -> {
-            CandidateCheck.Built built = check.build(parameter, candidate);
+        return (at, candidate) -> {
+            CandidateCheck.Built built = check.build(at, candidate);
             // Nothing built it, so nothing here can say where it went, and the row is offered as it
             // was composed.
-            if (!(built instanceof CandidateCheck.Built.Value(var observed))) {
+            if (at != parameter || !(built instanceof CandidateCheck.Built.Value(var observed))) {
                 return built;
             }
-            List<souther.compiler.observe.ObservedValue> row = new ArrayList<>(
-                    java.util.Collections.nCopies(subject.parameters().size(), null));
-            row.set(parameter, observed);
             for (Map.Entry<NumericTerm, Place> each : fixing.entrySet()) {
                 if (!subject.parameters().get(parameter).equals(each.getKey().path().head())) {
                     continue;
                 }
-                String elsewhere = readsElsewhere(subject, row, each.getKey(), each.getValue(),
-                        on.apply(each.getKey()));
+                String elsewhere = readsElsewhere(subject, parameter, observed, each.getKey(),
+                        each.getValue(), builtOn.get(each.getKey()));
                 if (elsewhere != null) {
                     refused[0] = true;
                     return new CandidateCheck.Built.Refused(elsewhere);
@@ -2414,57 +2420,41 @@ public final class Generator {
     /**
      * Where the row reads at the term's position, said only where that is not {@code at}.
      *
-     * <p>Null where nothing here can say. A term this cannot read the orders of, a position the row
+     * <p>Null where nothing here can say. A fixing whose edge kept no orders, a position the row
      * wrote no value at, a walk the value and the type disagree about — none of them is the row
-     * standing somewhere else, and refusing a candidate for one would turn what this compiler cannot
-     * see into a row the model does not have.
+     * standing somewhere else, and refusing a candidate for one would turn what this compiler
+     * cannot see into a row the model does not have.
      *
      * <p>One occurrence is enough, as it is for a row that was written: a row stands at a point
      * where one of its readings does.
+     *
+     * @param on the orders the value was built against, carried from the edge that built it. Read
+     *           back on anything else, this would be a second reading of the position free to
+     *           disagree with the one the value came from
      */
-    private static String readsElsewhere(Subject subject,
-                                         List<souther.compiler.observe.ObservedValue> row,
-                                         NumericTerm term, Place at, Carrier answered) {
-        souther.compiler.inputs.TermOrders orders = ordersOf(subject, term, answered);
-        if (orders == null) {
+    private static String readsElsewhere(Subject subject, int parameter,
+                                         souther.compiler.observe.ObservedValue observed,
+                                         NumericTerm term, Place at, souther.compiler.inputs.TermOrders on) {
+        if (on == null) {
             return null;
         }
+        // Only this parameter's value is filled in: the walk reads the one the path names, and the
+        // others are not this candidate's to say anything about.
+        List<souther.compiler.observe.ObservedValue> row = new ArrayList<>(
+                java.util.Collections.nCopies(subject.parameters().size(), null));
+        row.set(parameter, observed);
         List<souther.compiler.observe.ObservedValue> values =
                 subject.inputs().valuesAt(row, term.path());
         if (values == null || values.isEmpty()) {
             return null;
         }
         for (souther.compiler.observe.ObservedValue value : values) {
-            if (term.read(value, orders) instanceof NumericTerm.Reading.Number number
+            if (term.read(value, on) instanceof NumericTerm.Reading.Number number
                     && number.value().compareTo(at) == 0) {
                 return null;
             }
         }
         return "it was composed to put " + term + " at " + at + " and does not stand there";
-    }
-
-    /**
-     * How the term at this position is read: the order its values are written on, and the order the
-     * number it answers is measured on.
-     *
-     * <p>Off the axis where the subject has one, and off the declared type where it has none, which
-     * is the same pair {@link #edgeAt} builds the value against. Null where neither answers, since a
-     * term nothing here reads is one nothing here can say the value stands away from.
-     */
-    private static souther.compiler.inputs.TermOrders ordersOf(Subject subject, NumericTerm term,
-                                                               Carrier answered) {
-        if (answered == null) {
-            return null;
-        }
-        for (Axis axis : subject.axes()) {
-            if (axis.term().equals(term)) {
-                return new souther.compiler.inputs.TermOrders(
-                        term.observedOn(axis.type(), subject.symbols()), answered);
-            }
-        }
-        Type declared = declaredAt(subject, term.path());
-        return declared == null ? null : new souther.compiler.inputs.TermOrders(
-                term.observedOn(declared, subject.symbols()), answered);
     }
 
     /**
@@ -2508,10 +2498,10 @@ public final class Generator {
         if (declared == null) {
             return Edge.none(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
-        return edgeFrom(TermRealizations.at(term, declared,
-                new souther.compiler.inputs.TermOrders(
-                        term.observedOn(declared, subject.symbols()), carrier),
-                at, subject.symbols(), subject.inputs().policy()), term, at);
+        souther.compiler.inputs.TermOrders on = new souther.compiler.inputs.TermOrders(
+                term.observedOn(declared, subject.symbols()), carrier);
+        return edgeFrom(TermRealizations.at(term, declared, on, at, subject.symbols(),
+                subject.inputs().policy()), term, at, on);
     }
 
     /** The type declared at a position this subject has no axis for, which is a bare parameter and
@@ -3902,16 +3892,23 @@ public final class Generator {
      * location at it, and what the rest of the record may hold is read from the rules relating them;
      * a line on a count taken of a location settles no number inside it, and saying it did would tell
      * the rest of the row that a string's length is the number the string holds.
+     *
+     * @param on the pair of orders the values here were built against: the one a value at the
+     *           position is written on, and the one the number it answers is measured on. Carried
+     *           rather than worked out again by whoever wants it — reading a value back is asking
+     *           the same question building it asked, and a second answer to it is two readings of
+     *           one position free to disagree about which order the number is on
      */
     private record Edge(List<FixtureTemplate> values, UnresolvedCombination.Reason reason,
-                        Place settledAt, UnresolvedCombination.Reason heldBack) {
+                        Place settledAt, UnresolvedCombination.Reason heldBack,
+                        souther.compiler.inputs.TermOrders on) {
 
         Edge {
             values = List.copyOf(values);
         }
 
         static Edge none(UnresolvedCombination.Reason why) {
-            return new Edge(List.of(), why, null, null);
+            return new Edge(List.of(), why, null, null, null);
         }
 
         /**
@@ -3939,12 +3936,10 @@ public final class Generator {
         // The order the line was drawn on is the caller's — a cut carries the one the rule was read
         // on — and the order the value at the position is written on is the position's. Both, so
         // neither stands in for the other.
-        return edgeFrom(
-                TermRealizations.at(axis.term(), axis.type(),
-                        new souther.compiler.inputs.TermOrders(
-                                axis.term().observedOn(axis.type(), symbols), carrier),
-                        at, symbols, policy),
-                axis.term(), at);
+        souther.compiler.inputs.TermOrders on = new souther.compiler.inputs.TermOrders(
+                axis.term().observedOn(axis.type(), symbols), carrier);
+        return edgeFrom(TermRealizations.at(axis.term(), axis.type(), on, at, symbols, policy),
+                axis.term(), at, on);
     }
 
     /**
@@ -3956,7 +3951,8 @@ public final class Generator {
      * the search records as settled is the one and not the other. The one question here the variant
      * genuinely settles, and asked of the variant.
      */
-    private static Edge edgeFrom(TermRealizations.Realization made, NumericTerm term, Place at) {
+    private static Edge edgeFrom(TermRealizations.Realization made, NumericTerm term, Place at,
+                                 souther.compiler.inputs.TermOrders on) {
         Place settled = switch (term) {
             case NumericTerm.ValueOf _ -> at;
             case NumericTerm.TakenOf _ -> null;
@@ -3964,7 +3960,7 @@ public final class Generator {
         return switch (made) {
             case TermRealizations.Realization.BuiltNone none -> Edge.none(none.why());
             case TermRealizations.Realization.Built built ->
-                    new Edge(built.values(), null, settled, built.heldBack());
+                    new Edge(built.values(), null, settled, built.heldBack(), on);
         };
     }
 
