@@ -6,6 +6,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
+import souther.compiler.inputs.Case;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.TermPath;
@@ -142,6 +143,72 @@ class APlanIsMadeWhereItsRequirementsArePutTogetherTest {
                 "the answer names the position said twice: " + said.getMessage());
     }
 
+    private static final String HELD = """
+            module g
+
+            data Tag = String
+            data NoTag
+            data Filter = NoTag | Tag
+
+            data Query = { tag: Filter?, other: Tag }
+            data Page = { count: Int }
+
+            behavior readArticles : (query: Query) -> Page
+            """;
+
+    /**
+     * A second narrowing of a position an absence settled is asked about nothing.
+     *
+     * <p>A refinement does not move to another position, so it is written at the same path the
+     * absence left — `x@None` and not something below it. Read as "not below", it would be let
+     * through, and the plan would answer `None` for a caller that asked for a `Tag`.
+     */
+    @Test
+    void aNarrowingUnderAnAbsenceIsAskedAboutNothing() {
+        TermPath tag = TermPath.of("query").then("tag");
+        TermPath absent = tag.refine(Refinement.of(new Case.Presence(false)));
+
+        IllegalStateException said = assertThrows(IllegalStateException.class,
+                () -> ConstructionPlan.of(heldType(), TermPath.of("query"), heldSymbols(),
+                        Set.of(),
+                        Requirements.NONE.and(tag, Refinement.of(new Case.Presence(false)))
+                                .and(absent, caseOf("Tag")),
+                        (_, _) -> 0));
+
+        assertTrue(said.getMessage().contains("query.tag@None"),
+                "the answer names the position that holds no value: " + said.getMessage());
+    }
+
+    /**
+     * And a value fixed under one is too, which no requirement would have shown.
+     *
+     * <p>A field step adds no requirement, so `x@None.foo` appears nowhere in what the caller
+     * stated — only in what it fixed. Read off the requirements alone the value is dropped in
+     * silence, which is the half of a demand this check exists to stop being read on its own.
+     */
+    @Test
+    void aValueFixedUnderAnAbsenceIsAskedAboutNothing() {
+        TermPath tag = TermPath.of("query").then("tag");
+        TermPath absent = tag.refine(Refinement.of(new Case.Presence(false)));
+
+        IllegalStateException said = assertThrows(IllegalStateException.class,
+                () -> ConstructionPlan.of(heldType(), TermPath.of("query"), heldSymbols(),
+                        Set.of(absent.then("value")),
+                        Requirements.NONE.and(tag, Refinement.of(new Case.Presence(false))),
+                        (_, _) -> 0));
+
+        assertTrue(said.getMessage().contains("query.tag@None.value"),
+                "the answer names the value fixed where nothing stands: " + said.getMessage());
+    }
+
+    private static souther.compiler.types.Type heldType() {
+        return readOf(HELD).sig().inputTypes().get(0);
+    }
+
+    private static Symbols heldSymbols() {
+        return readOf(HELD).symbols();
+    }
+
     private static ConstructionPlan planned(Set<TermPath> decided, Requirements additional) {
         return assertInstanceOf(ConstructionPlan.Result.Planned.class,
                 ConstructionPlan.of(typeOf(), TermPath.of("query"), symbols(), decided, additional,
@@ -165,8 +232,12 @@ class APlanIsMadeWhereItsRequirementsArePutTogetherTest {
     private record Read(Sig sig, Symbols symbols) {}
 
     private static Read read() {
+        return readOf(FILTER);
+    }
+
+    private static Read readOf(String source) {
         Compilation compilation =
-                Compilation.ofSources(List.of(FILTER), souther.compiler.meta.ModulePath.EMPTY);
+                Compilation.ofSources(List.of(source), souther.compiler.meta.ModulePath.EMPTY);
         compilation.answerEverything();
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();

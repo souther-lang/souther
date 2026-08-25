@@ -305,6 +305,7 @@ final class ConstructionPlan {
         // where every path below it hangs all follow from it.
         Settled settled = settle(declared, at, symbols, required);
         if (settled.exact() != null) {
+            refuseWhatWouldStandUnder(settled.at(), decided, required);
             return new Exact(settled.at(), settled.exact(), settled.outer());
         }
         // A position the caller fixed takes the value it was given whatever would have been built
@@ -420,30 +421,48 @@ final class ConstructionPlan {
         TermPath here = settled.at().refine(refinement);
         if (refinement instanceof Refinement.Presence presence && !presence.present()) {
             // The absence of an optional settles the value rather than narrowing to something to be
-            // built: `None` is a branch that puts no position anywhere (ADR-0114).
-            refuseWhatWouldStandUnder(here, required);
+            // built: `None` is a branch that puts no position anywhere (ADR-0114). Whether anything
+            // was asked for under it is not this reading's question — what stands at a position and
+            // what a caller demanded of it are two, and only the caller's side knows both halves of
+            // the second.
             return new Settled(here, null, FixtureTemplate.none(), outer);
         }
         return new Settled(here, narrowed(settled.building(), refinement, symbols), null, outer);
     }
 
     /**
-     * That nothing is required below a position an absence settled.
+     * That nothing is asked for at or under a position an absence settled.
      *
-     * <p>A requirement under one names a position no value reaches, which is a caller asking about
-     * somewhere inside a value it has just said is not there. Refused here rather than left to
-     * {@link Requirements#merge}: that answers whether one position is asked to be two things, and
-     * {@code x} being absent and {@code x@None.y} being narrowed are two keys it has no quarrel
-     * with. Nothing a model writes reaches it — the absence puts no position anywhere, so nothing
-     * derives one to require — and a claim that somebody else refuses it is a guarantee this is not
-     * in a position to make.
+     * <p>Asked of the whole demand and not of half of it. What a caller asks for is the paths it
+     * fixed a value at and the requirements it stated, put together where the plan is made — so a
+     * check that read only the requirements would pass a value fixed at {@code x@None.foo}, which a
+     * field step adds no requirement for, and drop it in silence.
+     *
+     * <p>And at the position as well as under it. A refinement does not move to another position,
+     * so a second narrowing of one an absence settled is written at that same path: leaving it out
+     * as "not below" reads a rule about steps into a value as one about narrowings, which take
+     * none. That is what {@link Result.Conflict} is about at a position two narrowings disagree
+     * over, and this is the other half of it — the narrowings agree, and there is nothing there for
+     * the second to be about.
+     *
+     * <p>Nothing a model writes reaches either. The absence puts no position anywhere, so nothing
+     * derives one to require or to fix. It is refused so that {@link Exact} means what it says: the
+     * value is settled here, and there is nothing left below for anything to have asked of.
      */
-    private static void refuseWhatWouldStandUnder(TermPath absent, Requirements required) {
+    private static void refuseWhatWouldStandUnder(TermPath absent, Set<TermPath> decided,
+                                                  Requirements required) {
         for (TermPath each : required.refinements().keySet()) {
-            if (!each.equals(absent) && each.isAtOrUnder(absent)) {
+            if (each.isAtOrUnder(absent)) {
                 throw new IllegalStateException("`" + each + "` is required to be "
-                        + required.at(each).spelled() + " under `" + absent + "`, which holds no"
-                        + " value; nothing stands under an absence for a requirement to be about");
+                        + required.at(each).spelled() + " at or under `" + absent + "`, which holds"
+                        + " no value; nothing stands there for a requirement to be about");
+            }
+        }
+        for (TermPath each : decided) {
+            if (each.isAtOrUnder(absent)) {
+                throw new IllegalStateException("a value is fixed at `" + each + "`, at or under `"
+                        + absent + "`, which holds no value; nothing stands there for a value to be"
+                        + " written at");
             }
         }
     }
