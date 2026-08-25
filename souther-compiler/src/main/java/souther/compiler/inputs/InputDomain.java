@@ -72,10 +72,17 @@ public final class InputDomain {
     /**
      * The declaration a position's rules are read of, and where that value stands.
      *
-     * <p>One reading per value and not one per record met on the way down: a clause on the outer
-     * record relates positions at any depth it can name. What starts a new one is a narrowing —
-     * what a {@code GlobalQuery} says about its {@code tag} is written in {@code GlobalQuery} and
-     * cannot be written in the sum, so the rules under a case are that case's and are read of it.
+     * <p>One reading per rule-owning value and not one per record met on the way down: a clause on
+     * the outer record relates positions at any depth it can name, and rebuilding the reading at
+     * each record is how a clause stopped reaching the field it was about.
+     *
+     * <p><b>What starts a new one is a descent crossing a boundary of rule ownership</b>, which is
+     * wherever the value below is one a declaration writes its own clauses about. Narrowing into a
+     * case is one — what a {@code GlobalQuery} says about its {@code tag} is written in
+     * {@code GlobalQuery} and cannot be written in the sum — and so is entering what a sequence
+     * holds, since what {@code Tag} says about itself is written in {@code Tag} however the position
+     * is reached. Both go through {@link #takeTheRulesOver} and nothing else does, which is what a
+     * shape this compiler learns to walk later has to do to have its rules read at all (#1072).
      *
      * <p>Kept as the declarations rather than as a reading of them, for the reason the parameters
      * are: what is answered with is compared as a value by whatever decides that a compile changed
@@ -95,8 +102,8 @@ public final class InputDomain {
      * way of reading the declarations rather than a statement about them. */
     private final List<Parameter> parameters;
     /** Every declaration whose rules reach a position of this input, and where it stands. One per
-     * parameter, and one more wherever a narrowing put a value of another declaration at a
-     * position. */
+     * parameter, and one more wherever a descent crossed a boundary of rule ownership — see
+     * {@link RuleRoot}. */
     private final List<RuleRoot> roots;
     private final ReadingPolicy policy;
 

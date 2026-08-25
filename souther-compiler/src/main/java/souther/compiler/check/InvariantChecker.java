@@ -396,10 +396,12 @@ public final class InvariantChecker {
      *                        then weaker than what the declaration actually says, and a caller
      *                        turning one into an obligation has to know that
      * @param notGathered where a clause of the value did not reach the readings at all, as the
-     *                 paths the stops happened at. A clause that could not be typed, and a walk
-     *                 that declined to go further: in both, a rule of the declaration is one no
-     *                 reading here ever saw, so no reading can say it took that part of the
-     *                 declaration in.
+     *                 paths the stops happened at. A clause that could not be typed, and a walk that
+     *                 stopped leaving rules nobody else reads ({@link PathEngine#leftBy}): in both,
+     *                 a rule of the declaration is one no reading here ever saw, so no reading can
+     *                 say it took that part of the declaration in. Not a walk that handed the rules
+     *                 on — those are {@link #handedOn()}, and they are somebody's to read rather
+     *                 than nobody's
      *
      *                 <p>Where and not whether, because a rule that narrows a position names it,
      *                 and a clause written under one field can name no position outside that field.
@@ -911,11 +913,11 @@ public final class InvariantChecker {
      * said there. Read off the path instead, a reader would be deciding from a spelling what the
      * walk knew.
      *
-     * <p><b>Asked only of the stops that leave rules unread.</b> A stop at a container, an optional
-     * or a choice between declarations hands the rules to a reading one position down and is not one
-     * of these ({@link Gathering#handedOn}); {@link PathEngine} refuses to answer for it rather than
-     * giving it a word. So nothing here decides what is handed on, and the day these two questions
-     * stop agreeing is a day nothing was resting on their agreeing (#1072).
+     * <p><b>Asked only of the stops that leave rules unread.</b> Which those are is
+     * {@link PathEngine#leftBy}'s answer and is not restated here: a stop that hands the rules to a
+     * reading one position down leaves nothing for anybody to bear ({@link Gathering#handedOn}).
+     * Nothing here decides what is handed on, so the day these two questions stop agreeing is a day
+     * nothing was resting on their agreeing (#1072).
      */
     enum Borne {
 
@@ -923,17 +925,17 @@ public final class InvariantChecker {
         BY_EVERY_VALUE,
 
         /**
-         * A type already met on the way down, read where it was met.
+         * A value the construction need not make, so a rule under it refuses no construction.
          *
          * <p>The same reach {@link #everyRuleRead} has, and for the same reason: a rule four records
          * down the required chain refuses the outermost construction exactly as one on its own
          * fields does.
          *
-         * <p>The one stop that leaves this word, and a required field of a type already entered is
-         * borne by every value rather than by some. It is written down as it is because such a value
-         * cannot be built — a record that must hold its own kind has no values — so no construction
-         * and no edge is decided by the answer. A model that could be built here would be one this
-         * has to be told apart from the collections and optionals it used to stand for.
+         * <p>Which stops leave this is {@link PathEngine#leftBy}'s answer. What is worth knowing
+         * here is that a required field of a type already entered comes back with this word and is
+         * borne by every value: such a value cannot be built — a record that must hold its own kind
+         * has no values — so no construction and no edge is decided by the answer. A model that
+         * could be built there is one this would have to be told apart from.
          */
         BY_SOME_VALUES
     }
@@ -974,10 +976,10 @@ public final class InvariantChecker {
         /**
          * A position where this reading ends and the rules under it become another reading's.
          *
-         * <p>Not a rule missed. Nothing is declared at the position for this reading to take in —
-         * what stands there is a container, an optional, or a choice between declarations — and what
-         * is written under it is written about a value one position down, where a reading of that
-         * declaration is opened and a row meets it.
+         * <p>Not a rule missed. Nothing is declared at the position for this reading to take in,
+         * and what is written under it is written about a value one position down, where a reading
+         * of that declaration is opened and a row meets it. Which stops arrive here is
+         * {@link PathEngine#leftBy}'s answer.
          *
          * <p>So this is an obligation and not a finding: something has to have taken the rules over,
          * and whoever walks the positions is the only one who can say whether anything did. Recorded

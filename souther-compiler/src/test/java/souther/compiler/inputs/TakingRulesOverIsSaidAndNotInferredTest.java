@@ -99,6 +99,27 @@ class TakingRulesOverIsSaidAndNotInferredTest {
         assertFalse(handoffs.unresolvedAt(HANDS_ON), "and now both of them were opened");
     }
 
+    /**
+     * One position, one reading answering for its rules.
+     *
+     * <p>Which reading that is follows from where the descent last crossed an ownership boundary, so
+     * it is a function of the path. Everything here carries the pair and one step does not:
+     * {@link RuleHandoffs#unresolvedAt} asks by position alone. That projection is safe only while
+     * this holds, so it is refused rather than assumed — a handoff owed by a reading nobody kept
+     * would otherwise leave somebody else's position short, which is this issue's own shape.
+     */
+    @Test
+    void twoReadingsCannotAnswerForTheRulesAtOnePosition() {
+        RuleHandoffs handoffs = new RuleHandoffs();
+        handoffs.owes(P, HANDS_ON);
+
+        handoffs.owes(P, HANDS_ON);
+
+        assertThrows(IllegalStateException.class,
+                () -> handoffs.owes(P.then("elsewhere"), HANDS_ON),
+                "a second reading answering for one position is this walk contradicting itself");
+    }
+
     /** A value whose own clause could not be typed, held behind an optional. What is short is the
      *  reading of that value, and the optional above it handed the rules to exactly that reading. */
     private static final String THE_READING_OPENED_IS_SHORT = """

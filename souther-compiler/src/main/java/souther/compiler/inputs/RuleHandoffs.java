@@ -53,9 +53,30 @@ final class RuleHandoffs {
     /** And which of them a reading was actually opened at. */
     private final Map<Handoff, Set<TermPath>> accepted = new LinkedHashMap<>();
 
-    /** That the reading rooted at {@code by} ended at {@code at} with rules under it still to be
-     *  read. Said by the reading, which is the only thing that knows it stopped. */
+    /**
+     * That the reading rooted at {@code by} ended at {@code at} with rules under it still to be
+     * read. Said by the reading, which is the only thing that knows it stopped.
+     *
+     * <p>Refuses a second reading owing one at the same position. Which reading answers for a
+     * position is settled by where the descent last crossed an ownership boundary, so it is a
+     * function of the path and there is one of them — and {@link #unresolvedAt} leans on that,
+     * asking by position alone because a position has one owner to ask about.
+     *
+     * <p>Written down as a refusal because the projection is the whole risk. Every other step here
+     * carries the pair, and one place that drops the origin is one place where a handoff owed by a
+     * reading nobody kept could leave somebody else's position short — which is this issue's own
+     * shape, an answer taken from something other than what established it. A traversal that puts
+     * two readings under one path is this compiler contradicting itself and stops here, rather than
+     * arriving as a position quietly reported short.
+     */
     void owes(TermPath by, TermPath at) {
+        for (Handoff each : owed) {
+            if (each.at().equals(at) && !each.by().equals(by)) {
+                throw new IllegalStateException(
+                        "two readings answer for the rules at " + at + ": " + each.by()
+                                + " and " + by);
+            }
+        }
         owed.add(new Handoff(by, at));
     }
 
@@ -81,9 +102,15 @@ final class RuleHandoffs {
      * That a reading was opened at {@code child}, which is one of the positions {@code at} passed
      * the rules to.
      *
-     * <p>Refused for a position nothing said to expect. A reading opened somewhere nobody handed
-     * anything to is a reading about something else, and counting it here is what would let an
-     * unrelated root discharge an obligation.
+     * <p>Nothing happens where no handoff was made at {@code at}. A descent opens readings whether
+     * or not any rule is written under the position it came from, and a position nothing was owed at
+     * has nothing to discharge.
+     *
+     * <p>Refused where a handoff was made and {@code child} is not one of the positions it passed
+     * the rules to. That is the descent that enumerated the children and the descent that opened
+     * them disagreeing, which is one walk contradicting itself rather than a state of the model —
+     * and counting it anyway is what would let a reading nobody handed anything to discharge an
+     * obligation.
      */
     void accepts(TermPath by, TermPath at, TermPath child) {
         Handoff handoff = new Handoff(by, at);
@@ -100,11 +127,16 @@ final class RuleHandoffs {
     }
 
     /**
-     * Whether some reading ended at {@code at} with rules under it that nothing took over.
+     * Whether the reading that ended at {@code at} left rules under it that nothing took over.
      *
      * <p>Every position the rules were passed to has to have been opened, and not merely some of
      * them: a sum whose second case nothing walked has left the rules of that case unread however
      * well the first went.
+     *
+     * <p>Asked by position and not by the pair the handoffs are held under, which is safe because
+     * {@link #owes} refuses a second reading at one position. Left to be true rather than made so, a
+     * handoff owed by one reading would answer for a position another reading reports — and an
+     * answer taken from something other than what established it is what this issue was.
      */
     boolean unresolvedAt(TermPath at) {
         for (Handoff handoff : owed) {

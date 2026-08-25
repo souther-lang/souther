@@ -53,10 +53,10 @@ public enum UnreadReason {
      * and so never arrived. Which of those it was is not recorded: none of them is a fact about the
      * rule, and all of them leave the same hole.
      *
-     * <p>Not a walk that stopped where no declaration stands to be read. What is written under a
-     * container, an optional or a choice between declarations is written about a value one position
-     * down, where a reading of that declaration is opened and a row meets it — so those rules are
-     * handed on rather than left unread, and the position above admits what it admits (#1072).
+     * <p>Not every way a walk can stop. One of them hands the rules to a reading one position down,
+     * where a row meets them, and the position above admits what it admits (#1072). Which stops
+     * those are is settled in one place and not restated here — see {@code PathEngine.leftBy} in
+     * {@code souther.compiler.check}, which this package may not name.
      */
     NOT_REACHED
 }

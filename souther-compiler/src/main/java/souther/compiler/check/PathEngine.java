@@ -638,28 +638,6 @@ final class PathEngine {
     }
 
     /**
-     * What a stop leaves unread: a rule of every value that stands there, or one of only some.
-     *
-     * <p>A stop the reader asked for and a depth it could not afford both leave rules every
-     * construction has to make; the rest stop where no rule holds of every value anyway.
-     *
-     * <p>Asked only of the stops that leave something unread. A stop that hands the rules on
-     * ({@link #handsTheRulesOn}) leaves nothing here for anybody to bear, and answering for it would
-     * put a word in the hands of a reader deciding what to hand on from what a rule is borne by —
-     * which is the reading the two questions are kept apart to refuse.
-     */
-    private static InvariantChecker.Borne borne(GuaranteeWalk.Stop why) {
-        return switch (why) {
-            case PAST_THE_DEPTH, ASKED_TO_STOP, NO_VALUE_THERE ->
-                    InvariantChecker.Borne.BY_EVERY_VALUE;
-            case ALREADY_ENTERED -> InvariantChecker.Borne.BY_SOME_VALUES;
-            case NOTHING_DECLARED -> throw new IllegalArgumentException(
-                    "a stop that hands the rules on leaves nothing unread at the position it "
-                            + "happened at");
-        };
-    }
-
-    /**
      * {@code k} with what {@code guarantee} says taken as holding of the value it was read at.
      *
      * <p>The one step that turns an answer about a declaration into knowledge on this path, kept
@@ -697,36 +675,64 @@ final class PathEngine {
         if (gathering == null || type == null || !guarantees.anyRuleUnder(type)) {
             return;
         }
-        if (handsTheRulesOn(why)) {
-            gathering.handedOn(path);
-        } else {
-            gathering.missed(path, borne(why));
+        switch (leftBy(why)) {
+            case Leaves.ToAnotherReading _ -> gathering.handedOn(path);
+            case Leaves.Unread(InvariantChecker.Borne borne) -> gathering.missed(path, borne);
         }
     }
 
+    /** What a stop leaves behind. */
+    sealed interface Leaves {
+
+        /**
+         * Rules for a reading one position down, and nothing wrong here.
+         *
+         * <p>There is no declaration standing at the position for this reading to take in — a
+         * container, an optional, a choice between declarations — so what is written under it is
+         * written about a value below, where a reading of that declaration is opened and a row meets
+         * it. The rules are not lost; the responsibility for them is somebody else's, and whoever
+         * walks the positions has to show that somebody took it (#1072).
+         */
+        record ToAnotherReading() implements Leaves {}
+
+        /** Rules no reading here took in, and how much of what stands at the position they were
+         *  about. */
+        record Unread(InvariantChecker.Borne borne) implements Leaves {}
+    }
+
     /**
-     * Whether this stop passes the rules under the position to another reading rather than leaving
-     * them unread.
+     * What each way of stopping leaves behind.
      *
-     * <p>{@link GuaranteeWalk.Stop#NOTHING_DECLARED} and nothing else. It says there is no
-     * declaration standing here to be read, which is what a container, an optional and a choice
-     * between declarations all are — and what is written under one of those is written about a value
-     * one position down, where a reading of that declaration is opened and a row meets it. So the
-     * rules are not lost by this stop; the responsibility for them is somebody else's, and whoever
-     * walks the positions has to show that somebody took it (#1072).
+     * <p><b>The one statement of it.</b> Which stops hand the rules on and which leave them unread
+     * is one partition of one enum, and it used to be spelled again in the prose of every word
+     * downstream of it — {@link InvariantChecker.Borne}, {@link souther.compiler.values.UnreadReason},
+     * the account a seeding gives of itself. A partition restated is a partition that goes on being
+     * true only until somebody moves an arm, and then the code is right and the sentences are not.
+     * So it is written here once and referred to.
      *
-     * <p>Every other stop leaves them unread. {@link GuaranteeWalk.Stop#ALREADY_ENTERED} is the one
-     * worth naming: it stops where the walk could have gone on, so nothing below is opened and
-     * nobody takes the rules over. Read as a handing on, a type holding its own kind would be
-     * discharged by the reading made of it further up.
+     * <p>Exhaustive with no {@code default}, so a way of stopping added later is a compile error
+     * here rather than a stop quietly counted as a loss — or, worse, quietly counted as handed on to
+     * a reading that was never opened.
      *
-     * <p>Asked of the stop and not of {@link InvariantChecker.Borne}. What a stop leaves unread and
-     * whether the rules pass to another reading are different questions that agree today by
+     * <p>Asked of the stop and never of {@link InvariantChecker.Borne}. What a stop leaves unread
+     * and whether the rules pass to another reading are different questions that agree today by
      * coincidence: every stop that hands on is borne by some values, and one that is borne by some
      * values need not hand anything on. Read off the second, the coincidence becomes the rule.
      */
-    private static boolean handsTheRulesOn(GuaranteeWalk.Stop why) {
-        return why == GuaranteeWalk.Stop.NOTHING_DECLARED;
+    static Leaves leftBy(GuaranteeWalk.Stop why) {
+        return switch (why) {
+            case NOTHING_DECLARED -> new Leaves.ToAnotherReading();
+            // A depth this reader could not afford, a name it was told to suppose holds values, and
+            // a field it could find no value for. Each stops where a construction still has to make
+            // the value, so a rule under it can refuse the construction.
+            case PAST_THE_DEPTH, ASKED_TO_STOP, NO_VALUE_THERE ->
+                    new Leaves.Unread(InvariantChecker.Borne.BY_EVERY_VALUE);
+            // Read where the name was met, and nothing is opened here — so nobody takes the rules
+            // over. Counted as a handing on, a type holding its own kind would be discharged by the
+            // reading made of it further up.
+            case ALREADY_ENTERED ->
+                    new Leaves.Unread(InvariantChecker.Borne.BY_SOME_VALUES);
+        };
     }
 
 }
