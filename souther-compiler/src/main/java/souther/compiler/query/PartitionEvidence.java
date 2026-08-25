@@ -23,7 +23,7 @@ import java.util.Set;
  * fact that costs a measure something into what weakened that measure, and the obvious next step is
  * to drop the lists and project them back out. Two of them cannot be: {@code unread} holds rules
  * that were set aside and left neither measure short — a comparison relating two positions is read,
- * says what it says, and divides nothing ({@code BlockReason.AboutARule.leavesShort}) — so the
+ * says what it says, and divides nothing ({@code BlockReason.RuleWithoutLineReason.leavesShort}) — so the
  * weakening is a strictly smaller set than what a reader is owed, and a projection would drop
  * exactly those rules from the report.
  *
@@ -208,7 +208,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
 
             @Override
             public boolean readingStopped() {
-                return finding.why() instanceof souther.compiler.inputs.BlockReason.ReadingStopped;
+                return finding.why() instanceof souther.compiler.inputs.BlockReason.RuleReadingStopped;
             }
 
             /** Which rule, which is what tells this finding from the one beside it. */

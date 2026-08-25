@@ -315,7 +315,7 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
                 "the rule a reader is sent to look at is the one that wrote the clause");
     }
 
-    private static List<BlockReason.AboutARule> reasonsAt(FieldDomains read, String path) {
+    private static List<BlockReason.RuleWithoutLineReason> reasonsAt(FieldDomains read, String path) {
         return read.unreadAt(path).stream().map(FieldDomains.Unread::why).toList();
     }
 }

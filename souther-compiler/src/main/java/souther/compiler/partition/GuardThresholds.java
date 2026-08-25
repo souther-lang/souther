@@ -200,7 +200,7 @@ public final class GuardThresholds {
             }
             InputReads reads = reading.reads();
             List<FilingCoordinate> named = filedAt(binary, reads, symbols);
-            final BlockReason.AboutARule why = why(binary, reads, symbols);
+            final BlockReason.RuleWithoutLineReason why = why(binary, reads, symbols);
             // The rule the author wrote, read off the source. Which comparison it is is the
             // behavior and the construct the source wrote; where a reader is sent is where it is
             // written. Neither comes from the plan: a comparison in a fork both of whose arms can
@@ -366,7 +366,7 @@ public final class GuardThresholds {
      * a body's read of a parameter is what names one here, and a coordinate of a value is what
      * names one over there.
      */
-    static BlockReason.AboutARule why(Core.Binary comparison, InputReads reads,
+    static BlockReason.RuleWithoutLineReason why(Core.Binary comparison, InputReads reads,
                            Symbols symbols) {
         return said(comparison, AffineReading.read(comparison, reads, symbols), reads, symbols);
     }
@@ -378,14 +378,14 @@ public final class GuardThresholds {
      * describes. Reading it again to say why it stopped is the comparison read twice, and the
      * second read is free to answer about a shape the first one had already got past.
      */
-    static BlockReason.ReadingStopped whyItStopped(Core.Binary comparison,
+    static BlockReason.RuleReadingStopped whyItStopped(Core.Binary comparison,
                                                    AffineReading.OfAComparison canonical,
                                                    InputReads reads, Symbols symbols) {
-        BlockReason.AboutARule said = said(comparison, canonical, reads, symbols);
+        BlockReason.RuleWithoutLineReason said = said(comparison, canonical, reads, symbols);
         // What this reader is asked for is why it stopped, and the words for a rule read to the end
         // are not answers to that. Reached with one, the caller has met an absence this reading did
         // not produce — so it is refused rather than passed on as a reason nothing fell short.
-        if (said instanceof BlockReason.ReadingStopped stopped) {
+        if (said instanceof BlockReason.RuleReadingStopped stopped) {
             return stopped;
         }
         throw new IllegalStateException(
@@ -393,7 +393,7 @@ public final class GuardThresholds {
     }
 
     /** What stopped a reading of this comparison, in whatever words its own answer comes in. */
-    private static BlockReason.AboutARule said(Core.Binary comparison,
+    private static BlockReason.RuleWithoutLineReason said(Core.Binary comparison,
                                                AffineReading.OfAComparison canonical,
                                                InputReads reads, Symbols symbols) {
         Names left = namesIn(comparison.left(), reads, symbols);
@@ -606,7 +606,7 @@ public final class GuardThresholds {
     private static void publish(String behavior, Core.Binary comparison, CoverageSites.Plan plan,
                                 InputReads reads, Symbols symbols, ComparisonAssessment read,
                                 List<UnreadRule> out) {
-        BlockReason.AboutARule why = switch (read) {
+        BlockReason.RuleWithoutLineReason why = switch (read) {
             case ComparisonAssessment.AcrossPositions _ ->
                     new BlockReason.ComparisonBetweenPositions();
             case ComparisonAssessment.CutsNothing _ ->

@@ -284,7 +284,7 @@ public final class EnsuresThresholds {
      * of the three reasons that does not turn on what two sides name.
      */
     private static void reportUnread(RuleRef.Ensures rule, Core statement, BindingId answer,
-                                     BlockReason.AboutARule why,
+                                     BlockReason.RuleWithoutLineReason why,
                                      List<FilingCoordinate> at,
                                      List<UnreadRule> unread) {
         if (ComparisonAssessment.readsAnswer(statement, answer)) {

@@ -66,7 +66,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         record CutsNothing() implements Read {}
 
         /** The reading stopped, and this is what it stopped on. */
-        record Stopped(souther.compiler.inputs.BlockReason.ReadingStopped why) implements Read {
+        record Stopped(souther.compiler.inputs.BlockReason.RuleReadingStopped why) implements Read {
 
             public Stopped {
                 java.util.Objects.requireNonNull(why, "a reading that stopped says why");

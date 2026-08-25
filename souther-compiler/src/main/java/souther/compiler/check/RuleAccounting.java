@@ -198,7 +198,7 @@ public final class RuleAccounting {
         }
 
         /** The reading that turns a clause into an end a line can be drawn at. */
-        record TheEndReadingSays(souther.compiler.inputs.BlockReason.AboutARule why)
+        record TheEndReadingSays(souther.compiler.inputs.BlockReason.RuleWithoutLineReason why)
                 implements Why {
 
             public TheEndReadingSays {

@@ -439,7 +439,7 @@ public final class FieldDomains {
      *             own terms
      */
     public record Unread(String path, ValueName by, RuleRef.Invariant from,
-                         Core part, souther.compiler.inputs.BlockReason.AboutARule why) {
+                         Core part, souther.compiler.inputs.BlockReason.RuleWithoutLineReason why) {
 
         /** Whether it is a number taken of the position rather than its own values, derived for the
          *  reason {@link Placed#measured} gives. */

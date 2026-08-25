@@ -37,7 +37,7 @@ import souther.compiler.check.RuleRef;
  *              capability gained here need not move a published vocabulary
  */
 public record UnreadRule(RuleRef rule, RuleCitation cited, FilingCoordinate at,
-                         BlockReason.AboutARule why) {
+                         BlockReason.RuleWithoutLineReason why) {
 
     public UnreadRule {
         if (rule == null || cited == null) {

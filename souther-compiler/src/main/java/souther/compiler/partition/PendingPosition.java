@@ -129,7 +129,7 @@ sealed interface PendingPosition {
             return null;
         }
         return switch (blocked.why()) {
-            case BlockReason.AboutARule _ -> null;
+            case BlockReason.RuleWithoutLineReason _ -> null;
             case BlockReason.AboutThePosition why ->
                     new souther.compiler.inputs.PositionReadingBlocked(at(), why);
         };

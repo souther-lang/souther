@@ -25,7 +25,7 @@ import souther.compiler.inputs.UnreadRule;
 public sealed interface ClosureGap {
 
     /** A rule of the model that a reader set aside. The rule says which measures that costs
-     *  ({@link BlockReason.AboutARule#leavesShort}). */
+     *  ({@link BlockReason.RuleWithoutLineReason#leavesShort}). */
     record RuleUnread(UnreadRule rule) implements ClosureGap {}
 
     /**

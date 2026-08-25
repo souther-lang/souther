@@ -1476,7 +1476,7 @@ public final class InvariantChecker {
         }
         Places left = placesIn(comparison.left(), at, byName);
         Places right = placesIn(comparison.right(), at, byName);
-        BlockReason.AboutARule why = UnreadComparison.why(left.origin(), right.origin(),
+        BlockReason.RuleWithoutLineReason why = UnreadComparison.why(left.origin(), right.origin(),
                 quantityOf(comparison, at, byName),
                 place -> carrierAt(place, left, right) != null);
         for (Coordinate each : coordinatesIn(comparison, at, byName)) {

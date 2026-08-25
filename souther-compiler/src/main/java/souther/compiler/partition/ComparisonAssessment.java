@@ -130,7 +130,7 @@ sealed interface ComparisonAssessment {
      * @param filedAt where the reading was looking, which is a diagnostic position and never the
      *                subject of a question. What such a rule is about is the part that was not read
      */
-    record Unread(BlockReason.ReadingStopped why, List<FilingCoordinate> filedAt)
+    record Unread(BlockReason.RuleReadingStopped why, List<FilingCoordinate> filedAt)
             implements ComparisonAssessment {
 
         public Unread {
