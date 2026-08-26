@@ -2,6 +2,7 @@ package souther.compiler.stdlib;
 
 import souther.compiler.Reserved;
 import souther.compiler.ast.Hir;
+import souther.compiler.core.Kernel;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
@@ -10,6 +11,7 @@ import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -84,10 +86,10 @@ public final class Stdlib {
         }
     }
 
-    /** A kernel the library names, and the signature it was declared with. The key is the language's
-     *  ({@code "decimal.round"}); what a backend emits for it is that backend's, and a signature is
-     *  what both of them derive their own boundary form from. */
-    public record Intrinsic(String key, Signature signature) {
+    /** A kernel the library names, and the signature it was declared with. The kernel is the
+     *  language's operation ({@link Kernel#DECIMAL_ROUND}); what a backend emits for it is that
+     *  backend's, and a signature is what both of them derive their own boundary form from. */
+    public record Intrinsic(Kernel kernel, Signature signature) {
     }
 
     private final Map<String, Entry> entries;
@@ -98,7 +100,10 @@ public final class Stdlib {
     /** And the same declarations by the library module that writes them, worked out once with
      *  everything else rather than gathered on each ask. */
     private final Map<String, Map<String, Hir.Def>> byModule;
-    private final Map<String, Intrinsic> intrinsics;
+    private final Map<Kernel, Intrinsic> intrinsics;
+    /** And which kernel each operation that is one reaches, so a reader holding a name asks the
+     *  library rather than the declaration it would have to open to find out. */
+    private final Map<String, Intrinsic> kernelOperations;
     private final Map<String, Hir.FnDef> helpers;
     private final Set<String> published;
     private final Map<String, List<String>> candidates;
@@ -108,7 +113,8 @@ public final class Stdlib {
 
     private Stdlib(Map<String, Entry> entries, Set<String> privateNames,
                    Map<String, ValueName.Stdlib> operations, Map<String, Rewrite> sugars,
-                   Map<TypeKey, Hir.Def> language, Map<String, Intrinsic> intrinsics,
+                   Map<TypeKey, Hir.Def> language, Map<Kernel, Intrinsic> intrinsics,
+                   Map<String, Intrinsic> kernelOperations,
                    Map<String, Hir.FnDef> helpers, Set<String> published,
                    Map<String, List<String>> candidates) {
         this.entries = entries;
@@ -127,6 +133,7 @@ public final class Stdlib {
         grouped.replaceAll((_, defs) -> Collections.unmodifiableMap(defs));
         this.byModule = Collections.unmodifiableMap(grouped);
         this.intrinsics = intrinsics;
+        this.kernelOperations = kernelOperations;
         this.helpers = helpers;
         this.published = published;
         this.candidates = candidates;
@@ -211,9 +218,23 @@ public final class Stdlib {
         return helpers;
     }
 
-    /** The kernel written {@code intrinsic "key"}, or null where no declaration names that key. */
-    public Intrinsic intrinsic(String key) {
-        return intrinsics.get(key);
+    /** What the library declares for {@code kernel}, or null where no declaration names it. */
+    public Intrinsic intrinsic(Kernel kernel) {
+        return intrinsics.get(kernel);
+    }
+
+    /**
+     * What the library declares under {@code qualifiedName} where that operation is a kernel, and
+     * null where it is anything else — a Souther-bodied helper, a sugar, a name the library does not
+     * have.
+     *
+     * <p>Whether an operation is a kernel is a fact about the library and is answered by the
+     * library. A reader that opened the declaration to look at its body would be reading how the
+     * library is written to learn what it means, and would go on holding the declaration — which is
+     * {@code Hir}, and is this compiler's own.
+     */
+    public Intrinsic intrinsicOf(String qualifiedName) {
+        return kernelOperations.get(qualifiedName);
     }
 
     /**
@@ -352,13 +373,27 @@ public final class Stdlib {
         /** The finished library. */
         public Stdlib freeze() {
             Map<String, Rewrite> sugars = sugars();
-            Map<String, Intrinsic> intrinsics = new LinkedHashMap<>();
+            Map<Kernel, Intrinsic> intrinsics = new EnumMap<>(Kernel.class);
+            Map<String, Intrinsic> kernelOperations = new LinkedHashMap<>();
             Map<String, Hir.FnDef> helpers = new LinkedHashMap<>();
             for (Map.Entry<String, Entry> e : entries.entrySet()) {
                 Hir.FnBody body = e.getValue().declaration().body();
-                if (body instanceof Hir.FnBody.Intrinsic kernel) {
-                    intrinsics.put(kernel.key(),
-                            new Intrinsic(kernel.key(), e.getValue().signature()));
+                if (body instanceof Hir.FnBody.Intrinsic written) {
+                    // The one place a written key becomes the operation it names. Everything after
+                    // this holds the kernel, so a key that names none is refused here — while the
+                    // library is being built, and so for a kernel nothing goes on to call as much as
+                    // for one every program calls.
+                    Intrinsic intrinsic =
+                            new Intrinsic(Kernel.fromKey(written.key()), e.getValue().signature());
+                    // And one kernel is declared once. A backend builds its boundary form out of
+                    // the signature this holds, so two declarations of one kernel would be two
+                    // answers to a question that has one — and put into a map, the second would
+                    // replace the first in silence.
+                    if (intrinsics.put(intrinsic.kernel(), intrinsic) != null) {
+                        throw new IllegalStateException("two standard-library declarations name the"
+                                + " kernel `" + intrinsic.kernel().key() + "`");
+                    }
+                    kernelOperations.put(e.getKey(), intrinsic);
                 }
                 if (body instanceof Hir.FnBody.Written) {
                     helpers.put(e.getKey(), e.getValue().declaration());
@@ -376,6 +411,7 @@ public final class Stdlib {
                     Collections.unmodifiableMap(sugars),
                     Collections.unmodifiableMap(new LinkedHashMap<>(language)),
                     Collections.unmodifiableMap(intrinsics),
+                    Collections.unmodifiableMap(kernelOperations),
                     Collections.unmodifiableMap(helpers),
                     published,
                     candidates(published));

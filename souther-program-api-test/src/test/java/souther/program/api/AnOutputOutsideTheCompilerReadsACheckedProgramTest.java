@@ -4,6 +4,7 @@ import souther.compiler.Compiler;
 import souther.compiler.core.Composition;
 import souther.compiler.diag.CompileException;
 import souther.compiler.core.Core;
+import souther.compiler.core.Kernel;
 import souther.compiler.program.CheckedBehavior;
 import souther.compiler.program.CheckedHelper;
 import souther.compiler.program.CheckedImplementation;
@@ -99,6 +100,24 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
             let shipIt (p) = Shipped { total = p.total }
 
             behavior process = classify >-> priceIt >-> shipIt
+            """;
+
+    /**
+     * A body that reaches the standard library: a kernel over a string and one over a list.
+     *
+     * <p>{@code List.map} is not among them and is not missing. The derivable layer is ordinary
+     * Souther over the kernels and expands where it is called (ADR-0028), so what a backend meets is
+     * the walk it became.
+     */
+    private static final String CALLS_THE_LIBRARY = """
+            module demo
+
+            data Tidied = { label: String, items: Int }
+
+            behavior tidy : (label: String, items: List<Int>) -> Tidied constructs Tidied
+
+            let tidy (label, items) =
+                Tidied { label = String.trim(label), items = List.length(items) }
             """;
 
     private static CheckedModule demo() {
@@ -409,6 +428,36 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
         assertNotNull(depth.body().type(), "what it answers, as the checker typed it");
         assertTrue(helpersCalledIn(depth.body()).contains(new ValueName.Helper("demo", "depth")),
                 "and it calls itself, which is why it is a definition of its own");
+    }
+
+    /**
+     * And a call reaching a kernel of the standard library says which kernel.
+     *
+     * <p>The operation, not a spelling of it. What is on the other side of {@code String.trim} is a
+     * decision the language made, and an output that read the alias and the name back apart would be
+     * resolving, by spelling, a name this compiler had resolved already.
+     *
+     * <p>Reached all the same, which is the shape of it: the same node still says what name the
+     * module wrote and what that name denotes, so a reader with no business emitting the operation
+     * asks what it always asked.
+     */
+    @Test
+    void aCallReachingAKernelSaysWhichKernel() {
+        CheckedProgram program = CheckedProgram.of(List.of(CALLS_THE_LIBRARY));
+        Core body = ((CheckedImplementation.Body)
+                named(program.module("demo"), "tidy").implementation()).body();
+
+        Set<Kernel> reached = new LinkedHashSet<>();
+        for (Core node : everyNodeOf(body)) {
+            if (node instanceof Core.Call call
+                    && call.fn() instanceof Core.Reached.OfKernel kernel) {
+                reached.add(kernel.kernel());
+                assertNotNull(kernel.denotes(), "and what the name denotes: " + kernel.rendered());
+            }
+        }
+
+        assertEquals(Set.of(Kernel.STRING_TRIM, Kernel.LIST_LENGTH), reached,
+                "the kernels this body reaches, as the operations they are");
     }
 
     /** Every helper a call in {@code body} reaches, walking every node of it. */

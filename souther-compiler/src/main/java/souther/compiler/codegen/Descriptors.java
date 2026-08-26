@@ -338,10 +338,6 @@ final class Descriptors {
     static final String ORDER_METHOD = "__order";
     static final String ORDERING_METHOD = "__ordering";
 
-    /** The library functions that compare by natural order. An enumeration's order lives on its sum
-     *  rather than on its values, so for one of these the emitter passes a comparator (issue #161). */
-    static final java.util.Set<String> ORDERED_BY_COMPARATOR =
-            java.util.Set.of("List.sort", "List.max", "List.min");
     static final MethodTypeDesc MTD_order = MethodTypeDesc.of(ConstantDescs.CD_int, CD_Object);
     static final ClassDesc CD_Comparator = ClassDesc.of("java.util.Comparator");
     static final ClassDesc CD_ToIntFunction = ClassDesc.of("java.util.function.ToIntFunction");

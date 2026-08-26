@@ -157,17 +157,59 @@ public sealed interface Core {
      * from outside — asks what the name denotes. Working the second out of the first would be
      * resolving a name this compiler resolved already, and a bare spelling reaches a helper and an
      * injected behavior alike.
+     *
+     * <p>A kernel call is one of these and not something beside them. {@code List.sort} is reached
+     * by a name and resolves to a library operation, and its declaration being a kernel is what that
+     * operation turned out to be — so a reader asking what a call reaches asks this, whichever arm
+     * it is, and only a reader that has to emit the operation goes on to ask which kernel. Put
+     * beside {@code Reached}, the arms would divide by provenance for two of them and by what the
+     * declaration holds for the third, and a reader that wanted only the name would stop seeing
+     * kernels without being told.
      */
-    record Reached(ReachName name, ValueName denotes) implements CallTarget {
+    sealed interface Reached extends CallTarget {
+
+        /** The name the module being emitted reaches the callee by. */
+        ReachName name();
+
+        /** What that name was resolved to. */
+        ValueName denotes();
 
         @Override
-        public String rendered() {
-            return name.rendered();
+        default String rendered() {
+            return name().rendered();
         }
 
-        @Override
-        public String toString() {
-            return rendered();
+        /** A callee whose declaration this compilation carries: a module's own helper, another
+         *  module's, an injected behavior, a library operation written in Souther. What is emitted
+         *  for it is a call. */
+        record OfDeclaration(ReachName name, ValueName denotes) implements Reached {
+
+            @Override
+            public String toString() {
+                return rendered();
+            }
+        }
+
+        /**
+         * A callee whose declaration is a kernel of the standard library, and which kernel it is.
+         *
+         * <p>Which kernel is the answer to a question this compiler settled: the checker typed the
+         * call against the library's signature, and the declaration behind that signature named the
+         * operation. An output reads the operation here rather than going back to a table this
+         * compiler keeps for itself — and a spelling it guessed from would be resolving, by the
+         * alias and the name, what was resolved already.
+         *
+         * <p>Still carries both the reach name and what it denotes, and neither is the kernel. The
+         * name says how this module got here, the denotation says which declaration was chosen, and
+         * the kernel says what that declaration is. Two declarations naming one kernel is a thing
+         * the library is refused for while it is built, not a thing this collapses.
+         */
+        record OfKernel(ReachName name, ValueName denotes, Kernel kernel) implements Reached {
+
+            @Override
+            public String toString() {
+                return rendered();
+            }
         }
     }
 
@@ -212,17 +254,12 @@ public sealed interface Core {
      *
      * <p>{@code fn} says what is applied ({@link CallTarget}). Where that is a name, it is the one
      * the module being emitted reaches the callee by, carried from where resolution settled it, and
-     * held as what it is rather than as the spelling of it: the backend needs both the whole name, to
-     * emit the method it calls, and the operation inside it, to reach the runtime method a library
-     * call becomes — and taking the second out of the first meant splitting a name this compiler had
-     * joined a moment earlier.
+     * held as what it is rather than as the spelling of it: the backend needs the whole name to emit
+     * the method it calls, and what the name denotes to know what kind of thing was called. Where
+     * the callee turned out to be a kernel of the standard library, the call says which one
+     * ({@link Reached.OfKernel}), so an output emitting it asks the call rather than this compiler.
      */
     record Call(CallTarget fn, List<Core> args, Type type, SourcePos pos) implements Core {
-
-        /** A call to a name, as the name it reaches and what that name denotes. */
-        public Call(ReachName fn, ValueName denotes, List<Core> args, Type type, SourcePos pos) {
-            this(new Reached(fn, denotes), args, type, pos);
-        }
 
         /** The callee as it renders — the reach name for a call to one, the operation's own
          * spelling for one this compiler emits. What a method name is built from and what a report

@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
+import souther.compiler.core.Kernel;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Region;
@@ -41,10 +42,10 @@ public final class CallElaborator {
      * say (ADR-0053). The declaration states the shape and this states the rest, keyed by the kernel
      * it constrains — which is what {@code sort} has always done, written out by hand.
      */
-    private static final Map<String, OrderedElement> ORDERED_ELEMENT = Map.of(
-            "list.sort", OrderedElement.OF_THE_LIST,
-            "list.max", OrderedElement.OF_THE_OPTION,
-            "list.min", OrderedElement.OF_THE_OPTION);
+    private static final Map<Kernel, OrderedElement> ORDERED_ELEMENT = Map.of(
+            Kernel.LIST_SORT, OrderedElement.OF_THE_LIST,
+            Kernel.LIST_MAX, OrderedElement.OF_THE_OPTION,
+            Kernel.LIST_MIN, OrderedElement.OF_THE_OPTION);
 
     /**
      * Refuses an element with no natural order. An ordered primitive has one, and so does a newtype
@@ -52,8 +53,9 @@ public final class CallElaborator {
      * throw at run time, so it is refused here. The empty-list literal (element {@code Nothing}) is
      * fine: it sorts to itself and its max is {@code None}.
      */
-    private static void requiresOrdering(String key, Hir.Apply call, Type result, CheckContext ctx) {
-        OrderedElement where = ORDERED_ELEMENT.get(key);
+    private static void requiresOrdering(Kernel kernel, Hir.Apply call, Type result,
+                                         CheckContext ctx) {
+        OrderedElement where = ORDERED_ELEMENT.get(kernel);
         if (where == null) {
             return;
         }
@@ -79,9 +81,9 @@ public final class CallElaborator {
      * what the list holds, so it reads the binding the key's declared result took rather than the
      * call's result.
      */
-    private static void requiresOrderedKey(String key, Hir.Apply call, Type.FnOf declaredKey,
+    private static void requiresOrderedKey(Kernel kernel, Hir.Apply call, Type.FnOf declaredKey,
                                            Map<String, Type> bindings, CheckContext ctx) {
-        if (!key.equals("list.sortBy")) {
+        if (kernel != Kernel.LIST_SORT_BY) {
             return;
         }
         Type answered = TypeOps.substitute(declaredKey.result(), bindings);
@@ -116,8 +118,33 @@ public final class CallElaborator {
         Type declared = entry.signature().result();
         Map<String, Type> bindings = new HashMap<>();
         BottomInfer.pinResultTypeVars(declared, expected, bindings, ctx.symbols());
-        return new Core.Call(new ReachName.OfLibrary(lib), lib, List.of(),
-                TypeOps.toBottom(TypeOps.substitute(declared, bindings)), v.pos());
+        return new Core.Call(reached(new ReachName.OfLibrary(lib), lib, ctx),
+                List.of(), TypeOps.toBottom(TypeOps.substitute(declared, bindings)), v.pos());
+    }
+
+    /**
+     * What a call to a name applies, as this compiler has settled it: the name the module reaches
+     * the callee by, what that name denotes, and — where the declaration behind it is a kernel of
+     * the standard library — which kernel that is.
+     *
+     * <p>The one place a {@link Core.Reached} is built. Two things reach it — an application, and a
+     * library value written on its own — and each of them asking the library whether what it reached
+     * is a kernel would be one rule kept in as many places as there are callers, which is how one of
+     * them comes to be the one that forgets. {@code Core.Call} takes what is applied and no longer
+     * takes a name, so there is no way past here to a call target built out of a spelling.
+     *
+     * <p>Asked of what the name denotes rather than of how it renders. Whether an operation is a
+     * kernel is a property of the declaration the resolver picked, and the two are one string apart
+     * only for as long as they happen to be.
+     */
+    private static Core.Reached reached(ReachName name, ValueName denotes, CheckContext ctx) {
+        if (denotes instanceof ValueName.Stdlib operation) {
+            Stdlib.Intrinsic kernel = ctx.symbols().library().intrinsicOf(operation.qualified());
+            if (kernel != null) {
+                return new Core.Reached.OfKernel(name, denotes, kernel.kernel());
+            }
+        }
+        return new Core.Reached.OfDeclaration(name, denotes);
     }
 
     static Core elaborateCall(Hir.Apply call, Scope env, CheckContext ctx,
@@ -168,7 +195,8 @@ public final class CallElaborator {
         ValueName denotes = callee.denotes() instanceof ValueName.Local local
                 && ctx.dependencyOf(local.id()) != null
                 ? ctx.dependencyOf(local.id()) : callee.denotes();
-        return new Core.Call(callee.reachedAs(), denotes, ca.cores(), result, call.pos());
+        return new Core.Call(reached(callee.reachedAs(), denotes, ctx), ca.cores(), result,
+                call.pos());
     }
 
     /**
@@ -535,11 +563,14 @@ public final class CallElaborator {
                             .hint(new NameMessage.WriteItOnItsOwn(call.written())).say(new NameMessage.ItIsNotAFunctionHere(call.written())).build());
         }
         // A shipped kernel behaves like a built-in: check the call against the declared signature
-        // and yield its result type; the backend emits the primitive for its key. A Souther-bodied
-        // library call — a recursive helper such as `List.foldFrom` — is not one of these and takes
-        // the paths below, as any helper does.
-        if (entry != null && entry.declaration().body() instanceof Hir.FnBody.Intrinsic kernel) {
-            Stdlib.Signature intrinsic = entry.signature();
+        // and yield its result type; the backend emits the primitive the call says it reaches. A
+        // Souther-bodied library call — a recursive helper such as `List.foldFrom` — is not one of
+        // these and takes the paths below, as any helper does.
+        Stdlib.Intrinsic declaredKernel = callee.denotes() instanceof ValueName.Stdlib operation
+                ? ctx.symbols().library().intrinsicOf(operation.qualified()) : null;
+        if (declaredKernel != null) {
+            Kernel kernel = declaredKernel.kernel();
+            Stdlib.Signature intrinsic = declaredKernel.signature();
             if (args.size() != intrinsic.params().size()) {
                 throw CompileException.of(Diagnostic
                                 .at(call.appliedAt())
@@ -547,20 +578,20 @@ public final class CallElaborator {
             }
             Applied applied = applySignature(call,
                     new Type.FnOf(intrinsic.params(), intrinsic.result()), ca, expected, env, ctx);
-            // What remains is the kernel's own: constraints its key names on the outcome the
+            // What remains is the kernel's own: constraints the kernel places on the outcome the
             // signature could not state, and the emitter's special cases. They read the settled
             // substitution and result — they are checks on what the application became, not part
             // of how an application is typed.
             for (Type param : intrinsic.params()) {
                 if (param instanceof Type.FnOf declaredStep) {
-                    requiresOrderedKey(kernel.key(), call, declaredStep, applied.substitution(), ctx);
+                    requiresOrderedKey(kernel, call, declaredStep, applied.substitution(), ctx);
                 }
             }
-            requiresOrdering(kernel.key(), call, applied.result(), ctx);
-            if (kernel.key().equals("list.sum") || kernel.key().equals("list.product")) {
+            requiresOrdering(kernel, call, applied.result(), ctx);
+            if (kernel == Kernel.LIST_SUM || kernel == Kernel.LIST_PRODUCT) {
                 return numericFold(call, applied.result(), expected);
             }
-            if (kernel.key().equals("string.matches")) {
+            if (kernel == Kernel.STRING_MATCHES) {
                 validateRegexPattern(args.get(0));
             }
             return applied.result();

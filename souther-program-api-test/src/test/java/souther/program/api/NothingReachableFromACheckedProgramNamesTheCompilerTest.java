@@ -67,6 +67,11 @@ class NothingReachableFromACheckedProgramNamesTheCompilerTest {
                 () -> "no invariant clause in " + reached);
         assertTrue(reached.contains("souther.compiler.core.Contract$Rule"),
                 () -> "no ensures rule in " + reached);
+        // And which kernel a call to the standard library reaches, reached through the arm of a
+        // call target that carries it — the walk going down into what a body is made of rather than
+        // reading the top of the model.
+        assertTrue(reached.contains("souther.compiler.core.Kernel"),
+                () -> "no kernel in " + reached);
         assertTrue(reached.size() > 50, () -> "the walk reached only " + reached.size());
     }
 

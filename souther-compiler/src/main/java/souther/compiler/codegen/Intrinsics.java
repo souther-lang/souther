@@ -4,6 +4,7 @@ import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.Type;
 import souther.compiler.core.Core;
+import souther.compiler.core.Kernel;
 
 import java.lang.constant.ClassDesc;
 import java.lang.constant.ConstantDescs;
@@ -36,20 +37,20 @@ final class Intrinsics {
     private Intrinsics() {
     }
 
-    /** Emits the intrinsic named by {@code key}, leaving its result on the stack, and returns the
-     * result's Souther type (spec §stdlib). Throws on an unknown key — the checker admits only keys
-     * that were declared {@code = intrinsic "..."} in a prelude module, so this is a compiler bug. */
-    static Type emit(BodyGen g, String key, Core.Call call) {
-        Emit e = TABLE.get(key);
+    /** Emits {@code kernel}, leaving its result on the stack, and returns the result's Souther type
+     * (spec §stdlib). Throws where this table has no row for it — the language names the kernel and
+     * the JVM answers it, so a kernel with no answer here is this backend behind the library. */
+    static Type emit(BodyGen g, Kernel kernel, Core.Call call) {
+        Emit e = TABLE.get(kernel);
         if (e == null) {
-            throw new IllegalStateException("unknown intrinsic `" + key + "`");
+            throw new IllegalStateException("the JVM emits nothing for `" + kernel.key() + "`");
         }
-        return e.emit(g, key, call);
+        return e.emit(g, kernel, call);
     }
 
     sealed interface Emit permits RuntimeStatic, JdkVirtual, NumericFold, TakesAFunction,
             DeclaredStatic {
-        Type emit(BodyGen g, String key, Core.Call call);
+        Type emit(BodyGen g, Kernel kernel, Core.Call call);
     }
 
     /**
@@ -61,8 +62,8 @@ final class Intrinsics {
      * happens to be, while the declaration names the sum.
      */
     record DeclaredStatic(ClassDesc owner, String method) implements Emit {
-        public Type emit(BodyGen g, String key, Core.Call call) {
-            Stdlib.Signature declared = g.library().intrinsic(key).signature();
+        public Type emit(BodyGen g, Kernel kernel, Core.Call call) {
+            Stdlib.Signature declared = g.library().intrinsic(kernel).signature();
             ClassDesc[] params = new ClassDesc[declared.params().size()];
             for (int i = 0; i < params.length; i++) {
                 params[i] = boundaryDesc(declared.params().get(i));
@@ -88,7 +89,7 @@ final class Intrinsics {
     record TakesAFunction(ClassDesc owner, String method, int container,
                           Function<Type, List<Type>> paramTypes,
                           Function<List<Type>, Type> result) implements Emit {
-        public Type emit(BodyGen g, String key, Core.Call call) {
+        public Type emit(BodyGen g, Kernel kernel, Core.Call call) {
             Type held = call.args().get(container).type();
             g.emitFn(call.args().get(0), paramTypes.apply(held));
             g.genExpr(call.args().get(container));
@@ -109,7 +110,7 @@ final class Intrinsics {
      */
     record RuntimeStatic(ClassDesc owner, String method, int[] argOrder,
                          Set<Integer> objectSlots, Function<List<Type>, Type> result) implements Emit {
-        public Type emit(BodyGen g, String key, Core.Call call) {
+        public Type emit(BodyGen g, Kernel kernel, Core.Call call) {
             int n = argOrder.length;
             Type[] byArg = new Type[n];
             ClassDesc[] params = new ClassDesc[n];
@@ -146,7 +147,7 @@ final class Intrinsics {
      */
     record JdkVirtual(ClassDesc owner, String method, MethodTypeDesc desc, int[] argOrder,
                       Type result) implements Emit {
-        public Type emit(BodyGen g, String key, Core.Call call) {
+        public Type emit(BodyGen g, Kernel kernel, Core.Call call) {
             for (int src : argOrder) {
                 g.genExpr(call.args().get(src));
             }
@@ -163,7 +164,7 @@ final class Intrinsics {
      * position the call was written in.
      */
     record NumericFold(String intMethod, String decimalMethod) implements Emit {
-        public Type emit(BodyGen g, String key, Core.Call call) {
+        public Type emit(BodyGen g, Kernel kernel, Core.Call call) {
             Type result = call.type();
             if (result != Type.INT && result != Type.DECIMAL) {
                 // the checker admits these two and nothing else; anything here is this compiler
@@ -221,16 +222,16 @@ final class Intrinsics {
 
     // --- the registry ---
 
-    private static final Map<String, Emit> TABLE = buildTable();
+    private static final Map<Kernel, Emit> TABLE = buildTable();
 
-    /** Every kernel key this table emits. A key here with no declaration naming it is a kernel the
-     *  library ships and no signature describes, which is what {@code BUILTINS} used to be. */
-    static Set<String> keys() {
+    /** Every kernel this table emits. One here with no declaration naming it is a kernel the library
+     *  ships and no signature describes, which is what {@code BUILTINS} used to be. */
+    static Set<Kernel> kernels() {
         return TABLE.keySet();
     }
 
-    /** How each key is emitted — read by the test that holds the descriptor invariant. */
-    static Map<String, Emit> emitters() {
+    /** How each kernel is emitted — read by the test that holds the descriptor invariant. */
+    static Map<Kernel, Emit> emitters() {
         return Map.copyOf(TABLE);
     }
 
@@ -262,155 +263,155 @@ final class Intrinsics {
         return MethodTypeDesc.of(ret, params);
     }
 
-    private static Map<String, Emit> buildTable() {
+    private static Map<Kernel, Emit> buildTable() {
         ClassDesc bool = ConstantDescs.CD_boolean;
         ClassDesc lng = ConstantDescs.CD_long;
-        Map<String, Emit> t = new java.util.LinkedHashMap<>();
+        Map<Kernel, Emit> t = new java.util.EnumMap<>(Kernel.class);
 
         // String — JDK-native instance methods (explicit descriptor); receiver is the last Souther arg.
-        t.put("string.toInt", rtDeclared(CD_Strings, "toInt", order(0)));
-        t.put("string.toDecimal", rtDeclared(CD_Strings, "toDecimal", order(0)));
-        t.put("string.length", rt(CD_Strings, "length", order(0), ts -> Type.INT));
-        t.put("string.trim", jdk(CD_String, "trim", mtd(CD_String), order(0), Type.STRING));
-        t.put("string.lowercase", jdk(CD_String, "toLowerCase", mtd(CD_String), order(0), Type.STRING));
-        t.put("string.uppercase", jdk(CD_String, "toUpperCase", mtd(CD_String), order(0), Type.STRING));
-        t.put("string.contains", jdk(CD_String, "contains", mtd(bool, CD_CharSequence), order(1, 0), Type.BOOL));
-        t.put("string.startsWith", jdk(CD_String, "startsWith", mtd(bool, CD_String), order(1, 0), Type.BOOL));
-        t.put("string.endsWith", jdk(CD_String, "endsWith", mtd(bool, CD_String), order(1, 0), Type.BOOL));
-        t.put("string.append", jdk(CD_String, "concat", mtd(CD_String, CD_String), order(0, 1), Type.STRING));
+        t.put(Kernel.STRING_TO_INT, rtDeclared(CD_Strings, "toInt", order(0)));
+        t.put(Kernel.STRING_TO_DECIMAL, rtDeclared(CD_Strings, "toDecimal", order(0)));
+        t.put(Kernel.STRING_LENGTH, rt(CD_Strings, "length", order(0), ts -> Type.INT));
+        t.put(Kernel.STRING_TRIM, jdk(CD_String, "trim", mtd(CD_String), order(0), Type.STRING));
+        t.put(Kernel.STRING_LOWERCASE, jdk(CD_String, "toLowerCase", mtd(CD_String), order(0), Type.STRING));
+        t.put(Kernel.STRING_UPPERCASE, jdk(CD_String, "toUpperCase", mtd(CD_String), order(0), Type.STRING));
+        t.put(Kernel.STRING_CONTAINS, jdk(CD_String, "contains", mtd(bool, CD_CharSequence), order(1, 0), Type.BOOL));
+        t.put(Kernel.STRING_STARTS_WITH, jdk(CD_String, "startsWith", mtd(bool, CD_String), order(1, 0), Type.BOOL));
+        t.put(Kernel.STRING_ENDS_WITH, jdk(CD_String, "endsWith", mtd(bool, CD_String), order(1, 0), Type.BOOL));
+        t.put(Kernel.STRING_APPEND, jdk(CD_String, "concat", mtd(CD_String, CD_String), order(0, 1), Type.STRING));
         // String — Strings runtime statics (descriptor derived).
         // `slice` left the JDK's `substring` when the language settled on code points: the JDK method
         // indexes UTF-16 units, so the conversion — and the abort for an index the string has not
         // got — lives in the runtime rather than in a descriptor here.
-        t.put("string.slice", rt(CD_Strings, "slice", order(2, 0, 1), ts -> Type.STRING));
-        t.put("string.split", rt(CD_Strings, "split", order(1, 0), ts -> Type.list(Type.STRING)));
-        t.put("string.join", rt(CD_Strings, "join", order(1, 0), ts -> Type.STRING));
-        t.put("string.replace", rt(CD_Strings, "replace", order(2, 0, 1), ts -> Type.STRING));
-        t.put("string.words", rt(CD_Strings, "words", order(0), ts -> Type.list(Type.STRING)));
-        t.put("string.matches", rt(CD_Strings, "matches", order(1, 0), ts -> Type.BOOL));
-        t.put("string.characters", rt(CD_Strings, "characters", order(0), ts -> Type.list(Type.STRING)));
-        t.put("string.codePoints", rt(CD_Strings, "codePoints", order(0), ts -> Type.list(Type.INT)));
-        t.put("string.fromInt", rt(CD_Strings, "fromInt", order(0), ts -> Type.STRING));
-        t.put("string.concat", rt(CD_Strings, "concat", order(0), ts -> Type.STRING));
-        t.put("string.reverse", rt(CD_Strings, "reverse", order(0), ts -> Type.STRING));
-        t.put("string.repeat", rt(CD_Strings, "repeat", order(1, 0), ts -> Type.STRING));
-        t.put("string.lines", rt(CD_Strings, "lines", order(0), ts -> Type.list(Type.STRING)));
-        t.put("string.padLeft", rt(CD_Strings, "padLeft", order(2, 0, 1), ts -> Type.STRING));
-        t.put("string.padRight", rt(CD_Strings, "padRight", order(2, 0, 1), ts -> Type.STRING));
-        t.put("string.fromDecimal", rt(CD_Strings, "fromDecimal", order(0), ts -> Type.STRING));
+        t.put(Kernel.STRING_SLICE, rt(CD_Strings, "slice", order(2, 0, 1), ts -> Type.STRING));
+        t.put(Kernel.STRING_SPLIT, rt(CD_Strings, "split", order(1, 0), ts -> Type.list(Type.STRING)));
+        t.put(Kernel.STRING_JOIN, rt(CD_Strings, "join", order(1, 0), ts -> Type.STRING));
+        t.put(Kernel.STRING_REPLACE, rt(CD_Strings, "replace", order(2, 0, 1), ts -> Type.STRING));
+        t.put(Kernel.STRING_WORDS, rt(CD_Strings, "words", order(0), ts -> Type.list(Type.STRING)));
+        t.put(Kernel.STRING_MATCHES, rt(CD_Strings, "matches", order(1, 0), ts -> Type.BOOL));
+        t.put(Kernel.STRING_CHARACTERS, rt(CD_Strings, "characters", order(0), ts -> Type.list(Type.STRING)));
+        t.put(Kernel.STRING_CODE_POINTS, rt(CD_Strings, "codePoints", order(0), ts -> Type.list(Type.INT)));
+        t.put(Kernel.STRING_FROM_INT, rt(CD_Strings, "fromInt", order(0), ts -> Type.STRING));
+        t.put(Kernel.STRING_CONCAT, rt(CD_Strings, "concat", order(0), ts -> Type.STRING));
+        t.put(Kernel.STRING_REVERSE, rt(CD_Strings, "reverse", order(0), ts -> Type.STRING));
+        t.put(Kernel.STRING_REPEAT, rt(CD_Strings, "repeat", order(1, 0), ts -> Type.STRING));
+        t.put(Kernel.STRING_LINES, rt(CD_Strings, "lines", order(0), ts -> Type.list(Type.STRING)));
+        t.put(Kernel.STRING_PAD_LEFT, rt(CD_Strings, "padLeft", order(2, 0, 1), ts -> Type.STRING));
+        t.put(Kernel.STRING_PAD_RIGHT, rt(CD_Strings, "padRight", order(2, 0, 1), ts -> Type.STRING));
+        t.put(Kernel.STRING_FROM_DECIMAL, rt(CD_Strings, "fromDecimal", order(0), ts -> Type.STRING));
 
-        t.put("decimal.toInt", new DeclaredStatic(CD_DecimalMath, "toInt"));
-        t.put("decimal.round", new DeclaredStatic(CD_DecimalMath, "round"));
+        t.put(Kernel.DECIMAL_TO_INT, new DeclaredStatic(CD_DecimalMath, "toInt"));
+        t.put(Kernel.DECIMAL_ROUND, new DeclaredStatic(CD_DecimalMath, "round"));
 
         // List
-        t.put("list.sortBy", new TakesAFunction(CD_Lists, "sortBy", 1,
+        t.put(Kernel.LIST_SORT_BY, new TakesAFunction(CD_Lists, "sortBy", 1,
                 held -> List.of(((Type.ListOf) held).element()),
                 ts -> ts.get(1)));
-        t.put("list.find", new TakesAFunction(CD_Lists, "find", 1,
+        t.put(Kernel.LIST_FIND, new TakesAFunction(CD_Lists, "find", 1,
                 held -> List.of(((Type.ListOf) held).element()),
                 ts -> Type.option(((Type.ListOf) ts.get(1)).element())));
-        t.put("option.map", new TakesAFunction(CD_Options, "map", 1,
+        t.put(Kernel.OPTION_MAP, new TakesAFunction(CD_Options, "map", 1,
                 held -> List.of(((Type.OptionOf) held).element()),
                 ts -> Type.option(((Type.FnOf) ts.get(0)).result())));
-        t.put("list.max", rt(CD_Lists, "max", order(0), ts -> Type.option(listOf(ts, 0).element())));
-        t.put("list.min", rt(CD_Lists, "min", order(0), ts -> Type.option(listOf(ts, 0).element())));
-        t.put("list.length", rt(CD_Lists, "length", order(0), ts -> Type.INT));
-        t.put("list.get", rt(CD_Lists, "get", order(1, 0), ts -> Type.option(listOf(ts, 1).element())));
-        t.put("list.sort", rt(CD_Lists, "sort", order(0), ts -> ts.get(0)));
-        t.put("list.reverse", rt(CD_Lists, "reverse", order(0), ts -> ts.get(0)));
-        t.put("list.rangeInclusive", rt(CD_Lists, "rangeInclusive", order(0, 1), ts -> Type.list(Type.INT)));
-        t.put("list.sum", new NumericFold("sumInt", "sumDecimal"));
-        t.put("list.product", new NumericFold("productInt", "productDecimal"));
+        t.put(Kernel.LIST_MAX, rt(CD_Lists, "max", order(0), ts -> Type.option(listOf(ts, 0).element())));
+        t.put(Kernel.LIST_MIN, rt(CD_Lists, "min", order(0), ts -> Type.option(listOf(ts, 0).element())));
+        t.put(Kernel.LIST_LENGTH, rt(CD_Lists, "length", order(0), ts -> Type.INT));
+        t.put(Kernel.LIST_GET, rt(CD_Lists, "get", order(1, 0), ts -> Type.option(listOf(ts, 1).element())));
+        t.put(Kernel.LIST_SORT, rt(CD_Lists, "sort", order(0), ts -> ts.get(0)));
+        t.put(Kernel.LIST_REVERSE, rt(CD_Lists, "reverse", order(0), ts -> ts.get(0)));
+        t.put(Kernel.LIST_RANGE_INCLUSIVE, rt(CD_Lists, "rangeInclusive", order(0, 1), ts -> Type.list(Type.INT)));
+        t.put(Kernel.LIST_SUM, new NumericFold("sumInt", "sumDecimal"));
+        t.put(Kernel.LIST_PRODUCT, new NumericFold("productInt", "productDecimal"));
 
         // Map — keys/values are erased to Object; the map argument stays a raw Map.
-        t.put("map.get", rtErased(CD_Maps, "get", order(1, 0), Set.of(0),
+        t.put(Kernel.MAP_GET, rtErased(CD_Maps, "get", order(1, 0), Set.of(0),
                 ts -> Type.option(mapOf(ts, 1).value())));
-        t.put("map.empty", rt(CD_Maps, "empty", order(), ts -> Type.map(Type.NOTHING, Type.NOTHING)));
-        t.put("map.containsKey", rtErased(CD_Maps, "containsKey", order(1, 0), Set.of(0), ts -> Type.BOOL));
-        t.put("map.keys", rt(CD_Maps, "keys", order(0), ts -> Type.list(mapOf(ts, 0).key())));
-        t.put("map.values", rt(CD_Maps, "values", order(0), ts -> Type.list(mapOf(ts, 0).value())));
-        t.put("map.singleton", rtErased(CD_Maps, "singleton", order(0, 1), Set.of(0, 1),
+        t.put(Kernel.MAP_EMPTY, rt(CD_Maps, "empty", order(), ts -> Type.map(Type.NOTHING, Type.NOTHING)));
+        t.put(Kernel.MAP_CONTAINS_KEY, rtErased(CD_Maps, "containsKey", order(1, 0), Set.of(0), ts -> Type.BOOL));
+        t.put(Kernel.MAP_KEYS, rt(CD_Maps, "keys", order(0), ts -> Type.list(mapOf(ts, 0).key())));
+        t.put(Kernel.MAP_VALUES, rt(CD_Maps, "values", order(0), ts -> Type.list(mapOf(ts, 0).value())));
+        t.put(Kernel.MAP_SINGLETON, rtErased(CD_Maps, "singleton", order(0, 1), Set.of(0, 1),
                 ts -> Type.map(ts.get(0), ts.get(1))));
-        t.put("map.insert", rtErased(CD_Maps, "insert", order(0, 1, 2), Set.of(0, 1),
+        t.put(Kernel.MAP_INSERT, rtErased(CD_Maps, "insert", order(0, 1, 2), Set.of(0, 1),
                 Intrinsics::mapInsertResult));
-        t.put("map.remove", rtErased(CD_Maps, "remove", order(0, 1), Set.of(0), ts -> ts.get(1)));
-        t.put("map.isEmpty", rt(CD_Maps, "isEmpty", order(0), ts -> Type.BOOL));
-        t.put("map.size", rt(CD_Maps, "size", order(0), ts -> Type.INT));
-        t.put("map.toList", rt(CD_Maps, "toList", order(0), ts -> {
+        t.put(Kernel.MAP_REMOVE, rtErased(CD_Maps, "remove", order(0, 1), Set.of(0), ts -> ts.get(1)));
+        t.put(Kernel.MAP_IS_EMPTY, rt(CD_Maps, "isEmpty", order(0), ts -> Type.BOOL));
+        t.put(Kernel.MAP_SIZE, rt(CD_Maps, "size", order(0), ts -> Type.INT));
+        t.put(Kernel.MAP_TO_LIST, rt(CD_Maps, "toList", order(0), ts -> {
             Type.MapOf m = mapOf(ts, 0);
             return Type.list(Type.tuple(List.of(m.key(), m.value())));
         }));
-        t.put("map.fromList", rt(CD_Maps, "fromList", order(0), Intrinsics::mapFromListResult));
+        t.put(Kernel.MAP_FROM_LIST, rt(CD_Maps, "fromList", order(0), Intrinsics::mapFromListResult));
 
         // Set — the element is erased to Object; a set argument stays a raw Set.
-        t.put("set.empty", rt(CD_Sets, "empty", order(), ts -> Type.set(Type.NOTHING)));
-        t.put("set.singleton", rtErased(CD_Sets, "singleton", order(0), Set.of(0), ts -> Type.set(ts.get(0))));
-        t.put("set.insert", rtErased(CD_Sets, "insert", order(0, 1), Set.of(0), Intrinsics::setInsertResult));
-        t.put("set.remove", rtErased(CD_Sets, "remove", order(0, 1), Set.of(0), ts -> ts.get(1)));
-        t.put("set.contains", rtErased(CD_Sets, "contains", order(0, 1), Set.of(0), ts -> Type.BOOL));
-        t.put("set.union", rt(CD_Sets, "union", order(0, 1), ts -> setUnionType(ts.get(0), ts.get(1))));
-        t.put("set.intersection", rt(CD_Sets, "intersection", order(0, 1), ts -> ts.get(0)));
-        t.put("set.difference", rt(CD_Sets, "difference", order(0, 1), ts -> ts.get(0)));
-        t.put("set.isEmpty", rt(CD_Sets, "isEmpty", order(0), ts -> Type.BOOL));
-        t.put("set.size", rt(CD_Sets, "size", order(0), ts -> Type.INT));
-        t.put("set.toList", rt(CD_Sets, "toList", order(0), ts -> Type.list(setOf(ts, 0).element())));
-        t.put("set.fromList", rt(CD_Sets, "fromList", order(0), ts -> Type.set(listOf(ts, 0).element())));
+        t.put(Kernel.SET_EMPTY, rt(CD_Sets, "empty", order(), ts -> Type.set(Type.NOTHING)));
+        t.put(Kernel.SET_SINGLETON, rtErased(CD_Sets, "singleton", order(0), Set.of(0), ts -> Type.set(ts.get(0))));
+        t.put(Kernel.SET_INSERT, rtErased(CD_Sets, "insert", order(0, 1), Set.of(0), Intrinsics::setInsertResult));
+        t.put(Kernel.SET_REMOVE, rtErased(CD_Sets, "remove", order(0, 1), Set.of(0), ts -> ts.get(1)));
+        t.put(Kernel.SET_CONTAINS, rtErased(CD_Sets, "contains", order(0, 1), Set.of(0), ts -> Type.BOOL));
+        t.put(Kernel.SET_UNION, rt(CD_Sets, "union", order(0, 1), ts -> setUnionType(ts.get(0), ts.get(1))));
+        t.put(Kernel.SET_INTERSECTION, rt(CD_Sets, "intersection", order(0, 1), ts -> ts.get(0)));
+        t.put(Kernel.SET_DIFFERENCE, rt(CD_Sets, "difference", order(0, 1), ts -> ts.get(0)));
+        t.put(Kernel.SET_IS_EMPTY, rt(CD_Sets, "isEmpty", order(0), ts -> Type.BOOL));
+        t.put(Kernel.SET_SIZE, rt(CD_Sets, "size", order(0), ts -> Type.INT));
+        t.put(Kernel.SET_TO_LIST, rt(CD_Sets, "toList", order(0), ts -> Type.list(setOf(ts, 0).element())));
+        t.put(Kernel.SET_FROM_LIST, rt(CD_Sets, "fromList", order(0), ts -> Type.set(listOf(ts, 0).element())));
 
         // Date / DateTime — the temporal is the receiver (emitted first); the count is a long.
         // Through the runtime rather than straight to `java.time`: a shift off the end of the range
         // aborts saying what it was doing, instead of the JVM's own exception reaching the boundary
         // and naming a class the language has no type for.
-        t.put("date.addDays", rt(CD_Temporals, "addDays", order(1, 0), ts -> Type.DATE));
-        t.put("date.addMonths", rt(CD_Temporals, "addMonths", order(1, 0), ts -> Type.DATE));
-        t.put("date.addYears", rt(CD_Temporals, "addYears", order(1, 0), ts -> Type.DATE));
-        t.put("date.daysBetween", rt(CD_Temporals, "daysBetween", order(0, 1), ts -> Type.INT));
-        t.put("date.year", rt(CD_Temporals, "year", order(0), ts -> Type.INT));
-        t.put("date.month", rt(CD_Temporals, "month", order(0), ts -> Type.INT));
-        t.put("date.day", rt(CD_Temporals, "day", order(0), ts -> Type.INT));
+        t.put(Kernel.DATE_ADD_DAYS, rt(CD_Temporals, "addDays", order(1, 0), ts -> Type.DATE));
+        t.put(Kernel.DATE_ADD_MONTHS, rt(CD_Temporals, "addMonths", order(1, 0), ts -> Type.DATE));
+        t.put(Kernel.DATE_ADD_YEARS, rt(CD_Temporals, "addYears", order(1, 0), ts -> Type.DATE));
+        t.put(Kernel.DATE_DAYS_BETWEEN, rt(CD_Temporals, "daysBetween", order(0, 1), ts -> Type.INT));
+        t.put(Kernel.DATE_YEAR, rt(CD_Temporals, "year", order(0), ts -> Type.INT));
+        t.put(Kernel.DATE_MONTH, rt(CD_Temporals, "month", order(0), ts -> Type.INT));
+        t.put(Kernel.DATE_DAY, rt(CD_Temporals, "day", order(0), ts -> Type.INT));
         // Building from parts: partial, so the declaration states `Date | NotADate` and the emitter
         // takes the result from it rather than working one out.
-        t.put("date.fromParts", rtDeclared(CD_Temporals, "fromDateParts", order(0, 1, 2)));
-        t.put("time.fromParts", rtDeclared(CD_Temporals, "fromTimeParts", order(0, 1, 2)));
-        t.put("time.hour", rt(CD_Temporals, "hour", order(0), ts -> Type.INT));
-        t.put("time.minute", rt(CD_Temporals, "minute", order(0), ts -> Type.INT));
-        t.put("time.second", rt(CD_Temporals, "second", order(0), ts -> Type.INT));
-        t.put("datetime.addMinutes", rt(CD_Temporals, "addMinutes", order(1, 0), ts -> Type.DATETIME));
-        t.put("datetime.addHours", rt(CD_Temporals, "addHours", order(1, 0), ts -> Type.DATETIME));
+        t.put(Kernel.DATE_FROM_PARTS, rtDeclared(CD_Temporals, "fromDateParts", order(0, 1, 2)));
+        t.put(Kernel.TIME_FROM_PARTS, rtDeclared(CD_Temporals, "fromTimeParts", order(0, 1, 2)));
+        t.put(Kernel.TIME_HOUR, rt(CD_Temporals, "hour", order(0), ts -> Type.INT));
+        t.put(Kernel.TIME_MINUTE, rt(CD_Temporals, "minute", order(0), ts -> Type.INT));
+        t.put(Kernel.TIME_SECOND, rt(CD_Temporals, "second", order(0), ts -> Type.INT));
+        t.put(Kernel.DATETIME_ADD_MINUTES, rt(CD_Temporals, "addMinutes", order(1, 0), ts -> Type.DATETIME));
+        t.put(Kernel.DATETIME_ADD_HOURS, rt(CD_Temporals, "addHours", order(1, 0), ts -> Type.DATETIME));
         // `addDateTimeDays` rather than a second `addDays`: the runtime is Java, which would take the
-        // two as overloads and leave the emitter's descriptor deciding which, where the key already
+        // two as overloads and leave the emitter's descriptor deciding which, where the kernel already
         // says which temporal it is for.
-        t.put("datetime.addDays", rt(CD_Temporals, "addDateTimeDays", order(1, 0), ts -> Type.DATETIME));
-        t.put("datetime.minutesBetween", rt(CD_Temporals, "minutesBetween", order(0, 1), ts -> Type.INT));
-        t.put("datetime.toDate",
+        t.put(Kernel.DATETIME_ADD_DAYS, rt(CD_Temporals, "addDateTimeDays", order(1, 0), ts -> Type.DATETIME));
+        t.put(Kernel.DATETIME_MINUTES_BETWEEN, rt(CD_Temporals, "minutesBetween", order(0, 1), ts -> Type.INT));
+        t.put(Kernel.DATETIME_TO_DATE,
                 jdk(CD_LocalDateTime, "toLocalDate", mtd(CD_LocalDate), order(0), Type.DATE));
-        t.put("datetime.toTime",
+        t.put(Kernel.DATETIME_TO_TIME,
                 jdk(CD_LocalDateTime, "toLocalTime", mtd(CD_LocalTime), order(0), Type.TIME));
         // A date and a time of day are both settled values, so joining them cannot fail: total, with
         // the date as the receiver of `LocalDate.atTime`.
-        t.put("datetime.fromDateAndTime",
+        t.put(Kernel.DATETIME_FROM_DATE_AND_TIME,
                 jdk(CD_LocalDate, "atTime", mtd(CD_LocalDateTime, CD_LocalTime), order(0, 1), Type.DATETIME));
 
         // Int — IntMath statics. add/subtract/multiply share the overflow-aborting kernel with the
         // `+ - *` operators; modBy aborts on a zero divisor; compare returns -1/0/1.
-        t.put("int.add", rt(CD_IntMath, "addExact", order(0, 1), ts -> Type.INT));
-        t.put("int.subtract", rt(CD_IntMath, "subtractExact", order(0, 1), ts -> Type.INT));
-        t.put("int.multiply", rt(CD_IntMath, "multiplyExact", order(0, 1), ts -> Type.INT));
-        t.put("int.compare", rt(CD_IntMath, "compare", order(0, 1), ts -> Type.INT));
-        t.put("int.floorMod", rt(CD_IntMath, "floorMod", order(0, 1), ts -> Type.INT));
+        t.put(Kernel.INT_ADD, rt(CD_IntMath, "addExact", order(0, 1), ts -> Type.INT));
+        t.put(Kernel.INT_SUBTRACT, rt(CD_IntMath, "subtractExact", order(0, 1), ts -> Type.INT));
+        t.put(Kernel.INT_MULTIPLY, rt(CD_IntMath, "multiplyExact", order(0, 1), ts -> Type.INT));
+        t.put(Kernel.INT_COMPARE, rt(CD_IntMath, "compare", order(0, 1), ts -> Type.INT));
+        t.put(Kernel.INT_FLOOR_MOD, rt(CD_IntMath, "floorMod", order(0, 1), ts -> Type.INT));
 
         // Decimal — every one of them a DecimalMath static, read off its declaration. What a
         // BigDecimal method does is not what a Souther operation means: each of these is partial at
         // the ends of the scale range, and the abort that reports it belongs to the operation rather
         // than to whoever emitted the call (ADR-0112). One emitter for the whole module, so a
         // Decimal operation added later has one place to be written and no second shape to pick.
-        t.put("decimal.add", new DeclaredStatic(CD_DecimalMath, "add"));
-        t.put("decimal.subtract", new DeclaredStatic(CD_DecimalMath, "subtract"));
-        t.put("decimal.multiply", new DeclaredStatic(CD_DecimalMath, "multiply"));
-        t.put("decimal.divide", new DeclaredStatic(CD_DecimalMath, "divide"));
-        t.put("decimal.compare", new DeclaredStatic(CD_DecimalMath, "compare"));
-        t.put("decimal.fromInt", new DeclaredStatic(CD_DecimalMath, "fromInt"));
+        t.put(Kernel.DECIMAL_ADD, new DeclaredStatic(CD_DecimalMath, "add"));
+        t.put(Kernel.DECIMAL_SUBTRACT, new DeclaredStatic(CD_DecimalMath, "subtract"));
+        t.put(Kernel.DECIMAL_MULTIPLY, new DeclaredStatic(CD_DecimalMath, "multiply"));
+        t.put(Kernel.DECIMAL_DIVIDE, new DeclaredStatic(CD_DecimalMath, "divide"));
+        t.put(Kernel.DECIMAL_COMPARE, new DeclaredStatic(CD_DecimalMath, "compare"));
+        t.put(Kernel.DECIMAL_FROM_INT, new DeclaredStatic(CD_DecimalMath, "fromInt"));
 
-        return Map.copyOf(t);
+        return java.util.Collections.unmodifiableMap(t);
     }
 
     // --- result-type formulas for the intrinsics whose result is learned from argument types ---
