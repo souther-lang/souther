@@ -1166,10 +1166,8 @@ final class BodyGen {
                         break;
                     }
                     code.invokestatic(cd(ordering), ORDERING_METHOD, MTD_ordering, true);
-                    genExpr(call.args().get(0));
-                    code.invokestatic(CD_Lists, RUNTIME_ORDERED.get(kernel),
-                            MethodTypeDesc.of(kernel == Kernel.LIST_SORT ? CD_List : CD_Option,
-                                    CD_Comparator, CD_List));
+                    Intrinsics.emitOrderedByComparator(this, kernel,
+                            genExpr(call.args().get(0)));
                     return;
                 }
                 // `sortBy` orders by what its key answers, not by what the list holds, so its
@@ -1199,12 +1197,6 @@ final class BodyGen {
             }
             Intrinsics.emit(this, kernel, call);
         }
-
-        /** What the runtime calls each of the ordered family when it is handed a comparator. The
-         *  runtime's own name for the operation, which is the JVM ABI's to say — spelled out here
-         *  rather than taken off the library's alias, which is what a module imported it under. */
-        private static final Map<Kernel, String> RUNTIME_ORDERED = Map.of(
-                Kernel.LIST_SORT, "sort", Kernel.LIST_MAX, "max", Kernel.LIST_MIN, "min");
 
         private void call(Core.Call call, Type expected) {
             // Which kernel a call reaches is on the call, so what is emitted for one is asked of

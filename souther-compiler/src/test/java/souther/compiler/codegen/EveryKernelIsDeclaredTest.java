@@ -2,7 +2,6 @@ package souther.compiler.codegen;
 
 import souther.compiler.DefaultStdlib;
 import souther.compiler.core.Kernel;
-import souther.compiler.stdlib.Stdlib;
 
 import org.junit.jupiter.api.Test;
 
@@ -79,14 +78,6 @@ class EveryKernelIsDeclaredTest {
 
     /** The kernels the library's declarations name. */
     private static Set<Kernel> declared() {
-        Stdlib library = DefaultStdlib.get();
-        Set<Kernel> declared = EnumSet.noneOf(Kernel.class);
-        for (String qualified : library.entries().keySet()) {
-            Stdlib.Intrinsic kernel = library.intrinsicOf(qualified);
-            if (kernel != null) {
-                declared.add(kernel.kernel());
-            }
-        }
-        return declared;
+        return DefaultStdlib.get().intrinsics().keySet();
     }
 }

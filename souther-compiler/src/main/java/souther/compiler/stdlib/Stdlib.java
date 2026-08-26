@@ -31,7 +31,7 @@ import java.util.Set;
  * reader that wants to know what the library declares takes this and nothing else.
  *
  * <p>Neutral about how any of it is implemented. A declaration says what an operation means in
- * Souther — its parameters, what it answers, the kernel key behind it where there is one. What a
+ * Souther — its parameters, what it answers, the kernel behind it where there is one. What a
  * kernel is emitted as, and what class or module a language-declared type is represented by, is the
  * backend's and is not stated here: a second backend answers those differently for the same
  * declarations, and a fact recorded here that only one of them could honour would be a fact about
@@ -221,6 +221,13 @@ public final class Stdlib {
     /** What the library declares for {@code kernel}, or null where no declaration names it. */
     public Intrinsic intrinsic(Kernel kernel) {
         return intrinsics.get(kernel);
+    }
+
+    /** Every kernel the library declares, with what it declares for each. Which kernels those are is
+     *  the library's own answer: a reader that walked the names asking after each would be building
+     *  this again, and would be right only about the names it thought to walk. */
+    public Map<Kernel, Intrinsic> intrinsics() {
+        return intrinsics;
     }
 
     /**

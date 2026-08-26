@@ -230,6 +230,27 @@ final class Intrinsics {
         return TABLE.keySet();
     }
 
+    /**
+     * The ordered family over an element whose order lives on its sum: the runtime call this table
+     * already holds for {@code kernel}, taking a comparator ahead of the container. The comparator
+     * and the container are on the stack, and {@code container} is the container's type as it was
+     * emitted.
+     *
+     * <p>Here rather than in the emitter that pushes the comparator, because which runtime method
+     * answers a kernel and what it answers with are this table's to say. Written out there, the
+     * class, the method and the result would each be stated a second time, and a row changed here
+     * would leave the second statement behind.
+     */
+    static void emitOrderedByComparator(BodyGen g, Kernel kernel, Type container) {
+        if (!(TABLE.get(kernel) instanceof RuntimeStatic row) || row.result() == null) {
+            throw new IllegalStateException("`" + kernel.key()
+                    + "` is not emitted as a runtime call that works its result out");
+        }
+        g.emitInvokeStatic(row.owner(), row.method(),
+                MethodTypeDesc.of(boundaryDesc(row.result().apply(List.of(container))),
+                        CD_Comparator, boundaryDesc(container)));
+    }
+
     /** How each kernel is emitted — read by the test that holds the descriptor invariant. */
     static Map<Kernel, Emit> emitters() {
         return Map.copyOf(TABLE);
@@ -411,6 +432,9 @@ final class Intrinsics {
         t.put(Kernel.DECIMAL_COMPARE, new DeclaredStatic(CD_DecimalMath, "compare"));
         t.put(Kernel.DECIMAL_FROM_INT, new DeclaredStatic(CD_DecimalMath, "fromInt"));
 
+        // Not a copy: the map is a local nothing else holds, and read back through an EnumMap it
+        // answers in the order the kernels are declared in rather than in whatever order a copy
+        // happens to hash them into.
         return java.util.Collections.unmodifiableMap(t);
     }
 

@@ -448,16 +448,21 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
                 named(program.module("demo"), "tidy").implementation()).body();
 
         Set<Kernel> reached = new LinkedHashSet<>();
+        Set<String> named = new LinkedHashSet<>();
         for (Core node : everyNodeOf(body)) {
             if (node instanceof Core.Call call
                     && call.fn() instanceof Core.Reached.OfKernel kernel) {
                 reached.add(kernel.kernel());
-                assertNotNull(kernel.denotes(), "and what the name denotes: " + kernel.rendered());
+                named.add(kernel.rendered());
+                assertInstanceOf(ValueName.Stdlib.class, kernel.denotes(),
+                        "what " + kernel.rendered() + " denotes");
             }
         }
 
         assertEquals(Set.of(Kernel.STRING_TRIM, Kernel.LIST_LENGTH), reached,
                 "the kernels this body reaches, as the operations they are");
+        assertEquals(Set.of("String.trim", "List.length"), named,
+                "and the same nodes still say what name the module wrote");
     }
 
     /** Every helper a call in {@code body} reaches, walking every node of it. */

@@ -710,6 +710,20 @@ final class DischargeRules {
         return params.get(ROUNDING_POLICY_ARGUMENT);
     }
 
+    /** The library operation {@code operation} names. Every fact is declared of one, so the name
+     *  says which library and which operation rather than a spelling a reader would have to take
+     *  apart — and a reader that has held a name to the library holds this rather than narrowing the
+     *  name a second time.
+     *
+     *  @throws IllegalStateException where the name is no library operation. */
+    static ValueName.Stdlib theLibraryOperation(ValueName operation) {
+        if (!(operation instanceof ValueName.Stdlib library)) {
+            throw new IllegalStateException("a fact is declared of " + operation
+                    + ", which is not a library operation");
+        }
+        return library;
+    }
+
     /**
      * The library's declaration of {@code operation}, or a build that does not start.
      *
@@ -724,12 +738,7 @@ final class DischargeRules {
      * lost the same way, silently, on the day its arm was written empty.
      */
     static Stdlib.Entry holdTheOperationToTheLibrary(Stdlib stdlib, ValueName operation) {
-        // Every fact is about an operation the library declares, so the operation says which
-        // library and which name rather than a spelling this would have to take apart.
-        if (!(operation instanceof ValueName.Stdlib library)) {
-            throw new IllegalStateException("a fact is declared of " + operation
-                    + ", which is not a library operation");
-        }
+        ValueName.Stdlib library = theLibraryOperation(operation);
         Stdlib.Entry entry = stdlib.entry(library.qualified());
         if (entry == null) {
             throw new IllegalStateException("a fact is declared of " + library.qualified()
