@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -157,6 +158,81 @@ class AClauseAboveASumIsReadAtTheFieldItIsAboutTest {
                         || read.reach().crossings().stream()
                                 .allMatch(each -> each.at().insideASequence()),
                 "and any crossing under it is the sum's own, not the list's");
+    }
+
+    /**
+     * A clause of the value above that this reading did not take in leaves the shared field short.
+     *
+     * <p>What a position is short of is asked of every reading that reaches it, and the value a case
+     * was narrowed out of is one of them. Asked of the case alone, a field the value above wrote an
+     * unread clause about came back as one every rule of which had been read.
+     */
+    @Test
+    void aClauseAboveThisReadingDidNotTakeInLeavesTheFieldShort() {
+        String model = """
+                module g
+
+                data Paging = { limit: Int }
+                data A = { ...Paging, x: Int }
+                data B = { ...Paging, y: Int }
+                data Q = A | B
+
+                data Floor = Int invariant atLeastOne = value >= 1
+
+                data Holder = { q: HELD, floor: Floor }
+                    invariant loose = q.limit >= floor + 1
+                    invariant tight = q.limit >= floor + 5
+
+                data Ok
+
+                behavior read : (h: Holder) -> Ok
+                """;
+        InputDomain sum = reading(model.replace("HELD", "Q"));
+
+        for (String each : List.of("A", "B")) {
+            Position at = sum.at(TermPath.of("h").then("q")
+                    .refine(caseNamed(sum, each)).then("limit"));
+            assertFalse(at.rulesLeftUnread().isEmpty(),
+                    () -> "the clause of `Holder` about this field went unread, and the field says "
+                            + "so under case " + each);
+        }
+        assertFalse(reading(model.replace("HELD", "A"))
+                        .at(TermPath.of("h").then("q").then("limit")).rulesLeftUnread().isEmpty(),
+                "which is what the same clause leaves where no sum is in the way");
+    }
+
+    /**
+     * A question the value above raised about the shared field is raised at each case.
+     *
+     * <p>A row is written under one case, so a question about what may stand at that field is a
+     * question at every position the field stands at. Asked of the case's own rules alone, the
+     * question the value above raised was one nobody was waiting on.
+     */
+    @Test
+    void aQuestionRaisedAboveIsRaisedAtEachCase() {
+        InputDomain read = reading("""
+                module g
+
+                data Code = String invariant shaped = String.length(value) >= 2
+                data Paging = { code: Code }
+                data A = { ...Paging, x: Int }
+                data B = { ...Paging, y: Int }
+                data Q = A | B
+
+                data Holder = { q: Q }
+                    invariant notBlank = q.code /= Code("zz")
+
+                data Ok
+
+                behavior read : (h: Holder) -> Ok
+                """);
+
+        for (String each : List.of("A", "B")) {
+            Position at = read.at(TermPath.of("h").then("q")
+                    .refine(caseNamed(read, each)).then("code"));
+            assertEquals(1, at.unansweredQuestions().size(),
+                    () -> "the question `Holder` raised stands at the field under case " + each);
+        }
     }
 
     /** Every position something puts a ceiling on, spelled the way a report names it. */
