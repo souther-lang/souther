@@ -130,8 +130,14 @@ public sealed interface StructuralInspection {
          * <p>{@code why} is the reason this position is left with if nothing else answers for it,
          * not a verdict. A rule a body writes may still draw a line on this same position — a
          * length, a size — and where one does, that is what the position is measured at and this
-         * reason is never reported. What it does not do is let a rule about what is <em>inside</em>
-         * stand in for reaching inside.
+         * continuation no longer stands. What it does not do is let a rule about what is
+         * <em>inside</em> stand in for reaching inside.
+         *
+         * <p><b>The stop it observed outlives that.</b> A position something else answers for is
+         * still a position the walk never went into, and this arm is gone by then — so what a report
+         * says about the walk is written from {@link BlockedDescent}, which is the same observation
+         * kept as one nothing later takes away. Read from here instead, a {@code Map} under a rule
+         * about its size came back with nothing to say the walk had ever stopped (issue #1084).
          */
         record Blocked(BlockReason.AboutThePosition why) implements Continuation {}
     }

@@ -38,18 +38,19 @@ public record ReadingResidue(BlockedDescent blockedDescent,
 
     public ReadingResidue {
         rulesLeftUnread = Collections.unmodifiableSet(new LinkedHashSet<>(rulesLeftUnread));
-        // What the arm says about itself, held to. `FromBlockedDescent` is the one arm whose finding
-        // is somebody else's — the stop is reported as the blocked descent beside it, and this is
-        // folded away — so an arm arriving without the descent it names would fold into a finding
-        // nothing writes, and the stop would go unsaid. The producer proved the two agree
-        // (`InputDomain`); this is where a copy that dropped one of them is caught.
-        if (blockedDescent == null && rulesLeftUnread.stream().anyMatch(
-                each -> each instanceof RulesLeftUnread.Handoff handoff
-                        && handoff.why()
-                                instanceof RulesLeftUnread.HandoffUnread.FromBlockedDescent)) {
-            throw new IllegalArgumentException(
-                    "a handing over left standing by a blocked descent, with no blocked descent: "
-                            + rulesLeftUnread);
+        // What the arms say about themselves, held to — the same agreement the reader that settled
+        // them held, asked the same way ({@link RulesLeftUnread.HandoffUnread#namesABlockedDescent}).
+        // An arm naming a descent this does not carry would fold into a finding nothing writes and
+        // the stop would go unsaid; an arm denying one beside a descent that is reported puts the
+        // stop out twice. Both are a copy that dropped one of the pair, and this is where a copy is
+        // caught.
+        for (RulesLeftUnread each : rulesLeftUnread) {
+            if (each instanceof RulesLeftUnread.Handoff handoff
+                    && handoff.why().namesABlockedDescent() != (blockedDescent != null)) {
+                throw new IllegalArgumentException(
+                        "a handing over and the descent beside it disagree: " + handoff.why()
+                                + " with " + blockedDescent);
+            }
         }
     }
 

@@ -29,7 +29,13 @@ import java.util.Set;
  * then came back short of something reports that shortfall itself, at its own position. The handoff
  * above it is discharged all the same: the rules reached a reader, and saying so twice would report
  * one gap at two positions. What leaves a handoff standing is that no reading was opened at all —
- * a shape this compiler cannot enter, a depth this walk stops at, a value it has already been to.
+ * a shape this compiler cannot enter, or a recipient the descent named and nothing opened.
+ *
+ * <p>A depth this walk stops at is not one of them, though it reads like one. A stop at the depth
+ * leaves the rules under it unread and hands nothing on
+ * ({@code PathEngine.leftBy}), so no handing over is made there and none is left standing — which is
+ * why a record four levels down is reported as a position nothing was read into and not also as one
+ * whose rules nobody took (issue #1084).
  */
 final class RuleHandoffs {
 

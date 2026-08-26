@@ -442,23 +442,24 @@ public final class InputDomain {
             return position;
         }
         ReadPosition read = (ReadPosition) position;
+        BlockedDescent blocked = BlockedDescent.of(read.structure());
         RulesLeftUnread.HandoffUnread why = switch (shortfall) {
-            // Named a recipient for nobody, which for a position the walk went into would be the
-            // descent and the ledger disagreeing about one path — two walks over one model joined
-            // by the spelling of it, and the join is what this refuses to let through. Never a
-            // state of the model: every position that hands its rules on and is entered names the
-            // positions it passes them to.
-            case RuleHandoffs.Shortfall.NothingExpected _ -> {
-                if (BlockedDescent.of(read.structure()) == null) {
-                    throw new IllegalStateException(
-                            "nothing was passed the rules at " + read.path()
-                                    + ", which the walk went into: " + read.structure());
-                }
-                yield new RulesLeftUnread.HandoffUnread.FromBlockedDescent();
-            }
+            case RuleHandoffs.Shortfall.NothingExpected _ ->
+                    new RulesLeftUnread.HandoffUnread.FromBlockedDescent();
             case RuleHandoffs.Shortfall.NotFullyAccepted _ ->
                     new RulesLeftUnread.HandoffUnread.NotFullyAccepted();
         };
+        // The whole agreement and not the half this arm happens to need. Over an owed handing over,
+        // nobody was named as a recipient exactly where the walk could not go in — so a ledger that
+        // named nobody at a position this entered and a ledger that named somebody at a position it
+        // could not enter are both two walks over one model disagreeing about one path, joined by
+        // the spelling of it. Held one way, the second would arrive as an arm nothing folds beside a
+        // descent that is reported, which is #1084's own two entries, reached by a different road.
+        if (why.namesABlockedDescent() != (blocked != null)) {
+            throw new IllegalStateException(
+                    "the ledger and the walk disagree at " + read.path() + ": " + shortfall
+                            + " beside " + read.structure());
+        }
         java.util.Set<RulesLeftUnread> left =
                 new java.util.LinkedHashSet<>(read.rulesLeftUnread());
         left.add(new RulesLeftUnread.Handoff(why));

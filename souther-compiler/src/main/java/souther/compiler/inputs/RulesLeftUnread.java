@@ -46,6 +46,30 @@ public sealed interface RulesLeftUnread {
     sealed interface HandoffUnread {
 
         /**
+         * Whether this is the arm a descent that could not be made leaves behind.
+         *
+         * <p><b>The one place the agreement between the two walks is written.</b> Over an owed
+         * handing over the ledger and the structural reading say the same thing two ways: nobody was
+         * named as a recipient exactly where the walk could not go into the position. That is a
+         * biconditional and not an implication, and written out at each place that needs it, each
+         * would state the half it happened to be constructing — which is the shape of the defect
+         * #1084 was, one stop written from two ends with nothing relating them.
+         *
+         * <p>So both places ask this and compare it against the descent they hold: the reader that
+         * settles the arm ({@code InputDomain}) and the value that carries it afterwards
+         * ({@link souther.compiler.partition.ReadingResidue}). Neither can hold to half of it.
+         *
+         * <p>Exhaustive with no {@code default}: an arm added later says which side of the
+         * agreement it is on, or does not compile.
+         */
+        default boolean namesABlockedDescent() {
+            return switch (this) {
+                case FromBlockedDescent _ -> true;
+                case NotFullyAccepted _ -> false;
+            };
+        }
+
+        /**
          * Nothing was opened under the position, because the walk could not go into it.
          *
          * <p>The one arm with a cause named elsewhere. {@link BlockedDescent} is the same stop said

@@ -3,7 +3,11 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.BlockedDescent;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.RulesLeftUnread;
+import souther.compiler.inputs.TermPath;
+import souther.compiler.types.Type;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
@@ -204,6 +208,110 @@ class AStopThisCompilerMadeIsSaidOnceTest {
                         Set.of(new RulesLeftUnread.Handoff(
                                 new RulesLeftUnread.HandoffUnread.FromBlockedDescent()))),
                 "the arm names a descent this residue does not carry");
+    }
+
+    /**
+     * Every way the two facts can arrive together, and what each comes to.
+     *
+     * <p><b>The relation and not one direction of it.</b> Which findings a residue comes to is a
+     * biconditional between what the ledger recorded and what the walk found, crossed with the one
+     * fold. Asserted a case at a time from whichever side a reader happens to be building, each
+     * assertion holds the half it was written for — which is how one stop came to be written from
+     * two ends with nothing relating them in the first place (issue #1084).
+     *
+     * <p>Built here rather than compiled from sources. Two of the six rows are this compiler
+     * contradicting itself and no model produces them, and a row of the other four needs a position
+     * that both loses a clause of its own and cannot be entered, which no model this compiler
+     * accepts carries either. What is being held is the arithmetic over the arms, and that is what a
+     * synthetic axis is exactly good for.
+     */
+    @Test
+    void whatEachPairOfFactsComesTo() {
+        // The walk could not go in, and the handing over it left standing is that same stop.
+        assertEquals(Set.of(ClosureGap.PositionNotReachedInto.class),
+                gapKindsOf(residue(BLOCKED, fromBlockedDescent())),
+                "the stop, once");
+        // And a clause this reading lost beside it is a finding of its own, at the same path.
+        // The one the issue names: folded on the path, this one goes with the other.
+        assertEquals(Set.of(ClosureGap.PositionNotReachedInto.class,
+                        ClosureGap.RulesNotReached.class),
+                gapKindsOf(residue(BLOCKED,
+                        new RulesLeftUnread.ClauseOfThisReadingWasUnread(),
+                        fromBlockedDescent())),
+                "a clause this reading lost is not the stop, and does not fold into it");
+        // The walk went on and left a recipient with no reading. Nothing else says so.
+        assertEquals(Set.of(ClosureGap.RulesNotReached.class),
+                gapKindsOf(residue(null, notFullyAccepted())),
+                "a recipient nothing opened is its own finding");
+        assertEquals(Set.of(ClosureGap.RulesNotReached.class),
+                gapKindsOf(residue(null, new RulesLeftUnread.ClauseOfThisReadingWasUnread())),
+                "and so is a clause lost where nothing stopped the walk");
+
+        // And the two rows where the ledger and the walk contradict each other. Neither is a state
+        // of a model: over an owed handing over, nobody was named as a recipient exactly where the
+        // walk could not go in. Let through, the second is #1084's two entries reached another way.
+        assertThrows(IllegalArgumentException.class,
+                () -> residue(BLOCKED, notFullyAccepted()),
+                "a recipient was named at a position the walk could not enter");
+        assertThrows(IllegalArgumentException.class,
+                () -> residue(null, fromBlockedDescent()),
+                "nobody was named at a position the walk went into");
+    }
+
+    private static final BlockedDescent BLOCKED = new BlockedDescent(
+            new BlockReason.UnsupportedTraversal(BlockReason.Traversal.MAPPING_CONTENT));
+
+    private static RulesLeftUnread fromBlockedDescent() {
+        return new RulesLeftUnread.Handoff(
+                new RulesLeftUnread.HandoffUnread.FromBlockedDescent());
+    }
+
+    private static RulesLeftUnread notFullyAccepted() {
+        return new RulesLeftUnread.Handoff(
+                new RulesLeftUnread.HandoffUnread.NotFullyAccepted());
+    }
+
+    private static ReadingResidue residue(BlockedDescent blocked, RulesLeftUnread... unread) {
+        return new ReadingResidue(blocked, Set.of(unread));
+    }
+
+    /**
+     * Which kinds of gap one axis carrying {@code residue} leaves the partition measure short of.
+     *
+     * <p>The kinds and not the values: what a gap is keyed by is asserted where that decision is
+     * ({@link #theStopIsNamedForTheAxisCarryingIt}), and repeating it in every row here would make
+     * every row of the arithmetic fail the day the identity is revisited.
+     */
+    private static Set<Class<?>> gapKindsOf(ReadingResidue residue) {
+        MeasureClosure.Both closed = MeasureClosure.of(
+                List.of(new Axis(new AxisId("f", "r.cost"),
+                        new NumericTerm.ValueOf(TermPath.of("r").then("cost")),
+                        Type.BOOL, List.of(), List.of(), List.of(), residue, null, null)),
+                List.of(), List.of(), new LinesRead());
+        return ((MeasureClosure.OfThePartition.Open) closed.partition()).by().stream()
+                .map(Object::getClass).collect(java.util.stream.Collectors.toSet());
+    }
+
+    /**
+     * The stop is named for the axis carrying it, which is not always the position that was blocked.
+     *
+     * <p>Where the two come apart, and the whole of why this arm is keyed by an axis. The map's
+     * contents are what the walk could not reach; the axis is the size a rule measures. A reader is
+     * being told something about the number it holds, so that is what the finding names — and the
+     * position is that axis's path.
+     */
+    @Test
+    void theStopIsNamedForTheAxisCarryingIt() {
+        List<Weakening> said = weakeningOf(A_MAP_A_BODY_MEASURES, "f");
+
+        assertEquals(List.of("f/Map.size(r.cost)"),
+                said.stream()
+                        .filter(each -> each instanceof Weakening.ModelReadingIncomplete(
+                                ClosureGap.PositionNotReachedInto _))
+                        .map(each -> ((ClosureGap.PositionNotReachedInto)
+                                ((Weakening.ModelReadingIncomplete) each).cause()).at().toString())
+                        .toList(),
+                () -> "the axis carrying the stop, not the position blocked: " + said);
     }
 
     private static List<Weakening> weakeningOf(String source, String behavior) {
