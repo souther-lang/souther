@@ -41,27 +41,123 @@ import java.util.Optional;
  *
  * @param cut     where the line is: what is cut, and where on it
  * @param origin  the rule that drew it, as this reading met it
- * @param demands one entry per role, always four of them
+ * @param answers one entry per role, always four of them
  */
-public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand> demands) {
+public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, PointAnswer> answers) {
 
     public Border {
-        if (demands == null || !demands.keySet().equals(EnumSet.allOf(PointRole.class))) {
+        if (answers == null || !answers.keySet().equals(EnumSet.allOf(PointRole.class))) {
             throw new IllegalArgumentException(
-                    "a border that does not answer for every point role: " + demands);
+                    "a border that does not answer for every point role: " + answers);
         }
         // And an answer at every one of them. A key with nothing under it is the same silence the
         // roles were made total to stop, wearing the shape that was supposed to have refused it.
-        if (demands.containsValue(null)) {
+        if (answers.containsValue(null)) {
             throw new IllegalArgumentException(
-                    "a border with a point role it names and does not answer: " + demands);
+                    "a border with a point role it names and does not answer: " + answers);
         }
-        demands = java.util.Collections.unmodifiableMap(new EnumMap<>(demands));
+        // And an answer of the kind the role is. Which of the four points a line names a value at is
+        // the role's own answer, and a border that came back with a region where a value belongs
+        // would have every reader of it deciding what it was holding from the shape it happened to
+        // have.
+        for (Map.Entry<PointRole, PointAnswer> each : answers.entrySet()) {
+            boolean atTheLine = each.getValue() instanceof PointAnswer.AtLine;
+            boolean inARegion = each.getValue() instanceof PointAnswer.InRegion;
+            if (atTheLine && !each.getKey().againstTheLine()
+                    || inARegion && each.getKey().againstTheLine()) {
+                throw new IllegalArgumentException("the " + each.getKey() + " point of a border,"
+                        + " answered as " + each.getValue());
+            }
+        }
+        answers = java.util.Collections.unmodifiableMap(new EnumMap<>(answers));
     }
 
     /** What this border asks of the rows in one role. */
     public Demand demand(PointRole role) {
-        return demands.get(role);
+        return answers.get(role).demand();
+    }
+
+    /** What this border asks of the rows in one role, and what such a row would be owed for. */
+    public PointAnswer answer(PointRole role) {
+        return answers.get(role);
+    }
+
+    /**
+     * What a row in one role of this reading would be owed for, which is none where none is asked
+     * for and more than one where more than one thing stopped the region.
+     *
+     * <p>Made here, from the answer that settled both halves at once. Everything that accounts for
+     * rows asks this rather than building a point out of the parts it happened to know — which is
+     * how a debt came to carry the reading it was met at.
+     */
+    public java.util.List<OwedPoint> owes(PointRole role) {
+        BorderObligationId line = obligation();
+        // The line's own rule is behind every point of it, whatever else settled the region beside
+        // it: it is the line a row here stands at or beside, and an author moving it moves the
+        // point.
+        PointAttribution own = PointAttribution.by(origin.authoredLine());
+        return switch (answer(role)) {
+            case PointAnswer.NotOwed _ -> java.util.List.of();
+            case PointAnswer.AtLine _ -> java.util.List.of(
+                    new OwedPoint(new BorderObligationPoint.AtLine(line, role), own));
+            case PointAnswer.InRegion in -> in.claims().stream()
+                    .map(claim -> new OwedPoint(
+                            new BorderObligationPoint.InRegion(line, role, claim.basis()),
+                            own.and(claim.attribution())))
+                    .toList();
+        };
+    }
+
+    /**
+     * Whether this and {@code other} are one reading of one line.
+     *
+     * <p>What the records' own equality was being used for at the two places that ask it: finding
+     * the reading a debt was made from in a later assessment, and keeping one reading's lines from
+     * holding one line twice. Neither is asking whether everything about the two values matches —
+     * they are asking whether it is the same border, met in the same place, owing the same things.
+     *
+     * <p><b>The demands and what they are owed for, and not what is written beside them.</b> Two
+     * readings can ask a row for the same values and owe them to different things — the run below a
+     * line the rules already stop the quantity at is owed to the line as well as to that end — so
+     * the demands alone would call two borders one. What settles where a run stops, on the other
+     * hand, is settled by the model, while who can move it is a fact about the reading's
+     * surroundings and is no part of which border this is.
+     *
+     * <p>The quantity is compared as the value it is, and the place on it as a place. What a rule
+     * wrote a form's coefficients as is the rule's own text and is the same at every reading of it,
+     * so nothing here folds two spellings of one form.
+     */
+    public boolean sameReadingAs(Border other) {
+        if (other == null || !origin.equals(other.origin)
+                || !cut.of().equals(other.cut.of())
+                // The place, and not how the rule happened to write the number: a level keeps the
+                // spelling it was written in, so two readings of one line at one place can hold
+                // `0` and `0.00` — which is the mistake this whole comparison is here to stop
+                // being made about a border, and it would have been made about the border's own
+                // place by asking the records.
+                || !cut.cut().canonical().equals(other.cut.cut().canonical())) {
+            return false;
+        }
+        for (PointRole role : EnumSet.allOf(PointRole.class)) {
+            PointAnswer mine = answer(role);
+            PointAnswer also = other.answer(role);
+            // What a row here is owed for, as the set it is. Which of them a reading listed first is
+            // the order its arrangement was walked in, and reading that as part of the answer would
+            // put an accident of the derivation into the identity — which is the thing this method
+            // exists to keep out of it. One entry per basis is the answer's own invariant, so the
+            // set loses nothing.
+            if (!mine.demand().sameAs(also.demand())
+                    || !java.util.Set.copyOf(mine.bases()).equals(
+                            java.util.Set.copyOf(also.bases()))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** The same over all four roles, in role order. */
+    public java.util.List<OwedPoint> owes() {
+        return EnumSet.allOf(PointRole.class).stream().flatMap(role -> owes(role).stream()).toList();
     }
 
     /**
@@ -151,6 +247,19 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
      */
     public static Border at(BoundaryTarget target, OriginRef origin, NumericDomain.Bounds within,
                             java.util.List<Parting> parted) {
+        return at(target, origin, within, parted, NarrowedEnds.NONE);
+    }
+
+    /**
+     * The same, told which declarations took in where the position stops.
+     *
+     * <p>Which is what a run stopping at one of those ends is owed to besides the line it lies
+     * against. Carried from the reading that placed the end, because nothing downstream can work it
+     * out: an end is where every rule about the position leaves off, and the number it leaves off at
+     * says nothing about who moved it.
+     */
+    public static Border at(BoundaryTarget target, OriginRef origin, NumericDomain.Bounds within,
+                            java.util.List<Parting> parted, NarrowedEnds narrowed) {
         NumericDomain.Bounds reach = within == null ? new NumericDomain.Bounds(null, null) : within;
         LevelSpace space = target.levels();
         Level cut = target.at();
@@ -171,10 +280,10 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
             all.add(mine);
         }
         QuantityArrangement arrangement = QuantityArrangement.of(space, all,
-                endOf(space, reach.min(), Towards.ABOVE, cut),
-                endOf(space, reach.max(), Towards.BELOW, cut));
+                leaves(endOf(space, reach.min(), Towards.ABOVE, cut), narrowed.below()),
+                leaves(endOf(space, reach.max(), Towards.BELOW, cut), narrowed.above()));
         boolean holdsHere = holdsAtTheValue(origin);
-        Map<PointRole, Demand> demands = new EnumMap<>(PointRole.class);
+        Map<PointRole, PointAnswer> demands = new EnumMap<>(PointRole.class);
         if (!ordersAroundTheCut(origin)) {
             aLineWithOneSide(demands, origin, cut, holdsHere, space, reach, arrangement);
             return new Border(target, origin, demands);
@@ -183,8 +292,8 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
         // are read off. The same `at` is the ON point of `<= 3000` and the OFF point of `< 3000`,
         // and neither is the threshold at all where the quantity does not take it.
         Towards satisfying = satisfyingSide(origin);
-        Demand on = pointAt(space, cut, satisfying, holdsHere, reach);
-        Demand off = pointAt(space, cut, satisfying.opposite(), !holdsHere, reach);
+        PointAnswer on = pointAt(space, cut, satisfying, holdsHere, reach);
+        PointAnswer off = pointAt(space, cut, satisfying.opposite(), !holdsHere, reach);
         demands.put(PointRole.ON, on);
         demands.put(PointRole.OFF, off);
         // Each side runs from the point against the line on that side, where there is one, and from
@@ -296,7 +405,7 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
             // loop went round.
             read.found(each.cuts().target(), each.by());
             Border made = at(each.cuts().target(), each.by(), each.cuts().within(), beside);
-            if (out.stream().noneMatch(had -> had.equals(made))) {
+            if (out.stream().noneMatch(had -> had.sameReadingAs(made))) {
                 out.add(read.drew(made));
             }
         }
@@ -341,18 +450,30 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
      * takes no value in at all. Told apart by comparing the two ends instead, the second was owed a
      * row nobody can write and the report said the search stopped looking for it.
      */
-    private static Demand runOf(LevelSpace space, Band run, Level except, Towards away) {
+    private static PointAnswer runOf(LevelSpace space, QuantityArrangement.Run run, Level except,
+                                     Towards away) {
         if (run == null) {
-            return new Demand.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT);
+            return new PointAnswer.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT);
         }
-        Criterion.Within inside = new Criterion.Within(run, except, away);
+        Criterion.Within inside = new Criterion.Within(run.values(), except, away);
+        // What the run is owed to, from the same reading that said what it asks: the line this point
+        // is named for is the border's own, and the far side is where the run stops — which is the
+        // end lying the way the run does.
         return inside.region().parts().stream().anyMatch(part -> space.inspect(part).any())
-                ? new Demand.Owed(inside)
-                : new Demand.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT);
+                ? new PointAnswer.InRegion(inside, run.endsAt(away))
+                : new PointAnswer.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT);
+    }
+
+    /** Where the rules leave the quantity, with the declarations that took that end in beside it.
+     *  Null where they leave it everything that way and there is no end at all. */
+    private static DomainEnd leaves(Bound end,
+                                    java.util.List<souther.compiler.types.TypeSymbol.AtModule>
+                                            narrowers) {
+        return end == null ? null : new DomainEnd(end, narrowers);
     }
 
     /** The level a point against the line stands at, or null where no row is owed there. */
-    private static Level against(Demand point) {
+    private static Level against(PointAnswer point) {
         return point.criterion() instanceof Criterion.AtTheLevel at ? at.at() : null;
     }
 
@@ -393,19 +514,19 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
      *
      * @param isTheThreshold whether this point is the threshold itself, where the quantity takes it
      */
-    private static Demand pointAt(LevelSpace space, Level cut, Towards towards,
-                                  boolean isTheThreshold, NumericDomain.Bounds reach) {
+    private static PointAnswer pointAt(LevelSpace space, Level cut, Towards towards,
+                                       boolean isTheThreshold, NumericDomain.Bounds reach) {
         if (isTheThreshold && space.attainable(cut)) {
             // Admitted already: a threshold the rules refuse is a line this never made.
-            return new Demand.Owed(new Criterion.AtTheLevel(cut));
+            return new PointAnswer.AtLine(new Criterion.AtTheLevel(cut));
         }
         Optional<Level> at = beyond(space, cut, towards);
         if (at.isEmpty()) {
-            return new Demand.NotOwed(NotOwedReason.THE_CARRIER_NAMES_NO_NEIGHBOUR);
+            return new PointAnswer.NotOwed(NotOwedReason.THE_CARRIER_NAMES_NO_NEIGHBOUR);
         }
         return reach.admits(placeOf(at.get()))
-                ? new Demand.Owed(new Criterion.AtTheLevel(at.get()))
-                : new Demand.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT);
+                ? new PointAnswer.AtLine(new Criterion.AtTheLevel(at.get()))
+                : new PointAnswer.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT);
     }
 
     /**
@@ -432,7 +553,7 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
      * the one value from every other one. Read as one case, a bound's whole admitted range was
      * offered as the {@code OUT} point of a border nothing can be outside of.
      */
-    private static void aLineWithOneSide(Map<PointRole, Demand> demands, OriginRef origin,
+    private static void aLineWithOneSide(Map<PointRole, PointAnswer> demands, OriginRef origin,
                                          Level cut, boolean holdsHere, LevelSpace space,
                                          NumericDomain.Bounds within,
                                          QuantityArrangement arrangement) {
@@ -445,9 +566,10 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
                 // against the range below, which the same reading settled.
                 Towards kept = satisfyingSide(origin);
                 requireItIsTheEndItKeeps(within, cut, kept, origin);
-                Demand on = againstABound(space, cut, kept, holdsHere, within, origin);
+                PointAnswer on = againstABound(space, cut, kept, holdsHere, within, origin);
                 demands.put(PointRole.ON, on);
-                demands.put(PointRole.OFF, new Demand.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT));
+                demands.put(PointRole.OFF,
+                        new PointAnswer.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT));
                 // The partition the bound bounds, without the value against the line. Everything
                 // else was what this asked for before, which is every value the rules leave —
                 // including the ones past the next line along, in a partition this border does not
@@ -459,7 +581,8 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
                 // no run of the arrangement at all and its `IN` point came back refused.
                 Level against = against(on) != null ? against(on) : cut;
                 demands.put(PointRole.IN, runOf(space, arrangement.endmost(kept), against, kept));
-                demands.put(PointRole.OUT, new Demand.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT));
+                demands.put(PointRole.OUT,
+                        new PointAnswer.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT));
             }
             case THE_RULE_NAMES_A_VALUE_NOT_A_SIDE -> {
                 // The value the rule names, which is the one point against this line: a rule that
@@ -467,16 +590,16 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
                 // being outside than the other. Which of the two roles the value serves as is
                 // whether the rule holds there — `x == 5` is met at five and `x /= 5` is not.
                 PointRole atTheCut = holdsHere ? PointRole.ON : PointRole.OFF;
-                demands.put(atTheCut, new Demand.Owed(new Criterion.AtTheLevel(cut)));
+                demands.put(atTheCut, new PointAnswer.AtLine(new Criterion.AtTheLevel(cut)));
                 demands.put(atTheCut == PointRole.ON ? PointRole.OFF : PointRole.ON,
-                        new Demand.NotOwed(NotOwedReason.THE_RULE_NAMES_A_VALUE_NOT_A_SIDE));
+                        new PointAnswer.NotOwed(NotOwedReason.THE_RULE_NAMES_A_VALUE_NOT_A_SIDE));
                 // The value's own class is the value, so the side the cut is on has nothing away
                 // from the border; the rest of the quantity is the other side. `x == 5` puts the cut
                 // inside and `x /= 5` puts it outside, which is what `holdsHere` says.
                 PointRole ofTheRest = holdsHere ? PointRole.OUT : PointRole.IN;
                 demands.put(ofTheRest, sideOf(rest, space, within));
                 demands.put(ofTheRest == PointRole.OUT ? PointRole.IN : PointRole.OUT,
-                        new Demand.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT));
+                        new PointAnswer.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT));
             }
             // An order with no next value leaves the line its second side; it is the value on that
             // side it has no name for, which is the point beside the cut and not the side itself.
@@ -506,8 +629,9 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
      * <p>No carrier is asked. What tells the two apart is whether the order names a value on the
      * side the bound keeps, which is the question the point is about anyway.
      */
-    private static Demand againstABound(LevelSpace space, Level cut, Towards kept, boolean holdsHere,
-                                        NumericDomain.Bounds within, OriginRef origin) {
+    private static PointAnswer againstABound(LevelSpace space, Level cut, Towards kept,
+                                             boolean holdsHere, NumericDomain.Bounds within,
+                                             OriginRef origin) {
         if (holdsHere) {
             return pointAt(space, cut, kept, true, within);
         }
@@ -519,7 +643,7 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
                             + " — an end this compiler could step was to have been stepped before"
                             + " it got here");
         }
-        return new Demand.NotOwed(NotOwedReason.THE_CARRIER_NAMES_NO_NEIGHBOUR);
+        return new PointAnswer.NotOwed(NotOwedReason.THE_CARRIER_NAMES_NO_NEIGHBOUR);
     }
 
     /**
@@ -544,11 +668,20 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
         }
     }
 
-    /** A side of the border, or the reason the rules leave nothing there for a row to be at. */
-    private static Demand sideOf(Criterion side, LevelSpace space, NumericDomain.Bounds within) {
+    /**
+     * A side of the border, or the reason the rules leave nothing there for a row to be at.
+     *
+     * <p>What such a row is owed for is the line and no more. A rule that names a value leaves
+     * everything else, which is not a run and stops nowhere — so there is no far side to tell one
+     * of these from another, and the basis says so ({@link RegionBasis.TheRest}) rather than
+     * naming an end nobody wrote.
+     */
+    private static PointAnswer sideOf(Criterion side, LevelSpace space,
+                                      NumericDomain.Bounds within) {
         return provablyHoldsNothing(side, space, within)
-                ? new Demand.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT)
-                : new Demand.Owed(side);
+                ? new PointAnswer.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT)
+                : new PointAnswer.InRegion(side, java.util.List.of(new RegionClaim(
+                        RegionBasis.TheRest.INSTANCE, PointAttribution.NONE)));
     }
 
     /**

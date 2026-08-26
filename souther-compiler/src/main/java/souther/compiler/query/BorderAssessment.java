@@ -203,15 +203,20 @@ public record BorderAssessment(Border border, Map<PointRole, ItemAssessment> ite
         }
 
         /**
-         * Whether the behavior this reading belongs to is the one owed a row here.
+         * What the behavior this reading belongs to is owed a row for here.
          *
-         * <p>Two of a border's four points can be owed to a declaration rather than to any body
-         * carrying the type: what a row standing at the line shows is a fact about the type, and one
-         * row anywhere settles it. Which declarations owe it is the line's answer and is not this
-         * question — a body's line has none, and that is the whole of what this reads. The other two
-         * are the regions
-         * either side, and where a region stops is settled by every other rule reaching this
-         * position — so they are this reading's whatever drew the line.
+         * <p>A point can be owed to a declaration rather than to any body carrying the type: what a
+         * row standing at the line shows is a fact about the type, and one row anywhere settles it.
+         * A region beside the line is the same where nothing but declarations settled where it stops
+         * — and this reading's where a rule of this body did, since such a run exists in this body
+         * and nowhere else.
+         *
+         * <p>The points and not whether there are any, because one role can owe more than one: a
+         * place two rules drew a line at leaves a run owed to each of them, and each is its own
+         * obligation to be told about — a single row may well answer both, which is a question for
+         * whoever offers rows and not for this. Answered as a yes, everything downstream went on
+         * accounting in this reading's roles, which is the occurrence standing in for the debt one
+         * level down from where it was taken out.
          *
          * <p>Asked here and not at each reader. Everything that measures a behavior, counts what it
          * covers or raises a finding about it has to leave the declaration's points out, and the
@@ -223,9 +228,9 @@ public record BorderAssessment(Border border, Map<PointRole, ItemAssessment> ite
          * be measured for is still a line its values are held to, and the block that says so is
          * telling an author about the type they wrote.
          */
-        public boolean owedHere() {
-            return !role.againstTheLine()
-                    || border.origin().authoredLine().obligationOwners().isEmpty();
+        public java.util.List<souther.compiler.partition.OwedPoint> owedHere() {
+            return border.border().owes(role).stream()
+                    .filter(owed -> !owed.attribution().owedToDeclarations()).toList();
         }
 
         /** The measured half, or null where no row is owed here. */
@@ -264,7 +269,7 @@ public record BorderAssessment(Border border, Map<PointRole, ItemAssessment> ite
                                         PointRole role) {
         ItemAssessment found = null;
         for (BorderAssessment each : lines) {
-            if (!each.border().equals(line)) {
+            if (!each.border().sameReadingAs(line)) {
                 continue;
             }
             if (found != null) {

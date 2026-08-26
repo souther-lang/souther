@@ -191,12 +191,13 @@ class CompileExampleGenerateTest {
         assertEquals(List.of("Request { kind = Domestic, cost = Amount(0) }",
                         "Request { kind = Overseas, cost = Amount(0) }"),
                 inputs(filling.composed()), "the classes, at whatever cost builds");
-        // The two regions first, which are this reading's, and then the two against the line, which
-        // the declaration is owed and which are resolved once for the module.
-        assertEquals(List.of("Request { kind = Domestic, cost = Amount(1) }",
-                        "Request { kind = Domestic, cost = Amount(999) }",
-                        "Request { kind = Domestic, cost = Amount(0) }",
-                        "Request { kind = Domestic, cost = Amount(1000) }"),
+        // Each line's own value and then a value inside the run beside it, line by line. All four
+        // are the declaration's: nothing in this body cuts the cost, so where the runs stop is what
+        // the clause leaves and a row anywhere settles them.
+        assertEquals(List.of("Request { kind = Domestic, cost = Amount(0) }",
+                        "Request { kind = Domestic, cost = Amount(1) }",
+                        "Request { kind = Domestic, cost = Amount(1000) }",
+                        "Request { kind = Domestic, cost = Amount(999) }"),
                 inputs(atTheLines(bounded, "submit")),
                 "the points against each line at exactly the value the rule names, and the points"
                         + " away from them at a value the side holds");
@@ -1249,7 +1250,9 @@ class CompileExampleGenerateTest {
 
                 let submit (request) = Accepted { at = "now" }
                 """;
-        Generator.GenerationResult edges = generated(correlated).get("submit").boundaries();
+        // Both authorities, because the lines are the clause's: nothing in this body cuts the count,
+        // so every point of them is the declaration's and none is in this behavior's own filling.
+        Generator.GenerationResult edges = atTheLines(correlated, "submit");
 
         Generator.UnresolvedCombination atTheTop = edges.unresolved().stream()
                 .filter(left -> left.subject().contains("100000")).findFirst().orElse(null);

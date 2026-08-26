@@ -39,7 +39,7 @@ class WhatAFindingIsAboutIsHeldByTheTypeTest {
     void aSubjectThatIsNotThereIsRefusedWhereTheFindingIsMade() {
         assertThrows(NullPointerException.class, () -> new About.ACaseNoRowExpects(null));
         assertThrows(NullPointerException.class, () -> new About.AClassNoRowIsIn(null));
-        assertThrows(NullPointerException.class, () -> new About.APointOfABorder(null));
+        assertThrows(NullPointerException.class, () -> new About.APointOfABorder(null, null));
         assertThrows(NullPointerException.class, () -> new About.AQuestionNothingAnswered(null));
         assertThrows(NullPointerException.class, () -> new About.AnArmNoRowGoesThrough(null));
         assertThrows(NullPointerException.class,

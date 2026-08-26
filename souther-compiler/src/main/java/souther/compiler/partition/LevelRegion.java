@@ -44,6 +44,11 @@ public record LevelRegion(List<LevelInterval> parts) {
         return of(LevelInterval.point(at));
     }
 
+    /** The same values with every end written the one way, for an identity to be built from. */
+    public LevelRegion canonical() {
+        return new LevelRegion(parts.stream().map(LevelInterval::canonical).toList());
+    }
+
     /** Whether a value of the quantity stands at this item. */
     public boolean contains(Level value) {
         return parts.stream().anyMatch(part -> part.contains(value));

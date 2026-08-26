@@ -845,7 +845,7 @@ public final class Partitions {
                 // The line is written down as it is met and the border where it lands, so that the
                 // day something is written between the two the reading is held to having lost one.
                 read.found(target, origin);
-                out.add(read.drew(Border.at(target, origin, within, parted)));
+                out.add(read.drew(Border.at(target, origin, within, parted, axis.narrowed())));
             }
         }
         return List.copyOf(out);
@@ -901,6 +901,7 @@ public final class Partitions {
                 // (issue #1084).
                 out.add(new Axis(id, term, position.type(), divided.classes(),
                         divided.cuts().cuts(), List.of(),
+                        new NarrowedEnds(position.narrowedBy(true), position.narrowedBy(false)),
                         ReadingResidue.of(position), null, null));
             }
             // Nothing local divides the position, which is what licenses asking what it is made of.

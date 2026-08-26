@@ -186,7 +186,20 @@ public sealed interface Criterion {
      * whether the two are one demand, which is narrower than whether one row answers both.
      */
     default boolean sameAs(Criterion other) {
-        return other != null && canonical().equals(other.canonical());
+        if (!(this instanceof Within in)) {
+            return other != null && canonical().equals(other.canonical());
+        }
+        // A run is what it holds, and not how it came to stop there. The same values are left by a
+        // line at the end and by the rules stopping the quantity at that same place, and a run
+        // bounded both ways is bounded once — so a reading that has both and a reading that has one
+        // ask a row for the same thing. Compared as the run was built, a rule that moves nothing
+        // would have two readings of one point asking two things, which is what this check calls a
+        // defect in the identity.
+        return other instanceof Within also && in.away() == also.away()
+                && (in.except() == null ? also.except() == null
+                        : also.except() != null
+                                && in.except().canonical().equals(also.except().canonical()))
+                && in.region().canonical().equals(also.region().canonical());
     }
 
     /** How this relates a row's quantity to what it is against. */
@@ -268,6 +281,31 @@ public sealed interface Criterion {
         if (!(this instanceof Within in)) {
             return of.writtenAt(against());
         }
+        // Through the quantity's own spelling, which knows what it is made of: twice a form is that
+        // form doubled and not the words `2 *` in front of it.
         return in.band().written(of, in.except());
+    }
+
+    /**
+     * The same, with {@code left} in place of the name the quantity goes by at this reading.
+     *
+     * <p>What a debt writes. A run says the quantity's own name inside the sentence — {@code 1 <
+     * String.length(value)} — so a debt written off a reading would put that reading's position into
+     * a sentence about the line, which is the position a walk happened to reach first.
+     *
+     * <p><b>{@code left} names the whole of the quantity.</b> An end only the rule that drew it can
+     * name says how much of the quantity that rule wrote, and this spells that by writing the
+     * multiple in front — which is what a quantity of one coordinate does and is not what a form of
+     * several does ({@link BorderQuantity#left(java.math.BigDecimal)} rebuilds the form instead). A
+     * run bounded that way, on a line a declaration is owed over a relation between two positions,
+     * would come out spelled as the multiple of the first of them. No model here writes one; the
+     * limit is said rather than guessed at.
+     */
+    default String written(BorderQuantity of, String left) {
+        if (!(this instanceof Within in)) {
+            return of.writtenAt(against());
+        }
+        return in.band().written(of, in.except(),
+                times -> BorderQuantity.times(times, left));
     }
 }

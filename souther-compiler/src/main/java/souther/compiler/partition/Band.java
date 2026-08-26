@@ -51,7 +51,7 @@ public record Band(BandEnd lower, BandEnd upper) {
      * none. Written as the line, the run above a seam that keeps its own value would hold that
      * value; written as the value, a run over an order whose values fill would have no end at all.
      */
-    private static Bound atTheLine(Seam parted, Towards inward) {
+    static Bound atTheLine(Seam parted, Towards inward) {
         Level edge = inward == Towards.ABOVE ? parted.above() : parted.below();
         return edge != null ? Bound.at(edge, true) : new Bound(parted.at(), false);
     }
@@ -213,6 +213,27 @@ public record Band(BandEnd lower, BandEnd upper) {
      * hundred is the one value that will not do.
      */
     public String written(BorderQuantity of, Level except) {
+        return written(of, except, of::left);
+    }
+
+    /**
+     * The same, with {@code much} in place of how the quantity says a multiple of itself here.
+     *
+     * <p>For a debt, which is written on what the declaration wrote rather than on the position some
+     * reading met the line at: a run of {@code UserId}'s lengths reads {@code 1 <
+     * String.length(value)} wherever it is owed, and taking the name off a reading would put
+     * whichever position a walk reached first into a sentence about the type (issue #1062).
+     *
+     * <p>A multiple and not a name, because an end only the rule that drew it can name says how much
+     * of the quantity that rule wrote — and how a quantity says twice itself is the quantity's own
+     * answer ({@link BorderQuantity#left(java.math.BigDecimal)}).
+     *
+     * <p>The levels are still the reading's to write, because the order they are on is what knows
+     * how to spell them, and it is the same order at every reading of one line.
+     */
+    public String written(BorderQuantity of, Level except,
+                          java.util.function.Function<java.math.BigDecimal, String> much) {
+        String left = much.apply(java.math.BigDecimal.ONE);
         Seam under = lower.seam();
         Seam over = upper.seam();
         String low = except != null && same(except, first())
@@ -226,8 +247,8 @@ public record Band(BandEnd lower, BandEnd upper) {
         // An end only the rule that drew it can name relates a row to the quantity rather than to
         // the position, so it is a condition of its own beside the rest. Dropped, the run read as
         // reaching past the very line that ends it.
-        String ruleLow = low != null ? null : under.asARuleAbout(of::left, Towards.ABOVE);
-        String ruleHigh = high != null ? null : over.asARuleAbout(of::left, Towards.BELOW);
+        String ruleLow = low != null ? null : under.asARuleAbout(much, Towards.ABOVE);
+        String ruleHigh = high != null ? null : over.asARuleAbout(much, Towards.BELOW);
         // One subject and two relations where both ends name the same multiple of the quantity,
         // which is what a reader reads a range as. Said as two conditions, the same run reads as
         // two facts — and the class that is this run says it the other way, so a reader is told
@@ -235,7 +256,7 @@ public record Band(BandEnd lower, BandEnd upper) {
         if (ruleLow != null && ruleHigh != null && sharedMultiple() != null) {
             return ruleLow + " <= " + tail(ruleHigh);
         }
-        String plain = (nullToEmpty(low) + of.left() + nullToEmpty(high)).trim();
+        String plain = (nullToEmpty(low) + left + nullToEmpty(high)).trim();
         boolean anyPlain = low != null && !low.isEmpty() || high != null && !high.isEmpty();
         java.util.List<String> said = new java.util.ArrayList<>();
         if (ruleLow != null) {

@@ -22,7 +22,6 @@ import souther.compiler.query.OutputCaseEvidence;
 import souther.compiler.query.About;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
-import souther.compiler.query.BorderObligationAssessment;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.BehaviorEvidence;
@@ -354,7 +353,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
         return declarations.stream()
                 .filter(each -> !(each.about()
-                        instanceof About.APointOfADeclaredBorder(var debt, var _))
+                        instanceof About.APointOfADeclaredBorder(var debt))
                         || names.stream().anyMatch(debt::carriedBy))
                 .toList();
     }
@@ -391,10 +390,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         byDeclaration.forEach((declaration, findings) -> {
             out.append(String.format("  %s%n", declaration));
             for (Adequacy.Finding f : findings) {
-                if (f.about() instanceof About.APointOfADeclaredBorder(var debt, var role)) {
-                    out.append(String.format("      %s no row is at the %s point %s = %s (%s)%n",
-                            mark(f), role, debt.axis(), debt.against(role),
-                            debt.id().named()));
+                if (f.about() instanceof About.APointOfADeclaredBorder(var debt)) {
+                    // What the point asks, in its own words. A point against the line names a value
+                    // and a point beside it names a run, and a sentence that wrote `=` for both said
+                    // a run was one value.
+                    out.append(String.format("      %s no row is at the %s point %s (%s)%n",
+                            mark(f), debt.role(), debt.said(), debt.id().named()));
                 }
             }
         });
@@ -614,10 +615,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 // below, from every reading of it: read here as well, a row standing at it in one
                 // behavior would be weighed against another behavior having no rows, and the
                 // verdict would hold open what the aggregation had settled (issue #1062).
+                // One measurement per thing the reading is owed a row for, since each of them is an
+                // obligation: a place two of this body's rules drew a line at leaves a run owed to
+                // each, and a verdict counting the role once would be short by the rest. How many
+                // rows answer them is a different count and is the generator's.
                 BorderAssessment.pointsOf(behavior.partition().boundaries()).stream()
                         .filter(p -> held.requires(p.role()))
-                        .filter(BorderAssessment.Point::owedHere)
-                        .forEach(p -> add(measures, measurementOf(p.item())));
+                        .forEach(p -> p.owedHere()
+                                .forEach(_ -> add(measures, measurementOf(p.item()))));
                 // Which of the four those are is the bar's answer and not a second reading of it
                 // here: a build refusing over a missing IN row and calling a model satisfied while
                 // the IN point could not be measured would be held to one bar in one place and
@@ -635,11 +640,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // denominator made of the findings is a denominator made of the gaps — which is
             // satisfied by whatever it does not contain.
             for (Adequacy.DeclaredDebt owed : module.debts()) {
-                for (souther.compiler.partition.PointRole role
-                        : BorderObligationAssessment.AGAINST_THE_LINE) {
-                    if (held.requires(role)) {
-                        add(measures, measurementOf(owed.debt().at(role)));
-                    }
+                if (held.requires(owed.debt().role())) {
+                    add(measures, measurementOf(owed.debt().item()));
                 }
             }
         }
@@ -1102,7 +1104,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // together, and printed in that order the two halves would be interleaved.
         for (boolean againstTheLine : List.of(true, false)) {
             for (Adequacy.Finding f : behavior.findings()) {
-                if (f.about() instanceof About.APointOfABorder(var point)
+                if (f.about() instanceof About.APointOfABorder(var point, var _)
                         && point.role().againstTheLine() == againstTheLine) {
                     // `the` for a point and `an` for a run. Two of the four are one value and the
                     // other two are met anywhere in a run of them, so a reader told there is no row
@@ -2430,11 +2432,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     missing.name() + " (in #" + (input.at() + 1) + ")";
             // What the point asks of a row, which is what joins it to one of a border's `items`.
             // Asked of the point, which is where the two readers of that name meet.
-            case About.APointOfABorder(var point) -> point.said();
+            case About.APointOfABorder(var point, var _) -> point.said();
             // The same sentence, on what the declaration wrote. A line owed once over every reading
             // of it is named by the terms the author used and not by the position some behavior met
             // it at, which is what the debt is (issue #1062).
-            case About.APointOfADeclaredBorder(var debt, var role) -> debt.said(role);
+            case About.APointOfADeclaredBorder(var debt) -> debt.said();
         };
     }
 
