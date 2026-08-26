@@ -32,6 +32,11 @@ import java.util.List;
  * whether or not the language had anything against it. That is a fact about how a row is evaluated
  * rather than about this: it moves when evaluation stops needing one backend, and until then a
  * verdict here is never more permissive than the one a JVM build gives.
+ *
+ * <p>Which is the decision and not the arrangement (ADR-0115): a program Souther accepts is one the
+ * JVM can emit and run, so the refusal above reaches the author naming the machine's rule, and an
+ * output that is not the JVM's may emit only what the JVM could have emitted.
+ * {@code AnOutputOutsideTheCompilerReadsACheckedProgramTest} holds it at the boundary it is about.
  */
 public final class Acceptance {
 

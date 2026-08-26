@@ -5,6 +5,7 @@ import souther.compiler.core.Composition;
 import souther.compiler.diag.CompileException;
 import souther.compiler.core.Core;
 import souther.compiler.program.CheckedBehavior;
+import souther.compiler.program.CheckedData;
 import souther.compiler.program.CheckedHelper;
 import souther.compiler.program.CheckedImplementation;
 import souther.compiler.program.CheckedModule;
@@ -202,6 +203,47 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
 
         // and the batch compiler refuses it for the same reason, which is the point
         assertThrows(CompileException.class, () -> Compiler.compile(WRONG_ROW));
+    }
+
+    /**
+     * And so is a program the language has nothing against, where the JVM cannot emit it.
+     *
+     * <p>A record of 128 {@code Int} fields is a record like any other to read. What refuses it is
+     * the JVM: a constructor takes at most 254 argument slots and an {@code Int} is carried as a
+     * {@code long}, so the class this declaration turns into is one no JVM would load. The same
+     * declaration one field narrower is answered with a snapshot, which is what says the count is
+     * the machine's limit rather than a rule of the language.
+     *
+     * <p>Refused all the same, and this is the decision rather than an accident of the order things
+     * happen in (ADR-0115): a checked program is reachable only through a compile that emits and
+     * runs one on the JVM, so what an output outside this compiler may be handed is bounded by what
+     * the JVM can hold. An output reading this program is told the machine's rule in the machine's
+     * words, which is a refusal it can act on — a snapshot for a program the JVM build stops at
+     * would be an artifact shipped for something no other reading of the same program agrees is
+     * buildable.
+     */
+    @Test
+    void aProgramTheLanguageAcceptsAndTheJvmCannotEmitIsRefusedHereToo() {
+        CheckedProgram narrower = CheckedProgram.of(List.of(wideData(127)));
+        assertEquals(127, ((CheckedData.Product) narrower.module("demo").data().get(0))
+                .fields().size(), "the language has nothing against a record this wide");
+
+        CompileException refused = assertThrows(CompileException.class,
+                () -> CheckedProgram.of(List.of(wideData(128))));
+
+        assertEquals("E2101", refused.code(), refused.getMessage());
+        assertTrue(refused.getMessage().contains("JVM parameter slots"),
+                "the refusal names whose rule it is: " + refused.getMessage());
+    }
+
+    /** A record of {@code fields} {@code Int} fields, and a behavior so the module has one. */
+    private static String wideData(int fields) {
+        StringBuilder declared = new StringBuilder("module demo\n\ndata Wide = { ");
+        for (int i = 0; i < fields; i++) {
+            declared.append(i == 0 ? "" : ", ").append("f").append(i).append(": Int");
+        }
+        return declared.append(" }\n\nbehavior keep : (w: Wide) -> Wide\n\nlet keep (w) = w\n")
+                .toString();
     }
 
     private static final String WRONG_ROW = """
