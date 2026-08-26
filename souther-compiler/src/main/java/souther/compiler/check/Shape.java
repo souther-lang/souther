@@ -115,6 +115,8 @@ public sealed interface Shape permits Shape.ReadablePositionShape, Shape.Cases, 
         record Shared(List<TypeSymbol> origins, Map<String, Type> fields) implements CommonProduct {
 
             public Shared {
+                // A data with no fields is a unit data and is written without a body (E1008), so a
+                // shared declaration has fields and a clause of it is about them.
                 if (origins.isEmpty() || fields.isEmpty()) {
                     throw new IllegalArgumentException("a shared part sharing nothing is None");
                 }

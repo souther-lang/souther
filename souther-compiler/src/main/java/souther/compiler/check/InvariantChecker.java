@@ -476,25 +476,32 @@ public final class InvariantChecker {
      * was still descended into, so a value supposed to exist came back impossible by the rules of
      * what it wraps — the supposing undone one step in, by the same walk that honoured it.
      *
-     * @param withoutClauses which declarations' own clauses are left out, what is under them still
-     *                       being read
+     * <p><b>One of them is asked of a rule and the other of a position, and they are different
+     * types for that reason.</b> Which rules are left out is a property of each rule — the
+     * declaration that wrote it — and a rule a spread carries in was written where it was written,
+     * whatever value it is being read at. Which names are not read at all is a property of the
+     * position. The two are the same name only where a declaration writes its own clauses and
+     * spreads nothing, and asked alike a spread rule was left in whatever a reader asked for, so
+     * every end it held was held by nobody a report could name.
+     *
+     * @param withoutClauses which rules are left out, what is under the declarations that wrote
+     *                       them still being read
      * @param stopAt         which declarations are not read at all
      */
-    record Reach(java.util.function.Predicate<TypeSymbol> withoutClauses,
-                 java.util.function.Predicate<TypeSymbol> stopAt) {
+    record Reach(RulesLeftOut withoutClauses, java.util.function.Predicate<TypeSymbol> stopAt) {
 
         /** Every rule, wherever it is written. */
-        static final Reach EVERYTHING = new Reach(_ -> false, _ -> false);
+        static final Reach EVERYTHING = new Reach(RulesLeftOut.NONE, _ -> false);
 
         /** Every rule but the ones {@code these} names wrote. */
         static Reach withoutClausesOf(java.util.function.Predicate<TypeSymbol> these) {
-            return new Reach(these, _ -> false);
+            return new Reach(RulesLeftOut.writtenOn(these), _ -> false);
         }
 
         /** Every rule that is not reached through one of {@code these}, they being supposed to hold
          * values whatever is written under them. */
         static Reach stoppingAt(java.util.function.Predicate<TypeSymbol> these) {
-            return new Reach(_ -> false, these);
+            return new Reach(RulesLeftOut.NONE, these);
         }
     }
 
@@ -588,26 +595,34 @@ public final class InvariantChecker {
             }
         };
         try {
-            boolean own = !reach.withoutClauses().test(named) && !reach.stopAt().test(named);
-            if (!own && !c.clauses.of(named, data).isEmpty()) {
-                // Left out because this reading was asked to leave them out, which is still a rule
-                // of the value that no reading here took in. At the value itself, since a clause of
-                // this declaration can name any position of it.
+            // Not read at all, which is a question about this position and is asked once.
+            boolean opened = !reach.stopAt().test(named);
+            // And whether any rule of it was left out, which is asked of each rule. The two are
+            // recorded at different grains on purpose: what is left out is a rule, and what is
+            // missing from this reading is the position, since a clause of this declaration can
+            // name any position of it.
+            boolean skipped = false;
+            if (!opened && !c.clauses.of(named, data).isEmpty()) {
                 gathering.missed(FieldDomains.THE_VALUE, Borne.BY_EVERY_VALUE);
             }
             for (TypeOps.Declared declared :
-                    own ? c.clauses.declared(named, data) : List.<TypeOps.Declared>of()) {
+                    opened ? c.clauses.declared(named, data) : List.<TypeOps.Declared>of()) {
+                // Where this clause becomes a rule of the model something can be attributed to.
+                // Everything below carries the origin as it is: what is written down here is read
+                // back by a report, and a reader handed the clause reference instead would have to
+                // decide for itself which of the rules that draw a line it was looking at. It is
+                // also what says whether this reader asked for the rule at all.
+                RuleRef.Invariant origin = new RuleRef.Invariant(Clause.Ref.of(declared));
+                if (reach.withoutClauses().excludes(origin)) {
+                    skipped = true;
+                    continue;
+                }
                 Core stated = c.clauses.typed(declared.clause().expr(), named, data).orNull();
                 if (stated == null) {
                     read = false;
                     gathering.missed(FieldDomains.THE_VALUE, Borne.BY_EVERY_VALUE);
                     continue;
                 }
-                // Where this clause becomes a rule of the model something can be attributed to.
-                // Everything below carries the origin as it is: what is written down here is read
-                // back by a report, and a reader handed the clause reference instead would have to
-                // decide for itself which of the rules that draw a line it was looking at.
-                RuleRef.Invariant origin = new RuleRef.Invariant(Clause.Ref.of(declared));
                 written.add(new Written(origin, stated));
                 Predicates.Owed owed = c.predicates.assumed(stated, at, false,
                         (part, said) -> gathering.constrained(origin, part, partRead(said)));
@@ -618,6 +633,12 @@ public final class InvariantChecker {
                 Predicates.subjectsIn(owed).forEach(spoken -> took.record(origin, spoken));
                 read &= !owed.unreadable();
                 k = c.predicates.assume(owed, k, Known.Held.OF_THE_VALUE);
+            }
+            if (skipped) {
+                // A rule of this value that no reading here took in, said once however many were
+                // left out: what is recorded is which position is short, and the position is this
+                // value either way.
+                gathering.missed(FieldDomains.THE_VALUE, Borne.BY_EVERY_VALUE);
             }
             // And what each field's own type says of it, at the field's own location. A depth of one
             // is already spent on the record, so this reaches the field's newtype and stops where the
@@ -915,11 +936,11 @@ public final class InvariantChecker {
      * said there. Read off the path instead, a reader would be deciding from a spelling what the
      * walk knew.
      *
-     * <p><b>Asked only of the stops that leave rules unread.</b> Which those are is
-     * {@link PathEngine#leftBy}'s answer and is not restated here: a stop that hands the rules to a
-     * reading one position down leaves nothing for anybody to bear ({@link Gathering#handedOn}).
-     * Nothing here decides what is handed on, so the day these two questions stop agreeing is a day
-     * nothing was resting on their agreeing (#1072).
+     * <p><b>Asked only of a stop, and never of a handing on.</b> Every way a walk stops short
+     * leaves its rules unread and this says how much of the position they were about; whether some
+     * rule below belongs to a reading opened elsewhere is a separate answer the reading gives beside
+     * what it read ({@link Gathering#handedOn}). Nothing here decides that, and a position may
+     * truthfully be both.
      */
     enum Borne {
 
@@ -1988,10 +2009,10 @@ public final class InvariantChecker {
                 Known out = walk(m.scrutinee(), k, at, copies);
                 List<Entered> ways = new ArrayList<>();
                 for (Core.Case c : m.cases()) {
-                    // A sum has no fields of its own, so the scrutinee is not a location any clause
-                    // could have named — the case's value names only itself. What the arm binds is a
-                    // value of the case's type, reached only here, so it is a location this arm
-                    // introduces and it carries what that type guarantees.
+                    // What the arm binds is a value of the case's type, reached only here, so it is
+                    // a location this arm introduces and it carries what that type guarantees. What
+                    // the scrutinee itself guarantees was read where the scrutinee stands, the part
+                    // its cases share included, and is not read again under the case.
                     // The scrutinee travels with the arm: what a caller may assume of an answer is
                     // decided by which behavior answered and which case this arm opened, and the
                     // first of those is a question about what is being matched.

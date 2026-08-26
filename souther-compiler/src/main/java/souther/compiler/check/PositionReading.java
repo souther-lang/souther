@@ -26,6 +26,10 @@ import java.util.Map;
  * {@link GuaranteeWalk}'s. Held together, the depth a reader could afford would be part of what a
  * declaration means.
  *
+ * @param entering  the declaration standing here, which a walk files what it has entered under and
+ *                  a reader supposing values names, or null where no declaration stands here. Not
+ *                  {@link #owners}: a sum whose cases share nothing declares nothing of every value
+ *                  here and is a declaration a walk has entered all the same
  * @param owners    the declarations whose clauses hold of every value standing here. One for a
  *                  record or a newtype; for a sum, the declarations its cases share — a rule written
  *                  on one case refuses values of that case and not every value here
@@ -35,8 +39,8 @@ import java.util.Map;
  * @param handedOn  what stands under this position that no reading here takes in — the cases of a
  *                  sum, what a container holds
  */
-record PositionReading(List<Owner> owners, Map<String, Type> fields, boolean atOwnPath,
-                       List<Type> handedOn) {
+record PositionReading(TypeSymbol entering, List<Owner> owners, Map<String, Type> fields,
+                       boolean atOwnPath, List<Type> handedOn) {
 
     /** A declaration whose clauses hold of every value standing at a position, and the name it was
      *  reached by — which is what a clause of it resolves its fields against. */
@@ -47,8 +51,9 @@ record PositionReading(List<Owner> owners, Map<String, Type> fields, boolean atO
         handedOn = List.copyOf(handedOn);
     }
 
-    private static final PositionReading NOTHING =
-            new PositionReading(List.of(), Map.of(), true, List.of());
+    private static PositionReading nothing(TypeSymbol entering) {
+        return new PositionReading(entering, List.of(), Map.of(), true, List.of());
+    }
 
     /** What the model writes at a position of {@code type}. */
     static PositionReading of(Type type, Symbols symbols) {
@@ -57,7 +62,7 @@ record PositionReading(List<Owner> owners, Map<String, Type> fields, boolean atO
             // One name at a time. What the layer states is stated of this very atom, and what the
             // value under it states is read where a walk reaches it.
             TypeOps.Layer worn = view.wrappers().getFirst();
-            return new PositionReading(owning(worn.named(), symbols),
+            return new PositionReading(worn.named(), owning(worn.named(), symbols),
                     TypeOps.fieldTypes(worn.data(), symbols), false, List.of());
         }
         return switch (view.shape()) {
@@ -65,52 +70,32 @@ record PositionReading(List<Owner> owners, Map<String, Type> fields, boolean atO
             // plan for building a value already share.
             case Shape.Product product -> {
                 StructuralDescent.Children under = StructuralDescent.of(product);
-                yield new PositionReading(owning(under.of(), symbols), under.under(), true,
-                        List.of());
+                yield new PositionReading(under.of(), owning(under.of(), symbols), under.under(),
+                        true, List.of());
             }
             // A sum is a common product times a choice of case. What the cases share is stated of
             // every value standing here; what one case declares is under that case, and a reading of
             // it is opened where a match opens the case.
             case Shape.Sum sum -> switch (sum.common()) {
-                case Shape.CommonProduct.Shared shared -> new PositionReading(
+                case Shape.CommonProduct.Shared shared -> new PositionReading(sum.name(),
                         owning(shared.origins(), symbols), shared.fields(), true,
                         cases(sum.name(), symbols));
-                case Shape.CommonProduct.None _ -> new PositionReading(List.of(), Map.of(), true,
-                        cases(sum.name(), symbols));
+                case Shape.CommonProduct.None _ -> new PositionReading(sum.name(), List.of(),
+                        Map.of(), true, cases(sum.name(), symbols));
             };
             // A unit data holds nothing and may write no rule about it (spec §unit-data), and a
             // primitive is written under no declaration of its own.
-            case Shape.Unit _, Shape.Scalar _ -> NOTHING;
+            case Shape.Unit unit -> nothing(unit.name());
+            case Shape.Scalar _ -> nothing(null);
             // What a container holds, what an option holds when it holds anything, an unnamed
             // union's members, a tuple's elements. Each is a value a reading of its own is opened
             // at, and none of them is a value standing here.
             case Shape.Cases _, Shape.Sequence _, Shape.Mapping _, Shape.Optional _, Shape.Tuple _,
-                 Shape.Function _ -> new PositionReading(List.of(), Map.of(), true, held(type));
+                 Shape.Function _ -> new PositionReading(null, List.of(), Map.of(), true,
+                         held(type));
             // Nothing was interpreted, so nothing is written here and nothing is under it.
             case Shape.Unresolved _, Shape.Uninhabited _, Shape.Bottom _, Shape.Erroneous _,
-                 Shape.Undecided _ -> NOTHING;
-        };
-    }
-
-    /**
-     * The declaration standing here, which a walk files what it has entered under, or null where no
-     * declaration does.
-     *
-     * <p>A sum whose cases share nothing declares nothing of every value here and is still a
-     * declaration a walk has entered, so this is asked of the shape and not of {@link #owners}.
-     */
-    static TypeSymbol entering(Type type, Symbols symbols) {
-        TypeView view = TypeView.of(type, symbols);
-        if (view.isWrapped()) {
-            return view.wrappers().getFirst().named();
-        }
-        return switch (view.shape()) {
-            case Shape.Product product -> product.name();
-            case Shape.Sum sum -> sum.name();
-            case Shape.Unit unit -> unit.name();
-            case Shape.Scalar _, Shape.Cases _, Shape.Sequence _, Shape.Mapping _,
-                 Shape.Optional _, Shape.Tuple _, Shape.Function _, Shape.Unresolved _,
-                 Shape.Uninhabited _, Shape.Bottom _, Shape.Erroneous _, Shape.Undecided _ -> null;
+                 Shape.Undecided _ -> nothing(null);
         };
     }
 

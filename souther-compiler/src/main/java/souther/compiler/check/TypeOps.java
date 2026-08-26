@@ -1162,9 +1162,8 @@ public final class TypeOps {
                 fields.putAll(fieldTypes(d, symbols));
             }
         }
-        // A shared declaration contributing no field is shared all the same, and a rule may be
-        // written on it — but there is nothing at this position for such a rule to be about, since
-        // what a sum exposes of the shared part is its fields. Nothing shared to read means None.
+        // A data declaring no field is a unit data and is written without a body (E1008), so this
+        // is empty only where the cases share nothing at all.
         return fields.isEmpty() ? new Shape.CommonProduct.None()
                 : new Shape.CommonProduct.Shared(origins, fields);
     }

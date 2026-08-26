@@ -4,6 +4,7 @@ import souther.compiler.core.Core;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -48,22 +49,26 @@ final class GuaranteeWalk {
     /**
      * How far a reader is asking this walk to go.
      *
+     * <p>The last two are asked of different things, and are different types for that reason. A
+     * name supposed to hold values is a position; a rule left out is a rule, and one a spread
+     * carries in was written where it was written whatever value it is read at.
+     *
      * @param extent          how far down to read
      * @param stopAt          names this reader is supposing hold values whatever is written under
      *                        them, so nothing under one of them is read
-     * @param withoutClauses  names whose own clauses this reader asked to leave out, what is under
-     *                        them still being read
+     * @param withoutClauses  rules this reader asked to leave out, what is under the declarations
+     *                        that wrote them still being read
      */
-    record Scope(Extent extent, Predicate<TypeSymbol> stopAt, Predicate<TypeSymbol> withoutClauses) {
+    record Scope(Extent extent, Predicate<TypeSymbol> stopAt, RulesLeftOut withoutClauses) {
 
         /** Every rule down to {@code positions} positions, wherever it is written. */
         static Scope asFarAs(int positions) {
-            return new Scope(new Extent.AsFarAs(positions), _ -> false, _ -> false);
+            return new Scope(new Extent.AsFarAs(positions), _ -> false, RulesLeftOut.NONE);
         }
 
         /** Every rule the model writes under this value. */
         static Scope everyPosition() {
-            return new Scope(new Extent.EveryPosition(), _ -> false, _ -> false);
+            return new Scope(new Extent.EveryPosition(), _ -> false, RulesLeftOut.NONE);
         }
     }
 
@@ -196,14 +201,24 @@ final class GuaranteeWalk {
                 return;
             }
         }
-        // What the declaration states is read whatever this walk was asked for; whether this reader
-        // hears it is the scope's answer. A reader told to leave a declaration's clauses out was not
-        // asked to lose any, so nothing is reported lost for them either.
-        if (name == null || !scope.withoutClauses().test(name)) {
-            if (here.coverage() instanceof TypeGuarantees.At.Coverage.Incomplete incomplete) {
-                reader.lostAClause(path, incomplete.lost());
+        // What the declarations state is read whatever this walk was asked for; which of them this
+        // reader hears is the scope's answer, asked of each rule. A rule the reader asked to leave
+        // out is not one it was asked to lose, so nothing is reported lost for it either — and the
+        // rules read here need not have been written on the declaration standing here, which is why
+        // this is not one question about the position.
+        List<RuleRef.Invariant> lost = new ArrayList<>();
+        if (here.coverage() instanceof TypeGuarantees.At.Coverage.Incomplete incomplete) {
+            for (RuleRef.Invariant each : incomplete.lost()) {
+                if (!scope.withoutClauses().excludes(each)) {
+                    lost.add(each);
+                }
             }
-            for (TypeGuarantee guarantee : here.here()) {
+        }
+        if (!lost.isEmpty()) {
+            reader.lostAClause(path, lost);
+        }
+        for (TypeGuarantee guarantee : here.here()) {
+            if (!scope.withoutClauses().excludes(guarantee.rule())) {
                 reader.guaranteed(path, guarantee);
             }
         }

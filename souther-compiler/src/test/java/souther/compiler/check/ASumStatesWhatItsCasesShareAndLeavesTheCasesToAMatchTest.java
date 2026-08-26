@@ -98,13 +98,17 @@ class ASumStatesWhatItsCasesShareAndLeavesTheCasesToAMatchTest {
     private record Told(Map<String, List<String>> guaranteed, List<String> handedOn) {}
 
     private Told reading(String name) {
+        return reading(name, GuaranteeWalk.Scope.everyPosition());
+    }
+
+    private Told reading(String name, GuaranteeWalk.Scope scope) {
         Core.Read root = place(name);
         Denotations at = Denotations.none().location(root.binding(),
                 engine.terms().placeSubject(root.binding()),
                 engine.terms().placeTerm(root.binding()));
         Map<String, List<String>> guaranteed = new LinkedHashMap<>();
         List<String> handedOn = new ArrayList<>();
-        walk.from(root, FieldDomains.THE_VALUE, at, GuaranteeWalk.Scope.everyPosition(),
+        walk.from(root, FieldDomains.THE_VALUE, at, scope,
                 new GuaranteeWalk.Reader() {
                     @Override
                     public void guaranteed(String path, TypeGuarantee guarantee) {
@@ -182,6 +186,76 @@ class ASumStatesWhatItsCasesShareAndLeavesTheCasesToAMatchTest {
         assertTrue(told.guaranteed().containsKey("amount"),
                 "a field every case spreads is readable on the sum, and so are its rules: "
                         + told.guaranteed());
+    }
+
+    /** The reading of the value itself, without walking anywhere. */
+    private TypeGuarantees.At at(String name) {
+        Core.Read root = place(name);
+        return engine.guarantees().at(root, Denotations.none().location(root.binding(),
+                engine.terms().placeSubject(root.binding()),
+                engine.terms().placeTerm(root.binding())));
+    }
+
+    /** Reading everything but the rules {@code declaration} wrote. */
+    private static GuaranteeWalk.Scope without(String declaration) {
+        return new GuaranteeWalk.Scope(new GuaranteeWalk.Extent.EveryPosition(), _ -> false,
+                RulesLeftOut.writtenOn(each -> each.name().equals(declaration)));
+    }
+
+    /**
+     * A rule is left out by the declaration that wrote it, and a sum writes none of what it states.
+     *
+     * <p>The two identities this reading tells apart, asked of one position. What stands at the sum
+     * is the sum; what wrote the rule read there is the declaration its cases spread. A reader
+     * naming the first leaves the rule in, because the sum wrote nothing, and a reader naming the
+     * second takes it out although the sum is what it was read at.
+     */
+    @Test
+    void aRuleIsLeftOutByWhoWroteItAndNotByWhereItIsRead() {
+        assertTrue(states(reading("Marked"), "capped"),
+                "read in full, what the cases share is stated at the sum");
+        assertFalse(states(reading("Marked", without("Common")), "capped"),
+                "Common wrote it, so leaving Common's rules out leaves it out");
+        assertTrue(states(reading("Marked", without("Marked")), "capped"),
+                "the sum wrote no rule, so leaving its rules out leaves this one standing");
+    }
+
+    /**
+     * The same of a record that spreads, which is where the two identities first came apart.
+     *
+     * <p>A record's own name and the name that wrote a rule it carries are two names, exactly as a
+     * sum's are. That they are the same name for a declaration writing its own clauses is what let
+     * one predicate stand for both.
+     */
+    @Test
+    void aRuleASpreadCarriesIntoARecordIsLeftOutByWhoWroteIt() {
+        assertTrue(states(reading("Alone"), "capped"));
+        assertFalse(states(reading("Alone", without("Common")), "capped"),
+                "Common wrote it, wherever it is read");
+        assertTrue(states(reading("Alone", without("Alone")), "capped"),
+                "Alone wrote no rule of its own");
+    }
+
+    /**
+     * What is left to the cases is what was not read here, and no more.
+     *
+     * <p>Said of the residual itself rather than of the fact that there is one. Handing the cases on
+     * whole would name a case whose every rule was read at the sum, and nothing below could settle
+     * a rule that was already settled above.
+     */
+    @Test
+    void whatIsLeftToTheCasesIsWhatWasNotReadHere() {
+        assertEquals(List.of("Stamped"), residualOf("Both"),
+                "Plain carries only what the sum states; Stamped writes a rule of its own");
+        assertEquals(List.of(), residualOf("Marked"),
+                "neither case writes anything the sum did not state");
+    }
+
+    /** What the reading at {@code name} says another reading answers for. */
+    private List<String> residualOf(String name) {
+        return at(name).handedOn() instanceof TypeGuarantees.At.HandedOn.ToAnotherReading passed
+                ? passed.under().stream().map(each -> Type.show(each)).toList()
+                : List.of();
     }
 
     private static boolean states(Told told, String clause) {

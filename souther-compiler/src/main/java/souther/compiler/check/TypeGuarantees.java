@@ -101,8 +101,7 @@ final class TypeGuarantees {
                 }
             }
         }
-        return new At(PositionReading.entering(root.type(), symbols), here, beneath,
-                handedOn(written, already),
+        return new At(written.entering(), here, beneath, handedOn(written, already),
                 lost.isEmpty() ? new At.Coverage.Complete() : new At.Coverage.Incomplete(lost));
     }
 
@@ -192,11 +191,10 @@ final class TypeGuarantees {
     /** {@code seen} stops a type that holds its own kind. A name met on the way here was read where
      * it was met, so what it holds is accounted for and reaching it again adds nothing. */
     private boolean anyRuleUnder(Type type, Set<TypeSymbol> seen) {
-        TypeSymbol entered = PositionReading.entering(type, symbols);
-        if (entered != null && !seen.add(entered)) {
+        PositionReading written = PositionReading.of(type, symbols);
+        if (written.entering() != null && !seen.add(written.entering())) {
             return false;
         }
-        PositionReading written = PositionReading.of(type, symbols);
         for (PositionReading.Owner owner : written.owners()) {
             if (!clauses.declared(owner.named(), owner.data()).isEmpty()) {
                 return true;
