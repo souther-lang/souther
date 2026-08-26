@@ -183,6 +183,33 @@ class CompileEnumerationOrderTest {
         assertTrue(out.contains("ordered"), out);
     }
 
+    /**
+     * And the other two kernels that take the enumeration's order: the extremes of a list of cases.
+     *
+     * <p>Here because which kernels reach their runtime method with a comparator is a decision
+     * {@code codegen.BodyGen} makes, and whether it made the right one shows in what a program
+     * answers rather than in what descriptor it was emitted at. A kernel routed there and never run
+     * over an enumeration is one nothing would notice being routed somewhere else.
+     */
+    @Test
+    void maxAndMinAnswerTheLastAndFirstCaseDeclared() throws Exception {
+        String src = """
+                module demo
+
+                data Stage = Prospecting | Negotiation | Won | Lost
+                data In = { n: Int }
+                data Out = { furthest: Stage?, earliest: Stage? }
+
+                behavior run : (i: In) -> Out constructs Out
+
+                let run (i) =
+                    Out { furthest = List.max([ Prospecting, Won, Negotiation ]),
+                          earliest = List.min([ Prospecting, Won, Negotiation ]) }
+                """;
+
+        assertEquals(Map.of("furthest", "Won", "earliest", "Prospecting"), run(src, "demo.Out"));
+    }
+
     @Test
     void sortByOrdersRowsOnTheirStage() throws Exception {
         String src = """

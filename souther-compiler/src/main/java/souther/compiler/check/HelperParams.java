@@ -1086,7 +1086,7 @@ final class HelperParams {
             if (kernel == null) {
                 return null;
             }
-            return new Type.FnOf(kernel.signature().params(), kernel.signature().result());
+            return new Type.FnOf(kernel.signature().parameters(), kernel.signature().result());
         }
 
         private boolean isParam(Hir.Expr e, BindingId target) {

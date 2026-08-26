@@ -62,7 +62,19 @@ final class CheckedProgramAssembler {
         for (String module : compilation.modules()) {
             modules.add(moduleOf(db, module));
         }
-        return new CheckedProgram(modules, languageDataOf(db), declaredOnThePath(db));
+        return new CheckedProgram(modules, languageDataOf(db), declaredOnThePath(db),
+                libraryOf(db).kernelSignatures());
+    }
+
+    /** The library this compilation was checked against. Asked for here rather than fetched: what a
+     *  name in a checked body denotes was settled against that one, and a second copy could be a
+     *  different version of the language. */
+    private static Stdlib libraryOf(Db db) {
+        Stdlib stdlib = db.ask(new Front.Library()).value();
+        if (stdlib == null) {
+            throw new IllegalStateException("this compilation was checked against no library");
+        }
+        return stdlib;
     }
 
     /**
@@ -78,10 +90,7 @@ final class CheckedProgramAssembler {
      * reading them somewhere they could have come out differently.
      */
     private static List<CheckedData> languageDataOf(Db db) {
-        Stdlib stdlib = db.ask(new Front.Library()).value();
-        if (stdlib == null) {
-            throw new IllegalStateException("this compilation was checked against no library");
-        }
+        Stdlib stdlib = libraryOf(db);
         Symbols language = Symbols.none(stdlib);
         List<CheckedData> declared = new ArrayList<>();
         for (Hir.Def def : stdlib.languageDeclarations().values()) {

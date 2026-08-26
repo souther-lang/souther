@@ -4,6 +4,7 @@ import souther.compiler.stdlib.Stdlib;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.core.Kernel;
+import souther.compiler.core.KernelSignature;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Region;
@@ -570,19 +571,19 @@ public final class CallElaborator {
                 ? ctx.symbols().library().intrinsicOf(operation) : null;
         if (declaredKernel != null) {
             Kernel kernel = declaredKernel.kernel();
-            Stdlib.Signature intrinsic = declaredKernel.signature();
-            if (args.size() != intrinsic.params().size()) {
+            KernelSignature intrinsic = declaredKernel.signature();
+            if (args.size() != intrinsic.parameters().size()) {
                 throw CompileException.of(Diagnostic
                                 .at(call.appliedAt())
-                                .say(new DeclarationMessage.AppliedToAnotherNumberOfArguments(call.written(), String.valueOf(intrinsic.params().size()), String.valueOf(args.size()))).build());
+                                .say(new DeclarationMessage.AppliedToAnotherNumberOfArguments(call.written(), String.valueOf(intrinsic.parameters().size()), String.valueOf(args.size()))).build());
             }
             Applied applied = applySignature(call,
-                    new Type.FnOf(intrinsic.params(), intrinsic.result()), ca, expected, env, ctx);
+                    new Type.FnOf(intrinsic.parameters(), intrinsic.result()), ca, expected, env, ctx);
             // What remains is the kernel's own: constraints the kernel places on the outcome the
             // signature could not state, and the emitter's special cases. They read the settled
             // substitution and result — they are checks on what the application became, not part
             // of how an application is typed.
-            for (Type param : intrinsic.params()) {
+            for (Type param : intrinsic.parameters()) {
                 if (param instanceof Type.FnOf declaredStep) {
                     requiresOrderedKey(kernel, call, declaredStep, applied.substitution(), ctx);
                 }

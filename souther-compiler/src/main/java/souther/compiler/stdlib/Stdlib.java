@@ -3,6 +3,8 @@ package souther.compiler.stdlib;
 import souther.compiler.Reserved;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Kernel;
+import souther.compiler.core.KernelSignature;
+import souther.compiler.core.KernelSignatures;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
@@ -89,7 +91,7 @@ public final class Stdlib {
     /** A kernel the library names, and the signature it was declared with. The kernel is the
      *  language's operation ({@link Kernel#DECIMAL_ROUND}); what a backend emits for it is that
      *  backend's, and a signature is what both of them derive their own boundary form from. */
-    public record Intrinsic(Kernel kernel, Signature signature) {
+    public record Intrinsic(Kernel kernel, KernelSignature signature) {
     }
 
     private final Map<String, Entry> entries;
@@ -100,7 +102,11 @@ public final class Stdlib {
     /** And the same declarations by the library module that writes them, worked out once with
      *  everything else rather than gathered on each ask. */
     private final Map<String, Map<String, Hir.Def>> byModule;
-    private final Map<Kernel, Intrinsic> intrinsics;
+    /** What the language declares of its kernels, worked out once here so that a program and a
+     *  backend hold one value rather than two readings of it. Kept as the snapshot and not as the
+     *  declarations it was built from: what a reader has business asking is what a kernel takes and
+     *  answers, and the library is not the place that question is put. */
+    private final KernelSignatures kernels;
     /** And which kernel each operation that is one reaches, so a reader holding a name asks the
      *  library rather than the declaration it would have to open to find out. */
     private final Map<String, Intrinsic> kernelOperations;
@@ -132,7 +138,9 @@ public final class Stdlib {
         }
         grouped.replaceAll((_, defs) -> Collections.unmodifiableMap(defs));
         this.byModule = Collections.unmodifiableMap(grouped);
-        this.intrinsics = intrinsics;
+        Map<Kernel, KernelSignature> declared = new EnumMap<>(Kernel.class);
+        intrinsics.forEach((kernel, intrinsic) -> declared.put(kernel, intrinsic.signature()));
+        this.kernels = KernelSignatures.of(declared);
         this.kernelOperations = kernelOperations;
         this.helpers = helpers;
         this.published = published;
@@ -218,16 +226,11 @@ public final class Stdlib {
         return helpers;
     }
 
-    /** What the library declares for {@code kernel}, or null where no declaration names it. */
-    public Intrinsic intrinsic(Kernel kernel) {
-        return intrinsics.get(kernel);
-    }
-
-    /** Every kernel the library declares, with what it declares for each. Which kernels those are is
-     *  the library's own answer: a reader that walked the names asking after each would be building
-     *  this again, and would be right only about the names it thought to walk. */
-    public Map<Kernel, Intrinsic> intrinsics() {
-        return intrinsics;
+    /** What the language declares of its kernels, as the one value everything emitting a call to
+     *  one reads. What a checked program carries across the boundary and what a backend derives its
+     *  descriptors from is this, so neither is reading a library of its own. */
+    public KernelSignatures kernelSignatures() {
+        return kernels;
     }
 
     /**
@@ -414,7 +417,8 @@ public final class Stdlib {
                         throw new IllegalStateException("the standard library declares `intrinsic \""
                                 + written.key() + "\"`, which this compiler has no kernel for");
                     }
-                    Intrinsic intrinsic = new Intrinsic(named, e.getValue().signature());
+                    Intrinsic intrinsic =
+                            new Intrinsic(named, declaredAs(e.getKey(), e.getValue().signature()));
                     // And one kernel is declared once. A backend builds its boundary form out of
                     // the signature this holds, so two declarations of one kernel would be two
                     // answers to a question that has one — and put into a map, the second would
@@ -463,6 +467,22 @@ public final class Stdlib {
                 }
             }
             return byKey;
+        }
+
+        /**
+         * One kernel's declaration in the language's own vocabulary.
+         *
+         * <p>A kernel has no body to infer an answer from, so its calls are checked against the
+         * declared result and there is nothing else to check them against. A declaration that
+         * writes none is refused here, where which one it is can be said: the library is this
+         * compiler's own source, so a fault in it is nobody's mistake to be told about.
+         */
+        private static KernelSignature declaredAs(String qualified, Signature declared) {
+            if (declared.result() == null) {
+                throw new IllegalStateException("the standard library declares the kernel `"
+                        + qualified + "`, which states no return type");
+            }
+            return new KernelSignature(declared.params(), declared.result());
         }
 
         /** Each sugar with what it keeps in place: the target's own parameter count, less what the

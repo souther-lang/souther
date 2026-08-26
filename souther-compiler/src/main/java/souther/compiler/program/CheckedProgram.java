@@ -1,5 +1,8 @@
 package souther.compiler.program;
 
+import souther.compiler.core.Kernel;
+import souther.compiler.core.KernelSignature;
+import souther.compiler.core.KernelSignatures;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.types.TypeSymbol;
 
@@ -8,6 +11,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * A Souther program the compiler checked, for an output that lives outside this compiler.
@@ -68,9 +72,19 @@ public final class CheckedProgram {
      * keep true, and the day something is filed in one of them it is missing from the other.
      */
     private final Map<TypeSymbol.AtModule, Declared> declarations;
+    /**
+     * What each kernel of the language was declared to take and answer.
+     *
+     * <p>Held once for the program and not on the calls that reach one. Which operation a call
+     * reaches is a fact about that call; what the operation accepts is a fact about the language
+     * this program was checked with, and the same for every call in every module — written onto
+     * each call site it would be one statement copied as many times as the program happens to reach
+     * the library.
+     */
+    private final KernelSignatures kernels;
 
     CheckedProgram(List<CheckedModule> modules, List<CheckedData> languageDeclarations,
-                   List<CheckedData> declaredOnThePath) {
+                   List<CheckedData> declaredOnThePath, KernelSignatures kernels) {
         this.modules = List.copyOf(modules);
         Map<String, CheckedModule> named = new LinkedHashMap<>();
         for (CheckedModule module : this.modules) {
@@ -96,6 +110,8 @@ public final class CheckedProgram {
         // data in an order and a reader listing them is shown one. A map that kept none would show
         // an order nothing decided, which can differ between two runs of one compiler.
         this.declarations = Collections.unmodifiableMap(index);
+        this.kernels = Objects.requireNonNull(kernels,
+                "a checked program is what the language it was checked with declares of its kernels");
     }
 
     /**
@@ -180,6 +196,28 @@ public final class CheckedProgram {
                     "nothing this compile read declares `" + name + "`");
         }
         return declared;
+    }
+
+    /**
+     * What {@code kernel} was declared to take and to answer.
+     *
+     * <p>The declaration behind a call this program's bodies reach. A call says which operation it
+     * reaches ({@link souther.compiler.core.Core.Reached.OfKernel}) and every node carries the type
+     * the checker settled for it, and those answer what arrived rather than what the callee accepts:
+     * the two part company wherever a declared parameter is a type a value can arrive narrower than,
+     * which a sum-typed parameter is. An output building a boundary form for a call reads it here.
+     *
+     * <p>Total over the kernels, and never a null. The language names a fixed set of them and a
+     * snapshot holding fewer cannot be made, so there is no kernel a program can reach that this
+     * has nothing for.
+     *
+     * <p>Asked of the program, because a program was checked against one version of the language.
+     * A signature read from a library obtained some other way would be a second reading of what a
+     * body was already checked against, and the two would agree for exactly as long as they were
+     * the same version.
+     */
+    public KernelSignature kernelSignature(Kernel kernel) {
+        return kernels.signatureOf(kernel);
     }
 
     /**

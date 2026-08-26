@@ -5,6 +5,7 @@ import souther.compiler.core.Composition;
 import souther.compiler.diag.CompileException;
 import souther.compiler.core.Core;
 import souther.compiler.core.Kernel;
+import souther.compiler.core.KernelSignature;
 import souther.compiler.program.CheckedBehavior;
 import souther.compiler.program.CheckedData;
 import souther.compiler.program.CheckedHelper;
@@ -128,6 +129,23 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
             behavior counts : (label: String) -> Map<String, Int>
 
             let counts (label) = Map.insert(label, String.length(label), Map.empty)
+            """;
+
+    /**
+     * A call whose argument arrives narrower than the parameter it goes into.
+     *
+     * <p>{@code round} declares its second parameter {@code RoundingMode}, a sum the language
+     * itself gives; {@code HALF_UP} is one of its cases, so the type at the call is the case and
+     * the type in the declaration is the sum.
+     */
+    private static final String ROUNDS = """
+            module demo
+
+            data Rate = { value: Decimal }
+
+            behavior toCents : (r: Rate) -> Decimal
+
+            let toCents (r) = Decimal.round(2, HALF_UP, r.value)
             """;
 
     private static CheckedModule demo() {
@@ -543,6 +561,61 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
                 () -> "the empty map is a kernel here too, and this body reaches " + reached);
         assertEquals(Set.of(Kernel.MAP_INSERT, Kernel.STRING_LENGTH, Kernel.MAP_EMPTY), reached,
                 "every kernel this body reaches, however it was written");
+    }
+
+    /**
+     * And the program says what the kernel that call reaches was declared to take.
+     *
+     * <p>What the checker settled for each node is what arrived there. That answers the callee's
+     * shape only while no value can arrive narrower than the parameter it goes into, and a
+     * sum-typed parameter ends it: the argument here is a {@code HALF_UP} and the parameter is the
+     * sum it is a case of. An output building a boundary form off the arguments would build one
+     * naming the case, and find nothing declared that way.
+     */
+    @Test
+    void andTheProgramSaysWhatThatKernelWasDeclaredToTake() {
+        CheckedProgram program = CheckedProgram.of(List.of(ROUNDS));
+        Core body = ((CheckedImplementation.Body)
+                named(program.module("demo"), "toCents").implementation()).body();
+        Core.Call rounds = null;
+        for (Core node : everyNodeOf(body)) {
+            if (node instanceof Core.Call call
+                    && call.fn() instanceof Core.Reached.OfKernel kernel
+                    && kernel.kernel() == Kernel.DECIMAL_ROUND) {
+                rounds = call;
+            }
+        }
+        assertNotNull(rounds, "the body reaches Decimal.round");
+
+        KernelSignature declared = program.kernelSignature(Kernel.DECIMAL_ROUND);
+
+        assertEquals(List.of("Int", "RoundingMode", "Decimal"),
+                declared.parameters().stream().map(Type::show).toList(),
+                "what the language declared the kernel to take");
+        assertEquals("Decimal", Type.show(declared.result()),
+                "and what it declared it answers");
+        assertEquals("HALF_UP", Type.show(rounds.args().get(1).type()),
+                "while what arrived at the sum-typed parameter is the case it is");
+    }
+
+    /**
+     * And it says so for every kernel, not only the ones this program reaches.
+     *
+     * <p>Which kernels the language has is the language's answer. An output told only about the
+     * ones some program happened to call would be one that could not emit the next program.
+     */
+    @Test
+    void andItSaysSoForEveryKernelTheLanguageHas() {
+        CheckedProgram program = CheckedProgram.of(List.of(ROUNDS));
+
+        List<String> answered = new ArrayList<>();
+        for (Kernel kernel : Kernel.values()) {
+            // Refused rather than answered with an absence, so asking is the assertion.
+            answered.add(Type.show(program.kernelSignature(kernel).result()));
+        }
+
+        assertEquals(Kernel.values().length, answered.size(),
+                "every kernel the language has says what it answers");
     }
 
     /** Every helper a call in {@code body} reaches, walking every node of it. */

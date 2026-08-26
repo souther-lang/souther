@@ -1,9 +1,11 @@
 package souther.compiler.codegen;
 
-import souther.compiler.stdlib.Stdlib;
 import souther.compiler.check.AtomSpace;
 import souther.compiler.check.ReqSig;
 import souther.compiler.core.EnsuresEnforcement;
+import souther.compiler.core.Kernel;
+import souther.compiler.core.KernelSignature;
+import souther.compiler.core.KernelSignatures;
 import souther.compiler.core.ValueShape;
 import souther.compiler.check.Symbols;
 import souther.compiler.ast.Hir;
@@ -38,11 +40,21 @@ final class CodegenContext {
     final String pkg;
     final Symbols symbols;
 
-    /** The standard library this compile emits against — the same one its names were resolved
-     *  against, taken from the symbol table rather than fetched, so a kernel is emitted from the
-     *  declaration the checker read. */
-    Stdlib library() {
-        return symbols.library();
+    /**
+     * What the language declares of its kernels: what each takes and answers, as the compilation
+     * that checked these bodies settled it.
+     *
+     * <p>Handed in rather than fetched. A backend that could reach the library would be a backend
+     * that could ask it anything, and what it has business asking is what the operation it is
+     * emitting a call to was declared with — which is a decision of the language, already made and
+     * already carried. Given the value, there is no arrangement under which this emits against one
+     * reading and the program says another.
+     */
+    private final KernelSignatures kernels;
+
+    /** What {@code kernel} was declared to take and answer. */
+    KernelSignature kernelSignature(Kernel kernel) {
+        return kernels.signatureOf(kernel);
     }
     final Map<String, List<GeneratedClass>> caseToSums;
     final Map<String, String> typePackage;
@@ -351,11 +363,13 @@ final class CodegenContext {
         return r != null ? r.descriptorString() : null;
     }
 
-    CodegenContext(String pkg, Symbols symbols, Map<String, List<GeneratedClass>> caseToSums,
+    CodegenContext(String pkg, Symbols symbols, KernelSignatures kernels,
+                   Map<String, List<GeneratedClass>> caseToSums,
                    Map<String, String> typePackage, boolean exposeAll, Set<String> exposed,
                    Map<String, Hir.FnDef> emittedHelpers, Map<String, Type> standingCalls) {
         this.pkg = pkg;
         this.symbols = symbols;
+        this.kernels = kernels;
         this.caseToSums = caseToSums;
         this.typePackage = typePackage;
         this.exposeAll = exposeAll;

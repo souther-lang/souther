@@ -72,6 +72,10 @@ class NothingReachableFromACheckedProgramNamesTheCompilerTest {
         // reading the top of the model.
         assertTrue(reached.contains("souther.compiler.core.Kernel"),
                 () -> "no kernel in " + reached);
+        // And what that kernel was declared to take, which the program answers for and no call
+        // carries — reached off the program itself rather than through a body.
+        assertTrue(reached.contains("souther.compiler.core.KernelSignature"),
+                () -> "no kernel signature in " + reached);
         assertTrue(reached.size() > 50, () -> "the walk reached only " + reached.size());
     }
 
