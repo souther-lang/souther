@@ -660,7 +660,7 @@ public interface Hir {
          * <p>What comes back is a definition this module took on, and it says so. A row's value is
          * its module's own and is never reached from anywhere, so nothing renamed here was one.
          */
-        public FnDef reachedAs(ReachName reference) {
+        public FnDef reachedAs(ReachName.Declaration reference) {
             return new FnDef(WrittenName.synthetic(reference.rendered(), pos), declaredIn, params,
                     declaredReturn, body, modifiers, new DefinitionRole.TakenOn(reference), pos);
         }
@@ -668,8 +668,9 @@ public interface Hir {
         /** The reference this module reaches what it took on by, or null where the definition is
          *  its module's own. Which declaration a taken-on definition is a copy of is this and not
          *  {@link #address}, which is only where the module holds it. */
-        public ReachName takenOnAs() {
-            return role instanceof DefinitionRole.TakenOn(ReachName reference) ? reference : null;
+        public ReachName.Declaration takenOnAs() {
+            return role instanceof DefinitionRole.TakenOn(ReachName.Declaration reference)
+                    ? reference : null;
         }
 
         /** The same declaration with {@code replacement} in place of its body. */
@@ -1788,6 +1789,21 @@ public interface Hir {
             /** The declaration this names, which the reference carries. */
             public ValueName denotes() {
                 return reachedAs.denotes();
+            }
+
+            /**
+             * The reference this was answered with where it reaches a declaration, and null where
+             * it reaches none.
+             *
+             * <p>The one place the question is put. A body names declarations and things that are
+             * not — a binding, a type written where a value goes, the library's namespace — and
+             * every reader that looks a name up among declarations has to tell them apart. Asked
+             * once here, a reader holds the answer as a type; asked at each of them, each reader
+             * writes down which kinds are not one, and the reader that forgets a kind looks it up
+             * anyway.
+             */
+            public ReachName.Declaration reachesADeclaration() {
+                return reachedAs instanceof ReachName.Declaration reached ? reached : null;
             }
 
             /**

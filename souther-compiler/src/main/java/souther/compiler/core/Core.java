@@ -166,8 +166,9 @@ public sealed interface Core {
      */
     sealed interface Reached extends CallTarget {
 
-        /** The reference the module being emitted reaches the callee by. */
-        ReachName name();
+        /** The reference the module being emitted reaches the callee by, which reaches a
+         *  declaration — a call is emitted for nothing else, and both arms below say so. */
+        ReachName.Declaration name();
 
         /** What that reference reaches. Read off the reference rather than held beside it: a
          *  declaration kept next to the route it was reached by is the same fact twice, and the two

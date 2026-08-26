@@ -380,7 +380,7 @@ final class CheckedProgramAssembler {
             // itself; one it declared it reaches as it stands. Neither is worked out from the name
             // it is filed under here — that name is where the module holds the method, and the
             // alias a library operation is carried under says nothing about who declared it.
-            ReachName reachedAs = fn.takenOnAs() != null ? fn.takenOnAs()
+            ReachName.Declaration reachedAs = fn.takenOnAs() != null ? fn.takenOnAs()
                     : new ReachName.Own(new ValueName.Helper(module, fn.name()));
             helpers.add(new CheckedHelper(reachedAs, parameters, body));
         });

@@ -2689,7 +2689,7 @@ final class Terms {
     /** How a preserved call's operation is reached: it is the library's, named under the alias the
      * library publishes it under. A call this representation kept standing applies an operation —
      * the namespace applied is a construction, and is written back as one. */
-    private static ReachName reachOf(ValueName operation) {
+    private static ReachName.Declaration reachOf(ValueName operation) {
         return new ReachName.OfLibrary((ValueName.Stdlib.Operation) operation);
     }
 

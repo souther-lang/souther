@@ -57,7 +57,7 @@ final class PartialHelperUse {
         // Asked with the reference this module reaches it by, which is the graph's node. Asked with
         // the name it is held under, a definition reached one way and held under another would be
         // asked about a node the graph has not got, and the answer would be that it reaches nothing.
-        Optional<List<souther.compiler.types.ReachName>> path =
+        Optional<List<souther.compiler.types.ReachName.Declaration>> path =
                 reachability.fromHelper(held.reachedAs());
         if (path.isPresent()) {
             throw reachesPartial(helper, path.get());
@@ -71,7 +71,7 @@ final class PartialHelperUse {
      * so a single report for the group would leave the rest to be found one build at a time.
      */
     private static CompileException reachesPartial(
-            Hir.FnDef helper, List<souther.compiler.types.ReachName> path) {
+            Hir.FnDef helper, List<souther.compiler.types.ReachName.Declaration> path) {
         String reached = path.get(path.size() - 1).rendered();
         String rendered = PartialReachability.render(path);
         return CompileException.of(Diagnostic

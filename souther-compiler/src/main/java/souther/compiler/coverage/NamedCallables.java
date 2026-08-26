@@ -26,7 +26,7 @@ import java.util.Map;
  * other which declaration a copy is of — and written apart they would agree by having been derived
  * alike, until the day one of them learned a shape the other did not.
  */
-public record NamedCallables(Map<BindingId, ReachName> byBinding) {
+public record NamedCallables(Map<BindingId, ReachName.Declaration> byBinding) {
 
     /** Nothing bound. */
     public static final NamedCallables NONE = new NamedCallables(Map.of());
@@ -46,18 +46,23 @@ public record NamedCallables(Map<BindingId, ReachName> byBinding) {
      * <p>{@code null} where it names no declaration at all -- a parameter holding a function, say,
      * whose callable is decided by whoever called this.
      */
-    public ReachName reached(Hir.Var.Denoting named) {
-        return named.denotes() instanceof ValueName.Local local ? byBinding.get(local.id())
-                : named.reachedAs();
+    public ReachName.Declaration reached(Hir.Var.Denoting named) {
+        if (named.denotes() instanceof ValueName.Local local) {
+            return byBinding.get(local.id());
+        }
+        // A declaration or nothing, which is what this answers and now says. A name that reaches no
+        // declaration — a type used as a value, the library's namespace — is nothing a summary is
+        // kept for, and handing its reference back made the caller ask for one.
+        return named.reachedAs() instanceof ReachName.Declaration reached ? reached : null;
     }
 
     /** The same, with {@code binding} standing for whatever {@code value} is. */
     public NamedCallables and(BindingId binding, Hir.Expr value) {
-        ReachName callable = value instanceof Hir.Var.Denoting named ? reached(named) : null;
+        ReachName.Declaration callable = value instanceof Hir.Var.Denoting named ? reached(named) : null;
         if (binding == null || callable == null) {
             return this;
         }
-        Map<BindingId, ReachName> wider = new LinkedHashMap<>(byBinding);
+        Map<BindingId, ReachName.Declaration> wider = new LinkedHashMap<>(byBinding);
         wider.put(binding, callable);
         return new NamedCallables(wider);
     }

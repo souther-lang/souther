@@ -28,11 +28,11 @@ import java.util.List;
  */
 public final class CheckedHelper {
 
-    private final ReachName reachedAs;
+    private final ReachName.Declaration reachedAs;
     private final List<Parameter> parameters;
     private final Core body;
 
-    CheckedHelper(ReachName reachedAs, List<Parameter> parameters, Core body) {
+    CheckedHelper(ReachName.Declaration reachedAs, List<Parameter> parameters, Core body) {
         this.reachedAs = reachedAs;
         this.parameters = List.copyOf(parameters);
         this.body = body;
@@ -43,7 +43,7 @@ public final class CheckedHelper {
 
     /** The reference a call in this module reaches it by — what a call carries, and what a name
      *  for the method an output emits is built from. */
-    public ReachName reachedAs() {
+    public ReachName.Declaration reachedAs() {
         return reachedAs;
     }
 

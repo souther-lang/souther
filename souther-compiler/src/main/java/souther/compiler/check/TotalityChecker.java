@@ -60,7 +60,7 @@ final class TotalityChecker {
                 entry -> own.put(entry.address().text(), entry.definition()));
         Map<String, Set<String>> ownEdges = ownCallGraph(own, inliner);
         Set<String> handled = new HashSet<>();
-        for (souther.compiler.types.ReachName reference : inliner.recursiveHelpers()) {
+        for (souther.compiler.types.ReachName.Declaration reference : inliner.recursiveHelpers()) {
             souther.compiler.ast.DefinitionName at = inliner.heldAt(reference);
             String name = at == null ? null : at.text();
             Hir.FnDef h = name == null ? null : own.get(name);
@@ -448,8 +448,10 @@ final class TotalityChecker {
     private static void collectOwnCalls(Hir.Expr e, HelperInliner inliner, Set<String> own,
                                         Set<String> out) {
         if (e instanceof Hir.Apply call && call.answered() != null) {
+            souther.compiler.types.ReachName.Declaration reaches =
+                    call.answered().reachesADeclaration();
             souther.compiler.ast.DefinitionName at =
-                    inliner.heldAt(call.answered().reachedAs());
+                    reaches == null ? null : inliner.heldAt(reaches);
             if (at != null && own.contains(at.text())) {
                 out.add(at.text());
             }

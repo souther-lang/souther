@@ -62,7 +62,7 @@ public final class HelperTable {
 
     private final String module;
     private final InliningPolicy policy;
-    private final Map<ReachName, HelperEntry> byReference;
+    private final Map<ReachName.Declaration, HelperEntry> byReference;
     private final Map<DefinitionName, HelperEntry> byAddress;
     private final Map<DefinitionName, HelperEntry> declared;
     private final Map<DefinitionName, HelperEntry> emits;
@@ -71,7 +71,7 @@ public final class HelperTable {
     private final Stdlib stdlib;
 
     private HelperTable(String module, InliningPolicy policy,
-                        Map<ReachName, HelperEntry> byReference,
+                        Map<ReachName.Declaration, HelperEntry> byReference,
                         Map<DefinitionName, HelperEntry> declared,
                         Map<DefinitionName, HelperEntry> emits, Stdlib stdlib) {
         this.stdlib = stdlib;
@@ -120,7 +120,7 @@ public final class HelperTable {
             HelperEntry entry = HelperEntry.reached(takenOnAs(fn), fn);
             emits.put(entry.address(), entry);
         }
-        Map<ReachName, HelperEntry> reached = new LinkedHashMap<>();
+        Map<ReachName.Declaration, HelperEntry> reached = new LinkedHashMap<>();
         if (policy == InliningPolicy.FULL) {
             stdlib.helpers().forEach((operation, body) -> {
                 HelperEntry entry =
@@ -148,8 +148,8 @@ public final class HelperTable {
      * declaration would answer {@code souther.list.foldFrom} for an operation reached as
      * {@code List.foldFrom}, and the definition would then answer to a name no call writes.
      */
-    private static ReachName takenOnAs(Hir.FnDef fn) {
-        ReachName reference = fn.takenOnAs();
+    private static ReachName.Declaration takenOnAs(Hir.FnDef fn) {
+        ReachName.Declaration reference = fn.takenOnAs();
         if (reference == null) {
             throw new IllegalStateException("`" + fn.name() + "` was handed to " + fn.declaredIn()
                     + "'s reader without saying how that reader reaches it");
@@ -175,10 +175,10 @@ public final class HelperTable {
      * fact about the declarations, worked out over the table as it was built, and a graph taken over
      * a narrowed table would find {@code foldFrom} non-recursive and expand its self-call forever.
      */
-    public HelperTable hiding(Collection<ReachName> references) {
-        Map<ReachName, HelperEntry> narrowed = new LinkedHashMap<>(byReference);
+    public HelperTable hiding(Collection<ReachName.Declaration> references) {
+        Map<ReachName.Declaration, HelperEntry> narrowed = new LinkedHashMap<>(byReference);
         boolean any = false;
-        for (ReachName reference : references) {
+        for (ReachName.Declaration reference : references) {
             any |= narrowed.remove(reference) != null;
         }
         return any ? new HelperTable(module, policy, Collections.unmodifiableMap(narrowed),
@@ -201,19 +201,19 @@ public final class HelperTable {
     }
 
     /** The declaration {@code reference} reaches, or null where it reaches none here. */
-    public Hir.FnDef reached(ReachName reference) {
+    public Hir.FnDef reached(ReachName.Declaration reference) {
         HelperEntry entry = byReference.get(reference);
         return entry == null ? null : entry.definition();
     }
 
     /** Whether {@code reference} reaches a declaration here. */
-    public boolean reaches(ReachName reference) {
+    public boolean reaches(ReachName.Declaration reference) {
         return byReference.containsKey(reference);
     }
 
     /** Everything reachable, by the reference it is reached by — what the call graph is built
      * over. */
-    public Map<ReachName, HelperEntry> reachable() {
+    public Map<ReachName.Declaration, HelperEntry> reachable() {
         return byReference;
     }
 
@@ -226,7 +226,7 @@ public final class HelperTable {
      * {@link #declarations} — would be a fourth copy of what an entry already pairs, and the day one
      * of them was built from a different reading the four would stop agreeing.
      */
-    public DefinitionName heldAt(ReachName reference) {
+    public DefinitionName heldAt(ReachName.Declaration reference) {
         HelperEntry entry = byReference.get(reference);
         return entry == null ? null : entry.address();
     }

@@ -59,11 +59,11 @@ public sealed interface ReachName {
     String rendered();
 
     /**
-     * A name reached as it stands: what the module declares itself, a binding in force, a behavior it
-     * can call, a type used as a value.
+     * A declaration of the module doing the reading, reached as it stands.
      *
-     * <p>What these have in common is that no qualifier gets between the reference and what it
-     * reaches, so the declaration's own name is the whole of it.
+     * <p>No qualifier gets between the reference and what it reaches, so the declaration's own name
+     * is the whole of it. Which is true of a binding too, and a binding is {@link InScope}: what
+     * divides the two is not how they render but whether there is a declaration on the other side.
      */
     record Own(ValueName.OfAModule denotes) implements Declaration {
 

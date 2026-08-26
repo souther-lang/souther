@@ -203,7 +203,7 @@ public final class HelperNames {
      * the mark is not part of how the name is reached. So this is that answer and not a route
      * carried over from what stood here.
      */
-    private static ReachName reachingTheSameTypeAs(ValueName.OfType marked) {
+    private static ReachName.InScope reachingTheSameTypeAs(ValueName.OfType marked) {
         return new ReachName.InScope(marked);
     }
 
@@ -343,7 +343,7 @@ public final class HelperNames {
 
     /** How a helper written qualified is reached: under the module that declares it, which is what
      * writing it qualified says. Read off what the name denotes, like the spelling beside it. */
-    private static ReachName ofModule(ValueName denotes) {
+    private static ReachName.Declaration ofModule(ValueName denotes) {
         return new ReachName.OfModule((ValueName.Helper) denotes);
     }
 

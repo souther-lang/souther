@@ -57,7 +57,7 @@ final class PartialReachability {
      * key is a terminal: an imported or prelude helper, whose declaration answers for its own
      * closure. Which of the two a name is comes from the declaration and not from the name, since a
      * module's fns hold both under names of one shape. */
-    private final Map<ReachName, List<ReachName>> calls;
+    private final Map<ReachName.Declaration, List<ReachName.Declaration>> calls;
 
     /**
      * The names of this graph from which a {@code partial} one is reachable, and the {@code partial}
@@ -73,19 +73,19 @@ final class PartialReachability {
      * would: the forward one stops at the first {@code partial} node and does not expand it, and a
      * path that ran on through one would be a longer path to a node this already holds.
      */
-    private final Set<ReachName> reachingPartial;
+    private final Set<ReachName.Declaration> reachingPartial;
 
     private final HelperInliner inliner;
 
-    private PartialReachability(Map<ReachName, List<ReachName>> calls,
-                                Set<ReachName> reachingPartial, HelperInliner inliner) {
+    private PartialReachability(Map<ReachName.Declaration, List<ReachName.Declaration>> calls,
+                                Set<ReachName.Declaration> reachingPartial, HelperInliner inliner) {
         this.calls = calls;
         this.reachingPartial = reachingPartial;
         this.inliner = inliner;
     }
 
     static PartialReachability of(HelperInliner inliner) {
-        Map<ReachName, List<ReachName>> calls = new LinkedHashMap<>();
+        Map<ReachName.Declaration, List<ReachName.Declaration>> calls = new LinkedHashMap<>();
         for (HelperEntry entry : inliner.held().values()) {
             // Only what this module declared is a node. What it took on to emit — a prelude helper,
             // one another module published — is a terminal, because its declaration already answers
@@ -104,26 +104,26 @@ final class PartialReachability {
 
     /** Every node of {@code calls} from which a {@code partial} one is reachable, the
      * {@code partial} ones included. */
-    private static Set<ReachName> reachingPartial(Map<ReachName, List<ReachName>> calls,
+    private static Set<ReachName.Declaration> reachingPartial(Map<ReachName.Declaration, List<ReachName.Declaration>> calls,
                                                   HelperInliner inliner) {
-        Map<ReachName, List<ReachName>> back = new LinkedHashMap<>();
-        Set<ReachName> nodes = new LinkedHashSet<>(calls.keySet());
+        Map<ReachName.Declaration, List<ReachName.Declaration>> back = new LinkedHashMap<>();
+        Set<ReachName.Declaration> nodes = new LinkedHashSet<>(calls.keySet());
         calls.forEach((from, tos) -> {
-            for (ReachName to : tos) {
+            for (ReachName.Declaration to : tos) {
                 nodes.add(to);
                 back.computeIfAbsent(to, _ -> new ArrayList<>()).add(from);
             }
         });
-        Set<ReachName> reaching = new LinkedHashSet<>();
-        Deque<ReachName> work = new ArrayDeque<>();
-        for (ReachName node : nodes) {
+        Set<ReachName.Declaration> reaching = new LinkedHashSet<>();
+        Deque<ReachName.Declaration> work = new ArrayDeque<>();
+        for (ReachName.Declaration node : nodes) {
             Hir.FnDef declared = inliner.helper(node);
             if (declared != null && declared.partial() && reaching.add(node)) {
                 work.add(node);
             }
         }
         while (!work.isEmpty()) {
-            for (ReachName previous : back.getOrDefault(work.poll(), List.of())) {
+            for (ReachName.Declaration previous : back.getOrDefault(work.poll(), List.of())) {
                 if (reaching.add(previous)) {
                     work.add(previous);
                 }
@@ -141,7 +141,7 @@ final class PartialReachability {
      * helper of this module names it too. Which of them are visited is another pass's business, so a
      * soundness rule may not rest on it.
      */
-    private boolean isPartial(ReachName reference) {
+    private boolean isPartial(ReachName.Declaration reference) {
         Hir.FnDef declared = inliner.helper(reference);
         return declared != null && declared.partial();
     }
@@ -163,7 +163,7 @@ final class PartialReachability {
      * {@code partial} one last, or empty where it reaches none. {@code helper}'s own marker is not
      * read — this answers what it reaches, not what it is.
      */
-    Optional<List<ReachName>> fromHelper(ReachName helper) {
+    Optional<List<ReachName.Declaration>> fromHelper(ReachName.Declaration helper) {
         return search(calls.getOrDefault(helper, List.of())).map(path -> prepend(helper, path));
     }
 
@@ -171,14 +171,14 @@ final class PartialReachability {
      * The shortest path from the helpers {@code e} calls to a {@code partial} one, or empty where it
      * reaches none. The expression is not on the path — its caller names what it is.
      */
-    Optional<List<ReachName>> fromExpression(Hir.Expr e) {
+    Optional<List<ReachName.Declaration>> fromExpression(Hir.Expr e) {
         return search(reachedBy(e, inliner));
     }
 
     /** A path as a report writes it: {@code depth -> measure -> spin}. Each node renders as this
      *  module reaches it, which is what an author looking for the call would find written. */
-    static String render(List<ReachName> path) {
-        return path.stream().map(ReachName::rendered).collect(java.util.stream.Collectors.joining(" -> "));
+    static String render(List<ReachName.Declaration> path) {
+        return path.stream().map(ReachName.Declaration::rendered).collect(java.util.stream.Collectors.joining(" -> "));
     }
 
     /**
@@ -186,17 +186,17 @@ final class PartialReachability {
      * {@code partial} node is not expanded: what it reaches is its own business and says nothing more
      * about the caller. A node is visited once, so a cycle is walked once.
      */
-    private Optional<List<ReachName>> search(List<ReachName> seeds) {
+    private Optional<List<ReachName.Declaration>> search(List<ReachName.Declaration> seeds) {
         // Whether one is reachable at all is a lookup; the marker is still read off the declaration
         // beside it, because a name this graph never saw — one an invariant clause alone reaches —
         // is in no set built from the graph.
         if (seeds.stream().noneMatch(seed -> reachingPartial.contains(seed) || isPartial(seed))) {
             return Optional.empty();
         }
-        Map<ReachName, ReachName> from = new HashMap<>();
-        Set<ReachName> seen = new HashSet<>();
-        Deque<ReachName> work = new ArrayDeque<>();
-        for (ReachName seed : seeds) {
+        Map<ReachName.Declaration, ReachName.Declaration> from = new HashMap<>();
+        Set<ReachName.Declaration> seen = new HashSet<>();
+        Deque<ReachName.Declaration> work = new ArrayDeque<>();
+        for (ReachName.Declaration seed : seeds) {
             if (!seen.add(seed)) {
                 continue;
             }
@@ -206,8 +206,8 @@ final class PartialReachability {
             work.add(seed);
         }
         while (!work.isEmpty()) {
-            ReachName at = work.poll();
-            for (ReachName next : calls.getOrDefault(at, List.of())) {
+            ReachName.Declaration at = work.poll();
+            for (ReachName.Declaration next : calls.getOrDefault(at, List.of())) {
                 if (!seen.add(next)) {
                     continue;
                 }
@@ -221,17 +221,17 @@ final class PartialReachability {
         return Optional.empty();
     }
 
-    private static List<ReachName> pathTo(ReachName end, Map<ReachName, ReachName> from) {
-        List<ReachName> path = new ArrayList<>();
-        for (ReachName at = end; at != null; at = from.get(at)) {
+    private static List<ReachName.Declaration> pathTo(ReachName.Declaration end, Map<ReachName.Declaration, ReachName.Declaration> from) {
+        List<ReachName.Declaration> path = new ArrayList<>();
+        for (ReachName.Declaration at = end; at != null; at = from.get(at)) {
             path.add(at);
         }
         Collections.reverse(path);
         return List.copyOf(path);
     }
 
-    private static List<ReachName> prepend(ReachName head, List<ReachName> tail) {
-        List<ReachName> path = new ArrayList<>();
+    private static List<ReachName.Declaration> prepend(ReachName.Declaration head, List<ReachName.Declaration> tail) {
+        List<ReachName.Declaration> path = new ArrayList<>();
         path.add(head);
         path.addAll(tail);
         return List.copyOf(path);
@@ -246,16 +246,16 @@ final class PartialReachability {
      * goes it becomes a function, and a {@code partial} one may not be written there at all
      * (spec §fn-rules), which is checked on its own and is why no edge is made for it here.
      */
-    private static List<ReachName> reachedBy(Hir.Expr e, HelperInliner inliner) {
+    private static List<ReachName.Declaration> reachedBy(Hir.Expr e, HelperInliner inliner) {
         // In the order the names render, which is what "in name order" was and is what a report
         // walking this reads out.
-        Set<ReachName> reached =
-                new TreeSet<>(java.util.Comparator.comparing(ReachName::rendered));
+        Set<ReachName.Declaration> reached =
+                new TreeSet<>(java.util.Comparator.comparing(ReachName.Declaration::rendered));
         collectReached(e, inliner, reached);
         return List.copyOf(reached);
     }
 
-    private static void collectReached(Hir.Expr e, HelperInliner inliner, Set<ReachName> out) {
+    private static void collectReached(Hir.Expr e, HelperInliner inliner, Set<ReachName.Declaration> out) {
         switch (e) {
             // A name nothing answered reaches no declaration, so it makes no edge.
             case Hir.Apply call when call.answered() != null -> {
@@ -286,18 +286,18 @@ final class PartialReachability {
      * today, so keeping it changes no answer; leaving it out would make that a premise of the check
      * rather than a fact about the library, and one the library could stop honouring in silence.
      */
-    private static ReachName keyOf(Hir.Var.Denoting named) {
+    private static ReachName.Declaration keyOf(Hir.Var.Denoting named) {
         return switch (named.denotes()) {
             // Which node it is, the reference is: settled where the name was resolved and carried
             // here. What decides whether there is a node at all is what the name denotes — a binding
             // spelled like a helper reaches no declaration however it is written.
-            case ValueName.Helper _, ValueName.Stdlib _ -> named.reachedAs();
+            case ValueName.Helper _, ValueName.Stdlib _ -> named.reachesADeclaration();
             case null, default -> null;
         };
     }
 
     private static Hir.FnDef declarationOf(Hir.Var.Denoting named, HelperInliner inliner) {
-        ReachName key = keyOf(named);
+        ReachName.Declaration key = keyOf(named);
         return key == null ? null : inliner.helper(key);
     }
 }

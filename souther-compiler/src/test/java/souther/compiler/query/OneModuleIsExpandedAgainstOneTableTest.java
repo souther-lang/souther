@@ -101,7 +101,8 @@ class OneModuleIsExpandedAgainstOneTableTest {
         if (e instanceof Hir.NewData nd) {
             for (Hir.Var spread : nd.spreads()) {
                 if (spread.answered() instanceof Hir.Var.Denoting named
-                        && table.reaches(named.reachedAs())) {
+                        && named.reachesADeclaration() != null
+                        && table.reaches(named.reachesADeclaration())) {
                     out.add(named.reaches());
                 }
             }
@@ -114,7 +115,8 @@ class OneModuleIsExpandedAgainstOneTableTest {
     @Test
     void thePublishedValueIsThereToBeReached() {
         Db db = db();
-        souther.compiler.types.ReachName standard = new souther.compiler.types.ReachName.OfModule(
+        souther.compiler.types.ReachName.Declaration standard =
+                new souther.compiler.types.ReachName.OfModule(
                 new souther.compiler.types.ValueName.Helper("up", "standard"));
         assertTrue(asTheCheckBuildsIt(db, "down").reaches(standard));
         assertTrue(asTheQueryLayerBuildsIt(db, "down").reaches(standard));

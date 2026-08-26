@@ -255,7 +255,7 @@ public final class HelperTyping {
             if (!(e.getValue().body() instanceof Hir.FnBody.Written written)) {
                 continue;
             }
-            Set<souther.compiler.types.ReachName> reached = new LinkedHashSet<>();
+            Set<souther.compiler.types.ReachName.Declaration> reached = new LinkedHashSet<>();
             HelperInliner.helperCallsIn(stdlib, written.expr(), inliner.reachable(), reached);
             Set<String> here = new LinkedHashSet<>();
             reached.forEach(reference -> {
@@ -393,7 +393,7 @@ public final class HelperTyping {
 
     /** The same, read off a table rather than off an inliner over it. */
     static Map<String, Type> recursiveCallSigs(
-            HelperTable table, java.util.Collection<souther.compiler.types.ReachName> references,
+            HelperTable table, java.util.Collection<souther.compiler.types.ReachName.Declaration> references,
             Symbols symbols) {
         return sigsOf(references, table::reached, symbols, table.module());
     }
@@ -407,11 +407,12 @@ public final class HelperTyping {
      *     this module and is a place its author can act on.
      */
     private static Map<String, Type> sigsOf(
-            java.util.Collection<souther.compiler.types.ReachName> references,
-            java.util.function.Function<souther.compiler.types.ReachName, Hir.FnDef> declaring,
+            java.util.Collection<souther.compiler.types.ReachName.Declaration> references,
+            java.util.function.Function<souther.compiler.types.ReachName.Declaration, Hir.FnDef>
+                    declaring,
             Symbols symbols, String ownModule) {
         Map<String, Type> sigs = new HashMap<>();
-        for (souther.compiler.types.ReachName reference : references) {
+        for (souther.compiler.types.ReachName.Declaration reference : references) {
             // Which declaration each is, the reference answers. What comes out is a scope — the
             // names a body may write for a call this representation kept standing — so it is keyed
             // as a scope is, by what the body writes. The resolution happened here, above it.
@@ -462,7 +463,7 @@ public final class HelperTyping {
      */
     static void rejectPartialHelperInInvariant(Hir.Expr e, String data,
                                                PartialReachability reachability) {
-        List<souther.compiler.types.ReachName> path =
+        List<souther.compiler.types.ReachName.Declaration> path =
                 reachability.fromExpression(e).orElse(null);
         if (path == null) {
             return;
@@ -477,7 +478,7 @@ public final class HelperTyping {
 
     static void rejectPartialHelperInEnsures(Hir.Expr e, String behavior,
                                              PartialReachability reachability) {
-        List<souther.compiler.types.ReachName> path =
+        List<souther.compiler.types.ReachName.Declaration> path =
                 reachability.fromExpression(e).orElse(null);
         if (path == null) {
             return;
@@ -492,7 +493,7 @@ public final class HelperTyping {
 
     /** The first application of {@code name} in {@code e}, for the report to underline, or null where
      * the clause holds none (a lowering wrote the call without a name of its own). */
-    private static Hir.Apply firstCallTo(Hir.Expr e, souther.compiler.types.ReachName reference) {
+    private static Hir.Apply firstCallTo(Hir.Expr e, souther.compiler.types.ReachName.Declaration reference) {
         if (e instanceof Hir.Apply call && call.answered() != null
                 && call.answered().reachedAs().equals(reference)) {
             return call;

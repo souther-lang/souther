@@ -33,13 +33,13 @@ import java.util.Set;
  * something declared below would be read as resting on every argument on the first pass, and there
  * is no pass that takes it back.
  */
-public record AnswerDependencies(Map<ReachName, Set<Integer>> bySlot) {
+public record AnswerDependencies(Map<ReachName.Declaration, Set<Integer>> bySlot) {
 
     /** Nothing read. */
     public static final AnswerDependencies NONE = new AnswerDependencies(Map.of());
 
     public AnswerDependencies {
-        Map<ReachName, Set<Integer>> copy = new LinkedHashMap<>();
+        Map<ReachName.Declaration, Set<Integer>> copy = new LinkedHashMap<>();
         bySlot.forEach((name, slots) -> copy.put(name, Set.copyOf(slots)));
         bySlot = Map.copyOf(copy);
     }
@@ -54,23 +54,23 @@ public record AnswerDependencies(Map<ReachName, Set<Integer>> bySlot) {
      * answered "this call rests on none of its arguments", and a rule reaching a fork through it
      * was not followed at all. Which is a rule two call sites wrote counted as one.
      */
-    public Set<Integer> of(ReachName declaration) {
+    public Set<Integer> of(ReachName.Declaration declaration) {
         return bySlot.get(declaration);
     }
 
     /** What {@code declarations} answer out of. */
-    public static AnswerDependencies of(Map<ReachName, Hir.FnDef> declarations) {
+    public static AnswerDependencies of(Map<ReachName.Declaration, Hir.FnDef> declarations) {
         // Everything being read starts at nothing, so a declaration this has not got to yet is
         // told from a callable it will never read. Started from an empty map, the two were the same
         // absence: a call to something declared further down was read as resting on every argument,
         // and the passes only ever add — so the answer stayed at what the first pass could not
         // know, and forks resting on nothing were owed a row per call site.
-        Map<ReachName, Set<Integer>> bySlot = new LinkedHashMap<>();
+        Map<ReachName.Declaration, Set<Integer>> bySlot = new LinkedHashMap<>();
         declarations.keySet().forEach(each -> bySlot.put(each, Set.of()));
         boolean moved = true;
         while (moved) {
             moved = false;
-            for (Map.Entry<ReachName, Hir.FnDef> each : declarations.entrySet()) {
+            for (Map.Entry<ReachName.Declaration, Hir.FnDef> each : declarations.entrySet()) {
                 Set<Integer> was = bySlot.get(each.getKey());
                 Set<Integer> now = answeredOutOf(each.getValue(), bySlot);
                 if (!now.equals(was)) {
@@ -82,7 +82,7 @@ public record AnswerDependencies(Map<ReachName, Set<Integer>> bySlot) {
         return bySlot.isEmpty() ? NONE : new AnswerDependencies(bySlot);
     }
 
-    private static Set<Integer> answeredOutOf(Hir.FnDef fn, Map<ReachName, Set<Integer>> bySlot) {
+    private static Set<Integer> answeredOutOf(Hir.FnDef fn, Map<ReachName.Declaration, Set<Integer>> bySlot) {
         if (!(fn.body() instanceof Hir.FnBody.Written written)) {
             return Set.of();
         }
@@ -106,7 +106,7 @@ public record AnswerDependencies(Map<ReachName, Set<Integer>> bySlot) {
      * rules; the other projects this onto the parameters that carry one.
      */
     static void dependsOn(Hir.Expr e, Map<BindingId, Integer> params,
-                          Map<ReachName, Set<Integer>> bySlot, Map<BindingId, Set<Integer>> bound,
+                          Map<ReachName.Declaration, Set<Integer>> bySlot, Map<BindingId, Set<Integer>> bound,
                           NamedCallables named, Set<Integer> out) {
         switch (e) {
             case Hir.Var.Denoting read when read.denotes() instanceof ValueName.Local local -> {
@@ -134,7 +134,7 @@ public record AnswerDependencies(Map<ReachName, Set<Integer>> bySlot) {
             case Hir.Apply call when call.function() instanceof Hir.Var.Denoting callee -> {
                 // Only the arguments the callee answers out of. One it never reads is not something
                 // this call's value depends on, whatever else that argument would decide elsewhere.
-                ReachName reaches = named.reached(callee);
+                ReachName.Declaration reaches = named.reached(callee);
                 Set<Integer> uses = reaches == null ? null : bySlot.get(reaches);
                 for (int i = 0; i < call.args().size(); i++) {
                     // Every argument where nothing says which of them this call rests on. What is

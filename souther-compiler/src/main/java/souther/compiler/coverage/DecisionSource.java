@@ -44,7 +44,7 @@ public sealed interface DecisionSource {
      * write one declaration differently would own the same fork under two names, and the summaries
      * a fork is read against are looked up by this.
      */
-    record Supplied(souther.compiler.types.ReachName declaration,
+    record Supplied(souther.compiler.types.ReachName.Declaration declaration,
                     java.util.List<String> parameters) implements DecisionSource {
 
         public Supplied {

@@ -108,7 +108,8 @@ public sealed interface DefinitionRole {
      * <p>The model's, and declared elsewhere. Which module wrote it is {@link Hir.FnDef#declaredIn},
      * as it is for any definition; what is here is how this module got to it.
      */
-    record TakenOn(souther.compiler.types.ReachName reachedAs) implements DefinitionRole {
+    record TakenOn(souther.compiler.types.ReachName.Declaration reachedAs)
+            implements DefinitionRole {
 
         public TakenOn {
             if (reachedAs == null) {

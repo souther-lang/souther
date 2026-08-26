@@ -344,7 +344,7 @@ public final class HelperInliner {
      * <p>In the order they were met, because a reader reporting one of a group reports the one it
      * reached first.
      */
-    private final java.util.SequencedSet<ReachName> leftStanding = new java.util.LinkedHashSet<>();
+    private final java.util.SequencedSet<ReachName.Declaration> leftStanding = new java.util.LinkedHashSet<>();
 
     /** Bindings holding the same elements as another binding, and bindings holding elements made
      *  from another's. Written where an expansion removes the operation that says so. */
@@ -367,7 +367,7 @@ public final class HelperInliner {
     /** Every recursion in reach, which is exactly what {@link #inline} leaves a call standing to —
      *  this module's own, what its imports publish to it, and the library underneath both. What a
      *  standing call can be typed against, whatever this module turns out to reach. */
-    public java.util.SequencedSet<ReachName> recursiveInReach() {
+    public java.util.SequencedSet<ReachName.Declaration> recursiveInReach() {
         return graph.recursive();
     }
 
@@ -378,9 +378,9 @@ public final class HelperInliner {
      *
      * <p>Answered in declaration order, which is the order a check reporting one of them reports in.
      * The order is the graph's and is carried, not rebuilt. */
-    public java.util.SequencedSet<ReachName> recursiveHelpers() {
-        java.util.SequencedSet<ReachName> result = new java.util.LinkedHashSet<>();
-        for (ReachName reference : graph.recursive()) {
+    public java.util.SequencedSet<ReachName.Declaration> recursiveHelpers() {
+        java.util.SequencedSet<ReachName.Declaration> result = new java.util.LinkedHashSet<>();
+        for (ReachName.Declaration reference : graph.recursive()) {
             // Held here, which is asked at the address this module puts what it reaches that way —
             // the entry says both, so neither is worked out from the other.
             if (table.held().containsKey(DefinitionName.of(reference))) {
@@ -402,7 +402,7 @@ public final class HelperInliner {
      * that may reach further recursions, and following that is the call graph's to answer
      * ({@link HelperGraph#reachedFrom}) rather than something to re-walk here.
      */
-    public java.util.SequencedSet<ReachName> leftStanding() {
+    public java.util.SequencedSet<ReachName.Declaration> leftStanding() {
         return java.util.Collections.unmodifiableSequencedSet(leftStanding);
     }
 
@@ -493,7 +493,7 @@ public final class HelperInliner {
     /** Every declaration this body can reach, this module's own and the library's, by the reference
      *  it is reached by. What a reader asking about a fork wants: the fork may have been written in
      *  either. */
-    public Map<ReachName, HelperEntry> reachable() {
+    public Map<ReachName.Declaration, HelperEntry> reachable() {
         return table.reachable();
     }
 
@@ -523,7 +523,7 @@ public final class HelperInliner {
         }
         // Its own module is reading here, so it reaches its own declaration bare — which is the
         // reference the graph over that module's table is keyed by.
-        ReachName here = new ReachName.Own(new ValueName.Helper(module, fn.name()));
+        ReachName.Declaration here = new ReachName.Own(new ValueName.Helper(module, fn.name()));
         Hir.Expr closed = graph.recurses(here)
                 ? inlineRecursiveBody(fn) : inline(fn.writtenBody(), bodyOf(fn.name()));
         return fn.reachedAs(new ReachName.OfModule(new ValueName.Helper(module, fn.name())))
@@ -540,14 +540,14 @@ public final class HelperInliner {
      * null where the name reaches none. For a reader walking a set of names this pass answered with —
      * the recursive helpers, say. A reader holding a call asks {@link #applied} instead, because what
      * a call applies is not decided by how it is spelled. */
-    public Hir.FnDef helper(ReachName reference) {
+    public Hir.FnDef helper(ReachName.Declaration reference) {
         return table.reached(reference);
     }
 
     /** Where this module holds what {@code reference} reaches, or null where it reaches nothing
      *  here. The table's answer: a caller that paired the two itself would be keeping a second
      *  statement of what an entry says. */
-    public souther.compiler.ast.DefinitionName heldAt(ReachName reference) {
+    public souther.compiler.ast.DefinitionName heldAt(ReachName.Declaration reference) {
         return table.heldAt(reference);
     }
 
@@ -603,13 +603,18 @@ public final class HelperInliner {
      * sugar it takes rewrites to. Null where what is applied is not a name that reaches a
      * declaration: a binding holding a lambda is applied by the expression and reaches nothing.
      */
-    private static ReachName calledHelper(Stdlib stdlib, Hir.Apply call) {
-        if (!(call.answered() instanceof Hir.Var.Denoting callee)
-                || callee.denotes() instanceof ValueName.Local) {
+    private static ReachName.Declaration calledHelper(Stdlib stdlib, Hir.Apply call) {
+        if (!(call.answered() instanceof Hir.Var.Denoting callee)) {
             return null;
         }
         Stdlib.Rewrite rewrite = rewriteTaken(stdlib, call);
-        return rewrite != null ? new ReachName.OfLibrary(rewrite.target()) : callee.reachedAs();
+        if (rewrite != null) {
+            return new ReachName.OfLibrary(rewrite.target());
+        }
+        // An edge to a declaration, and to nothing else. Applying a binding, or the library's
+        // namespace, reaches no declaration to draw one to — which the reference says, where this
+        // read the denotation and had to name the kinds that are not one.
+        return callee.reachedAs() instanceof ReachName.Declaration reached ? reached : null;
     }
 
     /** The call a sugared name becomes, written out: what it becomes and what it supplies are the
@@ -641,7 +646,7 @@ public final class HelperInliner {
      * is a parameter application, not a call to that helper, so the same-named helpers are hidden while
      * the body is expanded. */
     public Hir.Expr inlineRecursiveBody(Hir.FnDef h) {
-        List<ReachName> parameters = new ArrayList<>();
+        List<ReachName.Declaration> parameters = new ArrayList<>();
         for (Hir.FnParam p : h.params()) {
             // A parameter hides the module's own helper of that name, which is the one a bare name
             // here reaches. Another module's and the library's are reached under a qualifier that
@@ -794,7 +799,8 @@ public final class HelperInliner {
             Hir.FnDef target = table.reached(new ReachName.OfLibrary(rewrite.target()));
             return target == null ? null : target.params().subList(0, rewrite.keptArgs());
         }
-        Hir.FnDef helper = table.reached(call.answered().reachedAs());
+        ReachName.Declaration reached = call.answered().reachesADeclaration();
+        Hir.FnDef helper = reached == null ? null : table.reached(reached);
         return helper == null ? null : helper.params();
     }
 
@@ -902,7 +908,7 @@ public final class HelperInliner {
      * was decided by whoever called this, and answering with the parameter's own spelling would be
      * a declaration of that name, of which there is none.
      */
-    private ReachName reaches(Hir.Var.Denoting named) {
+    private ReachName.Declaration reaches(Hir.Var.Denoting named) {
         return callables.reached(named);
     }
 
@@ -935,7 +941,7 @@ public final class HelperInliner {
      * denotes, never by the text. A name that names nothing has neither, so it is not asked at all.
      */
     private Hir.FnDef expands(Hir.Var.Denoting named) {
-        ReachName reachedBy = named.reachedAs();
+        ReachName.Declaration reachedBy = named.reachesADeclaration();
         return switch (named.denotes()) {
             // applying something that is not a name: what is applied is worked out by the expression,
             // and no declaration stands behind it
@@ -950,7 +956,8 @@ public final class HelperInliner {
                         : writing.scopedLambdas().get(local.id());
                 yield lambda == null ? null : lambda.fn();
             }
-            case ValueName.Helper _, ValueName.Stdlib _ -> table.reached(reachedBy);
+            case ValueName.Helper _, ValueName.Stdlib _ ->
+                    reachedBy == null ? null : table.reached(reachedBy);
             // a construction, an injected behavior, `None`, or a name that denotes nothing: each is
             // applied by something other than an expansion, and each is reported where it belongs
             case ValueName.OfType _, ValueName.Behavior _, ValueName.Builtin _ -> null;
@@ -1066,11 +1073,12 @@ public final class HelperInliner {
     /** The body {@code name} would put here, or null where the name stands for itself — asked as
      *  {@link #valueOf} and {@link #expandCall} ask it, so what is counted is what is spliced. */
     private Hir.Expr substitutedAt(Hir.Var.Denoting name) {
-        if (!(name.denotes() instanceof ValueName.Helper)
-                || graph.recurses(name.reachedAs())) {
+        ReachName.Declaration reaches = name.reachesADeclaration();
+        if (!(name.denotes() instanceof ValueName.Helper) || reaches == null
+                || graph.recurses(reaches)) {
             return null;
         }
-        Hir.FnDef reached = table.reached(name.reachedAs());
+        Hir.FnDef reached = table.reached(reaches);
         return reached == null || reached.body() == null ? null : reached.writtenBody();
     }
 
@@ -1258,13 +1266,13 @@ public final class HelperInliner {
         Hir.Var.Denoting callee = call.answered();
         // a recursive helper is reached by the name it is declared under; a lambda a binding
         // holds is not one, whatever it is called
-        boolean standing = callee != null
-                && !(callee.denotes() instanceof ValueName.Local)
-                && graph.recurses(callee.reachedAs());
+        ReachName.Declaration reaches =
+                callee == null ? null : callee.reachesADeclaration();
+        boolean standing = reaches != null && graph.recurses(reaches);
         if (standing) {
             // The requirement this expansion just made: the call stays a call, so a method for what
             // it reaches has to be emitted wherever this tree ends up.
-            leftStanding.add(callee.reachedAs());
+            leftStanding.add(reaches);
         }
         if (helper == null || standing) {
             // builtin, injected behavior, a function-typed parameter, or a recursive helper —
@@ -1377,7 +1385,8 @@ public final class HelperInliner {
      */
     private Arguments bindArguments(Hir.Apply rawCall, Hir.Apply call, Hir.FnDef helper,
                                     List<Hir.Expr> args, Map<String, Type> applied,
-                                    Hir.Binders ours, BindingOwner mine, ReachName declaration) {
+                                    Hir.Binders ours, BindingOwner mine,
+                                    ReachName.Declaration declaration) {
         // what stands in the body for each of the callee's parameters: the name it is written
         // as and what that name resolved to at the call site, so the expansion carries the
         // argument's own answer rather than deciding one for it
@@ -1547,7 +1556,8 @@ public final class HelperInliner {
                 yield declared == null ? 0 : declared.params().size();
             }
             case ValueName.Helper _ -> {
-                Hir.FnDef declared = table.reached(v.reachedAs());
+                ReachName.Declaration reaches = v.reachesADeclaration();
+                Hir.FnDef declared = reaches == null ? null : table.reached(reaches);
                 yield declared == null || declared.body() == null ? 0 : declared.params().size();
             }
             // A behavior's name handed over is the behavior: the block applies the behavior, so the
@@ -1587,10 +1597,11 @@ public final class HelperInliner {
                 || !(named.denotes() instanceof ValueName.Helper)) {
             return v;
         }
-        Hir.FnDef value = table.reached(named.reachedAs());
         // Asked with the reference the table is keyed by. The graph is keyed as the table is, and a
         // spelling agrees with that key only where a pass has already written it out qualified.
-        if (value == null || value.body() == null || graph.recurses(named.reachedAs())) {
+        ReachName.Declaration reaches = named.reachesADeclaration();
+        Hir.FnDef value = reaches == null ? null : table.reached(reaches);
+        if (value == null || value.body() == null || graph.recurses(reaches)) {
             return v;
         }
         Hir.Expr settled = settled(named);
@@ -2178,8 +2189,8 @@ public final class HelperInliner {
         // Asked of what the name reaches and not of what this module has as its own fns: a published
         // value is substituted where it is spread exactly as one declared here is, and it is not one
         // of this module's fns — nothing emits a value.
-        ReachName reached = spread.reachedAs();
-        Hir.FnDef value = table.reached(reached);
+        ReachName.Declaration reached = spread.reachesADeclaration();
+        Hir.FnDef value = reached == null ? null : table.reached(reached);
         return value == null || !value.params().isEmpty() || value.body() == null
                 || graph.recurses(reached) ? null : value;
     }
@@ -2213,17 +2224,18 @@ public final class HelperInliner {
      * inliner exists. One walk either way: an edge of this graph is what it is, and a reader that
      * counted a different set of them would be reading a different graph.
      */
-    static void helperCallsIn(Stdlib stdlib, Hir.Expr e, Map<ReachName, HelperEntry> table,
-                              Set<ReachName> out) {
+    static void helperCallsIn(Stdlib stdlib, Hir.Expr e,
+                              Map<ReachName.Declaration, HelperEntry> table,
+                              Set<ReachName.Declaration> out) {
         // Applying a function-typed parameter, or a binding holding a function, is not a call to
         // whatever else bears that name. The call carries what it resolved to, so it is asked rather
         // than matched against the helper table — a parameter named like a helper was reaching the
         // graph as a call to that helper, which made `let f (g: (Int) -> Int) = g(1)` recursive.
-        if (e instanceof Hir.Apply call && calledHelper(stdlib, call) != null) {
+        if (e instanceof Hir.Apply call) {
             // A sugar is written out before inlining, so a body that folds reaches the recursive
             // `foldFrom` — recursion classification and what a module has to emit must see that.
-            ReachName fn = calledHelper(stdlib, call);
-            if (table.containsKey(fn)) {
+            ReachName.Declaration fn = calledHelper(stdlib, call);
+            if (fn != null && table.containsKey(fn)) {
                 out.add(fn);
             }
         }

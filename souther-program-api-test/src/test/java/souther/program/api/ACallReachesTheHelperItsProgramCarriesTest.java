@@ -170,7 +170,7 @@ class ACallReachesTheHelperItsProgramCarriesTest {
     }
 
     /** How every call in {@code module} reaching {@code operation} reaches it, which is one way. */
-    private static ReachName reachOf(CheckedModule module, String operation) {
+    private static ReachName.Declaration reachOf(CheckedModule module, String operation) {
         return theOne(callsReaching(module, operation).stream().map(Core.Reached::name).toList());
     }
 

@@ -53,9 +53,9 @@ class TheRecursiveHelpersAreAnsweredInDeclarationOrderTest {
      * recursive helpers of its own and the graph walks those too; which of them there are is not what
      * this is about, and a name the module declares carries no qualifier. */
     private static List<String> declaredHere(
-            Iterable<souther.compiler.types.ReachName> answered) {
+            Iterable<souther.compiler.types.ReachName.Declaration> answered) {
         List<String> own = new ArrayList<>();
-        for (souther.compiler.types.ReachName reference : answered) {
+        for (souther.compiler.types.ReachName.Declaration reference : answered) {
             // The module's own are reached as they stand; everything else is reached under a
             // module or an alias. Which arm it is says so, rather than whether it holds a dot.
             if (reference instanceof souther.compiler.types.ReachName.Own) {

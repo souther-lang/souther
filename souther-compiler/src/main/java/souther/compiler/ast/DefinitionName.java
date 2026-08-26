@@ -58,7 +58,7 @@ public record DefinitionName(String text) {
      * part of the reach and is nowhere in the declaration. A reader holding an address and wanting
      * the reference asks whatever built the pair.
      */
-    public static DefinitionName of(souther.compiler.types.ReachName reference) {
+    public static DefinitionName of(souther.compiler.types.ReachName.Declaration reference) {
         return new DefinitionName(reference.rendered());
     }
 

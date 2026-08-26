@@ -65,7 +65,7 @@ public final class ValueCycles {
         }
         Map<String, Set<String>> callsOf = new LinkedHashMap<>();
         for (HelperEntry entry : table.declarations().values()) {
-            Set<ReachName> called = new LinkedHashSet<>();
+            Set<ReachName.Declaration> called = new LinkedHashSet<>();
             HelperInliner.helperCallsIn(table.library(), entry.definition().writtenBody(),
                     table.reachable(), called);
             Set<String> here = new LinkedHashSet<>();
@@ -151,7 +151,8 @@ public final class ValueCycles {
             // Which name this reads is what the reference reaches, and where that is held is what
             // the graph is keyed by. Read off the spelling, a value named through its own module
             // would be an edge to a node this graph has not got.
-            DefinitionName at = heldAt.of(v.reachedAs());
+            ReachName.Declaration reaches = v.reachesADeclaration();
+            DefinitionName at = reaches == null ? null : heldAt.of(reaches);
             Hir.FnDef d = at == null ? null : reachable.get(at.text());
             if (d != null && d.params().isEmpty()) {
                 out.add(at.text());
@@ -171,7 +172,7 @@ public final class ValueCycles {
     interface HeldAt {
 
         /** Where {@code reference} is held, or null where it reaches nothing there. */
-        DefinitionName of(ReachName reference);
+        DefinitionName of(ReachName.Declaration reference);
     }
 
     /**

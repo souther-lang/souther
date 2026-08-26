@@ -34,7 +34,7 @@ class WhatAModuleMustEmitIsWhatItsExpansionsCouldNotRemoveTest {
     }
 
     private static SequencedSet<String> required(Db db, String module) {
-        Answer<SequencedSet<souther.compiler.types.ReachName>> answer =
+        Answer<SequencedSet<souther.compiler.types.ReachName.Declaration>> answer =
                 db.ask(new Bodies.RequiredRecursiveDefs(module));
         assertTrue(answer.present(), "required of " + module + ": " + answer.reports());
         SequencedSet<String> rendered = new java.util.LinkedHashSet<>();

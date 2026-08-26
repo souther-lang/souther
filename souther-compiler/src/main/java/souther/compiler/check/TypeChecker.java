@@ -146,7 +146,7 @@ public final class TypeChecker {
      *  what typing a call left standing needs, whether or not this module turned out to reach it. */
     public static Map<String, Type> recursiveCallSigs(
             HelperTable table,
-            java.util.Collection<souther.compiler.types.ReachName> references,
+            java.util.Collection<souther.compiler.types.ReachName.Declaration> references,
             Symbols symbols) {
         return HelperTyping.recursiveCallSigs(table, references, symbols);
     }

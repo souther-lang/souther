@@ -60,17 +60,17 @@ class TheCallGraphReadsASugarFromTheLibraryThatDeclaresItTest {
 
     /** The library's helpers as a table is keyed: under the operation each is the body of, which
      *  the library says rather than this splitting a qualified name. */
-    private static Map<ReachName, HelperEntry> libraryHelpers() {
-        Map<ReachName, HelperEntry> reachable = new LinkedHashMap<>();
+    private static Map<ReachName.Declaration, HelperEntry> libraryHelpers() {
+        Map<ReachName.Declaration, HelperEntry> reachable = new LinkedHashMap<>();
         DefaultStdlib.get().helpers().forEach((operation, def) -> {
-            ReachName reference = new ReachName.OfLibrary(operation);
+            ReachName.Declaration reference = new ReachName.OfLibrary(operation);
             reachable.put(reference, HelperEntry.reached(reference, def));
         });
         return reachable;
     }
 
     private static Set<String> callsIn(Hir.Expr e) {
-        Set<ReachName> out = new LinkedHashSet<>();
+        Set<ReachName.Declaration> out = new LinkedHashSet<>();
         HelperInliner.helperCallsIn(DefaultStdlib.get(), e, libraryHelpers(), out);
         Set<String> rendered = new LinkedHashSet<>();
         out.forEach(reference -> rendered.add(reference.rendered()));

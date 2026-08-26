@@ -19,7 +19,7 @@ import souther.compiler.types.ReachName;
  * is built from what the declaration and the reading module say, and every index is an index of
  * this.
  */
-public record HelperEntry(DefinitionName address, ReachName reachedAs, Hir.FnDef definition) {
+public record HelperEntry(DefinitionName address, ReachName.Declaration reachedAs, Hir.FnDef definition) {
 
     public HelperEntry {
         if (address == null || reachedAs == null || definition == null) {
@@ -36,13 +36,13 @@ public record HelperEntry(DefinitionName address, ReachName reachedAs, Hir.FnDef
      * holds what it reaches follows from how it reaches it. The other way round is what this whole
      * type exists to stop.
      */
-    public static HelperEntry reached(ReachName reference, Hir.FnDef definition) {
+    public static HelperEntry reached(ReachName.Declaration reference, Hir.FnDef definition) {
         return new HelperEntry(DefinitionName.of(reference), reference, definition);
     }
 
     /** The entry for a definition the module wrote itself, which it reaches bare and holds under
      *  the name it wrote. */
-    public static HelperEntry own(ReachName reference, Hir.FnDef definition) {
+    public static HelperEntry own(ReachName.Declaration reference, Hir.FnDef definition) {
         return new HelperEntry(definition.address(), reference, definition);
     }
 }

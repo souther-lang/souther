@@ -54,12 +54,12 @@ class AParameterHidesTheDeclarationItIsNamedLikeTest {
     }
 
     /** How {@code demo} reaches a helper of its own, which is bare. */
-    private static ReachName own(String name) {
+    private static ReachName.Declaration own(String name) {
         return new ReachName.Own(new ValueName.Helper("demo", name));
     }
 
     /** And how it reaches the library's fold, which is under the alias the library publishes. */
-    private static final ReachName FOLD_FROM =
+    private static final ReachName.Declaration FOLD_FROM =
             new ReachName.OfLibrary(ValueName.Stdlib.operation("List", "foldFrom"));
 
     @Test
