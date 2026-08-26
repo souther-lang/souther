@@ -45,7 +45,7 @@ public final class LspServer {
 
     /** Whether this client said it reads completion placeholders. False until it says so. */
     private boolean readsSnippets;
-    /** Whether this client asked the server to shut down. What the exit code answers. */
+    /** Whether this client sent the {@code shutdown} request. What the exit code answers. */
     private boolean askedToShutDown;
     private final Workspace workspace = new Workspace();
     private int nextRequestId = 1;
@@ -181,7 +181,16 @@ public final class LspServer {
             case CODE_LENS -> { respond(id, codeLenses(params)); yield false; }
             case RENAME -> { respond(id, rename(params)); yield false; }
             case FORMATTING -> { respond(id, formatting(params)); yield false; }
-            case SHUTDOWN -> { askedToShutDown = true; respond(id, null); yield false; }
+            // Only as the request it is. A `shutdown` written as a notification asked nothing, so
+            // there is nothing to reply to and nothing the exit code can hold the client to; the
+            // session still stops, because a client that wrote it is leaving either way.
+            case SHUTDOWN -> {
+                if (id != null && !id.isNull()) {
+                    askedToShutDown = true;
+                    respond(id, null);
+                }
+                yield false;
+            }
             case EXIT -> true;
         };
     }
