@@ -35,6 +35,21 @@ public record Band(Seam under, Seam over, Bound from, Bound to) {
     }
 
     /**
+     * The same run with every level written the one way, for an identity to be built from.
+     *
+     * <p>Not {@link #key()}, which reads the run off the values at its ends and so says nothing
+     * about where a run with no first value starts: {@code 0 < x} and {@code 5 < x} over the
+     * decimals have the same first value, which is none. What holds a run and is compared as a value
+     * holds this.
+     */
+    public Band canonical() {
+        return new Band(under == null ? null : under.canonical(),
+                over == null ? null : over.canonical(),
+                from == null ? null : from.canonical(),
+                to == null ? null : to.canonical());
+    }
+
+    /**
      * The line below this run, as an end of the position's counts, or the end the rules leave where
      * nothing parts it there.
      *

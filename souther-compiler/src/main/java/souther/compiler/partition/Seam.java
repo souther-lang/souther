@@ -115,6 +115,14 @@ public record Seam(CutPosition at, Level below, Level above) {
         return (below == null ? "" : below.key()) + "|" + (above == null ? "" : above.key());
     }
 
+    /** The same division with every level written the one way, for an identity to be built from.
+     *  What {@link #key()} answers, kept as the seam rather than as a word. */
+    public Seam canonical() {
+        return new Seam(at.canonical(),
+                below == null ? null : below.canonical(),
+                above == null ? null : above.canonical());
+    }
+
     /**
      * How a level written in one form's terms reads as a level of the quantity it is a multiple of.
      *

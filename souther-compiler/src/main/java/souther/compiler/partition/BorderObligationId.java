@@ -60,6 +60,10 @@ public record BorderObligationId(AuthoredLine line, Level at) {
             throw new IllegalArgumentException(
                     "a debt is some rule's line somewhere: " + line + " " + at);
         }
+        // Written the one way, because this is compared as a value and is what a map of debts is
+        // keyed on. A level keeps the spelling its rule was written in, so one line read at two
+        // positions can arrive here as 0 and as 0.00 — one line, and two keys.
+        at = at.canonical();
     }
 
     /**

@@ -64,6 +64,33 @@ public record CutPosition(Level written, BigDecimal per) {
     }
 
     /**
+     * This line written the one way {@link #key()} names it: the fraction reduced, and the place
+     * spelled as the order spells it.
+     *
+     * <p>So that a value holding a position and compared as a value answers what {@link #key()}
+     * would. A third and two sixths come back the same, and so do a line at {@code 0} and one at
+     * {@code 0.00}.
+     *
+     * <p>An order with no numbers has no fraction to reduce, and its place is its own value.
+     */
+    public CutPosition canonical() {
+        BigDecimal at = numberOf(written);
+        if (at == null) {
+            return new CutPosition(written.canonical(), per);
+        }
+        BigDecimal[] rule = asARule();
+        return new CutPosition(reduced(written, rule[1]), rule[0]);
+    }
+
+    /** The reduced numerator, put back on whatever order the line was written on. */
+    private static Level reduced(Level written, BigDecimal to) {
+        return switch (written) {
+            case Level.ACount _ -> new Level.ACount(new Count(to));
+            case Level.OnACarrier on -> new Level.OnACarrier(on.of(), new Count(to));
+        };
+    }
+
+    /**
      * This line as a value of the quantity, or null where it is not one.
      *
      * <p>The one way to get a level out of a position, and it answers null exactly where the rule

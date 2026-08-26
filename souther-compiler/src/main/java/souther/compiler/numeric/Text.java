@@ -53,6 +53,12 @@ public record Text(String at) implements Place {
         return at;
     }
 
+    /** Itself, there being no second spelling of a string to fold. */
+    @Override
+    public Text canonical() {
+        return this;
+    }
+
     @Override
     public String toString() {
         return at;
