@@ -37,8 +37,8 @@ final class AnswerWalk {
     record Found(String question, String offender, Locus at) {
 
         /** Which answer, where in it, and what — which is what a register of places is keyed by. */
-        String place() {
-            return at.place(question, offender);
+        Locus.Place place() {
+            return at.of(question, offender);
         }
     }
 
@@ -59,8 +59,8 @@ final class AnswerWalk {
         }
 
         /** Every place one of them sits. */
-        Set<String> places() {
-            Set<String> out = new java.util.TreeSet<>();
+        Set<Locus.Place> places() {
+            Set<Locus.Place> out = new java.util.TreeSet<>();
             found.forEach(each -> out.add(each.place()));
             return out;
         }
@@ -73,7 +73,7 @@ final class AnswerWalk {
     static Walked of(Db db) {
         Scan scan = new Scan();
         db.everyAnswer().forEach((key, answer) -> {
-            scan.question = key.getClass().getSimpleName();
+            scan.question = key.getClass().getName();
             scan.at(answer, Locus.ROOT);
         });
         return scan.walked();
@@ -231,7 +231,7 @@ final class AnswerWalk {
                         whole = false;
                         continue;
                     }
-                    whole &= at(held, where.thenMember(field.getName()));
+                    whole &= at(held, where.thenMember(at, field.getName()));
                 }
             }
             return whole;

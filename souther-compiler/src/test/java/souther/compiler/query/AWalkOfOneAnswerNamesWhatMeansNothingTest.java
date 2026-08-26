@@ -41,7 +41,9 @@ class AWalkOfOneAnswerNamesWhatMeansNothingTest {
     private record Root(Holder one, Holder two) {}
 
     private static Set<String> places(AnswerWalk.Walked walked) {
-        return new TreeSet<>(walked.places());
+        Set<String> out = new TreeSet<>();
+        walked.places().forEach(each -> out.add(each.toString()));
+        return out;
     }
 
     /**
@@ -58,8 +60,8 @@ class AWalkOfOneAnswerNamesWhatMeansNothingTest {
 
         AnswerWalk.Walked walked = AnswerWalk.of("Q", new Root(shared, shared));
 
-        assertEquals(Set.of("Q.one.held " + Address.class.getName(),
-                        "Q.two.held " + Address.class.getName()),
+        assertEquals(Set.of("Q.Root#one.Holder#held " + Address.class.getName(),
+                        "Q.Root#two.Holder#held " + Address.class.getName()),
                 places(walked), "the thing that means nothing, named at each place that holds it");
         assertTrue(walked.complete(),
                 () -> "nothing stopped this walk: " + walked.notOpened() + walked.loops());
@@ -114,7 +116,7 @@ class AWalkOfOneAnswerNamesWhatMeansNothingTest {
         Map<Object, Object> held = new HashMap<>();
         held.put(new Named("k", new Address()), "v");
 
-        assertEquals(Set.of("Q{key}.held " + Address.class.getName()),
+        assertEquals(Set.of("Q{key}.Named#held " + Address.class.getName()),
                 places(AnswerWalk.of("Q", held)), "what a key carries, reached through the key");
     }
 

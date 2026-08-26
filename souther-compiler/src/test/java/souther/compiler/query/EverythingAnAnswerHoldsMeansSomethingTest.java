@@ -81,14 +81,21 @@ class EverythingAnAnswerHoldsMeansSomethingTest {
         return out;
     }
 
-    /** Every place a detector met something, and which detector met it where. */
-    private record Met(Map<String, Set<String>> byPlace, Set<String> stopped,
-                       Map<String, Set<String>> differentThings, int visited) {}
+    /**
+     * Every place a detector met something, which detector met it where, and what got in the way.
+     *
+     * @param asDifferently questions the two stores were not both asked, which is the ground the
+     *                      comparison stands on rather than something it can report on
+     */
+    private record Met(Map<Locus.Place, Set<String>> byPlace, Set<String> stopped,
+                       Map<Locus.Place, Set<String>> differentThings, Set<String> askedDifferently,
+                       int visited) {}
 
     private static Met met() {
-        Map<String, Set<String>> byPlace = new TreeMap<>();
-        Map<String, Set<String>> differentThings = new TreeMap<>();
+        Map<Locus.Place, Set<String>> byPlace = new TreeMap<>();
+        Map<Locus.Place, Set<String>> differentThings = new TreeMap<>();
         Set<String> stopped = new TreeSet<>();
+        Set<String> askedDifferently = new TreeSet<>();
         int visited = 0;
         for (AnswerClosure.Scenario scenario : AnswerClosure.Scenario.values()) {
             for (Db one : storesOf(scenario)) {
@@ -109,6 +116,16 @@ class EverythingAnAnswerHoldsMeansSomethingTest {
             for (int i = 0; i < first.size(); i++) {
                 Map<Key<?>, Answer<?>> mine = first.get(i).everyAnswer();
                 Map<Key<?>, Answer<?>> theirs = again.get(i).everyAnswer();
+                // Which questions the two were put is what the comparison below stands on, and it
+                // is asked here rather than assumed. Compared over what they have in common, a
+                // question one of them was never put drops out of the comparison without a word,
+                // and this would go on holding a register about the answers that remained.
+                mine.keySet().stream().filter(key -> !theirs.containsKey(key))
+                        .forEach(key -> askedDifferently.add(
+                                "only the first time: " + key + " in " + scenario));
+                theirs.keySet().stream().filter(key -> !mine.containsKey(key))
+                        .forEach(key -> askedDifferently.add(
+                                "only the second time: " + key + " in " + scenario));
                 Set<Key<?>> asked = new HashSet<>(mine.keySet());
                 asked.retainAll(theirs.keySet());
                 for (Key<?> key : asked) {
@@ -119,11 +136,10 @@ class EverythingAnAnswerHoldsMeansSomethingTest {
                     }
                     Divergence.Walked walk = Divergence.between(a, b);
                     walk.traversal().interruptions().forEach(each -> stopped.add(
-                            each.why() + " " + key.getClass().getSimpleName() + each.at()
+                            each.why() + " " + key.getClass().getName() + each.at()
                                     + " in " + scenario));
                     for (Divergence each : walk.found()) {
-                        String place = each.at().place(key.getClass().getSimpleName(),
-                                each.cause());
+                        Locus.Place place = each.at().of(key.getClass().getName(), each.cause());
                         if (each.kind() == Divergence.Kind.DIFFERENT_THINGS) {
                             differentThings.computeIfAbsent(place, _ -> new TreeSet<>())
                                     .add(scenario.toString());
@@ -137,7 +153,7 @@ class EverythingAnAnswerHoldsMeansSomethingTest {
                 }
             }
         }
-        return new Met(byPlace, stopped, differentThings, visited);
+        return new Met(byPlace, stopped, differentThings, askedDifferently, visited);
     }
 
     /**
@@ -150,6 +166,12 @@ class EverythingAnAnswerHoldsMeansSomethingTest {
     void bothDetectorsGetToTheEndOfBothScenarios() {
         Met met = met();
 
+        // What an answer was built from is what an edit is absorbed by, so which questions a
+        // compile reaches is as much what it did as what it said: two stores over one input
+        // reaching different graphs would mean the dependencies recorded in one are not the ones
+        // the other would keep. Asked of every scenario, because every scenario is compiled twice.
+        assertEquals(Set.of(), met.askedDifferently(),
+                "a question one of two compilations of one input was put and the other was not");
         assertEquals(Set.of(), met.stopped(),
                 "somewhere a walk of the answers could not go");
         assertEquals(Map.of(), met.differentThings(),
@@ -189,7 +211,7 @@ class EverythingAnAnswerHoldsMeansSomethingTest {
     @Test
     void theOnlyThingsThatMeanNothingAreTheOnesWrittenDown() {
         Met met = met();
-        Map<String, String> reasons = AnswerClosure.reasons();
+        Map<Locus.Place, String> reasons = AnswerClosure.reasons();
 
         assertEquals(AnswerClosure.places(), met.byPlace().keySet(),
                 () -> "a place in an answer holding something that means nothing by equals. "

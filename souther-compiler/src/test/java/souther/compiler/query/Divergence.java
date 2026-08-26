@@ -6,7 +6,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -79,20 +78,44 @@ record Divergence(Locus at, String cause, Divergence.Kind kind) {
              *  and this arm is what keeps the holder from being named for finding nothing. */
             A_GRAPH_THAT_LOOPS,
             /**
-             * Two maps of one size whose entries do not line up by what their keys say.
+             * A container of one size whose members do not line up one to one by what they say.
              *
-             * <p>Not a finding, because which of the two it is cannot be told from here: keys that
-             * hold a way of reading a store and keys that name different things both arrive as an
-             * entry with nothing to pair it with. Said as somewhere the walk could not go, so that
-             * whoever meets it is told what is in front of them rather than handed a guess.
+             * <p>Not a finding, because which of the two it is cannot be told from here: members
+             * that hold a way of reading a store and members that name different things both arrive
+             * as something with nothing to pair it with. Said as somewhere the walk could not go, so
+             * that whoever meets it is told what is in front of them rather than handed a guess.
              */
-            KEYS_THAT_DO_NOT_PAIR
+            MEMBERS_THAT_DO_NOT_PAIR,
+            /**
+             * A collection whose equality is neither its order nor what it holds.
+             *
+             * <p>What pairs two containers is their own contract: a list is equal to another by
+             * position, a set by membership. A collection that is neither answers to neither rule,
+             * and pairing it by the order an iterator happens to give would compare a member with
+             * something that is not its counterpart — which comes back as one input having compiled
+             * to two different answers, the worst thing this can say wrongly.
+             */
+            A_CONTAINER_WITH_NO_RULE_FOR_PAIRING
         }
     }
 
+    /** A walk of two whole answers is bounded, so a graph nobody meant to walk stops. */
+    private static final int FAR_ENOUGH = 400_000;
+
     /** Where {@code a} and {@code b} come apart, and how much of them was looked at. */
     static Walked between(Object a, Object b) {
-        Walk walk = new Walk();
+        return between(a, b, FAR_ENOUGH);
+    }
+
+    /**
+     * The same, giving up after {@code budget} pairs.
+     *
+     * <p>For a test that is about what this says when it gives up. A model large enough to exhaust
+     * the bound a compile is walked under is larger than anything here, so the path out would rot
+     * unread and the arm reporting it would go with it.
+     */
+    static Walked between(Object a, Object b, int budget) {
+        Walk walk = new Walk(budget);
         walk.at(a, b, Locus.ROOT);
         return new Walked(List.copyOf(walk.out),
                 new Traversal(walk.visited, List.copyOf(walk.interruptions)));
@@ -125,8 +148,11 @@ record Divergence(Locus at, String cause, Divergence.Kind kind) {
         private final List<Divergence> out = new ArrayList<>();
         private final List<Interruption> interruptions = new ArrayList<>();
         private int visited;
-        /** A walk of two whole answers is bounded, so a graph nobody meant to walk stops. */
-        private int budget = 400_000;
+        private int budget;
+
+        Walk(int budget) {
+            this.budget = budget;
+        }
 
         private static boolean opaque(Class<?> c) {
             return c == String.class || Number.class.isAssignableFrom(c) || c == Boolean.class
@@ -243,16 +269,7 @@ record Divergence(Locus at, String cause, Divergence.Kind kind) {
                         || at(mine.get(), yours.get(), path.then(new Locus.Step.Present()));
             }
             if (a instanceof Collection<?> left && b instanceof Collection<?> right) {
-                if (left.size() != right.size()) {
-                    say(path, c, Kind.DIFFERENT_THINGS);
-                    return true;
-                }
-                boolean whole = true;
-                Iterator<?> theirs = right.iterator();
-                for (Object each : left) {
-                    whole &= at(each, theirs.next(), path.then(new Locus.Step.Element()));
-                }
-                return whole;
+                return members(left, right, c, path);
             }
             if (a.equals(b)) {
                 return true;
@@ -271,14 +288,75 @@ record Divergence(Locus at, String cause, Divergence.Kind kind) {
                         theirs = f.get(b);
                     } catch (ReflectiveOperationException | RuntimeException | Error _) {
                         stopped(Interruption.Why.A_FIELD_THAT_WOULD_NOT_OPEN,
-                                path.thenMember(f.getName()));
+                                path.thenMember(k, f.getName()));
                         whole = false;
                         continue;
                     }
-                    whole &= at(mine, theirs, path.thenMember(f.getName()));
+                    whole &= at(mine, theirs, path.thenMember(k, f.getName()));
                 }
             }
             return whole;
+        }
+
+        /**
+         * Two collections compared over the correspondence their own contract gives them.
+         *
+         * <p>A list is equal to another list by position and a set to another set by membership, so
+         * those are the two ways a pair of them line up. Lined up by the order an iterator gives, a
+         * pair of sets holding one thing each in a different order comes back as two members that
+         * differ — which is this saying a compile did not reproduce, about two answers that mean the
+         * same. So the rule is read off the contract, and a collection answering to neither is where
+         * this stops rather than where it guesses.
+         *
+         * <p>A set pairs by what its members say, so a member it pairs is equal to the other side
+         * and there is nothing under it left to find. What the pairing is for is that it either
+         * holds one to one or does not, and the second is worth saying.
+         */
+        private boolean members(Collection<?> left, Collection<?> right, Class<?> c, Locus path) {
+            if (left.size() != right.size()) {
+                say(path, c, Kind.DIFFERENT_THINGS);
+                return true;
+            }
+            if (left instanceof List<?> mine && right instanceof List<?> yours) {
+                boolean whole = true;
+                for (int i = 0; i < mine.size(); i++) {
+                    whole &= at(mine.get(i), yours.get(i), path.then(new Locus.Step.Element()));
+                }
+                return whole;
+            }
+            if (left instanceof Set<?> && right instanceof Set<?>) {
+                return pairedOneToOne(left, right, path.then(new Locus.Step.Element())) != null;
+            }
+            stopped(Interruption.Why.A_CONTAINER_WITH_NO_RULE_FOR_PAIRING, path);
+            return false;
+        }
+
+        /**
+         * {@code right}'s members by what each of them says, or null where that is not one to one
+         * with {@code left}'s.
+         *
+         * <p>Total and injective or nothing. A correspondence built by putting one side in a map of
+         * its own members loses a member wherever two of them say the same thing — which is exactly
+         * what a container comparing its members by address holds — and every member of the other
+         * side then pairs with whatever survived. Counting what the map kept is what says the
+         * correspondence is the one it looks like.
+         */
+        private Map<Object, Object> pairedOneToOne(Collection<?> left, Collection<?> right,
+                                                   Locus path) {
+            Map<Object, Object> theirs = new HashMap<>();
+            for (Object each : right) {
+                theirs.put(each, each);
+            }
+            Map<Object, Object> mine = new HashMap<>();
+            for (Object each : left) {
+                mine.put(each, each);
+            }
+            if (theirs.size() != right.size() || mine.size() != left.size()
+                    || !theirs.keySet().equals(mine.keySet())) {
+                stopped(Interruption.Why.MEMBERS_THAT_DO_NOT_PAIR, path);
+                return null;
+            }
+            return theirs;
         }
 
         /**
@@ -307,18 +385,16 @@ record Divergence(Locus at, String cause, Divergence.Kind kind) {
                 say(path, c, Kind.DIFFERENT_THINGS);
                 return true;
             }
+            if (pairedOneToOne(left.keySet(), right.keySet(),
+                    path.then(new Locus.Step.MapKey())) == null) {
+                return false;
+            }
             Map<Object, Object> theirs = new HashMap<>();
             for (Map.Entry<?, ?> each : right.entrySet()) {
                 theirs.put(each.getKey(), each.getValue());
             }
             boolean whole = true;
             for (Map.Entry<?, ?> each : left.entrySet()) {
-                if (!theirs.containsKey(each.getKey())) {
-                    stopped(Interruption.Why.KEYS_THAT_DO_NOT_PAIR,
-                            path.then(new Locus.Step.MapKey()));
-                    whole = false;
-                    continue;
-                }
                 whole &= at(each.getValue(), theirs.get(each.getKey()),
                         path.then(new Locus.Step.MapValue()));
             }

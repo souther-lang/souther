@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 import java.util.IdentityHashMap;
+import java.util.List;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
@@ -68,8 +69,8 @@ class APairWalkNamesADefectWhereItIsTest {
 
         Divergence.Walked walked = Divergence.between(left, right);
 
-        assertEquals(Set.of(".one.point.held " + Address.class.getName() + " THE_SAME_THING_TWICE",
-                        ".two.point.held " + Address.class.getName() + " THE_SAME_THING_TWICE"),
+        assertEquals(Set.of(".Root#one.Holder#point.Point#held " + Address.class.getName() + " THE_SAME_THING_TWICE",
+                        ".Root#two.Holder#point.Point#held " + Address.class.getName() + " THE_SAME_THING_TWICE"),
                 found(walked),
                 "the thing that cannot compare, named at each path that holds it");
         assertTrue(walked.traversal().complete(),
@@ -163,10 +164,180 @@ class APairWalkNamesADefectWhereItIsTest {
                 new HashMap<>(Map.of("k", new Address())),
                 new HashMap<>(Map.of("k", new Address()))));
 
-        assertEquals(Set.of(".value " + Address.class.getName() + " THE_SAME_THING_TWICE"),
+        assertEquals(Set.of(".Holding#value " + Address.class.getName() + " THE_SAME_THING_TWICE"),
                 underAComponent, "a component the record calls value");
         assertEquals(Set.of("{value} " + Address.class.getName() + " THE_SAME_THING_TWICE"),
                 underAMap, "and the far side of an entry, which is not that");
+    }
+
+    /**
+     * Two sets holding the same things in different orders are not two different answers.
+     *
+     * <p>What pairs two containers is their own contract, and a set is equal to another by what is
+     * in it. Paired by the order an iterator gives, these two come back as members that differ —
+     * this saying one input compiled to two different answers, about two values the language calls
+     * equal.
+     */
+    @Test
+    void twoSetsHoldingTheSameThingsAreNotTwoAnswers() {
+        java.util.Set<String> left = new java.util.LinkedHashSet<>(List.of("a", "b"));
+        java.util.Set<String> right = new java.util.LinkedHashSet<>(List.of("b", "a"));
+
+        Divergence.Walked walked = Divergence.between(
+                new Holds(left, new Address()), new Holds(right, new Address()));
+
+        assertEquals(Set.of(".Holds#beside " + Address.class.getName() + " THE_SAME_THING_TWICE"),
+                found(walked), "the sets hold the same things, and only what is beside them differs");
+        assertTrue(walked.traversal().complete(),
+                () -> "and nothing stopped the walk: " + walked.traversal().interruptions());
+    }
+
+    /**
+     * Something to hold a container in, beside something that never compares.
+     *
+     * <p>Both halves. Held on its own, two of these are equal wherever the containers are, and the
+     * walk stops at them without ever reaching what is inside — so the container's own rule would go
+     * untested and the assertion would pass on a walk that never happened.
+     */
+    private record Holds(Object it, Address beside) {}
+
+    /** And a list is still paired by position, which is what a list's equality is. */
+    @Test
+    void aListIsPairedByPosition() {
+        Address beside = new Address();
+        Divergence.Walked walked = Divergence.between(
+                new Holds(List.of("a", "b"), beside), new Holds(List.of("b", "a"), beside));
+
+        assertEquals(Set.of(".Holds#it[] java.lang.String DIFFERENT_THINGS"), found(walked),
+                "two lists holding the same things in two orders are two lists");
+    }
+
+    /** A collection that is neither is where the walk stops rather than guesses. */
+    @Test
+    void aCollectionThatIsNeitherAListNorASetStopsTheWalk() {
+        Address beside = new Address();
+        Divergence.Walked walked = Divergence.between(
+                new Holds(new java.util.ArrayDeque<>(List.of("a")), beside),
+                new Holds(new java.util.ArrayDeque<>(List.of("a")), beside));
+
+        assertFalse(walked.traversal().complete(), "neither position nor membership is its equality");
+        assertEquals(Set.of("A_CONTAINER_WITH_NO_RULE_FOR_PAIRING .Holds#it"),
+                walked.traversal().interruptions().stream()
+                        .map(each -> each.why() + " " + each.at())
+                        .collect(java.util.stream.Collectors.toSet()),
+                "said as what it is");
+    }
+
+    /** Something whose insides belong to a module that opens nothing here. */
+    private record Dated(java.time.LocalDateTime at) {}
+
+    /**
+     * A field the runtime will not hand over is said out loud.
+     *
+     * <p>What is under it was never compared. Swallowed, a walk that could not get into half of two
+     * answers would agree with a register as readily as one that read all of them.
+     */
+    @Test
+    void aFieldThatWouldNotOpenStopsTheWalk() {
+        Divergence.Walked walked = Divergence.between(
+                new Dated(java.time.LocalDateTime.of(2026, 1, 1, 0, 0)),
+                new Dated(java.time.LocalDateTime.of(2026, 1, 2, 0, 0)));
+
+        assertFalse(walked.traversal().complete(), "java.base opens nothing to this");
+        assertTrue(walked.traversal().interruptions().stream().anyMatch(each ->
+                        each.why() == Divergence.Interruption.Why.A_FIELD_THAT_WOULD_NOT_OPEN),
+                () -> "for the reason it is: " + walked.traversal().interruptions());
+    }
+
+    /**
+     * And a walk that runs out of its bound says that rather than stopping quietly.
+     *
+     * <p>The bound is what keeps a graph nobody meant to walk from being walked, and a compile is
+     * given more of it than anything here reaches — so the path out of it would rot unread, and the
+     * arm that reports it would go with it. Held by giving one walk almost none.
+     */
+    @Test
+    void aWalkThatRunsOutOfItsBoundSaysSo() {
+        Divergence.Walked walked = Divergence.between(
+                new Root(new Holder(new Point(new Address())), new Holder(new Point(new Address()))),
+                new Root(new Holder(new Point(new Address())), new Holder(new Point(new Address()))),
+                1);
+
+        assertFalse(walked.traversal().complete(), "one pair is not the whole of that graph");
+        assertTrue(walked.traversal().interruptions().stream().anyMatch(each ->
+                        each.why() == Divergence.Interruption.Why.BUDGET_EXHAUSTED),
+                () -> "for the reason it is: " + walked.traversal().interruptions());
+    }
+
+    /**
+     * And every way this walk can stop is one of these.
+     *
+     * <p>The arms are the checklist. A walk that reports nothing over a corpus says only that
+     * nothing happened there today, so a path out that no shape here reaches is a path that could
+     * stop reporting without anything going red — and an arm added to the mechanism arrives with
+     * nobody having built the graph that reaches it.
+     */
+    @Test
+    void everyWayThisWalkCanStopIsBuiltHere() {
+        Set<Divergence.Interruption.Why> met = new java.util.LinkedHashSet<>();
+        stoppedWalks().forEach(walked -> walked.traversal().interruptions()
+                .forEach(each -> met.add(each.why())));
+
+        assertEquals(java.util.EnumSet.allOf(Divergence.Interruption.Why.class),
+                java.util.EnumSet.copyOf(met),
+                "a way this walk can stop that no graph here reaches");
+    }
+
+    /** Every graph above that stops the walk, in one place, so the arms can be counted. */
+    private static List<Divergence.Walked> stoppedWalks() {
+        Address beside = new Address();
+        Map<Object, Object> unpairable = new HashMap<>();
+        unpairable.put(new Address(), "v");
+        Map<Object, Object> alsoUnpairable = new HashMap<>();
+        alsoUnpairable.put(new Address(), "v");
+        // The loop is made of something with no equality of its own. A container that holds itself
+        // has an `equals` that never comes back, and asking it is what a walk of two of them does
+        // before it descends — the graph would take the stack rather than the arm under test.
+        Loop ring = new Loop();
+        ring.again = ring;
+        Loop alsoRing = new Loop();
+        alsoRing.again = alsoRing;
+        return List.of(
+                Divergence.between(unpairable, alsoUnpairable),
+                Divergence.between(ring, alsoRing),
+                Divergence.between(new Holds(new java.util.ArrayDeque<>(List.of("a")), beside),
+                        new Holds(new java.util.ArrayDeque<>(List.of("a")), beside)),
+                Divergence.between(new Dated(java.time.LocalDateTime.of(2026, 1, 1, 0, 0)),
+                        new Dated(java.time.LocalDateTime.of(2026, 1, 2, 0, 0))),
+                Divergence.between(new Holder(new Point(new Address())),
+                        new Holder(new Point(new Address())), 1));
+    }
+
+    /**
+     * A map whose keys mean the same and are not the same is where the walk stops.
+     *
+     * <p>A correspondence built by putting one side into a map of its own keys loses a key wherever
+     * two of them say the same thing — which is what a map comparing its keys by address is for. The
+     * side that survived then pairs with everything, every entry looks accounted for, and what was
+     * never compared is what the collapse took away.
+     */
+    @Test
+    void aMapHoldingTwoKeysThatMeanOneThingStopsTheWalk() {
+        Map<Object, Object> left = new IdentityHashMap<>();
+        left.put(new String("k"), "v");
+        left.put(new String("k"), "w");
+        Map<Object, Object> right = new IdentityHashMap<>();
+        right.put(new String("k"), "v");
+        right.put(new String("k"), "w");
+
+        Divergence.Walked walked = Divergence.between(left, right);
+
+        assertFalse(walked.traversal().complete(), "two keys of one meaning is not a correspondence");
+        assertEquals(Set.of("MEMBERS_THAT_DO_NOT_PAIR {key}"),
+                walked.traversal().interruptions().stream()
+                        .map(each -> each.why() + " " + each.at())
+                        .collect(java.util.stream.Collectors.toSet()),
+                "said as somewhere the walk could not go");
     }
 
     /** Two maps of one size whose keys line up with nothing. */
@@ -180,7 +351,7 @@ class APairWalkNamesADefectWhereItIsTest {
         Divergence.Walked walked = Divergence.between(left, right);
 
         assertFalse(walked.traversal().complete(), "the entries line up with nothing");
-        assertEquals(Set.of("KEYS_THAT_DO_NOT_PAIR {key}"),
+        assertEquals(Set.of("MEMBERS_THAT_DO_NOT_PAIR {key}"),
                 walked.traversal().interruptions().stream()
                         .map(each -> each.why() + " " + each.at())
                         .collect(java.util.stream.Collectors.toSet()),
@@ -212,7 +383,7 @@ class APairWalkNamesADefectWhereItIsTest {
         Divergence.Walked walked = Divergence.between(left, right);
 
         assertFalse(walked.traversal().complete(), "the walk met the pair it was already walking");
-        assertEquals(Set.of("A_GRAPH_THAT_LOOPS .again"),
+        assertEquals(Set.of("A_GRAPH_THAT_LOOPS .Loop#again"),
                 walked.traversal().interruptions().stream()
                         .map(each -> each.why() + " " + each.at())
                         .collect(java.util.stream.Collectors.toSet()),

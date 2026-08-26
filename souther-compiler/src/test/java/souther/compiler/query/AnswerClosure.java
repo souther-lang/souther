@@ -48,6 +48,16 @@ final class AnswerClosure {
     enum Cause {
         /** It says what it is and defines no equality over that. */
         MISSING_VALUE_EQUALITY,
+        /**
+         * It has an equality and that equality is an address — its own, or its members'.
+         *
+         * <p>Its own word beside the one above because the work is different. Something with no
+         * equality wants one written; something whose equality is an address has one already and it
+         * answers the wrong question, so what it wants is to be held in something that means what it
+         * says. Filed under the first, the second sends whoever picks it up to add a method beside
+         * one that is already there.
+         */
+        IDENTITY_SEMANTICS,
         /** It is a way of asking something rather than an answer, so it is one object per store
          *  whatever it is compared with. */
         CAPABILITY,
@@ -81,7 +91,7 @@ final class AnswerClosure {
      * @param at where in that answer it sits, as the steps of the answer's own shape
      * @param offender the class of the thing, or the array type
      */
-    record Identity(String question, String at, String offender, Nature nature, Cause cause) {
+    record Identity(Locus.Place place, Nature nature, Cause cause) {
 
         /**
          * The two axes say one thing between them or neither says anything.
@@ -94,14 +104,8 @@ final class AnswerClosure {
             if (nature == Nature.NOT_READ ^ cause == Cause.UNCLASSIFIED) {
                 throw new IllegalArgumentException(
                         "what a thing is and what is wrong with it are read together: "
-                                + question + at + " is " + nature + "/" + cause);
+                                + place + " is " + nature + "/" + cause);
             }
-        }
-
-        /** The place, as both detectors write one. A question of {@code *} is a place every
-         *  answer has rather than a place in one. */
-        String place() {
-            return question + at + " " + offender;
         }
     }
 
@@ -139,68 +143,82 @@ final class AnswerClosure {
             walked(Scenario.VALID_CORPUS), compared(Scenario.VALID_CORPUS),
             walked(Scenario.A_MODULE_SPOKEN_ABOUT), compared(Scenario.A_MODULE_SPOKEN_ABOUT));
 
-    private static Known bytes(String question, String at) {
-        return new Known(new Identity(question, at, "byte[]", Nature.VALUE,
+    private static final Set<Observation> ONLY_WALKED = Set.of(
+            walked(Scenario.VALID_CORPUS), walked(Scenario.A_MODULE_SPOKEN_ABOUT));
+
+    /** A place, written the way a walk writes one. */
+    private static Locus.Place at(String question, String offender, Locus.Step... steps) {
+        return new Locus(List.of(steps)).of(question, offender);
+    }
+
+    private static Locus.Step m(String owner, String name) {
+        return new Locus.Step.Member(owner, name);
+    }
+
+    private static final Locus.Step ELEMENT = new Locus.Step.Element();
+    private static final Locus.Step VALUE = new Locus.Step.MapValue();
+
+    private static Known bytes(String question, Locus.Step... steps) {
+        return new Known(new Identity(at(question, "byte[]", steps), Nature.VALUE,
                 Cause.MISSING_VALUE_EQUALITY), BOTH_EVERYWHERE, CLASS_BYTES);
     }
 
+    private static final String Q = "souther.compiler.query.";
+
     private static final List<Known> KNOWN = List.of(
-            bytes("All", ".value{value}"),
-            bytes("Classes", ".value{value}"),
-            bytes("Evaluated", ".value.classes{value}"),
-            bytes("EvaluationLinked", ".value.classes{value}"),
+            bytes(Q + "Output$All", m("Answer", "value"), VALUE),
+            bytes(Q + "Output$Classes", m("Answer", "value"), VALUE),
+            bytes(Q + "Output$Evaluated", m("Answer", "value"),
+                    m("EvaluationArtifact", "classes"), VALUE),
+            bytes(Q + "Output$EvaluationLinked", m("Answer", "value"),
+                    m("EvaluationArtifact", "classes"), VALUE),
             // The one of the five a module on its own does not reach: nothing is linked against
             // where there is nothing to link against.
-            new Known(new Identity("Linked", ".value{value}", "byte[]", Nature.VALUE,
-                    Cause.MISSING_VALUE_EQUALITY),
+            new Known(new Identity(at(Q + "Output$Linked", "byte[]", m("Answer", "value"), VALUE),
+                    Nature.VALUE, Cause.MISSING_VALUE_EQUALITY),
                     Set.of(walked(Scenario.VALID_CORPUS), compared(Scenario.VALID_CORPUS)),
                     CLASS_BYTES),
-            new Known(new Identity("ModuleScope", ".value.values.elsewhere.universe.db",
-                    "souther.compiler.query.Db", Nature.NON_VALUE, Cause.CAPABILITY),
-                    BOTH_EVERYWHERE,
+            new Known(new Identity(at(Q + "Names$ModuleScope", Q + "Db",
+                    m("Answer", "value"), m("Scoped", "values"), m("Values", "elsewhere"),
+                    m("OfTheUniverse", "universe"), m("CompilationUniverse", "db")),
+                    Nature.NON_VALUE, Cause.CAPABILITY), BOTH_EVERYWHERE,
                     "Scoping.Scoped carries a way of asking the modules around this one a further "
                             + "question, and it holds this store to ask with. Where a scope has "
                             + "been taken apart already, that is the half of the assembly nobody "
                             + "has yet — it belongs inside the compute that asks"),
-            new Known(new Identity("Path", ".value",
-                    "souther.compiler.meta.ModulePath$$Lambda", Nature.NON_VALUE,
-                    Cause.CAPABILITY),
+            new Known(new Identity(at(Q + "Front$Path", "souther.compiler.meta.ModulePath$$Lambda",
+                    m("Answer", "value")), Nature.NON_VALUE, Cause.CAPABILITY),
                     // A function is not compared, so two of them never come apart under a walk that
                     // holds one against another; only the walk that asks each object what it is
                     // meets this.
-                    Set.of(walked(Scenario.VALID_CORPUS),
-                            walked(Scenario.A_MODULE_SPOKEN_ABOUT)),
+                    ONLY_WALKED,
                     "a module path resolves a module by running something, and a function never "
                             + "equals the same function computed again"),
-            new Known(new Identity("Library", ".value",
-                    "souther.compiler.stdlib.Stdlib", Nature.VALUE,
-                    Cause.MISSING_VALUE_EQUALITY),
-                    Set.of(walked(Scenario.VALID_CORPUS),
-                            walked(Scenario.A_MODULE_SPOKEN_ABOUT)),
+            new Known(new Identity(at(Q + "Front$Library", "souther.compiler.stdlib.Stdlib",
+                    m("Answer", "value")), Nature.VALUE, Cause.MISSING_VALUE_EQUALITY),
+                    ONLY_WALKED,
                     "a value, and here for a reason the others are not: one is built per process "
                             + "and every answer of a compilation holds that one, so identity is the "
                             + "answer structural equality would give. Writing that equality out "
                             + "would walk every declaration the library has on every comparison, "
                             + "and writing \"any library equals any other\" would be true only "
                             + "while there is one of them"),
-            new Known(new Identity("Expanding", ".value.table.stdlib",
-                    "souther.compiler.stdlib.Stdlib", Nature.VALUE,
-                    Cause.MISSING_VALUE_EQUALITY),
-                    Set.of(walked(Scenario.VALID_CORPUS),
-                            walked(Scenario.A_MODULE_SPOKEN_ABOUT)),
+            new Known(new Identity(at(Q + "Bodies$Expanding", "souther.compiler.stdlib.Stdlib",
+                    m("Answer", "value"), m("Of", "table"), m("HelperTable", "stdlib")),
+                    Nature.VALUE, Cause.MISSING_VALUE_EQUALITY), ONLY_WALKED,
                     "the same library, reached through the table an expansion reads. One thing to "
                             + "fix and two places it is held"),
-            new Known(new Identity("Inputs", ".value{value}",
-                    "souther.compiler.inputs.InputDomain", Nature.NOT_READ,
-                    Cause.UNCLASSIFIED), BOTH_EVERYWHERE,
+            new Known(new Identity(at(Q + "Adequacy$Inputs", "souther.compiler.inputs.InputDomain",
+                    m("Answer", "value"), VALUE), Nature.NOT_READ, Cause.UNCLASSIFIED),
+                    BOTH_EVERYWHERE,
                     "whether it is something that says what it is or something that does something "
                             + "has to be read before it is either, so the fix is to read it"),
-            new Known(new Identity("Checked", ".value",
-                    "souther.compiler.query.Bodies$Elaborated", Nature.NOT_READ,
-                    Cause.UNCLASSIFIED), BOTH_EVERYWHERE, "as above"),
-            new Known(new Identity("*", ".reports[].diagnostic",
-                    "souther.compiler.diag.Diagnostic", Nature.VALUE,
-                    Cause.MISSING_VALUE_EQUALITY),
+            new Known(new Identity(at(Q + "Bodies$Checked", Q + "Bodies$Elaborated",
+                    m("Answer", "value")), Nature.NOT_READ, Cause.UNCLASSIFIED), BOTH_EVERYWHERE,
+                    "as above"),
+            new Known(new Identity(at("*", "souther.compiler.diag.Diagnostic",
+                    m("Answer", "reports"), ELEMENT, m("Report", "diagnostic")),
+                    Nature.VALUE, Cause.MISSING_VALUE_EQUALITY),
                     Set.of(walked(Scenario.A_MODULE_SPOKEN_ABOUT),
                             compared(Scenario.A_MODULE_SPOKEN_ABOUT)),
                     "a report says what this compile found, and two compiles that found the same "
@@ -212,15 +230,15 @@ final class AnswerClosure {
                             + "and not this defect's"));
 
     /** Every place written down here, whichever detector or scenario meets it. */
-    static Set<String> places() {
-        Set<String> out = new java.util.TreeSet<>();
+    static Set<Locus.Place> places() {
+        Set<Locus.Place> out = new java.util.TreeSet<>();
         KNOWN.forEach(each -> out.add(each.identity().place()));
         return out;
     }
 
     /** And who is expected to meet each of them. */
-    static Map<String, Set<String>> observations() {
-        Map<String, Set<String>> out = new TreeMap<>();
+    static Map<Locus.Place, Set<String>> observations() {
+        Map<Locus.Place, Set<String>> out = new TreeMap<>();
         KNOWN.forEach(each -> {
             Set<String> seen = new java.util.TreeSet<>();
             each.seenBy().forEach(one -> seen.add(one.toString()));
@@ -230,8 +248,8 @@ final class AnswerClosure {
     }
 
     /** What each place is, for a reader of a failure. */
-    static Map<String, String> reasons() {
-        Map<String, String> out = new LinkedHashMap<>();
+    static Map<Locus.Place, String> reasons() {
+        Map<Locus.Place, String> out = new LinkedHashMap<>();
         KNOWN.forEach(each -> out.put(each.identity().place(),
                 each.identity().nature() + "/" + each.identity().cause() + ": "
                         + each.reason()));

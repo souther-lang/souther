@@ -29,12 +29,47 @@ import java.util.List;
  */
 record Locus(List<Locus.Step> steps) {
 
+    /**
+     * One place in one answer, as both detectors name one and the register is keyed by.
+     *
+     * <p>Kept as what it is until a failure is written. Flattened to text where it is compared, two
+     * places whose rendering happens to agree are one line in a register that is meant to hold one
+     * line per place — and which two those are moves with how a step is spelled rather than with
+     * anything about the answers.
+     *
+     * @param question the key that asks it, by class, or {@code *} for a place every answer has
+     * @param offender the class of the thing there, or the array type
+     */
+    record Place(String question, Locus at, String offender) implements Comparable<Place> {
+
+        @Override
+        public int compareTo(Place other) {
+            return toString().compareTo(other.toString());
+        }
+
+        @Override
+        public String toString() {
+            return question + at + " " + offender;
+        }
+    }
+
+    /** This place in the answer {@code question} asks, holding {@code offender}. */
+    Place of(String question, String offender) {
+        return new Place(questionOf(question), this, offender);
+    }
+
     /** One way down from a thing an answer holds to something it holds. */
     sealed interface Step {
 
-        /** A member of the thing above, by the name it is declared under — a component where that
-         *  is a record and a field where it is not, which is the same step either way. */
-        record Member(String name) implements Step {}
+        /**
+         * A member of the thing above, by what declares it and the name it is declared under.
+         *
+         * <p>The declaring type and not only the name. Two arms of one sum can each hold a thing of
+         * one class under a component of one name, and a walk that reached them through a collection
+         * writes the same steps for both — so one line would stand for two places, one of them would
+         * be fixed, and the line would stay because the other still holds.
+         */
+        record Member(String owner, String name) implements Step {}
 
         /** An element of an array or of a collection. Which one is not kept: an answer is not more
          *  or less exposed at the third element than at the first, and the index would put the
@@ -60,8 +95,8 @@ record Locus(List<Locus.Step> steps) {
      * <p>Read off the record rather than written out, so that renaming the component moves this with
      * it instead of leaving a string nobody notices is stale.
      */
-    private static final String WHAT_WAS_SAID =
-            Answer.class.getRecordComponents()[1].getName();
+    private static final Step.Member WHAT_WAS_SAID = new Step.Member(
+            Answer.class.getSimpleName(), Answer.class.getRecordComponents()[1].getName());
 
     /**
      * Whether this is a place every answer has, rather than a place in one answer's value.
@@ -74,19 +109,15 @@ record Locus(List<Locus.Step> steps) {
      * thing, and each of them an artifact of which model a scenario compiled.
      */
     boolean inEveryAnswer() {
-        return !steps.isEmpty() && steps.getFirst() instanceof Step.Member(String name)
-                && name.equals(WHAT_WAS_SAID);
+        return !steps.isEmpty() && WHAT_WAS_SAID.equals(steps.getFirst());
     }
 
-    /**
-     * Which answer, where in it, and what — as both detectors write a place.
-     *
-     * <p>The question is dropped where the place is one every answer has, and {@code *} stands where
-     * it would have been.
-     */
-    String place(String question, String offender) {
-        return (inEveryAnswer() ? "*" : question) + this + " " + offender;
+    /** Which answer this is in, or {@code *} where it is a place every answer has. */
+    String questionOf(String question) {
+        return inEveryAnswer() ? "*" : question;
     }
+
+
 
     Locus {
         steps = List.copyOf(steps);
@@ -99,9 +130,9 @@ record Locus(List<Locus.Step> steps) {
         return new Locus(out);
     }
 
-    /** The member of the thing above that is declared under {@code name}. */
-    Locus thenMember(String name) {
-        return then(new Step.Member(name));
+    /** The member {@code owner} declares under {@code name}. */
+    Locus thenMember(Class<?> owner, String name) {
+        return then(new Step.Member(owner.getSimpleName(), name));
     }
 
     /**
@@ -128,7 +159,7 @@ record Locus(List<Locus.Step> steps) {
         StringBuilder out = new StringBuilder();
         for (Step step : steps) {
             out.append(switch (step) {
-                case Step.Member(String name) -> "." + name;
+                case Step.Member(String owner, String name) -> "." + owner + "#" + name;
                 case Step.Element _ -> "[]";
                 case Step.MapKey _ -> "{key}";
                 case Step.MapValue _ -> "{value}";

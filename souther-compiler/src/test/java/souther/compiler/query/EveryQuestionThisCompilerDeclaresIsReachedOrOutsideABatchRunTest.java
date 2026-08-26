@@ -79,10 +79,11 @@ class EveryQuestionThisCompilerDeclaresIsReachedOrOutsideABatchRunTest {
      * added and not registered would leave the arithmetic below adding up while the question went
      * unreached.
      *
-     * <p>The code source of {@link Key} and the package it is in, which is where this compiler keeps
-     * its query vocabulary. A key declared somewhere else is a change to how the vocabulary is
-     * arranged, and this failing to find it is that change being noticed rather than a limit of the
-     * scan.
+     * <p>The whole of what {@link Key} was compiled beside, and not the package it sits in. Scanning
+     * the package would make the vocabulary's own arrangement the thing that bounds the count: a key
+     * declared somewhere else would be in neither what is declared nor what is reached, and every
+     * equation below would go on balancing while the question went unwatched. Where they are allowed
+     * to sit is a claim of its own and is made by {@link #everyQuestionIsDeclaredWhereTheyBelong}.
      */
     private record Scanned(Set<String> declared, Set<String> unreadable) {}
 
@@ -90,7 +91,7 @@ class EveryQuestionThisCompilerDeclaresIsReachedOrOutsideABatchRunTest {
         Path root = Path.of(Key.class.getProtectionDomain().getCodeSource().getLocation().toURI());
         Set<String> out = new TreeSet<>();
         Set<String> unreadable = new TreeSet<>();
-        try (Stream<Path> files = Files.walk(root.resolve("souther/compiler/query"))) {
+        try (Stream<Path> files = Files.walk(root.resolve("souther/compiler"))) {
             for (Path each : files.filter(p -> p.toString().endsWith(".class")).toList()) {
                 String name = root.relativize(each).toString()
                         .replace(java.io.File.separatorChar, '.')
@@ -116,6 +117,28 @@ class EveryQuestionThisCompilerDeclaresIsReachedOrOutsideABatchRunTest {
 
     private static Set<String> declared() throws Exception {
         return scan().declared();
+    }
+
+    /** Where the query vocabulary is kept. */
+    private static final String WHERE_QUESTIONS_LIVE = "souther.compiler.query.";
+
+    /**
+     * And every question is declared where the vocabulary is kept.
+     *
+     * <p>Its own claim rather than something the scan assumes. What the scan counts is every key
+     * this compiler has, wherever it was written; that they are all written in one place is a fact
+     * about how the compiler is arranged, and a key put somewhere else moves the vocabulary rather
+     * than escaping the count.
+     */
+    @Test
+    void everyQuestionIsDeclaredWhereTheyBelong() throws Exception {
+        Set<String> elsewhere = new TreeSet<>();
+        declared().stream().filter(each -> !each.startsWith(WHERE_QUESTIONS_LIVE))
+                .forEach(elsewhere::add);
+
+        assertEquals(Set.of(), elsewhere,
+                "a question declared outside " + WHERE_QUESTIONS_LIVE + ", which moves where this"
+                        + " compiler keeps what it can be asked");
     }
 
     /**
