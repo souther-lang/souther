@@ -268,7 +268,7 @@ public record BorderAssessment(Border border, Map<PointRole, ItemAssessment> ite
                                         PointRole role) {
         ItemAssessment found = null;
         for (BorderAssessment each : lines) {
-            if (!each.border().equals(line)) {
+            if (!each.border().sameReadingAs(line)) {
                 continue;
             }
             if (found != null) {

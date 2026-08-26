@@ -103,6 +103,35 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, PointA
         };
     }
 
+    /**
+     * Whether this and {@code other} are one reading of one line.
+     *
+     * <p>What the records' own equality was being used for at the two places that ask it: finding
+     * the reading a debt was made from in a later assessment, and keeping one reading's lines from
+     * holding one line twice. Neither is asking whether everything about the two values matches —
+     * they are asking whether it is the same border, met in the same place, owing the same things.
+     *
+     * <p><b>The demands and what they are owed for, and not what is written beside them.</b> Two
+     * readings can ask a row for the same values and owe them to different things — the run below a
+     * line the rules already stop the quantity at is owed to the line as well as to that end — so
+     * the demands alone would call two borders one. What settles where a run stops, on the other
+     * hand, is settled by the model, while who can move it is a fact about the reading's
+     * surroundings and is no part of which border this is.
+     */
+    public boolean sameReadingAs(Border other) {
+        if (other == null || !cut.equals(other.cut) || !origin.equals(other.origin)) {
+            return false;
+        }
+        for (PointRole role : EnumSet.allOf(PointRole.class)) {
+            PointAnswer mine = answer(role);
+            PointAnswer also = other.answer(role);
+            if (!mine.demand().sameAs(also.demand()) || !mine.bases().equals(also.bases())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     /** The same over all four roles, in role order. */
     public java.util.List<BorderObligationPoint> owes() {
         return EnumSet.allOf(PointRole.class).stream().flatMap(role -> owes(role).stream()).toList();
@@ -340,7 +369,7 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, PointA
             // loop went round.
             read.found(each.cuts().target(), each.by());
             Border made = at(each.cuts().target(), each.by(), each.cuts().within(), beside);
-            if (out.stream().noneMatch(had -> had.equals(made))) {
+            if (out.stream().noneMatch(had -> had.sameReadingAs(made))) {
                 out.add(read.drew(made));
             }
         }
