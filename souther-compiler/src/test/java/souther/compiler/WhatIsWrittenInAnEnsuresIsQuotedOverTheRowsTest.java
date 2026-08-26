@@ -251,10 +251,11 @@ class WhatIsWrittenInAnEnsuresIsQuotedOverTheRowsTest {
      *  against, and a behavior nothing is offering a row for has none to fill. */
     @Test
     void aBehaviorWithNoRowToFillIsNotQuoted() {
-        String block = GeneratedRows.of("example.todo",
+        String block = GeneratedRows.of(
+                souther.compiler.query.OfferingRequest.overTheModule("example.todo", true),
                 Map.of("findTodo", nothingOffered()), null,
                 Map.of("findTodo", List.of("ensures asked = NotFound -> id.value > 0")),
-                true, SourceNameResolver.identity()).text();
+                SourceNameResolver.identity()).text();
 
         assertEquals("", block);
     }

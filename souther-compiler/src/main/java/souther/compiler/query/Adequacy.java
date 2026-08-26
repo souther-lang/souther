@@ -1565,6 +1565,40 @@ public final class Adequacy {
     }
 
     /**
+     * The rows one request is offered, from the two searches that compose them.
+     *
+     * <p>Both halves and one answer. A behavior's own rows and the rows a declaration's line is owed
+     * are asked for in two ways and are work for one person, so which rows go out is settled here
+     * rather than wherever they are printed — and the joining of them is a question about the work
+     * rather than a step of the layout.
+     *
+     * <p>Here rather than in a key of its own, for the reason the two aggregations above are: what a
+     * generation costs is paid by {@link Generated} and {@link BoundarySearch}, which are keyed, so
+     * nothing is searched twice however many times this is asked. What identifies the question is
+     * the request, and it is a value the caller states.
+     */
+    public static Offering offeredFor(Db db, OfferingRequest request) {
+        Map<String, Filling> generated;
+        if (request.scope() instanceof GenerationScope.Behavior one) {
+            // One behavior, asked about on its own. Generating rows searches the pair space and
+            // composes values at the edges, and a caller that named a behavior would otherwise pay
+            // for every other behavior of the module to find out about the one it asked for.
+            Filling only = db.ask(new Generated(request.module(), one.name())).value();
+            generated = only == null ? Map.of() : Map.of(one.name(), only);
+        } else {
+            generated = generatedOf(db, request.module());
+        }
+        if (generated == null) {
+            return null;
+        }
+        // And what the module's own declarations are owed, which is no behavior's and so is in none
+        // of the fillings above. Asked only where the request asked for the edges: a request that
+        // asked for no boundary rows is not asking about these either.
+        return Offering.of(request, generated, request.boundaries()
+                ? generatedForDeclarationsOf(db, request.module(), request.scope()) : null);
+    }
+
+    /**
      * What one behavior's reading of one line holds at one of its points.
      *
      * <p>Asked of {@link BoundarySearch} and never of the measurement. The two are both called an

@@ -264,10 +264,11 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
                     Adequacy.generatedOf(compilation.db(), module);
             assertNotNull(generated);
 
-            String written = GeneratedRows.of(module, generated,
+            String written = GeneratedRows.of(
+                    souther.compiler.query.OfferingRequest.overTheModule(module, true), generated,
                     Adequacy.generatedForDeclarationsOf(compilation.db(), module,
                             new souther.compiler.query.GenerationScope.Module()),
-                    Map.of(), true, SourceNameResolver.identity()).text();
+                    Map.of(), SourceNameResolver.identity()).text();
             assertFalse(written.contains("example "),
                     module + " offers a row that may already be written: " + written);
             // Either word, because the two models get here differently: one has rows nothing read
@@ -321,12 +322,12 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
         assertTrue(partition.pairs().counts().unknown() > 0, "a combination nothing reaches");
         assertFalse(compilation.db().ask(new Adequacy.BranchCoverage(module)).value()
                 .get("take").unreached().orElseThrow().isEmpty(), "an arm nothing goes through");
-        assertFalse(GeneratedRows.of(module,
+        assertFalse(GeneratedRows.of(
+                souther.compiler.query.OfferingRequest.overTheModule(module, true),
                 Adequacy.generatedOf(compilation.db(), module),
                 Adequacy.generatedForDeclarationsOf(compilation.db(), module,
                         new souther.compiler.query.GenerationScope.Module()),
-                Map.of(), true,
-                SourceNameResolver.identity()).text().isEmpty(),
+                Map.of(), SourceNameResolver.identity()).text().isEmpty(),
                 "and rows offered for them");
     }
 }

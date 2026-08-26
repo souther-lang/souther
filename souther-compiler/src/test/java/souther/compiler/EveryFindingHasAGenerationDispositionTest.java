@@ -893,10 +893,11 @@ class EveryFindingHasAGenerationDispositionTest {
 
     private static String saidAbout(souther.compiler.partition.GenerationReason why,
                                     souther.compiler.partition.GenerationReason alsoAtTheEdges) {
-        return GeneratedRows.of("example.kind",
+        return GeneratedRows.of(
+                souther.compiler.query.OfferingRequest.overTheModule("example.kind", true),
                 Map.of("pick", new Adequacy.Filling(stopped(why), atTheEdges(alsoAtTheEdges),
                         List.of())), null,
-                Map.of(), true, SourceNameResolver.identity()).text();
+                Map.of(), SourceNameResolver.identity()).text();
     }
 
     /** A run asked for nothing that came to a reason about itself, which is what a stopped
@@ -969,10 +970,12 @@ class EveryFindingHasAGenerationDispositionTest {
         Compilation compilation = compiled(POLICY);
         Map<String, Adequacy.Filling> generated =
                 Adequacy.generatedOf(compilation.db(), "example.policy");
-        String block = GeneratedRows.of("example.policy", generated,
+        String block = GeneratedRows.of(
+                souther.compiler.query.OfferingRequest.overTheModule("example.policy", true),
+                generated,
                 Adequacy.generatedForDeclarationsOf(compilation.db(), "example.policy",
                         new GenerationScope.Module()),
-                Map.of(), true, SourceNameResolver.identity()).text();
+                Map.of(), SourceNameResolver.identity()).text();
 
         assertTrue(block.contains("`then`"),
                 "the arm nothing offers a row for is named: " + block);

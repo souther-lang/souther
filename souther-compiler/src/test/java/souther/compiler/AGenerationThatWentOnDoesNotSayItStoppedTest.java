@@ -82,10 +82,11 @@ class AGenerationThatWentOnDoesNotSayItStoppedTest {
     }
 
     private static String written(souther.compiler.partition.FillResult result) {
-        return GeneratedRows.of("example.trip",
+        return GeneratedRows.of(
+                souther.compiler.query.OfferingRequest.overTheModule("example.trip", false),
                 Map.of("submit", new Adequacy.Filling(result, Generator.GenerationResult.NONE,
                         List.of())), null,
-                Map.of(), false, SourceNameResolver.identity()).text();
+                Map.of(), SourceNameResolver.identity()).text();
     }
 
     /** A run asked for nothing, which is what a reason about the run alone is written against. */

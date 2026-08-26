@@ -73,12 +73,12 @@ class AGeneratedRowIsNamedForWhatItWasComposedForTest {
         compilation.answerEverything();
         Map<String, Adequacy.Filling> filling = Adequacy.generatedOf(compilation.db(), compilation.modules().get(0));
         assertNotNull(filling, "the model under test compiles");
-        return GeneratedRows.of(compilation.modules().get(0), filling,
+        return GeneratedRows.of(souther.compiler.query.OfferingRequest.overTheModule(
+                        compilation.modules().get(0), boundaries), filling,
                 boundaries ? Adequacy.generatedForDeclarationsOf(compilation.db(),
                         compilation.modules().get(0),
                         new souther.compiler.query.GenerationScope.Module()) : null,
-                Map.of(), boundaries,
-                SourceNameResolver.identity()).text();
+                Map.of(), SourceNameResolver.identity()).text();
     }
 
     /** Two minimum edges of one behavior, which compose one row between them. */
