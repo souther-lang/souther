@@ -13,6 +13,12 @@ import java.util.List;
  * saying so, which is the thing this exists to make impossible: where a name reaches no position,
  * that is an outcome and is written down as one. So a reader counting what a build took in never has
  * to read an absence, and a reader reporting a cause never has to invent one.
+ *
+ * <p><b>No accessor hands out the filings alone.</b> A caller reading the positions and nothing else
+ * is left holding a list, and what a list answers is how long it is — which is not what any of these
+ * outcomes says. Told apart by a length, a name filed at one position and a name that was never
+ * followed are the same answer. So a caller says what it does about each of the three, and the
+ * meaning it needs is the one it writes down rather than one it recovers from a count.
  */
 public final class PlacementFiling {
 
@@ -71,14 +77,6 @@ public final class PlacementFiling {
     @Override
     public String toString() {
         return seed.address() + " -> " + outcomes;
-    }
-
-    /** Where this placement was filed, which is empty where none of its outcomes was a filing. */
-    public List<PositionId> filedAt() {
-        return outcomes.stream()
-                .filter(each -> each instanceof PlacementOutcome.Filed)
-                .map(each -> ((PlacementOutcome.Filed) each).at())
-                .toList();
     }
 
     /** Whether anything about this placement is still waiting on this compiler. */

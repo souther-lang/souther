@@ -257,6 +257,49 @@ class ALineDrawnOnASharedNameFallsUnderEachCaseTest {
                 "which is what the same clause says where no sum is in the way");
     }
 
+    /**
+     * A name the reading stopped short of leaves the line where the model wrote it.
+     *
+     * <p>Nothing was filed, and the two ways of that are one answer about the line: a name this
+     * reading has no position for and a name it stopped before reaching both leave nothing to move
+     * the line to. Which of them it was is what the reading says where it stopped, and is not a
+     * question the count of filings answers.
+     */
+    @Test
+    void aNameTheReadingStoppedShortOfLeavesTheLineWhereItWasWritten() throws Exception {
+        String report = report("""
+                module example.line
+
+                data Paging = { limit: Int }
+                data A = { ...Paging, x: Int }
+                data B = { ...Paging, y: Int }
+                data Q = A | B
+                data Held = { q: Q }
+                data Outer = { held: Held }
+
+                data Ok
+                data No
+
+                behavior read : (o: Outer) -> Ok | No
+
+                let read (o) = {
+                    guard o.held.q.limit <= 10 else No
+                    Ok
+                }
+                """);
+
+        assertTrue(report.contains("not read: o.held.q@A (the walk stopped before reaching what is "
+                        + "under it)"),
+                () -> "the reading of the case says where it stopped:\n" + report);
+        assertTrue(report.contains("border      not measured (no line was derived at any position)"),
+                () -> "and the line is left where the model wrote it, which is not a position:\n"
+                        + report);
+        assertFalse(report.contains("how those positions pair up is not worked out"),
+                () -> "nothing was filed, so no pairing was ever in question:\n" + report);
+        assertFalse(report.contains("no line can be drawn on here"),
+                () -> "and no cause is invented for the line not being placed:\n" + report);
+    }
+
     /** What a model with no sum in the way answers, which is what the fan-out has to come to. */
     @Test
     void nothingChangesWhereNoNameCrosses() throws Exception {
