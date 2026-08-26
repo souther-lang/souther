@@ -225,7 +225,7 @@ final class GeneratedImplementation implements Answerer {
             Class<?> fakeClass = loader.define(fakeName, () -> fakeSubclassBytes(fakeName, base, applyM));
             return fakeClass.getConstructor(Function.class).newInstance(standin.answers());
         } catch (ReflectiveOperationException e) {
-            throw new StandinNotBuilt(standin.dependency().name(),
+            throw new StandinNotBuilt(standin.dependency(),
                     "its base subclass could not be built: " + e);
         }
     }

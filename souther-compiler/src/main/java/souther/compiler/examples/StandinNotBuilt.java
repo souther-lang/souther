@@ -1,5 +1,7 @@
 package souther.compiler.examples;
 
+import souther.compiler.types.ValueName;
+
 /**
  * A stand-in the answerer was asked for and could not make into something the implementation can be
  * constructed with.
@@ -18,15 +20,23 @@ public final class StandinNotBuilt extends RuntimeException {
 
     private static final long serialVersionUID = 1L;
 
-    private final String dependency;
+    /** Transient because a behavior is not a serializable value and this is never written out: it
+     *  is raised and caught inside one compile, between an answerer and the row that asked it. */
+    private final transient ValueName.Behavior dependency;
 
-    public StandinNotBuilt(String dependency, String why) {
+    public StandinNotBuilt(ValueName.Behavior dependency, String why) {
         super(why);
         this.dependency = dependency;
     }
 
-    /** The dependency whose stand-in could not be made, as the module names it. */
-    public String dependency() {
+    /**
+     * The dependency whose stand-in could not be made, as the declaration it is.
+     *
+     * <p>The behavior and not the name this module reaches it by. What could not be made is an
+     * instance of the base generated where the behavior is declared, which is not always the module
+     * the row is written in, and a reader deciding where to send an author needs to know which.
+     */
+    public ValueName.Behavior dependency() {
         return dependency;
     }
 }

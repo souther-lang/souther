@@ -1541,7 +1541,7 @@ public final class ExampleVerifier {
             // be constructed with. Nothing was applied, so the row stops where a row whose dependency
             // has no fake stops, and says the same thing about itself.
             out.add(ExampleStatements.unbuildableFake(whereDeclared(e.dependency(), row),
-                    e.dependency(), e.getMessage()));
+                    spelling(e.dependency()), e.getMessage()));
             state.failed(FailurePhase.FAKE_RESOLUTION);
             return;
         }
@@ -1937,11 +1937,21 @@ public final class ExampleVerifier {
         return new DependencyStandin(dependency, arity, body);
     }
 
-    /** Where the dependency a stand-in was written for is declared, for a report about the stand-in to
-     * be quoted against. The row's own position where this module declares nothing of that name, which
-     * cannot arise for a stand-in that was resolved and is not worth a second reading to rule out. */
-    private SourcePos whereDeclared(String dependency, Hir.ExampleRow row) {
-        Hir.SpecBehavior dep = injectedSpec(dependency);
+    /**
+     * Where the dependency a stand-in was written for is declared, for a report about the stand-in
+     * to be quoted against.
+     *
+     * <p>The row's own position for a dependency another module declares. The declaration is a place
+     * in a source this report is not about, and sending an author there would send them to a file
+     * with nothing wrong in it — what they can act on is the stand-in they wrote, which is on the
+     * row. A dependency this module declares is quoted at its declaration, which is where the shape
+     * a stand-in has to be made into is stated.
+     */
+    private SourcePos whereDeclared(ValueName.Behavior dependency, Hir.ExampleRow row) {
+        if (!dependency.module().equals(module.name())) {
+            return row.pos();
+        }
+        Hir.SpecBehavior dep = injectedSpec(dependency.name());
         return dep == null ? row.pos() : dep.pos();
     }
 

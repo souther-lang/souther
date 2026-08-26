@@ -217,7 +217,7 @@ class WhereARowStopsIsDecidedByWhichHalfOfTheSeamItReachedTest {
     /** A stand-in the answerer will not make. What it could not make is the whole of what it says. */
     private static final Answerer REFUSING = something(_ -> standins -> {
         assertEquals(1, standins.size(), "the row does state a stand-in");
-        throw new StandinNotBuilt(standins.get(0).dependency().name(),
+        throw new StandinNotBuilt(standins.get(0).dependency(),
                 "its base subclass could not be built: (said by the test)");
     });
 
