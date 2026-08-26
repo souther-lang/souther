@@ -411,6 +411,61 @@ class APairWalkNamesADefectWhereItIsTest {
                 found(walked), "the map for its keys, and what it holds for itself");
     }
 
+    /** Something with a part, whose own equality is its address. */
+    private static final class OwnIdentity {
+        private final Address held;
+
+        private OwnIdentity(Address held) {
+            this.held = held;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return this == other;
+        }
+
+        @Override
+        public int hashCode() {
+            return System.identityHashCode(this);
+        }
+    }
+
+    /**
+     * Where a thing wrote its own equality and a part of it denies, the walk says it cannot tell.
+     *
+     * <p>Nothing readable off the class settles it. An equality over the parts denies because the
+     * part did; an equality over the address denies whatever the part did; and while the part is
+     * denying the two answer alike. Taken for the first — which is what everything that is not an
+     * array used to be taken for — something whose equality is its address goes unnamed for as long
+     * as anything under it also fails, and the line for it arrives only once somebody has fixed the
+     * inner one.
+     *
+     * <p>Said as somewhere the walk could not go, so whoever reads it is told what is in front of
+     * them. It goes when the part does.
+     */
+    @Test
+    void whoseDenialItIsIsSaidToBeUntellableRatherThanGuessed() {
+        Covered<Divergence> walked = Divergence.between(
+                new OwnIdentity(new Address()), new OwnIdentity(new Address()));
+
+        assertEquals(Set.of(".OwnIdentity#held " + Address.class.getName()
+                        + " THE_SAME_THING_TWICE"), found(walked), "the part, which is tellable");
+        assertEquals(Set.of("WHOSE_DENIAL_THIS_IS_CANNOT_BE_TOLD "), gaps(walked),
+                "and the thing above it, which is not");
+    }
+
+    /** And where every part agrees, there is nothing else its denial could be. */
+    @Test
+    void andWhereEveryPartAgreesItsDenialIsItsOwn() {
+        Address held = new Address();
+        Covered<Divergence> walked = Divergence.between(
+                new OwnIdentity(held), new OwnIdentity(held));
+
+        assertEquals(Set.of(" " + OwnIdentity.class.getName() + " THE_SAME_THING_TWICE"),
+                found(walked), "nothing under it denies, so what denies is it");
+        assertEquals(Set.of(), gaps(walked), "and there is nothing this could not tell");
+    }
+
     /** Two maps of one size whose keys line up with nothing. */
     @Test
     void twoMapsWhoseKeysDoNotPairAreWhereTheWalkStops() {

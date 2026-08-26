@@ -66,6 +66,40 @@ final class AGraphNobodyChose {
 
         /** Parts in a collection whose equality is neither its order nor what it holds. */
         record WithNoRule(List<Recipe> of) implements Recipe {}
+
+        /**
+         * Parts under something that wrote its own equality, and wrote it over its address.
+         *
+         * <p>The axis that was missing. A leaf that only says which object it is and a record whose
+         * equality is its parts' were both here; a thing that has parts and whose own equality is
+         * its address was not, so no number of shapes reached the one case where telling the two
+         * apart matters.
+         */
+        record WithOwnIdentity(List<Recipe> of) implements Recipe {}
+    }
+
+    /** Something with parts, whose equality is its address. */
+    static final class OwnIdentity {
+
+        private final List<Object> parts;
+
+        OwnIdentity(List<Object> parts) {
+            this.parts = parts;
+        }
+
+        List<Object> parts() {
+            return parts;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return this == other;
+        }
+
+        @Override
+        public int hashCode() {
+            return System.identityHashCode(this);
+        }
     }
 
     private AGraphNobodyChose() {
@@ -77,7 +111,7 @@ final class AGraphNobodyChose {
             return random.nextInt(4) == 0 ? new Recipe.Itself()
                     : new Recipe.Says("v" + random.nextInt(3));
         }
-        return switch (random.nextInt(10)) {
+        return switch (random.nextInt(11)) {
             case 0 -> new Recipe.Says("v" + random.nextInt(3));
             case 1 -> new Recipe.Itself();
             case 2 -> new Recipe.Made(parts(random, depth));
@@ -87,6 +121,7 @@ final class AGraphNobodyChose {
             case 6 -> new Recipe.BehindAnAbsence(recipe(random, depth - 1));
             case 7 -> new Recipe.UnderAddresses(parts(random, depth));
             case 8 -> new Recipe.WithNoRule(parts(random, depth));
+            case 9 -> new Recipe.WithOwnIdentity(parts(random, depth));
             default -> new Recipe.InAnArray(parts(random, depth));
         };
     }
@@ -139,6 +174,7 @@ final class AGraphNobodyChose {
             case Recipe.InAnArray(List<Recipe> of) -> each(of, random).toArray();
             case Recipe.WithNoRule(List<Recipe> of) ->
                     new java.util.ArrayDeque<>(each(of, random));
+            case Recipe.WithOwnIdentity(List<Recipe> of) -> new OwnIdentity(each(of, random));
         };
     }
 
@@ -201,6 +237,7 @@ final class AGraphNobodyChose {
             case Recipe.UnderKeys(List<Recipe> of) -> out += under(of);
             case Recipe.UnderAddresses(List<Recipe> of) -> out += under(of);
             case Recipe.InAnArray(List<Recipe> of) -> out += under(of);
+            case Recipe.WithOwnIdentity(List<Recipe> of) -> out += under(of);
         }
         return out;
     }
@@ -245,6 +282,8 @@ final class AGraphNobodyChose {
                     new Recipe.UnderAddresses(honestly(of));
             case Recipe.InAnArray(List<Recipe> of) -> new Recipe.InAnArray(honestly(of));
             case Recipe.WithNoRule(List<Recipe> of) -> new Recipe.WithNoRule(honestly(of));
+            case Recipe.WithOwnIdentity(List<Recipe> of) ->
+                    new Recipe.WithOwnIdentity(honestly(of));
         };
     }
 
@@ -280,27 +319,66 @@ final class AGraphNobodyChose {
         return out;
     }
 
-    private static void collectFallingShort(Recipe recipe, java.util.Set<Gap.Why> out) {
+    /**
+     * @return whether the walk gave up somewhere at or under this shape, so that whatever the shape
+     *     above it would have asked is never asked
+     */
+    private static boolean collectFallingShort(Recipe recipe, java.util.Set<Gap.Why> out) {
         switch (recipe) {
-            case Recipe.WithNoRule _ -> out.add(Gap.Why.A_CONTAINER_WITH_NO_RULE_FOR_PAIRING);
-            case Recipe.Says _, Recipe.Itself _ -> { }
-            case Recipe.BehindAnAbsence(Recipe of) -> collectFallingShort(of, out);
-            // A set is where the walk pairs and stops, so nothing under one is ever reached and
-            // nothing under one can fall short. What can is the pairing itself.
+            case Recipe.WithNoRule _ -> {
+                out.add(Gap.Why.A_CONTAINER_WITH_NO_RULE_FOR_PAIRING);
+                return true;
+            }
+            case Recipe.Says _, Recipe.Itself _ -> {
+                return false;
+            }
+            case Recipe.BehindAnAbsence(Recipe of) -> {
+                return collectFallingShort(of, out);
+            }
+            // A set is where the walk pairs and stops, so nothing inside one is reached and what
+            // can fall short is the pairing.
             case Recipe.InASet(List<Recipe> of) -> {
                 if (anyOnlyItself(of)) {
                     out.add(Gap.Why.MEMBERS_THAT_DO_NOT_PAIR);
+                    return true;
                 }
+                return false;
             }
-            case Recipe.Made(List<Recipe> of) -> of.forEach(one -> collectFallingShort(one, out));
-            case Recipe.InAList(List<Recipe> of) -> of.forEach(one -> collectFallingShort(one, out));
-            case Recipe.UnderKeys(List<Recipe> of) -> of.forEach(one ->
-                    collectFallingShort(one, out));
-            case Recipe.UnderAddresses(List<Recipe> of) -> of.forEach(one ->
-                    collectFallingShort(one, out));
-            case Recipe.InAnArray(List<Recipe> of) -> of.forEach(one ->
-                    collectFallingShort(one, out));
+            // Something that wrote its own equality: where a part of it denies, no walk can say
+            // whose denial its denial is — but only where the walk got as far as asking, which it
+            // does not where a part of it gave up first.
+            case Recipe.WithOwnIdentity(List<Recipe> of) -> {
+                boolean below = under(of, out);
+                if (!below && anyOnlyItself(of)) {
+                    out.add(Gap.Why.WHOSE_DENIAL_THIS_IS_CANNOT_BE_TOLD);
+                    return true;
+                }
+                return below;
+            }
+            case Recipe.Made(List<Recipe> of) -> {
+                return under(of, out);
+            }
+            case Recipe.InAList(List<Recipe> of) -> {
+                return under(of, out);
+            }
+            case Recipe.UnderKeys(List<Recipe> of) -> {
+                return under(of, out);
+            }
+            case Recipe.UnderAddresses(List<Recipe> of) -> {
+                return under(of, out);
+            }
+            case Recipe.InAnArray(List<Recipe> of) -> {
+                return under(of, out);
+            }
         }
+    }
+
+    private static boolean under(List<Recipe> of, java.util.Set<Gap.Why> out) {
+        boolean any = false;
+        for (Recipe one : of) {
+            any |= collectFallingShort(one, out);
+        }
+        return any;
     }
 
     /** Whether two things of this shape are never equal, which is what stops a set pairing. */
@@ -312,6 +390,7 @@ final class AGraphNobodyChose {
             case Recipe.InAnArray _ -> true;
             // And a map that compares by address is never equal to another of it either.
             case Recipe.UnderAddresses _ -> true;
+            case Recipe.WithOwnIdentity _ -> true;
             case Recipe.BehindAnAbsence(Recipe of) -> saysOnlyWhichObjectItIs(of);
             case Recipe.Made(List<Recipe> of) -> any(of);
             case Recipe.InAList(List<Recipe> of) -> any(of);
@@ -337,6 +416,7 @@ final class AGraphNobodyChose {
             case Recipe.UnderKeys(List<Recipe> underKeys) -> anyWithNoRule(underKeys);
             case Recipe.UnderAddresses(List<Recipe> underAddresses) -> anyWithNoRule(underAddresses);
             case Recipe.InAnArray(List<Recipe> inAnArray) -> anyWithNoRule(inAnArray);
+            case Recipe.WithOwnIdentity(List<Recipe> own) -> anyWithNoRule(own);
         };
     }
 }

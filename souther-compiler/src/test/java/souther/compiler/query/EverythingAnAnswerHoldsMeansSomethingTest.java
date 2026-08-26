@@ -179,7 +179,7 @@ class EverythingAnAnswerHoldsMeansSomethingTest {
         // compile reaches is as much what it did as what it said: two stores over one input
         // reaching different graphs would mean the dependencies recorded in one are not the ones
         // the other would keep. Asked of every scenario, because every scenario is compiled twice.
-        assertEquals(Set.of(), met.fellShort(),
+        assertEquals(AnswerClosure.cannotBeTold(), met.fellShort(),
                 "somewhere a search of the answers fell short of what it was asked to cover");
         assertEquals(Map.of(), met.differentThings(),
                 "one input compiled twice answered two different things, which no equality can fix");

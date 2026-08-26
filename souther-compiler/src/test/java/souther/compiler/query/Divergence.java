@@ -223,11 +223,31 @@ record Divergence(Locus at, String cause, Divergence.Kind kind) {
             // itself does not come back, and one asked about a pair half of which went unread would
             // be answering about something nobody looked at.
             boolean andSayIt = a.equals(b);
-            boolean itsOwn = ownEqualityOf(c) == OwnEquality.ITS_ADDRESS || parts.everyPartSaysIt;
-            if (!andSayIt && itsOwn && !parts.alreadySaid) {
-                say(path, c, Kind.THE_SAME_THING_TWICE);
+            if (andSayIt || parts.alreadySaid) {
+                return new Came(true, true, andSayIt);
             }
-            return new Came(true, true, andSayIt);
+            switch (ownEqualityOf(a, c)) {
+                // Nothing its parts did explains it, so it is its own however they came out.
+                case ITS_ADDRESS -> say(path, c, Kind.THE_SAME_THING_TWICE);
+                // Its parts', so a part denying is the explanation and there is nothing of its own
+                // to report; where every part agreed, there is nothing else this could be.
+                case ITS_PARTS -> {
+                    if (parts.everyPartSaysIt) {
+                        say(path, c, Kind.THE_SAME_THING_TWICE);
+                    }
+                }
+                // Where every part agreed the answer is the same either way. Where one did not,
+                // this is where the walk says it cannot tell whose denial this is.
+                case NEITHER_COULD_BE_SHOWN -> {
+                    if (parts.everyPartSaysIt) {
+                        say(path, c, Kind.THE_SAME_THING_TWICE);
+                    } else {
+                        stopped(Gap.Why.WHOSE_DENIAL_THIS_IS_CANNOT_BE_TOLD, path);
+                        return new Came(false, true, false);
+                    }
+                }
+            }
+            return new Came(true, true, false);
         }
 
         /**
@@ -248,7 +268,17 @@ record Divergence(Locus at, String cause, Divergence.Kind kind) {
             /** Its parts', so a part denying explains it. */
             ITS_PARTS,
             /** Its address, so nothing its parts do explains it. */
-            ITS_ADDRESS
+            ITS_ADDRESS,
+            /**
+             * Neither could be shown.
+             *
+             * <p>Something that wrote its own equality answers alike either way while a part of it
+             * is denying — an equality over the parts denies because the part did, and an equality
+             * over the address denies whatever the part did. Nothing readable off the class tells
+             * the two apart, so where a part is denying this is where the walk says it cannot tell
+             * rather than picking one.
+             */
+            NEITHER_COULD_BE_SHOWN
         }
 
         /** What the parts of one pair came to, added up as they are walked. */
@@ -293,8 +323,56 @@ record Divergence(Locus at, String cause, Divergence.Kind kind) {
          * contract that does — and where one of those turns out not to, what says so is a half of
          * its equality this can put on its own, which is asked where that half is walked.
          */
-        private static OwnEquality ownEqualityOf(Class<?> c) {
-            return c.isArray() ? OwnEquality.ITS_ADDRESS : OwnEquality.ITS_PARTS;
+        private static OwnEquality ownEqualityOf(Object a, Class<?> c) {
+            if (c.isArray()) {
+                return OwnEquality.ITS_ADDRESS;
+            }
+            if (contractOf(a) != Contract.A_THING) {
+                // Something answering to a contract this walk knows is equal to another by what it
+                // holds, which the contract says and this does not have to work out. Where an
+                // implementation of one answers otherwise, what says so is the half of its equality
+                // this puts on its own where that half is walked.
+                return OwnEquality.ITS_PARTS;
+            }
+            try {
+                if (c.getMethod("equals", Object.class).getDeclaringClass() == Object.class) {
+                    // Nothing of its own to compare with, so what it answers is its address.
+                    return OwnEquality.ITS_ADDRESS;
+                }
+            } catch (NoSuchMethodException none) {
+                return OwnEquality.ITS_ADDRESS;
+            }
+            if (c.isRecord()) {
+                // A twin of it, made of the very things it holds. One that denies that is one whose
+                // equality is not what it holds — asked of the thing rather than read off its class,
+                // because a record may write its own.
+                Boolean deniesItsTwin = deniesATwinOfItself(a, c);
+                if (deniesItsTwin != null) {
+                    return deniesItsTwin ? OwnEquality.ITS_ADDRESS : OwnEquality.ITS_PARTS;
+                }
+            }
+            return OwnEquality.NEITHER_COULD_BE_SHOWN;
+        }
+
+        /** Whether {@code a} denies a twin built from the very things it holds, or null where no
+         *  twin could be built. */
+        private static Boolean deniesATwinOfItself(Object a, Class<?> c) {
+            try {
+                java.lang.reflect.RecordComponent[] held = c.getRecordComponents();
+                Class<?>[] types = new Class<?>[held.length];
+                Object[] values = new Object[held.length];
+                for (int i = 0; i < held.length; i++) {
+                    types[i] = held[i].getType();
+                    java.lang.reflect.Method reader = held[i].getAccessor();
+                    reader.setAccessible(true);
+                    values[i] = reader.invoke(a);
+                }
+                java.lang.reflect.Constructor<?> canonical = c.getDeclaredConstructor(types);
+                canonical.setAccessible(true);
+                return !a.equals(canonical.newInstance(values));
+            } catch (ReflectiveOperationException | RuntimeException | Error opaque) {
+                return null;
+            }
         }
 
         private static Contract contractOf(Object each) {

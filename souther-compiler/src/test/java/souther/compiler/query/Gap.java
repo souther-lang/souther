@@ -45,7 +45,18 @@ record Gap(Gap.Why why, String at) {
         A_CLASS_THAT_WOULD_NOT_LOAD,
         /** A question one of two compilations of one input was put and the other was not, so the
          *  two have nothing to be compared over there. */
-        A_QUESTION_ONLY_ONE_STORE_WAS_PUT
+        A_QUESTION_ONLY_ONE_STORE_WAS_PUT,
+        /**
+         * Something denying its twin while a part of it denies too, and no way to tell whose denial
+         * it is.
+         *
+         * <p>What settles that is where the thing's equality comes from, and for something that
+         * wrote its own there is no way to read that off the class: an equality over the parts and
+         * an equality over the address answer alike while a part is denying. Guessed at, the two
+         * come out as one — which is how something whose equality is its address goes unnamed for as
+         * long as anything under it also fails.
+         */
+        WHOSE_DENIAL_THIS_IS_CANNOT_BE_TOLD
     }
 
     @Override

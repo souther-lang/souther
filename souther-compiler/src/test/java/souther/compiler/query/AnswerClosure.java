@@ -257,6 +257,28 @@ final class AnswerClosure {
                             + "has: which question happens to have said anything is the scenario's "
                             + "and not this defect's"));
 
+    /**
+     * Where a walk cannot say whose denial a denial is, and why that is known.
+     *
+     * <p>Beside the places rather than among them, because it is not one. A thing that wrote its own
+     * equality answers alike whether that equality is its parts' or its address, for as long as a
+     * part of it is denying — so where one of these stands above something already written down, it
+     * is what that thing costs and it goes when that thing goes.
+     *
+     * <p>Held to exactly, like everything else here. One arriving that stands above nothing is a
+     * walk that has stopped being able to attribute something it used to.
+     */
+    static Set<String> cannotBeTold() {
+        return Set.of(
+                // Above `Names$ModuleScope`'s store, which is the line below it. `Resolve.Values`
+                // wrote its own equality and is not a record, so there is no twin of it to build
+                // and no way to ask what its equality is over while the store under it denies.
+                "WHOSE_DENIAL_THIS_IS_CANNOT_BE_TOLD .Answer#value.Scoped#values"
+                        + " in A_MODULE_SPOKEN_ABOUT",
+                "WHOSE_DENIAL_THIS_IS_CANNOT_BE_TOLD .Answer#value.Scoped#values"
+                        + " in VALID_CORPUS");
+    }
+
     /** Every place written down here, whichever detector or scenario meets it. */
     static Set<Locus.Place> places() {
         Set<Locus.Place> out = new java.util.LinkedHashSet<>();
