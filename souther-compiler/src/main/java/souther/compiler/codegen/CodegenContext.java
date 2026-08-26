@@ -1,9 +1,10 @@
 package souther.compiler.codegen;
 
-import souther.compiler.stdlib.Stdlib;
 import souther.compiler.check.AtomSpace;
 import souther.compiler.check.ReqSig;
 import souther.compiler.core.EnsuresEnforcement;
+import souther.compiler.core.Kernel;
+import souther.compiler.core.KernelSignature;
 import souther.compiler.core.ValueShape;
 import souther.compiler.check.Symbols;
 import souther.compiler.ast.Hir;
@@ -38,11 +39,12 @@ final class CodegenContext {
     final String pkg;
     final Symbols symbols;
 
-    /** The standard library this compile emits against — the same one its names were resolved
-     *  against, taken from the symbol table rather than fetched, so a kernel is emitted from the
-     *  declaration the checker read. */
-    Stdlib library() {
-        return symbols.library();
+    /** What {@code kernel} was declared to take and answer — the same declaration the checker read,
+     *  taken from the symbol table rather than fetched, so what this emits a call to is what the
+     *  call was checked against. The language states it and every output derives its own boundary
+     *  form from it; nothing here reads the library any other way. */
+    KernelSignature kernelSignature(Kernel kernel) {
+        return symbols.library().intrinsic(kernel).signature();
     }
     final Map<String, List<GeneratedClass>> caseToSums;
     final Map<String, String> typePackage;

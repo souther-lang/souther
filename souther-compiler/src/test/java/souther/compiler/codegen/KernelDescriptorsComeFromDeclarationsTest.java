@@ -1,7 +1,7 @@
 package souther.compiler.codegen;
 
 import souther.compiler.DefaultStdlib;
-import souther.compiler.stdlib.Stdlib;
+import souther.compiler.core.KernelSignature;
 import souther.compiler.types.Type;
 
 import org.junit.jupiter.api.Test;
@@ -40,14 +40,14 @@ class KernelDescriptorsComeFromDeclarationsTest {
             if (!(entry.getValue() instanceof Intrinsics.RuntimeStatic kernel)) {
                 continue;
             }
-            Stdlib.Signature declared = DefaultStdlib.get().intrinsic(entry.getKey()).signature();
-            for (int i = 0; i < declared.params().size(); i++) {
+            KernelSignature declared = DefaultStdlib.get().intrinsic(entry.getKey()).signature();
+            for (int i = 0; i < declared.parameters().size(); i++) {
                 // An erased slot is passed as Object whatever arrives, which is what the declared
                 // type would give too, so the observed type cannot disagree there.
                 if (kernel.objectSlots().contains(i)) {
                     continue;
                 }
-                Type param = declared.params().get(i);
+                Type param = declared.parameters().get(i);
                 if (!fixesItsOwnBoundaryForm(param)) {
                     readOffTheCall.add(entry.getKey().key() + " parameter " + (i + 1)
                             + " is declared " + Type.show(param));

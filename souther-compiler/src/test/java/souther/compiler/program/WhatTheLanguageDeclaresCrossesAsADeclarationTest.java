@@ -1,13 +1,17 @@
 package souther.compiler.program;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.core.Kernel;
+import souther.compiler.core.KernelSignature;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -64,12 +68,22 @@ class WhatTheLanguageDeclaresCrossesAsADeclarationTest {
 
         assertEquals("`demo.Mode` is declared by A_MODULE and by THE_LANGUAGE",
                 assertThrows(IllegalStateException.class, () -> new CheckedProgram(
-                        List.of(module("demo", twice)), List.of(twice), List.of()))
+                        List.of(module("demo", twice)), List.of(twice), List.of(), kernels()))
                         .getMessage());
         assertEquals("`demo.Mode` is declared by A_MODULE and by A_MODULE_ON_THE_PATH",
                 assertThrows(IllegalStateException.class, () -> new CheckedProgram(
-                        List.of(module("demo", twice)), List.of(), List.of(twice)))
+                        List.of(module("demo", twice)), List.of(), List.of(twice), kernels()))
                         .getMessage());
+    }
+
+    /** What the language declares its kernels to take, as an assembled program carries them. The
+     *  fixtures below are about which world an address belongs to, so everything else about them is
+     *  a program as one really is. */
+    private static Map<Kernel, KernelSignature> kernels() {
+        Map<Kernel, KernelSignature> declared = new EnumMap<>(Kernel.class);
+        DefaultStdlib.get().intrinsics()
+                .forEach((kernel, intrinsic) -> declared.put(kernel, intrinsic.signature()));
+        return declared;
     }
 
     private static TypeSymbol.AtModule named(String module, String name) {

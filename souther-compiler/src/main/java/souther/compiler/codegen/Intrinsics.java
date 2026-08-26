@@ -1,10 +1,10 @@
 package souther.compiler.codegen;
 
 import souther.compiler.jvm.SoutherJvmAbi;
-import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.Type;
 import souther.compiler.core.Core;
 import souther.compiler.core.Kernel;
+import souther.compiler.core.KernelSignature;
 
 import java.lang.constant.ClassDesc;
 import java.lang.constant.ConstantDescs;
@@ -63,10 +63,10 @@ final class Intrinsics {
      */
     record DeclaredStatic(ClassDesc owner, String method) implements Emit {
         public Type emit(BodyGen g, Kernel kernel, Core.Call call) {
-            Stdlib.Signature declared = g.library().intrinsic(kernel).signature();
-            ClassDesc[] params = new ClassDesc[declared.params().size()];
+            KernelSignature declared = g.kernelSignature(kernel);
+            ClassDesc[] params = new ClassDesc[declared.parameters().size()];
             for (int i = 0; i < params.length; i++) {
-                params[i] = boundaryDesc(declared.params().get(i));
+                params[i] = boundaryDesc(declared.parameters().get(i));
             }
             for (Core arg : call.args()) {
                 g.genExpr(arg);

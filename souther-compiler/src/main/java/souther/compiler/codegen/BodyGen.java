@@ -6,7 +6,6 @@ import souther.compiler.check.Symbols;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.NameMessage;
-import souther.compiler.stdlib.Stdlib;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.CheckContext;
 import souther.compiler.check.DataChecker;
@@ -17,6 +16,7 @@ import souther.compiler.types.TypeSymbol;
 import souther.compiler.check.Ordering;
 import souther.compiler.core.Core;
 import souther.compiler.core.Kernel;
+import souther.compiler.core.KernelSignature;
 import souther.compiler.core.GrowingFold;
 
 import souther.compiler.core.EnsuresEnforcement;
@@ -58,9 +58,9 @@ final class BodyGen {
     private final String pkg;
     private final Symbols symbols;
 
-    /** The standard library this body is emitted against. */
-    Stdlib library() {
-        return ctx.library();
+    /** What {@code kernel} was declared to take and answer. */
+    KernelSignature kernelSignature(Kernel kernel) {
+        return ctx.kernelSignature(kernel);
     }
 
     private ClassDesc cd(TypeSymbol typeName) {

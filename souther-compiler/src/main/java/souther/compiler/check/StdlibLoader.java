@@ -184,9 +184,9 @@ public final class StdlibLoader {
 
     /** The resolved signature of {@code fn}. A zero-parameter declaration is a value whose type
      *  only the signature can answer — a library value is read with no call whose arguments could
-     *  pin it — and a kernel's calls are checked against the declared result with no body to infer
-     *  one from. Either would be an entry answering a type question with nothing, so a declaration of
-     *  either kind that writes no return type is refused here. */
+     *  pin it — so one that writes no return type would be an entry answering a type question with
+     *  nothing, and is refused here. What a kernel must declare is
+     *  {@link souther.compiler.core.KernelSignature}'s to say, and is said where one is made. */
     static Stdlib.Signature signatureOf(Hir.FnDef fn, String qualified) {
         List<Type> params = new ArrayList<>();
         for (Hir.FnParam p : fn.params()) {
@@ -194,11 +194,9 @@ public final class StdlibLoader {
         }
         Type result = fn.declaredReturn() == null
                 ? null : TypeOps.successType(fn.declaredReturn());
-        if (result == null
-                && (fn.params().isEmpty() || fn.body() instanceof Hir.FnBody.Intrinsic)) {
-            throw new IllegalStateException("a prelude "
-                    + (fn.params().isEmpty() ? "value" : "kernel")
-                    + " must declare its return type: `" + qualified + "`");
+        if (result == null && fn.params().isEmpty()) {
+            throw new IllegalStateException(
+                    "a prelude value must declare its return type: `" + qualified + "`");
         }
         return new Stdlib.Signature(params, result);
     }

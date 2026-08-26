@@ -3,6 +3,7 @@ package souther.compiler.stdlib;
 import souther.compiler.Reserved;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Kernel;
+import souther.compiler.core.KernelSignature;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
@@ -12,6 +13,7 @@ import souther.compiler.types.ValueName;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -89,7 +91,7 @@ public final class Stdlib {
     /** A kernel the library names, and the signature it was declared with. The kernel is the
      *  language's operation ({@link Kernel#DECIMAL_ROUND}); what a backend emits for it is that
      *  backend's, and a signature is what both of them derive their own boundary form from. */
-    public record Intrinsic(Kernel kernel, Signature signature) {
+    public record Intrinsic(Kernel kernel, KernelSignature signature) {
     }
 
     private final Map<String, Entry> entries;
@@ -414,7 +416,8 @@ public final class Stdlib {
                         throw new IllegalStateException("the standard library declares `intrinsic \""
                                 + written.key() + "\"`, which this compiler has no kernel for");
                     }
-                    Intrinsic intrinsic = new Intrinsic(named, e.getValue().signature());
+                    Intrinsic intrinsic =
+                            new Intrinsic(named, declaredAs(e.getKey(), e.getValue().signature()));
                     // And one kernel is declared once. A backend builds its boundary form out of
                     // the signature this holds, so two declarations of one kernel would be two
                     // answers to a question that has one — and put into a map, the second would
@@ -433,6 +436,17 @@ public final class Stdlib {
             // name a reader may write, so it belongs there.
             Map<String, ValueName.Stdlib> named = new LinkedHashMap<>(operations);
             SUGARED.forEach(sugar -> named.put(sugar.written().qualified(), sugar.written()));
+            // And every kernel this compiler names is declared. A reader holding one asks the
+            // library what it takes and is answered, so a kernel the library says nothing about
+            // would be a hole nothing downstream could fill — and the reader that met it would be
+            // the output trying to emit it.
+            Set<Kernel> undeclared = EnumSet.allOf(Kernel.class);
+            undeclared.removeAll(intrinsics.keySet());
+            if (!undeclared.isEmpty()) {
+                throw new IllegalStateException("this compiler names the kernel(s) "
+                        + undeclared.stream().map(Kernel::key).toList()
+                        + ", which the standard library declares nothing for");
+            }
             Set<String> published = published(sugars.keySet(), named);
             return new Stdlib(
                     Collections.unmodifiableMap(new LinkedHashMap<>(entries)),
@@ -463,6 +477,23 @@ public final class Stdlib {
                 }
             }
             return byKey;
+        }
+
+        /**
+         * One kernel's declaration in the language's own vocabulary.
+         *
+         * <p>Where the declaration writes no return type there is no such value, and what says so
+         * is {@link KernelSignature} rather than a second reading of the same rule here. What is
+         * added here is which declaration tripped it: the library is this compiler's own source, so
+         * a fault in it is nobody's mistake to be told about and is refused where it is read.
+         */
+        private static KernelSignature declaredAs(String qualified, Signature declared) {
+            try {
+                return new KernelSignature(declared.params(), declared.result());
+            } catch (NullPointerException refused) {
+                throw new IllegalStateException("the standard library declares the kernel `"
+                        + qualified + "`: " + refused.getMessage(), refused);
+            }
         }
 
         /** Each sugar with what it keeps in place: the target's own parameter count, less what the
