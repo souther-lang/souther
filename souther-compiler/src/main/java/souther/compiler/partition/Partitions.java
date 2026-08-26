@@ -228,10 +228,13 @@ public final class Partitions {
         for (Axis axis : kept) {
             keep(new ArrayList<>(), measured, axis, null, rulesWithoutALine);
         }
-        MeasureClosure.Both closed = MeasureClosure.of(kept, standing, rulesWithoutALine);
+        // The lines first, because the closure is a conclusion about them: whether the reading ran
+        // out is asked of what it produced beside what it found, and not of the gaps alone.
+        java.util.Map<AxisId, List<Border>> lines = linesAlong(kept, quantities, symbols);
+        MeasureClosure.Both closed = MeasureClosure.of(kept, standing, rulesWithoutALine, lines);
         return new Partitioning(kept, standing, uncertain, undividedIn(measured),
                 List.copyOf(rulesWithoutALine), blockedIn(measured), List.copyOf(notSeparated),
-                List.of(), linesAlong(kept, quantities, symbols), ReachingCuts.NONE,
+                List.of(), lines, ReachingCuts.NONE,
                 closed.partition(), closed.border());
     }
 
@@ -537,7 +540,8 @@ public final class Partitions {
                     reachable.stream().map(Threshold::parts).toList()),
                     reachable.isEmpty() ? null : new BodyCutInspection.Evidence(), rules);
         }
-        MeasureClosure.Both closed = MeasureClosure.of(out, base.unanswered(), rules);
+        java.util.Map<AxisId, List<Border>> lines = linesAlong(out, reading, symbols);
+        MeasureClosure.Both closed = MeasureClosure.of(out, base.unanswered(), rules, lines);
         return new Partitioning(out, base.unanswered(), base.uncertain(),
                 undividedIn(measured), List.copyOf(rules), blockedIn(measured),
                 // Carried across: what a reading could not hold together is a fact about the
@@ -551,7 +555,7 @@ public final class Partitions {
                 // where the position has no value beside it, its border over here — and the two
                 // sides of that border are runs of what all of them leave.
                 base.notSeparated(), Border.allOf(between, partedByQuantity(out)),
-                linesAlong(out, reading, symbols),
+                lines,
                 reaching, closed.partition(), closed.border());
     }
 

@@ -153,7 +153,9 @@ public final class MeasureClosure {
      *                ({@link souther.compiler.inputs.BlockReason.RuleWithoutLineReason#leavesShort})
      */
     static Both of(List<Axis> axes, List<souther.compiler.inputs.StandingQuestion> asked,
-                   List<souther.compiler.inputs.RuleWithoutALine> refused) {
+                   List<souther.compiler.inputs.RuleWithoutALine> refused,
+                   java.util.Map<AxisId, List<Border>> lines) {
+        everyLineWasDrawn(axes, lines);
         Set<ClosureGap> partition = new LinkedHashSet<>();
         Set<ClosureGap> border = new LinkedHashSet<>();
         for (souther.compiler.inputs.RuleWithoutALine rule : refused) {
@@ -200,6 +202,41 @@ public final class MeasureClosure {
         return new Both(
                 partition.isEmpty() ? new OfThePartition.Closed() : new OfThePartition.Open(partition),
                 border.isEmpty() ? new OfTheBorder.Closed() : new OfTheBorder.Open(border));
+    }
+
+    /**
+     * That every line this reading found was drawn, which is what {@code Closed} is a conclusion
+     * from.
+     *
+     * <p><b>An empty set of gaps is not a reading that ran out.</b> Nothing was set aside, nothing
+     * went unanswered and no position was left unreached are three absences, and the reading having
+     * got to the end of the rules is a fourth thing that none of them says: a rule dropped before it
+     * could be set aside leaves exactly the same three absences behind, and the measure then reports
+     * a model read in full on the strength of a reading that lost some of it. That is the whole of
+     * issue #1079, and it is what this refuses.
+     *
+     * <p>Asked as a count because that is the shape the loss takes. Every rule that drew a cut is
+     * one line, so a reading that kept an axis and came back with fewer lines than the axis has cuts
+     * has dropped one — whether by a null nobody tested for, a {@code continue}, or a filter. What
+     * the reading found and what it produced are held against each other here rather than each being
+     * trusted on its own.
+     */
+    private static void everyLineWasDrawn(List<Axis> axes,
+                                          java.util.Map<AxisId, List<Border>> lines) {
+        for (Axis axis : axes) {
+            if (!axis.measurable()) {
+                continue;
+            }
+            int drawn = lines.getOrDefault(axis.id(), List.of()).size();
+            int cut = axis.cuts().stream().mapToInt(each -> each.origins().size()).sum();
+            if (drawn != cut) {
+                throw new IllegalStateException(
+                        "a reading of `" + axis.term() + "` that found " + cut + " line"
+                                + (cut == 1 ? "" : "s") + " and drew " + drawn
+                                + ": what a measure is short of cannot be counted from what a"
+                                + " reading lost");
+            }
+        }
     }
 
     /** An open closure's own account of itself: never empty, and in the order the readers found it,
