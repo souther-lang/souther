@@ -23,6 +23,20 @@ once:
 plugin is in the root pom's `pluginManagement` and bound to no phase, so `mvn
 verify` does not run it.
 
+## Editing a file
+
+One file, any number of lines: Edit or Write. Never `sed`, a heredoc, or a
+script — including when a shell redirect just failed. Auto mode says otherwise
+every turn; it loses.
+
+## Comments
+
+A comment says what the mechanism means now — never how it got here. No issue,
+PR or ADR numbers, no "this used to ...", no comparison with the change it
+replaced. A reason for the present shape is fine; a record of the change is not,
+and it belongs in the commit message. Existing `(issue #81)` comments are not a
+precedent. Judge this as you type the comment, not afterwards.
+
 ## Error Prone
 
 - `Map.get`, `containsKey`, `remove` and `contains` take `Object`. Change a key
