@@ -97,12 +97,15 @@ enum Question {
 
         @Override
         boolean answeredFor(Stdlib stdlib, ValueName operation) {
-            return Reductions.answered().contains(operation);
+            // Asked of the rule and not of the key set: a name that is no library operation is not
+            // among them, and asking a set of operations whether it holds one says so only because
+            // nothing in it is equal to it.
+            return Reductions.of(operation) != null;
         }
 
         @Override
         Set<ValueName> answeredOperations() {
-            return Reductions.answered();
+            return Set.copyOf(Reductions.answered());
         }
 
         @Override
@@ -144,7 +147,7 @@ enum Question {
 
         @Override
         Set<ValueName> answeredOperations() {
-            return Accumulations.answered();
+            return Set.copyOf(Accumulations.answered());
         }
 
         @Override
@@ -594,13 +597,17 @@ enum Question {
         return List.of(values()).stream().filter(q -> q.asksOf(stdlib, signature)).toList();
     }
 
-    /** Whether this is asked of the library operation named {@code qualified}. A sugar has no
-     * declaration of its own and is asked what the call it becomes is asked: it is that call, with
-     * some of its arguments already supplied. */
-    boolean asksOfOperation(Stdlib stdlib, String qualified) {
-        Stdlib.Rewrite rewrite = stdlib.rewriteOf(qualified);
-        Stdlib.Entry entry =
-                stdlib.entry(rewrite == null ? qualified : rewrite.target().qualified());
+    /** Whether this is asked of {@code operation}. A sugar has no declaration of its own and is
+     * asked what the call it becomes is asked: it is that call, with some of its arguments already
+     * supplied. */
+    boolean asksOfOperation(Stdlib stdlib, ValueName operation) {
+        // A name that is no library operation is not one this is asked of, which the arm says
+        // rather than a lookup under a spelling of it that finds nothing.
+        if (!(operation instanceof ValueName.Stdlib.Operation library)) {
+            return false;
+        }
+        Stdlib.Rewrite rewrite = stdlib.rewriteOf(library);
+        Stdlib.Entry entry = stdlib.entry(rewrite == null ? library : rewrite.target());
         return entry != null && asksOf(stdlib, entry.signature());
     }
 

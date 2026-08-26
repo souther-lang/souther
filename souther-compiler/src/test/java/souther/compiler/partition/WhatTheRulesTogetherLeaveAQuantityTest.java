@@ -52,8 +52,8 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
     /** The same, where the rules leave the quantity only what lies between two values. */
     private static List<String> within(String low, String high, Seam... parted) {
         return QuantityArrangement.of(NUMBERS, byItsOwnRule(parted),
-                        low == null ? null : Bound.at(at(low), true),
-                        high == null ? null : Bound.at(at(high), true))
+                        low == null ? null : DomainEnd.at(Bound.at(at(low), true)),
+                        high == null ? null : DomainEnd.at(Bound.at(at(high), true)))
                 .bands().stream().map(Band::key).toList();
     }
 
@@ -70,6 +70,51 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
         assertThrows(IllegalArgumentException.class,
                 () -> new BandEnd.AtParting(upTo("10"), null),
                 "a parted end without a reach is not a state a run can be in");
+    }
+
+    /**
+     * A run claiming to be stopped where it does not reach is refused.
+     *
+     * <p>The run and what stops it are one value because they are one answer, and a value saying one
+     * thing in its own ends and another in what it is owed to would be two answers to the question
+     * it exists to settle. So each of the things said to stop it is held to where the run actually
+     * gets: a line stops it only where the run reaches that line, and an end the rules leave only
+     * where the run reaches that end.
+     */
+    @Test
+    void aRunClaimingToStopWhereItDoesNotReachIsRefused() {
+        Band values = new Band(new BandEnd.AtOrderEnd(Towards.BELOW),
+                new BandEnd.AtDomain(Bound.at(at("50"), true)));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> new QuantityArrangement.Run(values, stoppedByTheOrder(Towards.BELOW),
+                        stoppedByTheDomain(Bound.at(at("100"), true))),
+                "the run stops at fifty and says it stops at a hundred");
+        assertThrows(IllegalArgumentException.class,
+                () -> new QuantityArrangement.Run(values, stoppedByTheOrder(Towards.BELOW),
+                        List.of(new RegionClaim(RegionBasis.TheRest.INSTANCE,
+                                PointAttribution.NONE))),
+                "and what a rule leaves outside one value is not a run of the arrangement at all");
+        assertThrows(IllegalArgumentException.class,
+                () -> new QuantityArrangement.Run(values, stoppedByTheOrder(Towards.ABOVE),
+                        stoppedByTheDomain(Bound.at(at("50"), true))),
+                "nor is the end of the order the other way round from the end this is");
+    }
+
+    private static List<RegionClaim> stoppedByTheOrder(Towards towards) {
+        return List.of(new RegionClaim(new RegionBasis.Beside(new FarEnd.AtTheOrderEnd(towards)),
+                PointAttribution.NONE));
+    }
+
+    private static List<RegionClaim> stoppedByTheDomain(Bound at) {
+        return List.of(new RegionClaim(new RegionBasis.Beside(new FarEnd.AtTheDomain(at)),
+                PointAttribution.NONE));
+    }
+
+    /** What stops the first run of {@code arranged} at its high end, without who can move it. */
+    private static List<FarEnd> farEndsOf(QuantityArrangement arranged) {
+        return arranged.runs().get(0).endsAt(Towards.ABOVE).stream()
+                .map(each -> ((RegionBasis.Beside) each.basis()).farEnd()).toList();
     }
 
     /** Each place with a line of its own against it, these being tests about where the values part
@@ -117,7 +162,7 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
     @Test
     void aRunWithNothingPartingItBelowRunsFromTheStart() {
         Band first = QuantityArrangement.of(NUMBERS, byItsOwnRule(upTo("10")),
-                        Bound.at(at("0"), true), null)
+                        DomainEnd.at(Bound.at(at("0"), true)), null)
                 .bands().get(0);
 
         assertEquals(false, first.holds(at("-1")), "the rules leave nothing below zero");
@@ -231,6 +276,56 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
     /** The run above the line, as a border's point away from it asks for it. */
     private static Criterion run(QuantityArrangement arranged) {
         return new Criterion.Within(arranged.bands().get(1), null, Towards.ABOVE);
+    }
+
+    /**
+     * A line where the rules already stop the quantity stops the run as well, and neither replaces
+     * the other.
+     *
+     * <p>Each of them stops it there without the other: taking the line away leaves the run at the
+     * end the rules leave, and taking that away leaves it at the line. So a row inside answers for
+     * both, and adding the line to a model that already had the end leaves what was owed there owed
+     * and adds one — which is what a rule that moves nothing may do and no more.
+     */
+    @Test
+    void aLineWhereTheRulesAlreadyStopTheQuantityStopsTheRunAsWell() {
+        Bound upTo100 = Bound.at(at("100"), true);
+        QuantityArrangement withoutTheLine =
+                QuantityArrangement.of(NUMBERS, List.of(), null, DomainEnd.at(upTo100));
+        QuantityArrangement withTheLine = QuantityArrangement.of(NUMBERS,
+                List.of(Parting.by(upTo("100"), aLine(0))), null, DomainEnd.at(upTo100));
+
+        assertEquals(List.of(new FarEnd.AtTheDomain(upTo100)),
+                farEndsOf(withoutTheLine),
+                "with no line there, the run stops where the rules leave the quantity");
+        assertEquals(List.of(new FarEnd.AtALine(aLine(0), upTo("100")),
+                        new FarEnd.AtTheDomain(upTo100)),
+                farEndsOf(withTheLine),
+                "and with one, at the line as well — the end it had is still an end");
+        assertTrue(new Criterion.Within(withoutTheLine.bands().get(0), null, Towards.BELOW)
+                        .sameAs(new Criterion.Within(withTheLine.bands().get(0), null,
+                                Towards.BELOW)),
+                "and the run asks a row for exactly what it did: the values are the values, however"
+                        + " many things stop it where it stops");
+    }
+
+    /**
+     * A line the rules stop the quantity short of does not stop the run.
+     *
+     * <p>The run reaches the tighter of the two, and a line past that is a line it never gets to.
+     * Written down as what stopped it, a rule that settles nothing about the region would be named
+     * as the thing a row inside answers for — and two readings whose runs stop in different places
+     * would come back as one point asking two different things.
+     */
+    @Test
+    void aLineTheRulesStopShortOfDoesNotStopTheRun() {
+        QuantityArrangement arranged = QuantityArrangement.of(NUMBERS,
+                List.of(Parting.by(upTo("100"), aLine(0))), null,
+                DomainEnd.at(Bound.at(at("50"), true)));
+
+        assertEquals(List.of(new FarEnd.AtTheDomain(Bound.at(at("50"), true))),
+                farEndsOf(arranged),
+                "the rules stop it at fifty, so the line at a hundred settles nothing here");
     }
 
     /** And a rule read twice is one rule, which is what says how many runs a row answers for. */

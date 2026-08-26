@@ -71,8 +71,11 @@ class ALineIsOwedByTheDeclarationsThatWroteItTest {
 
         assertEquals(List.of(), debtsOf(both, "example.consumer"),
                 "the consumer carries the type and wrote none of its rules");
-        assertEquals(1, debtsOf(both, "example.producer").size(),
-                "and the module that wrote the clause holds it");
+        assertEquals(List.of("String.length(value) = 1",
+                        "String.length(value) in 1 < String.length(value)"),
+                said(both, "example.producer"),
+                "and the module that wrote the clause holds what the clause asks for: a row at the"
+                        + " line, and a row of an ordinary length above it");
     }
 
     /**
@@ -113,20 +116,28 @@ class ALineIsOwedByTheDeclarationsThatWroteItTest {
                 "a module's account of its own declarations is its own");
     }
 
+    /** What each of the module's debts asks a row for, as a report writes it. */
+    private static List<String> said(Compilation compilation, String module) {
+        return debtsOf(compilation, module).stream().map(each -> each.debt().said()).toList();
+    }
+
+    /** How many lines the module's debts are points of, which the owners of a line never multiply
+     *  and the points of one line always do. */
+    private static long linesAmong(List<Adequacy.DeclaredDebt> debts) {
+        return debts.stream().map(each -> each.debt().id()).distinct().count();
+    }
+
     /**
-     * The module's account of its declarations: which lines, owed by whom, and what became of each
-     * point of each of them.
+     * The module's account of its declarations: which points, owed by whom, and what became of each.
      *
      * <p>Written out rather than compared as the debts themselves, because a debt carries the row a
      * search composed and a row carries a region that compares by identity.
      */
     private static List<String> account(Compilation compilation, String module) {
         return debtsOf(compilation, module).stream()
-                .map(each -> each.subject().named() + " owes " + each.debt().id()
-                        + BorderObligationAssessment.AGAINST_THE_LINE.stream()
-                                .map(role -> " " + role + "=" + each.debt().at(role).isUnmetGap()
-                                        + "/" + each.debt().demands().get(role))
-                                .collect(java.util.stream.Collectors.joining()))
+                .map(each -> each.subject().named() + " owes " + each.debt().id() + " "
+                        + each.debt().role() + "=" + each.debt().item().isUnmetGap()
+                        + "/" + each.debt().demand())
                 .toList();
     }
 
@@ -167,20 +178,21 @@ class ALineIsOwedByTheDeclarationsThatWroteItTest {
         List<Adequacy.DeclaredDebt> narrowed = debtsOf(compilation, "example.together").stream()
                 .filter(each -> each.owners().size() > 1).toList();
 
-        assertEquals(1, narrowed.size(),
+        assertEquals(1, linesAmong(narrowed),
                 () -> "the end at 50 is held by both records: "
                         + subjects(compilation, "example.together"));
         assertEquals("Inner or Outer", narrowed.get(0).subject().named(),
                 "and a finding about it names both, because the reading does not know which");
 
-        // One line, and one of everything read off it. Counted here because the failure this is
-        // about is an owner list being spent as a multiplier.
+        // One of everything per point of the line, and nothing per owner. Counted here because the
+        // failure this is about is an owner list being spent as a multiplier.
         assertEquals(1, declaredFindings(compilation, "example.together").stream()
                         .filter(each -> each.subject().equals(narrowed.get(0).subject())).count(),
                 "one row to write is one thing to be told about");
-        assertEquals(1, generationTargetsFor(compilation, "example.together",
+        assertEquals(narrowed.size(), generationTargetsFor(compilation, "example.together",
                         narrowed.get(0).debt().id()),
-                "and one thing to offer a row for");
+                "and one thing to offer a row for at each point of the line, whichever of the two"
+                        + " records is read as having put the end there");
     }
 
     /** The inner record in one module, the outer in another, each taking the same end in. */
@@ -303,7 +315,7 @@ class ALineIsOwedByTheDeclarationsThatWroteItTest {
     private static Adequacy.DeclaredDebt narrowedDebtOf(Compilation compilation, String module) {
         List<Adequacy.DeclaredDebt> narrowed = debtsOf(compilation, module).stream()
                 .filter(each -> !each.debt().id().line().narrowedWithin().isEmpty()).toList();
-        assertEquals(1, narrowed.size(),
+        assertEquals(1, linesAmong(narrowed),
                 () -> module + " reads one taken-in end: " + subjects(compilation, module));
         return narrowed.get(0);
     }
@@ -333,7 +345,7 @@ class ALineIsOwedByTheDeclarationsThatWroteItTest {
                 .map(each -> {
                     About.APointOfADeclaredBorder about =
                             (About.APointOfADeclaredBorder) each.about();
-                    return each.named() + ": " + about.debt().said(about.role());
+                    return each.named() + ": " + about.debt().said();
                 })
                 .toList();
     }

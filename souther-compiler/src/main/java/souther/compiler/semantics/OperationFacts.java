@@ -466,7 +466,7 @@ public final class OperationFacts {
      *  two values it is, so that a declaration says which library it is about without a reader
      *  splitting a spelling to find out. */
     private static ValueName op(String alias, String name) {
-        return new ValueName.Stdlib(alias, name);
+        return ValueName.Stdlib.operation(alias, name);
     }
 
     private static OperationFact computes(Arithmetic arithmetic) {
@@ -505,7 +505,7 @@ public final class OperationFacts {
     }
 
     private static OperationFact meansSizeOf(String module, String size) {
-        return new OperationFact.MeansTheSameAsASizeOfNought(new ValueName.Stdlib(module, size));
+        return new OperationFact.MeansTheSameAsASizeOfNought(ValueName.Stdlib.operation(module, size));
     }
 
     /** The answer holds the very elements {@code source} held. */
@@ -556,7 +556,7 @@ public final class OperationFacts {
 
     private static OperationFact shifts(String module, String measure, ArgumentRef of,
                                         ArgumentRef amount, long per) {
-        return new OperationFact.ShiftsBy(new ValueName.Stdlib(module, measure), of, amount,
+        return new OperationFact.ShiftsBy(ValueName.Stdlib.operation(module, measure), of, amount,
                 java.math.BigDecimal.valueOf(per));
     }
 

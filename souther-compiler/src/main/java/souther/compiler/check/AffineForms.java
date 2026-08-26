@@ -55,6 +55,11 @@ public final class AffineForms {
      */
     public interface Reading<A, E> {
 
+        /** The symbols the expression being read was resolved against. A call folds to a number
+         *  when it computes one, which is a fact about the library, so the walk asks the caller
+         *  rather than reaching for a library of its own. */
+        Symbols symbols();
+
         /** {@code e} as a form, where nothing here composes one: an atom, a value read through, or
          *  null where the caller can say nothing about it. */
         LinearForm<A> leafOf(Core e, E at);
@@ -172,7 +177,7 @@ public final class AffineForms {
             // A call that folds is the number it folds to. `String.length("1A")` is 2, and a clause
             // about it is decided rather than owed — the run-time check is not what should answer a
             // question the compiler has already computed.
-            BigDecimal folded = Terms.constantNumber(e);
+            BigDecimal folded = Terms.constantNumber(e, reading.symbols());
             if (folded != null) {
                 return new Outcome.Composed<>(LinearForm.constant(folded));
             }

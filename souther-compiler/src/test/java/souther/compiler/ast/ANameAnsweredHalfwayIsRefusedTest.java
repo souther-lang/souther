@@ -15,14 +15,14 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 /**
  * A name says what it denotes and how this module reaches it, or it says neither.
  *
- * <p>Both answers come from resolution and they are two halves of one question. A reader that has
- * one and not the other is holding a reference that resolves to a declaration and reaches nothing,
+ * <p>Both answers come from resolution and they are two halves of one question. A reader that had
+ * one and not the other would hold a reference that resolves to a declaration and reaches nothing,
  * or the other way round — and the reader after it takes the spelling instead, which is what a table
  * keyed by names answers with silence.
  *
- * <p>So the halves are refused where they are put together rather than caught where they are read.
- * A rewrite that carries a name across and drops one of them is a mistake in this compiler, and the
- * place to say so is the one that could have carried both.
+ * <p>Which is why there is one half to carry. {@link ReachName} is the answer and it holds both, so
+ * a rewrite has nowhere to put a declaration without the route it was reached by; what is refused
+ * here is the name that carries no reference at all.
  */
 class ANameAnsweredHalfwayIsRefusedTest {
 
@@ -45,21 +45,32 @@ class ANameAnsweredHalfwayIsRefusedTest {
     }
 
     /**
-     * Half an answer is not a state a rewrite may leave behind, whichever half it is. One way round
-     * leaves a reference that resolves to a declaration and reaches nothing; the other leaves a key
-     * with nothing saying what it means, and there is nowhere for it to have come from —
-     * {@link ReachName#of} takes the denotation to work one out.
+     * Half an answer is not a state a rewrite may leave behind. There is one slot to leave empty,
+     * and leaving it empty is refused where the name is put together.
      */
     @Test
     void aNameAnsweredOnOneCountOnlyCannotBeBuilt() {
-        IllegalArgumentException noReach = assertThrows(IllegalArgumentException.class,
-                () -> new Hir.Var.Denoting(WrittenName.of("spin", POS), DECLARED, null, null));
-        IllegalArgumentException noDenotation = assertThrows(IllegalArgumentException.class,
-                () -> new Hir.Var.Denoting(WrittenName.of("spin", POS), null,
-                        new ReachName.OfModule("demo", "spin"), null));
+        IllegalArgumentException noReference = assertThrows(IllegalArgumentException.class,
+                () -> new Hir.Var.Denoting(WrittenName.of("spin", POS), null, null));
 
-        assertEquals(true, noReach.getMessage().contains("spin"), noReach.getMessage());
-        assertEquals(true, noDenotation.getMessage().contains("spin"), noDenotation.getMessage());
+        assertEquals(true, noReference.getMessage().contains("spin"), noReference.getMessage());
+    }
+
+    /**
+     * And the other half has nowhere to be left behind: a declaration is held by the reference that
+     * reached it, so a rewrite that has a declaration and no route has nothing to build.
+     *
+     * <p>Asked of {@link ReachName} rather than of the name, because that is where the pairing now
+     * is. A route with nothing on the other side of it is what would let one name's declaration sit
+     * beside another's route further down.
+     */
+    @Test
+    void andAReferenceReachesSomething() {
+        assertThrows(IllegalArgumentException.class, () -> new ReachName.Own(null));
+        assertThrows(IllegalArgumentException.class, () -> new ReachName.OfModule(null));
+        assertThrows(IllegalArgumentException.class, () -> new ReachName.OfLibrary(null));
+        assertThrows(IllegalArgumentException.class, () -> new ReachName.TheNamespace(null));
+        assertThrows(IllegalArgumentException.class, () -> new ReachName.InScope(null));
     }
 
     /**
@@ -68,19 +79,13 @@ class ANameAnsweredHalfwayIsRefusedTest {
      * this is the one that replaced it, so a caller with nothing to say cannot say it here either.
      *
      * <p>Refused at the application rather than left to {@link Hir.Var}: what a pass hands in is a
-     * spelling and two answers, and a caller with nothing to say would otherwise write a name for
+     * spelling and the reference, and a caller with nothing to say would otherwise write a name for
      * someone downstream to resolve, which is what ADR-0067 rules out.
      */
     @Test
     void anApplicationAPassWritesCannotLeaveItsNameUnanswered() {
         assertThrows(NullPointerException.class,
-                () -> new Hir.Apply("spin", null, new ReachName.OfModule("demo", "spin"),
-                        List.of(), ConstructionOrigin.own(), POS, null));
-        assertThrows(NullPointerException.class,
-                () -> new Hir.Apply("spin", DECLARED, null,
-                        List.of(), ConstructionOrigin.own(), POS, null));
-        assertThrows(NullPointerException.class,
-                () -> new Hir.Apply("spin", null, null,
+                () -> new Hir.Apply("spin", null,
                         List.of(), ConstructionOrigin.own(), POS, null));
     }
 
@@ -88,8 +93,8 @@ class ANameAnsweredHalfwayIsRefusedTest {
     @Test
     void aResolvedNameSaysWhatItDenotesAndHowItIsReached() {
         WrittenName spin = WrittenName.of("spin", POS);
-        Hir.Var resolved = new Hir.Var.Denoting(spin, DECLARED,
-                new ReachName.OfModule("demo", "spin"), spin.region());
+        Hir.Var resolved = new Hir.Var.Denoting(spin,
+                new ReachName.OfModule(DECLARED), spin.region());
 
         assertEquals("spin", resolved.answered().denotes().name());
         assertEquals("demo.spin", resolved.answered().reaches());

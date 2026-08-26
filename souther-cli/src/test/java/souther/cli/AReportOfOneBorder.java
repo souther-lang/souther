@@ -76,6 +76,35 @@ final class AReportOfOneBorder {
                         Endpoint.inclusive(Count.of(1000))));
     }
 
+    /**
+     * The same line, drawn by a comparison in a body rather than by a clause of a type.
+     *
+     * <p>For a test about what a behavior's own account rests on. A run beside a clause's line stops
+     * where the clause leaves the quantity, so it is owed to the type and is answered once for the
+     * module; a run beside a comparison exists in the body that wrote it and is that behavior's.
+     */
+    static Border aBorderABodyDrew() {
+        OriginRef origin = new OriginRef.ComparisonOrigin(
+                new RuleRef.Comparison("weigh", new souther.compiler.types.CoverageOrigin(
+                        "example.rate", 2, 0, souther.compiler.types.CoverageConstruct.BINARY)),
+                new OriginRef.ComparisonOrigin.Read(
+                        new souther.compiler.coverage.ComparisonOccurrence(0),
+                        new souther.compiler.check.RuleCitation.WrittenAt(
+                                souther.compiler.diag.Citation.of(
+                                        new souther.compiler.diag.SourcePos(3, 5)))),
+                true, true);
+        return Border.at(
+                BoundaryTarget.at(
+                        new BorderQuantity.OfACoordinate(new AxisId("weigh", "w.a"),
+                                new NumericTerm.ValueOf(TermPath.of("w").then("a")),
+                                souther.compiler.inputs.TermOrders.itself(Carrier.WHOLE)),
+                        new souther.compiler.partition.Level.OnACarrier(Carrier.WHOLE,
+                                Count.of(100))),
+                origin,
+                new NumericDomain.Bounds(Endpoint.inclusive(Count.of(1)),
+                        Endpoint.inclusive(Count.of(1000))));
+    }
+
     /** The same border a rule leaves at 100 and up, where the ON point is the whole of what it owes. */
     static Border aBorderAtTheEdgeOfItsDomain() {
         OriginRef origin = new OriginRef.InvariantOrigin(new RuleRef.Invariant(new Clause.Ref(

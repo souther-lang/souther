@@ -82,7 +82,7 @@ public sealed interface OperationFact {
      * of two of them. That number is what a rule over a pair of dates is written in as well, so the
      * two meet without either being restated.
      */
-    record ShiftsBy(souther.compiler.types.ValueName.Stdlib measure, ArgumentRef of,
+    record ShiftsBy(souther.compiler.types.ValueName.Stdlib.Operation measure, ArgumentRef of,
                     ArgumentRef amount, java.math.BigDecimal per) implements OperationFact {
 
         public ShiftsBy {

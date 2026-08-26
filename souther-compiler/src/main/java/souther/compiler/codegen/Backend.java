@@ -241,7 +241,7 @@ public final class Backend {
             }
         }
         CodegenContext ctx = new CodegenContext(module.name(), symbols, kernels, caseToSums, typePackage,
-                module.exposing().isEmpty(), exposed, recHelpers, standingCalls);
+                module.exposing().isEmpty(), exposed, standingCalls);
         ctx.setDischargeInvariants(dischargeInvariants);
         ctx.setValueShapes(shapes);
         ctx.setEnsuresChecks(checks);

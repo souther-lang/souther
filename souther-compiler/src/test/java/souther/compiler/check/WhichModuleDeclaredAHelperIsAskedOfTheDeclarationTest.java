@@ -5,6 +5,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.CompileException;
 import souther.compiler.frontend.CstFrontend;
+import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
@@ -75,13 +76,14 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
     }
 
     /**
-     * A helper the module declared, filed under a qualified name — the shape a published body is
-     * closed into, read back in the module that wrote it. Its descent is still required.
+     * A helper `maths` wrote, held at a qualified address — the shape a published body is closed
+     * into. Its descent is still `maths`'s to require.
      *
-     * <p>Reading the dot skips this, and skipping it is accepting a recursion nobody proved.
+     * <p>The address is not the answer. It is where the module puts the method, and a rule that
+     * read the dot in it would skip this one — which is accepting a recursion nobody proved.
      */
     @Test
-    void aQualifiedNameIsNotAnExemption() {
+    void whereItIsHeldIsNotAnExemption() {
         Hir.FnDef own = spinOf("maths");
         HelperInliner maths = HelperInliner.forHelpers("maths", Map.of("spin", own), DefaultStdlib.get());
         Hir.FnDef closed = maths.closeAcross(own, "maths");
@@ -90,26 +92,27 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
         assertEquals("maths", closed.declaredIn());
 
         CompileException refused = assertThrows(CompileException.class,
-                () -> check("maths", Map.of(closed.name(), closed), Map.of()));
+                () -> check("maths", Map.of(), Map.of(closed.name(), closed)));
         assertEquals("E2001", refused.code());
     }
 
     /**
-     * A helper another module declared, reached here under a bare name. Its descent is not this
-     * module's to require: the module that wrote it required it there, and an unmarked published
-     * helper answers for its whole closure (ADR-0098).
+     * The same definition, held by a module that did not write it. Its descent is not that module's
+     * to require: the module that wrote it required it there, and an unmarked published helper
+     * answers for its whole closure (ADR-0098).
      *
-     * <p>Reading the dot checks this one, and a rejection here names a definition the author of this
-     * module never wrote.
+     * <p>Which is decided by the declaration and by nothing about the address. Both modules hold it
+     * at {@code maths.spin} and both reach it the same way — so the address, the reference and the
+     * rendering are all the same in the two, and the only thing that differs is who wrote it.
      */
     @Test
-    void aBareNameIsNotADeclaration() {
-        Hir.FnDef foreign = spinOf("maths");
+    void aDefinitionAnotherModuleWroteIsNotThisOnesToProve() {
+        Hir.FnDef own = spinOf("maths");
+        HelperInliner maths = HelperInliner.forHelpers("maths", Map.of("spin", own), DefaultStdlib.get());
+        Hir.FnDef closed = maths.closeAcross(own, "maths");
 
-        assertEquals("spin", foreign.name());
-        assertEquals("maths", foreign.declaredIn());
-
-        assertDoesNotThrow(() -> check("order", Map.of(), Map.of(foreign.name(), foreign)));
+        assertEquals("maths", closed.declaredIn());
+        assertDoesNotThrow(() -> check("order", Map.of(), Map.of(closed.name(), closed)));
     }
 
     /**
@@ -153,12 +156,19 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
                 PartialReachability.of(HelperInliner.over(table, HelperGraph.of(table)));
 
         // `wrapped` is unmarked, and what it reaches is the module that declared it to answer for.
-        assertEquals(Optional.empty(), reachability.fromHelper("maths.wrapped"));
-        assertEquals(Optional.empty(), reachability.fromHelper("throughWrapped"));
+        assertEquals(Optional.empty(),
+                reachability.fromHelper(new ReachName.OfModule(
+                        new ValueName.Helper("maths", "wrapped"))));
+        assertEquals(Optional.empty(),
+                reachability.fromHelper(new ReachName.Own(
+                        new ValueName.Helper("order", "throughWrapped"))));
         // The rule stops at the boundary rather than everywhere: a `partial` helper of another
         // module is still one, and what this module wrote is still walked to find it.
-        assertEquals(Optional.of(List.of("straightToSpin", "maths.spin")),
-                reachability.fromHelper("straightToSpin"));
+        assertEquals(Optional.of(List.of(
+                        new ReachName.Own(new ValueName.Helper("order", "straightToSpin")),
+                        new ReachName.OfModule(new ValueName.Helper("maths", "spin")))),
+                reachability.fromHelper(new ReachName.Own(
+                        new ValueName.Helper("order", "straightToSpin"))));
     }
 
     /**
@@ -191,7 +201,9 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
         Hir.FnDef written = declared.get("hands");
         // Taken on by `order` under the name it reaches it by, and its body read against `order`'s
         // names: a body a reader holds names what the reader reaches, whoever declared it.
-        Hir.FnDef hands = written.reachedAs("maths.hands").withBody(new Hir.FnBody.Written(
+        Hir.FnDef hands = written
+                .reachedAs(new ReachName.OfModule(new ValueName.Helper("maths", "hands")))
+                .withBody(new Hir.FnBody.Written(
                 HelperNames.qualifyHelpersOf(written.writtenBody(), "maths")));
 
         Hir.Module order = resolved("""
@@ -225,10 +237,13 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
      */
     @Test
     void theNameAHelperIsReachedByDoesNotHoldTheModuleThatWroteIt() {
-        Hir.FnDef foldFrom = DefaultStdlib.get().helpers().get("List.foldFrom");
+        ValueName.Stdlib.Operation walk = DefaultStdlib.get().theWalk();
+        Hir.FnDef foldFrom = DefaultStdlib.get().helpers().get(walk);
 
-        assertEquals("souther.list", foldFrom.declaredIn());
+        assertEquals("List", walk.alias(), "reached under the alias the library publishes it as");
+        assertEquals("souther.list", foldFrom.declaredIn(), "and declared somewhere else");
         assertTrue(foldFrom.declaredIn().startsWith("souther."));
-        assertEquals("souther.list", foldFrom.reachedAs("List.foldFrom").declaredIn());
+        assertEquals("souther.list",
+                foldFrom.reachedAs(new ReachName.OfLibrary(walk)).declaredIn());
     }
 }

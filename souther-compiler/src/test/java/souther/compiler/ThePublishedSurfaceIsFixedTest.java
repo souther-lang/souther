@@ -67,7 +67,8 @@ class ThePublishedSurfaceIsFixedTest {
     private static String render() {
         List<String> lines = new ArrayList<>();
         for (String qualified : DefaultStdlib.get().published()) {
-            Stdlib.Entry entry = DefaultStdlib.get().entry(qualified);
+            Stdlib.Entry entry =
+                    DefaultStdlib.get().entry(DefaultStdlib.get().operation(qualified));
             if (entry == null) {
                 // `List.fold` is sugar: it is written and reached, and has no declaration of its own.
                 lines.add(qualified + "(step, seed, xs)");

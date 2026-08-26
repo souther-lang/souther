@@ -56,6 +56,13 @@ final class Terms {
     private final ReadingPolicy policy;
 
     private final Symbols symbols;
+
+    /** The symbols this reading was made against — what a reader holding this reading folds an
+     *  expression of it against, rather than reaching for a library of its own. */
+    Symbols symbols() {
+        return symbols;
+    }
+
     /**
      * What a clause states, read through this very reading.
      *
@@ -392,7 +399,7 @@ final class Terms {
         return switch (e) {
             case Core.Call call when call.fn() instanceof Core.Reached reached
                     && reached.name() instanceof souther.compiler.types.ReachName.OfLibrary library ->
-                    library.target();
+                    library.denotes();
             case Core.PreservedCall preserved -> preserved.operation();
             case null, default -> null;
         };
@@ -463,6 +470,11 @@ final class Terms {
         return AffineForms.outcome(raw, at, new AffineForms.Reading<FactSubject, Denotations>() {
 
             @Override
+            public Symbols symbols() {
+                return Terms.this.symbols;
+            }
+
+            @Override
             public LinearForm<FactSubject> leafOf(Core e, Denotations where) {
                 LinearForm<FactSubject> named = affineReading.leafOf(e, where);
                 return named == null || named.coefs().keySet().stream().allMatch(names)
@@ -498,6 +510,11 @@ final class Terms {
      */
     private final AffineForms.Reading<FactSubject, Denotations> affineReading =
             new AffineForms.Reading<>() {
+
+                @Override
+                public Symbols symbols() {
+                    return Terms.this.symbols;
+                }
 
                 @Override
                 public LinearForm<FactSubject> leafOf(Core e, Denotations at) {
@@ -564,15 +581,18 @@ final class Terms {
     }
 
     /** What {@code e} folds to where every part of it is written out, or {@code null} where any part
-     * of it is computed at run time and there is nothing to fold. */
-    static Object folded(Core e) {
+     * of it is computed at run time and there is nothing to fold.
+     *
+     * <p>Folded against {@code symbols}, because which operations fold is a fact about the library
+     * the expression was resolved against and not about the expression. */
+    static Object folded(Core e, Symbols symbols) {
         Hir.Expr written = asWrittenValue(e);
-        return written == null ? null : ConstEval.eval(written).orElse(null);
+        return written == null ? null : ConstEval.against(symbols).eval(written).orElse(null);
     }
 
     /** The number {@code e} folds to at compile time, or {@code null} where it folds to none. */
-    static BigDecimal constantNumber(Core e) {
-        Object folded = folded(e);
+    static BigDecimal constantNumber(Core e, Symbols symbols) {
+        Object folded = folded(e, symbols);
         if (folded instanceof Long n) {
             return BigDecimal.valueOf(n);
         }
@@ -2567,9 +2587,8 @@ final class Terms {
             case Core.PreservedCall call -> {
                 List<Hir.Expr> args = written(call.args());
                 yield args == null ? null
-                        : new Hir.Apply(call.operation().name(), call.operation(),
-                                reachOf(call.operation()), args, ConstructionOrigin.own(),
-                                call.pos(), null);
+                        : new Hir.Apply(call.operation().name(), reachOf(call.operation()), args,
+                                ConstructionOrigin.own(), call.pos(), null);
             }
             // A temporal is written as a literal with its text spelled out (spec
             // §a-temporal-value-is-written-as-a-literal). Rendered here for the same reason every
@@ -2582,16 +2601,20 @@ final class Terms {
             // line be drawn where the compiler knows no value. What is written is the node now, and
             // nothing here decides it.
             case Core.Temporal t -> {
-                ValueName.Stdlib namespace = ValueName.Stdlib.namespace(t.kind().shown());
-                yield new Hir.Apply(namespace.qualified(), namespace, reachOf(namespace),
+                ValueName.Stdlib.Namespace namespace =
+                        ValueName.Stdlib.namespace(t.kind().shown());
+                yield new Hir.Apply(namespace.qualified(),
+                        new ReachName.TheNamespace(namespace),
                         List.of(new Hir.StringLit(t.text(), t.pos(), null)),
                         ConstructionOrigin.own(), t.pos(), null);
             }
             // A case of an enumeration is written by naming it, so the value is the name.
-            case Core.UnitValue unit -> Hir.Var.respelled(unit.data().name(),
-                    new ValueName.OfType(unit.data().name(), unit.data(),
-                            ConstructionOrigin.own()),
-                    new ReachName.Bare(unit.data().name()), unit.pos(), null);
+            case Core.UnitValue unit -> {
+                ValueName.OfType named = new ValueName.OfType(unit.data().name(), unit.data(),
+                        ConstructionOrigin.own());
+                yield Hir.Var.respelled(unit.data().name(), new ReachName.InScope(named),
+                        unit.pos(), null);
+            }
             case null, default -> null;
         };
     }
@@ -2684,9 +2707,10 @@ final class Terms {
         return op == BinOp.ADD || op == BinOp.SUB || op == BinOp.MUL || op == BinOp.DIV;
     }
     /** How a preserved call's operation is reached: it is the library's, named under the alias the
-     * library publishes it under. */
-    private static ReachName reachOf(ValueName operation) {
-        return new ReachName.OfLibrary((ValueName.Stdlib) operation);
+     * library publishes it under. A call this representation kept standing applies an operation —
+     * the namespace applied is a construction, and is written back as one. */
+    private static ReachName.Declaration reachOf(ValueName operation) {
+        return new ReachName.OfLibrary((ValueName.Stdlib.Operation) operation);
     }
 
 }

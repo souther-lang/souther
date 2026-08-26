@@ -105,9 +105,6 @@ final class BodyGen {
          * put back when a scope ends, which is what a name-keyed table needed and did not always do.
          */
         private final Map<BindingId, Var> locals = new HashMap<>();
-        /** Where each injected behavior a lambda captured lives. Declared rather than bound, so it is
-         * reached by the name it is declared under. */
-        private final Map<String, Var> captured = new HashMap<>();
         private int nextSlot;
         private Set<ValueName.Behavior> reqNames = Set.of();
         private Map<ValueName.Behavior, Type> reqSuccess = Map.of();
@@ -208,11 +205,6 @@ final class BodyGen {
 
         void bind(BindingId binding, String name, int slot, Type type) {
             put(locals, binding, new Var(slot, type, name));
-        }
-
-        /** Where an injected behavior a lambda captured was put. */
-        void bindCaptured(String injected, int slot, Type type) {
-            put(captured, injected, new Var(slot, type, injected));
         }
 
         private <K> void put(Map<K, Var> where, K key, Var var) {
@@ -997,8 +989,10 @@ final class BodyGen {
         /** Whether emitting {@code e} emits a loop — a fold, or the walk a fold that grows a collection
          *  became. What it decides is whether a value being constructed can stay on the stack while its
          *  fields are built. */
-        private static boolean walksInside(Core e) {
-            if (e instanceof Core.Call c && (c.name().equals(FOLD)
+        private boolean walksInside(Core e) {
+            if (e instanceof Core.Call c
+                    && ((c.fn() instanceof Core.Reached r
+                            && ctx.symbols.theWalk().equals(r.denotes()))
                     || c.fn() == Core.Emitted.BUILD_LIST || c.fn() == Core.Emitted.BUILD_MAP)) {
                 return true;
             }
@@ -1217,7 +1211,7 @@ final class BodyGen {
             // Which kernel a call reaches is on the call, so what is emitted for one is asked of
             // the operation. Matched against the rendered reach name instead, these arms would turn
             // on the alias the library publishes the operation under.
-            if (call.fn() instanceof Core.Reached.OfKernel(_, _, Kernel kernel)) {
+            if (call.fn() instanceof Core.Reached.OfKernel(_, Kernel kernel)) {
                 kernel(kernel, call);
                 return;
             }
@@ -1237,25 +1231,34 @@ final class BodyGen {
                 putIntoMap(call);
                 return;
             }
-            // an injected behavior a lambda captured arrives in a slot rather than in a field of the
-            // enclosing behavior, and is applied as the value it is. This asks where the value is,
-            // not what the name means: what it means was settled when the call was elaborated, and
-            // an injected behavior is not a binding.
-            Var behavior = captured.get(call.name());
-            if (behavior != null && behavior.type() instanceof Type.FnOf fnType) {
-                applyCaptured(call, fnType);
-            } else if (ctx.emittedHelpers.containsKey(call.name())) {
-                // The one loop the language has is emitted where it stands, not called.
-                if (!call.name().equals(FOLD) || !folded(call)) {
-                    recursiveHelperCall(call);
-                }
-            } else if (behaviorOf(call) != null && reqNames.contains(behaviorOf(call))) {
-                requiredCall(call);
-            } else if (behaviorOf(call) != null
-                    && ctx.calleeSig(behaviorOf(call)) != null) {
-                behaviorCall(call);
-            } else {
+            // What running this call means, asked of the call. Matched against the tables this
+            // emitter happens to hold, the answer was whichever table the rendered name hit first —
+            // and a helper the module holds under a name this call renders differently was no
+            // helper at all.
+            if (!(call.fn() instanceof Core.Reached.OfDeclaration reached)) {
                 throw new IllegalStateException("unknown function `" + call.name() + "`");
+            }
+            switch (reached.reaches()) {
+                case Core.Reaches.AHelper _ -> {
+                    // The one loop the language has is emitted where it stands, not called.
+                    if (!ctx.symbols.theWalk().equals(reached.denotes()) || !folded(call)) {
+                        recursiveHelperCall(call);
+                    }
+                }
+                // Which of the two it is, is where the value of the behavior stands in this frame:
+                // one supplied to the class being emitted is read off it, one implemented elsewhere
+                // is called. Neither is a question about what the call reaches.
+                case Core.Reaches.ABehavior(ValueName.Behavior behavior) -> {
+                    if (reqNames.contains(behavior)) {
+                        requiredCall(call);
+                    } else if (ctx.calleeSig(behavior) != null) {
+                        behaviorCall(call);
+                    } else {
+                        throw new IllegalStateException("`" + call.name() + "` reaches the behavior "
+                                + behavior + ", which is neither supplied to this class nor"
+                                + " implemented by a module this one was told about");
+                    }
+                }
             }
         }
 
@@ -1482,10 +1485,6 @@ final class BodyGen {
             code.invokestatic(ctx.cd(new GeneratedClass.Helpers(pkg)), CodegenContext.helperMethod(call.name()),
                     MethodTypeDesc.of(CD_Object, params));
         }
-
-        /** The self-hosted walk of {@code souther.list}: a recursive helper everywhere else, and the
-         *  loop every fold in a program is, which is why the emitter knows its name. */
-        private static final String FOLD = "List.foldFrom";
 
         /**
          * {@code divide}/{@code remainder} on Int: a zero divisor takes the DivisionByZero case,
@@ -1916,14 +1915,11 @@ final class BodyGen {
             code.labelBinding(end);
         }
 
-        /** What the body may name here: the bindings this emitter holds, and the injected behaviors
-         * a lambda captured, which a call reaches by the name they are declared under. */
+        /** What the body may name here: the bindings this emitter holds. */
         private Scope bound() {
             Map<BindingId, Scope.Binding> held = new LinkedHashMap<>();
             locals.forEach((binding, v) -> held.put(binding, new Scope.Binding(v.name(), v.type())));
-            Map<String, Type> named = new HashMap<>();
-            captured.forEach((name, v) -> named.put(name, v.type()));
-            return Scope.of(held).naming(named);
+            return Scope.of(held);
         }
 
         /** {@link #bound} plus what a call left standing is typed against, so re-typing an
@@ -1934,14 +1930,7 @@ final class BodyGen {
          * names a standing call can hold follows from the declarations in reach; which methods are
          * emitted follows from what this module turned out to need. Typing against the second
          * answered that a rule reaching a fold had no fold to call, in a module whose only reach to
-         * one was that rule.
-         *
-         * <p>Nothing is taken out of it for what a block captured. The two are looked up by what the
-         * name denotes — a behavior reaches what the author wrote, a helper or a library operation
-         * reaches what a call was left standing on — so one cannot stand where the other is asked
-         * for, and there is no precedence to arrange. Arranged anyway, by removing the captured
-         * spellings from these, a captured name that denoted a helper would have been deleted from
-         * the only map it could have been found in. */
+         * one was that rule. */
         Scope scope() {
             return bound().reaching(ctx.standingCalls);
         }
@@ -2018,11 +2007,6 @@ final class BodyGen {
          * the {@code Object} result back to the function's result type. */
         private void applyFn(Core.Apply call, Type.FnOf fnType) {
             applyValue(locals.get(call.fn().binding()), call.args(), fnType);
-        }
-
-        /** The same, for an injected behavior a lambda captured into a slot of its own class. */
-        private void applyCaptured(Core.Call call, Type.FnOf fnType) {
-            applyValue(captured.get(call.name()), call.args(), fnType);
         }
 
         private void applyValue(Var fv, List<Core> args, Type.FnOf fnType) {

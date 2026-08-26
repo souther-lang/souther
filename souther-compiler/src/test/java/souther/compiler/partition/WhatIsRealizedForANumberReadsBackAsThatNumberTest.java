@@ -75,8 +75,8 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
 
     /** The type each operation is applied to, for the walk below to have a position to stand at. */
     private static Type sourceOf(ValueName operation) {
-        Type declared = DefaultStdlib.get().entry(
-                ((ValueName.Stdlib) operation).qualified()).signature().params().get(0);
+        Type declared = DefaultStdlib.get()
+                .entry((ValueName.Stdlib.Operation) operation).signature().params().get(0);
         // A signature over a type variable is a signature over anything, and a walk needs one thing.
         // `Int` is the element every collection below is asked to hold, so what is built is a value
         // of a type the language certainly has.

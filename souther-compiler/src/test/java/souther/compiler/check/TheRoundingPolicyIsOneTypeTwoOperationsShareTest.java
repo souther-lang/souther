@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.Type;
+import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
 
@@ -27,6 +28,12 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  */
 class TheRoundingPolicyIsOneTypeTwoOperationsShareTest {
 
+    private static final ValueName.Stdlib.Operation ROUND =
+            ValueName.Stdlib.operation("Decimal", "round");
+
+    private static final ValueName.Stdlib.Operation DIVIDE =
+            ValueName.Stdlib.operation("Decimal", "divide");
+
     /** {@code divide(dividend, divisor, scale, mode)}. */
     private static final int MODE_OF_DIVIDE = 3;
 
@@ -35,8 +42,8 @@ class TheRoundingPolicyIsOneTypeTwoOperationsShareTest {
 
     @Test
     void theTypeEachTakesForItIsTheSameType() {
-        assertEquals(argumentOf("Decimal.round", MODE_OF_ROUND),
-                argumentOf("Decimal.divide", MODE_OF_DIVIDE),
+        assertEquals(argumentOf(ROUND, MODE_OF_ROUND),
+                argumentOf(DIVIDE, MODE_OF_DIVIDE),
                 "the arithmetic over a rounded quotient is held to the policy `Decimal.round`"
                         + " declares, so a policy of its own would hold `Decimal.divide` to nothing");
     }
@@ -44,13 +51,13 @@ class TheRoundingPolicyIsOneTypeTwoOperationsShareTest {
     /** And it is a declaration, rather than a number or a scalar that happens to sit there. */
     @Test
     void andItIsATypeSomethingDeclares() {
-        assertEquals(Type.Ref.class, argumentOf("Decimal.round", MODE_OF_ROUND).getClass(),
+        assertEquals(Type.Ref.class, argumentOf(ROUND, MODE_OF_ROUND).getClass(),
                 "a policy is a declared type; a scale is the count beside it");
-        assertEquals(Type.INT, argumentOf("Decimal.round", 0),
+        assertEquals(Type.INT, argumentOf(ROUND, 0),
                 "and the scale is that count");
     }
 
-    private static Type argumentOf(String operation, int at) {
+    private static Type argumentOf(ValueName.Stdlib.Operation operation, int at) {
         Stdlib.Entry entry = DefaultStdlib.get().entry(operation);
         assertNotNull(entry, () -> "the library declares no `" + operation + "`");
         assertEquals(true, entry.signature().params().size() > at,

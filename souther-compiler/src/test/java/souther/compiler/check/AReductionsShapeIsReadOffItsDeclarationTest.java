@@ -28,7 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AReductionsShapeIsReadOffItsDeclarationTest {
 
     private static ValueName op(String alias, String name) {
-        return new ValueName.Stdlib(alias, name);
+        return ValueName.Stdlib.operation(alias, name);
     }
 
     /** The walk itself: the seed is the second argument, and it arrives on the step's first
@@ -77,7 +77,7 @@ class AReductionsShapeIsReadOffItsDeclarationTest {
     @Test
     void everyWalkWrittenDownIsOneTheQuestionIsAskedOf() {
         for (ValueName operation : Reductions.answered()) {
-            assertTrue(Question.REDUCTION.asksOfOperation(DefaultStdlib.get(), operation.toString()),
+            assertTrue(Question.REDUCTION.asksOfOperation(DefaultStdlib.get(), operation),
                     operation + " has a rule and is not asked whether it is a walk");
         }
     }

@@ -110,8 +110,10 @@ class WhatAModuleDeclaresDoesNotChangeWithTheStageTest {
     @Test
     void theModuleEmitsHelpersItDidNotDeclare() {
         Db db = db();
-        assertEquals(Set.of("List.foldFrom", "lib.flatten"),
-                db.ask(new Bodies.RequiredRecursiveDefs("app")).value());
+        Set<String> emitted = new java.util.LinkedHashSet<>();
+        db.ask(new Bodies.RequiredRecursiveDefs("app")).value()
+                .forEach(reference -> emitted.add(reference.rendered()));
+        assertEquals(Set.of("List.foldFrom", "lib.flatten"), emitted);
         assertEquals(Set.of("own", "both"),
                 HelperInliner.helpersOf(db.ask(new Bodies.Settled("app")).value()).keySet(),
                 "and what it declares is unchanged by that");
@@ -196,8 +198,10 @@ class WhatAModuleDeclaresDoesNotChangeWithTheStageTest {
         souther.compiler.check.HelperTable table =
                 db.ask(new Bodies.Expanding("app", souther.compiler.check.InliningPolicy.FULL))
                         .value().table();
-        rowMethods.forEach(method ->
-                assertFalse(table.reaches(method), method + " is reachable by name"));
+        rowMethods.forEach(method -> assertFalse(
+                table.reaches(new souther.compiler.types.ReachName.Own(
+                        new souther.compiler.types.ValueName.Helper("app", method))),
+                method + " is reachable by name"));
         assertEquals(Set.of(), Set.copyOf(db.ask(new Bodies.RequiredRecursiveDefs("app")).value()),
                 "and nothing here recurses, so nothing else needs a method");
         assertEquals(rowMethods,

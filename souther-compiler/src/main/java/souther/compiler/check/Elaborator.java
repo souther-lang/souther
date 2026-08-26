@@ -442,9 +442,9 @@ public final class Elaborator {
     /** {@code <collection>.fromList(written)} — the form a body writes for the collection a row
      *  wrote in brackets, applied where the row wrote them. */
     private static Hir.Expr fromList(String collection, Hir.Expr written, Hir.RowCollection row) {
-        souther.compiler.types.ValueName.Stdlib fromList =
-                new souther.compiler.types.ValueName.Stdlib(collection, "fromList");
-        return new Hir.Apply(collection + ".fromList", fromList,
+        souther.compiler.types.ValueName.Stdlib.Operation fromList =
+                souther.compiler.types.ValueName.Stdlib.operation(collection, "fromList");
+        return new Hir.Apply(collection + ".fromList",
                 new souther.compiler.types.ReachName.OfLibrary(fromList), List.of(written),
                 souther.compiler.types.ConstructionOrigin.own(), row.pos(), row.region());
     }
@@ -452,9 +452,9 @@ public final class Elaborator {
     /** {@code <collection>.empty} — the value a body names for the empty collection a row writes
      *  in brackets, standing where the row wrote them. */
     private static Hir.Expr empty(String collection, Hir.RowCollection row) {
-        souther.compiler.types.ValueName.Stdlib empty =
-                new souther.compiler.types.ValueName.Stdlib(collection, "empty");
-        return Hir.Var.respelled(collection + ".empty", empty,
+        souther.compiler.types.ValueName.Stdlib.Operation empty =
+                souther.compiler.types.ValueName.Stdlib.operation(collection, "empty");
+        return Hir.Var.respelled(collection + ".empty",
                 new souther.compiler.types.ReachName.OfLibrary(empty), row.pos(), row.region());
     }
 

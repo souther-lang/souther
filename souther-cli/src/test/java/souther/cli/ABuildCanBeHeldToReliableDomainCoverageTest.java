@@ -93,12 +93,16 @@ class ABuildCanBeHeldToReliableDomainCoverageTest {
      * measured is held to one criterion where it refuses and another where it decides. The border
      * here is the pair: the points against the line came to an answer and the two away from it did
      * not.
+     *
+     * <p>A line this body drew, because that is where all four points are this behavior's. A run
+     * beside a clause's line is owed to the type and is answered once for the module, so a verdict
+     * about one behavior would not be resting on it at all.
      */
     @Test
     void aVerdictRestsOnTheEvidenceItsCriterionAsksFor() {
         PartitionEvidence measured = AReportOfOneBorder.partition(
                 AReportOfOneBorder.measured(
-                        AReportOfOneBorder.assessed(AReportOfOneBorder.aBoundedBorder(),
+                        AReportOfOneBorder.assessed(AReportOfOneBorder.aBorderABodyDrew(),
                                 role -> role.againstTheLine()
                                         ? AReportOfOneBorder.settled(
                                                 new ItemAssessment.Coverage.Hit())

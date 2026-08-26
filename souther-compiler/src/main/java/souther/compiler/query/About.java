@@ -76,10 +76,31 @@ public sealed interface About {
      * found with the line itself ({@link BorderAssessment#owedAt}). This carries the measurement
      * because that is what a finding is about: a search settles what can be written at the point and
      * changes nothing about the point being missed.
+     *
+     * <p><b>What is owed and where it was measured, apart.</b> One role of one reading can owe more
+     * than one row — a place two rules of this body drew a line at leaves a run owed to each — so
+     * which of them this is is {@code owed}, and where it was measured is {@code point}. Said as the
+     * reading's role alone, two things to write came out as one finding, and the reading was
+     * standing in for the debt again.
+     *
+     * @param point where it was measured: this reading, in this role
+     * @param owed  what a row here is owed for, which is one of the things that role owes
      */
-    record APointOfABorder(BorderAssessment.Point point) implements About {
+    record APointOfABorder(BorderAssessment.Point point,
+                           souther.compiler.partition.BorderObligationPoint owed)
+            implements About {
         public APointOfABorder {
             java.util.Objects.requireNonNull(point, "a finding is about something");
+            java.util.Objects.requireNonNull(owed, "and a row here is owed for something");
+            // One of the things this reading owes here, and not something that merely looks like
+            // one. What a role owes is the border's own answer, so a finding naming anything else
+            // would be a second reading of it — and a reader joining the finding back to what was
+            // measured would find nothing to join it to.
+            if (point.owedHere().stream().noneMatch(each -> each.point().equals(owed))) {
+                throw new IllegalArgumentException("a finding about " + owed
+                        + ", which is not among what this reading owes at its " + point.role()
+                        + " point: " + point.owedHere());
+            }
         }
     }
 
@@ -98,25 +119,19 @@ public sealed interface About {
      * the walk reached first, and an author sent there would be sent to a body that says nothing
      * about the length of a user id (issue #1062).
      */
-    record APointOfADeclaredBorder(BorderObligationAssessment debt,
-                                   souther.compiler.partition.PointRole role) implements About {
+    record APointOfADeclaredBorder(BorderObligationPointAssessment debt) implements About {
         public APointOfADeclaredBorder {
             java.util.Objects.requireNonNull(debt, "a finding is about something");
-            java.util.Objects.requireNonNull(role, "and a border is owed a row in four roles");
-            // Two of the four. A region is not a debt's: where it stops is settled by every other
-            // rule reaching the position it is a region of, so a row well inside one reading is not
-            // a row that could stand at another — and this finding would be about a line while
-            // naming what a position asks.
-            if (!BorderObligationAssessment.AGAINST_THE_LINE.contains(role)) {
-                throw new IllegalArgumentException(
-                        "a line a declaration is owed is owed at the points against it, and "
-                                + role + " is a region of a position");
-            }
+        }
+
+        /** Which of a border's four points this is about, which the point itself says. */
+        public souther.compiler.partition.PointRole role() {
+            return debt.role();
         }
 
         /** What became of this point, which is what the finding is about. */
         public ItemAssessment item() {
-            return debt.at(role);
+            return debt.item();
         }
     }
 

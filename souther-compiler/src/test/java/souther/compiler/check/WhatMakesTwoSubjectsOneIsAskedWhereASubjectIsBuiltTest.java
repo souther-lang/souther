@@ -304,17 +304,17 @@ class WhatMakesTwoSubjectsOneIsAskedWhereASubjectIsBuiltTest {
     }
 
     private static Core length(Core of) {
-        return new Core.PreservedCall(new souther.compiler.types.ValueName.Stdlib("List", "length"),
+        return new Core.PreservedCall(souther.compiler.types.ValueName.Stdlib.operation("List", "length"),
                 java.util.List.of(of), Type.INT, POS);
     }
 
     private static Core reverse(Core of) {
-        return new Core.PreservedCall(new souther.compiler.types.ValueName.Stdlib("List", "reverse"),
+        return new Core.PreservedCall(souther.compiler.types.ValueName.Stdlib.operation("List", "reverse"),
                 java.util.List.of(of), of.type(), POS);
     }
 
     private static Core distinct(Core of) {
-        return new Core.PreservedCall(new souther.compiler.types.ValueName.Stdlib("List", "distinct"),
+        return new Core.PreservedCall(souther.compiler.types.ValueName.Stdlib.operation("List", "distinct"),
                 java.util.List.of(of), of.type(), POS);
     }
 

@@ -51,7 +51,8 @@ class NoExpansionSubstitutesAValueIntoItselfTest {
     }
 
     private static Hir.Expr expand(HelperInliner inliner, String helper) {
-        return inliner.inline(inliner.held().get(helper).writtenBody(), inliner.bodyOf(helper));
+        return inliner.inline(inliner.held().get(new souther.compiler.ast.DefinitionName(helper))
+                .definition().writtenBody(), inliner.bodyOf(helper));
     }
 
     private static Hir.Expr expand(String source, String helper) {

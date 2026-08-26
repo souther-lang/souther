@@ -42,7 +42,7 @@ class WhatAValueCarriesBelongsToTheAtomTest {
 
     private static final SourcePos POS = new SourcePos(1, 1);
 
-    private static final ValueName LENGTH = new ValueName.Stdlib("List", "length");
+    private static final ValueName LENGTH = ValueName.Stdlib.operation("List", "length");
 
     private static BindingId binding(int index) {
         return new BindingId(new BindingOwner.OfValue("demo", "f"), index);
@@ -65,7 +65,7 @@ class WhatAValueCarriesBelongsToTheAtomTest {
     }
 
     private static Core distinct(Core of) {
-        return new Core.PreservedCall(new ValueName.Stdlib("List", "distinct"), List.of(of),
+        return new Core.PreservedCall(ValueName.Stdlib.operation("List", "distinct"), List.of(of),
                 of.type(), POS);
     }
 

@@ -54,22 +54,22 @@ class EveryDeclaredFormIsMeasuredAtItsOwnCoefficientsTest {
 
     private static Map<ValueName, Observation> measured() {
         Map<ValueName, Observation> out = new LinkedHashMap<>();
-        out.put(new ValueName.Stdlib("Decimal", "fromInt"),
+        out.put(ValueName.Stdlib.operation("Decimal", "fromInt"),
                 new Observation("a: Int, b: Decimal", "b > Decimal.fromInt(a)", "b = a"));
-        out.put(new ValueName.Stdlib("Date", "daysBetween"),
+        out.put(ValueName.Stdlib.operation("Date", "daysBetween"),
                 new Observation("a: Date, b: Date", "Date.daysBetween(a, b) > 10", "a = b - 10"));
-        out.put(new ValueName.Stdlib("Date", "addDays"),
+        out.put(ValueName.Stdlib.operation("Date", "addDays"),
                 new Observation("a: Date, b: Date", "b > Date.addDays(10, a)", "b = a + 10"));
-        out.put(new ValueName.Stdlib("DateTime", "addMinutes"),
+        out.put(ValueName.Stdlib.operation("DateTime", "addMinutes"),
                 new Observation("a: DateTime, b: DateTime", "b > DateTime.addMinutes(2, a)",
                         "b = a + 120"));
-        out.put(new ValueName.Stdlib("DateTime", "addHours"),
+        out.put(ValueName.Stdlib.operation("DateTime", "addHours"),
                 new Observation("a: DateTime, b: DateTime", "b > DateTime.addHours(2, a)",
                         "b = a + 7200"));
-        out.put(new ValueName.Stdlib("DateTime", "addDays"),
+        out.put(ValueName.Stdlib.operation("DateTime", "addDays"),
                 new Observation("a: DateTime, b: DateTime", "b > DateTime.addDays(2, a)",
                         "b = a + 172800"));
-        out.put(new ValueName.Stdlib("DateTime", "fromDateAndTime"),
+        out.put(ValueName.Stdlib.operation("DateTime", "fromDateAndTime"),
                 new Observation("d: Date, t: Time, b: DateTime",
                         "b > DateTime.fromDateAndTime(d, t)", "b - 86400 * d - t = 0"));
         return out;
