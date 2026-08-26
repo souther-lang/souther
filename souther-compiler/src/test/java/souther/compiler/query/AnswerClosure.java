@@ -161,6 +161,29 @@ final class AnswerClosure {
     private static final Locus.Step ELEMENT = new Locus.Step.Element();
     private static final Locus.Step VALUE = new Locus.Step.MapValue();
 
+    /**
+     * An end of a coordinate's range, and the declarations holding it, reached two ways.
+     *
+     * <p>Met by the walk that holds two stores together and not by the walk that asks each object
+     * what it is. The second stops at {@code InputDomain}, which says nothing by {@code equals}
+     * either and is written down above — so what is under it is out of that walk's sight, and this
+     * is what the other one is for.
+     */
+    private static Known heldEnd(Locus.Step into, Locus.Step through) {
+        return new Known(new Identity(at(Q + "Adequacy$Inputs",
+                "souther.compiler.check.NarrowedBounds$Held", m(ANSWER, "value"), VALUE, into,
+                through, m("souther.compiler.inputs.ReadPosition", "narrowedEnds"),
+                m("souther.compiler.check.NarrowedBounds", "minBy")),
+                Nature.VALUE, Cause.MISSING_VALUE_EQUALITY),
+                Set.of(compared(Scenario.VALID_CORPUS)),
+                "the declarations holding one end of a range, worked out once and kept. A value: "
+                        + "two of these that would name the same declarations name the same "
+                        + "declarations. It is here for the reason the standard library is — what "
+                        + "it holds is worked out on demand, and comparing two of them is the one "
+                        + "way to reach that work without meaning to, which is what its own header "
+                        + "says about comparing, hashing and printing one");
+    }
+
     private static Known bytes(String question, Locus.Step... steps) {
         return new Known(new Identity(at(question, "byte[]", steps), Nature.VALUE,
                 Cause.MISSING_VALUE_EQUALITY), BOTH_EVERYWHERE, CLASS_BYTES);
@@ -219,6 +242,8 @@ final class AnswerClosure {
             new Known(new Identity(at(Q + "Bodies$Checked", Q + "Bodies$Elaborated",
                     m(ANSWER, "value")), Nature.NOT_READ, Cause.UNCLASSIFIED), BOTH_EVERYWHERE,
                     "as above"),
+            heldEnd(m("souther.compiler.inputs.InputDomain", "byPath"), VALUE),
+            heldEnd(m("souther.compiler.inputs.InputDomain", "positions"), ELEMENT),
             new Known(new Identity(at("*", "souther.compiler.diag.Diagnostic",
                     m(ANSWER, "reports"), ELEMENT, m("souther.compiler.query.Report", "diagnostic")),
                     Nature.VALUE, Cause.MISSING_VALUE_EQUALITY),

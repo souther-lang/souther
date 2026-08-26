@@ -223,10 +223,32 @@ record Divergence(Locus at, String cause, Divergence.Kind kind) {
             // itself does not come back, and one asked about a pair half of which went unread would
             // be answering about something nobody looked at.
             boolean andSayIt = a.equals(b);
-            if (!andSayIt && parts.everyPartSaysIt && !parts.alreadySaid) {
+            boolean itsOwn = ownEqualityOf(c) == OwnEquality.ITS_ADDRESS || parts.everyPartSaysIt;
+            if (!andSayIt && itsOwn && !parts.alreadySaid) {
                 say(path, c, Kind.THE_SAME_THING_TWICE);
             }
             return new Came(true, true, andSayIt);
+        }
+
+        /**
+         * Where a thing's own equality comes from, which is what says whose defect a denial is.
+         *
+         * <p>Two kinds and the difference is what a fix would move. Something whose equality is its
+         * parts' denies because a part denied, so fixing the part fixes it and it is not a debt of
+         * its own — a record holding something that compares by address is that. Something whose
+         * equality is its address denies whatever its parts do, so fixing every part leaves it
+         * exactly where it was, and it is a debt of its own beside them.
+         *
+         * <p>Read off what the language says and not off what the walk found. Judged on what was
+         * found beneath it, a thing of the second kind disappears from the register for as long as
+         * anything under it also fails — so putting an array around something already written down
+         * would add no line, and the line would arrive only once somebody fixed the inner one.
+         */
+        private enum OwnEquality {
+            /** Its parts', so a part denying explains it. */
+            ITS_PARTS,
+            /** Its address, so nothing its parts do explains it. */
+            ITS_ADDRESS
         }
 
         /** What the parts of one pair came to, added up as they are walked. */
@@ -260,6 +282,19 @@ record Divergence(Locus at, String cause, Divergence.Kind kind) {
             SOMETHING_ELSE_THAT_HOLDS_THINGS,
             /** Everything else, which is compared as what it is made of. */
             A_THING
+        }
+
+        /**
+         * Where {@code c}'s equality comes from.
+         *
+         * <p>An array and nothing else, because that is what the language says: an array is equal to
+         * another when it is the same array, whatever either holds. Everything else this walks
+         * either derives its equality from what it is made of or is a container answering to a
+         * contract that does — and where one of those turns out not to, what says so is a half of
+         * its equality this can put on its own, which is asked where that half is walked.
+         */
+        private static OwnEquality ownEqualityOf(Class<?> c) {
+            return c.isArray() ? OwnEquality.ITS_ADDRESS : OwnEquality.ITS_PARTS;
         }
 
         private static Contract contractOf(Object each) {

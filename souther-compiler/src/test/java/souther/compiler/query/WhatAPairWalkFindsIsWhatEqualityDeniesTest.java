@@ -59,7 +59,7 @@ class WhatAPairWalkFindsIsWhatEqualityDeniesTest {
                                 + shouldFallShortOn + ", in " + recipe);
                         break;
                     }
-                    int denials = AGraphNobodyChose.denialsIn(recipe, one, other);
+                    int denials = AGraphNobodyChose.denialsIn(recipe);
                     // Two graphs of one shape are one thing, so nothing in them says two different
                     // things and every denial in them is one of these.
                     List<Divergence> otherwise = found.stream()

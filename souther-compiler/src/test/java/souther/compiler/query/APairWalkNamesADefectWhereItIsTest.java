@@ -371,6 +371,46 @@ class APairWalkNamesADefectWhereItIsTest {
         assertEquals(Set.of(), gaps(walked), "and not as somewhere the walk could not go");
     }
 
+    /**
+     * An array is its own defect beside what it holds, and not instead of it.
+     *
+     * <p>Two debts and neither pays the other. An array is equal to another when it is the same
+     * array, whatever is in it — so giving what is inside a proper equality leaves the array exactly
+     * where it was. Judged on what was found beneath it, the array vanishes from the register for as
+     * long as its contents also fail, and the line for it arrives only once somebody has fixed the
+     * inner one.
+     */
+    @Test
+    void anArrayIsItsOwnDefectBesideWhatItHolds() {
+        Covered<Divergence> walked = Divergence.between(
+                new Object[] {new Address()}, new Object[] {new Address()});
+
+        assertEquals(Set.of(" java.lang.Object[] THE_SAME_THING_TWICE",
+                        "[] " + Address.class.getName() + " THE_SAME_THING_TWICE"),
+                found(walked), "the array for itself, and what is in it for itself");
+    }
+
+    /**
+     * And a map comparing its keys by address is named for that whatever its values did.
+     *
+     * <p>The half of its equality that is about keys can be put on its own — the two hold keys that
+     * mean the same and it says they do not — and that answer does not wait on what the values came
+     * to.
+     */
+    @Test
+    void aMapComparingKeysByAddressIsNamedBesideWhatItHolds() {
+        Map<Object, Object> left = new IdentityHashMap<>();
+        Map<Object, Object> right = new IdentityHashMap<>();
+        left.put(new String("k"), new Address());
+        right.put(new String("k"), new Address());
+
+        Covered<Divergence> walked = Divergence.between(left, right);
+
+        assertEquals(Set.of("{key} java.util.IdentityHashMap THE_SAME_THING_TWICE",
+                        "{value} " + Address.class.getName() + " THE_SAME_THING_TWICE"),
+                found(walked), "the map for its keys, and what it holds for itself");
+    }
+
     /** Two maps of one size whose keys line up with nothing. */
     @Test
     void twoMapsWhoseKeysDoNotPairAreWhereTheWalkStops() {

@@ -175,90 +175,83 @@ final class AGraphNobodyChose {
     /**
      * How many things in two graphs of one shape deny being what they are.
      *
-     * <p>Worked out from the recipe and from {@code equals}, and from nothing else. What a walk of
-     * the two should find is not a matter of opinion: two graphs of one shape are one thing, so
-     * anything in them that denies its twin is a defect — and it is that thing's own defect exactly
-     * where every part of it agreed with its twin, because a thing whose part denies is a thing
-     * denying for a reason.
+     * <p>Found by experiment and not by a rule. Whether a thing's denial is its own is the question
+     * the mechanism answers, so an expectation worked out by the same reasoning would agree with it
+     * wherever the reasoning is wrong — which is what a property is here to not do. So each shape is
+     * built again with every part of it replaced by something that says what it is, and asked
+     * whether it still denies its twin. A record of honest parts agrees; an array of them does not,
+     * because an array is its address whatever it holds.
      *
-     * <p>This does not walk the graphs the way the mechanism does. It takes the shape it was told
-     * and asks each pair the one question the language answers, which is what makes it something to
-     * measure the mechanism against rather than the mechanism written twice.
+     * <p>What is counted is every place the walk reaches. A set is where it pairs and stops, so what
+     * is inside one is not among them.
      */
-    static int denialsIn(Recipe recipe, Object a, Object b) {
-        return denials(recipe, a, b, new int[1]);
+    static int denialsIn(Recipe recipe) {
+        return denials(recipe);
     }
 
-    private static int denials(Recipe recipe, Object a, Object b, int[] counted) {
-        boolean partsAgree = true;
+    private static int denials(Recipe recipe) {
+        int out = deniesWithHonestParts(recipe) ? 1 : 0;
         switch (recipe) {
-            case Recipe.Says _, Recipe.Itself _ -> { }
-            case Recipe.Made(List<Recipe> of) ->
-                    partsAgree = parts(of, ((Node) a).parts(), ((Node) b).parts(), counted);
-            case Recipe.InAList(List<Recipe> of) ->
-                    partsAgree = parts(of, List.copyOf((List<?>) a), List.copyOf((List<?>) b),
-                            counted);
-            // A set is where the mechanism pairs and stops: a member it pairs is equal to the
-            // other side, so nothing under one is ever reported and nothing under one is expected.
+            case Recipe.Says _, Recipe.Itself _, Recipe.WithNoRule _ -> { }
+            // A set is where the walk pairs and stops, so nothing inside one is reached.
             case Recipe.InASet _ -> { }
-            case Recipe.UnderKeys(List<Recipe> under) -> {
-                // Read after, and never as a compound assignment: what is counted under the map is
-                // counted while this runs, and adding to a number read before it would drop it.
-                int own = ofAMap(under, (Map<?, ?>) a, (Map<?, ?>) b, counted);
-                counted[0] = counted[0] + own;
-                return counted[0];
-            }
-            case Recipe.UnderAddresses(List<Recipe> under) -> {
-                int own = ofAMap(under, (Map<?, ?>) a, (Map<?, ?>) b, counted);
-                counted[0] = counted[0] + own;
-                return counted[0];
-            }
-            case Recipe.BehindAnAbsence(Recipe of) -> partsAgree = parts(List.of(of),
-                    List.of(((Optional<?>) a).orElseThrow()),
-                    List.of(((Optional<?>) b).orElseThrow()), counted);
-            case Recipe.InAnArray(List<Recipe> of) -> partsAgree = parts(of,
-                    List.of((Object[]) a), List.of((Object[]) b), counted);
-            case Recipe.WithNoRule _ -> throw new IllegalArgumentException(
-                    "a shape the mechanism says it cannot pair is not one to expect a count from");
-        }
-        if (!a.equals(b) && partsAgree) {
-            counted[0]++;
-        }
-        return counted[0];
-    }
-
-    /**
-     * Whether a map denies being what it is, counting it once however many ways it does.
-     *
-     * <p>A map's equality has two halves and either of them can be the defect: it may hold keys that
-     * mean the same and say it does not, and it may deny its twin while every value agreed. Both are
-     * one map denying, so it is one line.
-     */
-    private static int ofAMap(List<Recipe> of, Map<?, ?> a, Map<?, ?> b, int[] counted) {
-        boolean valuesAgree = parts(of, values(a), values(b), counted);
-        boolean keysDeny = !a.keySet().equals(b.keySet());
-        return keysDeny || (!a.equals(b) && valuesAgree) ? 1 : 0;
-    }
-
-    private static List<Object> values(Map<?, ?> of) {
-        List<Object> out = new ArrayList<>();
-        for (Object key : KEYS) {
-            for (Map.Entry<?, ?> each : of.entrySet()) {
-                if (key.equals(each.getKey())) {
-                    out.add(each.getValue());
-                }
-            }
+            case Recipe.BehindAnAbsence(Recipe of) -> out += denials(of);
+            case Recipe.Made(List<Recipe> of) -> out += under(of);
+            case Recipe.InAList(List<Recipe> of) -> out += under(of);
+            case Recipe.UnderKeys(List<Recipe> of) -> out += under(of);
+            case Recipe.UnderAddresses(List<Recipe> of) -> out += under(of);
+            case Recipe.InAnArray(List<Recipe> of) -> out += under(of);
         }
         return out;
     }
 
-    private static boolean parts(List<Recipe> of, List<?> mine, List<?> theirs, int[] counted) {
-        boolean agree = true;
-        for (int i = 0; i < of.size(); i++) {
-            denials(of.get(i), mine.get(i), theirs.get(i), counted);
-            agree &= mine.get(i).equals(theirs.get(i));
+    private static int under(List<Recipe> of) {
+        int out = 0;
+        for (Recipe one : of) {
+            out += denials(one);
         }
-        return agree;
+        return out;
+    }
+
+    /**
+     * Whether two of this shape deny each other when everything under them says what it is.
+     *
+     * <p>The experiment. Built twice with every part replaced by a thing that means what it says,
+     * anything left denying is denying on its own account — and anything that agrees was only ever
+     * denying because a part did.
+     */
+    private static boolean deniesWithHonestParts(Recipe recipe) {
+        Recipe honest = withHonestParts(recipe);
+        Random same = new Random(SEED_FOR_THE_EXPERIMENT);
+        Object one = built(honest, same);
+        Object other = built(honest, new Random(SEED_FOR_THE_EXPERIMENT));
+        return !one.equals(other);
+    }
+
+    /** Fixed, so the experiment answers the same thing every time it is put. */
+    private static final long SEED_FOR_THE_EXPERIMENT = 1103;
+
+    private static final Recipe HONEST = new Recipe.Says("h");
+
+    private static Recipe withHonestParts(Recipe recipe) {
+        return switch (recipe) {
+            case Recipe.Says _, Recipe.Itself _ -> recipe;
+            case Recipe.BehindAnAbsence _ -> new Recipe.BehindAnAbsence(HONEST);
+            case Recipe.Made(List<Recipe> of) -> new Recipe.Made(honestly(of));
+            case Recipe.InAList(List<Recipe> of) -> new Recipe.InAList(honestly(of));
+            case Recipe.InASet(List<Recipe> of) -> new Recipe.InASet(honestly(of));
+            case Recipe.UnderKeys(List<Recipe> of) -> new Recipe.UnderKeys(honestly(of));
+            case Recipe.UnderAddresses(List<Recipe> of) ->
+                    new Recipe.UnderAddresses(honestly(of));
+            case Recipe.InAnArray(List<Recipe> of) -> new Recipe.InAnArray(honestly(of));
+            case Recipe.WithNoRule(List<Recipe> of) -> new Recipe.WithNoRule(honestly(of));
+        };
+    }
+
+    private static List<Recipe> honestly(List<Recipe> of) {
+        List<Recipe> out = new ArrayList<>();
+        of.forEach(_ -> out.add(HONEST));
+        return out;
     }
 
     private static boolean any(List<Recipe> of) {
