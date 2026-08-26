@@ -160,12 +160,6 @@ public record QuantityArrangement(List<Parting> partings, List<Run> runs) {
         return of(space, parted, (DomainEnd) null, null);
     }
 
-    /** The same, told where the rules leave the quantity and nothing about who took those ends in.
-     *  For a caller reading an arrangement rather than accounting for one. */
-    public static QuantityArrangement of(LevelSpace space, List<Parting> parted, Bound from,
-                                         Bound to) {
-        return of(space, parted, DomainEnd.at(from), DomainEnd.at(to));
-    }
 
     /**
      * The same, where the rules leave the quantity only what runs from {@code from} to {@code to}.

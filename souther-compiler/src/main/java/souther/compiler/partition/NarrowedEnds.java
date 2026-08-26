@@ -27,9 +27,4 @@ public record NarrowedEnds(List<TypeSymbol.AtModule> below, List<TypeSymbol.AtMo
         below = List.copyOf(below);
         above = List.copyOf(above);
     }
-
-    /** The declarations that took one end in, told which end by which way the run lies from it. */
-    public List<TypeSymbol.AtModule> at(souther.compiler.numeric.Towards inward) {
-        return inward == souther.compiler.numeric.Towards.ABOVE ? below : above;
-    }
 }

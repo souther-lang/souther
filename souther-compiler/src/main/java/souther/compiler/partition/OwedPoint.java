@@ -24,9 +24,4 @@ public record OwedPoint(BorderObligationPoint point, PointAttribution attributio
                     "a point owed a row is owed for something, by somebody: " + point);
         }
     }
-
-    /** Which of a border's four points this is. */
-    public PointRole role() {
-        return point.role();
-    }
 }

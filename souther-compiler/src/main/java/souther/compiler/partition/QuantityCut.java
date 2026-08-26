@@ -24,4 +24,10 @@ public record QuantityCut(Level at) {
             throw new IllegalArgumentException("a cut is at a level");
         }
     }
+
+    /** The same place with its level written the one way, for a reader comparing two of these as
+     *  places rather than as they were written ({@link Level#canonical()}). */
+    public QuantityCut canonical() {
+        return new QuantityCut(at.canonical());
+    }
 }

@@ -122,9 +122,20 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, PointA
      * the demands alone would call two borders one. What settles where a run stops, on the other
      * hand, is settled by the model, while who can move it is a fact about the reading's
      * surroundings and is no part of which border this is.
+     *
+     * <p>The quantity is compared as the value it is, and the place on it as a place. What a rule
+     * wrote a form's coefficients as is the rule's own text and is the same at every reading of it,
+     * so nothing here folds two spellings of one form.
      */
     public boolean sameReadingAs(Border other) {
-        if (other == null || !cut.equals(other.cut) || !origin.equals(other.origin)) {
+        if (other == null || !origin.equals(other.origin)
+                || !cut.of().equals(other.cut.of())
+                // The place, and not how the rule happened to write the number: a level keeps the
+                // spelling it was written in, so two readings of one line at one place can hold
+                // `0` and `0.00` — which is the mistake this whole comparison is here to stop
+                // being made about a border, and it would have been made about the border's own
+                // place by asking the records.
+                || !cut.cut().canonical().equals(other.cut.cut().canonical())) {
             return false;
         }
         for (PointRole role : EnumSet.allOf(PointRole.class)) {

@@ -52,8 +52,8 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
     /** The same, where the rules leave the quantity only what lies between two values. */
     private static List<String> within(String low, String high, Seam... parted) {
         return QuantityArrangement.of(NUMBERS, byItsOwnRule(parted),
-                        low == null ? null : Bound.at(at(low), true),
-                        high == null ? null : Bound.at(at(high), true))
+                        low == null ? null : DomainEnd.at(Bound.at(at(low), true)),
+                        high == null ? null : DomainEnd.at(Bound.at(at(high), true)))
                 .bands().stream().map(Band::key).toList();
     }
 
@@ -123,7 +123,7 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
     @Test
     void aRunWithNothingPartingItBelowRunsFromTheStart() {
         Band first = QuantityArrangement.of(NUMBERS, byItsOwnRule(upTo("10")),
-                        Bound.at(at("0"), true), null)
+                        DomainEnd.at(Bound.at(at("0"), true)), null)
                 .bands().get(0);
 
         assertEquals(false, first.holds(at("-1")), "the rules leave nothing below zero");
@@ -252,9 +252,9 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
     void aLineWhereTheRulesAlreadyStopTheQuantityStopsTheRunAsWell() {
         Bound upTo100 = Bound.at(at("100"), true);
         QuantityArrangement withoutTheLine =
-                QuantityArrangement.of(NUMBERS, List.of(), null, upTo100);
+                QuantityArrangement.of(NUMBERS, List.of(), null, DomainEnd.at(upTo100));
         QuantityArrangement withTheLine = QuantityArrangement.of(NUMBERS,
-                List.of(Parting.by(upTo("100"), aLine(0))), null, upTo100);
+                List.of(Parting.by(upTo("100"), aLine(0))), null, DomainEnd.at(upTo100));
 
         assertEquals(List.of(new FarEnd.AtTheDomain(upTo100)),
                 farEndsOf(withoutTheLine),
@@ -281,7 +281,8 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
     @Test
     void aLineTheRulesStopShortOfDoesNotStopTheRun() {
         QuantityArrangement arranged = QuantityArrangement.of(NUMBERS,
-                List.of(Parting.by(upTo("100"), aLine(0))), null, Bound.at(at("50"), true));
+                List.of(Parting.by(upTo("100"), aLine(0))), null,
+                DomainEnd.at(Bound.at(at("50"), true)));
 
         assertEquals(List.of(new FarEnd.AtTheDomain(Bound.at(at("50"), true))),
                 farEndsOf(arranged),

@@ -86,6 +86,25 @@ class OneBorderReadTwiceIsOneReadingTest {
                         + " different, so it is one reading of one line");
     }
 
+    /**
+     * Two spellings of the place a line is at are one place, so the two readings are one.
+     *
+     * <p>A level keeps the spelling its rule was written in, because that is what a report writes
+     * back. Asked of the records, the border's own place would have told two readings of one line
+     * apart over a trailing zero — which is the mistake this comparison exists to stop being made
+     * about everything else it holds.
+     */
+    @Test
+    void twoSpellingsOfThePlaceAreOnePlace() {
+        Border plain = boundAt(Count.of(100));
+        Border spelled = boundAt(new Count(new java.math.BigDecimal("100.00")));
+
+        assertNotEquals(plain, spelled,
+                "the two are written differently, and this is what they differ in");
+        assertTrue(plain.sameReadingAs(spelled),
+                "and a hundred is a hundred, so it is one line met in one place");
+    }
+
     /** And one line met at two positions is two readings, whatever each of them owes. */
     @Test
     void oneLineMetAtTwoPositionsIsTwoReadings() {
@@ -107,6 +126,19 @@ class OneBorderReadTwiceIsOneReadingTest {
                 new NumericDomain.Bounds(Endpoint.inclusive(Count.of(100)),
                         Endpoint.inclusive(Count.of(1000))),
                 parted, narrowed);
+    }
+
+    /** The same bound, with its line written as {@code at}. */
+    private static Border boundAt(Count at) {
+        AxisId axis = new AxisId("weigh", "w.a");
+        return Border.at(BoundaryTarget.at(
+                        new BorderQuantity.OfACoordinate(axis,
+                                new NumericTerm.ValueOf(TermPath.of(axis.term())),
+                                TermOrders.itself(WHOLE)),
+                        new Level.OnACarrier(WHOLE, at)),
+                aBound(),
+                new NumericDomain.Bounds(Endpoint.inclusive(at),
+                        Endpoint.inclusive(Count.of(1000))));
     }
 
     /** A declaration that could have moved where the position stops. */
