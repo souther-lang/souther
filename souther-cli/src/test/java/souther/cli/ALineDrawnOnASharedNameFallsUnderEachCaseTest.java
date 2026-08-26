@@ -258,15 +258,16 @@ class ALineDrawnOnASharedNameFallsUnderEachCaseTest {
     }
 
     /**
-     * A name the reading stopped short of leaves the line where the model wrote it.
+     * A line neither of whose names was filed stays where the model wrote it.
      *
-     * <p>Nothing was filed, and the two ways of that are one answer about the line: a name this
-     * reading has no position for and a name it stopped before reaching both leave nothing to move
-     * the line to. Which of them it was is what the reading says where it stopped, and is not a
-     * question the count of filings answers.
+     * <p>Nothing to move it to, and the two ways of that are one answer about the line: a name
+     * already at a position of this reading, and one the reading stopped before reaching. So the
+     * line is drawn once, at the name as written — and where that is a name no row is written at,
+     * the generator is what says it could not build a value there. Which of the two it was is what
+     * the reading says where it stopped, and is not something the number of lines answers.
      */
     @Test
-    void aNameTheReadingStoppedShortOfLeavesTheLineWhereItWasWritten() throws Exception {
+    void aLineNeitherOfWhoseNamesWasFiledStaysWhereItWasWritten() throws Exception {
         String report = report("""
                 module example.line
 
@@ -280,24 +281,26 @@ class ALineDrawnOnASharedNameFallsUnderEachCaseTest {
                 data Ok
                 data No
 
-                behavior read : (o: Outer) -> Ok | No
+                behavior read : (o: Outer, cap: Int) -> Ok | No
 
-                let read (o) = {
-                    guard o.held.q.limit <= 10 else No
+                let read (o, cap) = {
+                    guard o.held.q.limit < cap else No
                     Ok
                 }
                 """);
 
+        assertTrue(report.contains("borders 1"),
+                () -> "one line, not one per case of a sum nothing was filed under:\n" + report);
+        assertTrue(report.contains("read/o.held.q.limit ="),
+                () -> "and it is at the name the model wrote, which is where it was measured:\n"
+                        + report);
         assertTrue(report.contains("not read: o.held.q@A (the walk stopped before reaching what is "
                         + "under it)"),
                 () -> "the reading of the case says where it stopped:\n" + report);
-        assertTrue(report.contains("border      not measured (no line was derived at any position)"),
-                () -> "and the line is left where the model wrote it, which is not a position:\n"
-                        + report);
+        assertTrue(report.contains("nothing here could build a representative for o.held.q.limit"),
+                () -> "and the generator is what says nothing can be written there:\n" + report);
         assertFalse(report.contains("how those positions pair up is not worked out"),
                 () -> "nothing was filed, so no pairing was ever in question:\n" + report);
-        assertFalse(report.contains("no line can be drawn on here"),
-                () -> "and no cause is invented for the line not being placed:\n" + report);
     }
 
     /** What a model with no sum in the way answers, which is what the fan-out has to come to. */

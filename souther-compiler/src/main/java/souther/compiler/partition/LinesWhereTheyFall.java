@@ -21,11 +21,18 @@ import java.util.List;
  * field every case of a sum spreads is readable on the sum and a row writes it under one case — one
  * line comes out as one line per case, on the same number and from the same rule.
  *
- * <p><b>What comes out, for each line.</b> Every term the line cuts is either left where the model
- * wrote it or filed at one or more positions. Where no term of the line was filed, the line stays
- * where it was written. Where one was, the line comes out once at each position that term was filed
- * at. Where more than one was, which of their positions go together is not settled here and the line
- * is not placed.
+ * <p><b>What comes out.</b> Every name a rule is written at is either left where the model wrote it
+ * or filed at one or more positions. An end put on a number and a value singled out are about one
+ * name, so they come out once at each position that name was filed at, and once as written where it
+ * was filed nowhere. A line is about the names it is drawn between, so it takes one more question:
+ * where none of them was filed the line stays where it was written, where one was it comes out once
+ * at each position that one was filed at, and where more than one was, which of their positions go
+ * together is not settled here and the line is not placed.
+ *
+ * <p>How many names were filed and how many positions one of them was filed at are separate
+ * questions. Answered off one count, a name filed at one position and a name left where it was
+ * written would be the same answer, and the second must leave the rule alone where the first must
+ * not.
  *
  * <p><b>Before anything is matched against an axis.</b> What divides a position is settled by the
  * terms being the same term. Left to the matching, a line drawn on a name no axis carries would be a
@@ -64,20 +71,20 @@ public final class LinesWhereTheyFall {
         for (Threshold each : thresholds) {
             switch (standingOf(inputs, each.term(), symbols, each.origin())) {
                 case WhereTheNameStands.AsWritten(NumericTerm at) ->
-                        outThresholds.add(threshold(each, at));
+                        outThresholds.add(thresholdAt(each, at));
                 case WhereTheNameStands.FiledAt(NumericTerm first, List<NumericTerm> rest) -> {
-                    outThresholds.add(threshold(each, first));
-                    rest.forEach(at -> outThresholds.add(threshold(each, at)));
+                    outThresholds.add(thresholdAt(each, first));
+                    rest.forEach(at -> outThresholds.add(thresholdAt(each, at)));
                 }
             }
         }
         for (GuardThresholds.Guards.Singled each : singled) {
             switch (standingOf(inputs, each.term(), symbols, each.origin())) {
                 case WhereTheNameStands.AsWritten(NumericTerm at) ->
-                        outSingled.add(singled(each, at));
+                        outSingled.add(singledAt(each, at));
                 case WhereTheNameStands.FiledAt(NumericTerm first, List<NumericTerm> rest) -> {
-                    outSingled.add(singled(each, first));
-                    rest.forEach(at -> outSingled.add(singled(each, at)));
+                    outSingled.add(singledAt(each, first));
+                    rest.forEach(at -> outSingled.add(singledAt(each, at)));
                 }
             }
         }
@@ -88,13 +95,13 @@ public final class LinesWhereTheyFall {
     }
 
     /** The same threshold, measured at {@code at}. */
-    private static Threshold threshold(Threshold each, NumericTerm at) {
+    private static Threshold thresholdAt(Threshold each, NumericTerm at) {
         return new Threshold(at, each.parts(), each.valueBelongsBelow(), each.origin());
     }
 
     /** The same singled-out value, measured at {@code at}. */
-    private static GuardThresholds.Guards.Singled singled(GuardThresholds.Guards.Singled each,
-                                                          NumericTerm at) {
+    private static GuardThresholds.Guards.Singled singledAt(GuardThresholds.Guards.Singled each,
+                                                            NumericTerm at) {
         return new GuardThresholds.Guards.Singled(at, each.value(), each.origin());
     }
 
@@ -136,9 +143,9 @@ public final class LinesWhereTheyFall {
         }
         FiledName moves = filed.getFirst();
         List<LineDrawn> made = new ArrayList<>();
-        made.add(taken(line, moves.name(), moves.at().first(), inputs, quantities, symbols));
+        made.add(lineAt(line, moves.name(), moves.at().first(), inputs, quantities, symbols));
         for (NumericTerm to : moves.at().rest()) {
-            made.add(taken(line, moves.name(), to, inputs, quantities, symbols));
+            made.add(lineAt(line, moves.name(), to, inputs, quantities, symbols));
         }
         out.addAll(made);
     }
@@ -151,14 +158,14 @@ public final class LinesWhereTheyFall {
      * at none, and a subset is this compiler contradicting itself rather than a line to place at
      * fewer places than the name was filed.
      */
-    private static LineDrawn taken(LineDrawn line, NumericTerm moves, NumericTerm to,
-                                   InputDomain inputs,
-                                   souther.compiler.inputs.Quantities quantities, Symbols symbols) {
+    private static LineDrawn lineAt(LineDrawn line, NumericTerm moves, NumericTerm to,
+                                    InputDomain inputs,
+                                    souther.compiler.inputs.Quantities quantities, Symbols symbols) {
         Cutting cut = line.cuts().movedTo(moves, to, inputs.ordersOf(to, symbols), quantities);
         if (cut == null) {
             throw new IllegalStateException(
                     "`" + moves + "` was filed at " + to + " and the line on it cannot be taken "
-                            + "there, though it is taken at every other position it was filed at");
+                            + "there, though a name is filed at one field on one order");
         }
         return new LineDrawn(cut, line.by());
     }
@@ -197,7 +204,7 @@ public final class LinesWhereTheyFall {
         for (souther.compiler.inputs.PlacementOutcome outcome : filing.outcomes()) {
             switch (outcome) {
                 case souther.compiler.inputs.PlacementOutcome.Filed(PositionId at) ->
-                        filed.add(taken(term, at, inputs, symbols));
+                        filed.add(termAt(term, at, inputs, symbols));
                 // The reading held to what it already said about this case: no row is written under
                 // it, so there is no position there for a line to be about. Nothing is owed and
                 // nothing is left over.
@@ -221,15 +228,15 @@ public final class LinesWhereTheyFall {
      * agree everywhere or nowhere. Asked at each of them all the same, and a disagreement is this
      * compiler contradicting itself rather than a place to drop one.
      */
-    private static NumericTerm taken(NumericTerm term, PositionId at, InputDomain inputs,
-                                     Symbols symbols) {
+    private static NumericTerm termAt(NumericTerm term, PositionId at, InputDomain inputs,
+                                      Symbols symbols) {
         Position position = inputs.at(at.at());
         NumericTerm moved = position == null ? null
                 : term.movedTo(at.at(), position.type(), symbols);
         if (moved == null) {
             throw new IllegalStateException(
-                    "`" + term + "` was filed at " + at + " and cannot be taken there, though it is "
-                            + "taken at every other position one name is filed at");
+                    "`" + term + "` was filed at " + at + " and cannot be taken there, though a "
+                            + "name is filed at one field and one field has one declared type");
         }
         return moved;
     }
