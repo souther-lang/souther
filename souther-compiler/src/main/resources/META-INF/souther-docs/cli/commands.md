@@ -523,8 +523,9 @@ souther lsp
 
 Serves the language server over the Language Server Protocol on stdio: diagnostics, the document
 outline, hover, go-to-definition, find-references, name completion, quick-fix code actions, rename,
-formatting, code lenses and semantic tokens. Name resolution is per-module; a workspace-wide answer
-is not one this server gives yet.
+formatting, code lenses and semantic tokens. Names are resolved over the workspace the client
+announces, so a definition, a reference and a rename reach the module that imported the name and
+the module that exposed it alike.
 
 The same server the shaded `souther-lsp.jar` runs, in this command line's own process. An editor
 that already has this compiler on the path has the server too, and cannot end up running one built

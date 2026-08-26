@@ -64,11 +64,11 @@
 
     <build>
         <!-- The uber jar is `souther-lsp-all.jar`; an editor launches it with
-             `java -jar souther-lsp-all.jar`, which speaks LSP over stdio. It is attached under a
-             classifier rather than put in the module's own place, because `souther-cli` depends on
-             this module to serve the same server from `souther lsp` and would then be shading an
-             uber jar into an uber jar. What that module resolves is the plain one this build
-             leaves alone. -->
+             `java -jar souther-lsp-all.jar`, which speaks LSP over stdio. It is written beside the
+             module's own artifact under a final name of its own, rather than put in its place,
+             because `souther-cli` depends on this module to serve the same server from
+             `souther lsp` and would then be shading an uber jar into an uber jar. What that module
+             resolves is `souther-lsp.jar`, which this build leaves as javac wrote it. -->
         <finalName>souther-lsp</finalName>
         <plugins>
             <plugin>
@@ -83,10 +83,9 @@
                         </goals>
                         <configuration>
                             <createDependencyReducedPom>false</createDependencyReducedPom>
-                            <!-- Written beside the plain jar under a name of its own, rather than
-                                 put in its place. The module's own artifact is what `souther-cli`
-                                 resolves, and an uber jar resolved there would be shaded into an
-                                 uber jar. -->
+                            <!-- A final name of this plugin's own, which is what keeps the module's
+                                 artifact where it is: shade replaces it only when it is writing to
+                                 the build's own final name. -->
                             <finalName>souther-lsp-all</finalName>
                             <filters>
                                 <filter>

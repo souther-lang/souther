@@ -31,8 +31,9 @@ jobs:
 
       # The CLI's really-executable launcher and the shaded language server are build outputs of the
       # reactor; the grammar is a committed resource that `verify` has just checked is not stale.
-      # The server is attached under a classifier so the plain jar stays the one `souther-cli`
-      # depends on, and is published under the name an editor downloads it by.
+      # The server is shaded under a final name of its own so the plain jar stays the module's
+      # artifact and the one `souther-cli` depends on, and is published here under the name an
+      # editor downloads it by.
       - name: Collect the artifacts
         run: |
           mkdir -p artifacts
