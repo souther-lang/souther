@@ -16,7 +16,9 @@ import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -74,8 +76,9 @@ class ACallReachesTheHelperItsProgramCarriesTest {
         CheckedModule app = program.module("app");
         ValueName reached = theOneCallReaching(app, "flatten");
 
-        assertEquals(Set.of(reached), filedUnder(app),
+        assertEquals(reached, app.helper(reached).declares(),
                 "the call names " + reached + " and the module carries " + filedUnder(app));
+        assertTrue(filedUnder(app).contains(reached), filedUnder(app).toString());
     }
 
     /** The same, for the library's own recursion, which {@code folds} carries for the same reason. */
@@ -85,8 +88,22 @@ class ACallReachesTheHelperItsProgramCarriesTest {
         CheckedModule folds = program.module("folds");
         ValueName reached = theOneCallReaching(folds, "foldFrom");
 
-        assertEquals(Set.of(reached), filedUnder(folds),
+        assertEquals(reached, folds.helper(reached).declares(),
                 "the call names " + reached + " and the module carries " + filedUnder(folds));
+    }
+
+    /**
+     * And a declaration nothing here reaches is a reader's mistake, not an absence to read.
+     *
+     * <p>Which calls reach a method is settled before the program is handed over and every one of
+     * them says so, so there is no state of the program this could be asking about.
+     */
+    @Test
+    void aDeclarationTheModuleCarriesNothingForIsRefused() {
+        CheckedModule folds = CheckedProgram.of(List.of(FOLDS)).module("folds");
+
+        assertThrows(IllegalArgumentException.class,
+                () -> folds.helper(new ValueName.Helper("folds", "nothingWroteThis")));
     }
 
     /**
@@ -96,17 +113,16 @@ class ACallReachesTheHelperItsProgramCarriesTest {
      * whether the language declares it is told that it does. Filed under the module that emits the
      * method, it is told that {@code folds} declares an operation of the standard library.
      *
-     * <p>Asked through {@link ValueName.Helper} because that is what the snapshot answers with, and
-     * a library operation is not one — which is the same fact arriving as a type rather than as an
-     * answer.
+     * <p>A library operation is not a {@link ValueName.Helper} and does not become one by being
+     * carried, so what it is a copy of says the library declares it.
      */
     @Test
     void whatACarriedHelperIsFiledUnderSaysWhoDeclaredIt() {
         CheckedProgram program = CheckedProgram.of(List.of(FOLDS));
         CheckedHelper carried = only(program.module("folds").helpers());
 
-        assertTrue(carried.name().isDeclaredByLanguage(),
-                "the language declares what `" + carried.name() + "` is a copy of");
+        assertInstanceOf(ValueName.Stdlib.class, carried.declares(),
+                "the language declares what `" + carried + "` is a copy of");
     }
 
     /**
@@ -136,7 +152,7 @@ class ACallReachesTheHelperItsProgramCarriesTest {
     private static Set<ValueName> filedUnder(CheckedModule module) {
         Set<ValueName> names = new LinkedHashSet<>();
         for (CheckedHelper helper : module.helpers()) {
-            names.add(helper.name());
+            names.add(helper.declares());
         }
         return names;
     }

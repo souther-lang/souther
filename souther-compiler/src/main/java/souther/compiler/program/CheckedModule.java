@@ -19,7 +19,7 @@ public final class CheckedModule {
     private final List<CheckedBehavior> behaviors;
     private final Map<ValueName.Behavior, CheckedBehavior> behaviourByName;
     private final List<CheckedHelper> helpers;
-    private final Map<ValueName.Helper, CheckedHelper> helperByName;
+    private final Map<ValueName, CheckedHelper> helperByDeclaration;
     private final List<CheckedData> data;
 
     CheckedModule(String name, List<CheckedBehavior> behaviors, List<CheckedHelper> helpers,
@@ -33,11 +33,18 @@ public final class CheckedModule {
             byBehavior.put(behavior.name(), behavior);
         }
         this.behaviourByName = Map.copyOf(byBehavior);
-        Map<ValueName.Helper, CheckedHelper> byHelper = new LinkedHashMap<>();
+        Map<ValueName, CheckedHelper> byDeclaration = new LinkedHashMap<>();
         for (CheckedHelper helper : this.helpers) {
-            byHelper.put(helper.name(), helper);
+            CheckedHelper already = byDeclaration.put(helper.declares(), helper);
+            if (already != null) {
+                // One declaration, two methods for it in one module. A call reaches a declaration
+                // and this is what answers with the body, so a second would be a body reached by
+                // whichever was filed last with nothing saying the other was here.
+                throw new IllegalStateException("`" + name + "` carries `" + helper.declares()
+                        + "` twice, as " + already.reachedAs() + " and " + helper.reachedAs());
+            }
         }
-        this.helperByName = Map.copyOf(byHelper);
+        this.helperByDeclaration = Map.copyOf(byDeclaration);
     }
 
     /** What the module is called: what its own declarations are under, and what an import names. */
@@ -60,9 +67,32 @@ public final class CheckedModule {
         return helpers;
     }
 
-    /** The helper {@code name} reaches, or null where it is not one of this module's. */
-    public CheckedHelper helper(ValueName.Helper name) {
-        return helperByName.get(name);
+    /**
+     * The method this module carries for the declaration {@code declares}.
+     *
+     * <p>Asked with what a call reaches, which is the value that call carries — so an output
+     * holding one gets to the body by handing this that, and never by writing a name out of an
+     * alias, an operation and the module it happens to be emitting.
+     *
+     * <p>Never a null and never an absence to interpret. Which calls reach a method here is
+     * decided before this is made, and a call that reaches one says so
+     * ({@link souther.compiler.core.Core.Reaches.AHelper}) — so a declaration this has nothing for
+     * is a reader asking about something no call in this module reaches, which is a mistake at the
+     * reader rather than a state of the program.
+     *
+     * @throws IllegalArgumentException where this module carries no method for {@code declares}
+     */
+    public CheckedHelper helper(ValueName declares) {
+        if (declares == null) {
+            throw new IllegalArgumentException("a carried method is asked for by what it is a copy"
+                    + " of");
+        }
+        CheckedHelper helper = helperByDeclaration.get(declares);
+        if (helper == null) {
+            throw new IllegalArgumentException("`" + name + "` carries no method for `" + declares
+                    + "`; the methods it carries are " + helpers);
+        }
+        return helper;
     }
 
     /**
