@@ -80,18 +80,29 @@ class EverythingAnAnswerHoldsMeansSomethingTest {
         return out;
     }
 
+    /** Places in an order a reader can follow. Sorting is for writing a failure out, which is the
+     *  one place where how a place reads is what matters. */
+    private static Map<String, Set<String>> sorted(Map<Locus.Place, Set<String>> byPlace) {
+        Map<String, Set<String>> out = new TreeMap<>();
+        byPlace.forEach((place, seen) -> out.put(place.toString(), seen));
+        return out;
+    }
+
     /**
      * Every place a detector met something, which detector met it where, and what got in the way.
      *
-     * @param asDifferently questions the two stores were not both asked, which is the ground the
-     *                      comparison stands on rather than something it can report on
+     * @param fellShort everywhere a search covered less than what it was asked to cover, which is
+     *                  the ground the rest of this stands on rather than something it reports on
      */
     private record Met(Map<Locus.Place, Set<String>> byPlace, Set<String> fellShort,
                        Map<Locus.Place, Set<String>> differentThings, int visited) {}
 
     private static Met met() {
-        Map<Locus.Place, Set<String>> byPlace = new TreeMap<>();
-        Map<Locus.Place, Set<String>> differentThings = new TreeMap<>();
+        // Not a map that sorts. A place is told from a place by what it holds and not by how it
+        // reads, and what it reads as drops the very thing that tells two of them apart — so an
+        // order over the text would put two places in one bucket of anything that sorts.
+        Map<Locus.Place, Set<String>> byPlace = new LinkedHashMap<>();
+        Map<Locus.Place, Set<String>> differentThings = new LinkedHashMap<>();
         Set<String> fellShort = new TreeSet<>();
         int visited = 0;
         for (AnswerClosure.Scenario scenario : AnswerClosure.Scenario.values()) {
@@ -194,7 +205,8 @@ class EverythingAnAnswerHoldsMeansSomethingTest {
         Met met = met();
         Map<Locus.Place, String> reasons = AnswerClosure.reasons();
 
-        assertEquals(AnswerClosure.places(), met.byPlace().keySet(),
+        assertEquals(new java.util.HashSet<>(AnswerClosure.places()),
+                new java.util.HashSet<>(met.byPlace().keySet()),
                 () -> "a place in an answer holding something that means nothing by equals. "
                         + "What each written-down place is: " + reasons);
     }
@@ -210,8 +222,7 @@ class EverythingAnAnswerHoldsMeansSomethingTest {
     void andEachIsMetByWhatIsWrittenDownBesideIt() {
         Met met = met();
 
-        assertEquals(new LinkedHashMap<>(AnswerClosure.observations()),
-                new LinkedHashMap<>(met.byPlace()),
+        assertEquals(sorted(AnswerClosure.observations()), sorted(met.byPlace()),
                 "who meets each of them");
     }
 }

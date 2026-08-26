@@ -113,8 +113,8 @@ class APairWalkNamesADefectWhereItIsTest {
 
         Covered<Divergence> walked = Divergence.between(left, right);
 
-        assertEquals(Set.of(" java.util.IdentityHashMap THE_SAME_THING_TWICE"), found(walked),
-                "a map comparing by address, said as what it is");
+        assertEquals(Set.of("{key} java.util.IdentityHashMap THE_SAME_THING_TWICE"), found(walked),
+                "a map comparing by address, said as what it is and at the half that says so");
         assertEquals(Set.of(), gaps(walked), "nothing stopped this walk");
     }
 
@@ -136,7 +136,7 @@ class APairWalkNamesADefectWhereItIsTest {
 
         Covered<Divergence> walked = Divergence.between(left, right);
 
-        assertEquals(Set.of(" java.util.IdentityHashMap THE_SAME_THING_TWICE",
+        assertEquals(Set.of("{key} java.util.IdentityHashMap THE_SAME_THING_TWICE",
                         "{value} " + Address.class.getName() + " THE_SAME_THING_TWICE"),
                 found(walked), "the map for its keys, and what it holds for itself");
     }
@@ -309,7 +309,7 @@ class APairWalkNamesADefectWhereItIsTest {
                 new Held(new java.util.ArrayDeque<>(List.of("a")), beside));
 
         assertEquals(Set.of("A_CONTAINER_WITH_NO_RULE_FOR_PAIRING .Held#it"), gaps(walked), "neither position nor membership is its equality");
-        assertEquals(Set.of(), Set.of(),
+        assertEquals(Set.of(), found(walked),
                 "said as what it is");
     }
 
@@ -362,7 +362,7 @@ class APairWalkNamesADefectWhereItIsTest {
         Covered<Divergence> walked = Divergence.between(left, right);
 
         assertEquals(Set.of("MEMBERS_THAT_DO_NOT_PAIR {key}"), gaps(walked), "the entries line up with nothing");
-        assertEquals(Set.of(), Set.of(),
+        assertEquals(Set.of(), found(walked),
                 "said as a place the walk could not go, and not as a verdict on which it is");
         assertEquals(Set.of(), found(walked),
                 "and nothing is guessed about it");
@@ -391,7 +391,7 @@ class APairWalkNamesADefectWhereItIsTest {
         Covered<Divergence> walked = Divergence.between(left, right);
 
         assertEquals(Set.of("A_GRAPH_THAT_LOOPS .Loop#again"), gaps(walked), "the walk met the pair it was already walking");
-        assertEquals(Set.of(), Set.of(),
+        assertEquals(Set.of(), found(walked),
                 "for the reason it is, and where");
         assertEquals(Set.of(), found(walked),
                 "and nothing is named for what the walk did not get to");

@@ -37,15 +37,16 @@ record Locus(List<Locus.Step> steps) {
      * line per place — and which two those are moves with how a step is spelled rather than with
      * anything about the answers.
      *
+     * <p><b>Not ordered by how it reads.</b> What a reader is shown drops what tells one type from
+     * another of the same short name, so an order over the text would put two places in one bucket
+     * of anything that sorts — which is the collision the step below carries an owner to prevent,
+     * arriving through the door a register uses to hold its lines. Sorting is for writing a failure
+     * out, and is done on the text at that point.
+     *
      * @param question the key that asks it, by class, or {@code *} for a place every answer has
      * @param offender the class of the thing there, or the array type
      */
-    record Place(String question, Locus at, String offender) implements Comparable<Place> {
-
-        @Override
-        public int compareTo(Place other) {
-            return toString().compareTo(other.toString());
-        }
+    record Place(String question, Locus at, String offender) {
 
         @Override
         public String toString() {

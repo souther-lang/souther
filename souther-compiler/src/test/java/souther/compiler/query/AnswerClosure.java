@@ -4,7 +4,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeMap;
 
 /**
  * What is known to sit in an answer and not mean anything by {@code equals}, and who sees it.
@@ -235,14 +234,14 @@ final class AnswerClosure {
 
     /** Every place written down here, whichever detector or scenario meets it. */
     static Set<Locus.Place> places() {
-        Set<Locus.Place> out = new java.util.TreeSet<>();
+        Set<Locus.Place> out = new java.util.LinkedHashSet<>();
         KNOWN.forEach(each -> out.add(each.identity().place()));
         return out;
     }
 
     /** And who is expected to meet each of them. */
     static Map<Locus.Place, Set<String>> observations() {
-        Map<Locus.Place, Set<String>> out = new TreeMap<>();
+        Map<Locus.Place, Set<String>> out = new LinkedHashMap<>();
         KNOWN.forEach(each -> {
             Set<String> seen = new java.util.TreeSet<>();
             each.seenBy().forEach(one -> seen.add(one.toString()));

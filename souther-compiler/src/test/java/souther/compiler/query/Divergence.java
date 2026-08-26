@@ -82,7 +82,7 @@ record Divergence(Locus at, String cause, Divergence.Kind kind) {
          * walked together — and not whether two objects are equal, which is what the walk is here to
          * find out.
          */
-        private final Map<Pair, List<Divergence>> settled = new HashMap<>();
+        private final Map<Pair, Settled> settled = new HashMap<>();
         /** The pairs on the way down, so a graph that holds itself is met rather than followed. */
         private final Set<Pair> walking = new HashSet<>();
         private final List<Divergence> out = new ArrayList<>();
@@ -109,123 +109,225 @@ record Divergence(Locus at, String cause, Divergence.Kind kind) {
         }
 
         /**
-         * Compares {@code a} with {@code b}, reporting what it finds under {@code path}.
+         * What one pair came to: how much of it was seen, whether the two are the same thing, and
+         * whether they say so.
          *
-         * @return whether what is under the two was settled. False where the walk was cut short, so
-         *     that finding nothing below is not read as there being nothing below
+         * <p>Three answers because they are three questions, and the walk was answering the second
+         * and third with stand-ins for each other. Whether two things are the same thing is read off
+         * their shape — every part of one against the part of the other it corresponds to, down to
+         * the leaves the language defines. Whether they say so is what {@code equals} answers, which
+         * is the thing under test and never the evidence.
+         *
+         * <p>A defect is where the two disagree: the same thing said twice, said by something that
+         * denies it. And it is this thing's own defect only where every part of it says yes — a
+         * holder whose part denies its twin is a holder denying its twin for a reason, and nothing
+         * here can tell whether it would have agreed had the part behaved.
+         *
+         * @param covered whether everything under the two was looked at
+         * @param theSameThing whether the two are one thing, read off the shape
+         * @param andSayIt whether the two say so, read off {@code equals}. Only asked where the
+         *                 walk covered them: an {@code equals} of something that holds itself does
+         *                 not come back, and the answer would be worth nothing anyway
          */
-        boolean at(Object a, Object b, Locus path) {
+        record Came(boolean covered, boolean theSameThing, boolean andSayIt) {
+
+            static final Came IDENTICAL = new Came(true, true, true);
+
+            /** Cut short, so nothing under it was settled and nothing about it is claimed. */
+            static Came cutShort() {
+                return new Came(false, true, true);
+            }
+        }
+
+        /** Compares {@code a} with {@code b}, reporting what it finds under {@code path}. */
+        Came at(Object a, Object b, Locus path) {
             if (a == b) {
-                return true;
+                return Came.IDENTICAL;
             }
             if (budget-- <= 0) {
                 stopped(Gap.Why.BUDGET_EXHAUSTED, path);
-                return false;
+                return Came.cutShort();
             }
             if (a == null || b == null) {
                 say(path, (a == null ? b : a).getClass(), Kind.DIFFERENT_THINGS);
-                return true;
-            }
-            // What they say before what they are. A concrete class is not what makes a value: a
-            // `HashMap` and a `LinkedHashMap` holding one thing are one value by the contract both
-            // of them answer to, and telling them apart by their class would call an answer that
-            // reproduced a compile that did not.
-            if (a.equals(b)) {
-                return true;
-            }
-            if (a.getClass() != b.getClass()) {
-                say(path, a.getClass(), Kind.DIFFERENT_THINGS);
-                return true;
+                return new Came(true, false, false);
             }
             Class<?> c = a.getClass();
-            if (opaque(c)) {
-                if (!a.equals(b)) {
+            if (opaque(c) || opaque(b.getClass())) {
+                // The leaves the language defines. What one of these says is what it is, so the two
+                // questions are one question here and this is where the walk grounds out.
+                boolean alike = a.equals(b);
+                if (!alike) {
                     say(path, c, Kind.DIFFERENT_THINGS);
                 }
-                return true;
+                return new Came(true, alike, alike);
             }
             // The store itself is where a walk stops. Every answer in it is being compared already,
             // and an answer that holds it holds one object per store however deep the walk goes.
-            if (a instanceof Db) {
+            if (a instanceof Db || b instanceof Db) {
                 say(path, c, Kind.THE_SAME_THING_TWICE);
-                return true;
+                return new Came(true, true, false);
             }
             Pair pair = new Pair(a, b);
-            List<Divergence> already = settled.get(pair);
+            Settled already = settled.get(pair);
             if (already != null) {
-                already.forEach(each -> out.add(new Divergence(
+                already.found().forEach(each -> out.add(new Divergence(
                         path.followedBy(each.at()), each.cause(), each.kind())));
-                return true;
+                return already.came();
             }
             if (!walking.add(pair)) {
                 stopped(Gap.Why.A_GRAPH_THAT_LOOPS, path);
-                return false;
+                return Came.cutShort();
             }
             int before = out.size();
-            boolean whole;
+            Came came;
             try {
-                whole = descend(a, b, c, path);
-                // Nothing under the two explains them, so what is unequal is this. Asked only of a
-                // descent that reached the end: one that was cut short found nothing where it did
-                // not look, and naming this for that would name a holder for what it holds.
-                if (whole && out.size() == before && !a.equals(b)) {
-                    say(path, c, Kind.THE_SAME_THING_TWICE);
-                }
+                came = judged(a, b, c, path);
             } finally {
                 walking.remove(pair);
             }
-            if (whole) {
+            if (came.covered()) {
                 List<Divergence> mine = new ArrayList<>();
                 for (Divergence each : out.subList(before, out.size())) {
                     mine.add(new Divergence(new Locus(each.at().steps()
                             .subList(path.steps().size(), each.at().steps().size())),
                             each.cause(), each.kind()));
                 }
-                settled.put(pair, List.copyOf(mine));
+                settled.put(pair, new Settled(came, List.copyOf(mine)));
             }
-            return whole;
+            return came;
         }
 
-        private boolean descend(Object a, Object b, Class<?> c, Locus path) {
+        /**
+         * The two taken apart, and then judged on what the parts came to.
+         *
+         * <p>Where the rule that names a thing for itself lives, and the whole of it: the parts say
+         * the two are one thing, every part of it agrees with its twin, and this denies it. Read off
+         * what was found under it instead, a thing was named only where nothing else was — so
+         * wrapping something already written down in a container that compares by address left the
+         * container unnamed.
+         */
+        private Came judged(Object a, Object b, Class<?> c, Locus path) {
+            Parts parts = new Parts();
+            boolean known = takeApart(a, b, c, path, parts);
+            if (!known) {
+                return Came.cutShort();
+            }
+            if (!parts.covered) {
+                return Came.cutShort();
+            }
+            if (!parts.theSameThing) {
+                return new Came(true, false, false);
+            }
+            // Asked only of a pair the walk got to the end of. An `equals` of something that holds
+            // itself does not come back, and one asked about a pair half of which went unread would
+            // be answering about something nobody looked at.
+            boolean andSayIt = a.equals(b);
+            if (!andSayIt && parts.everyPartSaysIt && !parts.alreadySaid) {
+                say(path, c, Kind.THE_SAME_THING_TWICE);
+            }
+            return new Came(true, true, andSayIt);
+        }
+
+        /** What the parts of one pair came to, added up as they are walked. */
+        private static final class Parts {
+            private boolean covered = true;
+            private boolean theSameThing = true;
+            private boolean everyPartSaysIt = true;
+            /** Whether the thing above has already been named for a half of its own equality, so
+             *  that one defect is one line. */
+            private boolean alreadySaid;
+
+            void and(Came came) {
+                covered &= came.covered();
+                theSameThing &= came.theSameThing();
+                everyPartSaysIt &= came.andSayIt();
+            }
+        }
+
+        /**
+         * The two walked part by part, over the correspondence their own contract gives them.
+         *
+         * <p>The contract before the class. A list and a linked list holding one thing are one value
+         * by the contract both answer to, so which concrete class each of them is is not what says
+         * whether they are the same thing — read that way, a pair of them holding something that does
+         * not compare would come back as one input having compiled to two different answers.
+         *
+         * @return whether the shape of the two is one this knows how to take apart
+         */
+        private boolean takeApart(Object a, Object b, Class<?> c, Locus path, Parts parts) {
+            if (a instanceof List<?> mine && b instanceof List<?> yours) {
+                if (mine.size() != yours.size()) {
+                    say(path, c, Kind.DIFFERENT_THINGS);
+                    parts.theSameThing = false;
+                    return true;
+                }
+                for (int i = 0; i < mine.size(); i++) {
+                    parts.and(at(mine.get(i), yours.get(i), path.then(new Locus.Step.Element())));
+                }
+                return true;
+            }
+            if (a instanceof Set<?> mine && b instanceof Set<?> yours) {
+                if (mine.size() != yours.size()) {
+                    say(path, c, Kind.DIFFERENT_THINGS);
+                    parts.theSameThing = false;
+                    return true;
+                }
+                // A set pairs by what its members say, so a member it pairs is equal to the other
+                // side and there is nothing under it left to walk. What the pairing is for is that
+                // it either holds one to one or does not.
+                if (!pairedOneToOne(mine, yours, path.then(new Locus.Step.Element()))) {
+                    parts.covered = false;
+                }
+                return true;
+            }
+            if (a instanceof Map<?, ?> mine && b instanceof Map<?, ?> yours) {
+                entries(mine, yours, c, path, parts);
+                return true;
+            }
+            if (a instanceof java.util.Optional<?> mine && b instanceof java.util.Optional<?> yours) {
+                if (mine.isPresent() != yours.isPresent()) {
+                    say(path, c, Kind.DIFFERENT_THINGS);
+                    parts.theSameThing = false;
+                    return true;
+                }
+                if (mine.isPresent()) {
+                    parts.and(at(mine.get(), yours.get(), path.then(new Locus.Step.Present())));
+                }
+                return true;
+            }
+            if (a instanceof Collection<?> || b instanceof Collection<?>) {
+                // Neither position nor membership is its equality, so there is no rule here to pair
+                // it by. Said before the sizes are compared: that two of different sizes hold
+                // different things is a contract too, and this is where the contract is unknown.
+                stopped(Gap.Why.A_CONTAINER_WITH_NO_RULE_FOR_PAIRING, path);
+                return false;
+            }
+            // Past the shared contracts, two things of two classes are two things.
+            if (a.getClass() != b.getClass()) {
+                say(path, c, Kind.DIFFERENT_THINGS);
+                parts.theSameThing = false;
+                return true;
+            }
             if (c.isArray()) {
                 int length = java.lang.reflect.Array.getLength(a);
                 if (length != java.lang.reflect.Array.getLength(b)) {
                     say(path, c, Kind.DIFFERENT_THINGS);
+                    parts.theSameThing = false;
                     return true;
                 }
-                boolean whole = true;
                 for (int i = 0; i < length; i++) {
-                    whole &= at(java.lang.reflect.Array.get(a, i),
+                    parts.and(at(java.lang.reflect.Array.get(a, i),
                             java.lang.reflect.Array.get(b, i),
-                            path.then(new Locus.Step.Element()));
+                            path.then(new Locus.Step.Element())));
                 }
-                // An array compares by identity, so where the elements agree the caller's own
-                // check is what names it.
-                return whole;
-            }
-            if (a instanceof Map<?, ?> left && b instanceof Map<?, ?> right) {
-                return entries(left, right, c, path);
-            }
-            // What an absence may be hiding, read through rather than walked into. The field under
-            // one of these belongs to `java.base`, which opens nothing here, so a pair of them
-            // walked by their fields is a pair the walk cannot get inside — and read by their own
-            // equality, a value that compares by address inside one names the absence that holds it
-            // rather than itself.
-            if (a instanceof java.util.Optional<?> mine && b instanceof java.util.Optional<?> yours) {
-                if (mine.isPresent() != yours.isPresent()) {
-                    say(path, c, Kind.DIFFERENT_THINGS);
-                    return true;
-                }
-                return mine.isEmpty()
-                        || at(mine.get(), yours.get(), path.then(new Locus.Step.Present()));
-            }
-            if (a instanceof Collection<?> left && b instanceof Collection<?> right) {
-                return members(left, right, c, path);
-            }
-            if (a.equals(b)) {
                 return true;
             }
-            boolean whole = true;
+            fieldsOf(a, b, c, path, parts);
+            return true;
+        }
+
+        private void fieldsOf(Object a, Object b, Class<?> c, Locus path, Parts parts) {
             for (Class<?> k = c; k != null && k != Object.class; k = k.getSuperclass()) {
                 for (Field f : k.getDeclaredFields()) {
                     if (Modifier.isStatic(f.getModifiers())) {
@@ -238,68 +340,18 @@ record Divergence(Locus at, String cause, Divergence.Kind kind) {
                         mine = f.get(a);
                         theirs = f.get(b);
                     } catch (ReflectiveOperationException | RuntimeException | Error _) {
-                        stopped(Gap.Why.A_FIELD_THAT_WOULD_NOT_OPEN,
-                                path.thenMember(k, f.getName()));
-                        whole = false;
+                        stopped(Gap.Why.A_FIELD_THAT_WOULD_NOT_OPEN, path.thenMember(k, f.getName()));
+                        parts.covered = false;
                         continue;
                     }
-                    whole &= at(mine, theirs, path.thenMember(k, f.getName()));
+                    parts.and(at(mine, theirs, path.thenMember(k, f.getName())));
                 }
             }
-            return whole;
         }
 
         /**
-         * Two collections compared over the correspondence their own contract gives them.
-         *
-         * <p>A list is equal to another list by position and a set to another set by membership, so
-         * those are the two ways a pair of them line up. Lined up by the order an iterator gives, a
-         * pair of sets holding one thing each in a different order comes back as two members that
-         * differ — which is this saying a compile did not reproduce, about two answers that mean the
-         * same. So the rule is read off the contract, and a collection answering to neither is where
-         * this stops rather than where it guesses.
-         *
-         * <p>A set pairs by what its members say, so a member it pairs is equal to the other side
-         * and there is nothing under it left to find. What the pairing is for is that it either
-         * holds one to one or does not, and the second is worth saying.
-         */
-        private boolean members(Collection<?> left, Collection<?> right, Class<?> c, Locus path) {
-            if (left instanceof List<?> mine && right instanceof List<?> yours) {
-                if (mine.size() != yours.size()) {
-                    say(path, c, Kind.DIFFERENT_THINGS);
-                    return true;
-                }
-                boolean whole = true;
-                for (int i = 0; i < mine.size(); i++) {
-                    whole &= at(mine.get(i), yours.get(i), path.then(new Locus.Step.Element()));
-                }
-                return whole;
-            }
-            if (left instanceof Set<?> && right instanceof Set<?>) {
-                if (left.size() != right.size()) {
-                    say(path, c, Kind.DIFFERENT_THINGS);
-                    return true;
-                }
-                if (!pairedOneToOne(left, right, path.then(new Locus.Step.Element()))) {
-                    return false;
-                }
-                // Paired by what they say and still not equal, which is the container saying its
-                // membership is not what its members mean.
-                if (!left.equals(right)) {
-                    say(path, c, Kind.THE_SAME_THING_TWICE);
-                }
-                return true;
-            }
-            // Said before the sizes are compared. That two containers of different sizes hold
-            // different things is a container's own contract as much as how its members line up, and
-            // this is where that contract is unknown.
-            stopped(Gap.Why.A_CONTAINER_WITH_NO_RULE_FOR_PAIRING, path);
-            return false;
-        }
-
-        /**
-         * {@code right}'s members by what each of them says, or null where that is not one to one
-         * with {@code left}'s.
+         * {@code right}'s members put in correspondence with {@code left}'s by what each of them
+         * says.
          *
          * <p>Total and injective or nothing. A correspondence built by putting one side in a map of
          * its own members loses a member wherever two of them say the same thing — which is exactly
@@ -325,55 +377,50 @@ record Divergence(Locus at, String cause, Divergence.Kind kind) {
         }
 
         /**
-         * The two maps compared entry by entry, over a correspondence built here.
+         * The two maps taken apart entry by entry, over a correspondence built here.
          *
          * <p>Built here and never asked of the map. A map that compares its keys by address answers
          * no to every question about another store's however equal the keys are, so a walk that took
          * the map's own answer for the question would file a container nothing can keep as a compile
-         * that did not reproduce. Paired through what the keys themselves say, such a map is walked
-         * like any other and comes back unequal at the end, which is what it is.
+         * that did not reproduce.
          *
-         * <p>An entry with nothing to pair it with is where this stops rather than where it decides.
-         * Two maps of one size can hold keys that do not line up because a key carries an address, or
-         * because the two hold different things, and nothing at this end tells those apart — so it is
-         * said as a place the walk could not go.
-         *
-         * <p><b>The values, and the keys only as far as pairing them.</b> A key that pairs is a key
-         * the other side holds one equal to, and two equal things are where this walk stops looking:
-         * whatever an equal key carries, the answers above it compare the same either way. So a key
-         * holding a way of reading a store is not this walk's to find — that is a defect in what the
-         * answer holds rather than in what two of them come to, and it is found by walking one answer
-         * and asking each object what it is.
+         * <p>The values, and the keys only as far as pairing them. A key that pairs is a key the
+         * other side holds one equal to, and two equal things are where this walk stops looking.
          */
-        private boolean entries(Map<?, ?> left, Map<?, ?> right, Class<?> c, Locus path) {
+        private void entries(Map<?, ?> left, Map<?, ?> right, Class<?> c, Locus path, Parts parts) {
             if (left.size() != right.size()) {
                 say(path, c, Kind.DIFFERENT_THINGS);
-                return true;
+                parts.theSameThing = false;
+                return;
             }
             if (!pairedOneToOne(left.keySet(), right.keySet(),
                     path.then(new Locus.Step.MapKey()))) {
-                return false;
+                parts.covered = false;
+                return;
             }
-            // Judged here and not from what the walk finds underneath. A container has an equality
-            // of its own beside whatever its values hold, and the rule that names a thing for
-            // finding nothing below it would let one wrap a defect that is already written down and
-            // go unnamed. What says this one is its own is that its keys pair by what they say and
-            // it says they do not.
+            // Asked here and not left to the rule that judges a thing on its parts. A map's
+            // equality has a half that can be put on its own — whether the two hold the same keys —
+            // and the answer to that does not depend on what the values did. Left to the whole, a
+            // map comparing its keys by address goes unnamed for as long as anything under it also
+            // fails to compare, so wrapping something already written down in one of them would add
+            // no line.
             if (!left.keySet().equals(right.keySet())) {
-                say(path, c, Kind.THE_SAME_THING_TWICE);
+                say(path.then(new Locus.Step.MapKey()), c, Kind.THE_SAME_THING_TWICE);
+                parts.alreadySaid = true;
             }
             Map<Object, Object> theirs = new HashMap<>();
             for (Map.Entry<?, ?> each : right.entrySet()) {
                 theirs.put(each.getKey(), each.getValue());
             }
-            boolean whole = true;
             for (Map.Entry<?, ?> each : left.entrySet()) {
-                whole &= at(each.getValue(), theirs.get(each.getKey()),
-                        path.then(new Locus.Step.MapValue()));
+                parts.and(at(each.getValue(), theirs.get(each.getKey()),
+                        path.then(new Locus.Step.MapValue())));
             }
-            return whole;
         }
     }
+
+    /** What one pair came to, and what was found under it, as paths relative to it. */
+    private record Settled(Walk.Came came, List<Divergence> found) {}
 
     /** Two objects walked together, by identity. */
     private record Pair(Object left, Object right) {
