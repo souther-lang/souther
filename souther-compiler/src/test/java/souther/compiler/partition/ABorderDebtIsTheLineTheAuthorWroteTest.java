@@ -18,15 +18,17 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * What a row is owed for is the line the author wrote, and neither the rule it came from nor the
  * position it was read at.
  *
- * <p>Three identities where there used to be one. Which rule drew the line is provenance and the
- * same value however many lines the rule drew; which line is owed a row is the debt; where that line
- * was read is an occurrence, one per position of every behavior carrying the type. A measure keyed
- * on the occurrence asks for one rule's row once per position — 126 times over {@code crm}'s
+ * <p>Four questions and not one. Which rule drew the line is provenance and the same value however
+ * many lines the rule drew; which line of that rule it is, and which value it is at, are the debt;
+ * where that line was read is an occurrence, one per position of every behavior carrying the type,
+ * and which of those readings are one line is what a partition folds under. A measure keyed on the
+ * occurrence asks for one rule's row once per position — 126 times over {@code crm}'s
  * {@code UserId} — and a measure keyed on the rule asks for one row where the author drew two lines.
  *
- * <p>Written before the debt exists, because the whole of what this change is worth is the answer to
- * "why are these the same debt". Left to be read off whatever the implementation keyed on, that
- * answer lives outside the types and the next reading takes it back.
+ * <p>How far a debt reaches is the rule's own answer: a clause of a {@code data} is the type's
+ * wherever the type is carried, and a comparison is written in a body and is that body's. Both
+ * directions are measured here, because a debt that dropped the behavior would pass the first and
+ * fail the second.
  */
 class ABorderDebtIsTheLineTheAuthorWroteTest {
 
@@ -236,6 +238,56 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
                         java.util.Optional.of(
                                 new souther.compiler.check.ClauseName("cap"))));
     }
+
+    /**
+     * One helper's comparison called from two behaviors is two debts.
+     *
+     * <p>The other side of the equivalence above, and the reason a debt does not simply drop the
+     * behavior it was read in. A clause of a {@code data} states something about the type wherever
+     * the type is carried; a comparison is written in a body and states something about that body,
+     * so {@code one} and {@code two} each owe a row at the line {@code band}'s comparison draws in
+     * them. What the rule is is where that is decided
+     * ({@link souther.compiler.check.RuleRef.Comparison}), and a debt says no more about it.
+     */
+    @Test
+    void oneHelpersComparisonCalledFromTwoBehaviorsIsTwoDebts() {
+        Map<String, List<BorderAssessment>> lines = boundariesOf(TWO_CALLERS, "example.callers");
+        BorderAssessment first = at(lines.get("one"), "a = 100");
+        BorderAssessment second = at(lines.get("two"), "a = 100");
+
+        assertNotEquals(first.border().obligation(), second.border().obligation(),
+                "a comparison is written in a body, so each body that holds it owes its own row");
+        assertEquals(at(lines.get("one"), "a = 0").border().obligation(),
+                at(lines.get("two"), "a = 0").border().obligation(),
+                "and the clause of the type they both carry is the one row it always was");
+    }
+
+    /** One helper holding a comparison, called from two behaviors. */
+    private static final String TWO_CALLERS = """
+            module example.callers
+
+            data Amount = Int
+                invariant value >= 0
+
+            data Small
+            data Large
+            data Size = Small | Large
+
+            let band (a: Amount): Size =
+                if a.value <= 100 then Small else Large
+
+            behavior one : (a: Amount) -> Size
+            let one (a) = band(a)
+
+            behavior two : (a: Amount) -> Size
+            let two (a) = band(a)
+
+            example one
+                | "x" : (Amount(1)) -> Small
+
+            example two
+                | "y" : (Amount(1)) -> Small
+            """;
 
     /**
      * One {@code ensures} clause naming two positions is two debts.
@@ -467,6 +519,15 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
         BorderAssessment line = lines.get(label);
         assertNotNull(line, () -> label + " is not a line of this model: " + lines.keySet());
         return line;
+    }
+
+    /** The line one behavior draws at {@code label}, for a caller reading the behaviors apart. */
+    private static BorderAssessment at(List<BorderAssessment> lines, String label) {
+        return lines.stream().filter(each -> each.border().label().equals(label)).findFirst()
+                .orElseGet(() -> {
+                    throw new AssertionError(label + " is not a line of this behavior: "
+                            + lines.stream().map(each -> each.border().label()).toList());
+                });
     }
 
     /** Every border of {@code module}, as the measure holds them: per behavior, and one entry per

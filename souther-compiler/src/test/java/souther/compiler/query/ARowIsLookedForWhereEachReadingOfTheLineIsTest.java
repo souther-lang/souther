@@ -39,13 +39,14 @@ class ARowIsLookedForWhereEachReadingOfTheLineIsTest {
     @Test
     void aGuardCalledTwiceIsReadTwiceAndReportedOnce() {
         Compilation compilation = compiled();
-        List<BorderAssessment> readings = compilation.db()
+        LineReadings read = compilation.db()
                 .ask(new Adequacy.Readings("example.banding", "twice")).value();
         List<BorderAssessment> lines = compilation.db()
                 .ask(new Adequacy.Boundaries("example.banding", "twice")).value();
-        assertNotNull(readings, "the model under test compiles");
+        assertNotNull(read, "the model under test compiles");
         assertNotNull(lines, "the model under test compiles");
 
+        List<BorderAssessment> readings = read.each();
         assertEquals(2, at(readings, "a = 100").size(),
                 () -> "the helper is called from both arms, so its line is read twice: "
                         + labels(readings));

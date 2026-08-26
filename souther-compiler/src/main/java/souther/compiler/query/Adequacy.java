@@ -1280,11 +1280,18 @@ public final class Adequacy {
      * an editor that wants the rows at one behavior's edges may not have to wait for every
      * behavior's.
      *
-     * <p><b>Not a second assessment.</b> It asks {@link Boundaries} and adds to what came back:
-     * every border, every demand, every coverage and every projection is carried through untouched,
-     * and the only thing put in is the attempt at the points the measurement itself says are worth
-     * one. So the two answers are ordered rather than rival — this one holds strictly more evidence
-     * about the same lines, and a verdict read off evidence can gain a witness and never lose one.
+     * <p><b>Not a second assessment.</b> Every border, every demand, every coverage and every
+     * projection is carried through untouched, and the only thing put in is the attempt at the
+     * points the measurement itself says are worth one. So the two answers are ordered rather than
+     * rival — this one holds strictly more evidence about the same lines, and a verdict read off
+     * evidence can gain a witness and never lose one.
+     *
+     * <p><b>Asked of the readings, and folded after.</b> {@link Boundaries} is the same readings
+     * folded, and a row is composed against the conditions the reading it is for is reached under —
+     * so this takes {@link Readings} and folds what came back, which is the same fold and not a
+     * second one. Taken from {@code Boundaries} instead, the conditions would be those of whichever
+     * reading that fold kept. What keeps the two in this order is {@link LineReadings}: what a fold
+     * gives back is not what a search takes.
      *
      * <p>Which is what lets it be asked later than the measurement, or not at all. Nobody having
      * asked is said by this key not having been asked, and not by an answer inside the measurement
@@ -1300,7 +1307,7 @@ public final class Adequacy {
 
         @Override
         public Answer<List<BorderAssessment>> compute(Db db) {
-            List<BorderAssessment> measured = db.ask(new Readings(name, behavior)).value();
+            LineReadings measured = db.ask(new Readings(name, behavior)).value();
             if (measured == null) {
                 return Answer.absent();
             }
@@ -1653,7 +1660,7 @@ public final class Adequacy {
 
         @Override
         public Answer<List<BorderAssessment>> compute(Db db) {
-            List<BorderAssessment> readings = db.ask(new Readings(name, behavior)).value();
+            LineReadings readings = db.ask(new Readings(name, behavior)).value();
             return readings == null ? Answer.absent() : Answer.of(Coverages.merged(readings));
         }
     }
@@ -1666,9 +1673,12 @@ public final class Adequacy {
      * each of those is reached under its caller's own conditions — so what a row for it may be
      * composed out of is a reading's own answer, and a search made after the readings are one has
      * to pick one of them to compose against.
+     *
+     * <p>Answered as {@link LineReadings} rather than as the same list a line comes back in, so that
+     * which of the two a caller is holding is a thing the compiler knows.
      */
     public record Readings(String name, String behavior)
-            implements Key<List<BorderAssessment>> {
+            implements Key<LineReadings> {
 
         @Override
         public String module() {
@@ -1676,7 +1686,7 @@ public final class Adequacy {
         }
 
         @Override
-        public Answer<List<BorderAssessment>> compute(Db db) {
+        public Answer<LineReadings> compute(Db db) {
             Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
             Answer<Symbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
@@ -1701,7 +1711,7 @@ public final class Adequacy {
         }
 
         /** Every line of one behavior, with what the rows and the decoder say about each. */
-        private static List<BorderAssessment> assess(
+        private static LineReadings assess(
                 Hir.SpecBehavior spec, Sig sig, Symbols symbols,
                 souther.compiler.check.ReadingPolicy policy,
                 souther.compiler.partition.Partitions.Partitioning divided, RowReading observed,
@@ -1727,7 +1737,7 @@ public final class Adequacy {
                                 partitioning.edgeIsKnownWritable(axis.term()))));
             }
             out.addAll(Coverages.assessBetween(partitioning, inputs, observed, level));
-            return List.copyOf(out);
+            return new LineReadings(out);
         }
 
     }

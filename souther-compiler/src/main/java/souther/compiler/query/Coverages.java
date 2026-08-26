@@ -570,9 +570,9 @@ final class Coverages {
      * a debt holds the authored line and the value it is at — so two readings under one line are one
      * debt by construction, and a pair that is not says the two identities have come apart.
      */
-    static List<BorderAssessment> merged(List<BorderAssessment> readings) {
+    static List<BorderAssessment> merged(LineReadings readings) {
         java.util.SequencedMap<BoundaryLine, BorderAssessment> out = new java.util.LinkedHashMap<>();
-        for (BorderAssessment each : readings) {
+        for (BorderAssessment each : readings.each()) {
             out.merge(BoundaryLine.of(each.border()), each, Coverages::whicheverSawMore);
         }
         return List.copyOf(out.values());
@@ -590,12 +590,12 @@ final class Coverages {
      * evidence, and nothing a search finds is evidence against a point — so this can add a ground and
      * can never take one away, whenever it is run and however many points it is run over.
      */
-    static List<BorderAssessment> searched(List<BorderAssessment> measured, BehaviorInputs where,
-                                           Probe probe, souther.compiler.inputs.Quantities rules,
-                                           ReachingCuts reaching) {
+    static LineReadings searched(LineReadings measured, BehaviorInputs where,
+                                 Probe probe, souther.compiler.inputs.Quantities rules,
+                                 ReachingCuts reaching) {
         LevelRealizer realizer = new LevelRealizer();
         List<BorderAssessment> out = new ArrayList<>();
-        for (BorderAssessment border : measured) {
+        for (BorderAssessment border : measured.each()) {
             OneSearchOfABorder search = searching(border.border(), where, probe, realizer,
                     regionFor(border.border(), rules, reaching));
             java.util.EnumMap<PointRole, ItemAssessment> items =
@@ -609,7 +609,7 @@ final class Coverages {
             }
             out.add(new BorderAssessment(border.border(), items));
         }
-        return List.copyOf(out);
+        return new LineReadings(out);
     }
 
     /**

@@ -11,10 +11,17 @@ import java.util.Optional;
  * One line of the model: which rule, and which of that rule's lines.
  *
  * <p>What the author wrote, with nothing about the reading that reached it. A rule is read once per
- * position of every behavior carrying it and once per call of every helper holding it, and none of
- * that is here — no position, no behavior, no occurrence, no place a body arrived at it by. Those
- * are {@link OriginRef}'s, which is which reading of the rule this is, and this is what several
+ * position of every behavior carrying it and once per call of every helper holding it; which
+ * position, and which call of which helper, are {@link OriginRef}'s, and this is what several
  * readings of one line share.
+ *
+ * <p><b>How far that reaches is the rule's own answer and is not restated here.</b> {@link RuleRef}
+ * is what a rule is, and it does not tell every kind of rule apart the same way: a clause of a
+ * {@code data} is the type's rule wherever the type is carried, and a comparison and an
+ * {@code ensures} clause are written in a body and are that behavior's — so a helper's comparison
+ * called from two behaviors is two rules and two lines, while a type's clause read in two behaviors
+ * is one. Said again here as "no behavior", this would be a second answer to a question the rule
+ * already answers, and the two would differ for whichever kind of rule was added next.
  *
  * <p><b>Not the rule alone.</b> One clause places as many lines as it has conjuncts with an end in
  * them: {@code invariant within = value >= 1 && value <= 10} is one {@link RuleRef.Invariant} and

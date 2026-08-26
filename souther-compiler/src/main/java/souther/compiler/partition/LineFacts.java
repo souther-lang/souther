@@ -10,10 +10,15 @@ package souther.compiler.partition;
  * than by whoever knows. Kept as one value, a rule answers all three where it is written and no
  * consumer has a slot to fill in for it.
  *
- * <p>Recorded rather than worked out. What a border <em>makes</em> of these — which way the rule is
- * satisfied from its line, whether it orders the values around it at all, which of the four points a
- * row stands at — is {@link Border}'s, derived there from these and derived nowhere else. A reading
- * says what it read, and a measure says what that means for the rows it asks for.
+ * <p>Worked out once from what the producer knows, and never worked back out of what came later. A
+ * bound records which way it keeps its values and whether it admits the value it stops at, and which
+ * side of the line that value is on follows from the two — so it is settled here, beside the rule
+ * that knows both, rather than by a consumer holding the range every rule together left.
+ *
+ * <p>And what a border <em>makes</em> of these — which way the rule is satisfied from its line,
+ * whether it orders the values around it at all, which of the four points a row stands at — is
+ * {@link Border}'s, derived there from these and derived nowhere else. A reading says what it read,
+ * and a measure says what that means for the rows it asks for.
  *
  * @param valueBelongsBelow which side of the line the cut value itself is on. For a rule that orders
  *                          the values around its line it decides which neighbour is the other

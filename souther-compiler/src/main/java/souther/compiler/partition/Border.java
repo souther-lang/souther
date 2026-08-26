@@ -67,11 +67,14 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
     /**
      * What a row here is owed for, which several readings of this line share.
      *
-     * <p>The line the author wrote, without the position it was read at. Everything that folds
-     * readings together keys on this; everything that says where a row would go reads {@link #cut}.
-     * Both are here rather than one being worked out from the other by whoever needs it, because a
-     * caller deriving a key from the parts it happened to know is how one clause's row came to be
-     * asked for once per position of every behavior carrying the type (issue #1062).
+     * <p>The line the author wrote, without the position it was read at. What folds readings
+     * together keys on {@link BoundaryLine}, which is this line and where it was read; this is what
+     * such a fold may not cross, and {@code Coverages} holds itself to that where it merges.
+     * Everything that says where a row would go reads {@link #cut}.
+     *
+     * <p>Both are here rather than one being worked out from the other by whoever needs it: a caller
+     * deriving a key from the parts it happened to know asks for one clause's row once per position
+     * of every behavior carrying the type.
      */
     public BorderObligationId obligation() {
         return new BorderObligationId(origin.authoredLine(), cut.at());

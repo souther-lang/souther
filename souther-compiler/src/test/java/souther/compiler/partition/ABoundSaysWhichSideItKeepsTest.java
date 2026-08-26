@@ -22,6 +22,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -62,6 +63,27 @@ class ABoundSaysWhichSideItKeepsTest {
         assertEquals(List.of("n = 5", "n = 5"),
                 at.stream().map(each -> each.border().label()).toList(),
                 "at one value, so nothing about where they are tells them apart");
+    }
+
+    /**
+     * The side is what the two ends of one conjunct are told apart by.
+     *
+     * <p>Under the test above, which reads a model: {@code value >= 5 && value <= 5} draws its two
+     * lines from two conjuncts, so a reading that carried no side at all would still tell them
+     * apart by the conjunct and the model test would pass. What the side is worth is here — one
+     * rule, one conjunct, one inclusivity, and two lines.
+     */
+    @Test
+    void theTwoEndsOfOneConjunctAreToldApartByTheSideTheyKeep() {
+        OriginRef least = new OriginRef.InvariantOrigin(aClause(), 0, Towards.ABOVE, true);
+        OriginRef most = new OriginRef.InvariantOrigin(aClause(), 0, Towards.BELOW, true);
+
+        assertNotEquals(least.lineFacts(), most.lineFacts(),
+                "which side of the line the value it stops at is on is what the two disagree about");
+        assertNotEquals(least.authoredLine(), most.authoredLine(),
+                "so they are two lines of the model, and two rows to write");
+        assertEquals(least.authoredLine().rule(), most.authoredLine().rule(),
+                "one clause placed both, which is what provenance answers");
     }
 
     /**

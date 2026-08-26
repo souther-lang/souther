@@ -3,17 +3,20 @@ package souther.compiler.partition;
 /**
  * What a row is owed for: one line the author wrote, wherever it is read.
  *
- * <p>Two readings are one debt when they are readings of that same line — whatever position of
- * whatever behavior each was met at, and whatever occurrence of it a body reached. A row standing at
- * one then establishes what a row standing at the other would, which is what follows from their
- * being one debt and not the test for it: {@code value >= 5 && value <= 5} places two lines at one
- * value, one row stands at both, and they are two.
+ * <p>Two readings are one debt when they are readings of that same line — whatever position each was
+ * met at and whatever occurrence of it a body reached, as far as the rule itself is one rule
+ * ({@link AuthoredLine}). A row standing at one then establishes what a row standing at the other
+ * would, which is what follows from their being one debt and not the test for it:
+ * {@code value >= 5 && value <= 5} places two lines at one value, one row stands at both, and they
+ * are two.
  *
  * <p>So {@code UserId}'s clause saying a user id is a string of one character or more is one row to
  * write, whether the position it was read at is {@code draft.owner} or
  * {@code activities[*]@CallTask.owner}, and whether the behavior carrying it is
  * {@code scheduleMeeting} or {@code touchCount}. Neither behavior says anything about the length of
- * a user id, so neither can disagree with the other about a row at length 1.
+ * a user id, so neither can disagree with the other about a row at length 1. A comparison written in
+ * a body is the other way about — it says something about that body — so a helper's comparison
+ * called from two behaviors is two rules, and two rows to write.
  *
  * <p><b>Not the rule.</b> One clause places two ends: {@code invariant within = value >= 1 && value
  * <= 10} is one {@link souther.compiler.check.RuleRef.Invariant} and two lines, and a row at the
