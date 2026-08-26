@@ -23,14 +23,82 @@ import java.util.Map;
  * and below five that no row can be written in, and a report counts a class nothing can reach
  * ({@link Seam}).
  *
- * @param seams where the values part, in the order the values are in
- * @param bands the runs between them, one more than there are seams
+ * @param partings where the values part and which lines the model wrote there, in the order the
+ *                 values are in
+ * @param runs     the runs between them, one more than there are partings
  */
-public record QuantityArrangement(List<Parting> partings, List<Band> bands) {
+public record QuantityArrangement(List<Parting> partings, List<Run> runs) {
 
     public QuantityArrangement {
         partings = List.copyOf(partings);
-        bands = List.copyOf(bands);
+        runs = List.copyOf(runs);
+    }
+
+    /**
+     * One run of the arrangement, with what stops it at each end as a row inside it is owed to it.
+     *
+     * <p>Beside the run's own values rather than inside them. What a row has to do to be inside is
+     * the run ({@link Band}), and what it is owed to is which rules stopped it — two questions, and
+     * a value that answered both would have the second inside every comparison of the first.
+     *
+     * @param values what a row inside it has to be
+     * @param below  the place the values part at the low end, or null where nothing parts them there
+     * @param above  the same at the high end
+     */
+    public record Run(Band values, Parting below, Parting above) {
+
+        public Run {
+            if (values == null) {
+                throw new IllegalArgumentException("a run is a run of values");
+            }
+            agree(values.lower(), below, Towards.BELOW);
+            agree(values.upper(), above, Towards.ABOVE);
+        }
+
+        /**
+         * That the run and the place it stops at say the same thing about one end.
+         *
+         * <p>Checked rather than derived, because they are put here by one caller out of two
+         * readings of the arrangement: the run is what the values come to and the place is what the
+         * model wrote, and an end that is a line in one and not in the other is those two readings
+         * having come apart.
+         */
+        private static void agree(BandEnd end, Parting parted, Towards side) {
+            if ((end instanceof BandEnd.AtParting) != (parted != null)) {
+                throw new IllegalArgumentException("a run parted at its " + side
+                        + " end and no line there, or a line and no parting: " + end + " " + parted);
+            }
+            if (parted != null && !parted.geometry().key().equals(end.seam().key())) {
+                throw new IllegalArgumentException("a run stopping at one place and a line at"
+                        + " another: " + end.seam().key() + " against " + parted.key());
+            }
+        }
+
+        /**
+         * What a row inside this run is owed to at one end: one answer per rule that could have
+         * stopped it there, and one where no rule did.
+         *
+         * <p>Each line at a place is enough on its own to have stopped the run — taking either of
+         * two away leaves it where it is — so each is one thing a row here answers for. An end the
+         * rules leave together and an end of the order are one answer apiece, neither being any one
+         * rule's doing.
+         */
+        public List<FarEnd> endsAt(Towards side) {
+            BandEnd end = side == Towards.ABOVE ? values.upper() : values.lower();
+            Parting parted = side == Towards.ABOVE ? above : below;
+            return switch (end) {
+                case BandEnd.AtParting at -> parted.alternatives().stream()
+                        .map(line -> (FarEnd) new FarEnd.AtALine(line, at.seam())).toList();
+                case BandEnd.AtDomain at -> List.of(new FarEnd.AtTheDomain(at.reaches()));
+                case BandEnd.AtOrderEnd at -> List.of(new FarEnd.AtTheOrderEnd(at.towards()));
+            };
+        }
+    }
+
+    /** The runs as what a row inside each has to be, for a reader that is not asking what any of
+     *  them is owed to. */
+    public List<Band> bands() {
+        return runs.stream().map(Run::values).toList();
     }
 
     /**
@@ -77,25 +145,26 @@ public record QuantityArrangement(List<Parting> partings, List<Band> bands) {
         List<Parting> ordered = new ArrayList<>(distinct.values());
         ordered.sort(QuantityArrangement::inOrderOfTheValues);
 
-        List<Band> bands = new ArrayList<>();
+        List<Run> runs = new ArrayList<>();
         Parting under = null;
         for (Parting parting : ordered) {
-            keep(space, bands, runBetween(under, parting, from, to));
+            keep(space, runs, runBetween(under, parting, from, to));
             under = parting;
         }
-        keep(space, bands, runBetween(under, null, from, to));
-        return new QuantityArrangement(ordered, bands);
+        keep(space, runs, runBetween(under, null, from, to));
+        return new QuantityArrangement(ordered, runs);
     }
 
     /** The run between two of the places the values part, held to what the rules leave either
      *  side. */
-    private static Band runBetween(Parting under, Parting over, Bound from, Bound to) {
-        // The places and not the lines against them. What a run asks a row for is the same however
-        // many rules wrote a line where it stops, and which of them did is this arrangement's answer
-        // to a different question ({@link Parting#alternatives}) — carried into the run, it would be
-        // inside every value that says what is asked of a row.
-        return new Band(Band.endAt(under == null ? null : under.geometry(), from, Towards.ABOVE),
-                Band.endAt(over == null ? null : over.geometry(), to, Towards.BELOW));
+    private static Run runBetween(Parting under, Parting over, Bound from, Bound to) {
+        // The places and not the lines against them go into the values. What a run asks a row for is
+        // the same however many rules wrote a line where it stops, and which of them did is kept
+        // beside it — carried in, it would be inside every value that says what is asked of a row.
+        return new Run(
+                new Band(Band.endAt(under == null ? null : under.geometry(), from, Towards.ABOVE),
+                        Band.endAt(over == null ? null : over.geometry(), to, Towards.BELOW)),
+                under, over);
     }
 
     /**
@@ -123,20 +192,15 @@ public record QuantityArrangement(List<Parting> partings, List<Band> bands) {
      * leave nothing in, which is a point nobody is owed a row at rather than one nothing has got
      * to.
      */
-    public Band above(Parting parting) {
-        return bands.stream().filter(each -> is(each.lower().seam(), parting)).findFirst()
+    public Run above(Parting parting) {
+        return runs.stream().filter(each -> is(each.values().lower().seam(), parting)).findFirst()
                 .orElse(null);
     }
 
     /** The run just below it, on the same reading. */
-    public Band below(Parting parting) {
-        return bands.stream().filter(each -> is(each.upper().seam(), parting)).findFirst()
+    public Run below(Parting parting) {
+        return runs.stream().filter(each -> is(each.values().upper().seam(), parting)).findFirst()
                 .orElse(null);
-    }
-
-    /** The run one value of the quantity is in, or null where the rules leave it in none. */
-    public Band holding(Level at) {
-        return bands.stream().filter(each -> each.holds(at)).findFirst().orElse(null);
     }
 
     /**
@@ -148,10 +212,10 @@ public record QuantityArrangement(List<Parting> partings, List<Band> bands) {
      * line's own value, which a bound that stops short of that value does not leave in any run at
      * all. Null where the rules leave no run there, which is a point nobody is owed a row at.
      */
-    public Band endmost(Towards inward) {
-        return bands.stream()
-                .filter(each -> (inward == Towards.ABOVE ? each.lower() : each.upper())
-                        .seam() == null)
+    public Run endmost(Towards inward) {
+        return runs.stream()
+                .filter(each -> (inward == Towards.ABOVE
+                        ? each.values().lower() : each.values().upper()).seam() == null)
                 .findFirst().orElse(null);
     }
 
@@ -160,13 +224,13 @@ public record QuantityArrangement(List<Parting> partings, List<Band> bands) {
     }
 
     /** A run, unless what the rules leave has nothing in it. */
-    private static void keep(LevelSpace space, List<Band> bands, Band band) {
-        Level first = band.first();
-        Level last = band.last();
+    private static void keep(LevelSpace space, List<Run> runs, Run run) {
+        Level first = run.values().first();
+        Level last = run.values().last();
         if (first != null && last != null && space.compare(first, last) > 0) {
             return;
         }
-        bands.add(band);
+        runs.add(run);
     }
 
     /**
