@@ -185,26 +185,34 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
     }
 
     /**
-     * The end is read rather than assumed closed, at the one place both kinds are built.
+     * The end is read rather than assumed closed, at the one place both kinds are built, and what
+     * reads it is the point rather than the line.
      *
      * <p>A continuous carrier has no step to take, so {@code value > 5.0m} on a {@code Decimal}
      * reaches {@link OriginRef.InvariantOrigin} as an exclusive 5 — measured at the construction
-     * site, where both kinds arrive. No report shows one: such a cut is dropped further down. That
-     * makes the closed end a fact about how far the derivation gets rather than about bounds, and
-     * an origin that assumed it would answer {@code ON} for a value its own type refuses on the day
-     * the derivation reaches further.
+     * site, where both kinds arrive. Where the rule stops is the line either way; which value the
+     * point against it stands at is the order's answer, and the two are one value only where the
+     * position holds the line's own.
+     *
+     * <p>Both ends here on one carrier, which is what makes this about the end and not about the
+     * carrier. The bound that admits its value is at that value; the one that does not is at the
+     * value it leaves. Asked as one question, the second was read as a line the quantity does not
+     * reach, dropped, and its rule went unmeasured with nothing saying so (issue #1079).
      */
     @Test
-    void aBoundThatStopsShortOfItsValueDrawsNoBorderAtIt() {
-        assertEquals(Criterion.AtTheLevel.class,
-                borderOf(new OriginRef.InvariantOrigin(invariant(), THE_ONLY_CONJUNCT, true))
-                        .demand(PointRole.ON).criterion().getClass(),
+    void aBoundIsAtItsOwnEndWhereItKeepsItAndAtTheValueItLeavesWhereItDoesNot() {
+        assertEquals("= 5", pointAgainstTheLine(true),
                 "a bound that admits its own end is at that end's ON point");
-        // And where it does not admit it, the position does not reach the line: the value is outside
-        // what the rules leave, so there is no border here and no point of one either. Read as a
-        // border, it would owe an ON point one step in that no carrier here names.
-        assertEquals(null, borderOf(new OriginRef.InvariantOrigin(invariant(), THE_ONLY_CONJUNCT, false)),
-                "a bound whose own end its position refuses draws no line at it");
+        assertEquals("= 6", pointAgainstTheLine(false),
+                "and one that does not is at the first value it leaves");
+    }
+
+    /** What the {@code ON} point of a bound at 5 asks for, where the bound does or does not keep
+     *  the 5 itself. */
+    private static String pointAgainstTheLine(boolean keepsIt) {
+        Border border = borderOf(
+                new OriginRef.InvariantOrigin(invariant(), THE_ONLY_CONJUNCT, keepsIt));
+        return border.demand(PointRole.ON).criterion().asked(border.cut().of());
     }
 
     /** The border a bound draws at 5 on an `Int` whose rules leave 5 and up. */

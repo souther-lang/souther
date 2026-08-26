@@ -814,14 +814,12 @@ public final class Partitions {
                                     axis.term().observedOn(axis.type(), symbols), cut.carrier())),
                     new Level.OnACarrier(cut.carrier(), cut.at()));
             for (OriginRef origin : cut.origins()) {
-                // Null where the position does not reach the line at all, which is the line and not
-                // one of its points: the rule drew it about the type, and what is left of the type
-                // here may stop short of it — `low < high` under one `[0, 1]` leaves `low` every
-                // value up to 1 and not 1 itself.
-                Border border = Border.at(target, origin, within, parted);
-                if (border != null) {
-                    out.add(border);
-                }
+                // One cut, one border. Whether the quantity reaches the line is settled where the
+                // cut was made — a bound's line is an end of what the bound leaves — so there is
+                // nothing to test here and nothing to drop. It used to answer null and be dropped
+                // without a word, which is how a strict bound on a carrier with no step left the
+                // measure saying the behavior's rules draw no line anywhere (issue #1079).
+                out.add(Border.at(target, origin, within, parted));
             }
         }
         return List.copyOf(out);
