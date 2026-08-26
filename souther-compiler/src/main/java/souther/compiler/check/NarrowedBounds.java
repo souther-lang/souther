@@ -19,10 +19,11 @@ import java.util.function.Supplier;
  * different readings of the same position — a case's own and the value a case was narrowed out of —
  * and the declaration holding one value's end was named as holding the other's ({@link #meet}).
  *
- * <p>Which is why no reading answers with the declarations alone. A caller that could ask for the
- * names without the number is a caller that will pair them with whatever end it has, and there is
- * no reading here to say whether that end is the one they are about. Taking them out of this to
- * carry across to a reading of another range is a decision, and it is made where that reading is.
+ * <p>Which is why no reading answers with the declarations alone, and why one of these is only ever
+ * made by a reading. A caller that could ask for the names without the number, or write down a
+ * pairing of its own, is a caller that will put them beside whatever end it has — and there is no
+ * reading there to say whether that end is the one they are about. Taking them out of this to carry
+ * across to a reading of another range is a decision, and it is made where that reading is.
  *
  * <p><b>The names are worked out when they are asked for.</b> Reading a declaration again without
  * one declaration's clauses is what answers who holds an end, and it is done once per candidate and
@@ -49,9 +50,16 @@ public final class NarrowedBounds {
         this.maxBy = maxBy;
     }
 
-    /** These ends, held by these declarations. */
-    public NarrowedBounds(NumericDomain.Bounds bounds, List<TypeSymbol.AtModule> minBy,
-                          List<TypeSymbol.AtModule> maxBy) {
+    /**
+     * These ends, held by these declarations.
+     *
+     * <p>Not offered outside this reading, and this is the whole of what keeps the two together. A
+     * caller that could write one of these down could pair one reading's ends with another
+     * reading's names, which is the answer this exists to stop being possible — and there would be
+     * nothing left saying so except the sentence above.
+     */
+    NarrowedBounds(NumericDomain.Bounds bounds, List<TypeSymbol.AtModule> minBy,
+                   List<TypeSymbol.AtModule> maxBy) {
         this(bounds, held(bounds, true, minBy), held(bounds, false, maxBy));
     }
 

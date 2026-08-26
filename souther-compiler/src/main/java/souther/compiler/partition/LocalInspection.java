@@ -137,12 +137,8 @@ final class LocalInspection {
         }
         // Taken in, which a record can do by moving the end or by taking away the value it stops
         // at. `low < high` under one `[0, 1]` leaves `low` the same 1 and no longer holding it, and
-        // that is the record's doing as much as a smaller number would have been — so the question
-        // is asked of the whole end and not of the place it stands at.
-        //
-        // And of the end rather than of how it was written. A number arriving by another route is
-        // written as that route wrote it, and a derived equality tells `3.0` from `3.00`; read that
-        // way, a record that moved nothing was taken to have taken the end in.
+        // that is the record's doing as much as a smaller number would have been — so this asks
+        // whether the two are the same end, which is where a range stops and not what an end holds.
         boolean moved = own != null && !own.at().sameAs(end.at());
         // Wrapped here, and this is not a consumer settling what a rule is: which rule drew the end
         // was settled where the clause was read and arrives as it was. What is added is a
