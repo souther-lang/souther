@@ -48,10 +48,32 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
 
     /** The same, where the rules leave the quantity only what lies between two values. */
     private static List<String> within(String low, String high, Seam... parted) {
-        return QuantityArrangement.of(NUMBERS, List.of(parted),
+        return QuantityArrangement.of(NUMBERS, byItsOwnRule(parted),
                         low == null ? null : Bound.at(at(low), true),
                         high == null ? null : Bound.at(at(high), true))
                 .bands().stream().map(Band::key).toList();
+    }
+
+    /** Each place with a line of its own against it, these being tests about where the values part
+     *  and not about who parted them. */
+    private static List<Parting> byItsOwnRule(Seam... parted) {
+        List<Parting> out = new java.util.ArrayList<>();
+        for (Seam each : parted) {
+            out.add(Parting.by(each, aLine(out.size())));
+        }
+        return out;
+    }
+
+    /** One clause of one declaration, told from the next by which clause of it this is. */
+    static AuthoredLine aLine(int clause) {
+        return new AuthoredLine(new souther.compiler.check.RuleRef.Invariant(
+                new souther.compiler.check.Clause.Ref(
+                        new souther.compiler.check.Clause.Id(
+                                souther.compiler.types.TypeSymbols.declared(
+                                        new souther.compiler.types.TypeKey("example.runs", "N")),
+                                clause),
+                        java.util.Optional.empty())),
+                0, new LineFacts(false, true, false), List.of());
     }
 
     /**
@@ -64,7 +86,8 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
      */
     @Test
     void aRunHoldsTheValuesFromItsFirstToItsLast() {
-        Band mid = QuantityArrangement.of(NUMBERS, List.of(upTo("10"), upTo("20"))).bands().get(1);
+        Band mid = QuantityArrangement.of(NUMBERS, byItsOwnRule(upTo("10"), upTo("20")))
+                .bands().get(1);
 
         assertEquals(false, mid.holds(at("10")), "ten is the last value below it");
         assertEquals(true, mid.holds(at("11")), "eleven is its first");
@@ -75,7 +98,7 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
     /** And a run with no seam under it runs from wherever the rules start the quantity. */
     @Test
     void aRunWithNothingPartingItBelowRunsFromTheStart() {
-        Band first = QuantityArrangement.of(NUMBERS, List.of(upTo("10")),
+        Band first = QuantityArrangement.of(NUMBERS, byItsOwnRule(upTo("10")),
                         Bound.at(at("0"), true), null)
                 .bands().get(0);
 
@@ -102,7 +125,7 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
                 LevelSpace.overFiniteDecimals(LevelSpace.generatorOverFiniteDecimals(three)),
                 new Level.ACount(new Count(java.math.BigDecimal.ONE)), Towards.BELOW,
                 new Seam.Scale(three, dense));
-        Band below = QuantityArrangement.of(decimals, List.of(third)).bands().get(0);
+        Band below = QuantityArrangement.of(decimals, byItsOwnRule(third)).bands().get(0);
 
         assertEquals(true, below.holds(decimal(dense, "0.2")), "a fifth is under a third");
         assertEquals(false, below.holds(decimal(dense, "0.5")),
@@ -133,10 +156,44 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
 
         for (List<Seam> order : List.of(List.of(keeps, givesAway), List.of(givesAway, keeps))) {
             assertEquals(List.of("|", "0.5|0.5", "|"),
-                    QuantityArrangement.of(decimals, order).bands().stream()
+                    QuantityArrangement.of(decimals,
+                                    byItsOwnRule(order.toArray(new Seam[0]))).bands().stream()
                             .map(Band::key).toList(),
                     "read in either order, the number itself is a run of its own: " + order);
         }
+    }
+
+    /**
+     * Two rules at one place divide the quantity once, and both of them are against that place.
+     *
+     * <p>Where the values part is the quantity's answer, so a second rule at one number leaves the
+     * runs as they were. Which rules put a line there is the model's, and both did — each of them
+     * enough on its own, since taking either away leaves the place where it is.
+     *
+     * <p>Told apart by whoever read them instead, one of the two stood for the other and the second
+     * line was not written down anywhere. Which is why the arrangement is the only place that says
+     * two candidates are one place.
+     */
+    @Test
+    void twoRulesAtOnePlaceAreOnePlaceWithBothLinesAgainstIt() {
+        QuantityArrangement arranged = QuantityArrangement.of(NUMBERS,
+                List.of(Parting.by(upTo("10"), aLine(0)), Parting.by(upTo("10"), aLine(1))));
+
+        assertEquals(1, arranged.partings().size(), "the values part once");
+        assertEquals(List.of(aLine(0), aLine(1)), arranged.partings().get(0).alternatives(),
+                "and each of the two lines is against that place");
+        assertEquals(List.of("|10", "11|"), arranged.bands().stream().map(Band::key).toList(),
+                "so there are two runs and not three");
+    }
+
+    /** And a rule read twice is one rule, which is what says how many runs a row answers for. */
+    @Test
+    void oneRuleReadTwiceIsOneLineAgainstThePlace() {
+        QuantityArrangement arranged = QuantityArrangement.of(NUMBERS,
+                List.of(Parting.by(upTo("10"), aLine(0)), Parting.by(upTo("10"), aLine(0))));
+
+        assertEquals(List.of(aLine(0)), arranged.partings().get(0).alternatives(),
+                "one line, however many readings of it arrived");
     }
 
     /**

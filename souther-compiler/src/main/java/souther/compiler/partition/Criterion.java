@@ -237,7 +237,7 @@ public sealed interface Criterion {
         // walks away from it — which is why this is not what the run holds: two decimals a rule
         // holds apart have every distance past the line and no first one.
         Seam edge = in.away() == Towards.ABOVE
-                ? in.band().lower().parting() : in.band().upper().parting();
+                ? in.band().lower().seam() : in.band().upper().seam();
         return edge == null ? null : edge.at().asALevelOfTheQuantity();
     }
 

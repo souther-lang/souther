@@ -27,14 +27,15 @@ public sealed interface BandEnd {
     /**
      * A rule parts the values here.
      *
-     * @param seam    where they part, which is what the run is named after
+     * @param parting where they part and which lines the model wrote there, which is what the run
+     *                is named after and what a row inside it is owed to
      * @param reaches how far the run gets on this side, which is the line or what the rules leave,
      *                whichever is the tighter
      */
-    record AtParting(Seam seam, Bound reaches) implements BandEnd {
+    record AtParting(Parting parting, Bound reaches) implements BandEnd {
 
         public AtParting {
-            if (seam == null) {
+            if (parting == null) {
                 throw new IllegalArgumentException("a run parted here is parted by something");
             }
         }
@@ -81,9 +82,14 @@ public sealed interface BandEnd {
         };
     }
 
-    /** The line that parts the values here, or null where nothing parts them and the run stops for
-     *  another reason. */
-    default Seam parting() {
-        return this instanceof AtParting parted ? parted.seam() : null;
+    /** Where the values part here and what wrote the lines, or null where nothing parts them and
+     *  the run stops for another reason. */
+    default Parting parting() {
+        return this instanceof AtParting parted ? parted.parting() : null;
+    }
+
+    /** The same place as the quantity's own answer about it, or null on the same reading. */
+    default Seam seam() {
+        return this instanceof AtParting parted ? parted.parting().geometry() : null;
     }
 }

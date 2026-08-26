@@ -150,7 +150,7 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
      *               or not
      */
     public static Border at(BoundaryTarget target, OriginRef origin, NumericDomain.Bounds within,
-                            java.util.List<Seam> parted) {
+                            java.util.List<Parting> parted) {
         NumericDomain.Bounds reach = within == null ? new NumericDomain.Bounds(null, null) : within;
         LevelSpace space = target.levels();
         Level cut = target.at();
@@ -161,9 +161,13 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
                     "a border built on a line the quantity does not reach: " + target.left()
                             + " at " + target.right());
         }
-        Seam mine = parts(target, origin);
-        java.util.List<Seam> all = new java.util.ArrayList<>(parted);
-        if (mine != null && all.stream().noneMatch(each -> each.key().equals(mine.key()))) {
+        Parting mine = partedBy(target, origin);
+        java.util.List<Parting> all = new java.util.ArrayList<>(parted);
+        if (mine != null) {
+            // Handed over as a candidate rather than told apart here. Whether this line is one the
+            // others already hold is a question about where the values part, and the arrangement is
+            // what answers it — asked here as well, this reading kept whichever of two lines at one
+            // place it met first and the other went unsaid.
             all.add(mine);
         }
         QuantityArrangement arrangement = QuantityArrangement.of(space, all,
@@ -253,25 +257,24 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
      */
     public static java.util.List<Border> allOf(java.util.List<LineDrawn> drawn,
                                                java.util.Map<String,
-                                                       java.util.List<Seam>> alsoParted,
+                                                       java.util.List<Parting>> alsoParted,
                                                LinesRead read) {
         // Collected in the quantity's own units, because that is the only order the lines of one
         // quantity are all on. Two rules can write one quantity at two scales — `3a + 6b > 48` and
         // `a + 2b > 20` run the same way — and the numbers they carry are not comparable until both
         // are read as what they are a multiple of.
-        java.util.Map<String, java.util.List<Seam>> byQuantity = new java.util.LinkedHashMap<>();
+        java.util.Map<String, java.util.List<Parting>> byQuantity = new java.util.LinkedHashMap<>();
         alsoParted.forEach((key, parted) ->
                 byQuantity.computeIfAbsent(key, _ -> new java.util.ArrayList<>()).addAll(parted));
         for (LineDrawn each : drawn) {
             if (!ordersAroundTheCut(each.by())) {
                 continue;
             }
-            Seam parts = each.cuts().seam();
-            java.util.List<Seam> already = byQuantity.computeIfAbsent(
-                    each.cuts().quantity().key(), _ -> new java.util.ArrayList<>());
-            if (already.stream().noneMatch(had -> had.key().equals(parts.key()))) {
-                already.add(parts);
-            }
+            // Every line as it was read. Two of them at one place are one place with two lines
+            // against it, which the arrangement says and this does not: told apart here, whichever
+            // was read first stood for the other and the second line was not written down anywhere.
+            byQuantity.computeIfAbsent(each.cuts().quantity().key(), _ -> new java.util.ArrayList<>())
+                    .add(Parting.by(each.cuts().seam(), each.by().authoredLine()));
         }
         java.util.List<Border> out = new java.util.ArrayList<>();
         for (LineDrawn each : drawn) {
@@ -279,9 +282,9 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
             // a row in. A border reads rows through the form it was written as, so a run handed to
             // it in another scale would be held against numbers of a different size.
             java.math.BigDecimal per = each.cuts().per();
-            java.util.List<Seam> beside =
+            java.util.List<Parting> beside =
                     byQuantity.getOrDefault(each.cuts().quantity().key(), java.util.List.of())
-                            .stream().map(seam -> seam.scaledBy(per)).toList();
+                            .stream().map(parting -> parting.scaledBy(per)).toList();
             // One line drawn, one border. Which lines there are was settled by whoever read the
             // rules — a comparison whose line the quantity does not reach is no line, and says so
             // there ({@code ComparisonAssessment.OutsideTheDomain}) — so nothing here decides it
@@ -301,11 +304,24 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
     }
 
     /**
-     * Where the rule this reading met parts the quantity's values.
+     * Where the rule this reading met parts the quantity's values, and the line it wrote there.
      *
      * <p>For a caller collecting every place one quantity is parted before any border is built. A
      * border's two points away from the line are runs of the arrangement those places make, so a
      * border built without them knows only its own line and reads each side to the end of the order.
+     *
+     * <p>The line travels with the place because what a run beside it is owed to is the line and not
+     * the place: two rules can part the values at one number, and each of them is one an author
+     * could move without touching the other.
+     */
+    public static Parting partedBy(BoundaryTarget target, OriginRef origin) {
+        Seam parts = parts(target, origin);
+        return parts == null ? null : Parting.by(parts, origin.authoredLine());
+    }
+
+    /**
+     * The same as the quantity's own answer about it, for a caller that is asking where the values
+     * part and not who parted them.
      */
     public static Seam parts(BoundaryTarget target, OriginRef origin) {
         // Null for a rule that orders nothing around its line. A bound is where the quantity stops

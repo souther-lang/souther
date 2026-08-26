@@ -36,12 +36,13 @@ public record Band(BandEnd lower, BandEnd upper) {
      *
      * @param inward which way the run lies from this end
      */
-    public static BandEnd endAt(Seam parted, Bound leaves, Towards inward) {
+    public static BandEnd endAt(Parting parted, Bound leaves, Towards inward) {
         if (parted == null) {
             return leaves == null ? new BandEnd.AtOrderEnd(inward.opposite())
                     : new BandEnd.AtDomain(leaves);
         }
-        return new BandEnd.AtParting(parted, tighter(atTheLine(parted, inward), leaves, inward));
+        return new BandEnd.AtParting(parted,
+                tighter(atTheLine(parted.geometry(), inward), leaves, inward));
     }
 
     /**
@@ -83,8 +84,8 @@ public record Band(BandEnd lower, BandEnd upper) {
 
     private static BandEnd canonical(BandEnd end) {
         return switch (end) {
-            case BandEnd.AtParting(Seam seam, Bound reaches) ->
-                    new BandEnd.AtParting(seam.canonical(), reaches.canonical());
+            case BandEnd.AtParting(Parting parted, Bound reaches) ->
+                    new BandEnd.AtParting(parted.canonical(), reaches.canonical());
             case BandEnd.AtDomain(Bound reaches) -> new BandEnd.AtDomain(reaches.canonical());
             case BandEnd.AtOrderEnd order -> order;
         };
@@ -100,13 +101,13 @@ public record Band(BandEnd lower, BandEnd upper) {
      * is named after the line an author wrote and not after the value beside it.
      */
     public souther.compiler.numeric.Endpoint lineBelow(souther.compiler.numeric.Endpoint leaves) {
-        Seam parted = lower.parting();
+        Seam parted = lower.seam();
         return parted == null ? leaves : asAnEnd(parted, Towards.ABOVE);
     }
 
     /** The line above it, on the same reading. */
     public souther.compiler.numeric.Endpoint lineAbove(souther.compiler.numeric.Endpoint leaves) {
-        Seam parted = upper.parting();
+        Seam parted = upper.seam();
         return parted == null ? leaves : asAnEnd(parted, Towards.BELOW);
     }
 
@@ -147,13 +148,13 @@ public record Band(BandEnd lower, BandEnd upper) {
 
     /** The first value in this run, or null where the order names none there. */
     public Level first() {
-        Seam parted = lower.parting();
+        Seam parted = lower.seam();
         return parted == null ? valueAt(left(lower)) : parted.above();
     }
 
     /** The last, on the same reading. */
     public Level last() {
-        Seam parted = upper.parting();
+        Seam parted = upper.seam();
         return parted == null ? valueAt(left(upper)) : parted.below();
     }
 
@@ -197,8 +198,8 @@ public record Band(BandEnd lower, BandEnd upper) {
      * hundred is the one value that will not do.
      */
     public String written(BorderQuantity of, Level except) {
-        Seam under = lower.parting();
-        Seam over = upper.parting();
+        Seam under = lower.seam();
+        Seam over = upper.seam();
         String low = except != null && same(except, first())
                 ? of.writtenAt(except) + " < "
                 : under != null ? said(of, under, Towards.ABOVE)
@@ -307,8 +308,8 @@ public record Band(BandEnd lower, BandEnd upper) {
      * on the position and a line on a multiple of it relates a row to both.
      */
     public java.math.BigDecimal sharedMultiple() {
-        Seam under = lower.parting();
-        Seam over = upper.parting();
+        Seam under = lower.seam();
+        Seam over = upper.seam();
         if (under == null || over == null
                 || under.attainedLine() != null || over.attainedLine() != null
                 || under.below() != null || under.above() != null
@@ -357,17 +358,18 @@ public record Band(BandEnd lower, BandEnd upper) {
     private static BandEnd mappedBy(BandEnd end, Towards inward,
                                     java.util.function.UnaryOperator<Level> onto) {
         return switch (end) {
-            case BandEnd.AtParting(Seam seam, Bound reaches) -> {
-                Seam moved = seam.mappedBy(onto);
+            case BandEnd.AtParting(Parting parted, Bound reaches) -> {
+                Seam moved = parted.geometry().mappedBy(onto);
                 if (moved == null) {
                     yield null;
                 }
                 // Where the run reaches is worked out again from what moved, because the two things
                 // it is the tighter of move by different rules: a line goes through the seam, and an
                 // end the rules leave is at a value of the quantity and goes through that.
-                yield new BandEnd.AtParting(moved, reaches.equals(atTheLine(seam, inward))
-                        ? atTheLine(moved, inward)
-                        : tighter(atTheLine(moved, inward), mapped(reaches, onto), inward));
+                yield new BandEnd.AtParting(new Parting(moved, parted.alternatives()),
+                        reaches.equals(atTheLine(parted.geometry(), inward))
+                                ? atTheLine(moved, inward)
+                                : tighter(atTheLine(moved, inward), mapped(reaches, onto), inward));
             }
             case BandEnd.AtDomain(Bound reaches) -> new BandEnd.AtDomain(mapped(reaches, onto));
             case BandEnd.AtOrderEnd order -> order;
