@@ -132,6 +132,10 @@ class DecimalArithmeticIsTheRunTimesAndNotTheBackendsTest {
      * the call for {@code compare}/{@code fromInt}, and a declaration-reading one for
      * {@code toInt}/{@code round}. Four shapes is four places to decide a question that has one
      * answer, which is how {@code divide} came to be the one narrowing its scale.
+     *
+     * <p>What each is emitted as is now what every runtime kernel is emitted as, so what is left to
+     * hold here is the owner: a Decimal operation is answered by the Decimal runtime and by nothing
+     * else.
      */
     @Test
     void everyDecimalKernelIsOneEmitterOwnedByTheDecimalRunTime() {
@@ -144,14 +148,14 @@ class DecimalArithmeticIsTheRunTimesAndNotTheBackendsTest {
                 continue;
             }
             seen.add(row.getKey().key());
-            if (!(row.getValue() instanceof Intrinsics.DeclaredStatic kernel)
+            if (!(row.getValue() instanceof Intrinsics.RuntimeStatic kernel)
                     || !Descriptors.CD_DecimalMath.equals(kernel.owner())) {
                 otherwise.add(row.getKey().key() + " is emitted as " + row.getValue());
             }
         }
 
         assertEquals(List.of(), otherwise,
-                "a Decimal kernel is emitted by something other than DeclaredStatic on DecimalMath");
+                "a Decimal kernel is emitted by something other than a static on DecimalMath");
         assertEquals(Set.of("decimal.add", "decimal.subtract", "decimal.multiply", "decimal.divide",
                         "decimal.compare", "decimal.fromInt", "decimal.toInt", "decimal.round"),
                 seen,

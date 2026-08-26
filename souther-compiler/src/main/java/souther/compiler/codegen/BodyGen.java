@@ -1169,8 +1169,8 @@ final class BodyGen {
                         break;
                     }
                     code.invokestatic(cd(ordering), ORDERING_METHOD, MTD_ordering, true);
-                    Intrinsics.emitWithComparator(this, kernel,
-                            List.of(genExpr(call.args().get(0))));
+                    genExpr(call.args().get(0));
+                    Intrinsics.emitWithComparator(this, kernel);
                     return;
                 }
                 // `sortBy` orders by what its key answers, not by what the list holds, so its
@@ -1183,8 +1183,8 @@ final class BodyGen {
                     code.invokestatic(cd(ordering), ORDERING_METHOD, MTD_ordering, true);
                     emitFunctionValue(call.args().get(0),
                             List.of(((Type.ListOf) call.args().get(1).type()).element()));
-                    Intrinsics.emitWithComparator(this, kernel,
-                            List.of(key, genExpr(call.args().get(1))));
+                    genExpr(call.args().get(1));
+                    Intrinsics.emitWithComparator(this, kernel);
                     return;
                 }
                 case INT_DIVIDE -> {
