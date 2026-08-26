@@ -65,6 +65,27 @@ class OneBorderReadTwiceIsOneReadingTest {
                 "while a reading against itself is one reading");
     }
 
+    /**
+     * Two readings that differ only in who can move where a run stops are one reading.
+     *
+     * <p>Which declarations took the position in travels inside the border, because it is settled
+     * where the region is worked out and nothing downstream can work it out again. So it is inside
+     * the records' own equality, and the two readers that compare borders would have started saying
+     * two readings of one line are two the day a position was narrowed differently at two places.
+     * That is the day this method exists for.
+     */
+    @Test
+    void whoCanMoveTheEndIsNoPartOfWhichReadingThisIs() {
+        Border narrowed = bound(List.of(), new NarrowedEnds(List.of(), List.of(aDeclaration())));
+        Border bare = bound(List.of(), NarrowedEnds.NONE);
+
+        assertNotEquals(bare, narrowed,
+                "the two do differ, and this is what they differ in");
+        assertTrue(bare.sameReadingAs(narrowed),
+                "and neither the line nor what a row at any of its points has to do is any"
+                        + " different, so it is one reading of one line");
+    }
+
     /** And one line met at two positions is two readings, whatever each of them owes. */
     @Test
     void oneLineMetAtTwoPositionsIsTwoReadings() {
@@ -77,10 +98,20 @@ class OneBorderReadTwiceIsOneReadingTest {
 
     /** A bound at a hundred, leaving everything up to a thousand, told about {@code parted}. */
     private static Border bound(List<Parting> parted) {
+        return bound(parted, NarrowedEnds.NONE);
+    }
+
+    /** The same, told which declarations took the ends of the position in. */
+    private static Border bound(List<Parting> parted, NarrowedEnds narrowed) {
         return Border.at(aLineAt("w.a", 100), aBound(),
                 new NumericDomain.Bounds(Endpoint.inclusive(Count.of(100)),
                         Endpoint.inclusive(Count.of(1000))),
-                parted);
+                parted, narrowed);
+    }
+
+    /** A declaration that could have moved where the position stops. */
+    private static souther.compiler.types.TypeSymbol.AtModule aDeclaration() {
+        return TypeSymbols.declared(new TypeKey("example.weigh", "Held"));
     }
 
     private static LevelSpace space() {

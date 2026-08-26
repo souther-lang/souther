@@ -118,6 +118,57 @@ class WhichModuleKeepsTheAccountOfARunTest {
                 "nothing here reads the line, so nothing here is short a row at it");
     }
 
+    /** Another module that takes the same imported position in to the same place. */
+    private static final String ALSO_NARROWER = """
+            module example.also
+
+            import example.producer ( Cap )
+
+            data Bound = Int
+                invariant capped = value <= 50
+
+            data Kept = { c: Cap, b: Bound }
+                invariant tight = c.value <= b.value
+
+            behavior keep : (k: Kept) -> Int
+            let keep (k) = 1
+
+            example keep
+                | "x" : (Kept { c = Cap(1), b = Bound(2) }) -> 1
+            """;
+
+    /**
+     * One point can be two modules' to answer for, and each of them is told about its own.
+     *
+     * <p>Two records in two modules take the same imported position in to the same place, so the run
+     * above the imported floor stops at one end and is one thing to write a row for. Each module
+     * reads it and each put that end there, so each keeps an account of it — and what each account
+     * names is that module's own declaration, because a report telling one module's author to change
+     * another module's source is not a thing to write.
+     */
+    @Test
+    void onePointCanBeAnsweredForInTwoModules() {
+        Compilation both = compiled(PRODUCER, NARROWER, ALSO_NARROWER);
+        Adequacy.DeclaredDebt here = aboveTheFloor(both, "example.narrower");
+        Adequacy.DeclaredDebt there = aboveTheFloor(both, "example.also");
+
+        assertEquals(here.debt().point(), there.debt().point(),
+                "the run stops in one place and is one thing to write a row for");
+        assertEquals("Held", here.subject().named());
+        assertEquals("Kept", there.subject().named(),
+                "and each module is answered for by the declaration it wrote");
+    }
+
+    /** The debt for the run above the imported floor, in one module's account of it. */
+    private static Adequacy.DeclaredDebt aboveTheFloor(Compilation compilation, String module) {
+        List<Adequacy.DeclaredDebt> debts = debtsOf(compilation, module);
+        return debts.stream()
+                .filter(each -> each.debt().said().equals("value in 0 < value <= 50"))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError(
+                        module + " keeps no account of the run above the floor: " + said(debts)));
+    }
+
     private static List<String> said(List<Adequacy.DeclaredDebt> debts) {
         return debts.stream().map(each -> each.debt().role() + " " + each.debt().said()).toList();
     }
