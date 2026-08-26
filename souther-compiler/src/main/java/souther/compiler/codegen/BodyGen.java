@@ -989,9 +989,10 @@ final class BodyGen {
         /** Whether emitting {@code e} emits a loop — a fold, or the walk a fold that grows a collection
          *  became. What it decides is whether a value being constructed can stay on the stack while its
          *  fields are built. */
-        private static boolean walksInside(Core e) {
+        private boolean walksInside(Core e) {
             if (e instanceof Core.Call c
-                    && ((c.fn() instanceof Core.Reached r && Core.THE_WALK.equals(r.denotes()))
+                    && ((c.fn() instanceof Core.Reached r
+                            && ctx.symbols.theWalk().equals(r.denotes()))
                     || c.fn() == Core.Emitted.BUILD_LIST || c.fn() == Core.Emitted.BUILD_MAP)) {
                 return true;
             }
@@ -1240,7 +1241,7 @@ final class BodyGen {
             switch (reached.reaches()) {
                 case Core.Reaches.AHelper _ -> {
                     // The one loop the language has is emitted where it stands, not called.
-                    if (!Core.THE_WALK.equals(reached.denotes()) || !folded(call)) {
+                    if (!ctx.symbols.theWalk().equals(reached.denotes()) || !folded(call)) {
                         recursiveHelperCall(call);
                     }
                 }

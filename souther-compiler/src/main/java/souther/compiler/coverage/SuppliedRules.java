@@ -38,7 +38,8 @@ public record SuppliedRules(Map<BindingOwner, Handed> byExpansion) {
      * finds whichever copy spells one that way, which is the innermost one as often as the right
      * one.
      */
-    public record Handed(String declaration, Map<String, RuleIdentity> rules) {
+    public record Handed(souther.compiler.types.ReachName declaration,
+                         Map<String, RuleIdentity> rules) {
 
         public Handed {
             rules = Map.copyOf(rules);
@@ -51,8 +52,11 @@ public record SuppliedRules(Map<BindingOwner, Handed> byExpansion) {
         return handed == null ? null : handed.rules().get(parameter);
     }
 
-    /** Which declaration {@code expansion} is a copy of, or null where nothing here says. */
-    public String declarationOf(BindingOwner expansion) {
+    /** Which declaration {@code expansion} is a copy of, or null where nothing here says.
+     *  As the reference that reached it — what a call carries, and what
+     *  {@link DecisionSource.Supplied#declaration} is, so the two are compared as identities and
+     *  not as two spellings that happen to agree. */
+    public souther.compiler.types.ReachName declarationOf(BindingOwner expansion) {
         Handed handed = byExpansion.get(expansion);
         return handed == null ? null : handed.declaration();
     }
@@ -60,14 +64,15 @@ public record SuppliedRules(Map<BindingOwner, Handed> byExpansion) {
     /** What is being built while a body is read. */
     public static final class Builder {
 
-        private final Map<BindingOwner, String> of = new LinkedHashMap<>();
+        private final Map<BindingOwner, souther.compiler.types.ReachName> of =
+                new LinkedHashMap<>();
         private final Map<BindingOwner, Map<String, RuleIdentity>> byExpansion =
                 new LinkedHashMap<>();
 
         /** Says that {@code expansion} is a copy of {@code declaration} and was handed {@code rule}
          *  at {@code parameter}. */
-        public void handed(BindingOwner expansion, String declaration, String parameter,
-                           RuleIdentity rule) {
+        public void handed(BindingOwner expansion, souther.compiler.types.ReachName declaration,
+                           String parameter, RuleIdentity rule) {
             of.putIfAbsent(expansion, declaration);
             byExpansion.computeIfAbsent(expansion, _ -> new LinkedHashMap<>())
                     .putIfAbsent(parameter, rule);

@@ -58,13 +58,12 @@ class TheCallGraphReadsASugarFromTheLibraryThatDeclaresItTest {
                 ConstructionOrigin.own(), POS, null);
     }
 
-    /** The library's helpers as a table is keyed: under the alias the library publishes each by,
-     *  which the library says rather than this splitting its qualified name. */
+    /** The library's helpers as a table is keyed: under the operation each is the body of, which
+     *  the library says rather than this splitting a qualified name. */
     private static Map<ReachName, HelperEntry> libraryHelpers() {
         Map<ReachName, HelperEntry> reachable = new LinkedHashMap<>();
-        DefaultStdlib.get().helpers().forEach((qualified, def) -> {
-            ReachName reference =
-                    new ReachName.OfLibrary(DefaultStdlib.get().operation(qualified));
+        DefaultStdlib.get().helpers().forEach((operation, def) -> {
+            ReachName reference = new ReachName.OfLibrary(operation);
             reachable.put(reference, HelperEntry.reached(reference, def));
         });
         return reachable;

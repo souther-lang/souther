@@ -5,7 +5,6 @@ import souther.compiler.semantics.ArgumentRef;
 import souther.compiler.semantics.Combinator;
 import souther.compiler.semantics.ElementLineage;
 import souther.compiler.ast.DefinitionName;
-import souther.compiler.core.Core;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.StructuralCost;
 import souther.compiler.ast.WrittenName;
@@ -557,13 +556,19 @@ public final class HelperInliner {
         return appliedHelper(call);
     }
 
-    /** {@code fold} is the one privileged loop primitive that takes a block (spec §stdlib-list); its block is
-     * the first argument and has two parameters (`(acc, x)`, spec §pipe). A bare name passed in its
-     * place is sugar for a block that wraps a call. The map is from the combinator name to the block's
-     * argument index. The other combinators (map/filter/all/any) are ordinary prelude helpers derived
-     * from fold (ADR-0028), so they need no such desugaring — a name reaches their function parameter
-     * directly. */
-    private static final Map<ValueName, Integer> BLOCK_ARG = Map.of(Core.THE_WALK, 0);
+    /**
+     * Which argument of the walk holds its block.
+     *
+     * <p>The walk is the one privileged loop primitive that takes a block (spec §stdlib-list); its
+     * block is the first argument and has two parameters (`(acc, x)`, spec §pipe). A bare name
+     * passed in its place is sugar for a block that wraps a call. The other combinators
+     * (map/filter/all/any) are ordinary prelude helpers derived from the walk (ADR-0028), so they
+     * need no such desugaring — a name reaches their function parameter directly.
+     *
+     * <p>Which argument, and not which operation: what the walk is, the library says
+     * ({@link Stdlib#theWalk}).
+     */
+    private static final int BLOCK_ARG_OF_THE_WALK = 0;
 
     /**
      * The rewrite {@code call} takes, or null where it takes none.
@@ -897,7 +902,7 @@ public final class HelperInliner {
      * was decided by whoever called this, and answering with the parameter's own spelling would be
      * a declaration of that name, of which there is none.
      */
-    private String reaches(Hir.Var.Denoting named) {
+    private ReachName reaches(Hir.Var.Denoting named) {
         return callables.reached(named);
     }
 
@@ -1372,7 +1377,7 @@ public final class HelperInliner {
      */
     private Arguments bindArguments(Hir.Apply rawCall, Hir.Apply call, Hir.FnDef helper,
                                     List<Hir.Expr> args, Map<String, Type> applied,
-                                    Hir.Binders ours, BindingOwner mine, String declaration) {
+                                    Hir.Binders ours, BindingOwner mine, ReachName declaration) {
         // what stands in the body for each of the callee's parameters: the name it is written
         // as and what that name resolved to at the call site, so the expansion carries the
         // argument's own answer rather than deciding one for it
@@ -1729,7 +1734,9 @@ public final class HelperInliner {
         if (call.answered() == null) {
             return call;   // it reaches nothing, so it is no named block to desugar
         }
-        Integer idx = BLOCK_ARG.get(call.answered().denotes());
+        // Only the walk takes a block, and which operation that is, the library says.
+        Integer idx = table.library().theWalk().equals(call.answered().denotes())
+                ? BLOCK_ARG_OF_THE_WALK : null;
         if (idx == null || idx >= call.args().size()
                 || !(call.args().get(idx) instanceof Hir.Var v)
                 || !(v.answered() instanceof Hir.Var.Denoting named)) {

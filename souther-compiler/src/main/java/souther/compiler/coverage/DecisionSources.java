@@ -93,25 +93,22 @@ public record DecisionSources(Map<CoverageOrigin, DecisionSource> byFork, boolea
      */
     public static DecisionSources of(
             Map<souther.compiler.types.ReachName, souther.compiler.check.HelperEntry> reachable,
-            Hir.FnDef... own) {
-        // Keyed the way a call reaches them, which is what the forks below are looked up by. The
-        // reference renders that way and the entry says which reference each is, so nothing here
-        // spells a name out of a declaration.
-        Map<String, Hir.FnDef> declarations = new LinkedHashMap<>();
+            Map<souther.compiler.types.ReachName, Hir.FnDef> own) {
+        // Keyed by the reference a call reaches each by, which is what the forks below are looked
+        // up by and what a call carries. Rendered into a string here, this would be a summary
+        // joined to a call by a spelling, which is the join the reference exists to make
+        // unnecessary.
+        Map<souther.compiler.types.ReachName, Hir.FnDef> declarations = new LinkedHashMap<>();
         reachable.forEach((reference, entry) ->
-                declarations.put(reference.rendered(), entry.definition()));
-        for (Hir.FnDef each : own) {
-            if (each != null) {
-                declarations.put(each.name(), each);
-            }
-        }
+                declarations.put(reference, entry.definition()));
+        declarations.putAll(own);
         AnswerDependencies answersOn = AnswerDependencies.of(declarations);
         Map<CoverageOrigin, DecisionSource> byFork = new LinkedHashMap<>();
         declarations.forEach((declaration, fn) -> forks(declaration, fn, answersOn, byFork));
         return new DecisionSources(byFork);
     }
 
-    private static void forks(String declaration, Hir.FnDef fn, AnswerDependencies answersOn,
+    private static void forks(souther.compiler.types.ReachName declaration,Hir.FnDef fn, AnswerDependencies answersOn,
                               Map<CoverageOrigin, DecisionSource> out) {
         if (!(fn.body() instanceof Hir.FnBody.Written written)) {
             return;
@@ -128,7 +125,7 @@ public record DecisionSources(Map<CoverageOrigin, DecisionSource> byFork, boolea
      * afresh at each fork found the name and not what it stands for — and called a fork the caller
      * decides the declaration's own.
      */
-    private static void forks(Hir.Expr e, String declaration, Rules rules,
+    private static void forks(Hir.Expr e, souther.compiler.types.ReachName declaration,Rules rules,
                               AnswerDependencies answersOn, Map<BindingId, Set<String>> bound,
                               NamedCallables named, Map<CoverageOrigin, DecisionSource> out) {
         switch (e) {
@@ -169,7 +166,7 @@ public record DecisionSources(Map<CoverageOrigin, DecisionSource> byFork, boolea
                 child -> forks(child, declaration, rules, answersOn, bound, named, out));
     }
 
-    private static void said(CoverageOrigin fork, Hir.Expr cond, String declaration, Rules rules,
+    private static void said(CoverageOrigin fork, Hir.Expr cond, souther.compiler.types.ReachName declaration,Rules rules,
                              AnswerDependencies answersOn,
                              Map<BindingId, Set<String>> bound, NamedCallables named,
                              Map<CoverageOrigin, DecisionSource> out) {
@@ -239,7 +236,7 @@ public record DecisionSources(Map<CoverageOrigin, DecisionSource> byFork, boolea
                     return;
                 }
                 case Hir.Apply call when call.function() instanceof Hir.Var.Denoting callee -> {
-                    String reaches = named.reached(callee);
+                    souther.compiler.types.ReachName reaches = named.reached(callee);
                     Set<Integer> uses = reaches == null ? null : answersOn.of(reaches);
                     for (int i = 0; i < call.args().size(); i++) {
                         // Only the arguments the callee's answer rests on. An argument it never

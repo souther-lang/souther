@@ -5,6 +5,7 @@ import souther.compiler.stdlib.Stdlib;
 import souther.compiler.diag.CompileException;
 import souther.compiler.types.Denotation;
 import souther.compiler.types.TypeKey;
+import souther.compiler.types.ValueName;
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -41,6 +42,18 @@ public final class Symbols implements NameSense {
      *  operation, and a caller with none of its own has one to hand. */
     public static Symbols none(Stdlib stdlib) {
         return new Symbols("", Registry.empty(), Denoting.NONE, stdlib);
+    }
+
+    /**
+     * The one walk the library publishes, which an output lowers as a loop rather than as a call.
+     *
+     * <p>Handed on rather than looked up. An output holds these symbols already and this is one
+     * value of the language it was compiled against, so asking here is asking what it was given —
+     * where reaching {@link #library()} would be an output that could put any question to the
+     * library, which {@code TheBackendEmitsAgainstTheLanguageItWasHanded} keeps closed.
+     */
+    public ValueName.Stdlib theWalk() {
+        return stdlib.theWalk();
     }
 
     /** The library this module is compiled against. */

@@ -2,7 +2,6 @@ package souther.compiler.stdlib;
 
 import souther.compiler.Reserved;
 import souther.compiler.ast.Hir;
-import souther.compiler.core.Core;
 import souther.compiler.core.Kernel;
 import souther.compiler.core.KernelSignature;
 import souther.compiler.core.KernelSignatures;
@@ -111,7 +110,7 @@ public final class Stdlib {
     /** And which kernel each operation that is one reaches, so a reader holding a name asks the
      *  library rather than the declaration it would have to open to find out. */
     private final Map<String, Intrinsic> kernelOperations;
-    private final Map<String, Hir.FnDef> helpers;
+    private final Map<ValueName.Stdlib, Hir.FnDef> helpers;
     private final Set<String> published;
     private final Map<String, List<String>> candidates;
     /** The projection a resolver takes, worked out once with everything else. A set built on each
@@ -122,7 +121,7 @@ public final class Stdlib {
                    Map<String, ValueName.Stdlib> operations, Map<String, Rewrite> sugars,
                    Map<TypeKey, Hir.Def> language, Map<Kernel, Intrinsic> intrinsics,
                    Map<String, Intrinsic> kernelOperations,
-                   Map<String, Hir.FnDef> helpers, Set<String> published,
+                   Map<ValueName.Stdlib, Hir.FnDef> helpers, Set<String> published,
                    Map<String, List<String>> candidates) {
         this.entries = entries;
         this.privateNames = privateNames;
@@ -221,11 +220,31 @@ public final class Stdlib {
         return published;
     }
 
-    /** The Souther-bodied declarations (expanded inline at each call site), keyed by qualified name,
-     *  in declaration order. */
-    public Map<String, Hir.FnDef> helpers() {
+    /** The Souther-bodied declarations (expanded inline at each call site), by the operation each
+     *  is the body of, in declaration order. */
+    public Map<ValueName.Stdlib, Hir.FnDef> helpers() {
         return helpers;
     }
+
+    /**
+     * The one walk this library publishes: the recursion every fold in a program is.
+     *
+     * <p>An output lowers a call to it as a loop rather than as a call, so it has to say which
+     * operation that is. The library says: the alias is the library's, and a name written out
+     * wherever the lowering is done would be that place deciding what this library publishes its
+     * own walk as. Handed to an output the way a kernel's declaration is, so the output holds a
+     * value rather than a question it could put to the library.
+     *
+     * <p>That there is one, and that this library has it, is checked while the library is built.
+     */
+    public ValueName.Stdlib theWalk() {
+        return THE_WALK;
+    }
+
+    /** Which operation the walk is. Named where the library is described, so a library that
+     *  published it under another alias is refused rather than silently lowered as a call. */
+    private static final ValueName.Stdlib THE_WALK =
+            ValueName.Stdlib.operation("List", "foldFrom");
 
     /** What the language declares of its kernels, as the one value everything emitting a call to
      *  one reads. What a checked program carries across the boundary and what a backend derives its
@@ -405,7 +424,7 @@ public final class Stdlib {
             Map<String, Kernel> byKey = kernelsByKey();
             Map<Kernel, Intrinsic> intrinsics = new EnumMap<>(Kernel.class);
             Map<String, Intrinsic> kernelOperations = new LinkedHashMap<>();
-            Map<String, Hir.FnDef> helpers = new LinkedHashMap<>();
+            Map<ValueName.Stdlib, Hir.FnDef> helpers = new LinkedHashMap<>();
             for (Map.Entry<String, Entry> e : entries.entrySet()) {
                 Hir.FnBody body = e.getValue().declaration().body();
                 if (body instanceof Hir.FnBody.Intrinsic written) {
@@ -431,7 +450,16 @@ public final class Stdlib {
                     kernelOperations.put(e.getKey(), intrinsic);
                 }
                 if (body instanceof Hir.FnBody.Written) {
-                    helpers.put(e.getKey(), e.getValue().declaration());
+                    // Under the operation, which this already holds. Filed under the key it was
+                    // written with, a reader wanting the operation would have to ask for it back —
+                    // and the library is the only thing that can say which part of that key is the
+                    // alias, which is why nobody else may take it apart.
+                    ValueName.Stdlib operation = operations.get(e.getKey());
+                    if (operation == null) {
+                        throw new IllegalStateException("the standard library declares a body for `"
+                                + e.getKey() + "` and publishes no operation under that name");
+                    }
+                    helpers.put(operation, e.getValue().declaration());
                 }
             }
             // A sugar has no declaration, so nothing above put it among the operations; it is a
@@ -439,13 +467,9 @@ public final class Stdlib {
             Map<String, ValueName.Stdlib> named = new LinkedHashMap<>(operations);
             SUGARED.forEach(sugar -> named.put(sugar.written().qualified(), sugar.written()));
             Set<String> published = published(sugars.keySet(), named);
-            // The walk the language names is one this library has to have. An output lowers a call
-            // to it as a loop and says which operation that is by naming it; a library that
-            // published its walk as something else would leave that output emitting a call for the
-            // one thing the language guarantees is a loop, and nothing would say so.
-            if (!helpers.containsKey(Core.THE_WALK.qualified())) {
-                throw new IllegalStateException("the language's walk is `" + Core.THE_WALK
-                        + "` and this library publishes no such body");
+            if (!helpers.containsKey(THE_WALK)) {
+                throw new IllegalStateException("a library publishes the walk `" + THE_WALK
+                        + "` as a body of its own, and this one publishes no such body");
             }
             return new Stdlib(
                     Collections.unmodifiableMap(new LinkedHashMap<>(entries)),

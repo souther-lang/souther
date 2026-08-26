@@ -1938,7 +1938,12 @@ public final class Bodies {
                         // are written in it and nowhere else, and a reading without it leaves every
                         // one of them to whatever answer absence is given.
                         souther.compiler.coverage.DecisionSources.of(
-                                inliner.value().reachable(), fn.value()),
+                                inliner.value().reachable(),
+                                // Reached as this module reaches its own behavior, which is bare —
+                                // the forks below are looked up by the reference a call carries,
+                                // and this declaration is the one nothing calls.
+                                Map.of(new ReachName.Bare(
+                                        new ValueName.Behavior(module, behavior)), fn.value())),
                         body.value().supplied()), reports);
             } catch (Unanswerable _) {
                 // The name it rested on was reported where it was written. This body has no meaning

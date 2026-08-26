@@ -327,21 +327,6 @@ public sealed interface Core {
     }
 
     /**
-     * The one walk the language has: the recursion every fold in a program is.
-     *
-     * <p>Written in Souther in {@code souther.list} and published under {@code List}, so a call to
-     * it is a call to a method like any other — except where an output lowers it as a loop, which
-     * is a decision about how to emit this operation and needs to say which operation that is.
-     *
-     * <p>Here, in what the language's own vocabulary is written in, and not on either side that
-     * reads it. Named by the emitter it would be the emitter deciding what the library publishes
-     * its walk as; reached through the library it would be an output asking the library questions
-     * of its own, which is the arrangement {@code TheBackendEmitsAgainstTheLanguageItWasHanded}
-     * keeps closed. The library is held to publishing it when the library is built.
-     */
-    ValueName.Stdlib THE_WALK = ValueName.Stdlib.operation("List", "foldFrom");
-
-    /**
      * An operation this compiler emits, which no source names and no module declares.
      *
      * <p>Each is minted by a Core-to-Core pass ({@link GrowingFold}) for a shape the backend lowers

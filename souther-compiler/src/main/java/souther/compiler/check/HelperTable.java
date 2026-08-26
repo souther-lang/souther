@@ -122,20 +122,11 @@ public final class HelperTable {
         }
         Map<ReachName, HelperEntry> reached = new LinkedHashMap<>();
         if (policy == InliningPolicy.FULL) {
-            for (Map.Entry<String, Hir.FnDef> e : stdlib.helpers().entrySet()) {
-                ValueName.Stdlib operation = stdlib.operation(e.getKey());
-                if (operation == null) {
-                    // The library keys its helpers and its operations by one qualified name, so a
-                    // helper with no operation is a library that disagrees with itself about what
-                    // it publishes — and what would be built here is a reach name spelled out of
-                    // the key, which is the join this table exists to have no way of making.
-                    throw new IllegalStateException("the library holds a helper `" + e.getKey()
-                            + "` and says nothing about what name reaches it");
-                }
-                HelperEntry entry = HelperEntry.reached(new ReachName.OfLibrary(operation),
-                        e.getValue());
+            stdlib.helpers().forEach((operation, body) -> {
+                HelperEntry entry =
+                        HelperEntry.reached(new ReachName.OfLibrary(operation), body);
                 reached.put(entry.reachedAs(), entry);
-            }
+            });
         }
         for (Hir.FnDef fn : imported.values()) {
             HelperEntry entry = HelperEntry.reached(takenOnAs(fn), fn);

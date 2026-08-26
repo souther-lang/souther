@@ -237,11 +237,13 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
      */
     @Test
     void theNameAHelperIsReachedByDoesNotHoldTheModuleThatWroteIt() {
-        Hir.FnDef foldFrom = DefaultStdlib.get().helpers().get("List.foldFrom");
+        ValueName.Stdlib walk = DefaultStdlib.get().theWalk();
+        Hir.FnDef foldFrom = DefaultStdlib.get().helpers().get(walk);
 
-        assertEquals("souther.list", foldFrom.declaredIn());
+        assertEquals("List", walk.alias(), "reached under the alias the library publishes it as");
+        assertEquals("souther.list", foldFrom.declaredIn(), "and declared somewhere else");
         assertTrue(foldFrom.declaredIn().startsWith("souther."));
-        assertEquals("souther.list", foldFrom.reachedAs(new ReachName.OfLibrary(
-                ValueName.Stdlib.operation("List", "foldFrom"))).declaredIn());
+        assertEquals("souther.list",
+                foldFrom.reachedAs(new ReachName.OfLibrary(walk)).declaredIn());
     }
 }
