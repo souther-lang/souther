@@ -1,6 +1,7 @@
 package souther.compiler.inputs;
 
 import souther.compiler.check.Shape;
+import souther.compiler.check.StructuralDescent;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;

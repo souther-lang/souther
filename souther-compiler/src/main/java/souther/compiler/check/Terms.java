@@ -2628,12 +2628,11 @@ final class Terms {
     }
 
 
-    /** The type of {@code field} read from {@code owner}, or null where that is not a field of a
-     * declaration this module can see. Asked of the one field, since resolving the whole
-     * declaration's fields is a question about a declaration this reader may not own. */
+    /** The type of {@code field} read from {@code owner}, or null where nothing of that name is
+     * readable there. What a value has of its own is the one reading's answer, so a field every case
+     * of a sum spreads is read off the sum here exactly as it is where a body reads one. */
     Type fieldType(Type owner, String field) {
-        return owner instanceof Type.Ref r && symbols.declarations().declaration(r.name()) instanceof Hir.Data data
-                ? TypeOps.fieldType(data, field, symbols) : null;
+        return PositionReading.of(owner, symbols).fields().get(field);
     }
 
     /** What a container hands its closure: a list's or set's element, a map's value (the key is the

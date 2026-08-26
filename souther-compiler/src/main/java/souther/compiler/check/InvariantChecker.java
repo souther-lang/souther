@@ -830,11 +830,13 @@ public final class InvariantChecker {
             inner = new Core.FieldAccess(inner, "value", under, NOWHERE);
             worn = under;
         }
-        if (depth > GuaranteeWalk.FIELDS_SEEDED || !(worn instanceof Type.Ref ref)
-                || !(symbols.declarations().declaration(ref.name()) instanceof Hir.Data data) || data.newtype()) {
+        if (depth > GuaranteeWalk.FIELDS_SEEDED) {
             return;
         }
-        for (Map.Entry<String, Type> field : clauses.fieldsOf(data).entrySet()) {
+        // Which positions a value has is the reading's answer and not a second classification here:
+        // a record's fields, and the part a sum's cases share, which is readable on a value of the
+        // sum exactly as a field of a record is.
+        for (Map.Entry<String, Type> field : PositionReading.of(worn, symbols).positionsUnder().entrySet()) {
             name(new Core.FieldAccess(inner, field.getKey(), field.getValue(), NOWHERE),
                     GuaranteeWalk.under(path, field.getKey()), field.getValue(), at, symbols, depth + 1,
                     atoms, typeAt, held, keys);

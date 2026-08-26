@@ -66,7 +66,8 @@ class OneReadingSaysWhatAPositionIsAndHowItIsWrittenTest {
     /** The reading issue #631 is about. What the position is, is what the name wraps. */
     @Test
     void aNewtypeOverASumIsThatSum() {
-        assertEquals(new Shape.Sum(TypeSymbols.declared(new TypeKey(symbols.module(), "Stage"))), view("StageN").shape());
+        assertEquals(new Shape.Sum(TypeSymbols.declared(new TypeKey(symbols.module(), "Stage")),
+                new Shape.CommonProduct.None()), view("StageN").shape());
     }
 
     @Test
@@ -131,7 +132,8 @@ class OneReadingSaysWhatAPositionIsAndHowItIsWrittenTest {
     void eachTypeConstructorReadsAsItsOwnShape() {
         assertEquals(new Shape.Scalar(Type.Prim.STRING), view(Type.STRING).shape());
         assertEquals(new Shape.Unit(TypeSymbols.declared(new TypeKey(symbols.module(), "Won"))), view("Won").shape());
-        assertEquals(new Shape.Sum(TypeSymbols.declared(new TypeKey(symbols.module(), "Stage"))), view("Stage").shape());
+        assertEquals(new Shape.Sum(TypeSymbols.declared(new TypeKey(symbols.module(), "Stage")),
+                new Shape.CommonProduct.None()), view("Stage").shape());
         assertEquals(new Shape.Sequence(Shape.Sequence.Kind.LIST, Type.INT),
                 view(Type.list(Type.INT)).shape());
         assertEquals(new Shape.Sequence(Shape.Sequence.Kind.SET, Type.INT),

@@ -81,11 +81,53 @@ public sealed interface Shape permits Shape.ReadablePositionShape, Shape.Cases, 
         }
     }
 
-    /** A declared sum, {@code data S = A | B}. */
-    record Sum(TypeSymbol name) implements ReadablePositionShape {}
+    /**
+     * A declared sum, {@code data S = A | B}, and the part its cases hold in common.
+     *
+     * <p>The two are independent and the record says so by holding both. A sum is a common product
+     * times a choice of case, never a choice between the common part and the cases: sharing a spread
+     * adds no case and changes no case's identity, so a reader asking what the position divides into
+     * reads {@link #name} and is right to ignore {@link #common}.
+     */
+    record Sum(TypeSymbol name, CommonProduct common) implements ReadablePositionShape {}
+
+    /**
+     * What every case of a sum spreads, or that they spread nothing.
+     *
+     * <p>Sharing is nominal: the cases hold this in common because the author wrote the same
+     * {@code ...Common} in each, not because two of them happen to declare a field of one name. So
+     * what is shared is declarations, and the fields are read off them — which is why {@link Shared}
+     * keeps both. Held as fields alone, a reader wanting the rules written over them has only the
+     * field names to find the declaration back from, and works it out again.
+     */
+    sealed interface CommonProduct {
+
+        /** The cases share no spread, so the sum has no part of its own. */
+        record None() implements CommonProduct {}
+
+        /**
+         * The declarations every case spreads, and the fields they contribute.
+         *
+         * @param origins the shared declarations, outermost spread first — what a rule written over
+         *                the shared fields is written on
+         * @param fields  what those declarations declare, in the order they are written
+         */
+        record Shared(List<TypeSymbol> origins, Map<String, Type> fields) implements CommonProduct {
+
+            public Shared {
+                if (origins.isEmpty() || fields.isEmpty()) {
+                    throw new IllegalArgumentException("a shared part sharing nothing is None");
+                }
+                origins = List.copyOf(origins);
+                fields = java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(fields));
+            }
+        }
+    }
 
     /** A union nobody named — what a branch widened to, or a behavior's written answer. Told apart
-     *  from {@link Sum} because it has no declaration to be read off. */
+     *  from {@link Sum} because it has no declaration to be read off, which is also why it has no
+     *  {@link CommonProduct}: a spread is shared by being written, and nothing writes these
+     *  together. */
     record Cases(Set<TypeSymbol> members) implements Shape {
         public Cases {
             members = Set.copyOf(members);

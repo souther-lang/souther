@@ -1,6 +1,5 @@
-package souther.compiler.inputs;
+package souther.compiler.check;
 
-import souther.compiler.check.Shape;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
@@ -14,7 +13,8 @@ import java.util.Map;
  * where a value has to be built are different questions about the same fields, and each had a
  * recursion of its own, kept in step by hand and already out of step about how deep to go, about
  * whether a shape outside the readable set is refused, and about whether a path is a
- * {@link TermPath} or a string. A third reader of that question would have written a third.
+ * {@link souther.compiler.inputs.TermPath} or a string. A third reader of that question
+ * would have written a third.
  *
  * <p><b>One step and no walk.</b> What is under a type is a fact about the type. How far down to
  * follow it, where to stop because the caller has already settled something, and what type stands at
@@ -25,7 +25,8 @@ import java.util.Map;
  * hold one level up.
  *
  * <p>So there is no depth here, no stop, no recipe, and nothing of what either reader does with the
- * answer. {@link InputDomain} reads what the declaration says an input has; the generator refines a
+ * answer. {@link souther.compiler.inputs.InputDomain} reads what the declaration says an
+ * input has; the generator refines a
  * declared position into one a value is built at and asks again. Both take their steps from here and
  * neither takes the other's meaning with it.
  */

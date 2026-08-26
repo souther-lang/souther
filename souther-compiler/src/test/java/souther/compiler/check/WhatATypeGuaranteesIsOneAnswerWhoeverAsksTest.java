@@ -123,6 +123,23 @@ class WhatATypeGuaranteesIsOneAnswerWhoeverAsksTest {
         return out;
     }
 
+    /** Every position whose rules the walk said belong to a reading opened elsewhere. */
+    private List<String> handedOnIn(String name, GuaranteeWalk.Scope scope) {
+        List<String> out = new ArrayList<>();
+        Read read = place(name);
+        walk.from(read.root(), FieldDomains.THE_VALUE, read.at(), scope,
+                new GuaranteeWalk.Reader() {
+                    @Override
+                    public void guaranteed(String path, TypeGuarantee guarantee) {}
+
+                    @Override
+                    public void handedOn(String path, Type type) {
+                        out.add(path);
+                    }
+                });
+        return out;
+    }
+
     /**
      * A clause written on a field's type is a rule about that field of this value, at that field's
      * position.
@@ -153,8 +170,13 @@ class WhatATypeGuaranteesIsOneAnswerWhoeverAsksTest {
     }
 
     /**
-     * A record holding another of its own kind stops rather than descending for ever, and stopping
-     * there is not being short of anything: the name was read where it was met.
+     * A record holding another of its own kind does not descend for ever, and what it leaves is not
+     * lost: the list under it is read by whoever opens an element.
+     *
+     * <p>{@code Chain} reaches itself through a {@code List}, and a list is a position no value of
+     * this reading stands at — so the rules under it are handed to a reading opened at an element
+     * rather than left short here. A position this walk stopped at and a position whose rules are
+     * somebody else's are two answers, and this is the second.
      */
     @Test
     void aRecordHoldingItsOwnKindIsReadWhereItWasMet() {
@@ -163,8 +185,8 @@ class WhatATypeGuaranteesIsOneAnswerWhoeverAsksTest {
 
         assertEquals(List.of("here"), List.copyOf(guaranteed.keySet()),
                 "the chain's own field is read once, and the list under it reaches no further");
-        assertFalse(stoppedIn("Chain", GuaranteeWalk.Scope.asFarAs(6)).isEmpty(),
-                "and the walk says where it stopped rather than going round again");
+        assertEquals(List.of("next"), handedOnIn("Chain", GuaranteeWalk.Scope.asFarAs(6)),
+                "and the walk says whose the rules under it are rather than going round again");
     }
 
     /**
@@ -253,7 +275,9 @@ class WhatATypeGuaranteesIsOneAnswerWhoeverAsksTest {
                 List.of("Known", "Gathering", "PathEngine", "GuaranteeWalk", "Reach", "Borne");
         List<String> found = new ArrayList<>();
         for (Class<?> each : List.of(TypeGuarantees.class, TypeGuarantees.At.class,
-                TypeGuarantees.At.Declared.class, TypeGuarantees.At.Beneath.class,
+                TypeGuarantees.At.Beneath.class,
+                TypeGuarantees.At.HandedOn.ToAnotherReading.class,
+                TypeGuarantees.At.Coverage.Incomplete.class,
                 TypeGuarantee.class, TypeGuarantee.Part.class)) {
             for (java.lang.reflect.Field field : each.getDeclaredFields()) {
                 mentioning(theirs, each.getSimpleName() + "." + field.getName(),
