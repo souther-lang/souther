@@ -64,11 +64,17 @@ class AStandInNamesTheBehaviorItStandsInForTest {
     }
 
     private static List<String> codesOf(String brings, String body) {
+        return codesOf(brings, body, "");
+    }
+
+    /** The same, {@code catalogRows} written after the catalog's own declarations. */
+    private static List<String> codesOf(String brings, String body, String catalogRows) {
         List<String> codes = new java.util.ArrayList<>();
-        Compilation compiled = Compilation.ofSources(List.of(CATALOG, shipping(brings, body)),
-                ModulePath.EMPTY);
+        Compilation compiled = Compilation.ofSources(
+                List.of(CATALOG + "\n" + catalogRows, shipping(brings, body)), ModulePath.EMPTY);
         compiled.answerEverything();
         compiled.errors().forEach(e -> codes.add(e.diagnostic().code()));
+        compiled.warnings().forEach(w -> codes.add(w.diagnostic().code()));
         return codes;
     }
 
@@ -124,6 +130,101 @@ class AStandInNamesTheBehaviorItStandsInForTest {
 
         assertEquals(List.of("E1908"), codes,
                 "the borrowed dependency is the one nothing stands in for");
+    }
+
+    /**
+     * A stand-in here and the rows recorded where the behavior is declared are read against each
+     * other.
+     *
+     * <p>Two written statements about one behavior, and after this change they need not be in one
+     * module: a row records what a behavior owes where the behavior is declared, and a table stands
+     * in for it where the rows that run against it are. Read only within a module, the comparison
+     * would pass over every pair this change made writable — which is the state the corpus itself
+     * turned out to be in.
+     */
+    @Test
+    void aStandInIsReadAgainstTheRowsRecordedWhereTheBehaviorIsDeclared() {
+        List<String> codes = codesOf(", currentStock", """
+
+                fake currentStock
+                    | (Sku("z-9")) -> Stock { sku = Sku("z-9"), count = 9 }
+                    | _            -> 在庫あり
+                """, """
+                example currentStock
+                    | "the odd one is down to three" : (Sku("z-9"))
+                        -> Stock { sku = Sku("z-9"), count = 3 }
+                """);
+
+        assertEquals(List.of("E1919"), codes,
+                "the table says nine and the catalog's own row says three");
+    }
+
+    /** And where the two say the same thing, nothing is said. */
+    @Test
+    void aStandInThatAgreesWithThoseRowsSaysNothing() {
+        assertEquals(List.of(), codesOf(", currentStock", """
+
+                fake currentStock
+                    | (Sku("z-9")) -> Stock { sku = Sku("z-9"), count = 3 }
+                    | _            -> 在庫あり
+                """, """
+                example currentStock
+                    | "the odd one is down to three" : (Sku("z-9"))
+                        -> Stock { sku = Sku("z-9"), count = 3 }
+                """));
+    }
+
+    /**
+     * A borrowed dependency taking more than one input is stood in for too.
+     *
+     * <p>Its own claim because it is its own path. A dependency taking one input is injected as a
+     * {@code Behavior} proxy, which names no module; any other count is a generated subclass of the
+     * abstract base the declaring module emitted (spec §java-base-class, ADR-0056), and which module
+     * that is has to be read off the behavior. Read off the module being applied instead, the
+     * subclass names a class nothing generated — and every unary stand-in goes on working, which is
+     * how the reading that found this defect found the arity mattered.
+     */
+    @Test
+    void aBorrowedDependencyTakingSeveralInputsIsStoodInFor() {
+        List<String> codes = new java.util.ArrayList<>();
+        Compilation compiled = Compilation.ofSources(List.of("""
+                module probe.warehouses exposing ( Sku, Bay, Stock, stockAt )
+
+                data Sku = String
+                data Bay = String
+                data Stock = { sku: Sku, count: Int }
+
+                behavior stockAt : (sku: Sku, bay: Bay) -> Stock
+                    constructs Stock
+                """, """
+                module probe.picking exposing ( Picked )
+                import probe.warehouses as Warehouses ( Sku, Bay, Stock, stockAt )
+
+                data Picked = { sku: Sku, count: Int }
+
+                behavior pick : (sku: Sku, bay: Bay) -> Picked
+                    constructs Picked
+                    depends on stockAt
+
+                let pick (sku, bay, stockAt) = {
+                    let s = stockAt(sku, bay)
+                    Picked { sku = sku, count = s.count }
+                }
+
+                fake Warehouses.stockAt
+                    | (Sku("a-1"), Bay("b-1")) -> Stock { sku = Sku("a-1"), count = 4 }
+                    | _                        -> Stock { sku = Sku("a-1"), count = 0 }
+
+                example pick
+                    | "what the named bay holds" : (Sku("a-1"), Bay("b-1"))
+                        -> Picked { sku = Sku("a-1"), count = 4 }
+                    | "and nothing anywhere else" : (Sku("a-1"), Bay("b-9"))
+                        -> Picked { sku = Sku("a-1"), count = 0 }
+                """), ModulePath.EMPTY);
+        compiled.answerEverything();
+        compiled.errors().forEach(e -> codes.add(e.diagnostic().code()));
+
+        assertEquals(List.of(), codes, "both rows run against the two-input borrowed dependency");
     }
 
     /** A name no behavior answers to is refused where it is written, rather than leaving a table

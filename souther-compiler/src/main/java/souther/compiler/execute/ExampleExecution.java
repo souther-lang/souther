@@ -48,15 +48,18 @@ public final class ExampleExecution {
     private final Map<ValueName.Behavior, Contract> contracts;
     private final Deadline deadline;
     private final EvaluationPolicy policy;
+    private final Map<String, ExampleExecution> declaring;
 
     public ExampleExecution(Prepared prepared, Symbols symbols,
                             Map<ValueName.Behavior, Sig> signatures,
                             Map<String, List<BehaviorRequirement>> requirements,
                             Map<String, Hir.FnDef> definitions,
                             Map<ValueName.Behavior, Contract> contracts,
-                            Deadline deadline, EvaluationPolicy policy) {
+                            Deadline deadline, EvaluationPolicy policy,
+                            Map<String, ExampleExecution> declaring) {
         this.prepared = prepared;
         this.symbols = symbols;
+        this.declaring = declaring;
         // Taken as they are and not copied. Each is another question's settled answer, and this is
         // put together afresh every time it is asked for — it cannot be memoised, because a
         // `Symbols` closes over the store it resolves against — so copying four maps here would be
@@ -97,6 +100,27 @@ public final class ExampleExecution {
      */
     public Map<ValueName.Behavior, Sig> signatures() {
         return signatures;
+    }
+
+    /**
+     * The reading of each module this one writes a stand-in for a behavior of.
+     *
+     * <p>What a {@code fake} states and what the rows recorded for that behavior state are two
+     * statements about one thing, and the second lives where the behavior is declared — a row names
+     * a behavior of its own module, and a stand-in may name another module's. So reading the two
+     * against each other takes both, and the second is here.
+     *
+     * <p>The rows of the other module as that module writes them: its own values and its own names,
+     * because a fixture is read in the scope it was written in. What is not taken from it is the
+     * execution — the values are built and compared in this module's, so nothing crosses a loader
+     * and the comparison is the language's own equality rather than a second one that would agree
+     * with it until a value's identity mattered.
+     *
+     * <p>One level. What the other module borrows is that module's own reading to make, and
+     * following it further would read a statement nothing here writes about.
+     */
+    public Map<String, ExampleExecution> declaring() {
+        return declaring;
     }
 
     /** What each behavior needs supplied to it. */

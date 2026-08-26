@@ -224,39 +224,38 @@ class AConformanceCorpusReachesEveryConstructTheLanguageDeclaresTest {
      */
     @Test
     void aRequirementIsCarriedAcrossAModuleBoundary() {
-        List<String> carried = new ArrayList<>();
-        List<String> stoodInFor = new ArrayList<>();
+        List<String> closed = new ArrayList<>();
+        List<String> owed = new ArrayList<>();
         for (Module module : modules()) {
-            Map<String, List<BehaviorRequirement>> requirements =
-                    module.compiled().db().ask(new Bodies.Requirements(module.name())).value();
-            if (requirements != null) {
-                requirements.forEach((behavior, required) -> {
-                    for (BehaviorRequirement each : required) {
-                        if (!each.dependency().module().equals(module.name())) {
-                            carried.add(module.name() + "." + behavior + " requires "
-                                    + each.dependency());
-                        }
-                    }
-                });
-            }
             Prepared prepared =
                     module.compiled().db().ask(new Shapes.Prepared(module.name())).value();
-            if (prepared == null) {
+            Map<String, List<BehaviorRequirement>> requirements =
+                    module.compiled().db().ask(new Bodies.Requirements(module.name())).value();
+            if (prepared == null || requirements == null) {
                 continue;
             }
-            for (Prepared.FakeTable table : prepared.forExamples().fakes()) {
-                ValueName.Behavior standsFor = table.standsInFor();
-                if (standsFor != null && !standsFor.module().equals(module.name())) {
-                    stoodInFor.add(module.name() + " stands in for " + standsFor);
+            // The stand-ins this module writes, as the behaviors they answer for. A requirement is
+            // closed by one of these or by nothing: `with` supplies a dependency taking no input,
+            // and what this is about takes one.
+            Set<ValueName.Behavior> standsInFor =
+                    prepared.forExamples().tablesThatAnswer().keySet();
+            requirements.forEach((behavior, required) -> {
+                for (BehaviorRequirement each : required) {
+                    if (each.dependency().module().equals(module.name())) {
+                        continue;
+                    }
+                    String said = module.name() + "." + behavior + " requires " + each.dependency();
+                    // The same behavior on both sides. Collected apart, a requirement borrowed by
+                    // one module and a table written in another for something nothing requires
+                    // would answer this together while the construct was written nowhere.
+                    (standsInFor.contains(each.dependency()) ? closed : owed).add(said);
                 }
-            }
+            });
         }
-        assertFalse(carried.isEmpty(), "no behavior of the conformance corpus requires one another"
-                + " module declares, so nothing here carries a requirement across a module"
-                + " boundary");
-        assertFalse(stoodInFor.isEmpty(), "the corpus declares a requirement across a module"
-                + " boundary (" + carried + ") and nothing stands in for one, so no row is ever"
-                + " evaluated through it");
+        assertFalse(closed.isEmpty(), "no behavior of the conformance corpus requires one another"
+                + " module declares and closes it with a stand-in written where its rows run, so"
+                + " nothing here carries a requirement across a module boundary and runs through"
+                + " it. Borrowed and left owed: " + owed);
     }
 
     /**

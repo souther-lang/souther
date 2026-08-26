@@ -463,7 +463,9 @@ class CompileFakeExampleDisagreementTest {
                 Deadline.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis()),
                 EvaluationPolicy.DEFAULT,
                 CheckedEnsures.executableOf(c.db().ask(
-                        new souther.compiler.query.Bodies.ReachableContracts(name)).value()));
+                        new souther.compiler.query.Bodies.ReachableContracts(name)).value()),
+                // One source, so there is no module whose rows this one stands in for a behavior of.
+                java.util.Map.of());
     }
 
     /** The warnings of a single-source compile that holds. */

@@ -17,6 +17,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.ExampleMessage;
+import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.evaluate.DepthLimitExceeded;
 import souther.compiler.evaluate.EvaluationContext;
@@ -60,6 +61,16 @@ import java.util.Set;
  */
 public final class ExampleStatements {
 
+    /**
+     * Another module's rows, as that module writes them.
+     *
+     * <p>What a reading here needs of a module it stands in for a behavior of: the rows that record
+     * what that behavior owes, and the scope they are read in. Not its execution — the values are
+     * built and compared in the reading that holds this, so nothing crosses a loader.
+     */
+    public record Declaring(souther.compiler.check.Prepared.Examples rows, Symbols symbols,
+                            Map<String, Hir.FnDef> values) {}
+
     private final souther.compiler.check.Prepared.Examples module;
     private final Symbols symbols;
     /** The shape of every behavior a statement here may name, keyed by the declaration it is: this
@@ -84,13 +95,17 @@ public final class ExampleStatements {
     private final EvaluationPolicy policy;
     /** What holds a fake's row to what the dependency declares of what it answers. */
     private final EnsuresChecks ensures;
+    /** The modules whose behaviors this one writes stand-ins for, by name. */
+    private final Map<String, Declaring> declaring;
 
     private ExampleStatements(souther.compiler.check.Prepared.Examples module, Symbols symbols,
                               Map<ValueName.Behavior, Sig> sigs,
                               MemoryClassLoader loader, Map<String, Hir.FnDef> values,
                               Deadline deadline, EvaluationPolicy policy,
-                              Map<ValueName.Behavior, Contract> contracts) {
+                              Map<ValueName.Behavior, Contract> contracts,
+                              Map<String, Declaring> declaring) {
         this.ensures = new EnsuresChecks(loader, contracts, sigs.keySet());
+        this.declaring = declaring;
         this.module = module;
         this.symbols = symbols;
         this.sigs = sigs;
@@ -150,6 +165,18 @@ public final class ExampleStatements {
     }
 
     /**
+     * The stretch a report about a fake's table marks: the target, as it was written.
+     *
+     * <p>Taken from the name and not measured from its spelling. A target may be written through the
+     * module that declares the behavior, and the characters that reach are not the canonical name's
+     * — a qualifier and its dots are part of what the marker covers, and an author may write spaces
+     * or a comment between them.
+     */
+    static Region marked(Hir.Fake fk) {
+        return fk.target().written().region();
+    }
+
+    /**
      * A reader for one written statement, held for as long as reading it lasts.
      *
      * <p>Never shared between two of them. Reading a fixture runs the method a row's operand was
@@ -159,6 +186,23 @@ public final class ExampleStatements {
      */
     private FixtureReader newFixtureReader() {
         return new FixtureReader(module, symbols, values, loader);
+    }
+
+    /**
+     * How to make a reader for statements written in {@code declaredIn}.
+     *
+     * <p>That module's rows, values and names, on this reading's loader. The two halves of what this
+     * decides are why: a fixture is read in the scope it was written in, and the values it comes to
+     * are compared with the ones a stand-in here comes to — so the scope is the other module's and
+     * the execution is this one's.
+     */
+    private java.util.function.Supplier<FixtureReader> readersFor(String declaredIn) {
+        if (declaredIn.equals(module.name())) {
+            return this::newFixtureReader;
+        }
+        Declaring elsewhere = declaring.get(declaredIn);
+        return () -> new FixtureReader(elsewhere.rows(), elsewhere.symbols(),
+                elsewhere.values(), loader);
     }
 
     private Set<TypeSymbol> outCases(Type out) {
@@ -183,8 +227,9 @@ public final class ExampleStatements {
                                          Map<ValueName.Behavior, Sig> sigs, Map<String, byte[]> classes,
                                          ClassLoader parent, Map<String, Hir.FnDef> values,
                                          Deadline deadline, EvaluationPolicy policy,
-                                         Map<ValueName.Behavior, Contract> contracts) {
-        if (module.rows().isEmpty()) {
+                                         Map<ValueName.Behavior, Contract> contracts,
+                                         Map<String, Declaring> declaring) {
+        if (module.rows().isEmpty() && module.fakes().isEmpty()) {
             return Readings.NONE;
         }
         // Which behaviors have both a stand-in and rows of their own, read off the text. Two written
@@ -192,12 +237,13 @@ public final class ExampleStatements {
         // a module whose faked behaviors are exampled nowhere — which is most of them, since a fake is
         // written so that some *other* behavior's rows can run — is settled here, before a class is
         // loaded or a worker is started.
-        Set<ValueName.Behavior> contested = contested(module, sigs);
+        Set<ValueName.Behavior> contested = contested(module, sigs, declaring);
         if (contested.isEmpty()) {
             return Readings.NONE;
         }
         ExampleStatements v = new ExampleStatements(module, symbols, sigs,
-                new MemoryClassLoader(classes, parent), values, deadline, policy, contracts);
+                new MemoryClassLoader(classes, parent), values, deadline, policy, contracts,
+                declaring);
         try {
             return v.collectDisagreements(contested);
         } catch (LinkageError e) {
@@ -280,8 +326,11 @@ public final class ExampleStatements {
         if (building.isEmpty()) {
             return List.of();
         }
+        // Building a table reads statements written here and nothing another module wrote, so it
+        // needs no reading of one.
         ExampleStatements v = new ExampleStatements(module, symbols, sigs,
-                new MemoryClassLoader(classes, parent), values, deadline, policy, contracts);
+                new MemoryClassLoader(classes, parent), values, deadline, policy, contracts,
+                Map.of());
         List<Diagnostic> said = new ArrayList<>();
         for (souther.compiler.check.Prepared.FakeTable table : building) {
             Hir.Fake fk = table.read();
@@ -377,11 +426,18 @@ public final class ExampleStatements {
      */
     private <T> Read<T> within(java.util.function.Function<FixtureReader, T> read,
                                Deadline.Work what) {
+        return within(this::newFixtureReader, read, what);
+    }
+
+    /** The same, reading a statement written in another module through a reader made for it. */
+    private <T> Read<T> within(java.util.function.Supplier<FixtureReader> readers,
+                               java.util.function.Function<FixtureReader, T> read,
+                               Deadline.Work what) {
         // On a reader of its own, and that is all a reading needs to be given: a worker that runs out
         // of budget is asked to stop and cannot be made to — a fixture reaches no interrupt point — so
         // it may still be inside `expandedValue`, holding a binding or a half-walked expansion. What a
         // late worker can still write to is that reader, and the statement after it gets another.
-        FixtureReader reader = newFixtureReader();
+        FixtureReader reader = readers.get();
         switch (deadline.given(what, () -> counted(() -> read.apply(reader)))) {
             case Deadline.Outcome.Finished(T value) -> {
                 return new Read.Got<>(value);
@@ -487,7 +543,8 @@ public final class ExampleStatements {
      * would put a table written for a borrowed dependency against the rows of a namesake here.
      */
     private static Set<ValueName.Behavior> contested(
-            souther.compiler.check.Prepared.Examples module, Map<ValueName.Behavior, Sig> sigs) {
+            souther.compiler.check.Prepared.Examples module, Map<ValueName.Behavior, Sig> sigs,
+            Map<String, Declaring> declaring) {
         Set<ValueName.Behavior> stoodIn =
                 new LinkedHashSet<>(module.tablesThatAnswer().keySet());
         for (souther.compiler.check.Prepared.Rows block : module.rows()) {
@@ -501,13 +558,39 @@ public final class ExampleStatements {
             }
         }
         Set<ValueName.Behavior> both = new LinkedHashSet<>();
-        for (souther.compiler.check.Prepared.Rows block : module.rows()) {
-            ValueName.Behavior recorded = module.targeted(block.target());
-            if (stoodIn.contains(recorded)) {
-                both.add(recorded);
+        for (ValueName.Behavior each : stoodIn) {
+            if (!recordedFor(each, module, declaring).isEmpty()) {
+                both.add(each);
             }
         }
         return both;
+    }
+
+    /**
+     * The {@code example} blocks that record what {@code behavior} owes.
+     *
+     * <p>Where the behavior is declared, always: a row names a behavior of the module it is written
+     * in (spec §example-evaluable), so the rows for one another module declares are that module's.
+     * Empty where this reading was not given that module — nothing was compared, and the reading
+     * says so by having nothing rather than by taking silence for agreement.
+     */
+    private static List<Hir.Example> recordedFor(ValueName.Behavior behavior,
+                                                 souther.compiler.check.Prepared.Examples module,
+                                                 Map<String, Declaring> declaring) {
+        souther.compiler.check.Prepared.Examples where = behavior.module().equals(module.name())
+                ? module
+                : declaring.containsKey(behavior.module())
+                        ? declaring.get(behavior.module()).rows() : null;
+        if (where == null) {
+            return List.of();
+        }
+        List<Hir.Example> blocks = new ArrayList<>();
+        for (souther.compiler.check.Prepared.Rows block : where.rows()) {
+            if (block.target().equals(behavior.name())) {
+                blocks.add(block.read());
+            }
+        }
+        return blocks;
     }
 
     /** One recorded row, read as far as it can be without running it. What it says is left as written
@@ -517,10 +600,9 @@ public final class ExampleStatements {
 
     private Readings collectDisagreements(Set<ValueName.Behavior> contested) {
         Map<ValueName.Behavior, List<RecordedRow>> recorded = new LinkedHashMap<>();
-        for (int i = 0; i < module.rows().size(); i++) {
-            Hir.Example ex = module.rows().get(i).read();
-            if (contested.contains(module.targeted(ex.target()))) {
-                readRecorded(ex, recorded);
+        for (ValueName.Behavior behavior : contested) {
+            for (Hir.Example ex : recordedFor(behavior, module, declaring)) {
+                readRecorded(behavior, ex, recorded);
             }
         }
         if (recorded.isEmpty()) {
@@ -549,18 +631,23 @@ public final class ExampleStatements {
      * arm or fixture error it is where the row is evaluated — and a row read otherwise here than there
      * would be held to a stand-in on an assertion the model itself refuses.
      */
-    private void readRecorded(Hir.Example ex,
+    private void readRecorded(ValueName.Behavior behavior, Hir.Example ex,
                               Map<ValueName.Behavior, List<RecordedRow>> into) {
-        Sig sig = sigs.get(module.targeted(ex.target()));
+        Sig sig = sigs.get(behavior);
         if (sig == null) {
             return;
         }
+        // The rows as the module that wrote them writes them: its own values and its own names,
+        // because a fixture means what it means in the scope it was written in. Built here, on this
+        // reading's loader, so the two values a comparison is about are of one execution and the
+        // equality that decides it is the language's own.
+        java.util.function.Supplier<FixtureReader> readers = readersFor(behavior.module());
         Set<TypeSymbol> cases = outCases(sig.outputType());
         for (Hir.ExampleRow row : ex.rows()) {
             if (row.inputs().size() != sig.inputTypes().size()) {
                 continue;
             }
-            Read<RecordedRow> read = within(reader -> {
+            Read<RecordedRow> read = within(readers, reader -> {
                 Object[] arguments = builtOrNull(reader, row.inputs(), sig.ins());
                 if (arguments == null) {
                     return null;
@@ -577,7 +664,7 @@ public final class ExampleStatements {
             if (got == null) {
                 continue;
             }
-            into.computeIfAbsent(module.targeted(ex.target()), _ -> new ArrayList<>()).add(got);
+            into.computeIfAbsent(behavior, _ -> new ArrayList<>()).add(got);
         }
     }
 
@@ -605,20 +692,20 @@ public final class ExampleStatements {
             // `resolveFake`, which runs while a row of a behavior that *depends on* this one is
             // evaluated — and a fake nothing depends on has no such row, so an overrun that went
             // unsaid here would leave "the two agree" as the answer to a comparison never made.
-            // The caret goes on the target, which is what `fk.pos()` is.
+            // The marker goes over the target, as the name itself was written.
             case Read.Overspent(FailurePhase which, long limit) -> {
-                timedOut.add(new UnreadFake(wrote(fk), fk.pos(),
-                        wrote(fk).length(), Unread.overspending(which, limit)));
+                timedOut.add(new UnreadFake(wrote(fk), marked(fk),
+                        Unread.overspending(which, limit)));
                 return;
             }
             case Read.StackRanOut(int depthLimit) -> {
-                timedOut.add(new UnreadFake(wrote(fk), fk.pos(),
-                        wrote(fk).length(), new Unread.StackRanOut(depthLimit)));
+                timedOut.add(new UnreadFake(wrote(fk), marked(fk),
+                        new Unread.StackRanOut(depthLimit)));
                 return;
             }
             case Read.Unanswered(long budgetMs) -> {
-                timedOut.add(new UnreadFake(wrote(fk), fk.pos(),
-                        wrote(fk).length(), new Unread.DidNotAnswer(budgetMs)));
+                timedOut.add(new UnreadFake(wrote(fk), marked(fk),
+                        new Unread.DidNotAnswer(budgetMs)));
                 return;
             }
             // Not about this fake. The runtime is `provided`, so a host without it builds no value at
@@ -1024,7 +1111,7 @@ public final class ExampleStatements {
      * written out rather than passed as a number, which a locale would group into a budget nobody set.
      */
     private static Diagnostic unreadableFake(Hir.Fake fk, Unread why) {
-        Diagnostic.Builder said = Diagnostic.at(fk.pos(), wrote(fk).length())
+        Diagnostic.Builder said = Diagnostic.at(marked(fk))
                 .say(why.isDepth()
                         ? new ExampleMessage.TheTableReachedItsDepthLimit(wrote(fk),
                                 why.limitShown())

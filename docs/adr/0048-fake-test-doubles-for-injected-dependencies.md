@@ -49,8 +49,12 @@ it adds nothing to the module that declares the behavior and no other module see
 behavior it names may be that module's. Cross-module fake *sharing* (a shared test-layer, as in ZIO)
 is a different thing and stays deferred; when added it would use a test-scoped channel, not the
 domain `exposing`.
-A fake for a multi-argument dependency, and a computed (non-tabular) fake, are also out of scope; the
-latter is a sign the dependency should become an input.
+A computed (non-tabular) fake is also out of scope; it is a sign the dependency should become an
+input. A fake for a multi-argument dependency was out of scope here and stopped being so with
+ADR-0056, which made injected behaviors multi-argument: such a dependency is faked the same way, its
+row's inputs matched as a tuple. Issue #1108 corrected the last place that had not been told —
+the instance a stand-in is made into for a dependency taking any count but one is a subclass of the
+base the *declaring* module emitted, which was read off the module being applied.
 
 ## Consequences
 

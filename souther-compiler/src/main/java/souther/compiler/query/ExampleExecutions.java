@@ -10,6 +10,7 @@ import souther.compiler.core.Contract;
 import souther.compiler.execute.ExampleExecution;
 import souther.compiler.types.ValueName;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -44,6 +45,18 @@ public final class ExampleExecutions {
     /** The environment {@code module}'s examples are evaluated in, or null where this compile has
      *  not settled it. */
     public static ExampleExecution of(Db db, String module) {
+        return of(db, module, true);
+    }
+
+    /**
+     * The same, {@code withDeclaring} saying whether to take the readings of the modules this one
+     * writes stand-ins for behaviors of.
+     *
+     * <p>False for those readings themselves. What a module borrows statements about is its own
+     * question, and following it further would assemble a reading nothing asks anything of — one
+     * level is what a stand-in written here reaches.
+     */
+    private static ExampleExecution of(Db db, String module, boolean withDeclaring) {
         Answer<Prepared> prepared = db.ask(new Shapes.Prepared(module));
         Answer<Symbols> scope = Names.derivedSymbols(db, module);
         // Every behavior the rows may name, keyed by the declaration it is. A row targets one of
@@ -77,6 +90,31 @@ public final class ExampleExecutions {
         Map<String, Hir.FnDef> values = db.ask(new Bodies.ModuleDefinitions(module)).value();
         return new ExampleExecution(prepared.value(), scope.value(), sigs.value(),
                 requirements, values == null ? Map.of() : values, contracts,
-                Output.deadlineOf(db), Output.policyOf(db));
+                Output.deadlineOf(db), Output.policyOf(db),
+                withDeclaring ? declaringOf(db, prepared.value()) : Map.of());
+    }
+
+    /**
+     * The reading of each module {@code prepared} writes a stand-in for a behavior of.
+     *
+     * <p>Read off the tables, so a module is here because a statement written here is about one of
+     * its behaviors — not because an import line reached it. The module's own is not among them: its
+     * rows are what the reading already has.
+     *
+     * <p>A module whose reading this compile has not settled is left out. Nothing was compared, and
+     * saying so by absence is what every other unsettled reading here says.
+     */
+    private static Map<String, ExampleExecution> declaringOf(Db db, Prepared prepared) {
+        Map<String, ExampleExecution> out = new LinkedHashMap<>();
+        for (ValueName.Behavior each : prepared.forExamples().tablesThatAnswer().keySet()) {
+            if (each.module().equals(prepared.name()) || out.containsKey(each.module())) {
+                continue;
+            }
+            ExampleExecution reading = of(db, each.module(), false);
+            if (reading != null) {
+                out.put(each.module(), reading);
+            }
+        }
+        return out;
     }
 }
