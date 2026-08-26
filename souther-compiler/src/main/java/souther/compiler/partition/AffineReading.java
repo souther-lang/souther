@@ -143,6 +143,11 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
         return new AffineForms.Reading<NumericTerm, InputReads>() {
 
             @Override
+            public Symbols symbols() {
+                return symbols;
+            }
+
+            @Override
             public LinearForm<NumericTerm> leafOf(Core node, InputReads at) {
                 NumericTerm term = GuardThresholds.termOf(node, at, symbols);
                 return term == null ? null : LinearForm.atom(term);

@@ -4,6 +4,7 @@ import souther.compiler.DefaultStdlib;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.Type;
+import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
 
@@ -29,8 +30,10 @@ class ASignatureIsNotInstantiatedPerUseTest {
      * elements — which is what a helper's own minting has to separate. */
     @Test
     void twoLibrarySignaturesSpellTheirVariableTheSame() {
-        Type fromList = DefaultStdlib.get().entry("List.length").signature().params().get(0);
-        Type fromSet = DefaultStdlib.get().entry("Set.size").signature().params().get(0);
+        Type fromList = DefaultStdlib.get()
+                .entry(ValueName.Stdlib.operation("List", "length")).signature().params().get(0);
+        Type fromSet = DefaultStdlib.get()
+                .entry(ValueName.Stdlib.operation("Set", "size")).signature().params().get(0);
         assertEquals(Type.list(Type.var("'a")), fromList);
         assertEquals(Type.set(Type.var("'a")), fromSet);
     }
@@ -43,7 +46,8 @@ class ASignatureIsNotInstantiatedPerUseTest {
      */
     @Test
     void aVariableTheExpectedTypeSettledComesBackAsThatType() {
-        Stdlib.Signature get = DefaultStdlib.get().entry("List.get").signature();
+        Stdlib.Signature get = DefaultStdlib.get()
+                .entry(ValueName.Stdlib.operation("List", "get")).signature();
         Map<String, Type> bind = new HashMap<>();
         BottomInfer.pinResultTypeVars(get.result(), Type.option(Type.var("$0")), bind, null);
         assertEquals(Type.var("$0"), bind.get("'a"));

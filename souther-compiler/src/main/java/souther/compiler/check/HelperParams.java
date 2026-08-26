@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -63,7 +64,11 @@ final class HelperParams {
             return m;   // nothing to settle: don't build the inliner (it scans the whole prelude)
         }
         HelperInliner inliner = HelperInliner.forModule(m, symbols.library());
-        Set<String> recursive = inliner.recursiveHelpers();
+        // The addresses this module holds its own recursions at, which is what the loop below has:
+        // it walks the definitions and asks whether each is one of them.
+        Set<String> recursive = new LinkedHashSet<>();
+        inliner.recursiveHelpers().forEach(
+                reference -> recursive.add(reference.rendered()));
         Map<String, Type> recursiveHelperFns;
         try {
             // Every recursion in reach, not only what this module declares: settling reads a body
@@ -79,7 +84,8 @@ final class HelperParams {
             recursiveHelperFns = Map.of();
         }
         Map<String, Hir.FnDef> settled = new LinkedHashMap<>();
-        for (Hir.FnDef h : inliner.held().values()) {
+        for (HelperEntry entry : inliner.held().values()) {
+            Hir.FnDef h = entry.definition();
             if (recursive.contains(h.name())) {
                 continue;   // a recursive helper is not inlined and declares its parameters (spec §fn-declaration)
             }
@@ -1079,7 +1085,7 @@ final class HelperParams {
             // helper, and those are answered above with the types their call site instantiated.
             // Whether the name is a kernel is a fact about the library, asked of it and asked with
             // the operation this call was resolved to rather than with the name it renders as.
-            if (!(call.answered().denotes() instanceof ValueName.Stdlib operation)) {
+            if (!(call.answered().denotes() instanceof ValueName.Stdlib.Operation operation)) {
                 return null;
             }
             Stdlib.Intrinsic kernel = symbols.library().intrinsicOf(operation);

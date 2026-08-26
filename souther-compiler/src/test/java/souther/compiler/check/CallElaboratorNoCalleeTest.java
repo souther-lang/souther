@@ -38,8 +38,11 @@ class CallElaboratorNoCalleeTest {
     private static final SourcePos AT = new SourcePos(7, 3);
 
     private static RuntimeException answerFor(ValueName denotes) {
+        // As this module reaches it, whichever kind of name it is — which is what the arm of the
+        // reference then says, and what this is about is the ones that reach no callee.
         return CallElaborator.noCallee(
-                new Hir.Apply("f", denotes, new ReachName.Bare("f"), List.of(new Hir.IntLit(1, AT, null)),
+                new Hir.Apply("f", ReachName.of(denotes, "f", "m"),
+                        List.of(new Hir.IntLit(1, AT, null)),
                         ConstructionOrigin.own(), AT, null));
     }
 
@@ -103,7 +106,7 @@ class CallElaboratorNoCalleeTest {
     void anUnexpandedCallIsAnInternalError() {
         for (ValueName denotes : List.of(
                 new ValueName.Helper("m", "f"),
-                new ValueName.Stdlib("List", "map"))) {
+                ValueName.Stdlib.operation("List", "map"))) {
             RuntimeException e = answerFor(denotes);
             assertInstanceOf(IllegalStateException.class, e, denotes.toString());
             assertTrue(e.getMessage().contains("7:3"), () -> "says where: " + e.getMessage());

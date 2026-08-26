@@ -49,7 +49,7 @@ final class DischargeRules {
      * reaching it denotes. Written as the two values it is, so that a row here says which library it
      * is about without a reader splitting a spelling to find out. */
     private static ValueName op(String alias, String name) {
-        return new ValueName.Stdlib(alias, name);
+        return ValueName.Stdlib.operation(alias, name);
     }
 
     /** The argument the signature already says the elements come from, where the operation takes a
@@ -126,8 +126,8 @@ final class DischargeRules {
         Set<String> kinds = new LinkedHashSet<>();
         Bound.buildsItsResultFrom().forEach(operation -> {
             BuiltFrom built = Bound.buildsItsResultFrom(operation);
-            Stdlib.Entry entry = operation instanceof ValueName.Stdlib library
-                    ? stdlib.entry(library.qualified()) : null;
+            Stdlib.Entry entry = operation instanceof ValueName.Stdlib.Operation library
+                    ? stdlib.entry(library) : null;
             String kind = entry == null ? null : kindOf(entry.signature().result());
             if (kind != null) {
                 kinds.add(kind + "." + built.shape());
@@ -251,8 +251,7 @@ final class DischargeRules {
      * stands there.
      */
     private static boolean everyPartIsANumber(Stdlib stdlib, ValueName operation) {
-        Stdlib.Signature signature =
-                stdlib.entry(((ValueName.Stdlib) operation).qualified()).signature();
+        Stdlib.Signature signature = stdlib.entry(theLibraryOperation(operation)).signature();
         if (!NumericAnswers.isANumber(signature.result())) {
             return false;
         }
@@ -593,7 +592,7 @@ final class DischargeRules {
             shift) {
         holdToTheDeclaration(stdlib, operation, shift.amount(), null, TypeRequirement.NUMBER,
                 "the amount a shift moves by");
-        Stdlib.Entry counts = stdlib.entry(shift.measure().qualified());
+        Stdlib.Entry counts = stdlib.entry(shift.measure());
         if (counts == null) {
             throw new IllegalStateException("the rule about " + operation + " counts through "
                     + shift.measure().qualified() + ", which the library does not declare");
@@ -677,7 +676,7 @@ final class DischargeRules {
 
     /** Which library operation the rounding policy is read off, and where in its arguments. */
     private static final ValueName.Stdlib ROUNDING_POLICY_ANCHOR =
-            new ValueName.Stdlib("Decimal", "round");
+            ValueName.Stdlib.operation("Decimal", "round");
 
     /** {@code round(scale, mode, d)} — the second of them. */
     private static final int ROUNDING_POLICY_ARGUMENT = 1;
@@ -716,8 +715,8 @@ final class DischargeRules {
      *  name a second time.
      *
      *  @throws IllegalStateException where the name is no library operation. */
-    static ValueName.Stdlib theLibraryOperation(ValueName operation) {
-        if (!(operation instanceof ValueName.Stdlib library)) {
+    static ValueName.Stdlib.Operation theLibraryOperation(ValueName operation) {
+        if (!(operation instanceof ValueName.Stdlib.Operation library)) {
             throw new IllegalStateException("a fact is declared of " + operation
                     + ", which is not a library operation");
         }
@@ -738,8 +737,8 @@ final class DischargeRules {
      * lost the same way, silently, on the day its arm was written empty.
      */
     static Stdlib.Entry holdTheOperationToTheLibrary(Stdlib stdlib, ValueName operation) {
-        ValueName.Stdlib library = theLibraryOperation(operation);
-        Stdlib.Entry entry = stdlib.entry(library.qualified());
+        ValueName.Stdlib.Operation library = theLibraryOperation(operation);
+        Stdlib.Entry entry = stdlib.entry(library);
         if (entry == null) {
             throw new IllegalStateException("a fact is declared of " + library.qualified()
                     + ", which the library does not declare");

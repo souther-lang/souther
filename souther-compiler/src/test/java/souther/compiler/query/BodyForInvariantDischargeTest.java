@@ -79,7 +79,8 @@ class BodyForInvariantDischargeTest {
 
     @Test
     void theEmittedBodyHasExpandedTheOperationAway() {
-        List<String> fns = calls(lowered(new Bodies.LoweredBody("m.a", "shift")));
+        List<String> fns = calls(lowered(new Bodies.LoweredBody("m.a",
+                new souther.compiler.ast.DefinitionName("shift"))));
         assertFalse(fns.contains("List.map"),
                 "the backend emits folds, not operations: " + fns);
     }

@@ -39,9 +39,13 @@ public sealed interface DecisionSource {
      * that way. Asked that way, a fork written in a helper and handed to another that happens to
      * name a parameter the same was answered with the inner one's rule, and the rules two call sites
      * wrote were counted as one.
+     *
+     * <p>As the reference that reaches it, which is what a call carries. Rendered, two modules that
+     * write one declaration differently would own the same fork under two names, and the summaries
+     * a fork is read against are looked up by this.
      */
-    record Supplied(String declaration, java.util.List<String> parameters)
-            implements DecisionSource {
+    record Supplied(souther.compiler.types.ReachName.Declaration declaration,
+                    java.util.List<String> parameters) implements DecisionSource {
 
         public Supplied {
             parameters = java.util.List.copyOf(parameters);

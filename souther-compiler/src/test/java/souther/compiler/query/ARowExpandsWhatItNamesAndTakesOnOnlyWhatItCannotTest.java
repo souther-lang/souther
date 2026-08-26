@@ -81,7 +81,9 @@ class ARowExpandsWhatItNamesAndTakesOnOnlyWhatItCannotTest {
         assertTrue(answer.present(), "prepared of app: " + answer.reports());
         Prepared state = answer.value();
 
-        Set<String> beyond = new LinkedHashSet<>(db.ask(new Bodies.RequiredRecursiveDefs("app")).value());
+        Set<String> beyond = new LinkedHashSet<>();
+        db.ask(new Bodies.RequiredRecursiveDefs("app")).value()
+                .forEach(reference -> beyond.add(reference.rendered()));
         beyond.removeAll(HelperInliner.helpersOf(db.ask(new Bodies.Settled("app")).value()).keySet());
         beyond.removeAll(state.operandMethods().values());
 

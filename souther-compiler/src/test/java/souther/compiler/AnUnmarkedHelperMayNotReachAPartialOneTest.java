@@ -520,9 +520,8 @@ class AnUnmarkedHelperMayNotReachAPartialOneTest {
         ValueName.Helper foreign = new ValueName.Helper("maths", "spin");
         ValueName.Helper own = new ValueName.Helper("order", "spin");
 
-        assertEquals(new ReachName.OfModule("maths", "spin"),
-                ReachName.of(foreign, "spin", "order"));
-        assertEquals(new ReachName.Bare("spin"), ReachName.of(own, "spin", "order"));
+        assertEquals(new ReachName.OfModule(foreign), ReachName.of(foreign, "spin", "order"));
+        assertEquals(new ReachName.Own(own), ReachName.of(own, "spin", "order"));
     }
 
     /** An imported `partial` helper may not be handed over either. */

@@ -184,7 +184,7 @@ final class AdmissibleReading implements ClauseReading<AdmissibleValues<FactSubj
         if (e instanceof Core.UnitValue unit) {
             return Value.of(unit.data());
         }
-        Object folded = Terms.folded(e);
+        Object folded = Terms.folded(e, symbols);
         if (folded instanceof String text) {
             return Value.text(text);
         }

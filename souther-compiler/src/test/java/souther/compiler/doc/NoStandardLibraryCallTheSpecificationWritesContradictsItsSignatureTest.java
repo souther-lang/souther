@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.Reserved;
 import souther.compiler.types.Type;
+import souther.compiler.types.ValueName;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -305,7 +306,10 @@ class NoStandardLibraryCallTheSpecificationWritesContradictsItsSignatureTest {
                 found.add(call.saying(anchor, "names nothing the standard library publishes"));
                 continue;
             }
-            if (DefaultStdlib.get().isEmptyCollectionValue(call.name())) {
+            // The specification writes a spelling, so the library is asked which operation that
+            // reaches before it is asked anything about the operation.
+            ValueName.Stdlib.Operation named = DefaultStdlib.get().operation(call.name());
+            if (named != null && DefaultStdlib.get().isEmptyCollectionValue(named)) {
                 found.add(call.saying(anchor, "is a value and takes no argument list"));
                 continue;
             }

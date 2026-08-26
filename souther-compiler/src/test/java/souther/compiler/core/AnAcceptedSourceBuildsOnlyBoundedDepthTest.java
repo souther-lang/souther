@@ -331,7 +331,9 @@ class AnAcceptedSourceBuildsOnlyBoundedDepthTest {
                 for (String behavior : compilation.declaredBehaviors(module)) {
                     say(tooDeep, one.what(), behavior, "the Hir it expanded",
                             depthOf(compilation.db()
-                                    .ask(new Bodies.LoweredBody(module, behavior)).value().value()));
+                                    .ask(new Bodies.LoweredBody(module,
+                                            new souther.compiler.ast.DefinitionName(behavior)))
+                                    .value().value()));
                     say(tooDeep, one.what(), behavior, "the Core it elaborated",
                             Depth.of(compilation.db()
                                     .ask(new Bodies.CheckedBehavior(module, behavior)).value().body()));

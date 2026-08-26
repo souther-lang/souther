@@ -812,7 +812,7 @@ public final class Resolve {
      */
     private Hir.Var behaviorReached(Ast.Var ref, ValueName.Behavior name) {
         answered(ref.written(), name);
-        return new Hir.Var.Denoting(ref.written(), name,
+        return new Hir.Var.Denoting(ref.written(),
                 ReachName.of(name, ref.name(), reachable.module()), ref.region());
     }
 
@@ -1316,7 +1316,7 @@ public final class Resolve {
             name = new Hir.Var.Unanswered(written, over);
         } else {
             answered(call.name(), denotes);
-            name = new Hir.Var.Denoting(written, denotes,
+            name = new Hir.Var.Denoting(written,
                     ReachName.of(denotes, call.written(), reachable.module()), over);
         }
         return new Hir.Apply(name, exprs(call.args(), bound), call.origin(), call.appliedAs(),
@@ -1337,7 +1337,7 @@ public final class Resolve {
             return new Hir.Var.Unanswered(v.written(), v.region());
         }
         answered(v.written(), denotes);
-        return new Hir.Var.Denoting(v.written(), denotes,
+        return new Hir.Var.Denoting(v.written(),
                 ReachName.of(denotes, v.name(), reachable.module()), v.region());
     }
 
@@ -1409,7 +1409,7 @@ public final class Resolve {
             if (Reserved.isNamespace(reachable.module())
                     || !symbols.library().privateOperations().contains(written)) {
                 return new Reach.Reaches(dot < 0 ? ValueName.Stdlib.namespace(written)
-                        : new ValueName.Stdlib(written.substring(0, dot),
+                        : ValueName.Stdlib.operation(written.substring(0, dot),
                                 written.substring(dot + 1)));
             }
             return Reach.NOT_IN_SCOPE;
@@ -1519,7 +1519,7 @@ public final class Resolve {
         switch (lookup(written, applied, bound)) {
             case Reach.Reaches(ValueName denotes) -> {
                 ValueName resolved = answered(written, denotes);
-                return new Hir.Var.Denoting(written, resolved,
+                return new Hir.Var.Denoting(written,
                         ReachName.of(resolved, written.canonical(), reachable.module()),
                         written.region());
             }

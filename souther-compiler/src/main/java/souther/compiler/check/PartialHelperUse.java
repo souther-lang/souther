@@ -48,12 +48,17 @@ final class PartialHelperUse {
     /** The first rule, for one helper of {@code module}: unmarked, it may reach no {@code partial} one.
      * Asked per helper so that a module with several of them reports all of them in one build — the
      * word goes on each. */
-    static void rejectReachingPartial(Hir.FnDef helper, String module,
+    static void rejectReachingPartial(HelperEntry held, String module,
                                       PartialReachability reachability) {
+        Hir.FnDef helper = held.definition();
         if (!helper.declaredBy(module) || helper.partial()) {
             return;
         }
-        Optional<List<String>> path = reachability.fromHelper(helper.name());
+        // Asked with the reference this module reaches it by, which is the graph's node. Asked with
+        // the name it is held under, a definition reached one way and held under another would be
+        // asked about a node the graph has not got, and the answer would be that it reaches nothing.
+        Optional<List<souther.compiler.types.ReachName.Declaration>> path =
+                reachability.fromHelper(held.reachedAs());
         if (path.isPresent()) {
             throw reachesPartial(helper, path.get());
         }
@@ -65,8 +70,9 @@ final class PartialHelperUse {
      * each member of a mutually-recursive group is reported on its own — the word goes on each of them,
      * so a single report for the group would leave the rest to be found one build at a time.
      */
-    private static CompileException reachesPartial(Hir.FnDef helper, List<String> path) {
-        String reached = path.get(path.size() - 1);
+    private static CompileException reachesPartial(
+            Hir.FnDef helper, List<souther.compiler.types.ReachName.Declaration> path) {
+        String reached = path.get(path.size() - 1).rendered();
         String rendered = PartialReachability.render(path);
         return CompileException.of(Diagnostic
                         .at(helper.written().reportedAt()).say(new BehaviorMessage.ItReachesAPartialHelper(helper.name(), reached, rendered)).build());

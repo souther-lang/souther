@@ -100,7 +100,7 @@ class WhatWasWrittenIsFoundByFollowingWhatANameWasGivenTest {
     @Test
     void anArmOpeningAnAnswerOpensNoText() {
         Core answer = new Core.Call(new Core.Reached.OfDeclaration(
-                ReachName.of(FIND, "findIt", "demo"), FIND), List.of(),
+                new ReachName.Own(FIND)), List.of(),
                 Type.ref(FOUND), POS);
         Core.Binder x = CoreBinders.of(binders.binder("x", POS));
 

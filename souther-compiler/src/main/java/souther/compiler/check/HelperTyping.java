@@ -57,7 +57,7 @@ public final class HelperTyping {
         Map<ValueName, Type> settledTypes = new HashMap<>();
         Map<ValueName, Object> settledConstants = new HashMap<>();
         Preserved standing = Preserved.valuesAlreadySettled(settledTypes::get);
-        for (Hir.FnDef h : valuesBeforeTheValuesThatNameThem(symbols.library(), toCheck)) {
+        for (Hir.FnDef h : valuesBeforeTheValuesThatNameThem(inliner, symbols.library(), toCheck)) {
             boolean recursive = recursiveHelperFns.containsKey(h.name());
             // Where this definition stands, or null where it stands nowhere: the one thing every
             // rule below that is about a row's operand asks, read off the definition the rule is
@@ -187,7 +187,8 @@ public final class HelperTyping {
                 // What it is a constant of, read off the body it was checked as. A reference to it
                 // is written out as that constant, so every position that asks whether an
                 // expression is known at compile time goes on reading a literal.
-                ConstEval.eval(body).ifPresent(c -> settledConstants.put(settled, c));
+                ConstEval.against(symbols).eval(body)
+                        .ifPresent(c -> settledConstants.put(settled, c));
             }
             if (emitted != null) {
                 elaborated.helpers.put(h.name(), elaboratedBody);   // the backend emits this
@@ -245,17 +246,28 @@ public final class HelperTyping {
      * written, each copying the other, which is the answer this pass gave before there was an order
      * at all.
      */
-    private static List<Hir.FnDef> valuesBeforeTheValuesThatNameThem(Stdlib stdlib, Map<String, Hir.FnDef> held) {
+    private static List<Hir.FnDef> valuesBeforeTheValuesThatNameThem(
+            HelperInliner inliner, Stdlib stdlib, Map<String, Hir.FnDef> held) {
+        // The walk below finds edges by what a name reaches and records them at the addresses this
+        // ordering is over. Where a reference is held is the table's answer, so neither coordinate
+        // is read off the other's spelling and nothing here keeps a pairing of its own.
         Map<String, Set<String>> names = new LinkedHashMap<>();
         for (Map.Entry<String, Hir.FnDef> e : held.entrySet()) {
             if (!(e.getValue().body() instanceof Hir.FnBody.Written written)) {
                 continue;
             }
-            Set<String> reached = new LinkedHashSet<>();
-            HelperInliner.helperCallsIn(stdlib, written.expr(), held, reached);
-            ValueCycles.valuesRead(written.expr(), held, reached);
-            reached.retainAll(held.keySet());
-            names.put(e.getKey(), reached);
+            Set<souther.compiler.types.ReachName.Declaration> reached = new LinkedHashSet<>();
+            HelperInliner.helperCallsIn(stdlib, written.expr(), inliner.reachable(), reached);
+            Set<String> here = new LinkedHashSet<>();
+            reached.forEach(reference -> {
+                souther.compiler.ast.DefinitionName at = inliner.heldAt(reference);
+                if (at != null && held.containsKey(at.text())) {
+                    here.add(at.text());
+                }
+            });
+            ValueCycles.valuesRead(written.expr(), held, inliner::heldAt, here);
+            here.retainAll(held.keySet());
+            names.put(e.getKey(), here);
         }
         // Depth-first with its own stack. A module's values chain as deeply as the author wrote
         // them, and the chain is what this is for, so the call stack is the wrong one to walk it on.
@@ -381,9 +393,10 @@ public final class HelperTyping {
     }
 
     /** The same, read off a table rather than off an inliner over it. */
-    static Map<String, Type> recursiveCallSigs(HelperTable table,
-                                               java.util.Collection<String> names, Symbols symbols) {
-        return sigsOf(names, table::reached, symbols, table.module());
+    static Map<String, Type> recursiveCallSigs(
+            HelperTable table, java.util.Collection<souther.compiler.types.ReachName.Declaration> references,
+            Symbols symbols) {
+        return sigsOf(references, table::reached, symbols, table.module());
     }
 
     /**
@@ -394,12 +407,18 @@ public final class HelperTyping {
      *     compile does not own. A call that needed it fails where the call is written, which is in
      *     this module and is a place its author can act on.
      */
-    private static Map<String, Type> sigsOf(java.util.Collection<String> names,
-                                            java.util.function.Function<String, Hir.FnDef> declaring,
-                                            Symbols symbols, String ownModule) {
+    private static Map<String, Type> sigsOf(
+            java.util.Collection<souther.compiler.types.ReachName.Declaration> references,
+            java.util.function.Function<souther.compiler.types.ReachName.Declaration, Hir.FnDef>
+                    declaring,
+            Symbols symbols, String ownModule) {
         Map<String, Type> sigs = new HashMap<>();
-        for (String name : names) {
-            Hir.FnDef h = declaring.apply(name);
+        for (souther.compiler.types.ReachName.Declaration reference : references) {
+            // Which declaration each is, the reference answers. What comes out is a scope — the
+            // names a body may write for a call this representation kept standing — so it is keyed
+            // as a scope is, by what the body writes. The resolution happened here, above it.
+            String name = reference.rendered();
+            Hir.FnDef h = declaring.apply(reference);
             boolean ours = h.declaredBy(ownModule);
             if (h.declaredReturn() == null) {
                 if (!ours) {
@@ -445,11 +464,12 @@ public final class HelperTyping {
      */
     static void rejectPartialHelperInInvariant(Hir.Expr e, String data,
                                                PartialReachability reachability) {
-        List<String> path = reachability.fromExpression(e).orElse(null);
+        List<souther.compiler.types.ReachName.Declaration> path =
+                reachability.fromExpression(e).orElse(null);
         if (path == null) {
             return;
         }
-        String reached = path.get(path.size() - 1);
+        String reached = path.get(path.size() - 1).rendered();
         String rendered = "invariant -> " + PartialReachability.render(path);
         Hir.Apply at = firstCallTo(e, path.get(0));
         throw CompileException.of(Diagnostic.at(at == null ? null : at.name().reportedAt())
@@ -459,11 +479,12 @@ public final class HelperTyping {
 
     static void rejectPartialHelperInEnsures(Hir.Expr e, String behavior,
                                              PartialReachability reachability) {
-        List<String> path = reachability.fromExpression(e).orElse(null);
+        List<souther.compiler.types.ReachName.Declaration> path =
+                reachability.fromExpression(e).orElse(null);
         if (path == null) {
             return;
         }
-        String reached = path.get(path.size() - 1);
+        String reached = path.get(path.size() - 1).rendered();
         String rendered = "ensures -> " + PartialReachability.render(path);
         Hir.Apply at = firstCallTo(e, path.get(0));
         throw CompileException.of(Diagnostic.at(at == null ? null : at.name().reportedAt())
@@ -473,15 +494,15 @@ public final class HelperTyping {
 
     /** The first application of {@code name} in {@code e}, for the report to underline, or null where
      * the clause holds none (a lowering wrote the call without a name of its own). */
-    private static Hir.Apply firstCallTo(Hir.Expr e, String name) {
+    private static Hir.Apply firstCallTo(Hir.Expr e, souther.compiler.types.ReachName.Declaration reference) {
         if (e instanceof Hir.Apply call && call.answered() != null
-                && call.answered().reaches().equals(name)) {
+                && call.answered().reachedAs().equals(reference)) {
             return call;
         }
         Hir.Apply[] found = new Hir.Apply[1];
         TypeChecker.forEachChild(e, c -> {
             if (found[0] == null) {
-                found[0] = firstCallTo(c, name);
+                found[0] = firstCallTo(c, reference);
             }
         });
         return found[0];

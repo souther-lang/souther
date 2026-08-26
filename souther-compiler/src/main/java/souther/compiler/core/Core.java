@@ -148,15 +148,13 @@ public sealed interface Core {
     }
 
     /**
-     * A callee some module named: the name that module reaches it by, and what that name was
-     * resolved to.
+     * A callee some module named: the reference resolution settled for it.
      *
-     * <p>Both, because they answer different questions and neither is derived from the other. The
-     * backend emits the method the reach name spells; a reader asking what kind of thing was called —
-     * a module's own helper, one of the language's operations, a behavior whose implementation comes
-     * from outside — asks what the name denotes. Working the second out of the first would be
-     * resolving a name this compiler resolved already, and a bare spelling reaches a helper and an
-     * injected behavior alike.
+     * <p>One value, because a reference is one. The backend emits the method the reach name spells;
+     * a reader asking what kind of thing was called — a module's own helper, one of the language's
+     * operations, a behavior whose implementation comes from outside — asks what that reference
+     * denotes, and {@link ReachName} carries both. Held as a route and a denotation side by side,
+     * the two could be paired from different references and nothing would say so.
      *
      * <p>A kernel call is one of these and not something beside them. {@code List.sort} is reached
      * by a name and resolves to a library operation, and its declaration being a kernel is what that
@@ -168,21 +166,76 @@ public sealed interface Core {
      */
     sealed interface Reached extends CallTarget {
 
-        /** The name the module being emitted reaches the callee by. */
-        ReachName name();
+        /** The reference the module being emitted reaches the callee by, which reaches a
+         *  declaration — a call is emitted for nothing else, and both arms below say so. */
+        ReachName.Declaration name();
 
-        /** What that name was resolved to. */
-        ValueName denotes();
+        /** What that reference reaches. Read off the reference rather than held beside it: a
+         *  declaration kept next to the route it was reached by is the same fact twice, and the two
+         *  agree only until a pass replaces one of them. */
+        default ValueName denotes() {
+            return name().denotes();
+        }
 
         @Override
         default String rendered() {
             return name().rendered();
         }
 
-        /** A callee whose declaration this compilation carries: a module's own helper, another
-         *  module's, an injected behavior, a library operation written in Souther. What is emitted
-         *  for it is a call. */
-        record OfDeclaration(ReachName name, ValueName denotes) implements Reached {
+        /**
+         * A callee whose declaration this compilation carries: a helper the emitting module holds
+         * as a method of its own, or a behavior. What is emitted for it is a call.
+         *
+         * <p>Those two and nothing else, said here rather than found out downstream. A binding is
+         * applied where it stands and a type used as a value is a construction, so neither is a
+         * call to a declaration; a library operation the language implements is a kernel and is
+         * {@link OfKernel}. An emitter reading one of these divides it into a helper and a behavior
+         * and has no third arm to write, and that is true because this refuses to build a fourth
+         * rather than because the emitters have all been counted.
+         */
+        record OfDeclaration(ReachName.Declaration name) implements Reached {
+
+            /**
+             * What running this call means: a method of the emitting module, or a behavior.
+             *
+             * <p>Derived and not held. What a call reaches is on the reference already, and the two
+             * kinds of thing a residual call can reach are the arms this refuses to be built with —
+             * so an emitter reading this is reading the reference rather than a second answer that
+             * could come to disagree with it.
+             *
+             * <p>Not a property of a {@link ValueName}. Whether the library implements an operation
+             * as a helper, an intrinsic or a builtin is the library's own business and is
+             * deliberately not on the name; what holds here is narrower — that a call this
+             * compilation kept standing over a library operation is a call to a method, because a
+             * kernel would be {@link OfKernel} and anything else would have been expanded. That is
+             * true of this phase and is said at this phase.
+             */
+            public Reaches reaches() {
+                return switch (name) {
+                    // A helper of this module and one of another are the same thing to emit: a call
+                    // to a method the module holds. So is an operation the library wrote in
+                    // Souther — what differs between the three is where the declaration came from,
+                    // which is a different question and is asked of the declaration.
+                    case ReachName.Own(ValueName.OfAModule declared) -> ofAModule(declared);
+                    case ReachName.OfModule(ValueName.OfAModule declared) -> ofAModule(declared);
+                    case ReachName.OfLibrary(ValueName.Stdlib.Operation operation) ->
+                            new Reaches.AHelper(operation);
+                };
+            }
+
+            private static Reaches ofAModule(ValueName.OfAModule declared) {
+                return switch (declared) {
+                    case ValueName.Helper helper -> new Reaches.AHelper(helper);
+                    case ValueName.Behavior behavior -> new Reaches.ABehavior(behavior);
+                };
+            }
+
+            public OfDeclaration {
+                if (name == null) {
+                    throw new IllegalArgumentException(
+                            "a call applies something this compilation resolved");
+                }
+            }
 
             @Override
             public String toString() {
@@ -199,16 +252,72 @@ public sealed interface Core {
          * compiler keeps for itself — and a spelling it guessed from would be resolving, by the
          * alias and the name, what was resolved already.
          *
-         * <p>Still carries both the reach name and what it denotes, and neither is the kernel. The
-         * name says how this module got here, the denotation says which declaration was chosen, and
-         * the kernel says what that declaration is. Two declarations naming one kernel is a thing
-         * the library is refused for while it is built, not a thing this collapses.
+         * <p>The kernel is beside the reference and is not part of it. The reference says how this
+         * module got here and which declaration it chose; the kernel says what that declaration
+         * turned out to be, which the library answered and this holds rather than asks again. Two
+         * declarations naming one kernel is a thing the library is refused for while it is built,
+         * not a thing this collapses.
          */
-        record OfKernel(ReachName name, ValueName denotes, Kernel kernel) implements Reached {
+        record OfKernel(ReachName.OfLibrary name, Kernel kernel) implements Reached {
+
+            public OfKernel {
+                // Only the library declares a kernel, and only an operation of it is one. Both are
+                // the type of the reference, so there is nothing here to turn away.
+                if (name == null) {
+                    throw new IllegalArgumentException("a kernel call reaches the operation it is");
+                }
+            }
 
             @Override
             public String toString() {
                 return rendered();
+            }
+        }
+    }
+
+    /**
+     * What a call to a declaration runs, for whoever has to emit it.
+     *
+     * <p>The two kinds of thing a call that survived to here can reach, and the division an emitter
+     * writes its arms over. Not provenance: a module's own helper, another module's and a library
+     * operation written in Souther are one answer, because one thing is emitted for all three — a
+     * call to a method the emitting module holds. What differs between them is where the
+     * declaration came from, which is a different question and is asked of the declaration.
+     *
+     * <p>Read off a call rather than stored on one ({@link Reached.OfDeclaration#reaches}), so this
+     * cannot come to say something the reference does not.
+     *
+     * <p>Sealed, and the switches over it carry no {@code default}: a third kind of callee is a
+     * compile error at every emitter rather than a call one of them quietly does nothing for.
+     */
+    sealed interface Reaches {
+
+        /** The declaration reached. */
+        ValueName declaration();
+
+        /**
+         * A method the emitting module holds, which is where this program's recursions live.
+         *
+         * <p>{@code declaration} is what the module holds a copy of, and which module wrote it is
+         * that identity's to say — {@code souther.list} for an operation reached as
+         * {@code List.foldFrom}. Where the module holds the method is not here: that follows from
+         * how the call reaches it, and a reader emitting one works it out from the reference.
+         */
+        record AHelper(ValueName declaration) implements Reaches { }
+
+        /**
+         * A behavior, whose implementation is somewhere else — another module's, or supplied from
+         * outside this program altogether.
+         *
+         * <p>Where the value of it stands when this call runs is the emitter's own question: a
+         * field of the class being emitted, a parameter, a slot. That is a fact about how one
+         * output lays a frame out and is no part of what the call reaches.
+         */
+        record ABehavior(ValueName.Behavior behavior) implements Reaches {
+
+            @Override
+            public ValueName declaration() {
+                return behavior;
             }
         }
     }

@@ -59,8 +59,9 @@ class AnOperationTheLibraryGainsIsAnsweredForTest {
     @Test
     void everyOperationInAQuestionsRangeAnswersItOneWayAndNotBoth() {
         List<String> unsettled = new ArrayList<>();
-        for (Map.Entry<String, Stdlib.Entry> e : DefaultStdlib.get().entries().entrySet()) {
-            ValueName operation = DefaultStdlib.get().operation(e.getKey());
+        for (Map.Entry<ValueName.Stdlib.Operation, Stdlib.Entry> e
+                : DefaultStdlib.get().entries().entrySet()) {
+            ValueName operation = e.getKey();
             for (Question question : Question.askedOf(DefaultStdlib.get(), e.getValue().signature())) {
                 boolean answered = question.answeredFor(DefaultStdlib.get(), operation);
                 boolean silent = question.nothingSaidOf().contains(operation);
@@ -90,12 +91,12 @@ class AnOperationTheLibraryGainsIsAnsweredForTest {
         List<String> unasked = new ArrayList<>();
         for (Question question : Question.values()) {
             for (ValueName operation : question.answeredOperations()) {
-                if (!question.asksOfOperation(DefaultStdlib.get(), operation.toString())) {
+                if (!question.asksOfOperation(DefaultStdlib.get(), operation)) {
                     unasked.add(operation + " — " + question + " (a rule)");
                 }
             }
             for (ValueName operation : question.nothingSaidOf()) {
-                if (!question.asksOfOperation(DefaultStdlib.get(), operation.toString())) {
+                if (!question.asksOfOperation(DefaultStdlib.get(), operation)) {
                     unasked.add(operation + " — " + question + " (nothing to say)");
                 }
             }

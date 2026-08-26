@@ -109,17 +109,19 @@ public final class CallElaborator {
      * the two apart — which is what keeps a growing fold's seed the seed it was.
      */
     static Core libraryValue(Hir.Var.Denoting v, CheckContext ctx, Type expected) {
-        if (!(v.denotes() instanceof ValueName.Stdlib lib)) {
+        // An operation of the library. The namespace applied is a construction and not a value the
+        // library declares, so it takes none of the paths below.
+        if (!(v.denotes() instanceof ValueName.Stdlib.Operation lib)) {
             return null;
         }
-        Stdlib.Entry entry = ctx.symbols().library().entry(lib.qualified());
+        Stdlib.Entry entry = ctx.symbols().library().entry(lib);
         if (entry == null || !entry.declaration().params().isEmpty()) {
             return null;
         }
         Type declared = entry.signature().result();
         Map<String, Type> bindings = new HashMap<>();
         BottomInfer.pinResultTypeVars(declared, expected, bindings, ctx.symbols());
-        return new Core.Call(reached(new ReachName.OfLibrary(lib), lib, ctx),
+        return new Core.Call(reached(new ReachName.OfLibrary(lib), ctx),
                 List.of(), TypeOps.toBottom(TypeOps.substitute(declared, bindings)), v.pos());
     }
 
@@ -138,14 +140,14 @@ public final class CallElaborator {
      * kernel is a property of the declaration the resolver picked, and the two are one string apart
      * only for as long as they happen to be.
      */
-    private static Core.Reached reached(ReachName name, ValueName denotes, CheckContext ctx) {
-        if (denotes instanceof ValueName.Stdlib operation) {
-            Stdlib.Intrinsic kernel = ctx.symbols().library().intrinsicOf(operation);
+    private static Core.Reached reached(ReachName.Declaration name, CheckContext ctx) {
+        if (name instanceof ReachName.OfLibrary library) {
+            Stdlib.Intrinsic kernel = ctx.symbols().library().intrinsicOf(library.denotes());
             if (kernel != null) {
-                return new Core.Reached.OfKernel(name, denotes, kernel.kernel());
+                return new Core.Reached.OfKernel(library, kernel.kernel());
             }
         }
-        return new Core.Reached.OfDeclaration(name, denotes);
+        return new Core.Reached.OfDeclaration(name);
     }
 
     static Core elaborateCall(Hir.Apply call, Scope env, CheckContext ctx,
@@ -191,13 +193,25 @@ public final class CallElaborator {
         //
         // A trailing parameter an implementation takes its `depends on` as is written as a binding
         // and reaches the behavior the clause named: the call is to that behavior, and everything
-        // below asks what a call reaches rather than which parameter carried it here. The reach
-        // name stays what this module writes, which is the parameter's spelling.
-        ValueName denotes = callee.denotes() instanceof ValueName.Local local
-                && ctx.dependencyOf(local.id()) != null
-                ? ctx.dependencyOf(local.id()) : callee.denotes();
-        return new Core.Call(reached(callee.reachedAs(), denotes, ctx), ca.cores(), result,
-                call.pos());
+        // below asks what a call reaches rather than which parameter carried it here.
+        //
+        // Which makes it a different reference, and it is worked out as one. The parameter's is a
+        // reference to a binding, so keeping it beside the behavior would be a route to one thing
+        // paired with a denotation of another — the pairing `ReachName` holds both halves to
+        // prevent. What this module reaches the behavior by is asked of the behavior.
+        ValueName dependency = callee.denotes() instanceof ValueName.Local local
+                ? ctx.dependencyOf(local.id()) : null;
+        ReachName reaches = dependency == null
+                ? callee.reachedAs()
+                : ReachName.of(dependency, callee.name(), ctx.symbols().module());
+        if (!(reaches instanceof ReachName.Declaration declaration)) {
+            // The typing above refused what is not a name, and a binding applied became an apply
+            // rather than a call. So what is left reaches a declaration, and one that does not is
+            // this compiler having built a call for something no method stands behind.
+            throw new IllegalStateException("`" + call.written() + "` was elaborated as a call and"
+                    + " reaches " + reaches + ", which no method is emitted for");
+        }
+        return new Core.Call(reached(declaration, ctx), ca.cores(), result, call.pos());
     }
 
     /**
@@ -553,8 +567,11 @@ public final class CallElaborator {
             throw new IllegalStateException("`" + call.written()
                     + "` applies something that is not a name, at " + call.pos());
         }
-        boolean library = callee.denotes() instanceof ValueName.Stdlib;
-        Stdlib.Entry entry = library ? ctx.symbols().library().entry(callee.reaches()) : null;
+        // Asked with the name the library keys itself by, which the denotation carries. Asked with
+        // the reference rendered, this would be the library looked up by a spelling — the same
+        // string today, and the library's to change.
+        Stdlib.Entry entry = callee.denotes() instanceof ValueName.Stdlib.Operation operation
+                ? ctx.symbols().library().entry(operation) : null;
         // A declaration written with no parameter list is a value ([#fn-declaration]), and an empty
         // `()` would be a second spelling of it. The library was the last place that spelling was
         // still accepted.
@@ -567,7 +584,8 @@ public final class CallElaborator {
         // and yield its result type; the backend emits the primitive the call says it reaches. A
         // Souther-bodied library call — a recursive helper such as `List.foldFrom` — is not one of
         // these and takes the paths below, as any helper does.
-        Stdlib.Intrinsic declaredKernel = callee.denotes() instanceof ValueName.Stdlib operation
+        Stdlib.Intrinsic declaredKernel = callee.denotes() instanceof ValueName.Stdlib.Operation
+                operation
                 ? ctx.symbols().library().intrinsicOf(operation) : null;
         if (declaredKernel != null) {
             Kernel kernel = declaredKernel.kernel();
@@ -593,7 +611,7 @@ public final class CallElaborator {
                 return numericFold(call, applied.result(), expected);
             }
             if (kernel == Kernel.STRING_MATCHES) {
-                validateRegexPattern(args.get(0));
+                validateRegexPattern(args.get(0), ctx.symbols());
             }
             return applied.result();
         }
@@ -680,10 +698,10 @@ public final class CallElaborator {
      * form written directly. Empty when the argument is a runtime value or the data is not a
      * single-{@code value} wrapper (e.g. a product).
      */
-    static Optional<Object> newtypeConstantArg(Hir.NewData nd) {
+    static Optional<Object> newtypeConstantArg(Hir.NewData nd, Symbols symbols) {
         if (nd.spreads().isEmpty() && nd.inits().size() == 1
                 && nd.inits().get(0).name().equals("value")) {
-            return ConstEval.eval(nd.inits().get(0).value());
+            return ConstEval.against(symbols).eval(nd.inits().get(0).value());
         }
         return Optional.empty();
     }
@@ -694,8 +712,8 @@ public final class CallElaborator {
      * literal is one such expression and so is a {@code ++} of literals and of a module's values,
      * which is what lets several formats share a part (issue #208). What is validated is the string
      * the whole expression composes to, not the pieces it was written in. */
-    static void validateRegexPattern(Hir.Expr e) {
-        String pattern = ConstEval.evalString(e).orElse(null);
+    static void validateRegexPattern(Hir.Expr e, Symbols symbols) {
+        String pattern = ConstEval.against(symbols).evalString(e).orElse(null);
         if (pattern == null) {
             throw CompileException.of(Diagnostic
                             .at(e.pos()).say(new TypeMessage.ThePatternMustBeWrittenOut()).build());

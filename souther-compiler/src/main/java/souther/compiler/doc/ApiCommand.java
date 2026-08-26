@@ -3,6 +3,7 @@ package souther.compiler.doc;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.Reserved;
 import souther.compiler.stdlib.Stdlib;
+import souther.compiler.types.ValueName;
 import souther.compiler.ast.Hir;
 import souther.compiler.types.Type;
 
@@ -127,15 +128,21 @@ public final class ApiCommand {
     static Map<String, Signature> surface(Stdlib stdlib) {
         Map<String, Signature> surface = new LinkedHashMap<>();
         for (String name : stdlib.published()) {
-            Stdlib.Rewrite rewrite = stdlib.rewriteOf(name);
+            // A published name is a spelling, and the library is what turns one into the operation
+            // it reaches. Everything below is asked with that operation.
+            ValueName.Stdlib.Operation operation = stdlib.operation(name);
+            if (operation == null) {
+                continue;
+            }
+            Stdlib.Rewrite rewrite = stdlib.rewriteOf(operation);
             if (rewrite != null) {
-                Stdlib.Entry target = stdlib.entry(rewrite.target().qualified());
+                Stdlib.Entry target = stdlib.entry(rewrite.target());
                 if (target != null) {
                     surface.put(name, declared(target, rewrite.keptArgs()));
                 }
                 continue;
             }
-            Stdlib.Entry entry = stdlib.entry(name);
+            Stdlib.Entry entry = stdlib.entry(operation);
             if (entry != null) {
                 surface.put(name, declared(entry, entry.signature().params().size()));
             }

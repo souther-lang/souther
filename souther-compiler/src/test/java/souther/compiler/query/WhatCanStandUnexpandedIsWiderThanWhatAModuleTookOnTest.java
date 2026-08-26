@@ -105,7 +105,9 @@ class WhatCanStandUnexpandedIsWiderThanWhatAModuleTookOnTest {
 
         assertTrue(canStand(db, "owned", InliningPolicy.FULL).containsKey("depth"),
                 "what can stand: " + canStand(db, "owned", InliningPolicy.FULL).keySet());
-        assertTrue(db.ask(new Bodies.RequiredRecursiveDefs("owned")).value().contains("depth"));
+        assertTrue(db.ask(new Bodies.RequiredRecursiveDefs("owned")).value().contains(
+                new souther.compiler.types.ReachName.Own(
+                        new souther.compiler.types.ValueName.Helper("owned", "depth"))));
     }
 
     /** And a signature is the declaration's own, not something worked out from the call sites. */

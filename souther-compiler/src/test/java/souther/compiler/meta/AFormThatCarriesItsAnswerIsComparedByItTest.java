@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
@@ -104,7 +105,12 @@ class AFormThatCarriesItsAnswerIsComparedByItTest {
         for (RecordComponent part : form.getRecordComponents()) {
             spelling |= part.getType() == WrittenName.class || part.getType() == String.class;
             answer |= part.getType() == TypeSymbol.class || part.getType() == ValueName.class
-                    || part.getType() == BindingId.class || part.getType() == Type.class;
+                    || part.getType() == BindingId.class || part.getType() == Type.class
+                    // A use is settled to a reference, which carries the declaration it reaches.
+                    // Read for the same reason `ValueName` is: what the front end put beside the
+                    // spelling is the answer, whether the answer is the declaration or the
+                    // reference that reached it.
+                    || part.getType() == ReachName.class;
         }
         return spelling && answer;
     }

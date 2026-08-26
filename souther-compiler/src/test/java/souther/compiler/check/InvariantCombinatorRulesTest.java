@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.Compiler;
 import souther.compiler.diag.Severity;
+import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
 
@@ -238,25 +239,27 @@ class InvariantCombinatorRulesTest {
 
     /** The rules the discharge check can reach: what the tree it reads may hold. */
     private static Set<String> reachable() {
-        return Combinators.names().stream()
+        // Rendered here, at the end: the rows below are written as spellings, and this is what
+        // compares against them.
+        return Combinators.named().stream()
                 .filter(fn -> !DefaultStdlib.get().sugared(fn))
+                .map(ValueName.Stdlib.Operation::qualified)
                 .collect(Collectors.toCollection(TreeSet::new));
     }
 
     @Test
     void everyRuleIsKeyedByANameTheAnalysisStillSees() {
-        for (String fn : Combinators.names()) {
+        for (ValueName.Stdlib.Operation fn : Combinators.named()) {
             assertTrue(DefaultStdlib.get().isLibraryFunction(fn), fn + " is not a standard-library operation");
         }
         // A sugar is written by an author and gone by the time this check reads a tree. Its rule is
         // the totality check's to read, and this one cannot look it up: what a representation keeps
         // standing is built from the library's declarations, and a sugar has none.
-        for (String fn : Combinators.names()) {
+        for (ValueName.Stdlib.Operation fn : Combinators.named()) {
             if (!DefaultStdlib.get().sugared(fn)) {
                 continue;
             }
-            assertFalse(Preserved.byTheLanguagesOwnOperations().operations()
-                            .containsKey(DefaultStdlib.get().operation(fn)),
+            assertFalse(Preserved.byTheLanguagesOwnOperations().operations().containsKey(fn),
                     fn + " is sugar and is kept standing, so a tree this check reads could hold it");
         }
     }

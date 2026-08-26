@@ -11,6 +11,9 @@ import souther.compiler.types.ValueName;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import souther.compiler.types.ReachName;
+
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -42,23 +45,34 @@ class TheCallGraphReadsASugarFromTheLibraryThatDeclaresItTest {
 
     private static final SourcePos POS = new SourcePos(1, 1);
 
-    /** A call of {@code qualified} applied to {@code args} integers. */
-    private static Hir.Expr callTo(String qualified, int args) {
-        int dot = qualified.lastIndexOf('.');
-        ValueName.Stdlib name =
-                new ValueName.Stdlib(qualified.substring(0, dot), qualified.substring(dot + 1));
+    /** A call of {@code name} applied to {@code args} integers. Taken as the operation, so this
+     *  does not split a spelling to find out which part of it is the alias. */
+    private static Hir.Expr callTo(ValueName.Stdlib.Operation name, int args) {
         List<Hir.Expr> given = new ArrayList<>();
         for (int i = 0; i < args; i++) {
             given.add(new Hir.IntLit(i, POS, null));
         }
-        return new Hir.Apply(qualified, name, new ReachName.OfLibrary(name), given,
+        return new Hir.Apply(name.qualified(), new ReachName.OfLibrary(name), given,
                 ConstructionOrigin.own(), POS, null);
     }
 
+    /** The library's helpers as a table is keyed: under the operation each is the body of, which
+     *  the library says rather than this splitting a qualified name. */
+    private static Map<ReachName.Declaration, HelperEntry> libraryHelpers() {
+        Map<ReachName.Declaration, HelperEntry> reachable = new LinkedHashMap<>();
+        DefaultStdlib.get().helpers().forEach((operation, def) -> {
+            ReachName.Declaration reference = new ReachName.OfLibrary(operation);
+            reachable.put(reference, HelperEntry.reached(reference, def));
+        });
+        return reachable;
+    }
+
     private static Set<String> callsIn(Hir.Expr e) {
-        Set<String> out = new LinkedHashSet<>();
-        HelperInliner.helperCallsIn(DefaultStdlib.get(), e, DefaultStdlib.get().helpers(), out);
-        return out;
+        Set<ReachName.Declaration> out = new LinkedHashSet<>();
+        HelperInliner.helperCallsIn(DefaultStdlib.get(), e, libraryHelpers(), out);
+        Set<String> rendered = new LinkedHashSet<>();
+        out.forEach(reference -> rendered.add(reference.rendered()));
+        return rendered;
     }
 
     @Test
@@ -104,11 +118,12 @@ class TheCallGraphReadsASugarFromTheLibraryThatDeclaresItTest {
         HelperTable table = HelperTable.of("probe", Map.of(), Map.of(), Map.of(),
                 InliningPolicy.FULL, DefaultStdlib.get());
         HelperGraph graph = HelperGraph.of(table);
-        Stdlib.Rewrite fold = DefaultStdlib.get().rewriteOf("List.fold");
+        Stdlib.Rewrite fold =
+                DefaultStdlib.get().rewriteOf(ValueName.Stdlib.operation("List", "fold"));
 
         assertNotNull(fold, "`List.fold` is sugar for the fold the combinators are derived from");
         assertEquals("List.foldFrom", fold.target().qualified());
-        assertTrue(graph.recurses("List.foldFrom"),
+        assertTrue(graph.recurses(new ReachName.OfLibrary(fold.target())),
                 "a module emits it as a method only because it recurses");
     }
 }

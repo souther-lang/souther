@@ -91,20 +91,27 @@ public record DecisionSources(Map<CoverageOrigin, DecisionSource> byFork, boolea
      * second reads the forks with those summaries in hand, and projects them onto the parameters
      * that carry a rule.
      */
-    public static DecisionSources of(Map<String, Hir.FnDef> reachable, Hir.FnDef... own) {
-        Map<String, Hir.FnDef> declarations = new LinkedHashMap<>(reachable);
-        for (Hir.FnDef each : own) {
-            if (each != null) {
-                declarations.put(each.name(), each);
-            }
-        }
+    public static DecisionSources of(
+            Map<souther.compiler.types.ReachName.Declaration,
+                    souther.compiler.check.HelperEntry> reachable,
+            Map<souther.compiler.types.ReachName.Declaration, Hir.FnDef> own) {
+        // Keyed by the reference a call reaches each by, which is what the forks below are looked
+        // up by and what a call carries. Rendered into a string here, this would be a summary
+        // joined to a call by a spelling, which is the join the reference exists to make
+        // unnecessary.
+        Map<souther.compiler.types.ReachName.Declaration, Hir.FnDef> declarations =
+                new LinkedHashMap<>();
+        reachable.forEach((reference, entry) ->
+                declarations.put(reference, entry.definition()));
+        declarations.putAll(own);
         AnswerDependencies answersOn = AnswerDependencies.of(declarations);
         Map<CoverageOrigin, DecisionSource> byFork = new LinkedHashMap<>();
         declarations.forEach((declaration, fn) -> forks(declaration, fn, answersOn, byFork));
         return new DecisionSources(byFork);
     }
 
-    private static void forks(String declaration, Hir.FnDef fn, AnswerDependencies answersOn,
+    private static void forks(souther.compiler.types.ReachName.Declaration declaration,
+                              Hir.FnDef fn, AnswerDependencies answersOn,
                               Map<CoverageOrigin, DecisionSource> out) {
         if (!(fn.body() instanceof Hir.FnBody.Written written)) {
             return;
@@ -121,7 +128,8 @@ public record DecisionSources(Map<CoverageOrigin, DecisionSource> byFork, boolea
      * afresh at each fork found the name and not what it stands for — and called a fork the caller
      * decides the declaration's own.
      */
-    private static void forks(Hir.Expr e, String declaration, Rules rules,
+    private static void forks(Hir.Expr e,
+                              souther.compiler.types.ReachName.Declaration declaration, Rules rules,
                               AnswerDependencies answersOn, Map<BindingId, Set<String>> bound,
                               NamedCallables named, Map<CoverageOrigin, DecisionSource> out) {
         switch (e) {
@@ -162,7 +170,8 @@ public record DecisionSources(Map<CoverageOrigin, DecisionSource> byFork, boolea
                 child -> forks(child, declaration, rules, answersOn, bound, named, out));
     }
 
-    private static void said(CoverageOrigin fork, Hir.Expr cond, String declaration, Rules rules,
+    private static void said(CoverageOrigin fork, Hir.Expr cond,
+                             souther.compiler.types.ReachName.Declaration declaration, Rules rules,
                              AnswerDependencies answersOn,
                              Map<BindingId, Set<String>> bound, NamedCallables named,
                              Map<CoverageOrigin, DecisionSource> out) {
@@ -232,7 +241,7 @@ public record DecisionSources(Map<CoverageOrigin, DecisionSource> byFork, boolea
                     return;
                 }
                 case Hir.Apply call when call.function() instanceof Hir.Var.Denoting callee -> {
-                    String reaches = named.reached(callee);
+                    souther.compiler.types.ReachName.Declaration reaches = named.reached(callee);
                     Set<Integer> uses = reaches == null ? null : answersOn.of(reaches);
                     for (int i = 0; i < call.args().size(); i++) {
                         // Only the arguments the callee's answer rests on. An argument it never

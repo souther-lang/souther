@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.numeric.NumericDomain.LinearForm;
@@ -76,6 +77,11 @@ class WhereAReadingStoppedComesBackWithWhatItWasReadInTest {
      */
     private static AffineForms.Reading<String, String> reading() {
         return new AffineForms.Reading<>() {
+
+            @Override
+            public Symbols symbols() {
+                return Symbols.none(DefaultStdlib.get());
+            }
 
             @Override
             public LinearForm<String> leafOf(Core e, String at) {

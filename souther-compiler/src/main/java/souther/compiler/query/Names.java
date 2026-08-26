@@ -980,8 +980,8 @@ public final class Names {
                 // function. Its qualifier is the alias the library publishes it under, asked of the
                 // name — which holds it — rather than taken back out of the two rendered together.
                 // A namespace applied is not a member of anything and no list entry names one.
-                case ValueName.Stdlib s when !s.isNamespace() ->
-                        used.add(new Use(v.written().canonical(), s.alias(), s.operation()));
+                case ValueName.Stdlib.Operation s ->
+                        used.add(new Use(v.written().canonical(), s.alias(), s.name()));
                 default -> { }   // a local, a builtin, a type used as a value (recorded as a type)
             }
         }

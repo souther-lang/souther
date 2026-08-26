@@ -113,6 +113,30 @@ class TheTableAReaderHoldsReachesNothingTest {
         return asking;
     }
 
+    /**
+     * Whether {@code named} is a value, which is what a table may hold.
+     *
+     * <p>A record and an enum are, and so is a sealed interface every arm of which is — a name
+     * divided into the worlds it can come from is as much a value as one written as a single
+     * record, and holding one reaches no more than holding an arm of it does. Read as "a record",
+     * dividing a value into its cases would read as a way of asking, and what the reader would be
+     * told to do about it is put it back.
+     */
+    private static boolean isValue(Class<?> named) {
+        if (named.isRecord() || named.isEnum()) {
+            return true;
+        }
+        if (!named.isSealed()) {
+            return false;
+        }
+        for (Class<?> arm : named.getPermittedSubclasses()) {
+            if (!isValue(arm)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     /** What in {@code type} can answer a question, or null where none of it can. */
     private static String reaching(Type type) {
         if (type instanceof ParameterizedType parameterized) {
@@ -129,8 +153,7 @@ class TheTableAReaderHoldsReachesNothingTest {
             return null;
         }
         if (type instanceof Class<?> named) {
-            return HELD.contains(named) || named.isRecord() || named.isEnum()
-                    ? null : named.getSimpleName();
+            return HELD.contains(named) || isValue(named) ? null : named.getSimpleName();
         }
         return type.getTypeName();   // a wildcard or a variable says nothing about what it stands for
     }

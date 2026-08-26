@@ -36,7 +36,7 @@ class WhatCanBeTypedHereIsNotWhatCouldHaveBeenWrittenHereTest {
 
     @Test
     void aStandingCallOnALibraryRecursionIsTyped() {
-        assertNotNull(standingOnTheFold().of(new ValueName.Stdlib("List", "foldFrom"),
+        assertNotNull(standingOnTheFold().of(ValueName.Stdlib.operation("List", "foldFrom"),
                         "List.foldFrom"),
                 "a call the expansion left standing has to be typeable where it stands");
     }
@@ -70,7 +70,7 @@ class WhatCanBeTypedHereIsNotWhatCouldHaveBeenWrittenHereTest {
                 .reaching(Map.of("List.foldFrom", FOLD));
 
         assertNotNull(scope.of(new ValueName.Behavior("m", "settle"), "settle"));
-        assertNotNull(scope.of(new ValueName.Stdlib("List", "foldFrom"), "List.foldFrom"));
+        assertNotNull(scope.of(ValueName.Stdlib.operation("List", "foldFrom"), "List.foldFrom"));
         assertEquals(java.util.List.of("settle"), scope.spellings());
     }
 }

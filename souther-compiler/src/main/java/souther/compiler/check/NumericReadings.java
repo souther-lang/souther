@@ -115,7 +115,7 @@ final class NumericReadings {
     private static List<NumericReading> readingsOf(Stdlib stdlib,
             List<OperationFacts.Declared> declared, ValueName operation) {
         Stdlib.Entry entry = DischargeRules.holdTheOperationToTheLibrary(stdlib, operation);
-        ValueName.Stdlib named = DischargeRules.theLibraryOperation(operation);
+        ValueName.Stdlib.Operation named = DischargeRules.theLibraryOperation(operation);
         if (NumericAnswers.in(entry.signature().result()) == null) {
             return List.of();
         }

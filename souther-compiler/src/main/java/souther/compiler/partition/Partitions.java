@@ -1374,7 +1374,7 @@ public final class Partitions {
         if (base == Type.STRING && symbols.declarations().declaration(newtype) instanceof Hir.Data data) {
             for (Hir.InvariantClause clause : TypeOps.effectiveInvariants(data, symbols)) {
                 for (Hir.Expr each : ClauseHelpers.conjunctsOf(clause.expr())) {
-                    if (InvariantConstraints.of(each, base).orElse(null)
+                    if (InvariantConstraints.against(symbols).of(each, base).orElse(null)
                             instanceof InvariantConstraints.Pattern format) {
                         PatternValues.shortestAccepted(format.regex())
                                 .map(FixtureTemplate::string).ifPresent(candidates::add);

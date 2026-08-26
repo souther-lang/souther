@@ -34,9 +34,12 @@ class WhatAModuleMustEmitIsWhatItsExpansionsCouldNotRemoveTest {
     }
 
     private static SequencedSet<String> required(Db db, String module) {
-        Answer<SequencedSet<String>> answer = db.ask(new Bodies.RequiredRecursiveDefs(module));
+        Answer<SequencedSet<souther.compiler.types.ReachName.Declaration>> answer =
+                db.ask(new Bodies.RequiredRecursiveDefs(module));
         assertTrue(answer.present(), "required of " + module + ": " + answer.reports());
-        return answer.value();
+        SequencedSet<String> rendered = new java.util.LinkedHashSet<>();
+        answer.value().forEach(reference -> rendered.add(reference.rendered()));
+        return rendered;
     }
 
     /**
@@ -121,7 +124,11 @@ class WhatAModuleMustEmitIsWhatItsExpansionsCouldNotRemoveTest {
 
         assertEquals(Set.of("size"),
                 db.ask(new Bodies.Expanding("deep", souther.compiler.check.InliningPolicy.FULL))
-                        .value().graph().calls("size"),
+                        .value().graph()
+                        .calls(new souther.compiler.types.ReachName.Own(
+                                new souther.compiler.types.ValueName.Helper("deep", "size")))
+                        .stream().map(souther.compiler.types.ReachName::rendered)
+                        .collect(java.util.stream.Collectors.toSet()),
                 "`size` calls itself and reads a value; the fold is behind the value and is no call");
         assertTrue(required(db, "deep").contains("size"), required(db, "deep").toString());
         assertTrue(required(db, "deep").contains("List.foldFrom"),

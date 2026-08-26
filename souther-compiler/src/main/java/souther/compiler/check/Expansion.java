@@ -30,17 +30,17 @@ import java.util.SequencedSet;
  * @param supplied which rule each expansion was handed, by the parameter it was handed to. Read
  *                 where the call site still stands, for the same reason the element provenance is
  */
-public record Expansion<T>(T value, SequencedSet<String> standing,
+public record Expansion<T>(T value, SequencedSet<souther.compiler.types.ReachName.Declaration> standing,
                           ElementProvenance provenance,
                           souther.compiler.coverage.SuppliedRules supplied) {
 
     /** The same, of an expansion nothing needs what the calls inside it were handed. */
-    public Expansion(T value, SequencedSet<String> standing) {
+    public Expansion(T value, SequencedSet<souther.compiler.types.ReachName.Declaration> standing) {
         this(value, standing, ElementProvenance.NONE, souther.compiler.coverage.SuppliedRules.NONE);
     }
 
     /** The same, of one nothing needs the rules of. */
-    public Expansion(T value, SequencedSet<String> standing, ElementProvenance provenance) {
+    public Expansion(T value, SequencedSet<souther.compiler.types.ReachName.Declaration> standing, ElementProvenance provenance) {
         this(value, standing, provenance, souther.compiler.coverage.SuppliedRules.NONE);
     }
 

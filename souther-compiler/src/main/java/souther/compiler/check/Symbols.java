@@ -1,10 +1,12 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.core.Kernel;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.diag.CompileException;
 import souther.compiler.types.Denotation;
 import souther.compiler.types.TypeKey;
+import souther.compiler.types.ValueName;
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -41,6 +43,42 @@ public final class Symbols implements NameSense {
      *  operation, and a caller with none of its own has one to hand. */
     public static Symbols none(Stdlib stdlib) {
         return new Symbols("", Registry.empty(), Denoting.NONE, stdlib);
+    }
+
+    /**
+     * The one walk the library publishes, which an output lowers as a loop rather than as a call.
+     *
+     * <p>Handed on rather than looked up. An output holds these symbols already and this is one
+     * value of the language it was compiled against, so asking here is asking what it was given —
+     * where reaching {@link #library()} would be an output that could put any question to the
+     * library, which {@code TheBackendEmitsAgainstTheLanguageItWasHanded} keeps closed.
+     */
+    public ValueName.Stdlib.Operation theWalk() {
+        return stdlib.theWalk();
+    }
+
+    /**
+     * The one operation the library publishes that states elements are distinct, which an invariant
+     * written over is a constraint rather than a call.
+     *
+     * <p>Handed on for the reason {@link #theWalk} is.
+     */
+    public ValueName.Stdlib.Operation theDistinctnessPredicate() {
+        return stdlib.theDistinctnessPredicate();
+    }
+
+    /**
+     * Which kernel {@code operation} is declared to be, or null where it is not a kernel.
+     *
+     * <p>The question a pass asks when it recognises an operation by what it does rather than by
+     * what it is called: a kernel is the language's own vocabulary and is the same whatever alias a
+     * library publishes the operation under. Answered here rather than by reaching
+     * {@link #library()} so that a reader holding these symbols has it — a {@code Kernel} is
+     * {@code core}'s, so an output asking this is not naming the library.
+     */
+    public Kernel kernelOf(ValueName.Stdlib.Operation operation) {
+        Stdlib.Intrinsic intrinsic = stdlib.intrinsicOf(operation);
+        return intrinsic == null ? null : intrinsic.kernel();
     }
 
     /** The library this module is compiled against. */

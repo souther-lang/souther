@@ -27,7 +27,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class WhatARepresentationKeepsIsTheRepresentationsToSayTest {
 
     private static final SourcePos POS = new SourcePos(1, 1);
-    private static final ValueName.Stdlib MAP = new ValueName.Stdlib("List", "map");
+    private static final ValueName.Stdlib.Operation MAP =
+            ValueName.Stdlib.operation("List", "map");
 
     /** `(Int) -> Int`, standing for whatever the operation was declared as. */
     private static final Type.FnOf SIGNATURE = (Type.FnOf) Type.fn(List.of(Type.INT), Type.INT);
@@ -53,12 +54,12 @@ class WhatARepresentationKeepsIsTheRepresentationsToSayTest {
         Preserved keepsMapOnly = keeping(MAP, SIGNATURE);
 
         assertThrows(RuntimeException.class,
-                () -> elaborate(callTo(new ValueName.Stdlib("List", "filter")), keepsMapOnly));
+                () -> elaborate(callTo(ValueName.Stdlib.operation("List", "filter")), keepsMapOnly));
     }
 
     @Test
     void aKeptCallAppliedToTheWrongNumberOfArgumentsIsSaidAsThat() {
-        Hir.Expr twoArgs = new Hir.Apply("List.map", MAP, new ReachName.OfLibrary(MAP),
+        Hir.Expr twoArgs = new Hir.Apply("List.map", new ReachName.OfLibrary(MAP),
                 List.of(new Hir.IntLit(1, POS, null), new Hir.IntLit(2, POS, null)),
                 ConstructionOrigin.own(), POS, null);
 
@@ -91,8 +92,8 @@ class WhatARepresentationKeepsIsTheRepresentationsToSayTest {
         assertEquals(keeping.preserved(), keeping.forData(null).preserved());
     }
 
-    private static Hir.Expr callTo(ValueName.Stdlib operation) {
-        return new Hir.Apply(operation.qualified(), operation, new ReachName.OfLibrary(operation),
+    private static Hir.Expr callTo(ValueName.Stdlib.Operation operation) {
+        return new Hir.Apply(operation.qualified(), new ReachName.OfLibrary(operation),
                 List.of(new Hir.IntLit(1, POS, null)), ConstructionOrigin.own(), POS, null);
     }
 
