@@ -560,13 +560,23 @@ public sealed interface BorderQuantity {
      * which is the same rule the class beside it writes as {@code 6 * n <= 5}.
      */
     default String left(java.math.BigDecimal times) {
-        if (times.compareTo(java.math.BigDecimal.ONE) == 0) {
-            return left();
-        }
-        if (this instanceof OverAForm form) {
+        if (this instanceof OverAForm form && times.compareTo(java.math.BigDecimal.ONE) != 0) {
             return new OverAForm(form.behavior(), form.form().times(times), form.on()).left();
         }
-        return times.stripTrailingZeros().toPlainString() + " * " + left();
+        return times(times, left());
+    }
+
+    /**
+     * The same of a quantity said under another name.
+     *
+     * <p>Which is what a debt writes: a line an {@code invariant} drew is on {@code
+     * String.length(value)} wherever the type goes, and the reading that met it is at some
+     * behavior's own position. One spelling rule, so that the two say a multiple of the quantity the
+     * same way.
+     */
+    static String times(java.math.BigDecimal times, String left) {
+        return times.compareTo(java.math.BigDecimal.ONE) == 0 ? left
+                : times.stripTrailingZeros().toPlainString() + " * " + left;
     }
 
     /** One level of this quantity, as a report writes it. */

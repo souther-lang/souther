@@ -98,25 +98,19 @@ public sealed interface About {
      * the walk reached first, and an author sent there would be sent to a body that says nothing
      * about the length of a user id (issue #1062).
      */
-    record APointOfADeclaredBorder(BorderObligationAssessment debt,
-                                   souther.compiler.partition.PointRole role) implements About {
+    record APointOfADeclaredBorder(BorderObligationPointAssessment debt) implements About {
         public APointOfADeclaredBorder {
             java.util.Objects.requireNonNull(debt, "a finding is about something");
-            java.util.Objects.requireNonNull(role, "and a border is owed a row in four roles");
-            // Two of the four. A region is not a debt's: where it stops is settled by every other
-            // rule reaching the position it is a region of, so a row well inside one reading is not
-            // a row that could stand at another — and this finding would be about a line while
-            // naming what a position asks.
-            if (!BorderObligationAssessment.AGAINST_THE_LINE.contains(role)) {
-                throw new IllegalArgumentException(
-                        "a line a declaration is owed is owed at the points against it, and "
-                                + role + " is a region of a position");
-            }
+        }
+
+        /** Which of a border's four points this is about, which the point itself says. */
+        public souther.compiler.partition.PointRole role() {
+            return debt.role();
         }
 
         /** What became of this point, which is what the finding is about. */
         public ItemAssessment item() {
-            return debt.at(role);
+            return debt.item();
         }
     }
 

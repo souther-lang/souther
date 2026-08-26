@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.partition.Criterion;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.Level;
-import souther.compiler.query.BorderObligationAssessment.Reading;
+import souther.compiler.query.BorderObligationPointAssessment.Reading;
 
 import java.util.LinkedHashMap;
 import java.util.List;

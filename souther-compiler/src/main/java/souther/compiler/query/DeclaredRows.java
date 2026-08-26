@@ -157,15 +157,15 @@ public record DeclaredRows(GenerationScope scope,
     public sealed interface At {
 
         /** Which reading this is about. */
-        BorderObligationAssessment.Reading reading();
+        BorderObligationPointAssessment.Reading reading();
 
         /** The search ran and no row came of it, in its own words. */
-        record Searched(BorderObligationAssessment.Reading reading,
+        record Searched(BorderObligationPointAssessment.Reading reading,
                         Generator.UnresolvedCombination why) implements At {}
 
         /** The search of this reading had no answer to give, so nothing was looked for at it. A
          *  fact about this run, and never about the point. */
-        record CouldNotBeSearched(BorderObligationAssessment.Reading reading) implements At {}
+        record CouldNotBeSearched(BorderObligationPointAssessment.Reading reading) implements At {}
     }
 
     /**
@@ -230,14 +230,13 @@ public record DeclaredRows(GenerationScope scope,
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
         List<Adequacy.GenerationDisposition> out = new ArrayList<>();
         for (Adequacy.Finding finding : findings) {
-            if (!(finding.about()
-                    instanceof About.APointOfADeclaredBorder(var debt, var role))) {
+            if (!(finding.about() instanceof About.APointOfADeclaredBorder(var debt))) {
                 continue;
             }
             if (!asked.contains(debt.id())) {
                 continue;   // a line this request was not put a question about
             }
-            BorderObligationPoint at = new BorderObligationPoint(debt.id(), role);
+            BorderObligationPoint at = debt.point();
             Answer answer = resolved.get(at);
             if (answer == null) {
                 throw new IllegalStateException(

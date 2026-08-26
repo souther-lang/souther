@@ -727,7 +727,7 @@ public final class GeneratedRows {
             // The same words on what the declaration wrote. Nothing composes a row for one of
             // these yet — the search walks one behavior's inputs and this line is owed once over
             // all of them — so what is printed beside it is that, in its own sentence.
-            case About.APointOfADeclaredBorder(var debt, var role) -> debt.said(role);
+            case About.APointOfADeclaredBorder(var debt) -> debt.said();
             // The arm's own short name, which is what the report writes and what the document's
             // `subject` joins on. The finding carries the arm rather than words about it, so that
             // the sentence a diagnostic says in the reader's language and the words written here

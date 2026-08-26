@@ -83,6 +83,32 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, PointA
     }
 
     /**
+     * What a row in one role of this reading would be owed for, which is none where none is asked
+     * for and more than one where more than one thing stopped the region.
+     *
+     * <p>Made here, from the answer that settled both halves at once. Everything that accounts for
+     * rows asks this rather than building a point out of the parts it happened to know — which is
+     * how a debt came to carry the reading it was met at.
+     */
+    public java.util.List<BorderObligationPoint> owes(PointRole role) {
+        BorderObligationId line = obligation();
+        return switch (answer(role)) {
+            case PointAnswer.NotOwed _ -> java.util.List.of();
+            case PointAnswer.AtLine _ ->
+                    java.util.List.of(new BorderObligationPoint.AtLine(line, role));
+            case PointAnswer.InRegion in -> in.bases().stream()
+                    .map(basis -> (BorderObligationPoint)
+                            new BorderObligationPoint.InRegion(line, role, basis))
+                    .toList();
+        };
+    }
+
+    /** The same over all four roles, in role order. */
+    public java.util.List<BorderObligationPoint> owes() {
+        return EnumSet.allOf(PointRole.class).stream().flatMap(role -> owes(role).stream()).toList();
+    }
+
+    /**
      * What a row here is owed for, which several readings of this line share.
      *
      * <p>The line the author wrote, without the position it was read at. What folds readings

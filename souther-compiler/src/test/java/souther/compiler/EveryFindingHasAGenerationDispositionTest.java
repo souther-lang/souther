@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.partition.GenerationOutcome;
 import souther.compiler.query.Adequacy;
-import souther.compiler.query.BorderObligationAssessment;
+import souther.compiler.query.BorderObligationPointAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.DeclarationResolution;
 import souther.compiler.query.DeclaredRows;
@@ -361,16 +361,24 @@ class EveryFindingHasAGenerationDispositionTest {
         assertFalse(coverage.isEmpty(), "the model under test composes nothing at the line");
         for (SearchCoverage each : coverage) {
             assertEquals(List.of(
-                            new BorderObligationAssessment.Reading("one", "String.length(x.a)"),
-                            new BorderObligationAssessment.Reading("one", "String.length(x.b)")),
+                            new BorderObligationPointAssessment.Reading("one", "String.length(x.a)"),
+                            new BorderObligationPointAssessment.Reading("one", "String.length(x.b)")),
                     each.readings(),
-                    "both positions the behavior meets the line at");
-            assertEquals(List.of("String.length(x.a) = 1", "String.length(x.b) = 1"),
-                    each.attempted().stream()
-                            .map(souther.compiler.partition.Generator.UnresolvedCombination::subject)
-                            .toList(),
-                    "and what each of them said, in its own position's words");
+                    "both positions the behavior meets the line at, at every point of it");
         }
+        // Both points of the line, each searched at both positions. The line and the run beside it
+        // are two rows to write and neither is composable here, so each of them is answered from
+        // both readings rather than from whichever the walk reached first.
+        assertEquals(List.of(
+                        List.of("String.length(x.a) = 1", "String.length(x.b) = 1"),
+                        List.of("1 < String.length(x.a)", "1 < String.length(x.b)")),
+                coverage.stream()
+                        .map(each -> each.attempted().stream()
+                                .map(souther.compiler.partition.Generator
+                                        .UnresolvedCombination::subject)
+                                .toList())
+                        .toList(),
+                "and what each of them said, in its own position's words");
     }
 
     /** One line, met twice by one behavior, and composable at neither position. */
@@ -400,27 +408,31 @@ class EveryFindingHasAGenerationDispositionTest {
      * Resolved per clause, a line would be handed to an author as a single piece of work whose two
      * ends are owed at different positions.
      *
-     * <p>The point against a line and the point beside it are kept apart the same way, and there is
-     * nothing here to hold that with: a line a declaration drew is the type's own rule, so the value
-     * off it is not a value of the type at all and no row is owed there. Every model checked here
-     * answers {@code NotOwed} at that point, so a test of it would be asserting over an empty set.
+     * <p>The point against a line and the run beside it are kept apart the same way, and each of the
+     * four is resolved on its own. Asserted over the two against the lines, because those are the
+     * two the model was written to put at different readings.
      */
     @Test
     void twoLinesOneClauseDrewAreSearchedApart() {
-        Map<souther.compiler.partition.Level, String> composers = new java.util.LinkedHashMap<>();
+        Map<souther.compiler.partition.BorderObligationPoint, String> composers =
+                new java.util.LinkedHashMap<>();
         resolved(compiled(EITHER_END), "example.ends", new GenerationScope.Module()).resolved()
                 .forEach((at, answer) -> {
                     if (answer.resolution() instanceof DeclarationResolution.Generated(var by, var _)
                             && at.line().owedToTheDeclaration()
                                     .map(on -> on.name().equals("Code")).orElse(false)) {
-                        composers.put(at.line().at(), by);
+                        composers.put(at, by);
                     }
                 });
+        Map<souther.compiler.partition.BorderObligationPoint, String> atTheLines = composers
+                .entrySet().stream().filter(each -> each.getKey().role().againstTheLine())
+                .collect(java.util.stream.Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue,
+                        (one, _) -> one, java.util.LinkedHashMap::new));
 
-        assertEquals(2, composers.size(),
+        assertEquals(2, atTheLines.size(),
                 "one clause drew two lines and a row stands at each: " + composers);
-        assertEquals(2, java.util.Set.copyOf(composers.values()).size(),
-                "and the two were composed at different readings: " + composers);
+        assertEquals(2, java.util.Set.copyOf(atTheLines.values()).size(),
+                "and the two were composed at different readings: " + atTheLines);
     }
 
     /** Which reading composed each row, in the order the points were resolved. */

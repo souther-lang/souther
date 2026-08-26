@@ -22,7 +22,6 @@ import souther.compiler.query.OutputCaseEvidence;
 import souther.compiler.query.About;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
-import souther.compiler.query.BorderObligationAssessment;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.BehaviorEvidence;
@@ -354,7 +353,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
         return declarations.stream()
                 .filter(each -> !(each.about()
-                        instanceof About.APointOfADeclaredBorder(var debt, var _))
+                        instanceof About.APointOfADeclaredBorder(var debt))
                         || names.stream().anyMatch(debt::carriedBy))
                 .toList();
     }
@@ -391,9 +390,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         byDeclaration.forEach((declaration, findings) -> {
             out.append(String.format("  %s%n", declaration));
             for (Adequacy.Finding f : findings) {
-                if (f.about() instanceof About.APointOfADeclaredBorder(var debt, var role)) {
+                if (f.about() instanceof About.APointOfADeclaredBorder(var debt)) {
                     out.append(String.format("      %s no row is at the %s point %s = %s (%s)%n",
-                            mark(f), role, debt.axis(), debt.against(role),
+                            mark(f), debt.role(), debt.axis(), debt.against(),
                             debt.id().named()));
                 }
             }
@@ -635,11 +634,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // denominator made of the findings is a denominator made of the gaps — which is
             // satisfied by whatever it does not contain.
             for (Adequacy.DeclaredDebt owed : module.debts()) {
-                for (souther.compiler.partition.PointRole role
-                        : BorderObligationAssessment.AGAINST_THE_LINE) {
-                    if (held.requires(role)) {
-                        add(measures, measurementOf(owed.debt().at(role)));
-                    }
+                if (held.requires(owed.debt().role())) {
+                    add(measures, measurementOf(owed.debt().item()));
                 }
             }
         }
@@ -2432,7 +2428,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // The same sentence, on what the declaration wrote. A line owed once over every reading
             // of it is named by the terms the author used and not by the position some behavior met
             // it at, which is what the debt is (issue #1062).
-            case About.APointOfADeclaredBorder(var debt, var role) -> debt.said(role);
+            case About.APointOfADeclaredBorder(var debt) -> debt.said();
         };
     }
 

@@ -268,6 +268,23 @@ public sealed interface Criterion {
         if (!(this instanceof Within in)) {
             return of.writtenAt(against());
         }
+        // Through the quantity's own spelling, which knows what it is made of: twice a form is that
+        // form doubled and not the words `2 *` in front of it.
         return in.band().written(of, in.except());
+    }
+
+    /**
+     * The same, with {@code left} in place of the name the quantity goes by at this reading.
+     *
+     * <p>What a debt writes. A run says the quantity's own name inside the sentence — {@code 1 <
+     * String.length(value)} — so a debt written off a reading would put that reading's position into
+     * a sentence about the line, which is the position a walk happened to reach first.
+     */
+    default String written(BorderQuantity of, String left) {
+        if (!(this instanceof Within in)) {
+            return of.writtenAt(against());
+        }
+        return in.band().written(of, in.except(),
+                times -> BorderQuantity.times(times, left));
     }
 }
