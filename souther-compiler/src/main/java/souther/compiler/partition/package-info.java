@@ -27,7 +27,7 @@
  * hold a wide clause's alternatives apart, a rule may be one this compiler cannot turn into a line.
  * None of those is a budget choosing which evidence to keep: the position is still there, and what
  * the reading could not do with it is reported at that position — {@code notRead},
- * {@link souther.compiler.partition.Axis#rulesNotReached}, {@code PositionValuesNotSeparated}. A
+ * {@link souther.compiler.partition.ReadingResidue}, {@code PositionValuesNotSeparated}. A
  * limit that takes the position out of the measure is different in kind, because a position nobody
  * measured leaves the same absence as one the rows cover.
  *

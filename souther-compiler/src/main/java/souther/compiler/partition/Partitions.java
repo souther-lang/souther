@@ -887,9 +887,14 @@ public final class Partitions {
                 if (divided.cuts() instanceof CutEvidence.Present drawn && drawn.uncertain()) {
                     uncertain.add(term);
                 }
+                // No continuation, because something answered for the position and a fallback is
+                // what a position with no answer is left with. What the reading came to is carried
+                // all the same: a `Map` a rule about its size divides is one nothing was read into,
+                // and taking that off the axis with the fallback is how the stop went unreported
+                // (issue #1084).
                 out.add(new Axis(id, term, position.type(), divided.classes(),
                         divided.cuts().cuts(), List.of(),
-                        divided.rulesNotReached(), null, null));
+                        ReadingResidue.of(position), null, null));
             }
             // Nothing local divides the position, which is what licenses asking what it is made of.
             // Whether the reading got to the end of the rules is carried rather than acted on here:
@@ -907,7 +912,7 @@ public final class Partitions {
                     // position from completing as one the model divides no way.
                     case StructuralInspection.Retained retained ->
                             out.add(Axis.pendingAt(id, term, position.type(),
-                                    position.rulesNotReached(),
+                                    ReadingResidue.of(position),
                                     retained.continuation(), leftAt(position)));
                 }
             }

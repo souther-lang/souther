@@ -127,7 +127,8 @@ final class RuleHandoffs {
     }
 
     /**
-     * Whether the reading that ended at {@code at} left rules under it that nothing took over.
+     * How the reading that ended at {@code at} was left with rules under it that nothing took over,
+     * or null where nothing is standing.
      *
      * <p>Every position the rules were passed to has to have been opened, and not merely some of
      * them: a sum whose second case nothing walked has left the rules of that case unread however
@@ -137,19 +138,46 @@ final class RuleHandoffs {
      * {@link #owes} refuses a second reading at one position. Left to be true rather than made so, a
      * handoff owed by one reading would answer for a position another reading reports — and an
      * answer taken from something other than what established it is what this issue was.
+     *
+     * <p>The first standing handoff answers. Two of them at one position would be two readings
+     * answering for it, which {@link #owes} has already refused.
      */
-    boolean unresolvedAt(TermPath at) {
+    Shortfall unresolvedAt(TermPath at) {
         for (Handoff handoff : owed) {
-            if (handoff.at().equals(at) && !resolved(handoff)) {
-                return true;
+            if (!handoff.at().equals(at)) {
+                continue;
+            }
+            Set<TermPath> supposed = expected.get(handoff);
+            if (supposed == null) {
+                return new Shortfall.NothingExpected();
+            }
+            if (!accepted.getOrDefault(handoff, Set.of()).containsAll(supposed)) {
+                return new Shortfall.NotFullyAccepted();
             }
         }
-        return false;
+        return null;
     }
 
-    private boolean resolved(Handoff handoff) {
-        Set<TermPath> supposed = expected.get(handoff);
-        return supposed != null
-                && accepted.getOrDefault(handoff, Set.of()).containsAll(supposed);
+    /**
+     * How a handing over was left standing, in this ledger's own words.
+     *
+     * <p><b>Why the descent got no further is not said here.</b> This knows that no recipient was
+     * ever named, and that is a fact about the entries it holds; whether the walk was stopped by a
+     * shape it cannot enter or went on and left a recipient unopened is a fact about the structural
+     * reading, which this has never seen. Answered here, the ledger would be deciding what a
+     * traversal means from the absence of an entry — the same reading of silence as evidence that
+     * #1072 was about.
+     *
+     * <p>Whoever holds both readings joins them ({@code InputDomain}), and it is there that
+     * {@link RulesLeftUnread.HandoffUnread} is settled.
+     */
+    sealed interface Shortfall {
+
+        /** No recipient was ever named for the handing over: the descent past this position made no
+         *  entry at all. */
+        record NothingExpected() implements Shortfall {}
+
+        /** Recipients were named and a reading was not opened at every one of them. */
+        record NotFullyAccepted() implements Shortfall {}
     }
 }

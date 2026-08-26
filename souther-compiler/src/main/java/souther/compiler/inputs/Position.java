@@ -152,7 +152,7 @@ public sealed interface Position permits ReadPosition {
     List<StandingQuestion> unansweredQuestions();
 
     /**
-     * Whether a rule this position was owed went unread.
+     * The rules this position was owed that went unread, each as the reason it went unread.
      *
      * <p>Beside {@link #unansweredQuestions()} and not among them. A rule nothing took in is a rule
      * this compiler saw and made nothing of; here nothing was seen, so there is no rule to name and
@@ -165,8 +165,16 @@ public sealed interface Position permits ReadPosition {
      * written under a container, a case, or an optional is not one of them — it is read where it
      * governs, one position down, and a row meets it there. Said here, the measure was short of
      * something nobody could supply, because the walk had already gone to it (#1072).
+     *
+     * <p><b>The reasons and not a boolean.</b> Both can hold at once, and one of them is the same
+     * stop {@link BlockedDescent} reports from the other end — so a reader deciding whether what it
+     * holds is already said elsewhere has to be able to ask which this is. Answered {@code true},
+     * that reader could not ask, and reported one stop as two (issue #1084).
+     *
+     * <p>Empty where the rules this position was owed were all reached. In the order they were
+     * found, so that two runs over one model produce the same value.
      */
-    boolean rulesNotReached();
+    java.util.Set<RulesLeftUnread> rulesLeftUnread();
 
     /**
      * What stopped the reading of which values this position may hold, or null where nothing did.

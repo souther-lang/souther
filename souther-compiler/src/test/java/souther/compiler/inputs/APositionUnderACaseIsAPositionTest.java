@@ -19,6 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * What a case of a sum declares is declared, so it is read.
@@ -181,7 +182,7 @@ class APositionUnderACaseIsAPositionTest {
         Position least = read.at(TermPath.of("b").refine(
                 Refinement.sumCase(caseNamed(read, "Held"))).then("least"));
         assertNotNull(least, "a field of the case is a position");
-        assertFalse(least.rulesNotReached(),
+        assertTrue(least.rulesLeftUnread().isEmpty(),
                 "and the clause relating it to the field beside it was reached");
     }
 

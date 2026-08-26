@@ -35,7 +35,8 @@ record ReadPosition(TermPath path, TypeView view, NumericTerm term,
                     ObligationDomain obligations, AdmissibleSet.Completeness completeness,
                     BlockReason.ReadingStopReason valuesUnread,
                     List<RuleWithoutALine> rulesWithoutALine,
-                    List<StandingQuestion> unansweredQuestions, boolean rulesNotReached,
+                    List<StandingQuestion> unansweredQuestions,
+                    java.util.Set<RulesLeftUnread> rulesLeftUnread,
                     StructuralInspection structure) implements Position {
 
     ReadPosition {
@@ -44,6 +45,10 @@ record ReadPosition(TermPath path, TypeView view, NumericTerm term,
         declared = List.copyOf(declared);
         rulesWithoutALine = List.copyOf(rulesWithoutALine);
         unansweredQuestions = List.copyOf(unansweredQuestions);
+        // Kept in the order the readers found them, so that two runs over one model produce the
+        // same value — the reason `MeasureClosure` keeps its gaps that way too.
+        rulesLeftUnread = java.util.Collections.unmodifiableSet(
+                new java.util.LinkedHashSet<>(rulesLeftUnread));
     }
 
     @Override

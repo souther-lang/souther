@@ -54,8 +54,18 @@ public sealed interface ClosureGap {
     record QuestionUnanswered(souther.compiler.inputs.StandingQuestion question)
             implements ClosureGap {}
 
-    /** A position whose rules nothing enumerated. It raises no question, so it cannot be short of
-     *  one — which is why it is a gap of its own and not one of the two above. */
+    /**
+     * A position whose rules nothing enumerated. It raises no question, so it cannot be short of
+     * one — which is why it is a gap of its own and not one of the two above.
+     *
+     * <p><b>Not every way the rules go unread reaches this.</b> A handing over left standing because
+     * the walk could not go into the position is the same stop {@link PositionNotReachedInto}
+     * reports, and it is written there once. Which of the ways this is comes off the arm the reading
+     * settled and never off what else was found at the path
+     * ({@link souther.compiler.inputs.RulesLeftUnread}): a position the reading entered and lost a
+     * clause of its own is an independent finding, and a fold on the path would take it with the
+     * other (issue #1084).
+     */
     record RulesNotReached(AxisId at) implements ClosureGap {}
 
     /**
@@ -67,6 +77,18 @@ public sealed interface ClosureGap {
      * the measures rather than from what {@link MeasureClosure#of} finds, so nothing ever built one:
      * an arm taken from a second representation of a fact, which is the mistake #953 is about, in
      * miniature.
+     *
+     * <p><b>{@code at} names the axis carrying the fact, and the position is that axis's path.</b>
+     * The two come apart: a {@code Map} nothing can be read into, under a rule about its size, is
+     * measured at the size and the axis is named for that term. So this is not "the identity of the
+     * position that was blocked" — it is the axis a reader holding these numbers is being told
+     * something about, which is the one thing a gap beside a measurement is for. Keyed by the
+     * position instead, this arm and {@link RulesNotReached} would name a behavior's findings in two
+     * vocabularies.
+     *
+     * <p>Written from {@link souther.compiler.inputs.BlockedDescent} and never from what the axis is
+     * still waiting on. A position something answered for keeps no continuation, and was still never
+     * entered.
      */
     record PositionNotReachedInto(AxisId at, BlockReason.AboutThePosition why) implements ClosureGap {}
 }
