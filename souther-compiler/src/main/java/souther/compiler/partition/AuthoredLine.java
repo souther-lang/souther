@@ -6,6 +6,7 @@ import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * One line of the model: which rule, and which of that rule's lines.
@@ -38,17 +39,19 @@ import java.util.Optional;
  *
  * @param rule           which rule of the model drew it
  * @param conjunct       which of that rule's lines this is, counted over the conjuncts the author
- *                       wrote. Zero for a rule that draws one line, which is what a comparison and
- *                       an {@code ensures} clause each do
+ *                       wrote. Zero for a comparison, which is a rule apiece: a condition holding
+ *                       three of them is three rules, so there is no second line of one to tell
+ *                       this from
  * @param facts          what the rule says about its own line
  * @param narrowedWithin the declarations that took a bound's end in, kept so that a narrowed line
  *                       stays apart from the bare one it narrows: {@code MinuteOfDay}'s maximum is
  *                       the same rule whether or not {@code WorkInterval} moved where it lands, and
  *                       the line the two settled together is not the line the bound would have
- *                       drawn alone
+ *                       drawn alone. These are also who owes the line, which the bound is not once
+ *                       something took its end in ({@link #obligationOwners})
  */
 public record AuthoredLine(RuleRef rule, int conjunct, LineFacts facts,
-                           List<TypeSymbol> narrowedWithin) {
+                           List<TypeSymbol.AtModule> narrowedWithin) {
 
     public AuthoredLine {
         if (rule == null || facts == null) {
@@ -60,6 +63,23 @@ public record AuthoredLine(RuleRef rule, int conjunct, LineFacts facts,
                     "a conjunct of a rule is counted from zero: " + conjunct);
         }
         narrowedWithin = List.copyOf(narrowedWithin);
+        // An end is something a clause of a `data` places, so those are the only lines a declaration
+        // can take in. Said here rather than left to whoever reads the pair: a line answering that
+        // a body's rule was narrowed has an owner that owes a row for a comparison, and every reader
+        // of it would be deciding what to do about a line the language cannot write.
+        if (!narrowedWithin.isEmpty() && !(rule instanceof RuleRef.Invariant)) {
+            throw new IllegalArgumentException(
+                    "a rule written in a body places no end for a declaration to take in: " + rule
+                            + " within " + narrowedWithin);
+        }
+        // One entry per declaration. Several of these are one answer about one end, so a
+        // declaration written twice would be one owner counted twice — and what counts them is what
+        // says how many places a finding about the line names.
+        if (narrowedWithin.size() > 1
+                && narrowedWithin.size() != Set.copyOf(narrowedWithin).size()) {
+            throw new IllegalArgumentException(
+                    "one declaration took this end in twice, which is once: " + narrowedWithin);
+        }
     }
 
     /**
@@ -85,24 +105,38 @@ public record AuthoredLine(RuleRef rule, int conjunct, LineFacts facts,
      * in both places, the two spellings of one narrowing read as two.
      */
     public String said(String rule) {
-        return rule + (narrowedWithin.isEmpty() ? ""
-                : " within " + narrowedWithin.stream().map(TypeSymbol::name)
-                        .collect(java.util.stream.Collectors.joining(" or ")));
+        return rule + (narrowedWithin.isEmpty() ? "" : " within " + naming(narrowedWithin));
     }
 
     /**
-     * The declaration this line is owed to, where it is a declaration's line rather than a body's.
+     * Several declarations that answer for one thing together, as a report says them.
      *
-     * <p>Whose debt a row at the line is. A clause of a {@code data} says something about the type
-     * wherever the type is carried, so a row standing at the line is evidence about the type and the
-     * behaviors carrying it have nothing to add — one line, owed once, at the declaration that wrote
-     * it. A comparison and an {@code ensures} clause are written in a body and say something about
-     * that body at that position, so they are owed per behavior.
+     * <p>One place, because a report says such a list in more than one: which declarations took an
+     * end in, and which of them a finding is about. They are not the same list — the second is of
+     * one module, and a line nothing took in has an owner that is in neither — and the reason to
+     * spell them alike is that a reader meets both about one line. Written twice, the two spellings
+     * are free to come apart.
      *
-     * <p>A narrowed end is the bound's declaration. The declarations that took it in are what
-     * {@link #named} says beside the rule, and each of them is one where taking any away leaves the
-     * end where it is — so there is no one of them to send a reader to, and the rule that placed the
-     * end is where the line came from.
+     * <p>{@code or} rather than {@code and}, because that is what the list means: any one of them
+     * is as much the answer as the others, and the reading does not know which.
+     */
+    public static String naming(List<TypeSymbol.AtModule> declarations) {
+        return declarations.stream().map(TypeSymbol::name)
+                .collect(java.util.stream.Collectors.joining(" or "));
+    }
+
+    /**
+     * The declaration this line came from, where it is a declaration's line rather than a body's.
+     *
+     * <p>Where the line came from, and not who owes it. A clause of a {@code data} says something
+     * about the type wherever the type is carried, so a row standing at the line is evidence about
+     * the type and the behaviors carrying it have nothing to add — one line, read wherever the type
+     * goes. A comparison and an {@code ensures} clause are written in a body and say something about
+     * that body at that position, so they have no declaration here at all.
+     *
+     * <p>A narrowed end comes from the bound's declaration. What {@code MinuteOfDay} says is why the
+     * position has an upper edge; the declarations that took it in are why the edge is 1439, and
+     * they are the ones who owe a row at it — which is {@link #obligationOwners} and not this.
      */
     public Optional<TypeSymbol> owedToTheDeclaration() {
         return rule instanceof RuleRef.Invariant i
@@ -121,5 +155,58 @@ public record AuthoredLine(RuleRef rule, int conjunct, LineFacts facts,
         return rule instanceof RuleRef.Invariant i
                 ? Optional.of(new DeclaredBorders.Key(i, conjunct))
                 : Optional.empty();
+    }
+
+    /**
+     * The declarations that owe a row at this line. Empty where no declaration does.
+     *
+     * <p>Who has to write it, which is not where the line came from. Ownership follows the authored
+     * line: a bound nothing took in is owed by the declaration that wrote the clause, and a bound a
+     * record took in is owed by the record — the distinction at 1439 rather than 1440 is one that
+     * record's author wrote, and taking it out is theirs to do. So a module importing a type owes
+     * nothing for the type's own lines, and owes the ones its own declarations drew round them.
+     *
+     * <p>Empty for a comparison and for an {@code ensures} clause, which are a body's and are owed
+     * per behavior as they were. Asked of the line rather than matched on which kind of rule it is,
+     * for the reason {@link #owedToTheDeclaration} is: read as "is this an invariant", the question
+     * would be asked again at every report, refusal and editor, and a rule added later would be
+     * answered by whichever arm it was written beside.
+     *
+     * <p>Several, and not one chosen from them. Each is one where taking any away leaves the end
+     * where it is, so each is as much the author as the others; and they need not be one module's —
+     * an inner record's clause and an outer record's reach one coordinate at one value from two
+     * modules as readily as from one. What each module does with the ones that are its own is
+     * {@link #ownersIn}.
+     */
+    public List<TypeSymbol.AtModule> obligationOwners() {
+        if (!narrowedWithin.isEmpty()) {
+            return narrowedWithin;
+        }
+        return rule instanceof RuleRef.Invariant i
+                ? List.of(i.clause().id().declaredOn())
+                : List.of();
+    }
+
+    /**
+     * Which of them {@code module} wrote, in the order the line names them.
+     *
+     * <p>What a module's account of this line is filed under, and what a finding about it names. A
+     * line with none of these here is one this module has nothing to answer for: its values are held
+     * to it, and a row at it is somebody else's to write.
+     */
+    public List<TypeSymbol.AtModule> ownersIn(String module) {
+        return obligationOwners().stream().filter(each -> each.module().equals(module)).toList();
+    }
+
+    /**
+     * Whether any declaration {@code module} wrote owes a row at this line.
+     *
+     * <p>A projection of {@link #ownersIn} and nothing more. It says the module has a declaration
+     * that owes the line, not that the module holds a debt for it: a debt is what the readings of
+     * the line came to, so a module that owes this and reads it nowhere holds none
+     * ({@link souther.compiler.query.Adequacy.DeclaredBorders}).
+     */
+    public boolean owedIn(String module) {
+        return !ownersIn(module).isEmpty();
     }
 }

@@ -82,9 +82,9 @@ class OneAuthoredLineIsOneDebtHoweverManyBehaviorsCarryItTest {
         assertEquals(1, declared.size(),
                 () -> "four readings and one row to write: "
                         + declared.stream().map(each -> each.about().toString()).toList());
-        assertEquals(new FindingSubject.OfADeclaration(
+        assertEquals(new FindingSubject.OfADeclaration(List.of(
                         souther.compiler.types.TypeSymbols.declared(
-                                new souther.compiler.types.TypeKey("example.carried", "UserId"))),
+                                new souther.compiler.types.TypeKey("example.carried", "UserId")))),
                 declared.get(0).subject(),
                 "and it is asked of the declaration that wrote the rule");
     }

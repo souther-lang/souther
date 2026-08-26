@@ -65,8 +65,9 @@ public sealed interface Position permits ReadPosition {
      */
     NumericDomain.Bounds rangeLeft();
 
-    /** Which declarations' clauses are holding the end on the side asked for. */
-    List<TypeSymbol> narrowedBy(boolean lower);
+    /** Which declarations' clauses are holding the end on the side asked for. A declaration a module
+     *  wrote, because a clause is written on one. */
+    List<TypeSymbol.AtModule> narrowedBy(boolean lower);
 
     /** Whether the rules of the value this position sits in contradict, so that no value of it
      *  exists to have positions at all. */

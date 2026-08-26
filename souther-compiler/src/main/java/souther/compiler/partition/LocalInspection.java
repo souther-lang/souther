@@ -102,7 +102,8 @@ final class LocalInspection {
      *               one for at least one of them
      */
     private static List<Cut> cutsOf(DeclaredBounds.Bounds bounds, DeclaredBounds.Bounds own,
-                                    List<TypeSymbol> under, List<TypeSymbol> over) {
+                                    List<TypeSymbol.AtModule> under,
+                                    List<TypeSymbol.AtModule> over) {
         // Nothing about the shape of the position's type. An end is here because some clause placed
         // it, and a clause naming a field of a record places one on a bare `Int` and on the length
         // of a bare `List<Int>` as readily as on a newtype over either.
@@ -127,7 +128,7 @@ final class LocalInspection {
      */
     private static void cut(Map<String, Cut> into, DeclaredBounds.End end, DeclaredBounds.End own,
                             Carrier carrier, souther.compiler.numeric.Towards keeps,
-                            List<TypeSymbol> within) {
+                            List<TypeSymbol.AtModule> within) {
         if (end == null) {
             return;
         }
@@ -143,12 +144,13 @@ final class LocalInspection {
             put(into, carrier, end.value(),
                     new OriginRef.InvariantOrigin(from.rule(), from.conjunct(), keeps,
                             end.at().inclusive()),
-                    moved ? within : List.<TypeSymbol>of());
+                    moved ? within : List.<TypeSymbol.AtModule>of());
         }
     }
 
-    private static void put(Map<String, Cut> into, Carrier carrier, Place at, OriginRef drawnBy,
-                            List<TypeSymbol> narrowedBy) {
+    private static void put(Map<String, Cut> into, Carrier carrier, Place at,
+                            OriginRef.InvariantOrigin drawnBy,
+                            List<TypeSymbol.AtModule> narrowedBy) {
         // The rule as the end already names it. Narrowing is the one thing said here, and it is
         // said about the rule rather than in place of it: which declarations took the end in is a
         // fact about this reading of the position, and what drew the end is not.

@@ -32,8 +32,8 @@ import java.util.Set;
 record ReadPosition(TermPath path, TypeView view, NumericTerm term,
                     NumericDomain.Bounds numericDomain, DeclaredBounds.Bounds ownEnds,
                     NumericDomain.Bounds narrowedEnds, NumericDomain.Bounds rangeLeft,
-                    List<TypeSymbol> narrowedLower,
-                    List<TypeSymbol> narrowedUpper, boolean nothingExists,
+                    List<TypeSymbol.AtModule> narrowedLower,
+                    List<TypeSymbol.AtModule> narrowedUpper, boolean nothingExists,
                     ProjectionEvidence projection, List<Case> declared, ReadingResult reading,
                     ObligationDomain obligations, AdmissibleSet.Completeness completeness,
                     BlockReason.ReadingStopReason valuesUnread,
@@ -59,7 +59,7 @@ record ReadPosition(TermPath path, TypeView view, NumericTerm term,
     }
 
     @Override
-    public List<TypeSymbol> narrowedBy(boolean lower) {
+    public List<TypeSymbol.AtModule> narrowedBy(boolean lower) {
         return lower ? narrowedLower : narrowedUpper;
     }
 
