@@ -83,8 +83,16 @@ class AComparisonDrawsALineWhereverItsTruthIsReadTest {
         return evidence.axes().stream().map(axis -> axis.path() + ": " + axis.classes()).toList();
     }
 
-    private static List<String> linesOf(PartitionEvidence evidence) {
-        return BorderAssessment.pointsOf(evidence.boundaries()).stream()
+    /** The lines each behavior's positions met, whosever the row at each point is. */
+    private static Map<String, List<BorderAssessment>> lines() {
+        Compilation compilation = Compilation.ofSource(MODEL, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        return Adequacy.readingsOf(compilation.db(), compilation.modules().get(0));
+    }
+
+    private static List<String> linesOf(List<BorderAssessment> lines) {
+        return BorderAssessment.pointsOf(lines).stream()
                 .filter(p -> p.role().againstTheLine()).filter(p -> p.owed() != null)
                 .map(p -> p.label() + " " + p.role())
                 .sorted()
@@ -106,11 +114,12 @@ class AComparisonDrawsALineWhereverItsTruthIsReadTest {
     @Test
     void everySpellingThatReadsTheTruthDividesWhatTheForkSpellingDivides() {
         Map<String, PartitionEvidence> measured = measured();
+        Map<String, List<BorderAssessment>> lines = lines();
         PartitionEvidence held = measured.get("underAFork");
 
         for (String behavior : READ_ELSEWHERE) {
             assertEquals(classesOf(held), classesOf(measured.get(behavior)), behavior);
-            assertEquals(linesOf(held), linesOf(measured.get(behavior)), behavior);
+            assertEquals(linesOf(lines.get("underAFork")), linesOf(lines.get(behavior)), behavior);
         }
     }
 
@@ -137,7 +146,7 @@ class AComparisonDrawsALineWhereverItsTruthIsReadTest {
         PartitionEvidence dead = measured().get("namedAndNeverRead");
 
         assertEquals(List.of(), classesOf(dead));
-        assertEquals(List.of(), linesOf(dead));
+        assertEquals(List.of(), linesOf(lines().get("namedAndNeverRead")));
     }
 
     /**

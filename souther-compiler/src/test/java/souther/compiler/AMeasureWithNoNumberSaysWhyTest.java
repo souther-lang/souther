@@ -387,7 +387,7 @@ class AMeasureWithNoNumberSaysWhyTest {
     @Test
     void anInvariantsLineIsNeverWaitingOnTheArms() {
         List<BorderAssessment.Point> lines =
-                BorderAssessment.pointsOf(partitions().get("rated").boundaries()).stream()
+                BorderAssessment.pointsOf(lines().get("rated")).stream()
                         .filter(p -> p.owed() != null).toList();
         assertFalse(lines.isEmpty(), "the invariant draws two");
         for (BorderAssessment.Point line : lines) {
@@ -480,10 +480,10 @@ class AMeasureWithNoNumberSaysWhyTest {
         assertEquals(MeasurementStatus.PARTIAL, AdequacyReport.statusOf(branch.measured()),
                 "there are arms, and which of them were reached is undecided");
 
-        PartitionEvidence partition = compilation.db()
-                .ask(new Adequacy.Coverage("example.unseen")).value().get("elsewhere");
-        assertFalse(partition.boundaries().isEmpty(), "the invariant and the guard draw lines");
-        for (BorderAssessment.Point line : BorderAssessment.pointsOf(partition.boundaries())) {
+        List<BorderAssessment> read =
+                Adequacy.readingsOf(compilation.db(), "example.unseen").get("elsewhere");
+        assertFalse(read.isEmpty(), "the invariant and the guard draw lines");
+        for (BorderAssessment.Point line : BorderAssessment.pointsOf(read)) {
             if (line.owed() == null) {
                 continue;   // nothing was measured there and nothing was waiting on a row
             }
@@ -607,12 +607,12 @@ class AMeasureWithNoNumberSaysWhyTest {
             measures.add(new Object[] {"partition " + each.getKey(),
                     partition.partitioned()});
             measures.add(new Object[] {"boundary " + each.getKey(),
-                    partition.bounded()});
+                    boundaryReadings().get(each.getKey())});
             measures.add(new Object[] {"pairs " + each.getKey(),
                     partition.pairs().counted()});
             partition.axes().forEach(a -> measures.add(
                     new Object[] {"axis " + each.getKey(), a.reached()}));
-            BorderAssessment.pointsOf(partition.boundaries()).stream()
+            BorderAssessment.pointsOf(lines().get(each.getKey())).stream()
                     .filter(p -> p.owed() != null)
                     .forEach(p -> measures.add(new Object[] {"line " + each.getKey(),
                             p.item().weakeningSource()}));
@@ -718,6 +718,20 @@ class AMeasureWithNoNumberSaysWhyTest {
     private static Map<String, PartitionEvidence> partitions() {
         Compilation compilation = compiled();
         return compilation.db().ask(new Adequacy.Coverage(compilation.modules().get(0))).value();
+    }
+
+    /** The lines each behavior's positions met, whosever the row at each point is. */
+    private static Map<String, List<BorderAssessment>> lines() {
+        Compilation compilation = compiled();
+        return Adequacy.readingsOf(compilation.db(), compilation.modules().get(0));
+    }
+
+    /** How far the reading that found each behavior's lines got. */
+    private static Map<String, souther.compiler.query.Measure<List<BorderAssessment>>>
+            boundaryReadings() {
+        Compilation compilation = compiled();
+        return compilation.db()
+                .ask(new Adequacy.BoundaryReadings(compilation.modules().get(0))).value();
     }
 
     private static List<Adequacy.Finding> findings(String behavior, Adequacy.Kind kind) {

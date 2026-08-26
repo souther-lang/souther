@@ -89,7 +89,7 @@ class ARowComposedForAPointIsWritableAndStandsAtItTest {
     void everyRowComposedStandsAtThePointItWasComposedFor() {
         List<String> missed = new ArrayList<>();
         forEachComposedRow((model, point, row) -> {
-            if (!met(measured(model + example(row)), point)) {
+            if (!met(lines(model + example(row)), point)) {
                 missed.add(point + " -> " + row);
             }
         });
@@ -114,8 +114,7 @@ class ARowComposedForAPointIsWritableAndStandsAtItTest {
     private static void forEachComposedRow(OfAComposedRow held) {
         EveryDeclaredFormIsMeasuredAtItsOwnCoefficientsTest.MEASURED.forEach((operation, observed) -> {
             String model = EveryDeclaredFormIsMeasuredAtItsOwnCoefficientsTest.modelOf(observed);
-            PartitionEvidence measured = measured(model);
-            for (BorderAssessment border : measured.boundaries()) {
+            for (BorderAssessment border : lines(model)) {
                 border.items().forEach((role, item) -> {
                     if (item instanceof ItemAssessment.Owed owed
                             && owed.attempt() instanceof ItemAssessment.Attempt.Built built) {
@@ -137,8 +136,8 @@ class ARowComposedForAPointIsWritableAndStandsAtItTest {
     }
 
     /** Whether the point is met, read off the item rather than out of a report's text. */
-    private static boolean met(PartitionEvidence evidence, String point) {
-        for (BorderAssessment border : evidence.boundaries()) {
+    private static boolean met(List<BorderAssessment> lines, String point) {
+        for (BorderAssessment border : lines) {
             for (Map.Entry<PointRole, ItemAssessment> each : border.items().entrySet()) {
                 if (!point.equals(border.label() + " " + each.getKey())) {
                     continue;
@@ -164,6 +163,18 @@ class ARowComposedForAPointIsWritableAndStandsAtItTest {
             }
         }
         return said;
+    }
+
+    /** The lines the behavior's positions met, whosever the row at each point is. */
+    private static List<BorderAssessment> lines(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        Map<String, List<BorderAssessment>> read = Adequacy.readingsOf(compilation.db(), "demo");
+        assertNotNull(read, () -> "the model under test compiles: " + source);
+        List<BorderAssessment> lines = read.get("f");
+        assertNotNull(lines, () -> "f was measured: " + source);
+        return lines;
     }
 
     private static PartitionEvidence measured(String source) {

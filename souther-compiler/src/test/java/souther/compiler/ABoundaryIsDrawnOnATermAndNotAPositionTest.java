@@ -78,8 +78,14 @@ class ABoundaryIsDrawnOnATermAndNotAPositionTest {
         return compilation.db().ask(new Adequacy.Coverage(compilation.modules().get(0))).value();
     }
 
-    private static List<String> labels(PartitionEvidence partition) {
-        return partition.boundaries().stream().map(BorderAssessment::label).sorted().toList();
+    /** The lines each behavior of the one module in {@code source} was measured at. */
+    private static Map<String, List<BorderAssessment>> lines(String source) {
+        Compilation compilation = compiled(source);
+        return Adequacy.readingsOf(compilation.db(), compilation.modules().get(0));
+    }
+
+    private static List<String> labels(List<BorderAssessment> lines) {
+        return lines.stream().map(BorderAssessment::label).sorted().toList();
     }
 
     /** A size call in an invariant draws the line its number names, and the line is named by the term
@@ -92,7 +98,7 @@ class ABoundaryIsDrawnOnATermAndNotAPositionTest {
                         "Set.size(t.codes) = 1",
                         "String.length(t.label) = 1",
                         "t.size = 1"),
-                labels(partitions(MODEL).get("look")));
+                labels(lines(MODEL).get("look")));
     }
 
     /** One point against the line each, and it is the {@code ON} point. Everything outside an
@@ -101,7 +107,7 @@ class ABoundaryIsDrawnOnATermAndNotAPositionTest {
      * words. */
     @Test
     void anInvariantsEdgeIsOwedOnceAndNotOnBothSides() {
-        for (BorderAssessment line : partitions(MODEL).get("look").boundaries()) {
+        for (BorderAssessment line : lines(MODEL).get("look")) {
             assertNotNull(line.owedAt(souther.compiler.partition.PointRole.ON), line.label());
             assertEquals(new ItemAssessment.NotOwed(
                             souther.compiler.partition.NotOwedReason.THE_RULES_REFUSE_IT),
@@ -117,7 +123,7 @@ class ABoundaryIsDrawnOnATermAndNotAPositionTest {
     @Test
     void aRowIsReadThroughTheTermThatDrewTheLine() {
         Map<String, BorderAssessment> byLabel = new java.util.LinkedHashMap<>();
-        partitions(MODEL).get("look").boundaries().forEach(b -> byLabel.put(b.label(), b));
+        lines(MODEL).get("look").forEach(b -> byLabel.put(b.label(), b));
 
         assertTrue(onPointOf(byLabel, "String.length(t.label) = 1").hasRowWitness(),
                 "the row's label is one character long");
@@ -131,7 +137,7 @@ class ABoundaryIsDrawnOnATermAndNotAPositionTest {
     /** The borders of {@code behavior} in {@code source}, by the line each is at. */
     private static Map<String, BorderAssessment> byLabel(String source, String behavior) {
         Map<String, BorderAssessment> out = new java.util.LinkedHashMap<>();
-        partitions(source).get(behavior).boundaries().forEach(b -> out.put(b.label(), b));
+        lines(source).get(behavior).forEach(b -> out.put(b.label(), b));
         return out;
     }
 
@@ -190,7 +196,7 @@ class ABoundaryIsDrawnOnATermAndNotAPositionTest {
         assertEquals(List.of(
                         "String.length(t.label) = 1",
                         "String.length(t.label) = 3"),
-                labels(partitions(GUARDED).get("guarded")),
+                labels(lines(GUARDED).get("guarded")),
                 "two borders, and the guard's owes a row at 4 as its OFF point rather than being a"
                         + " line of its own");
         // `> 3` puts the 3 outside the partition it names, so the row there is the border's OFF
@@ -241,7 +247,7 @@ class ABoundaryIsDrawnOnATermAndNotAPositionTest {
         assertEquals(List.of(
                         "String.length(t.label) = 1",
                         "String.length(t.label) = 3"),
-                labels(partitions(IMPORTED).get("look")));
+                labels(lines(IMPORTED).get("look")));
     }
 
     private static final String UNBOUNDED = """
@@ -270,6 +276,6 @@ class ABoundaryIsDrawnOnATermAndNotAPositionTest {
     @Test
     void aSizeIsNeverNegativeAndNoRowIsAskedForBelowZero() {
         assertEquals(List.of("List.length(t.names) = 0"),
-                labels(partitions(UNBOUNDED).get("atLeastNone")));
+                labels(lines(UNBOUNDED).get("atLeastNone")));
     }
 }

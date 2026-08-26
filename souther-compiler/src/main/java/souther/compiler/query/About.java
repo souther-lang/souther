@@ -65,10 +65,10 @@ public sealed interface About {
     /**
      * A point of a border no row is at.
      *
-     * <p>The assessment's own item, which is what the count, the document and this are three
-     * readings of. Held as the point rather than as the axis, the value, the rule and the role,
-     * which is what those four fields were: a copy that did not identify a point, since several
-     * rules can draw a line at one value.
+     * <p>One entry of this behavior's account, which is what the count, the document and this are
+     * three readings of. Held as the point rather than as the axis, the value, the rule and the
+     * role, which is what those four fields were: a copy that did not identify a point, since
+     * several rules can draw a line at one value.
      *
      * <p>What is here is what was measured, and a reader wanting more than that says so. A
      * generation composes values at these lines whatever the build was measuring, so what it can do
@@ -77,30 +77,15 @@ public sealed interface About {
      * because that is what a finding is about: a search settles what can be written at the point and
      * changes nothing about the point being missed.
      *
-     * <p><b>What is owed and where it was measured, apart.</b> One role of one reading can owe more
-     * than one row — a place two rules of this body drew a line at leaves a run owed to each — so
-     * which of them this is is {@code owed}, and where it was measured is {@code point}. Said as the
-     * reading's role alone, two things to write came out as one finding, and the reading was
-     * standing in for the debt again.
+     * <p>That this behavior is owed a row here at all is settled where the account is made, so
+     * nothing is checked again: a point owed to the declarations that drew the line is answered once
+     * for the module and never reaches this.
      *
-     * @param point where it was measured: this reading, in this role
-     * @param owed  what a row here is owed for, which is one of the things that role owes
+     * @param point what this behavior is owed a row for, and what became of it
      */
-    record APointOfABorder(BorderAssessment.Point point,
-                           souther.compiler.partition.BorderObligationPoint owed)
-            implements About {
+    record APointOfABorder(OwedBoundaryPoint point) implements About {
         public APointOfABorder {
             java.util.Objects.requireNonNull(point, "a finding is about something");
-            java.util.Objects.requireNonNull(owed, "and a row here is owed for something");
-            // One of the things this reading owes here, and not something that merely looks like
-            // one. What a role owes is the border's own answer, so a finding naming anything else
-            // would be a second reading of it — and a reader joining the finding back to what was
-            // measured would find nothing to join it to.
-            if (point.owedHere().stream().noneMatch(each -> each.point().equals(owed))) {
-                throw new IllegalArgumentException("a finding about " + owed
-                        + ", which is not among what this reading owes at its " + point.role()
-                        + " point: " + point.owedHere());
-            }
         }
     }
 

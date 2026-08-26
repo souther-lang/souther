@@ -586,16 +586,20 @@ public final class Analyzer {
         souther.compiler.query.PartitionEvidence partition =
                 adequacy.partitions() == null ? null : adequacy.partitions().get(behavior);
         if (partition != null) {
-            // Over the coverage items and not over the borders. A border owes a row at up to four
-            // points, and counting borders would call one with a single point met as covered as one
-            // that owes only that point.
-            List<souther.compiler.query.ItemAssessment> settled =
-                    souther.compiler.query.BorderAssessment.pointsOf(partition.boundaries()).stream()
-                            .map(souther.compiler.query.BorderAssessment.Point::item)
+            // What this behavior is owed a row for, and not every point of every line it met. A
+            // line the declarations drew is answered once for the module by a row written for any
+            // behavior carrying the type, so a lens over a behavior that counted those would be
+            // telling this author about work that is not theirs.
+            //
+            // Over the points and not over the borders. A border owes a row at up to four of them,
+            // and counting borders would call one with a single point met as covered as one that
+            // owes only that point.
+            List<souther.compiler.query.ItemAssessment.Owed> settled =
+                    partition.owedPoints().stream()
+                            .map(souther.compiler.query.OwedBoundaryPoint::item)
                             .filter(Analyzer::settled).toList();
             long met = settled.stream()
-                    .filter(item -> item instanceof souther.compiler.query.ItemAssessment.Owed owed
-                            && owed.hasRowWitness())
+                    .filter(souther.compiler.query.ItemAssessment.Owed::hasRowWitness)
                     .count();
             if (!settled.isEmpty()) {
                 parts.add("boundary " + met + "/" + settled.size());
@@ -631,13 +635,12 @@ public final class Analyzer {
      * <p>Nor a point nobody is owed a row at. Nothing was measured there and nothing is missing, and
      * a lens that counted it would put the model's own answer into a ratio of what the rows reach.
      */
-    private static boolean settled(souther.compiler.query.ItemAssessment item) {
+    private static boolean settled(souther.compiler.query.ItemAssessment.Owed owed) {
         // The measurement was made and made in full, which is the whole of what this asks. It used
         // to list the two verdicts that count as settled and leave out the two that do not; a
         // verdict is now what was seen and how far it can be trusted is the measurement's, so this
         // is one question again.
-        return item instanceof souther.compiler.query.ItemAssessment.Owed owed
-                && owed.coverage() instanceof souther.compiler.query.Measurement.Complete<?>;
+        return owed.coverage() instanceof souther.compiler.query.Measurement.Complete<?>;
     }
 
     /** The caret at one position, as a range of no width. */

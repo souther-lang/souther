@@ -49,13 +49,27 @@ class CompileExampleBoundaryTest {
             }
             """;
 
-    private static PartitionEvidence evidence(String source) {
+    private static Compilation measured(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         // Measuring the arms is opted into, so a test about them opts in.
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
+        return compilation;
+    }
+
+    private static PartitionEvidence evidence(String source) {
+        Compilation compilation = measured(source);
         Map<String, PartitionEvidence> all = compilation.db()
                 .ask(new Adequacy.Coverage(compilation.modules().get(0))).value();
+        assertNotNull(all, "the model under test compiles");
+        return all.get("submit");
+    }
+
+    /** The lines the behavior's positions met, whosever the row at each point is. */
+    private static List<BorderAssessment> lines(String source) {
+        Compilation compilation = measured(source);
+        Map<String, List<BorderAssessment>> all =
+                Adequacy.readingsOf(compilation.db(), compilation.modules().get(0));
         assertNotNull(all, "the model under test compiles");
         return all.get("submit");
     }
@@ -66,8 +80,8 @@ class CompileExampleBoundaryTest {
     }
 
     /** The points against a line at {@code value}, which is what a row there is owed for. */
-    private static List<BorderAssessment.Point> at(PartitionEvidence evidence, String value) {
-        return BorderAssessment.pointsOf(evidence.boundaries()).stream()
+    private static List<BorderAssessment.Point> at(List<BorderAssessment> lines, String value) {
+        return BorderAssessment.pointsOf(lines).stream()
                 .filter(p -> p.role().againstTheLine()).filter(p -> p.owed() != null)
                 .filter(p -> value.equals(p.against())).toList();
     }
@@ -96,7 +110,7 @@ class CompileExampleBoundaryTest {
      * is to reach — and reaching it needs no branch to have run. */
     @Test
     void anInvariantsBoundIsMetByWritingTheValue() {
-        PartitionEvidence away = evidence(MODEL + """
+        List<BorderAssessment> away = lines(MODEL + """
 
                 example submit
                     | (Draft { cost = Amount(50) }) -> Submitted
@@ -107,7 +121,7 @@ class CompileExampleBoundaryTest {
         assertTrue(zero.border().origin().named().startsWith("invariant"),
                 zero.border().origin().named());
 
-        PartitionEvidence edge = evidence(MODEL + """
+        List<BorderAssessment> edge = lines(MODEL + """
 
                 example submit
                     | (Draft { cost = Amount(0) }) -> Submitted
@@ -119,13 +133,13 @@ class CompileExampleBoundaryTest {
     /** A row that writes the value and reaches the comparison meets the line the guard drew. */
     @Test
     void aGuardsBoundaryIsMetByARowThatReachesTheComparison() {
-        PartitionEvidence evidence = evidence(MODEL + """
+        List<BorderAssessment> lines = lines(MODEL + """
 
                 example submit
                     | (Draft { cost = Amount(100) }) -> Submitted
                 """);
 
-        BorderAssessment.Point hundred = at(evidence, "100").get(0);
+        BorderAssessment.Point hundred = at(lines, "100").get(0);
         assertEquals(MeasurementStatus.COMPLETE, AdequacyReport.statusOf(hundred.item().weakeningSource()));
         assertTrue(hundred.owed().hasRowWitness(),
                 "the row wrote 100 and the guard compared it");
@@ -143,7 +157,7 @@ class CompileExampleBoundaryTest {
      */
     @Test
     void aValueWrittenButNeverComparedDoesNotMeetTheLine() {
-        PartitionEvidence evidence = evidence("""
+        List<BorderAssessment> lines = lines("""
                 module example.trip
 
                 data Amount = Int
@@ -166,9 +180,9 @@ class CompileExampleBoundaryTest {
                     | (Draft { cost = Amount(-1) }) -> Waiting { cost = Amount(-1) }
                 """);
 
-        BorderAssessment.Point first = at(evidence, "0").stream()
+        BorderAssessment.Point first = at(lines, "0").stream()
                 .filter(p -> p.border().origin().isWrittenRatherThanNamed()).findFirst().orElseThrow();
-        BorderAssessment.Point second = at(evidence, "100").get(0);
+        BorderAssessment.Point second = at(lines, "100").get(0);
 
         assertEquals(MeasurementStatus.COMPLETE, AdequacyReport.statusOf(second.item().weakeningSource()),
                 "the arms were measured");
@@ -178,14 +192,14 @@ class CompileExampleBoundaryTest {
 
     @Test
     void bothSidesOfAGuardsLineAreAskedFor() {
-        PartitionEvidence evidence = evidence(MODEL + """
+        List<BorderAssessment> lines = lines(MODEL + """
 
                 example submit
                     | (Draft { cost = Amount(50) }) -> Submitted
                 """);
 
-        assertEquals(1, at(evidence, "100").size(), "the value itself");
-        assertEquals(1, at(evidence, "101").size(), "and the first value on the other side");
+        assertEquals(1, at(lines, "100").size(), "the value itself");
+        assertEquals(1, at(lines, "101").size(), "and the first value on the other side");
     }
 
     /** Not a gap. The model draws no line through a plain String, so there was nothing to measure,
@@ -221,6 +235,7 @@ class CompileExampleBoundaryTest {
         assertTrue(keep.notDerivable().get(0).isAbsent(),
                 "the model divides it no way, which is established rather than assumed");
         assertEquals(List.of(), keep.axes());
-        assertEquals(List.of(), keep.boundaries());
+        assertEquals(List.of(),
+                Adequacy.readingsOf(compilation.db(), compilation.modules().get(0)).get("keep"));
     }
 }

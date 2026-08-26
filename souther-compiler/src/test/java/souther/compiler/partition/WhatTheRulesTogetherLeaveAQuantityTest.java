@@ -93,7 +93,7 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
         assertThrows(IllegalArgumentException.class,
                 () -> new QuantityArrangement.Run(values, stoppedByTheOrder(Towards.BELOW),
                         List.of(new RegionClaim(RegionBasis.TheRest.INSTANCE,
-                                PointAttribution.NONE))),
+                                PointContributions.none()))),
                 "and what a rule leaves outside one value is not a run of the arrangement at all");
         assertThrows(IllegalArgumentException.class,
                 () -> new QuantityArrangement.Run(values, stoppedByTheOrder(Towards.ABOVE),
@@ -103,12 +103,12 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
 
     private static List<RegionClaim> stoppedByTheOrder(Towards towards) {
         return List.of(new RegionClaim(new RegionBasis.Beside(new FarEnd.AtTheOrderEnd(towards)),
-                PointAttribution.NONE));
+                PointContributions.none()));
     }
 
     private static List<RegionClaim> stoppedByTheDomain(Bound at) {
         return List.of(new RegionClaim(new RegionBasis.Beside(new FarEnd.AtTheDomain(at)),
-                PointAttribution.NONE));
+                PointContributions.none()));
     }
 
     /** What stops the first run of {@code arranged} at its high end, without who can move it. */

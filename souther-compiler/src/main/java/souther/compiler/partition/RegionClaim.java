@@ -12,15 +12,17 @@ import java.util.List;
  * in two places instead, a reader would have to put them back together by whatever they had in
  * common, and what they have in common is where they were read.
  *
- * @param basis       what a row here is owed for, which is part of the point's identity
- * @param attribution who settled that, which is not
+ * @param basis         what a row here is owed for, which is part of the point's identity
+ * @param contributions what settled that at this end, which is not. One end's worth of what the
+ *                      point is owed to, since the line the region lies beside settled it as well
  */
-public record RegionClaim(RegionBasis basis, PointAttribution attribution) {
+public record RegionClaim(RegionBasis basis, PointContributions contributions) {
 
     public RegionClaim {
-        if (basis == null || attribution == null) {
+        if (basis == null || contributions == null) {
             throw new IllegalArgumentException(
-                    "a claim is something owed for, by somebody: " + basis + " " + attribution);
+                    "a claim is something owed for, settled by something: " + basis + " "
+                            + contributions);
         }
     }
 
@@ -50,7 +52,7 @@ public record RegionClaim(RegionBasis basis, PointAttribution attribution) {
                 out.add(each);
             } else {
                 out.set(at, new RegionClaim(each.basis(),
-                        out.get(at).attribution().and(each.attribution())));
+                        out.get(at).contributions().and(each.contributions())));
             }
         }
         return List.copyOf(out);

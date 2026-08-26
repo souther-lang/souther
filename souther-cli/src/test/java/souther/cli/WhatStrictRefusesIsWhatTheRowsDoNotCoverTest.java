@@ -537,10 +537,10 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
                 AReportOfOneBorder.aBorderAtTheEdgeOfItsDomain(), AReportOfOneBorder::hit);
 
         assertEquals(AdequacyReport.AdequacyStatus.SATISFIED,
-                verdictOf(partition(AReportOfOneBorder.measured(met))),
+                verdictOf(AReportOfOneBorder.measured(met)),
                 "a border measure made in full");
         assertEquals(AdequacyReport.AdequacyStatus.UNDETERMINED,
-                verdictOf(partition(AReportOfOneBorder.shortOfSomething(met))),
+                verdictOf(AReportOfOneBorder.shortOfSomething(met)),
                 "a border measure that was not made in full");
     }
 
@@ -561,14 +561,14 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
     void aPartitionReadingThatDidNotRunOutHoldsTheClassesBarOpen() {
         BorderAssessment met = AReportOfOneBorder.assessed(
                 AReportOfOneBorder.aBorderAtTheEdgeOfItsDomain(), AReportOfOneBorder::hit);
-        PartitionEvidence readingStopped = partition(AReportOfOneBorder.measured(met));
+        souther.compiler.query.Measurement<List<BorderAssessment>> lines =
+                AReportOfOneBorder.measured(met);
 
         assertEquals(AdequacyReport.AdequacyStatus.UNDETERMINED,
-                AReportOfOneBorder.verdictOf(readingStopped, Adequacy.AdequacyBar.CLASSES),
+                AReportOfOneBorder.verdictOf(lines, Adequacy.AdequacyBar.CLASSES),
                 "the classes this could not derive are classes nobody has covered");
         assertEquals(AdequacyReport.AdequacyStatus.SATISFIED,
-                AReportOfOneBorder.verdictOf(readingStopped,
-                        Adequacy.AdequacyBar.RELIABLE_DOMAIN),
+                AReportOfOneBorder.verdictOf(lines, Adequacy.AdequacyBar.RELIABLE_DOMAIN),
                 "and a bar that asks nothing of the classes reads only the lines");
     }
 
@@ -578,8 +578,9 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
         return AReportOfOneBorder.partition(border);
     }
 
-    private static AdequacyReport.AdequacyStatus verdictOf(PartitionEvidence partition) {
-        return AReportOfOneBorder.verdictOf(partition, Adequacy.AdequacyBar.SIMPLIFIED_DOMAIN);
+    private static AdequacyReport.AdequacyStatus verdictOf(
+            souther.compiler.query.Measurement<List<BorderAssessment>> lines) {
+        return AReportOfOneBorder.verdictOf(lines, Adequacy.AdequacyBar.SIMPLIFIED_DOMAIN);
     }
 
     /** Two covered stages and the composition of them, which carries rows of its own. */

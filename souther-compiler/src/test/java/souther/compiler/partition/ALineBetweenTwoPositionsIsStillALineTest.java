@@ -545,7 +545,7 @@ class ALineBetweenTwoPositionsIsStillALineTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return AdequacyReport.of(compilation).modules().get(0).behaviors().get(0)
-                .partition().boundaries().size();
+                .lines().size();
     }
 
     private static String generated(String model) {

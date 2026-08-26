@@ -89,21 +89,27 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, PointA
      * <p>Made here, from the answer that settled both halves at once. Everything that accounts for
      * rows asks this rather than building a point out of the parts it happened to know — which is
      * how a debt came to carry the reading it was met at.
+     *
+     * <p>Whose account each point falls in is read here as well, and here only. Everything that
+     * settled the point has arrived by this line: its own rule, and whatever stops the region
+     * beside it. A caller handed the contributors would be deciding it again, and a caller that
+     * forgot to decide would measure a body against a line no row written for it is owed.
      */
     public java.util.List<OwedPoint> owes(PointRole role) {
         BorderObligationId line = obligation();
         // The line's own rule is behind every point of it, whatever else settled the region beside
         // it: it is the line a row here stands at or beside, and an author moving it moves the
         // point.
-        PointAttribution own = PointAttribution.by(origin.authoredLine());
+        PointContributions own = PointContributions.by(origin.authoredLine());
         return switch (answer(role)) {
             case PointAnswer.NotOwed _ -> java.util.List.of();
             case PointAnswer.AtLine _ -> java.util.List.of(
-                    new OwedPoint(new BorderObligationPoint.AtLine(line, role), own));
+                    new OwedPoint(new BorderObligationPoint.AtLine(line, role),
+                            PointAttribution.of(own)));
             case PointAnswer.InRegion in -> in.claims().stream()
                     .map(claim -> new OwedPoint(
                             new BorderObligationPoint.InRegion(line, role, claim.basis()),
-                            own.and(claim.attribution())))
+                            PointAttribution.of(own.and(claim.contributions()))))
                     .toList();
         };
     }
@@ -180,6 +186,56 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, PointA
      *  {@link #label(PointRole)}, and the two differ at three of the four. */
     public String label() {
         return cut.left() + " = " + cut.right();
+    }
+
+    /**
+     * The position this line is on, as a report names it.
+     *
+     * <p>Asked of the shape of the line rather than of a field every shape was assumed to have. A
+     * line between two positions is on neither of them, and answering with one of the two would name
+     * a border after half of itself.
+     */
+    public String axis() {
+        return cut.named();
+    }
+
+    /** How one point relates a row's value to what it is against, or null where none is owed. */
+    public String operator(PointRole role) {
+        Criterion criterion = demand(role).criterion();
+        return criterion == null ? null : criterion.operator();
+    }
+
+    /** What that point is against, or null where none is owed. */
+    public String against(PointRole role) {
+        Criterion criterion = demand(role).criterion();
+        // Asked of the criterion, which is what knows whether it is written against a level or
+        // against a run of them. Two of the four points name a level and two name a run, and a
+        // reader that took a level from every shape wrote a value inside a run as though it were
+        // the run.
+        return criterion == null ? null : criterion.written(cut.of());
+    }
+
+    /** The rule that drew this line, as a report about {@code sectionSource} writes it. */
+    public String describe(souther.compiler.diag.SourceNameResolver names,
+                           souther.compiler.source.SourceId sectionSource) {
+        return origin.describe(names, sectionSource);
+    }
+
+    /**
+     * The class a row at one point of this line falls in, as one line of a class list is written.
+     *
+     * <p>One place, because more than one reader names it: the document a consumer joins a finding
+     * to its item by, the class a generated row is offered against, and a block that shows the line
+     * whosever the row at each point is. Written once per reader, the spellings agreed for a point
+     * on the line and had nothing to say to each other away from it.
+     *
+     * <p>A point on the line is the value it is at. A point away from it carries the relation as
+     * well, because what it is against alone names the border there rather than the side of it a row
+     * is owed in.
+     */
+    public String said(PointRole role) {
+        return role.againstTheLine() ? axis() + " = " + against(role)
+                : axis() + " " + operator(role) + " " + against(role);
     }
 
     /**
@@ -681,7 +737,7 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, PointA
         return provablyHoldsNothing(side, space, within)
                 ? new PointAnswer.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT)
                 : new PointAnswer.InRegion(side, java.util.List.of(new RegionClaim(
-                        RegionBasis.TheRest.INSTANCE, PointAttribution.NONE)));
+                        RegionBasis.TheRest.INSTANCE, PointContributions.none())));
     }
 
     /**

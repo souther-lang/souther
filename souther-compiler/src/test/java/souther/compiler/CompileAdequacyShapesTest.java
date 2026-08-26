@@ -41,6 +41,14 @@ class CompileAdequacyShapesTest {
         return all.get(behavior);
     }
 
+    /** The lines that behavior's positions met, whosever the row at each point is. */
+    private static List<BorderAssessment> lines(Compilation compilation, String behavior) {
+        Map<String, List<BorderAssessment>> all =
+                Adequacy.readingsOf(compilation.db(), compilation.modules().get(0));
+        assertNotNull(all, "the model under test compiles");
+        return all.get(behavior);
+    }
+
     /**
      * A bare `Decimal` position compared against a fraction.
      *
@@ -51,7 +59,7 @@ class CompileAdequacyShapesTest {
      */
     @Test
     void aFractionalGuardOnAPlainDecimalIsMeasuredRatherThanThrown() {
-        PartitionEvidence evidence = partition(measured("""
+        Compilation compilation = measured("""
                 module example.dec
 
                 data Yes = { r: Decimal }
@@ -67,20 +75,21 @@ class CompileAdequacyShapesTest {
 
                 example classify
                     | (0.1m) -> Yes { r = 0.1m }
-                """), "classify");
+                """);
+        PartitionEvidence evidence = partition(compilation, "classify");
+        List<BorderAssessment> lines = lines(compilation, "classify");
 
         assertEquals(1, evidence.axes().size());
         assertEquals(List.of("rate/x < 0.5", "rate/0.5 <= x"), evidence.axes().get(0).classes());
         assertEquals(List.of("0.5"),
-                evidence.boundaries().stream().map(BorderAssessment::value)
-                        .toList());
+                lines.stream().map(BorderAssessment::value).toList());
         // A `Decimal` names no value one step over, so the border owes its own point and says why
         // the other one is not a gap rather than leaving it out.
         // `< 0.5` puts the cut outside the partition it names, so the row at 0.5 is the border's
         // OFF point — and the ON point one step in is a value a `Decimal` names none of.
         assertEquals(new souther.compiler.query.ItemAssessment.NotOwed(
                         souther.compiler.partition.NotOwedReason.THE_CARRIER_NAMES_NO_NEIGHBOUR),
-                evidence.boundaries().get(0).at(souther.compiler.partition.PointRole.ON));
+                lines.get(0).at(souther.compiler.partition.PointRole.ON));
     }
 
     /**
@@ -123,7 +132,7 @@ class CompileAdequacyShapesTest {
                 "the behavior's own arms are countable whatever its helpers look like");
         assertEquals(2, branch.arms().all().size(), "the guard's two arms, and none of the helper's");
 
-        assertTrue(BorderAssessment.pointsOf(partition(compilation, "check").boundaries()).stream()
+        assertTrue(BorderAssessment.pointsOf(lines(compilation, "check")).stream()
                         .anyMatch(p -> p.item().weakeningSource() instanceof Measurement.Complete<?>),
                 "and the guard's boundary is decided rather than unavailable");
     }
@@ -216,7 +225,7 @@ class CompileAdequacyShapesTest {
      */
     @Test
     void aValueWrittenAtTwoScalesIsOneLine() {
-        PartitionEvidence evidence = partition(measured("""
+        Compilation compilation = measured("""
                 module example.scale
 
                 data Rate = Decimal
@@ -235,9 +244,10 @@ class CompileAdequacyShapesTest {
 
                 example classify
                     | (Rate(1m)) -> No { r = Rate(1m) }
-                """), "classify");
+                """);
+        PartitionEvidence evidence = partition(compilation, "classify");
 
-        List<String> at = evidence.boundaries().stream()
+        List<String> at = lines(compilation, "classify").stream()
                 .map(BorderAssessment::value).filter(v -> v.equals("0")).toList();
         assertEquals(2, at.size(), "one line, and two rules that drew it there");
         assertFalse(evidence.axes().isEmpty());

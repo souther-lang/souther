@@ -188,7 +188,7 @@ final class AReportOfOneBorder {
                         WeakeningSet.of(new Weakening.ModelReadingIncomplete(
                                 new souther.compiler.partition.ClosureGap.RulesNotReached(
                                         new souther.compiler.partition.AxisId("b", "t"))))),
-                border,
+                souther.compiler.query.OwedBoundaryPoint.accountOf(border),
                 PartitionEvidence.PairSpace.NONE,
                 List.of(), List.of(), List.of(), List.of(), List.of(),
                 List.of());
@@ -208,18 +208,28 @@ final class AReportOfOneBorder {
                                 new souther.compiler.partition.AxisId("b", "m")))));
     }
 
-    /** What one behavior's partition makes of the whole report, held to {@code held}. */
-    static AdequacyReport.AdequacyStatus verdictOf(PartitionEvidence partition,
+    /**
+     * What one behavior's lines make of the whole report, held to {@code held}.
+     *
+     * <p>The lines and nothing else, because the account is read off them: handed both, a fixture
+     * could put a verdict in front of an account made from other lines than the ones beside it, and
+     * what came back would be about neither.
+     */
+    static AdequacyReport.AdequacyStatus verdictOf(Measurement<List<BorderAssessment>> lines,
                                                    Adequacy.AdequacyBar held) {
+        PartitionEvidence partition = partition(lines);
         AdequacyReport.BehaviorReport behavior = new AdequacyReport.BehaviorReport(
                 "weigh", souther.compiler.check.BehaviorImplementation.IMPLEMENTED,
                 new souther.compiler.query.BehaviorEvidence(
-                        Adequacy.RowReading.NONE, null, partition, null),
+                        Adequacy.RowReading.NONE, null, partition, lines, null),
                 souther.compiler.query.ClaimAnnotations.NONE, List.of());
         return new AdequacyReport(AdequacyReport.SCHEMA_VERSION, "test",
                 held, WeakeningSet.none(),
                 List.of(new AdequacyReport.ModuleReport("example.wide",
-                        new SourceId("wide.sou"), List.of(behavior), List.of(), List.of())))
+                        new SourceId("wide.sou"), List.of(behavior), List.of(),
+                        // Nothing this module's declarations are owed, and nothing that finding
+                        // them went without: the fixture is about one behavior's own lines.
+                        new Adequacy.DeclaredBoundaries(List.of(), java.util.Map.of()))))
                 .adequacy();
     }
 }

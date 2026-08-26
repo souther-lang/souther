@@ -104,8 +104,16 @@ class ABodyThatBindsItsInputBeforeComparingItComparesItsInputTest {
                 .toList();
     }
 
-    private static List<String> linesOf(PartitionEvidence evidence) {
-        return BorderAssessment.pointsOf(evidence.boundaries()).stream()
+    /** The lines each behavior's positions met, whosever the row at each point is. */
+    private static Map<String, List<BorderAssessment>> lines() {
+        Compilation compilation = Compilation.ofSource(MODEL, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        return Adequacy.readingsOf(compilation.db(), compilation.modules().get(0));
+    }
+
+    private static List<String> linesOf(List<BorderAssessment> lines) {
+        return BorderAssessment.pointsOf(lines).stream()
                 .filter(p -> p.role().againstTheLine()).filter(p -> p.owed() != null)
                 .map(p -> p.label() + " " + p.role())
                 .sorted()
@@ -122,18 +130,20 @@ class ABodyThatBindsItsInputBeforeComparingItComparesItsInputTest {
                 classesOf(read));
         assertEquals(List.of("temp = 239 ON", "temp = 240 OFF",
                         "temp = 259 ON", "temp = 260 OFF"),
-                linesOf(read));
+                linesOf(lines().get("throughTheField")));
     }
 
     /** And every spelling that binds the input first divides it the same way. */
     @Test
     void aBoundSpellingDividesWhatTheFieldSpellingDivides() {
         Map<String, PartitionEvidence> measured = measured();
+        Map<String, List<BorderAssessment>> lines = lines();
         PartitionEvidence held = measured.get("throughTheField");
 
         for (String behavior : BOUND) {
             assertEquals(classesOf(held), classesOf(measured.get(behavior)), behavior);
-            assertEquals(linesOf(held), linesOf(measured.get(behavior)), behavior);
+            assertEquals(linesOf(lines.get("throughTheField")), linesOf(lines.get(behavior)),
+                    behavior);
         }
     }
 

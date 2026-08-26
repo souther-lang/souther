@@ -68,12 +68,12 @@ class ARowOfferedForABorderOverAnOperationStandsAtItTest {
      */
     @Test
     void theBorderThisIsAboutIsDrawnAndItsPointsAreOpen() {
-        PartitionEvidence measured = measured(SPAN);
+        List<BorderAssessment> lines = lines(SPAN);
 
-        assertEquals(List.of("b - 10"), measured.boundaries().stream()
+        assertEquals(List.of("b - 10"), lines.stream()
                 .map(BorderAssessment::value).filter(each -> each.contains("b")).toList(),
                 "the line `Date.daysBetween(a, b) > 10` draws");
-        assertTrue(!open(measured).isEmpty(),
+        assertTrue(!open(lines).isEmpty(),
                 "and points of it nothing has covered, for a row to be offered at");
     }
 
@@ -90,7 +90,7 @@ class ARowOfferedForABorderOverAnOperationStandsAtItTest {
      */
     @Test
     void thePointsOfThatBorderAreOfferedRows() {
-        Map<String, String> rows = offeredAt(measured(SPAN));
+        Map<String, String> rows = offeredAt(lines(SPAN));
 
         assertEquals(List.of("a = b - 10 ON", "a = b - 10 OFF", "a = b - 10 IN", "a = b - 10 OUT"),
                 rows.keySet().stream().filter(each -> each.startsWith("a = b - 10 ")).toList(),
@@ -131,7 +131,7 @@ class ARowOfferedForABorderOverAnOperationStandsAtItTest {
      */
     @Test
     void thePointsOfABorderAcrossTwoOrdersAreOfferedRowsWrittenOnEachOrder() {
-        Map<String, String> rows = inputsOf(measured(ACROSS_TWO_ORDERS));
+        Map<String, String> rows = inputsOf(lines(ACROSS_TWO_ORDERS));
 
         assertEquals(List.of("b = a OFF", "b = a IN", "b = a OUT"),
                 rows.keySet().stream().filter(each -> each.startsWith("b = a ")).toList(),
@@ -181,7 +181,7 @@ class ARowOfferedForABorderOverAnOperationStandsAtItTest {
      */
     @Test
     void andThePairIsSearchedForOnBothOrders() {
-        Map<String, String> rows = inputsOf(measured(A_RUN_ONE_ORDER_FILLS));
+        Map<String, String> rows = inputsOf(lines(A_RUN_ONE_ORDER_FILLS));
 
         assertEquals("(0, Amount(0.5m))", rows.get("b = a + 0.5 OFF"),
                 "the point on the line has the one whole number the line leaves, and the decimal"
@@ -197,9 +197,9 @@ class ARowOfferedForABorderOverAnOperationStandsAtItTest {
      */
     @Test
     void everyRowOfferedAtAPointStandsAtIt() {
-        Map<String, String> rows = offeredAt(measured(SPAN));
+        Map<String, String> rows = offeredAt(lines(SPAN));
 
-        PartitionEvidence again = measured(SPAN + "\nexample f\n"
+        List<BorderAssessment> again = lines(SPAN + "\nexample f\n"
                 + String.join("\n", rows.values()) + "\n");
 
         assertEquals(List.of(), open(again).stream().filter(rows::containsKey).toList(),
@@ -207,9 +207,9 @@ class ARowOfferedForABorderOverAnOperationStandsAtItTest {
     }
 
     /** The points of every border a row is owed at and nothing stands at. */
-    private static List<String> open(PartitionEvidence evidence) {
+    private static List<String> open(List<BorderAssessment> lines) {
         List<String> points = new ArrayList<>();
-        for (BorderAssessment border : evidence.boundaries()) {
+        for (BorderAssessment border : lines) {
             border.items().forEach((role, item) -> {
                 if (item instanceof ItemAssessment.Owed owed
                         && !owed.hasRowWitness()) {
@@ -226,22 +226,22 @@ class ARowOfferedForABorderOverAnOperationStandsAtItTest {
      * <p>Empty where the search composed nothing, which is what a point with no row is. Whether that
      * happens is the search's answer and no part of what this holds.
      */
-    private static Map<String, String> offeredAt(PartitionEvidence evidence) {
-        return offeredAt(evidence, ARowOfferedForABorderOverAnOperationStandsAtItTest::written);
+    private static Map<String, String> offeredAt(List<BorderAssessment> lines) {
+        return offeredAt(lines, ARowOfferedForABorderOverAnOperationStandsAtItTest::written);
     }
 
     /** The same, as each row's inputs alone — for a model whose rows are not written as dates and
      *  whose answer nothing here works out. */
-    private static Map<String, String> inputsOf(PartitionEvidence evidence) {
-        return offeredAt(evidence, row -> "("
+    private static Map<String, String> inputsOf(List<BorderAssessment> lines) {
+        return offeredAt(lines, row -> "("
                 + String.join(", ", row.inputs().stream().map(FixtureTemplate::text).toList()) + ")");
     }
 
     private static Map<String, String> offeredAt(
-            PartitionEvidence evidence,
+            List<BorderAssessment> lines,
             java.util.function.Function<Generator.GeneratedRow, String> as) {
         Map<String, String> rows = new LinkedHashMap<>();
-        for (BorderAssessment border : evidence.boundaries()) {
+        for (BorderAssessment border : lines) {
             border.items().forEach((role, item) -> {
                 if (item instanceof ItemAssessment.Owed owed
                         && owed.attempt() instanceof ItemAssessment.Attempt.Built built) {
@@ -287,5 +287,18 @@ class ARowOfferedForABorderOverAnOperationStandsAtItTest {
         PartitionEvidence measured = coverage.get("f");
         assertNotNull(measured, () -> "f was measured: " + source);
         return measured;
+    }
+
+    /** The lines the behavior's positions met, whosever the row at each point is. */
+    private static List<BorderAssessment> lines(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        Map<String, List<BorderAssessment>> read =
+                Adequacy.readingsOf(compilation.db(), compilation.modules().get(0));
+        assertNotNull(read, () -> "the model under test compiles: " + source);
+        List<BorderAssessment> lines = read.get("f");
+        assertNotNull(lines, () -> "f was measured: " + source);
+        return lines;
     }
 }

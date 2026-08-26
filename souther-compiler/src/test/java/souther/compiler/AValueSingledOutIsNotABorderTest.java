@@ -49,6 +49,14 @@ class AValueSingledOutIsNotABorderTest {
         return AdequacyReport.of(compilation).modules().get(0).behaviors().get(0).partition();
     }
 
+    /** The lines the behavior's positions met, whosever the row at each point is. */
+    private static List<souther.compiler.query.BorderAssessment> lines(String condition) {
+        Compilation compilation = Compilation.ofSource(SOURCE.formatted(condition), "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        return AdequacyReport.of(compilation).modules().get(0).behaviors().get(0).lines();
+    }
+
     /** The classes the rules divide the behavior's positions into, each named as a document names
      *  it. */
     private static List<String> classes(String condition) {
@@ -59,7 +67,7 @@ class AValueSingledOutIsNotABorderTest {
     /** How many borders the rules draw, which is what a rule placing no order across a value does
      *  not add to. */
     private static int borders(String condition) {
-        return measured(condition).boundaries().size();
+        return lines(condition).size();
     }
 
     /** What the rules left unread, as the position and the reason. */

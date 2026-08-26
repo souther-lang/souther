@@ -37,7 +37,7 @@ import java.util.Map;
  */
 public record BorderObligationPointAssessment(BorderObligationPoint point, String axis,
                                               souther.compiler.partition.PointAttribution
-                                                      attribution,
+                                                      .TheDeclarations attribution,
                                               Demand demand, ItemAssessment.Owed item,
                                               java.util.SequencedMap<Reading, BorderAssessment>
                                                       met) {
@@ -92,35 +92,56 @@ public record BorderObligationPointAssessment(BorderObligationPoint point, Strin
     }
 
     /**
-     * The points of a module, from every reading of every one of them.
+     * The points {@code module}'s declarations owe, from every reading of every one of them.
      *
      * <p>In the order the readings were made, so that what a report prints is read against the one
      * before it. What tells the points apart is what a border says it owes and nothing here: a
      * caller that grouped by anything else — the label, the rule, the position — would be deciding
      * what a debt is a second time and somewhere else.
+     *
+     * <p><b>Which points those are is asked of the attribution and of nothing else.</b> A row this
+     * reading's own rule settled is that body's to write and is no debt of any declaration; a row
+     * owed to declarations none of which are this module's is a line this module's values are held
+     * to and somebody else's to answer for. Both are the reading's own answer, read here rather
+     * than re-derived, and the module is what this account is of.
      */
     public static List<BorderObligationPointAssessment> across(
-            Map<String, List<BorderAssessment>> byBehavior,
-            java.util.function.Predicate<souther.compiler.partition.OwedPoint> keep,
+            Map<String, List<BorderAssessment>> byBehavior, String module,
             java.util.function.Function<BorderObligationPoint, String> named) {
         Map<BorderObligationPoint, java.util.SequencedMap<Reading, BorderAssessment>> byPoint =
                 new LinkedHashMap<>();
-        Map<BorderObligationPoint, souther.compiler.partition.PointAttribution> attribution =
+        Map<BorderObligationPoint,
+                souther.compiler.partition.PointAttribution.TheDeclarations> attribution =
                 new LinkedHashMap<>();
         byBehavior.forEach((behavior, readings) -> {
             for (BorderAssessment reading : readings) {
                 Reading where = new Reading(behavior, reading.border().cut().left());
                 for (souther.compiler.partition.OwedPoint each : reading.border().owes()) {
-                    if (!keep.test(each)) {
+                    // Every arm answered, for the reason the account beside this one answers them
+                    // all: a point whose arm neither producer names is a point measured nowhere,
+                    // and both of them would go on compiling.
+                    souther.compiler.partition.PointAttribution.TheDeclarations owedTo =
+                            switch (each.attribution()) {
+                                // A row a rule of this body settled is that behavior's own account
+                                // ({@link OwedBoundaryPoint#across}).
+                                case souther.compiler.partition.PointAttribution.TheReading _ ->
+                                        null;
+                                case souther.compiler.partition.PointAttribution
+                                        .TheDeclarations it -> it;
+                            };
+                    // And this module keeps the account only where its own declarations are among
+                    // the owners: a line another module wrote and this one narrowed nothing about
+                    // is the dependency it carries rather than a debt.
+                    if (owedTo == null || owedTo.ownersIn(module).isEmpty()) {
                         continue;
                     }
                     BorderObligationPoint owed = each.point();
-                    // What settled the point is the reading's, so a point read twice is settled by
-                    // what either reading says settled it. Kept as the first reading's, a point one
+                    // What settled the point is the reading's, so a point read twice is owed to
+                    // what either reading says owes it. Kept as the first reading's, a point one
                     // module's declaration narrowed at one position and another's at another would
                     // be attributed to whichever the walk reached first.
-                    attribution.merge(owed, each.attribution(),
-                            souther.compiler.partition.PointAttribution::and);
+                    attribution.merge(owed, owedTo,
+                            souther.compiler.partition.PointAttribution.TheDeclarations::and);
                     BorderAssessment already = byPoint
                             .computeIfAbsent(owed, _ -> new LinkedHashMap<>()).put(where, reading);
                     if (already != null) {
@@ -151,12 +172,39 @@ public record BorderObligationPointAssessment(BorderObligationPoint point, Strin
      */
     public static BorderObligationPointAssessment of(
             BorderObligationPoint point, String axis,
-            souther.compiler.partition.PointAttribution attribution,
+            souther.compiler.partition.PointAttribution.TheDeclarations attribution,
             java.util.SequencedMap<Reading, BorderAssessment> met) {
         List<BorderAssessment> readings = List.copyOf(met.values());
         Demand asked = asked(point, readings);
         return new BorderObligationPointAssessment(point, axis, attribution, asked,
                 came(point.role(), readings, asked), met);
+    }
+
+    /**
+     * The same point as a reader shown only {@code behaviors} is owed it, or null where none of
+     * them reads it.
+     *
+     * <p>What a debt came to is what its readings came to together, so a view that shows some of
+     * them is owed what those came to and not what the rest did: a row that was not read in a
+     * behavior the reader cannot see leaves this debt undecided for a reader who cannot act on it,
+     * and the reason it is undecided names a position that is not on the page.
+     *
+     * <p>Made again from the readings that are left rather than trimmed, because everything about a
+     * debt but its identity follows from them — what it asks of a row, what became of it, which
+     * behaviors carry it. Trimming the ones a reader can name and keeping the answer folded from
+     * all of them is how a filtered view came to carry a hidden behavior's evidence.
+     *
+     * <p>Who owes it is not re-derived. A declaration owes a line wherever the type is carried, and
+     * which behaviors this reader is shown is no part of that.
+     */
+    public BorderObligationPointAssessment keptFor(java.util.Set<String> behaviors) {
+        java.util.SequencedMap<Reading, BorderAssessment> kept = new LinkedHashMap<>();
+        met.forEach((where, reading) -> {
+            if (behaviors.contains(where.behavior())) {
+                kept.put(where, reading);
+            }
+        });
+        return kept.isEmpty() ? null : of(point, axis, attribution, kept);
     }
 
     /** Every reading of the line that owes this point, in the order they were made. */

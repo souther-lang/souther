@@ -25,7 +25,7 @@ import java.util.function.Predicate;
  * {@code CompilePartialAdequacyTest} walks four thousand nodes to spend the observation budget, and
  * it holds no looping helper at all.
  */
-final class DoesNotComeBack {
+public final class DoesNotComeBack {
 
     /**
      * The wait a test quotes when it says work did not come back.
@@ -93,7 +93,7 @@ final class DoesNotComeBack {
      * <p>Only the work picked out overruns, so whatever else the model does still has to finish: it
      * is run inline, and a loop nothing picked out would not be cut short but would hang.
      */
-    static Deadline overrunningOn(Predicate<Deadline.Work> which) {
+    public static Deadline overrunningOn(Predicate<Deadline.Work> which) {
         return new Deadline() {
 
             @Override
@@ -161,7 +161,7 @@ final class DoesNotComeBack {
     }
 
     /** Everything a row of {@code target} is worked on for: read, and evaluated. */
-    static Predicate<Deadline.Work> everythingAboutRowsOf(String target) {
+    public static Predicate<Deadline.Work> everythingAboutRowsOf(String target) {
         return everyRowOf(target).or(theFixturesOfEveryRowOf(target));
     }
 

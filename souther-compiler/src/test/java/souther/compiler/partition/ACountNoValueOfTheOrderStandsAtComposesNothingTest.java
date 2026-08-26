@@ -6,7 +6,6 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ItemAssessment;
-import souther.compiler.query.PartitionEvidence;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -53,7 +52,7 @@ class ACountNoValueOfTheOrderStandsAtComposesNothingTest {
     /** The line is drawn, over the counts the operation was declared with. */
     @Test
     void theLineIsStillDrawn() {
-        assertEquals(List.of("b - 86400 * d - t = 0"), measured().boundaries().stream()
+        assertEquals(List.of("b - 86400 * d - t = 0"), measured().stream()
                 .map(BorderAssessment::label).toList());
     }
 
@@ -68,7 +67,7 @@ class ACountNoValueOfTheOrderStandsAtComposesNothingTest {
     @Test
     void thePointBelowItIsUnresolvedRatherThanThrown() {
         List<String> reasons = new ArrayList<>();
-        for (BorderAssessment border : measured().boundaries()) {
+        for (BorderAssessment border : measured()) {
             border.items().forEach((role, item) -> {
                 if (item instanceof ItemAssessment.Owed owed
                         && owed.attempt() instanceof ItemAssessment.Attempt.Unresolved unresolved) {
@@ -86,7 +85,7 @@ class ACountNoValueOfTheOrderStandsAtComposesNothingTest {
     @Test
     void thePointsWithValuesKeepThem() {
         List<String> rows = new ArrayList<>();
-        for (BorderAssessment border : measured().boundaries()) {
+        for (BorderAssessment border : measured()) {
             border.items().forEach((role, item) -> {
                 if (item instanceof ItemAssessment.Owed owed
                         && owed.attempt() instanceof ItemAssessment.Attempt.Built built) {
@@ -102,15 +101,16 @@ class ACountNoValueOfTheOrderStandsAtComposesNothingTest {
                 "the two points that have a value, at the counts the declared form puts them at");
     }
 
-    private static PartitionEvidence measured() {
+    /** The lines the behavior's positions met, whosever the row at each point is. */
+    private static List<BorderAssessment> measured() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        Map<String, PartitionEvidence> coverage =
-                compilation.db().ask(new Adequacy.Coverage("demo")).value();
-        assertNotNull(coverage, "the model under test compiles");
-        PartitionEvidence measured = coverage.get("f");
-        assertNotNull(measured, "f was measured");
-        return measured;
+        Map<String, List<BorderAssessment>> read =
+                Adequacy.readingsOf(compilation.db(), "demo");
+        assertNotNull(read, "the model under test compiles");
+        List<BorderAssessment> lines = read.get("f");
+        assertNotNull(lines, "f was measured");
+        return lines;
     }
 }

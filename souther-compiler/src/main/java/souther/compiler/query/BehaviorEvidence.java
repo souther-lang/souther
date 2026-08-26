@@ -22,19 +22,50 @@ package souther.compiler.query;
  * with nothing: every measure that ran says why it has no number. The reading is always there,
  * because there is always an answer to how far the rows were read — including that nobody asked.
  *
- * @param reading   how far the reading of this behavior's rows got, and what it read
- * @param signature what the rows establish about the cases of its inputs and its output
- * @param partition what they establish about the classes and the lines its rules draw
- * @param branch    what they establish about the arms of its body
+ * <p><b>The lines are read here and accounted for beside it.</b> Which lines this behavior's
+ * positions meet, and how far the reading that found them got, is one measure and is held once; what
+ * this behavior is owed a row for at them is one account of it, and what the module's declarations
+ * are owed is another. A reader that describes a border whole — a block that accounts for its four
+ * points, a document that publishes them — reads the lines; a reader that measures this behavior
+ * reads its account.
+ *
+ * @param reading          how far the reading of this behavior's rows got, and what it read
+ * @param signature        what the rows establish about the cases of its inputs and its output
+ * @param partition        what they establish about the classes, and what this behavior is owed a
+ *                         row for at the lines its rules draw
+ * @param boundaryReadings every line its positions met, in every role, whosever the row at each
+ *                         point is
+ * @param branch           what they establish about the arms of its body
  */
 public record BehaviorEvidence(Adequacy.RowReading reading,
                                Adequacy.SignatureEvidence signature,
                                PartitionEvidence partition,
+                               Measure<java.util.List<BorderAssessment>> boundaryReadings,
                                Adequacy.BranchEvidence branch) {
 
     public BehaviorEvidence {
         java.util.Objects.requireNonNull(reading,
                 "there is always an answer to how far a behavior's rows were read");
+        // The account and the lines it was read from arrive together or not at all. They are two
+        // readings of one measurement, so a behavior holding one of them is this compiler having
+        // answered half a question — and whoever met it next would have to decide what the half it
+        // was holding meant.
+        if ((partition == null) != (boundaryReadings == null)) {
+            throw new IllegalArgumentException("a behavior measured at the lines its positions met"
+                    + " and not at what it is owed a row for, or the other way about: "
+                    + partition + " / " + boundaryReadings);
+        }
+        // And two readings of one measurement rather than two measurements. What this behavior is
+        // owed is read off the lines it met, so the account beside them is the one they come to —
+        // and the two are read by different readers: a block and a document show the lines, and a
+        // finding, a verdict and an editor read the account. Held apart without being held together,
+        // one behavior could show one reading's borders under another reading's findings, and
+        // nothing downstream is in a position to notice.
+        if (partition != null
+                && !partition.owes().equals(OwedBoundaryPoint.accountOf(boundaryReadings))) {
+            throw new IllegalArgumentException("a behavior whose account is not what the lines it"
+                    + " was read at come to: " + partition.owes() + " from " + boundaryReadings);
+        }
     }
 
     /**
@@ -56,7 +87,7 @@ public record BehaviorEvidence(Adequacy.RowReading reading,
         parts.put("reading", reading.measured());
         parts.put("signature", signature == null ? null : signature.counted());
         parts.put("partition", partition == null ? null : partition.partitioned());
-        parts.put("border", partition == null ? null : partition.bounded());
+        parts.put("border", boundaryReadings);
         parts.put("branch", branch == null ? null : branch.measured());
         return java.util.Collections.unmodifiableMap(parts);
     }

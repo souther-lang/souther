@@ -60,7 +60,8 @@ class AskingForNothingIsAnAnswerTest {
     /** Every measure that reads the rows says nobody asked, and says it in the same word. */
     @Test
     void everyMeasureThatReadsTheRowsSaysNobodyAsked() {
-        Adequacy.Of measured = compiled(Adequacy.Level.OFF).adequacy("example.off");
+        Compilation compilation = compiled(Adequacy.Level.OFF);
+        Adequacy.Of measured = compilation.adequacy("example.off");
 
         Adequacy.SignatureEvidence signature = measured.signatures().get("submit");
         assertEquals(NothingWasAsked.NOT_ASKED, signature.counted().why());
@@ -78,7 +79,8 @@ class AskingForNothingIsAnAnswerTest {
         }
         assertEquals(NothingWasAsked.NOT_ASKED, partition.pairs().counted().why());
         for (souther.compiler.query.BorderAssessment.Point point
-                : souther.compiler.query.BorderAssessment.pointsOf(partition.boundaries())) {
+                : souther.compiler.query.BorderAssessment.pointsOf(
+                        Adequacy.readingsOf(compilation.db(), "example.off").get("submit"))) {
             if (point.owed() != null) {
                 assertEquals(souther.compiler.query.ItemAssessment.Coverage.NotAsked.NOT_ASKED,
                         point.owed().coverage().why(), point.label());
@@ -91,13 +93,15 @@ class AskingForNothingIsAnAnswerTest {
     /** What the model says is there all the same. A measurement made none of it true. */
     @Test
     void whatTheModelDeclaresIsStillThere() {
-        Adequacy.Of measured = compiled(Adequacy.Level.OFF).adequacy("example.off");
+        Compilation compilation = compiled(Adequacy.Level.OFF);
+        Adequacy.Of measured = compilation.adequacy("example.off");
 
         assertEquals(2, measured.signatures().get("submit").output().declared().size(),
                 "the output is a sum of two whether or not anybody counted");
         PartitionEvidence partition = measured.partitions().get("submit");
         assertEquals(List.of("Yes", "No"), partition.axes().get(0).classes());
-        assertFalse(partition.boundaries().isEmpty(), "the invariant and the guard draw lines");
+        assertFalse(Adequacy.readingsOf(compilation.db(), "example.off").get("submit").isEmpty(),
+                "the invariant and the guard draw lines");
     }
 
     /** A verdict over measures none of which was made is undetermined, which is what the

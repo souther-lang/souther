@@ -6,7 +6,6 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ItemAssessment;
-import souther.compiler.query.PartitionEvidence;
 
 import java.util.List;
 import java.util.Map;
@@ -449,12 +448,12 @@ class ARowForABorderIsSearchedForInTheRegionThatReachesItTest {
     /** The one point of one border, found by the line and the level it names. */
     private static BorderAssessment.Point pointAt(String source, String level) {
         List<BorderAssessment.Point> found =
-                BorderAssessment.pointsOf(evidence(source).boundaries()).stream()
+                BorderAssessment.pointsOf(lines(source)).stream()
                         .filter(point -> point.label() != null && point.label().endsWith(level))
                         .toList();
         assertEquals(1, found.size(),
                 "one point is named `" + level + "`, and these are the points: "
-                        + BorderAssessment.pointsOf(evidence(source).boundaries()).stream()
+                        + BorderAssessment.pointsOf(lines(source)).stream()
                                 .map(BorderAssessment.Point::label).toList());
         return found.get(0);
     }
@@ -464,12 +463,13 @@ class ARowForABorderIsSearchedForInTheRegionThatReachesItTest {
                 "a row is owed at " + point.label());
     }
 
-    private static PartitionEvidence evidence(String source) {
+    /** The lines the behavior's positions met, whosever the row at each point is. */
+    private static List<BorderAssessment> lines(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        Map<String, PartitionEvidence> all = compilation.db()
-                .ask(new Adequacy.Coverage(compilation.modules().get(0))).value();
+        Map<String, List<BorderAssessment>> all =
+                Adequacy.readingsOf(compilation.db(), compilation.modules().get(0));
         assertNotNull(all, "the model under test compiles");
         return all.get("checkout");
     }

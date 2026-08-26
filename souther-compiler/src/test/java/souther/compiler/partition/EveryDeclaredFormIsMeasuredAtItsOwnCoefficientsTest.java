@@ -5,7 +5,6 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.PartitionEvidence;
 import souther.compiler.semantics.OperationFacts;
 import souther.compiler.types.ValueName;
 
@@ -126,11 +125,10 @@ class EveryDeclaredFormIsMeasuredAtItsOwnCoefficientsTest {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        Map<String, PartitionEvidence> coverage =
-                compilation.db().ask(new Adequacy.Coverage("demo")).value();
-        assertNotNull(coverage, () -> "the model under test compiles: " + model);
-        PartitionEvidence measured = coverage.get("f");
-        assertNotNull(measured, () -> "f was measured: " + model);
-        return measured.boundaries().stream().map(BorderAssessment::label).toList();
+        Map<String, List<BorderAssessment>> read = Adequacy.readingsOf(compilation.db(), "demo");
+        assertNotNull(read, () -> "the model under test compiles: " + model);
+        List<BorderAssessment> lines = read.get("f");
+        assertNotNull(lines, () -> "f was measured: " + model);
+        return lines.stream().map(BorderAssessment::label).toList();
     }
 }

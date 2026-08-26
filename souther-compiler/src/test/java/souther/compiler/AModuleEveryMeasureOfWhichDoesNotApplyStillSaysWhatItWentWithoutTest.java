@@ -67,7 +67,7 @@ class AModuleEveryMeasureOfWhichDoesNotApplyStillSaysWhatItWentWithoutTest {
                 "the output is not a sum");
         assertInstanceOf(Measure.NotApplicable.class, behavior.partition().partitioned(),
                 "the rules divide no position");
-        assertInstanceOf(Measure.NotApplicable.class, behavior.partition().bounded(),
+        assertInstanceOf(Measure.NotApplicable.class, behavior.boundaryReadings(),
                 "and draw no line");
         assertInstanceOf(Measure.NotApplicable.class, behavior.branch().measured(),
                 "and there is no body");

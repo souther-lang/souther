@@ -3,7 +3,6 @@ package souther.compiler.report;
 import org.junit.jupiter.api.Test;
 import souther.compiler.examples.EvaluationPolicy;
 import souther.compiler.query.Adequacy;
-import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.InputCaseEvidence;
 import souther.compiler.query.PartitionEvidence;
@@ -16,6 +15,7 @@ import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -145,27 +145,38 @@ class WhatAWholeWentWithoutIsWhatItsPartsWentWithoutTest {
                     parts = parts.union(behavior.branch().measured().weakening());
                     apart.add(behavior.branch().measured().weakening());
                 }
+                if (behavior.boundaryReadings() != null) {
+                    parts = parts.union(behavior.boundaryReadings().weakening());
+                    apart.add(behavior.boundaryReadings().weakening());
+                }
                 if (behavior.partition() != null) {
                     PartitionEvidence partition = behavior.partition();
                     parts = parts.union(partition.partitioned().weakening())
-                            .union(partition.bounded().weakening())
+                            .union(partition.owes().weakening())
                             .union(partition.pairs().counted().weakening());
                     for (PartitionEvidence.AxisCoverage axis : partition.axes()) {
                         parts = parts.union(axis.reached().weakening());
                     }
-                    for (BorderAssessment.Point point
-                            : BorderAssessment.pointsOf(partition.boundaries())) {
+                    // This behavior's own account, which is what its weakening is over. A row owed
+                    // to the declarations that drew a line is short or not short in the module's
+                    // account of them.
+                    for (souther.compiler.query.OwedBoundaryPoint point : partition.owedPoints()) {
                         parts = parts.union(point.item().weakening());
                     }
                     apart.add(partition.partitioned().weakening());
-                    apart.add(partition.bounded().weakening());
+                    apart.add(partition.owes().weakening());
                     apart.add(partition.pairs().counted().weakening());
                 }
                 loadBearing += loadBearing(apart);
                 holds(lost, "behavior " + behavior.name(), behavior.weakenedBy(), parts);
                 acrossBehaviors = acrossBehaviors.union(behavior.weakenedBy());
             }
-            holds(lost, "module " + module.module(), module.weakenedBy(), acrossBehaviors);
+            // What the module's declarations are owed is a part of the module the way a behavior is.
+            // Left out, a module that went without something only its declaration account knows
+            // would report itself measured in full — and the account is where a row owed to a
+            // declaration is short, since no behavior carrying the type is short by it.
+            holds(lost, "module " + module.module(), module.weakenedBy(),
+                    acrossBehaviors.union(module.declarationsWeakenedBy()));
             acrossModules = acrossModules.union(module.weakenedBy());
             everything.addAll(module.weakenedBy().causes());
         }
@@ -192,6 +203,76 @@ class WhatAWholeWentWithoutIsWhatItsPartsWentWithoutTest {
                         + " one of them from the union would leave this saying nothing");
 
         assertEquals(List.of(), lost, "a whole and its parts disagreeing about what was gone without");
+    }
+
+    /**
+     * A type whose clause draws a line, carried by two behaviors, one of whose rows is never read.
+     *
+     * <p>Both points of that line are owed to the declaration that drew it, so neither behavior is
+     * owed a row at either — and the row nobody read leaves the value at that point unreadable. What
+     * comes of that is a reason only the module's declaration account holds.
+     */
+    private static final String ONE_ROW_UNREAD = """
+            module example.owed
+
+            data Amount = Int
+                invariant value >= 0
+
+            data Draft = { n: Amount }
+            data Ok = { n: Int }
+
+            behavior seen : (d: Draft) -> Ok
+                constructs Ok
+            let seen (d) = Ok { n = d.n.value }
+
+            behavior unread : (d: Draft) -> Ok
+                constructs Ok
+            let unread (d) = Ok { n = d.n.value }
+
+            example seen
+                | "inside the run" : (Draft { n = Amount(5) }) -> Ok { n = 5 }
+
+            example unread
+                | "never read" : (Draft { n = Amount(7) }) -> Ok { n = 7 }
+            """;
+
+    /**
+     * And a module holds what its declaration account went without, where no behavior of it did.
+     *
+     * <p>The load-bearing half of the rule above for that part. Over most models the two accounts
+     * are short of the same reading, so the union holds whether or not anybody adds the declarations
+     * to it — and a part that is only ever carried by another part is a part this rule says nothing
+     * about.
+     *
+     * <p>What is only ever the declaration account's is a row owed to a declaration that could not
+     * be read at. The behaviors carrying the type are owed no row there, so no measure of theirs is
+     * short by it: what they went without is that a row was not read, which is their own reading's
+     * to say and is a different reason.
+     */
+    @Test
+    void aModuleHoldsWhatOnlyItsDeclarationsWentWithout() {
+        Compilation compilation = Compilation.ofSource(ONE_ROW_UNREAD, "Main");
+        compilation.withDeadline(souther.compiler.DoesNotComeBack.overrunningOn(
+                souther.compiler.DoesNotComeBack.everythingAboutRowsOf("unread")));
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        AdequacyReport.ModuleReport module =
+                AdequacyReport.of(compilation).modules().getFirst();
+
+        WeakeningSet behaviors = WeakeningSet.none();
+        for (AdequacyReport.BehaviorReport behavior : module.behaviors()) {
+            behaviors = behaviors.union(behavior.weakenedBy());
+        }
+        Set<Weakening> onlyTheDeclarations =
+                new LinkedHashSet<>(module.declarationsWeakenedBy().causes());
+        onlyTheDeclarations.removeAll(behaviors.causes());
+
+        assertFalse(onlyTheDeclarations.isEmpty(),
+                () -> "nothing here is the declaration account's alone, so this holds the module to"
+                        + " nothing: " + module.declarationsWeakenedBy().causes());
+        assertTrue(module.weakenedBy().causes().containsAll(onlyTheDeclarations),
+                () -> "a module that did not hear what only its declaration account went without: "
+                        + module.weakenedBy().causes());
     }
 
     /** How many of {@code parts} hold a fact none of the others do. */

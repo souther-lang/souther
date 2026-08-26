@@ -218,10 +218,10 @@ class CompilePartialAdequacyTest {
      */
     @Test
     void aBoundaryWhosePositionWasNotReadIsUndecided() {
-        PartitionEvidence partition = measured(budgetSpent("")).db()
-                .ask(new Adequacy.Coverage("example.budget")).value().get("take");
+        List<BorderAssessment> lines = Adequacy.readingsOf(
+                measured(budgetSpent("")).db(), "example.budget").get("take");
 
-        List<BorderAssessment.Point> at = pointsAgainstTheLine(partition).stream()
+        List<BorderAssessment.Point> at = pointsAgainstTheLine(lines).stream()
                 .filter(p -> "0".equals(p.against())).toList();
         assertEquals(1, at.size());
         assertEquals(MeasurementStatus.PARTIAL, AdequacyReport.statusOf(at.get(0).item().weakeningSource()));
@@ -459,11 +459,11 @@ class CompilePartialAdequacyTest {
      */
     @Test
     void aBoundaryIsUndecidedWhereSomeRowsWereNeverRead() {
-        PartitionEvidence partition = split().db()
-                .ask(new Adequacy.Coverage("example.split")).value().get("take");
+        List<BorderAssessment> lines =
+                Adequacy.readingsOf(split().db(), "example.split").get("take");
 
-        assertEquals(2, pointsAgainstTheLine(partition).size());
-        for (BorderAssessment.Point boundary : pointsAgainstTheLine(partition)) {
+        assertEquals(2, pointsAgainstTheLine(lines).size());
+        for (BorderAssessment.Point boundary : pointsAgainstTheLine(lines)) {
             assertEquals(MeasurementStatus.PARTIAL, AdequacyReport.statusOf(boundary.item().weakeningSource()), boundary.against());
             assertFalse(boundary.owed().hasRowWitness());
         }
@@ -697,7 +697,7 @@ class CompilePartialAdequacyTest {
      */
     @Test
     void aBoundaryARowDemonstrablyMetStaysMet() {
-        PartitionEvidence partition = measured("mix", """
+        Compilation compilation = measured("mix", """
                 module example.mix
 
                 data Amount = Int
@@ -725,24 +725,27 @@ class CompilePartialAdequacyTest {
                     | "at the line" : (Draft { kind = Overseas, cost = Amount(100) }) -> Ok { n = 100 }
                     | "over it"     : (Draft { kind = Domestic, cost = Amount(500) }) -> Big { n = 0 }
                 """, DoesNotComeBack.overrunningOn(
-                        DoesNotComeBack.everythingAboutTheRowNamed("over it")), Adequacy.Asked.fullReport())
-                .db().ask(new Adequacy.Coverage("example.mix")).value().get("take");
+                        DoesNotComeBack.everythingAboutTheRowNamed("over it")),
+                Adequacy.Asked.fullReport());
+        List<BorderAssessment> lines =
+                Adequacy.readingsOf(compilation.db(), "example.mix").get("take");
 
-        BorderAssessment.Point line = pointsAgainstTheLine(partition).stream()
+        BorderAssessment.Point line = pointsAgainstTheLine(lines).stream()
                 .filter(p -> "100".equals(p.against())).findFirst().orElseThrow();
         assertTrue(line.owed().hasRowWitness(),
                 "a row wrote 100 and went through the comparison");
         assertEquals(MeasurementStatus.COMPLETE, AdequacyReport.statusOf(line.item().weakeningSource()));
 
-        BorderAssessment.Point beyond = pointsAgainstTheLine(partition).stream()
+        BorderAssessment.Point beyond = pointsAgainstTheLine(lines).stream()
                 .filter(p -> "101".equals(p.against())).findFirst().orElseThrow();
         assertEquals(MeasurementStatus.PARTIAL, AdequacyReport.statusOf(beyond.item().weakeningSource()),
                 "and the one nothing was found at is undecided, not missed");
     }
 
     /** The points a row is owed at against a line, which is what a value names. */
-    private static List<BorderAssessment.Point> pointsAgainstTheLine(PartitionEvidence partition) {
-        return BorderAssessment.pointsOf(partition.boundaries()).stream()
+    private static List<BorderAssessment.Point> pointsAgainstTheLine(
+            List<BorderAssessment> lines) {
+        return BorderAssessment.pointsOf(lines).stream()
                 .filter(p -> p.role().againstTheLine()).filter(p -> p.owed() != null).toList();
     }
 

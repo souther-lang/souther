@@ -373,8 +373,20 @@ public final class Adequacy {
     /** What the build asked for. Absent is {@link Asked#NOTHING}. */
     public record Requested() implements Input<Asked> {}
 
-    /** Everything measured about one module, for a caller that wants it in one piece. A map is null
-     * where the question could not be answered at all, which is not the same as an empty one. */
+    /**
+     * Everything measured about one module, for a caller that wants it in one piece. A map is null
+     * where the question could not be answered at all, which is not the same as an empty one.
+     *
+     * <p>The lines each behavior's positions met are not here. A reader that measures a behavior
+     * reads its account, and a reader that shows a border whole asks {@link BoundaryReadings} by
+     * name — put here beside the accounts made from it, it would be a surface nobody asked for and
+     * a second way to reach the same answer.
+     *
+     * @param signatures what the rows establish about each behavior's inputs and output
+     * @param partitions what they establish about its classes, and what it is owed a row for at the
+     *                   lines its rules draw
+     * @param branches   what they establish about the arms of each body
+     */
     public record Of(Map<String, SignatureEvidence> signatures,
                      Map<String, PartitionEvidence> partitions,
                      Map<String, BranchEvidence> branches) {}
@@ -1154,6 +1166,11 @@ public final class Adequacy {
             // input: a composition is measured at its stages whether or not its own signature
             // worked out, and answering "the boundary was not derived" for one would be this
             // measure reporting a prerequisite it never had.
+            Map<String, Measure<List<BorderAssessment>>> lines =
+                    db.ask(new BoundaryReadings(name)).value();
+            if (lines == null) {
+                return Answer.absent();
+            }
             return answerEveryBehavior(prepared.value(), behavior -> {
                 if (!(behavior instanceof Hir.SpecBehavior spec)) {
                     return PartitionEvidence.NONE;   // measured at its stages, not here
@@ -1163,7 +1180,7 @@ public final class Adequacy {
                             PartitionEvidence.boundaryNotDerived(spec.name());
                     case BoundaryForMeasurement.Derived(Sig sig) ->
                             measured(db, name, spec, sig, level, scope.value(), readInputs,
-                                    byTarget);
+                                    byTarget, lines.get(spec.name()));
                 };
             });
         }
@@ -1173,7 +1190,8 @@ public final class Adequacy {
         private PartitionEvidence measured(Db db, String name, Hir.SpecBehavior spec, Sig sig,
                                            Level level, Symbols scope,
                                            Map<String, InputDomain> readInputs,
-                                           Map<String, RowReading> byTarget) {
+                                           Map<String, RowReading> byTarget,
+                                           Measure<List<BorderAssessment>> lines) {
             // A behavior with a signature is one the model divides somewhere or nowhere, and
             // either is an answer. Nothing is a compile that stopped after this had already
             // read the signature, which is the two disagreeing rather than a behavior to skip.
@@ -1184,17 +1202,7 @@ public final class Adequacy {
                         + " reading of what the model divides it into");
             }
             RowReading seen = Rows.readingFor(byTarget, spec.name());
-            // Counted with nothing a body claims in scope. What was claimed travels beside the
-            // numbers rather than into them ({@link Claimed}), and the two meet where a report
-            // is written.
-            // Whether the values are composed is the build's to ask for, and it is asked here
-            // rather than inside either key. A level says how much work to do; what a search
-            // does when it is asked is not a thing it may decide, which is the reading that put
-            // the composing inside the measurement in the first place.
-            List<BorderAssessment> edges = level.composesValues()
-                    ? db.ask(new BoundarySearch(name, spec.name())).value()
-                    : db.ask(new Boundaries(name, spec.name())).value();
-            if (edges == null) {
+            if (lines == null) {
                 // Nothing came back about this behavior's lines, from a question that has
                 // everything it needs to answer. Read as no lines, a behavior whose measure
                 // stopped would be counted as one the model draws nothing about.
@@ -1202,8 +1210,11 @@ public final class Adequacy {
                         + " reading of what the model divides it into, and no answer about the"
                         + " lines that reading drew");
             }
+            // Counted with nothing a body claims in scope. What was claimed travels beside the
+            // numbers rather than into them ({@link Claimed}), and the two meet where a report
+            // is written.
             return Coverages.of(spec, domainOf(readInputs, spec), sig, scope,
-                    db.ask(new Front.Reading()).value(), divided, seen, level, edges,
+                    db.ask(new Front.Reading()).value(), divided, seen, level, lines,
                     db.ask(new Front.Adequacy()).value().measures());
         }
     }
@@ -1399,6 +1410,25 @@ public final class Adequacy {
     }
 
     /**
+     * The lines each behavior was measured at, as the measurement read them.
+     *
+     * <p>{@link BoundaryReadings} without the measure beside each answer, for a caller asking what
+     * the lines are rather than how far the reading that found them got. Which of the two questions
+     * this is answers whether values were composed as well: a build that composes them is measured
+     * at the searched lines, and this is those.
+     */
+    public static Map<String, List<BorderAssessment>> readingsOf(Db db, String module) {
+        Map<String, Measure<List<BorderAssessment>>> lines =
+                db.ask(new BoundaryReadings(module)).value();
+        if (lines == null) {
+            return null;
+        }
+        Map<String, List<BorderAssessment>> out = new LinkedHashMap<>();
+        lines.forEach((behavior, read) -> out.put(behavior, read.made().orElseGet(List::of)));
+        return java.util.Collections.unmodifiableMap(out);
+    }
+
+    /**
      * What a generation comes to where writing a row could not answer a finding, or null where one
      * could.
      *
@@ -1509,13 +1539,13 @@ public final class Adequacy {
      */
     public static DeclaredRows generatedForDeclarationsOf(Db db, String module,
                                                           GenerationScope scope) {
-        List<DeclaredDebt> debts = db.ask(new DeclaredBorders(module)).value();
+        DeclaredBoundaries account = db.ask(new DeclaredBorders(module)).value();
         java.util.SequencedMap<souther.compiler.partition.BorderObligationPoint,
                 DeclaredRows.Answer> resolved = new LinkedHashMap<>();
-        if (debts == null) {
+        if (account == null) {
             return new DeclaredRows(scope, resolved);
         }
-        for (DeclaredDebt owed : debts) {
+        for (DeclaredDebt owed : account.owed()) {
             BorderObligationPointAssessment debt = owed.debt();
             // Which lines this request is about, settled once and here. A line no reading the
             // request asked about carries is not a question this was put — read further down, a
@@ -1621,6 +1651,65 @@ public final class Adequacy {
     }
 
     /**
+     * Every line each of a module's behaviors met, and how far the reading that found them got.
+     *
+     * <p>Where the lines a behavior was read at are kept. Two accounts are made from these — what a
+     * behavior is owed a row for ({@link PartitionEvidence#owes}) and what a module's declarations
+     * are ({@link DeclaredBorders}) — and what a report shows of a border whole is this: a block
+     * accounts for a border's four points whosever they are, which is a different question from
+     * whose debt each of them is.
+     *
+     * <p>Whether the values are composed is the build's to ask for, and it is asked here rather than
+     * inside either key below. A level says how much work to do; what a search does when it is asked
+     * is not a thing it may decide, which is the reading that put the composing inside the
+     * measurement in the first place.
+     */
+    public record BoundaryReadings(String name)
+            implements Key<Map<String, Measure<List<BorderAssessment>>>> {
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<String, Measure<List<BorderAssessment>>>> compute(Db db) {
+            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
+            Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
+            if (!prepared.present() || !sigs.present()) {
+                return Answer.absent();
+            }
+            Level level = levelOf(db);
+            return answerEveryBehavior(prepared.value(), behavior -> {
+                if (!(behavior instanceof Hir.SpecBehavior spec)) {
+                    return BoundaryDerivation.noSubject();   // measured at its stages, not here
+                }
+                if (BoundaryForMeasurement.of(sigs.value(), spec.name())
+                        instanceof BoundaryForMeasurement.NotDerived) {
+                    // No boundary to read the rules at, so the lines are a measure that was asked
+                    // for and could not be finished rather than a model that draws none.
+                    return BoundaryForMeasurement.failed(spec.name());
+                }
+                souther.compiler.partition.Partitions.Partitioning divided =
+                        db.ask(new Divided(name, spec.name())).value();
+                if (divided == null) {
+                    throw new IllegalStateException("`" + spec.name() + "` has a signature and no"
+                            + " reading of what the model divides it into");
+                }
+                List<BorderAssessment> read = level.composesValues()
+                        ? db.ask(new BoundarySearch(name, spec.name())).value()
+                        : db.ask(new Boundaries(name, spec.name())).value();
+                if (read == null) {
+                    throw new IllegalStateException("`" + spec.name() + "` has a reading of what"
+                            + " the model divides it into, and no answer about the lines that"
+                            + " reading drew");
+                }
+                return BoundaryDerivation.of(read, divided.borderClosure());
+            });
+        }
+    }
+
+    /**
      * What the rows established about every line one behavior's rules drew.
      *
      * <p>The one authority on a boundary. Whether a row sits at it and whether a row could sit at it
@@ -1634,9 +1723,8 @@ public final class Adequacy {
      * {@link BoundarySearch}'s, which reads this and adds to it — so what everybody pays for is the
      * reading, and what costs a decoder run for each point it settles is paid by whoever asked for it.
      *
-     * <p>Its own key rather than part of the coverage, because the coverage is not the only reader:
-     * what a build is refused over, what a report prints and what a generator offers are three
-     * readings of this one answer and not three measurements.
+     * <p>The lines alone, without how far the reading that found them got. What holds the two
+     * together is {@link BoundaryReadings}, and everything that accounts for rows reads that.
      */
     public record Boundaries(String name, String behavior)
             implements Key<List<BorderAssessment>> {
@@ -2694,7 +2782,7 @@ public final class Adequacy {
                 GenerationOutcome none = whereNoRowCouldAnswer(finding.about());
                 out.add(new GenerationDisposition(finding, none != null ? none
                         : switch (finding.about()) {
-                            case About.APointOfABorder(var point, var _) -> atEdge(finding, point, edges);
+                            case About.APointOfABorder(var point) -> atEdge(finding, point, edges);
                             case About.ACaseNoRowAppliesItTo(var input, var missing) ->
                                     atCase(input, missing, composed, spec);
                             case About.AClassNoRowIsIn(var missing) -> atClass(missing, composed);
@@ -2865,7 +2953,7 @@ public final class Adequacy {
          * copy back three fields deep, which does not identify a point: several rules can draw a
          * line at one value. A border is a value, and two lines that are equal are one line.
          */
-        private static GenerationOutcome atEdge(Finding gap, BorderAssessment.Point point,
+        private static GenerationOutcome atEdge(Finding gap, OwedBoundaryPoint point,
                                                 List<BorderAssessment> searched) {
             // Of whichever of the border's four points the finding is about. Which of them a build
             // refuses over is the criterion's answer and the loop above has already asked it; asking
@@ -2873,7 +2961,7 @@ public final class Adequacy {
             // is a second criterion, and it said the impossible about the two a build held to
             // reliable domain coverage refuses over.
             String subject = point.said();
-            if (!(BorderAssessment.owedAt(searched, point.border().border(), point.role())
+            if (!(BorderAssessment.owedAt(searched, point.line(), point.role())
                     instanceof ItemAssessment.Owed owed)) {
                 // A gap was found at a point nobody is owed a row at, which is the finding and
                 // the assessment disagreeing about the same border rather than a row that could
@@ -2950,33 +3038,23 @@ public final class Adequacy {
          * row worth offering. Keying what is offered on what a build refuses would leave a model
          * with no rows at all — the one an author most wants rows for — with nothing.
          *
-         * <p><b>The points this reading is owed a row at, and no others.</b> The two points against
+         * <p><b>The points this behavior is owed a row at, and no others.</b> The two points against
          * a line an {@code invariant} drew are the declaration's — one row settles the line however
          * many positions carry the type — and they are offered once, where the line is resolved
-         * ({@link DeclaredRows}). Offered from here as well, one authored line came out as a row per
-         * position of every behavior that carries it (issue #1076). The regions either side stay,
-         * because where a region stops is settled by every other rule reaching this position.
+         * ({@link DeclaredRows}). Offered from here as well, one authored line comes out as a row
+         * per position of every behavior that carries it. The regions either side stay, because
+         * where a region stops is settled by every other rule reaching this position.
          */
         private static Generator.GenerationResult offeredHere(String behavior,
                                                           List<BorderAssessment> boundaries) {
             List<Generator.GeneratedRow> rows = new ArrayList<>();
             List<Generator.UnresolvedCombination> unresolved = new ArrayList<>();
             List<souther.compiler.partition.GenerationReason> stopped = new ArrayList<>();
-            for (BorderAssessment border : boundaries) {
-              for (BorderAssessment.Point point : border.points()) {
-                souther.compiler.partition.PointRole role = point.role();
-                // The points this reading is owed a row at, which is what a filling is the answer
-                // about. A line an `invariant` drew is owed once over every behavior carrying the
-                // type, so the two points against it are the declaration's — offered from here as
-                // well, one authored line came out as a row per position of every behavior that
-                // carries it (issue #1076). They are offered once, where the line is resolved
-                // ({@link DeclaredRows}).
-                if (point.owedHere().isEmpty()) {
-                    continue;
-                }
-                if (!(point.item() instanceof ItemAssessment.Owed each)) {
-                    continue;   // nothing is owed here, so nothing was tried and nothing is offered
-                }
+            // What this behavior is owed a row for, as the values a row is composed at: one per
+            // point, since a row at a point answers everything a row there is owed for.
+            for (OwedBoundaryPoint point
+                    : OwedBoundaryPoint.oneForEachPoint(OwedBoundaryPoint.across(boundaries))) {
+                ItemAssessment.Owed each = point.item();
                 switch (each.attempt()) {
                     case ItemAssessment.Attempt.Built built -> rows.add(built.row());
                     case ItemAssessment.Attempt.Unresolved why -> {
@@ -3010,12 +3088,11 @@ public final class Adequacy {
                     // hole in it is the search having skipped a point it was asked about.
                     case null -> {
                         if (each.worthSearching()) {
-                            throw new IllegalStateException("nothing was searched for at a point of "
-                                    + border.label() + " that is worth searching");
+                            throw new IllegalStateException("nothing was searched for at "
+                                    + point.said() + ", which is worth searching");
                         }
                     }
                 }
-              }
             }
             return new Generator.GenerationResult(rows, unresolved,
                     stopped.stream().distinct().toList());
@@ -3558,7 +3635,7 @@ public final class Adequacy {
                 // the same two codes.
                 case About.APointOfADeclaredBorder(var debt) -> debt.role().againstTheLine()
                         ? Kind.BOUNDARY_UNMET : Kind.DOMAIN_POINT_UNCOVERED;
-                case About.APointOfABorder(var point, var _) -> point.role().againstTheLine()
+                case About.APointOfABorder(var point) -> point.role().againstTheLine()
                         ? Kind.BOUNDARY_UNMET : Kind.DOMAIN_POINT_UNCOVERED;
                 case About.APositionNoLineDivides _ -> Kind.PARTITION_NOT_DERIVABLE;
                 case About.ARuleWithoutALine _ -> Kind.PARTITION_NOT_READ;
@@ -3661,12 +3738,7 @@ public final class Adequacy {
     }
 
     /**
-     * Every line this module's declarations are owed, made once.
-     *
-     * <p>The one place the readings of a line are folded into what is owed. A report, a build's
-     * refusal, a document and a generation all ask what became of a line an {@code invariant} drew,
-     * and four foldings of one set of readings are four answers about it — which is the shape
-     * issue #1062 is about, one layer up from where it was found.
+     * What a module's declarations are owed, and how far the reading it was made from got.
      *
      * <p>Every debt and not only the ones something is short of. A line a row already stands at is
      * what a verdict rests on as much as one nothing stands at: read off the findings, the debts
@@ -3681,8 +3753,89 @@ public final class Adequacy {
      * cannot check. Reading it is what there is to measure with — what a point asks of a row is read
      * off the readings — so a module that owes a line no behavior of it carries holds no debt for it
      * here, and nothing is said about the line at all.
+     *
+     * <p>An account and not a list, for the reason a behavior's is a {@link Measure}: what is owed
+     * is read off the lines this module's behaviors met, so a reading that did not run out may have
+     * left this short of debts it never saw. Handed the debts alone, a reader has a list that is
+     * empty for two reasons — a module whose declarations owe nothing, and one whose lines nobody
+     * could read — and the second reads as the first.
+     *
+     * <p>Two halves, because they are short of different things. {@code reading} is what finding
+     * the debts went without; what became of each debt is the debt's own measurement, and
+     * {@link #weakening()} is both.
+     *
+     * @param owed    every debt this module's declarations hold, covered or not
+     * @param reading what finding them went without, under the behavior whose reading went without
+     *                it. By behavior and not as one set, because a reader shown some of a module's
+     *                behaviors is owed what those behaviors' readings went without and not what the
+     *                rest did — folded into one set here, a view filtered to one behavior would
+     *                carry a reason about a position its reader cannot see
      */
-    public record DeclaredBorders(String name) implements Key<List<DeclaredDebt>> {
+    public record DeclaredBoundaries(List<DeclaredDebt> owed,
+                                     Map<String, WeakeningSet> reading) {
+
+        public DeclaredBoundaries {
+            owed = List.copyOf(owed);
+            // In the order the readings were made, which is what everything downstream of a
+            // weakening is written in: a set of reasons keeps the order they were discovered in so
+            // that two runs of one compile write one document, and a copy that did not would hand
+            // that set its causes in whatever order a hash gave.
+            reading = java.util.Collections.unmodifiableMap(new LinkedHashMap<>(reading));
+        }
+
+        /**
+         * The same account as a reader shown only {@code behaviors} is owed.
+         *
+         * <p><b>Every part of it and not the ones that are easy to filter.</b> A debt is what its
+         * readings came to together, so a debt kept whole while its readings are filtered carries
+         * what a behavior the reader cannot see went without — the same fact, arriving by the half
+         * of the account nobody trimmed. So a debt none of them reads is dropped and a debt some of
+         * them read is made again from those readings, beside the reading each of them went
+         * without.
+         *
+         * <p>What is not sliced is who owes the line: a declaration owes it wherever the type is
+         * carried, and which behaviors a reader is shown is no part of that.
+         */
+        public DeclaredBoundaries keptFor(java.util.Set<String> behaviors) {
+            Map<String, WeakeningSet> kept = new LinkedHashMap<>(reading);
+            kept.keySet().retainAll(behaviors);
+            List<DeclaredDebt> owedHere = new ArrayList<>();
+            for (DeclaredDebt each : owed) {
+                BorderObligationPointAssessment debt = each.debt().keptFor(behaviors);
+                if (debt != null) {
+                    owedHere.add(new DeclaredDebt(debt, each.owners()));
+                }
+            }
+            return new DeclaredBoundaries(owedHere, kept);
+        }
+
+        /**
+         * What this account went without, all of it.
+         *
+         * <p>The reading that found the debts and the measurement of each of them. A verdict and a
+         * report read this rather than adding the two up themselves, which is what left the reading
+         * out of the module's status while every debt said it had been measured in full.
+         */
+        public WeakeningSet weakening() {
+            WeakeningSet out = WeakeningSet.none();
+            for (WeakeningSet went : reading.values()) {
+                out = out.union(went);
+            }
+            for (DeclaredDebt each : owed) {
+                out = out.union(each.debt().item().weakening());
+            }
+            return out;
+        }
+    }
+
+    /**
+     * That account, made once.
+     *
+     * <p>The one place the readings of a line are folded into what is owed. A report, a build's
+     * refusal, a document and a generation all ask what became of a line an {@code invariant} drew,
+     * and four foldings of one set of readings are four answers about it.
+     */
+    public record DeclaredBorders(String name) implements Key<DeclaredBoundaries> {
 
         @Override
         public String module() {
@@ -3690,23 +3843,40 @@ public final class Adequacy {
         }
 
         @Override
-        public Answer<List<DeclaredDebt>> compute(Db db) {
-            Map<String, PartitionEvidence> partitions = db.ask(new Coverage(name)).value();
-            if (partitions == null) {
-                return Answer.of(List.of());
+        public Answer<DeclaredBoundaries> compute(Db db) {
+            Map<String, Measure<List<BorderAssessment>>> lines =
+                    db.ask(new BoundaryReadings(name)).value();
+            if (lines == null) {
+                // Nobody read this module's lines, so what its declarations are owed was not
+                // measured either. Answered as an account with no debts, that would be this module
+                // owing nothing — which is what a module whose every line is covered also answers.
+                return Answer.absent();
             }
+            // What finding the debts went without, which is what the readings they are found from
+            // went without. Carried rather than dropped: a reading that did not run out may have
+            // left a line this module's declarations owe unread, and an account that said nothing
+            // about it would report the debts it happened to see as all there are.
+            Map<String, WeakeningSet> went = new LinkedHashMap<>();
+            lines.forEach((behavior, read) -> {
+                if (!read.weakening().isEmpty()) {
+                    went.put(behavior, read.weakening());
+                }
+            });
             Map<String, List<BorderAssessment>> readings = new LinkedHashMap<>();
-            partitions.forEach((behavior, evidence) -> {
+            lines.forEach((behavior, read) -> {
                 // Every reading, because which of them this module keeps an account of is a question
                 // about the points they owe and not about the lines they are readings of. A line
                 // another module wrote can be stopped where this module's declaration takes the
                 // position in, and the run beside it is then this module's to answer for — dropped
                 // here, that point was accounted nowhere at all.
+                //
+                // The lines a reading found, with how far it got carried above rather than here: a
+                // debt is made from the lines and is short of whatever finding them was short of.
                 readings.computeIfAbsent(behavior, _ -> new ArrayList<>())
-                        .addAll(evidence.boundaries());
+                        .addAll(read.made().orElseGet(List::of));
             });
             if (readings.isEmpty()) {
-                return Answer.of(List.of());
+                return Answer.of(new DeclaredBoundaries(List.of(), went));
             }
             // What names a line and where its declaration is are read from the declaration, and
             // neither is something a debt can go without — so they are asked here, once, and their
@@ -3721,15 +3891,12 @@ public final class Adequacy {
             List<DeclaredDebt> out = new ArrayList<>();
             // A run that stops at a body's own rule exists in that body and nowhere else, so no
             // declaration is owed a row inside it however the line beside it was written; and this
-            // module keeps an account only where its own declarations are among what settled the
-            // point. Both are asked of what settled it rather than of what identifies it — a
-            // declaration that took the position in put the end there without being a line of the
-            // point at all. A module reading a line another module wrote and narrowing nothing about
-            // it owes nothing here, which is the dependency it carries rather than a debt (#1077).
+            // module keeps an account only where its own declarations are among what owes the
+            // point. Which points those are is the reading's own answer and is asked there: a module
+            // reading a line another module wrote and narrowing nothing about it owes nothing here,
+            // which is the dependency it carries rather than a debt.
             for (BorderObligationPointAssessment debt : BorderObligationPointAssessment.across(
-                    readings,
-                    owed -> owed.attribution().owedToDeclarations()
-                            && !owed.attribution().ownersIn(name).isEmpty(),
+                    readings, name,
                     point -> axisOf(point.line(), declarations, symbols, policy))) {
                 List<DeclaredDebt.Owner> owners = new ArrayList<>();
                 for (TypeSymbol.AtModule owner : debt.attribution().ownersIn(name)) {
@@ -3738,7 +3905,7 @@ public final class Adequacy {
                 }
                 out.add(new DeclaredDebt(debt, owners));
             }
-            return Answer.of(List.copyOf(out));
+            return Answer.of(new DeclaredBoundaries(out, went));
         }
 
         /**
@@ -3852,11 +4019,11 @@ public final class Adequacy {
          * answering from the readings and the aggregation would hold in none of them.
          */
         private static void declaredFindings(Db db, String module, List<Finding> out) {
-            List<DeclaredDebt> debts = db.ask(new DeclaredBorders(module)).value();
-            if (debts == null) {
+            DeclaredBoundaries account = db.ask(new DeclaredBorders(module)).value();
+            if (account == null) {
                 return;
             }
-            for (DeclaredDebt owed : debts) {
+            for (DeclaredDebt owed : account.owed()) {
                 ItemAssessment item = owed.debt().item();
                 if (!item.isUnmetGap()) {
                     continue;
@@ -3953,37 +4120,21 @@ public final class Adequacy {
                             Citation.of(behavior.pos()), new About.AClassNoRowIsIn(missing)));
                 }
             }
-            // The assessment's own items, walked as items. Flattened here a second way, a reader
-            // that forgot a role would be short by it — which is the shape the whole measure was in
-            // before a border owed its four.
-            for (BorderAssessment.Point point
-                    : BorderAssessment.pointsOf(partition.boundaries())) {
+            // This behavior's account, walked as the things it is owed. One finding per thing and
+            // not one per role: a place two of this body's rules drew a line at leaves a run owed to
+            // each of them, and each is one obligation to be told about — a single row may well
+            // answer both. A line the declarations are owed is answered once for the module and is
+            // no part of this account.
+            for (OwedBoundaryPoint owed : partition.owedPoints()) {
                 // Both halves, asked of the two answers the assessment keeps apart. A point no
                 // row was measured against is not a gap, and neither is one nothing has shown a
                 // row can be written at — that point is where the reading stopped rather than
-                // where the model does, and a row at it may be one nobody can write. A point
-                // nobody is owed a row at is not a gap either, and it says so as its own shape.
-                if (!point.item().isUnmetGap()) {
+                // where the model does, and a row at it may be one nobody can write.
+                if (!owed.item().isUnmetGap()) {
                     continue;
                 }
-                // A line the declaration is owed is answered once for the module, from every
-                // reading of it. Left here as well, one clause of `UserId` is 126 findings over
-                // `crm` — one per position of every behavior carrying the type — for a rule the
-                // author wrote once (issue #1062). Asked of the rule rather than matched on which
-                // kind it is: which of them are the declaration's is the rule's own answer.
-                // This behavior's own. A line a declaration is owed is answered once for the
-                // module, from every reading of it.
-                // One finding per thing this reading is owed a row for, and not one per role: a
-                // place two of this body's rules drew a line at leaves a run owed to each of them,
-                // and each is one obligation to be told about — a single row may well answer both.
-                // The axis, the value, the rule and the role used to be copied out here, and a
-                // reader then matched the copy back against the assessments to find the one it came
-                // from.
-                for (souther.compiler.partition.OwedPoint owed : point.owedHere()) {
-                    out.add(Finding.by(behavior.name(), point.item().weakeningSource(),
-                            Citation.of(behavior.pos()),
-                            new About.APointOfABorder(point, owed.point())));
-                }
+                out.add(Finding.by(behavior.name(), owed.item().weakeningSource(),
+                        Citation.of(behavior.pos()), new About.APointOfABorder(owed)));
             }
             // What the model divides this position no way at all, which is the classes question and
             // is answered only for a position that has none.
@@ -4192,28 +4343,28 @@ public final class Adequacy {
                                                 .NoRowIsAtThePointAwayFromTheBorderARuleDrew(
                                                 debt.role().name(), debt.axis(), debt.against(),
                                                 debt.id().named());
-                        case About.APointOfABorder(var point, var _) ->
+                        case About.APointOfABorder(var point) ->
                                 point.role().againstTheLine()
-                                        ? point.border().origin().isWrittenRatherThanNamed()
+                                        ? point.origin().isWrittenRatherThanNamed()
                                                 ? new ExampleMessage
                                                         .NoRowIsAtThePointOfTheBorderAConstructDrew(
-                                                        point.role().name(), point.border().axis(),
+                                                        point.role().name(), point.axis(),
                                                         point.against(), constructOf(point))
                                                 : new ExampleMessage
                                                         .NoRowIsAtThePointOfTheBorderARuleDrew(
-                                                        point.role().name(), point.border().axis(),
+                                                        point.role().name(), point.axis(),
                                                         point.against(),
-                                                        point.border().origin().named())
-                                        : point.border().origin().isWrittenRatherThanNamed()
+                                                        point.origin().named())
+                                        : point.origin().isWrittenRatherThanNamed()
                                                 ? new ExampleMessage
                                                         .NoRowIsAtThePointAwayFromTheBorderAConstructDrew(
-                                                        point.role().name(), point.border().axis(),
+                                                        point.role().name(), point.axis(),
                                                         point.against(), constructOf(point))
                                                 : new ExampleMessage
                                                         .NoRowIsAtThePointAwayFromTheBorderARuleDrew(
-                                                        point.role().name(), point.border().axis(),
+                                                        point.role().name(), point.axis(),
                                                         point.against(),
-                                                        point.border().origin().named());
+                                                        point.origin().named());
                         case About.AnArmNoRowGoesThrough(var arm) ->
                                 new ExampleMessage.NoRowGoesThroughThatArm(
                                         phraseFor(arm), arm.behavior());
@@ -4239,7 +4390,7 @@ public final class Adequacy {
                 // The same hints, asked of the role. What a row at each point shows is a fact
                 // about the point and not about which of the two questions raised it.
                 case About.APointOfADeclaredBorder(var debt) -> hintFor(debt.role(), built);
-                case About.APointOfABorder(var point, var _) -> {
+                case About.APointOfABorder(var point) -> {
                     // Asked of the point, and in the point's own vocabulary. A hint saying which
                     // side of the line the value falls on would be keyed on the border being closed
                     // or open rather than on the role — `n <= 100` is at its ON point on the line
@@ -4255,7 +4406,7 @@ public final class Adequacy {
                     // dropped, on the grounds that a label naming no source would be read against
                     // the file the diagnostic is in; a label no longer takes its file from where it
                     // is shown, so what was left unsaid can be said.
-                    point.border().origin().citation().ifPresent(cited -> {
+                    point.origin().citation().ifPresent(cited -> {
                         switch (cited) {
                             case souther.compiler.diag.Citation.Written w ->
                                     built.secondary(souther.compiler.diag.Region.point(w.at()),
@@ -4326,7 +4477,7 @@ public final class Adequacy {
          *  supplies. One phrase, because a rule found by where it is written is a comparison —
          *  which construct stands around it is a fact about the body and not about the rule. */
         private static souther.compiler.diag.Localizable constructOf(
-                BorderAssessment.Point point) {
+                OwedBoundaryPoint point) {
             return souther.compiler.diag.Localizable.of("construct.comparison");
         }
 

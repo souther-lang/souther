@@ -79,7 +79,7 @@ public record QuantityArrangement(List<Parting> partings, List<Run> runs) {
             if (reaches == null) {
                 if (!claims.equals(List.of(new RegionClaim(
                         new RegionBasis.Beside(new FarEnd.AtTheOrderEnd(side)),
-                        PointAttribution.NONE)))) {
+                        PointContributions.none())))) {
                     throw new IllegalArgumentException("a run nothing stops at its " + side
                             + " end, stopped by " + claims);
                 }
@@ -137,7 +137,7 @@ public record QuantityArrangement(List<Parting> partings, List<Run> runs) {
         if (reaches == null) {
             return List.of(new RegionClaim(
                     new RegionBasis.Beside(new FarEnd.AtTheOrderEnd(inward.opposite())),
-                    PointAttribution.NONE));
+                    PointContributions.none()));
         }
         List<RegionClaim> out = new ArrayList<>();
         if (parted != null
@@ -145,12 +145,12 @@ public record QuantityArrangement(List<Parting> partings, List<Run> runs) {
                         reaches.canonical())) {
             parted.alternatives().forEach(line -> out.add(new RegionClaim(
                     new RegionBasis.Beside(new FarEnd.AtALine(line, parted.geometry())),
-                    PointAttribution.by(line))));
+                    PointContributions.by(line))));
         }
         if (leaves != null && leaves.bound().canonical().equals(reaches.canonical())) {
             out.add(new RegionClaim(
                     new RegionBasis.Beside(new FarEnd.AtTheDomain(leaves.bound())),
-                    PointAttribution.byNarrowing(leaves.narrowers())));
+                    PointContributions.byNarrowing(leaves.narrowers())));
         }
         if (out.isEmpty()) {
             // Where the run reaches is the tighter of the two, so one of them is it. Reaching here

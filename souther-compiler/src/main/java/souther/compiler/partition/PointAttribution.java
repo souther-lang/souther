@@ -6,93 +6,102 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Who can move what settled one point a row is owed at.
+ * Whose account one point a row is owed at falls in.
  *
- * <p><b>Beside what the point is, and never part of it.</b> Which point a row is owed at is settled
- * by the line and by what stops the region beside it ({@link BorderObligationPoint}); who could move
- * either of those is a fact about the reading's surroundings, and two readings that answer it
- * differently are still one point. Read off the identity instead — the lines that happen to be
- * inside it — a run stopping where a declaration narrowed the position came back owed to the line
- * below it and to nobody else, and the declaration that put the end there was told nothing.
+ * <p>The one answer read off what settled the point ({@link PointContributions}), and the only
+ * thing downstream is given: a row here is this reading's to write, or it is owed to the
+ * declarations that put the line there and one row anywhere in the module settles it. A reader
+ * handed the contributors instead has to ask the question itself, and a reader that forgets to ask
+ * measures a body against a line no row written for it is owed.
  *
- * <p><b>Two kinds of contributor, because the model has two.</b> A rule wrote a line, and that rule
- * is a clause of a type or a comparison in a body ({@link AuthoredLine}); or a declaration took in
- * where a position stops, which is not a line of its own and is named by the reading that placed the
- * end. What a reader asks of either is the same two questions: whether every one of them is a
- * declaration, and which of them are one module's.
+ * <p><b>Read once, when everything that settled the point has arrived.</b> A point's own line and
+ * whatever stops the region beside it are gathered as the reading works the region out, and either
+ * of them alone answers about itself rather than about the point. So the contributors are what can
+ * be added to and this is what is concluded, and nothing here can be added to.
  *
- * @param lines     the rules that drew what settled this point
- * @param narrowers the declarations that took in where the position stops, where that is what stops
- *                  the region
+ * <p><b>Two arms and no third, because a row here is somebody's to write.</b> Written as "not the
+ * declarations'", a value nothing contributed to would answer that a body owes the row, and a value
+ * everything contributed to would have to be read twice to find out which.
  */
-public record PointAttribution(List<AuthoredLine> lines, List<TypeSymbol.AtModule> narrowers) {
+public sealed interface PointAttribution {
 
-    /** Nobody: what an end of the order is settled by. */
-    public static final PointAttribution NONE = new PointAttribution(List.of(), List.of());
+    /**
+     * A body's, because a rule written in one settled it.
+     *
+     * <p>A comparison states something about that body at that position, so a run that stops at one
+     * exists in that body and nowhere else, and a row for it is written for this behavior.
+     */
+    record TheReading() implements PointAttribution {
 
-    public PointAttribution {
-        lines = List.copyOf(lines);
-        narrowers = List.copyOf(narrowers);
-    }
-
-    /** One rule's. */
-    public static PointAttribution by(AuthoredLine line) {
-        return new PointAttribution(List.of(line), List.of());
-    }
-
-    /** The declarations that took in where a position stops. */
-    public static PointAttribution byNarrowing(List<TypeSymbol.AtModule> narrowers) {
-        return new PointAttribution(List.of(), narrowers);
+        public static final TheReading INSTANCE = new TheReading();
     }
 
     /**
-     * This and {@code also} together, each contributor once.
+     * The declarations', because nothing but clauses and the declarations that took the position in
+     * settled it.
      *
-     * <p>What a point's own line and what stops the region beside it come to, and what two readings
-     * of one point come to over the readings. A contributor named twice is one contributor: what
-     * counts these is what says how many places a finding about the point names.
+     * <p>What such a row shows is a fact about the type — whether a string of one character is a
+     * {@code Sku} is the same question wherever a {@code Sku} goes — so one row anywhere in the
+     * module settles it, and the behaviors carrying the type have nothing to add.
+     *
+     * @param owners every declaration that owes a row here, in the order they contributed. Never
+     *               empty: an arm saying the declarations owe it and naming none of them would be a
+     *               debt with nobody to answer for it
      */
-    public PointAttribution and(PointAttribution also) {
-        List<AuthoredLine> both = new ArrayList<>(lines);
-        also.lines.stream().filter(each -> !both.contains(each)).forEach(both::add);
-        List<TypeSymbol.AtModule> declarations = new ArrayList<>(narrowers);
-        also.narrowers.stream().filter(each -> !declarations.contains(each))
-                .forEach(declarations::add);
-        return new PointAttribution(both, declarations);
-    }
+    record TheDeclarations(List<TypeSymbol.AtModule> owners) implements PointAttribution {
 
-    /**
-     * Whether everything that settled this point is a declaration's.
-     *
-     * <p>Which is what says whether one row anywhere settles it. A clause of a {@code data} states
-     * something about the type wherever the type is carried, so a row at a point settled only by
-     * clauses is evidence about the type; a comparison is written in a body and states something
-     * about that body, so a run that stops at one exists in that body and nowhere else.
-     *
-     * <p>A declaration that took an end in is a declaration, and an end of the order is nobody's —
-     * neither makes a point a body's.
-     */
-    public boolean owedToDeclarations() {
-        return lines.stream().noneMatch(each -> each.obligationOwners().isEmpty());
-    }
-
-    /**
-     * The declarations of {@code module} that owe a row here, in the order they were contributed.
-     *
-     * <p>This module's own and not everything that settled the point. What settled it can be several
-     * modules' — a line one module wrote, stopped where another module's declaration takes the
-     * position in — and a report of this module naming a foreign declaration would be telling its
-     * author to go and change somebody else's source. Each module's account names its own
-     * ({@link AuthoredLine#ownersIn}).
-     */
-    public List<TypeSymbol.AtModule> ownersIn(String module) {
-        List<TypeSymbol.AtModule> out = new ArrayList<>();
-        for (AuthoredLine each : lines) {
-            each.ownersIn(module).stream().filter(owner -> !out.contains(owner)).forEach(out::add);
+        public TheDeclarations {
+            owners = List.copyOf(owners);
+            if (owners.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "a point owed to the declarations is owed to some declaration");
+            }
         }
-        narrowers.stream()
-                .filter(each -> module.equals(each.module()) && !out.contains(each))
-                .forEach(out::add);
-        return List.copyOf(out);
+
+        /**
+         * Which of them {@code module} wrote, in the order this names them.
+         *
+         * <p>What a module's account of this point is filed under. A point with none of these here
+         * is one this module has nothing to answer for: its values are held to the line, and a row
+         * at it is somebody else's to write.
+         */
+        public List<TypeSymbol.AtModule> ownersIn(String module) {
+            return owners.stream().filter(each -> module.equals(each.module())).toList();
+        }
+
+        /**
+         * This and {@code also}, each owner once.
+         *
+         * <p>Two readings of one point, each naming what settled it where it was read. A point one
+         * module's declaration narrowed at one position and another's at another is owed to both.
+         * A union of owners and not a second classification: both sides are already the
+         * declarations'.
+         */
+        public TheDeclarations and(TheDeclarations also) {
+            List<TypeSymbol.AtModule> both = new ArrayList<>(owners);
+            also.owners.stream().filter(each -> !both.contains(each)).forEach(both::add);
+            return new TheDeclarations(both);
+        }
+    }
+
+    /**
+     * What the contributors come to.
+     *
+     * <p>The one place this is decided. Everything that measures a behavior, counts what it covers,
+     * raises a finding about it or offers it a row reads the answer rather than the contributors, so
+     * there is nowhere for the rule to be remembered wrongly.
+     *
+     * @throws IllegalArgumentException where nothing contributed, which is not a point either side
+     *                                  owes a row at. A claim about the end of the order carries
+     *                                  such a value, and the point it is part of is settled by the
+     *                                  line the region lies beside as well
+     */
+    static PointAttribution of(PointContributions contributions) {
+        if (contributions.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "a point nothing settled, which nobody can be owed a row at");
+        }
+        return contributions.allDeclarations()
+                ? new TheDeclarations(contributions.owners()) : TheReading.INSTANCE;
     }
 }

@@ -61,6 +61,31 @@ public sealed interface Measure<T> permits Measurement, Measure.NotApplicable {
     MeasureReason why();
 
     /**
+     * The same answer, about what {@code as} makes of what this found.
+     *
+     * <p>For a value read off another measure's: what a behavior is owed a row for is read off the
+     * lines its positions met, and the two are one measurement rather than two. What that
+     * measurement came to is decided where the reading is, so every arm is carried over unchanged
+     * and nothing here chooses between them — a projection that decided again could call a reading
+     * that did not run out complete over whatever it happened to produce.
+     *
+     * <p>The one place a measure's arms are carried over, which is why it is here and not beside
+     * each value that does it. Written by each of them, an arm added later would reach only the
+     * ones somebody remembered.
+     */
+    default <U> Measure<U> readAs(java.util.function.Function<T, U> as) {
+        return switch (this) {
+            case NotApplicable<T> none -> new NotApplicable<>(none.why());
+            case Measurement.Complete<T> made -> new Measurement.Complete<>(as.apply(made.value()));
+            case Measurement.Partial<T> made ->
+                    new Measurement.Partial<>(as.apply(made.value()), made.by());
+            case Measurement.NotMeasured<T> not -> new Measurement.NotMeasured<>(not.why());
+            case Measurement.FailedToMeasure<T> failed ->
+                    new Measurement.FailedToMeasure<>(failed.why(), failed.by());
+        };
+    }
+
+    /**
      * There is nothing here for the measure to be about, and no row would change that.
      *
      * <p>A positive claim about the model, and the strongest thing anything here says. It is not

@@ -7,8 +7,8 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ItemAssessment;
-import souther.compiler.query.PartitionEvidence;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -57,10 +57,10 @@ class AnInPointLiesInsideThePartitionItsBorderBoundsTest {
         Compilation compilation = Compilation.ofSource(BANDS.formatted(rows), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        Map<String, PartitionEvidence> all = compilation.db()
-                .ask(new Adequacy.Coverage(compilation.modules().get(0))).value();
+        Map<String, List<BorderAssessment>> all =
+                Adequacy.readingsOf(compilation.db(), compilation.modules().get(0));
         assertNotNull(all, "the model under test compiles");
-        return all.get("band").boundaries().stream()
+        return all.get("band").stream()
                 .filter(each -> each.value().equals(value)).findFirst()
                 .orElseThrow(() -> new AssertionError("no border at " + value));
     }
@@ -140,10 +140,10 @@ border.owedAt(PointRole.IN).coverage().made().orElseThrow());
                 """, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        Map<String, PartitionEvidence> all = compilation.db()
-                .ask(new Adequacy.Coverage(compilation.modules().get(0))).value();
+        Map<String, List<BorderAssessment>> all =
+                Adequacy.readingsOf(compilation.db(), compilation.modules().get(0));
         assertNotNull(all, "the model under test compiles");
-        BorderAssessment first = all.get("f").boundaries().stream()
+        BorderAssessment first = all.get("f").stream()
                 .filter(each -> each.label().equals("3 * a + 6 * b = 48")).findFirst()
                 .orElseThrow(() -> new AssertionError("no border at 48"));
 
@@ -188,8 +188,8 @@ border.owedAt(PointRole.IN).coverage().made().orElseThrow());
                 """, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        Map<String, PartitionEvidence> all = compilation.db()
-                .ask(new Adequacy.Coverage(compilation.modules().get(0))).value();
+        Map<String, List<BorderAssessment>> all =
+                Adequacy.readingsOf(compilation.db(), compilation.modules().get(0));
         assertNotNull(all, "the model under test compiles");
 
         assertEquals("51 < 3 * a + 6 * b <= 60",
@@ -200,11 +200,12 @@ border.owedAt(PointRole.IN).coverage().made().orElseThrow());
                 "and the second's runs on to what the form itself reaches, said in its own units");
     }
 
-    private static BorderAssessment borderNamed(Map<String, PartitionEvidence> all, String label) {
-        return all.get("f").boundaries().stream()
+    private static BorderAssessment borderNamed(Map<String, List<BorderAssessment>> all,
+                                                String label) {
+        return all.get("f").stream()
                 .filter(each -> each.label().equals(label)).findFirst()
                 .orElseThrow(() -> new AssertionError("no border " + label + " in "
-                        + all.get("f").boundaries().stream().map(BorderAssessment::label).toList()));
+                        + all.get("f").stream().map(BorderAssessment::label).toList()));
     }
 
     /**
@@ -243,8 +244,8 @@ border.owedAt(PointRole.IN).coverage().made().orElseThrow());
                 """, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        Map<String, PartitionEvidence> all = compilation.db()
-                .ask(new Adequacy.Coverage(compilation.modules().get(0))).value();
+        Map<String, List<BorderAssessment>> all =
+                Adequacy.readingsOf(compilation.db(), compilation.modules().get(0));
         assertNotNull(all, "the model under test compiles");
 
         assertEquals("0.2 < n and 3 * n <= 1", borderNamed(all, "n = 0.2").against(PointRole.IN),

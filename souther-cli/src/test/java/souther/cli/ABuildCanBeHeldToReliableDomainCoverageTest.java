@@ -4,7 +4,6 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.ItemAssessment;
-import souther.compiler.query.PartitionEvidence;
 import souther.compiler.report.AdequacyReport;
 
 
@@ -100,19 +99,19 @@ class ABuildCanBeHeldToReliableDomainCoverageTest {
      */
     @Test
     void aVerdictRestsOnTheEvidenceItsCriterionAsksFor() {
-        PartitionEvidence measured = AReportOfOneBorder.partition(
-                AReportOfOneBorder.measured(
+        souther.compiler.query.Measurement<java.util.List<
+                souther.compiler.query.BorderAssessment>> lines = AReportOfOneBorder.measured(
                         AReportOfOneBorder.assessed(AReportOfOneBorder.aBorderABodyDrew(),
                                 role -> role.againstTheLine()
                                         ? AReportOfOneBorder.settled(
                                                 new ItemAssessment.Coverage.Hit())
-                                        : AReportOfOneBorder.undecided())));
+                                        : AReportOfOneBorder.undecided()));
 
         assertEquals(AdequacyReport.AdequacyStatus.SATISFIED,
-                AReportOfOneBorder.verdictOf(measured, Adequacy.AdequacyBar.SIMPLIFIED_DOMAIN),
+                AReportOfOneBorder.verdictOf(lines, Adequacy.AdequacyBar.SIMPLIFIED_DOMAIN),
                 "the points it asks for came to an answer");
         assertEquals(AdequacyReport.AdequacyStatus.UNDETERMINED,
-                AReportOfOneBorder.verdictOf(measured, Adequacy.AdequacyBar.RELIABLE_DOMAIN),
+                AReportOfOneBorder.verdictOf(lines, Adequacy.AdequacyBar.RELIABLE_DOMAIN),
                 "two of the points it asks for did not");
     }
 

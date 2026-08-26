@@ -90,9 +90,10 @@ class ARunIsOwedToWhoeverMovedWhereItStopsTest {
         Compilation compilation = Compilation.ofSource(NARROWED, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        List<Adequacy.DeclaredDebt> debts =
+        Adequacy.DeclaredBoundaries account =
                 compilation.db().ask(new Adequacy.DeclaredBorders("example.narrow")).value();
-        assertNotNull(debts, "the model under test compiles");
+        assertNotNull(account, "the model under test compiles");
+        List<Adequacy.DeclaredDebt> debts = account.owed();
         return debts.stream()
                 .filter(each -> each.debt().role() == role && each.debt().said().equals(said))
                 .findFirst()

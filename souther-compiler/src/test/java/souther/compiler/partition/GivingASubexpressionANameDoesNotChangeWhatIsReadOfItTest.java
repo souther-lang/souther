@@ -120,6 +120,14 @@ class GivingASubexpressionANameDoesNotChangeWhatIsReadOfItTest {
         return compilation.db().ask(new Adequacy.Coverage(module)).value();
     }
 
+    /** The lines each behavior's positions met, whosever the row at each point is. */
+    private static Map<String, List<BorderAssessment>> lines(String model, String module) {
+        Compilation compilation = Compilation.ofSource(model, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        return Adequacy.readingsOf(compilation.db(), module);
+    }
+
     private static List<String> axesOf(PartitionEvidence evidence) {
         return evidence.axes().stream().map(axis -> axis.path() + ": " + axis.classes()).toList();
     }
@@ -127,8 +135,8 @@ class GivingASubexpressionANameDoesNotChangeWhatIsReadOfItTest {
     /** Every point of every line, and whether a row is owed at it. Not only the owed ones: a line
      *  whose points no row can be written at is still the line the rule draws, and a spelling that
      *  lost it would look like a spelling that kept it under a filter for what is owed. */
-    private static List<String> linesOf(PartitionEvidence evidence) {
-        return BorderAssessment.pointsOf(evidence.boundaries()).stream()
+    private static List<String> linesOf(List<BorderAssessment> lines) {
+        return BorderAssessment.pointsOf(lines).stream()
                 .filter(point -> point.role().againstTheLine())
                 .map(point -> point.label() + " " + point.role()
                         + (point.owed() != null ? " owed" : " excluded"))
@@ -159,7 +167,7 @@ class GivingASubexpressionANameDoesNotChangeWhatIsReadOfItTest {
         Map<String, PartitionEvidence> measured = measured(MODEL, "example.named");
         // The pair says the two spellings agree; this says what they agree on is a line, so a
         // reading that lost it in both would not pass for agreement.
-        assertFalse(linesOf(measured.get("overOnePosition")).isEmpty(),
+        assertFalse(linesOf(lines(MODEL, "example.named").get("overOnePosition")).isEmpty(),
                 "the spelling that writes the arithmetic draws a line");
         agree("overOnePositionNamed");
     }
@@ -181,11 +189,12 @@ class GivingASubexpressionANameDoesNotChangeWhatIsReadOfItTest {
 
     private static void agree(String named) {
         Map<String, PartitionEvidence> measured = measured(MODEL, "example.named");
+        Map<String, List<BorderAssessment>> lines = lines(MODEL, "example.named");
         PartitionEvidence written = measured.get(PAIRS.get(named));
         PartitionEvidence bound = measured.get(named);
         assertEquals(cutsOf(PAIRS.get(named)), cutsOf(named), named);
         assertEquals(axesOf(written), axesOf(bound), named);
-        assertEquals(linesOf(written), linesOf(bound), named);
+        assertEquals(linesOf(lines.get(PAIRS.get(named))), linesOf(lines.get(named)), named);
         assertEquals(reasonsOf(written), reasonsOf(bound), named);
     }
 
@@ -268,7 +277,8 @@ class GivingASubexpressionANameDoesNotChangeWhatIsReadOfItTest {
         Map<String, PartitionEvidence> measured = measured(DERIVED, "example.roster");
         assertEquals(List.of(), axesOf(measured.get("counted")));
         assertEquals(List.of(), axesOf(measured.get("countedNamed")));
-        assertEquals(List.of(), linesOf(measured.get("counted")));
-        assertEquals(List.of(), linesOf(measured.get("countedNamed")));
+        Map<String, List<BorderAssessment>> lines = lines(DERIVED, "example.roster");
+        assertEquals(List.of(), linesOf(lines.get("counted")));
+        assertEquals(List.of(), linesOf(lines.get("countedNamed")));
     }
 }

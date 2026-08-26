@@ -4,12 +4,12 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.PartitionEvidence;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 /**
  * The other producer of the same claim, held to the same reading of it.
@@ -20,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class AnEnsuresBetweenTwoPositionsSinglesNothingOutTest {
 
-    private static PartitionEvidence measured(String clause) {
+    private static AdequacyReport.BehaviorReport measured(String clause) {
         Compilation compilation = Compilation.ofSource("""
                 module m
 
@@ -37,12 +37,12 @@ class AnEnsuresBetweenTwoPositionsSinglesNothingOutTest {
                 """.formatted(clause), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        return AdequacyReport.of(compilation).modules().get(0).behaviors().get(0).partition();
+        return AdequacyReport.of(compilation).modules().get(0).behaviors().get(0);
     }
 
     /** The classes the clause divides the behavior's positions into. */
     private static List<String> classes(String clause) {
-        return measured(clause).axes().stream()
+        return measured(clause).partition().axes().stream()
                 .flatMap(each -> each.classes().stream()).toList();
     }
 
@@ -51,7 +51,10 @@ class AnEnsuresBetweenTwoPositionsSinglesNothingOutTest {
     void anEqualityBetweenTwoPositionsDividesNeitherOfThem() {
         assertEquals(List.of(), classes("r.a == r.other"));
         assertEquals(List.of(), classes("r.a /= r.other"));
-        assertEquals(0, measured("r.a == r.other").boundaries().size(),
+        // The measure's own answer and not a count read off it, which nought would also be where
+        // nobody measured: what the rule leaves is no line for a row to be at.
+        assertInstanceOf(souther.compiler.query.Measure.NotApplicable.class,
+                measured("r.a == r.other").boundaryReadings(),
                 "and it is not a line either: the values either side of the place they meet are"
                         + " one class");
     }
