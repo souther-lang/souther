@@ -61,9 +61,12 @@ public record NarrowedBounds(NumericDomain.Bounds bounds,
      * is as much the answer as the other, which is what the reading below answers when two clauses
      * of one value say what one edge says.
      *
-     * <p>The end and not the place it stands at. {@code (3, inclusive)} and {@code (3, exclusive)}
-     * are two ends and the second is the one a conjunction leaves; read as one because the number is
-     * the same, the value that stops at 3 would be reported as held by a clause that admits it.
+     * <p>The end and not the place it stands at, and the end and not how it was written. Both are
+     * {@link Endpoint#sameAs}'s business: {@code (3, inclusive)} and {@code (3, exclusive)} are two
+     * ends and a conjunction leaves the second, while {@code 3.0} and {@code 3.00} are one end
+     * written twice. Asked with a derived equality, the first pair comes back as one — and the
+     * second as two, so which reading is holding the end would turn on which of them spelled the
+     * number the way the meet happened to keep.
      */
     public NarrowedBounds meet(NarrowedBounds other) {
         if (other == null) {
@@ -84,10 +87,10 @@ public record NarrowedBounds(NumericDomain.Bounds bounds,
             return List.of();
         }
         List<TypeSymbol.AtModule> out = new ArrayList<>();
-        if (end.equals(endOf(bounds, lower))) {
+        if (end.sameAs(endOf(bounds, lower))) {
             out.addAll(lower ? minBy : maxBy);
         }
-        if (end.equals(endOf(other.bounds, lower))) {
+        if (end.sameAs(endOf(other.bounds, lower))) {
             out.addAll(lower ? other.minBy : other.maxBy);
         }
         return out;

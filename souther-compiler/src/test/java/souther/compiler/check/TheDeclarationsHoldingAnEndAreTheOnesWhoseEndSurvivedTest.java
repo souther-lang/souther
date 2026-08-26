@@ -9,10 +9,12 @@ import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Two readings of one coordinate meet, and the declarations follow the end that survived.
@@ -133,12 +135,30 @@ class TheDeclarationsHoldingAnEndAreTheOnesWhoseEndSurvivedTest {
                 "in the declarations' own order, and each once");
     }
 
+    /**
+     * One place written two ways is one end, and both readings are holding it.
+     *
+     * <p>What a rule wrote is what a report writes back, so a reading keeps the spelling it was
+     * handed and two readings of one end can hold two of them. Told apart by what they hold rather
+     * than by where they stop, whichever spelling the meet happened to keep would decide which
+     * declaration is named — and the answer would turn on the order the two were met in.
+     */
+    @Test
+    void onePlaceWrittenTwoWaysIsOneEnd() {
+        NarrowedBounds plain = upper(endAt("3", true), A);
+        NarrowedBounds padded = upper(endAt("3.00", true), B);
+
+        assertEquals(List.of(A, B), plain.meet(padded).maxBy(),
+                "one end, spelled twice, held by both");
+        assertEquals(List.of(A, B), padded.meet(plain).maxBy(),
+                "and the spelling the meet kept decides nothing");
+    }
+
     /** Meeting a reading with itself leaves it as it was. */
     @Test
     void meetingAReadingWithItselfChangesNothing() {
-        for (NarrowedBounds each : List.of(upper(3, true, A), upper(3, true, A, B),
-                NarrowedBounds.NOTHING)) {
-            assertEquals(each, each.meet(each), "met with itself, " + each);
+        for (NarrowedBounds each : readings()) {
+            assertSameAnswer(each, each.meet(each), () -> "met with itself, " + each);
         }
     }
 
@@ -147,7 +167,7 @@ class TheDeclarationsHoldingAnEndAreTheOnesWhoseEndSurvivedTest {
     void theOrderOfTwoReadingsDoesNotDecideTheAnswer() {
         for (NarrowedBounds left : readings()) {
             for (NarrowedBounds right : readings()) {
-                assertEquals(left.meet(right), right.meet(left),
+                assertSameAnswer(left.meet(right), right.meet(left),
                         () -> left + " met with " + right);
             }
         }
@@ -159,33 +179,77 @@ class TheDeclarationsHoldingAnEndAreTheOnesWhoseEndSurvivedTest {
         for (NarrowedBounds left : readings()) {
             for (NarrowedBounds mid : readings()) {
                 for (NarrowedBounds right : readings()) {
-                    assertEquals(left.meet(mid).meet(right), left.meet(mid.meet(right)),
+                    assertSameAnswer(left.meet(mid).meet(right), left.meet(mid.meet(right)),
                             () -> left + ", " + mid + ", " + right);
                 }
             }
         }
     }
 
-    /** Ends at two places and at one place both ways, held by one declaration, by another, and by
-     *  none. */
+    /**
+     * The same answer: the same ends, held by the same declarations.
+     *
+     * <p>Not the same value. A meet keeps one of the two ends it was handed and each is written as
+     * whoever wrote it wrote it, so two answers that stop a coordinate at one place can hold two
+     * spellings of it — which is a fact about the rules that were read and not about where the
+     * coordinate stops. Held to a derived equality, these laws would be statements about which
+     * spelling survives.
+     */
+    private static void assertSameAnswer(NarrowedBounds left, NarrowedBounds right,
+                                         java.util.function.Supplier<String> what) {
+        assertTrue(sameEnd(endOf(left, true), endOf(right, true)), () -> "lower end: " + what.get());
+        assertTrue(sameEnd(endOf(left, false), endOf(right, false)),
+                () -> "upper end: " + what.get());
+        assertEquals(left.minBy(), right.minBy(), () -> "holding the lower end: " + what.get());
+        assertEquals(left.maxBy(), right.maxBy(), () -> "holding the upper end: " + what.get());
+    }
+
+    private static boolean sameEnd(Endpoint left, Endpoint right) {
+        return left == null ? right == null : left.sameAs(right);
+    }
+
+    private static Endpoint endOf(NarrowedBounds narrowed, boolean lower) {
+        return narrowed.bounds() == null ? null
+                : lower ? narrowed.bounds().min() : narrowed.bounds().max();
+    }
+
+    /**
+     * Ends at two places, at one place both ways, and at one place spelled two ways.
+     *
+     * <p>The last of those is here because the laws cannot fail without it. Every end written one
+     * way is an end the comparison under test and the assertion agree about, whatever the comparison
+     * is — so a set built from a single spelling holds for a reading of {@code equals} as readily as
+     * for a reading of the order, and says nothing about which of the two this is.
+     */
     private static List<NarrowedBounds> readings() {
         return List.of(NarrowedBounds.NOTHING,
-                upper(3, true, A), upper(3, true, B), upper(3, true, A, B),
-                upper(3, false, A), upper(3, false, C),
-                upper(10, true, A), upper(10, true, B),
-                new NarrowedBounds(new NumericDomain.Bounds(null, endAt(3, true)),
+                upper(endAt("3", true), A), upper(endAt("3", true), B),
+                upper(endAt("3", true), A, B),
+                upper(endAt("3.00", true), B), upper(endAt("3.00", true), C),
+                upper(endAt("3", false), A), upper(endAt("3.00", false), C),
+                upper(endAt("10", true), A), upper(endAt("10", true), B),
+                new NarrowedBounds(new NumericDomain.Bounds(null, endAt("3", true)),
                         List.of(), List.of()),
-                new NarrowedBounds(new NumericDomain.Bounds(endAt(0, true), endAt(10, true)),
+                new NarrowedBounds(new NumericDomain.Bounds(endAt("0", true), endAt("10", true)),
                         List.of(C), List.of(A)));
     }
 
+    private static NarrowedBounds upper(Endpoint at, TypeSymbol.AtModule... by) {
+        return new NarrowedBounds(new NumericDomain.Bounds(null, at), List.of(), List.of(by));
+    }
+
     private static NarrowedBounds upper(long at, boolean inclusive, TypeSymbol.AtModule... by) {
-        return new NarrowedBounds(new NumericDomain.Bounds(null, endAt(at, inclusive)),
-                List.of(), List.of(by));
+        return upper(endAt(String.valueOf(at), inclusive), by);
+    }
+
+    /** An end written as {@code spelled}, so that two spellings of one place can be told apart here
+     *  and not by the algebra. */
+    private static Endpoint endAt(String spelled, boolean inclusive) {
+        return new Endpoint(new Count(new BigDecimal(spelled)), inclusive);
     }
 
     private static Endpoint endAt(long at, boolean inclusive) {
-        return new Endpoint(Count.of(at), inclusive);
+        return endAt(String.valueOf(at), inclusive);
     }
 
     private static TypeSymbol.AtModule named(String name) {

@@ -524,9 +524,20 @@ public final class FieldDomains {
         return bounds == null ? null : lower ? bounds.min() : bounds.max();
     }
 
-    /** Whether {@code end} is where {@code other} leaves this coordinate on the side asked for. */
+    /**
+     * Whether {@code end} is where {@code other} leaves this coordinate on the side asked for.
+     *
+     * <p>Asked of the ends and not of how the two readings wrote them. A reading with a declaration
+     * left out states its bounds over again, and a number arriving by another route is written as
+     * that route wrote it — so a derived equality answers that the end moved wherever {@code 3.0}
+     * came back as {@code 3.00}, and the declaration that moved it nowhere is named as holding it.
+     *
+     * <p>An end neither reading has is the same absence, which is why a null on both sides is true
+     * here and is not {@link Endpoint#sameAs}'s answer: that one is asked of an end that is there.
+     */
     private boolean ends(Endpoint end, FieldDomains other, String path, boolean lower) {
-        return java.util.Objects.equals(end, endOf(other, path, lower));
+        Endpoint theirs = endOf(other, path, lower);
+        return end == null ? theirs == null : end.sameAs(theirs);
     }
 
     /** This value read again without the clauses of the declarations {@code skip} names. */
@@ -1076,6 +1087,7 @@ public final class FieldDomains {
      * <p>The ends and the names together, because which declaration holds an end is worked out
      * against that end and is true of no other ({@link NarrowedBounds}). Handed out apart, a caller
      * meeting these with another reading's kept both sets of names and one of the two ends.
+     *
      */
     public NarrowedBounds at(String path) {
         NumericDomain.Bounds here = byField.get(path);
