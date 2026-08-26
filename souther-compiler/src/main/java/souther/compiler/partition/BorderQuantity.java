@@ -9,6 +9,7 @@ import souther.compiler.numeric.NumericDomain.LinearForm;
 import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -53,6 +54,18 @@ public sealed interface BorderQuantity {
         @Override
         public LevelSpace levels() {
             return LevelSpace.onACarrier(of.answered());
+        }
+
+        @Override
+        public List<NumericTerm> terms() {
+            return List.of(term);
+        }
+
+        @Override
+        public BorderQuantity movedTo(NumericTerm from, NumericTerm to, TermOrders orders) {
+            return term.equals(from)
+                    ? new OfACoordinate(new AxisId(axis.behavior(), to.toString()), to, orders)
+                    : null;
         }
 
         /** Its one position's, and nothing about any other. */
@@ -146,6 +159,30 @@ public sealed interface BorderQuantity {
      */
     record Apart(String behavior, NumericTerm on, NumericTerm against,
                  Map<NumericTerm, TermOrders> carriers) implements BorderQuantity {
+
+        @Override
+        public List<NumericTerm> terms() {
+            return List.of(on, against);
+        }
+
+        @Override
+        public BorderQuantity movedTo(NumericTerm from, NumericTerm to, TermOrders orders) {
+            if (!on.equals(from) && !against.equals(from)) {
+                return null;
+            }
+            NumericTerm here = on.equals(from) ? to : on;
+            NumericTerm there = against.equals(from) ? to : against;
+            // A distance runs between two positions, and a name standing at more than one can bring
+            // the two ends of one together. Answered here, because what a caller has in hand is a
+            // name that moved and not a pair it chose.
+            if (here.equals(there)) {
+                return null;
+            }
+            Map<NumericTerm, TermOrders> moved = new java.util.LinkedHashMap<>();
+            moved.put(here, on.equals(from) ? orders : carriers.get(on));
+            moved.put(there, against.equals(from) ? orders : carriers.get(against));
+            return new Apart(behavior, here, there, moved);
+        }
 
         public Apart {
             if (behavior == null || on == null || against == null || carriers == null) {
@@ -363,6 +400,25 @@ public sealed interface BorderQuantity {
     record OverAForm(String behavior, LinearForm<NumericTerm> form, Map<NumericTerm, TermOrders> on)
             implements BorderQuantity {
 
+        @Override
+        public List<NumericTerm> terms() {
+            return List.copyOf(form.coefs().keySet());
+        }
+
+        @Override
+        public BorderQuantity movedTo(NumericTerm from, NumericTerm to, TermOrders orders) {
+            if (!form.coefs().containsKey(from) || form.coefs().containsKey(to)) {
+                return null;
+            }
+            Map<NumericTerm, java.math.BigDecimal> coefs = new java.util.LinkedHashMap<>();
+            form.coefs().forEach((term, coef) -> coefs.put(term.equals(from) ? to : term, coef));
+            Map<NumericTerm, TermOrders> moved = new java.util.LinkedHashMap<>();
+            on.forEach((term, its) -> moved.put(term.equals(from) ? to : term,
+                    term.equals(from) ? orders : its));
+            return new OverAForm(behavior,
+                    new LinearForm<>(form.constant(), coefs), moved);
+        }
+
         public OverAForm {
             if (behavior == null || form == null || on == null || form.coefs().isEmpty()) {
                 throw new IllegalArgumentException("a form quantity names positions and their orders");
@@ -513,6 +569,34 @@ public sealed interface BorderQuantity {
 
     /** How this quantity's own values are ordered, and which of them it can take. */
     LevelSpace levels();
+
+    /**
+     * Every term this quantity is taken of.
+     *
+     * <p>What a caller moving a quantity to another position has to know it is moving. Read off the
+     * arm rather than off the direction the quantity runs in, which is the same list said twice as
+     * long as the two agree and one reader's answer the day they do not.
+     */
+    List<NumericTerm> terms();
+
+    /**
+     * The same quantity, with {@code from} taken at {@code to} instead — or null where it is not
+     * this quantity's term, or where the move leaves something a quantity cannot be.
+     *
+     * <p><b>For one name standing at more than one position.</b> A field every case of a sum spreads
+     * is one field, so a quantity taken of it is one quantity and it is taken under each case; what
+     * moves is where the number is taken, and the comparison that named it is read once and stays
+     * one comparison.
+     *
+     * <p>Answered here rather than assembled by whoever resolved the name, because what has to hold
+     * of a quantity is this type's: a distance runs between two positions on orders a value can be
+     * counted from one to the other, and a caller building the pair itself would be the second place
+     * that has to know it.
+     *
+     * @param orders what the term is read on and answers at its new position, which is a fact about
+     *               where it lands and cannot be carried over from where it was
+     */
+    BorderQuantity movedTo(NumericTerm from, NumericTerm to, TermOrders orders);
 
     /**
      * The order one position under this quantity is read and written back on, or null where the

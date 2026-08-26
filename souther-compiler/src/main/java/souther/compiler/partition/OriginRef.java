@@ -253,6 +253,27 @@ public sealed interface OriginRef {
     }
 
     /**
+     * The handle a report sends a reader to the rule by.
+     *
+     * <p>Beside {@link #rule()} and answering the other half of the same question: which rule it is,
+     * and how a reader finds it. A rule the author named is found by that name wherever it is read;
+     * a comparison has none and is found by where it is written, which is a place this cannot invent
+     * ({@link souther.compiler.check.RuleCitation}).
+     *
+     * <p>Here because it is one answer per origin. Worked out by whoever is building a finding, the
+     * same rule would be cited one way by a reader that had the place to hand and another by one
+     * that did not.
+     */
+    default souther.compiler.check.RuleCitation cited() {
+        return switch (this) {
+            case InvariantOrigin i -> souther.compiler.check.RuleCitation.named(i.rule());
+            case ComparisonOrigin g -> g.read().written();
+            case EnsuresOrigin e -> souther.compiler.check.RuleCitation.named(e.rule());
+            case NarrowedOrigin n -> n.bound().cited();
+        };
+    }
+
+    /**
      * Where this came from, as a report writes it, with the sources under the names {@code names}
      * gives them and the section it is printed under being about {@code sectionSource}.
      *

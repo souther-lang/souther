@@ -52,6 +52,11 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         // its reader which kind of thing stopped a derivation rather than which reader stopped.
         table.put("ValueRuleRelatingTwoPositions", "short/short/UNSUPPORTED_PARTITION_SHAPE");
         table.put("CompetingCoordinates", "short/short/COMPETING_COORDINATES");
+        // Read to the end, and placed nowhere. Its own word beside the two above: the comparison
+        // was taken apart, a line came out of it and every name it is between reached positions —
+        // what was not reached is which of those positions the line runs between. Both measures are
+        // short, because a row either side of the line is owed and there is nowhere to ask for one.
+        table.put("CasePairingNotDetermined", "short/short/UNRESOLVED_CASE_PAIRING");
         // Read to the end. Whatever the rule places has been placed, and there is none to be owed.
         table.put("ComparisonCuttingNothing", "whole/whole/RULE_CUTS_NOTHING");
         table.put("ComparisonCuttingOutsideDomain",
@@ -171,6 +176,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 new BlockReason.UnreadValueRule(),
                 new BlockReason.ValueRuleRelatingTwoPositions(),
                 new BlockReason.CompetingCoordinates(),
+                new BlockReason.CasePairingNotDetermined(),
                 new BlockReason.ComparisonCuttingNothing(),
                 new BlockReason.ComparisonCuttingOutsideDomain(),
                 new BlockReason.ComparisonBetweenPositions());

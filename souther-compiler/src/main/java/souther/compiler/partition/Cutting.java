@@ -106,6 +106,28 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     }
 
     /**
+     * The same line, on the quantity taken at another position — or null where the quantity cannot
+     * be taken there.
+     *
+     * <p>For a name that stands at more than one position. The comparison is read once and stays one
+     * comparison; what moves is where its quantity is taken, and it is taken under each case a value
+     * of the sum can turn out to be.
+     *
+     * <p>What the quantity runs between is worked out again here and not carried over. It is what
+     * the rules leave the quantity, so a quantity taken somewhere else runs between whatever the
+     * rules leave it there — kept as it was, a line would be held inside the values of the position
+     * it came from.
+     */
+    Cutting movedTo(NumericTerm from, NumericTerm to, souther.compiler.inputs.TermOrders orders,
+                    souther.compiler.inputs.Quantities quantities) {
+        BorderQuantity moved = of.movedTo(from, to, orders);
+        if (moved == null || !moved.levels().canCutAt(at)) {
+            return null;
+        }
+        return new Cutting(moved, at, claim, quantities.runsBetween(direction(moved)));
+    }
+
+    /**
      * The line the canonical quantity draws, or the reading stopping on the order it is on.
      *
      * <p>Three shapes and one order among them, which is the arithmetic's: one position's own

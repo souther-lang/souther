@@ -92,7 +92,8 @@ public final class InputDomain {
 
     /** Nothing to read: a behavior whose signature is not in hand. */
     public static final InputDomain NONE =
-            new InputDomain(List.of(), Map.of(), List.of(), List.of(), null);
+            new InputDomain(List.of(), Map.of(), List.of(), List.of(), null, NameReach.NONE,
+                    List.of());
 
     private final List<Position> positions;
     private final Map<TermPath, Position> byPath;
@@ -106,14 +107,24 @@ public final class InputDomain {
      * {@link RuleRoot}. */
     private final List<RuleRoot> roots;
     private final ReadingPolicy policy;
+    /** Where a name written at one position stands, wherever that is not the position of the same
+     * name one step down. Made by the walk that made the positions, so that what a name reaches and
+     * what the reading produced are one answer. */
+    private final NameReach reach;
+    /** Everything the rules of the values this reading opened placed, in the words each of them was
+     * written in. What became of each is {@link #placements()}. */
+    private final List<PlacementSeed> placed;
 
     private InputDomain(List<Position> positions, Map<BindingId, String> read,
-                        List<Parameter> parameters, List<RuleRoot> roots, ReadingPolicy policy) {
+                        List<Parameter> parameters, List<RuleRoot> roots, ReadingPolicy policy,
+                        NameReach reach, List<PlacementSeed> placed) {
+        this.placed = List.copyOf(placed);
         this.positions = List.copyOf(positions);
         this.read = Map.copyOf(read);
         this.parameters = List.copyOf(parameters);
         this.roots = List.copyOf(roots);
         this.policy = policy;
+        this.reach = reach;
         Map<TermPath, Position> at = new LinkedHashMap<>();
         // The first reading of a path stands. A path is where a rule and a row meet, so two
         // readings under one path would be the position answering differently depending on which
@@ -149,15 +160,22 @@ public final class InputDomain {
         // it: the reading says it stopped as the position is read, and the descent says who took
         // the rules as it opens the reading that did.
         RuleHandoffs handoffs = new RuleHandoffs();
+        // Written as the positions are made, so that a name reaches a position exactly where this
+        // walk produced one.
+        NameReach.Observed observed = new NameReach.Observed();
+        // Everything the rules of every value this reading opened placed, gathered as each reading
+        // is opened. What became of each of them is asked once the positions are all in hand.
+        List<PlacementSeed> account = new ArrayList<>();
         for (Parameter parameter : parameters) {
             if (parameter.binding() != null) {
                 read.putIfAbsent(parameter.binding(), parameter.name());
             }
             TermPath at = TermPath.of(parameter.name());
             roots.add(new RuleRoot(at, parameter.type()));
-            walk(at, parameter.type(), 0, symbols, policy,
-                    PlacedRules.of(at, parameter.type(), symbols, policy), found, roots,
-                    java.util.Set.of(), handoffs);
+            PlacedRules rules = PlacedRules.of(at, parameter.type(), symbols, policy);
+            account.addAll(rules.placed());
+            walk(at, parameter.type(), 0, symbols, policy, rules, found, roots,
+                    java.util.Set.of(), handoffs, observed, account);
         }
         // And only now, because a handoff is discharged by a descent that happens after the
         // position above it has been read. Held the other way round, every position that hands its
@@ -167,7 +185,8 @@ public final class InputDomain {
                 .map(each -> shortOfHandedOnRules(each, handoffs.unresolvedAt(each.path())))
                 .toList();
         return settled.isEmpty() ? NONE
-                : new InputDomain(settled, read, parameters, roots, policy);
+                : new InputDomain(settled, read, parameters, roots, policy, observed.reach(),
+                        List.copyOf(account));
     }
 
     /**
@@ -220,6 +239,138 @@ public final class InputDomain {
      */
     public Position at(TermPath path) {
         return byPath.get(path);
+    }
+
+    /** Where a name written at one position stands, as this walk observed it. */
+    public NameReach reach() {
+        return reach;
+    }
+
+    /**
+     * Everything the rules of this input's values placed, and what became of each of them.
+     *
+     * <p>The whole of what a build has to account for on this side. Every rule that placed anything
+     * is here, and every one of them ends somewhere said out loud — filed at a position, refused by
+     * the reading, or left with nowhere to go and a reason for it. Counted from the filings alone, a
+     * rule this compiler had nowhere to put would be a rule nobody wrote.
+     */
+    public List<PlacementFiling> placements() {
+        List<PlacementFiling> out = new ArrayList<>();
+        for (PlacementSeed each : placed) {
+            out.add(file(each));
+        }
+        return List.copyOf(out);
+    }
+
+    /**
+     * Every position the dotted name {@code named}, written in the rules of the value at
+     * {@code root}, stands at.
+     *
+     * <p>One name and any number of positions. A name is written once and a value is of one case, so
+     * a name naming a field the cases of a sum share stands under each of them — and where two such
+     * sums are on the way, at each pairing of their cases. Which is why this is taken a step at a
+     * time against what the walk observed rather than by rewriting the name and reading the types
+     * again: crossing at the first sum settles which positions the second step is asked of.
+     *
+     * <p>Empty where nothing this walk produced answers to the name. That is the whole of what is
+     * said: a case the reading left, a field below where it stops and a name of nothing at all are
+     * not told apart here, and a caller that has to tell them apart asks {@link #reach} what became
+     * of each case.
+     */
+    public List<TermPath> positionsNamed(TermPath root, String named) {
+        return follow(root, named).reached();
+    }
+
+    /**
+     * What becomes of {@code seed} at every place the name it was written at reaches.
+     *
+     * <p>The one crossing from what a rule wrote to where a row goes. Everything a rule places comes
+     * through here — an end a clause put on a number, the values a clause admits, a line a body drew
+     * — because what differs between them is what is said and never where, and a second reading of
+     * where would be a second answer to which rules reach which positions.
+     *
+     * <p>Never nothing. A name that reaches no position comes back saying so, with what the reading
+     * was left with at the position it stopped at, so that a reader further on never has an absence
+     * to make a cause out of.
+     */
+    public PlacementFiling file(PlacementSeed seed) {
+        Followed followed = follow(seed.address().root(), seed.address().key());
+        List<PlacementOutcome> outcomes = new ArrayList<>();
+        followed.reached().forEach(each -> outcomes.add(
+                new PlacementOutcome.Filed(new PositionId(each))));
+        outcomes.addAll(followed.otherwise());
+        return new PlacementFiling(seed, outcomes);
+    }
+
+    /** Where following a name got to, and what became of it everywhere it did not get to. */
+    private record Followed(List<TermPath> reached, List<PlacementOutcome> otherwise) {}
+
+    /**
+     * Follow a name from the value it was written in, a step at a time.
+     *
+     * <p>A step at a time and not by rewriting the name: crossing at the first sum settles which
+     * positions the next step is asked of, so a name naming a field two shared sums down stands at
+     * every pairing of their cases. Composed from the whole name at once, the pairing would be
+     * something this had to work out rather than something it walks into.
+     */
+    private Followed follow(TermPath root, String named) {
+        List<PlacementOutcome> otherwise = new ArrayList<>();
+        List<TermPath> frontier = List.of(root);
+        // The value's own name is at no step of its own, and a name of no steps is not a step
+        // called nothing.
+        for (String step : named.isEmpty() ? new String[0] : named.split("\\.")) {
+            List<TermPath> next = new ArrayList<>();
+            for (TermPath at : frontier) {
+                List<TermPath> across = reach.across(at, step);
+                List<NameReach.NotStanding> stopped = reach.notStanding(at, step);
+                if (!across.isEmpty() || !stopped.isEmpty()) {
+                    next.addAll(across);
+                    // Under this case the name stands nowhere, and the reading of the case said
+                    // where it stopped. One per case, since the readings need not have stopped
+                    // alike.
+                    stopped.forEach(each -> otherwise.add(new PlacementOutcome.Unresolved(
+                            new PlacementOutcome.Reason.TheReadingStoppedThere(
+                                    new PositionId(at.refine(each.branch())), each.why()))));
+                    // A name crossing into the cases reaches every case, so a case the reading left
+                    // is a place this name got to and stops at. Read from what the walk wrote down
+                    // about that case, never from the name having one place fewer to stand.
+                    reach.branchesNotEntered().stream()
+                            .filter(each -> each.at().equals(at))
+                            .forEach(each -> otherwise.add(new PlacementOutcome.Refused(each)));
+                    continue;
+                }
+                // An ordinary name, which is at the position of that name one step down — and only
+                // where the walk made one.
+                TermPath under = at.then(step);
+                if (byPath.containsKey(under)) {
+                    next.add(under);
+                } else {
+                    otherwise.add(new PlacementOutcome.Unresolved(whyNothingAt(at, step)));
+                }
+            }
+            frontier = next;
+        }
+        return new Followed(List.copyOf(frontier), List.copyOf(otherwise));
+    }
+
+    /**
+     * What the reading was left with where a name stopped.
+     *
+     * <p>The position's own answer and not a second opinion about it. A reading that stopped says so
+     * where it stopped ({@link StructuralInspection.Continuation.Blocked}), and that is what an
+     * author is owed; where it did not stop, what is left is that nothing of the name is there, which
+     * says that and nothing more.
+     */
+    private PlacementOutcome.Reason whyNothingAt(TermPath at, String step) {
+        Position position = byPath.get(at);
+        if (position != null
+                && position.structure() instanceof StructuralInspection.Retained retained
+                && retained.continuation()
+                        instanceof StructuralInspection.Continuation.Blocked blocked) {
+            return new PlacementOutcome.Reason.TheReadingStoppedThere(
+                    new PositionId(at), blocked.why());
+        }
+        return new PlacementOutcome.Reason.NothingOfThatNameThere(new PositionId(at), step);
     }
 
     /**
@@ -333,8 +484,13 @@ public final class InputDomain {
         StructuralInspection under =
                 StructuralInspection.of(shape, true, Distinctions.ofType(view, symbols));
         return switch (step) {
+            // A field of a record, or a name a sum's cases all spread. The second is readable on a
+            // value of the sum without opening a case, so the model does put something at it, and a
+            // reading that answered for the first alone would say the model puts nothing where the
+            // language reads a value.
             case TermPath.Step.Field field -> under instanceof StructuralInspection.Decomposed made
-                    ? made.under().get(field.name()) : null;
+                    ? made.under().get(field.name())
+                    : sharedFieldsOf(shape).get(field.name());
             case TermPath.Step.Element _ -> under instanceof StructuralInspection.Retained on
                     && on.continuation() instanceof StructuralInspection.Continuation.Elements held
                     ? held.element() : null;
@@ -483,7 +639,8 @@ public final class InputDomain {
     private static void walk(TermPath path, Type type, int depth, Symbols symbols,
                              ReadingPolicy policy, PlacedRules placed, List<Position> found,
                              List<RuleRoot> roots, java.util.Set<Type> visited,
-                             RuleHandoffs handoffs) {
+                             RuleHandoffs handoffs, NameReach.Observed observed,
+                             List<PlacementSeed> account) {
         // The proof first, and before anything is read off the position. A shape a reading is not
         // made of is this compiler disagreeing with itself about what may stand at a position, and
         // it is refused here rather than arriving further down as a position nothing divides.
@@ -507,13 +664,41 @@ public final class InputDomain {
                     walk(path.then(field.getKey()), field.getValue(), depth + 1, symbols, policy,
                             // A field is a value of its own, so a sum met under it is one this walk
                             // has not taken apart however many were taken apart above.
-                            placed, found, roots, java.util.Set.of(), handoffs);
+                            placed, found, roots, java.util.Set.of(), handoffs, observed, account);
                 }
             }
             case StructuralInspection.Retained retained ->
-                    under(retained.continuation(), here, path, depth, symbols, policy, placed,
-                            found, roots, visited, handoffs);
+                    under(retained.continuation(), here, path, sharedAt(input), depth, symbols,
+                            policy, placed, found, roots, visited, handoffs, observed, account);
         }
+    }
+
+    /**
+     * The names readable at this position that a value of one of its cases carries, which is empty
+     * for every position but a sum whose cases all spread one declaration.
+     *
+     * <p>Read off {@link Shape.Sum#common}, which is the same answer that makes those names readable
+     * on a value of the sum at all. Taken from what a case declares instead, a field one case has
+     * and another has not would be a name this said could be written at the sum, and the reading
+     * would reach positions the language refuses to name.
+     */
+    private static List<String> sharedAt(ReadablePosition input) {
+        return List.copyOf(sharedFieldsOf(input.shape()).keySet());
+    }
+
+    /**
+     * The names a value of this shape carries that are readable on it without opening a case, and
+     * what stands at each.
+     *
+     * <p>The one reading of a sum's shared part in this walk. What makes a name readable on a value
+     * of the sum is the declarations its cases all spread, and every question here that turns on
+     * that name — which names cross a narrowing, and what the model puts at one — is asked of this.
+     * Empty for every other shape, whose names are the positions under it.
+     */
+    private static Map<String, Type> sharedFieldsOf(Shape shape) {
+        return shape instanceof Shape.Sum sum
+                && sum.common() instanceof Shape.CommonProduct.Shared shared
+                ? shared.fields() : Map.of();
     }
 
     /**
@@ -536,9 +721,11 @@ public final class InputDomain {
      * some other reason is not one anybody handed anything to.
      */
     private static void under(StructuralInspection.Continuation continuation, Position here,
-                              TermPath path, int depth, Symbols symbols, ReadingPolicy policy,
+                              TermPath path, List<String> shared, int depth, Symbols symbols,
+                              ReadingPolicy policy,
                               PlacedRules placed, List<Position> found, List<RuleRoot> roots,
-                              java.util.Set<Type> visited, RuleHandoffs handoffs) {
+                              java.util.Set<Type> visited, RuleHandoffs handoffs,
+                              NameReach.Observed observed, List<PlacementSeed> account) {
         switch (continuation) {
             // Nothing is opened under the position, so a handoff made there stays standing. Which
             // is the answer whichever of the two this is: a shape this compiler does not enter and
@@ -548,8 +735,12 @@ public final class InputDomain {
             case StructuralInspection.Continuation.Elements elements -> {
                 TermPath at = path.element();
                 handoffs.passesTo(placed.root(), path, List.of(at));
+                // Nothing crosses into what a sequence holds: what a clause of the value out here
+                // says is written about the sequence, and an element is a value with a declaration
+                // of its own.
                 takeTheRulesOver(placed.root(), path, at, elements.element(), depth + 1, symbols,
-                        policy, found, roots, java.util.Set.of(), handoffs);
+                        policy, found, roots, java.util.Set.of(), handoffs, observed, null,
+                        account);
             }
             case StructuralInspection.Continuation.Branches branches -> {
                 List<StructuralInspection.Branch> standing = new ArrayList<>();
@@ -558,7 +749,17 @@ public final class InputDomain {
                     // A branch that is the whole of a value puts no position anywhere, and one the
                     // rules leave nothing at has no row to be written at it. Neither is a place the
                     // rules were passed to, so neither is owed a reading.
-                    if (branch.under() == null || !owed(here, branch.refinement())) {
+                    if (branch.under() == null) {
+                        // A name has nowhere to stand under a case that holds nothing, which is not
+                        // a shortfall and is not the answer below. Said apart from it so that a
+                        // reader of what became of this case reads which it was.
+                        observed.didNotEnter(path, branch.refinement(),
+                                new NameReach.NotEntered.NothingStandsUnderIt());
+                        continue;
+                    }
+                    if (!owed(here, branch.refinement())) {
+                        observed.didNotEnter(path, branch.refinement(),
+                                new NameReach.NotEntered.TheRulesLeaveNothingAtIt());
                         continue;
                     }
                     standing.add(branch);
@@ -566,11 +767,69 @@ public final class InputDomain {
                 }
                 handoffs.passesTo(placed.root(), path, passedTo);
                 for (StructuralInspection.Branch branch : standing) {
+                    int before = found.size();
+                    // What the value above calls the positions under this case, where it calls them
+                    // anything: the names its cases share and nothing else. Handed down as the
+                    // reading of the case is opened, so a clause written above is read at the
+                    // position it is about by the one reading of that position.
+                    PlacedRules.Reaching crossing = shared.isEmpty() ? null
+                            : new PlacedRules.Reaching(placed, path, branch.refinement(),
+                                    new java.util.LinkedHashSet<>(shared));
                     walkBranch(branch, placed.root(), path, depth, symbols, policy, found, roots,
-                            visited, handoffs);
+                            visited, handoffs, observed, crossing, account);
+                    crossed(observed, path, shared, branch.refinement(), found, before);
                 }
             }
         }
+    }
+
+    /**
+     * Say where the names the cases share stand, now that this case has been walked.
+     *
+     * <p>Asked of the positions this branch just produced, which is what keeps a crossing from
+     * naming a position nobody made: a field deeper than this reading goes and a case it turned back
+     * out of both leave the name with one place fewer to stand, and neither leaves a crossing to be
+     * read as one.
+     *
+     * @param from  where the walk's positions began before this branch was walked, so that what is
+     *              looked through is what this branch put there
+     */
+    private static void crossed(NameReach.Observed observed, TermPath at, List<String> shared,
+                                Refinement branch, List<Position> found, int from) {
+        if (shared.isEmpty()) {
+            return;
+        }
+        TermPath narrowed = at.refine(branch);
+        List<Position> made = found.subList(from, found.size());
+        for (String field : shared) {
+            TermPath stands = narrowed.then(field);
+            if (made.stream().anyMatch(each -> each.path().equals(stands))) {
+                observed.crosses(at, field, branch, stands);
+                continue;
+            }
+            // Nowhere under this case, and the reading of the case is what says why. Asked of the
+            // sum instead, there would be nothing to say: a sum is read whatever the depth, so its
+            // silence would be read as the model putting no such field here.
+            BlockReason.AboutThePosition why = whereItStopped(made, narrowed);
+            if (why != null) {
+                observed.doesNotStand(at, field, branch, why);
+            }
+        }
+    }
+
+    /** What the reading of the case standing at {@code narrowed} was left with, or null where it was
+     *  not left with anything — which is a case that was read to the end. */
+    private static BlockReason.AboutThePosition whereItStopped(List<Position> made,
+                                                               TermPath narrowed) {
+        for (Position each : made) {
+            if (each.path().equals(narrowed)
+                    && each.structure() instanceof StructuralInspection.Retained retained
+                    && retained.continuation()
+                            instanceof StructuralInspection.Continuation.Blocked blocked) {
+                return blocked.why();
+            }
+        }
+        return null;
     }
 
     /**
@@ -591,11 +850,18 @@ public final class InputDomain {
     private static void takeTheRulesOver(TermPath by, TermPath at, TermPath opened, Type type,
                                          int depth, Symbols symbols, ReadingPolicy policy,
                                          List<Position> found, List<RuleRoot> roots,
-                                         java.util.Set<Type> visited, RuleHandoffs handoffs) {
+                                         java.util.Set<Type> visited, RuleHandoffs handoffs,
+                                         NameReach.Observed observed,
+                                         PlacedRules.Reaching crossing,
+                                         List<PlacementSeed> account) {
         roots.add(new RuleRoot(opened, type));
         handoffs.accepts(by, at, opened);
-        walk(opened, type, depth, symbols, policy,
-                PlacedRules.of(opened, type, symbols, policy), found, roots, visited, handoffs);
+        PlacedRules rules = PlacedRules.of(opened, type, symbols, policy, crossing);
+        // Said as the reading of this value is opened, so that what a build has to account for is
+        // what the rules of the values it read actually placed.
+        account.addAll(rules.placed());
+        walk(opened, type, depth, symbols, policy, rules, found, roots, visited,
+                handoffs, observed, account);
     }
 
     /**
@@ -613,7 +879,9 @@ public final class InputDomain {
     private static void walkBranch(StructuralInspection.Branch branch, TermPath by, TermPath path,
                                    int depth, Symbols symbols, ReadingPolicy policy,
                                    List<Position> found, List<RuleRoot> roots,
-                                   java.util.Set<Type> visited, RuleHandoffs handoffs) {
+                                   java.util.Set<Type> visited, RuleHandoffs handoffs,
+                                   NameReach.Observed observed, PlacedRules.Reaching crossing,
+                                   List<PlacementSeed> account) {
         // <b>A descent that costs no level stops only where it returns to a value it has already
         // been at without a step into one.</b> That is the whole of the rule, and what it is keyed
         // on is the value reached and never the narrowing taken: a narrowing is an edge and the
@@ -635,7 +903,7 @@ public final class InputDomain {
         java.util.Set<Type> deeper = new java.util.LinkedHashSet<>(visited);
         deeper.add(branch.under());
         takeTheRulesOver(by, path, path.refine(branch.refinement()), branch.under(), depth, symbols,
-                policy, found, roots, deeper, handoffs);
+                policy, found, roots, deeper, handoffs, observed, crossing, account);
     }
 
     /**

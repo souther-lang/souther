@@ -1,0 +1,160 @@
+package souther.compiler.inputs;
+
+import org.junit.jupiter.api.Test;
+
+import souther.compiler.ast.Hir;
+import souther.compiler.check.Prepared;
+import souther.compiler.check.Sig;
+import souther.compiler.check.Symbols;
+import souther.compiler.conformance.ConformanceCorpus;
+import souther.compiler.query.Bodies;
+import souther.compiler.query.Compilation;
+import souther.compiler.query.ReadAs;
+import souther.compiler.query.Scopes;
+import souther.compiler.query.Shapes;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+
+/**
+ * Every rule that placed anything ends somewhere this compiler said out loud.
+ *
+ * <p>A rule is written in one value's words and a row is written at a position, so what a build has
+ * to account for is not what it produced but what the model gave it. Counted the first way, a rule
+ * this compiler had nowhere to put is a rule nobody wrote — which is how a field every case of a sum
+ * spreads came to be bounded by a clause no report ever mentioned.
+ *
+ * <p><b>What the answers are allowed to be is written out below.</b> A cause this has not met is a
+ * failure here rather than a line in a report nobody looked at: the day one turns up, somebody comes
+ * and decides what a reader should be told about it. So a shorter list is a failure as much as a
+ * longer one.
+ */
+class NoRuleIsPlacedWhereNothingAccountsForItTest {
+
+    /**
+     * Where a placement ends with nowhere to go, over every model this repository carries.
+     *
+     * <p>One entry, and it is the reading's own limit. How far a report is about one input is this
+     * reading's answer and it says so at the position it stopped at ({@code BlockedDescent}), so a
+     * rule about something deeper is a rule an author is already told about — this is the same fact
+     * counted per rule rather than per position.
+     *
+     * <p>Nothing else. A name a rule wrote that no position answers to would be
+     * {@code NothingOfThatNameThere}, and there is none: with the fan-out in place, every name the
+     * rules of these models write reaches a position or stops at a depth.
+     */
+    private static final Map<String, Integer> ALLOWED = Map.of(
+            "the reading stopped there: DepthLimit", 144);
+
+    @Test
+    void everyPlacementEndsInAnAnswerThisCompilerGave() throws Exception {
+        Map<String, Integer> found = new TreeMap<>();
+        for (InputDomain read : everyReading()) {
+            for (PlacementFiling filing : read.placements()) {
+                assertFalse(filing.outcomes().isEmpty(),
+                        () -> "a placement with no outcome cannot be built: " + filing.seed());
+                for (PlacementOutcome outcome : filing.outcomes()) {
+                    if (outcome instanceof PlacementOutcome.Unresolved it) {
+                        found.merge(spelled(it.why()), 1, Integer::sum);
+                    }
+                }
+            }
+        }
+        assertEquals(new TreeMap<>(ALLOWED), found,
+                "every way a rule this repository's models write ends up with nowhere to go. A "
+                        + "cause not written down here is one nobody has decided what to tell a "
+                        + "reader about");
+    }
+
+    /** How a report would have to tell them apart, which is what a new one has to be given. */
+    private static String spelled(PlacementOutcome.Reason why) {
+        return switch (why) {
+            case PlacementOutcome.Reason.TheReadingStoppedThere it ->
+                    "the reading stopped there: " + it.why().getClass().getSimpleName();
+            case PlacementOutcome.Reason.NothingOfThatNameThere it ->
+                    "nothing of that name there: " + it.named();
+        };
+    }
+
+    /**
+     * A model whose clauses name fields through a sum, which the corpora do not have.
+     *
+     * <p>Here so that the count above is answerable by the crossing rather than by there being
+     * nothing to cross. Without it every rule in every model this repository carries names a
+     * position directly or names something deeper than the reading goes, and the account would come
+     * out the same whether or not a name written at a sum reached anywhere — which is a test that
+     * holds for a reason other than the one it states.
+     */
+    private static final String NAMES_THROUGH_A_SUM = """
+            module ledger.crossed
+
+            data Paging = { limit: Int }
+            data Named = { name: String }
+            data A = { ...Paging, ...Named, x: Int }
+            data B = { ...Paging, ...Named, y: Int }
+            data Q = A | B
+
+            data Colour = Red | Green
+            data Red
+            data Green
+
+            data Holder = { q: Q, cap: Int }
+                invariant capped = q.limit <= 10
+                invariant long = String.length(q.name) >= 3
+
+            data Ok
+
+            behavior read : (h: Holder) -> Ok
+            behavior atTheSum : (q: Q) -> Ok
+            """;
+
+    /** The reading of every behavior of every model this repository carries. */
+    private static List<InputDomain> everyReading() throws Exception {
+        List<InputDomain> out = new ArrayList<>();
+        for (ConformanceCorpus corpus : ConformanceCorpus.all()) {
+            readings(corpus.analyse().compilation(), out);
+        }
+        Compilation crossed = Compilation.ofSources(List.of(NAMES_THROUGH_A_SUM),
+                souther.compiler.meta.ModulePath.EMPTY);
+        crossed.answerEverything();
+        readings(crossed, out);
+        Path root = souther.test.RepositoryLayout.ofWorkingDirectory().root();
+        for (List<String> corpus : List.of(
+                List.of("souther-bench/src/main/resources/souther/bench/corpus/crm/crm.sou",
+                        "souther-bench/src/main/resources/souther/bench/corpus/crm/pipeline.sou",
+                        "souther-bench/src/main/resources/souther/bench/corpus/crm/quoting.sou"),
+                List.of("souther-bench/src/main/resources/souther/bench/corpus/issuetracker/issues.sou"),
+                List.of("souther-bench/src/main/resources/souther/bench/corpus/runtime/runtime.sou"))) {
+            List<String> sources = new ArrayList<>();
+            for (String each : corpus) {
+                sources.add(Files.readString(root.resolve(each)));
+            }
+            Compilation compilation =
+                    Compilation.ofSources(sources, souther.compiler.meta.ModulePath.EMPTY);
+            compilation.answerEverything();
+            readings(compilation, out);
+        }
+        return out;
+    }
+
+    private static void readings(Compilation compilation, List<InputDomain> out) {
+        for (String module : compilation.modules()) {
+            Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
+            Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
+            Symbols symbols = Scopes.derived(compilation.db(), module).value();
+            for (Hir.BehaviorDef def : prepared.behaviors()) {
+                if (def instanceof Hir.SpecBehavior spec && sigs.get(spec.name()) != null) {
+                    out.add(InputDomain.of(spec, sigs.get(spec.name()), symbols,
+                            ReadAs.THE_COMPILATION_DOES));
+                }
+            }
+        }
+    }
+}
