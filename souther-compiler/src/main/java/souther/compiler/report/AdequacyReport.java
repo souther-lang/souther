@@ -391,9 +391,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             out.append(String.format("  %s%n", declaration));
             for (Adequacy.Finding f : findings) {
                 if (f.about() instanceof About.APointOfADeclaredBorder(var debt)) {
-                    out.append(String.format("      %s no row is at the %s point %s = %s (%s)%n",
-                            mark(f), debt.role(), debt.axis(), debt.against(),
-                            debt.id().named()));
+                    // What the point asks, in its own words. A point against the line names a value
+                    // and a point beside it names a run, and a sentence that wrote `=` for both said
+                    // a run was one value.
+                    out.append(String.format("      %s no row is at the %s point %s (%s)%n",
+                            mark(f), debt.role(), debt.said(), debt.id().named()));
                 }
             }
         });
