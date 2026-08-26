@@ -737,7 +737,7 @@ final class Predicates {
      * already standing where it read a field, folded. {@code null} where it does not fold — which is
      * every clause reading anything computed at run time. */
     Boolean decidedAt(Core inv) {
-        Object folded = Terms.folded(inv);
+        Object folded = Terms.folded(inv, terms.symbols());
         return folded instanceof Boolean b ? b : null;
     }
 

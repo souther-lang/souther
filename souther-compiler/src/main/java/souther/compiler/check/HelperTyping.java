@@ -187,7 +187,8 @@ public final class HelperTyping {
                 // What it is a constant of, read off the body it was checked as. A reference to it
                 // is written out as that constant, so every position that asks whether an
                 // expression is known at compile time goes on reading a literal.
-                ConstEval.eval(body).ifPresent(c -> settledConstants.put(settled, c));
+                ConstEval.against(symbols).eval(body)
+                        .ifPresent(c -> settledConstants.put(settled, c));
             }
             if (emitted != null) {
                 elaborated.helpers.put(h.name(), elaboratedBody);   // the backend emits this

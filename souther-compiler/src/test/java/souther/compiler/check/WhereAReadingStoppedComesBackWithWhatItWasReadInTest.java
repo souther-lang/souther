@@ -78,6 +78,11 @@ class WhereAReadingStoppedComesBackWithWhatItWasReadInTest {
         return new AffineForms.Reading<>() {
 
             @Override
+            public Symbols symbols() {
+                return Symbols.none(souther.compiler.DefaultStdlib.get());
+            }
+
+            @Override
             public LinearForm<String> leafOf(Core e, String at) {
                 return null;
             }

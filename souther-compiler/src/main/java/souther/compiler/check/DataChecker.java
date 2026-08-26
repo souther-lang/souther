@@ -74,7 +74,7 @@ public final class DataChecker {
                 && built.type() instanceof TypeSymbol.AtModule constructed
                 && symbols.declarations().declaration(constructed) instanceof Hir.Data nt
                 && nt.newtype() && isInvariantBearing(constructed, symbols)) {
-            CallElaborator.newtypeConstantArg(nd).ifPresent(v ->
+            CallElaborator.newtypeConstantArg(nd, symbols).ifPresent(v ->
                     out.add(new ConstCheck(nd.typeName().written(), constructed, v, nd.pos())));
         }
         TypeChecker.forEachChild(e, c -> collectConstChecks(c, symbols, out));

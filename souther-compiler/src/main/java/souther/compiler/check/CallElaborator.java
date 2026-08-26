@@ -610,7 +610,7 @@ public final class CallElaborator {
                 return numericFold(call, applied.result(), expected);
             }
             if (kernel == Kernel.STRING_MATCHES) {
-                validateRegexPattern(args.get(0));
+                validateRegexPattern(args.get(0), ctx.symbols());
             }
             return applied.result();
         }
@@ -697,10 +697,10 @@ public final class CallElaborator {
      * form written directly. Empty when the argument is a runtime value or the data is not a
      * single-{@code value} wrapper (e.g. a product).
      */
-    static Optional<Object> newtypeConstantArg(Hir.NewData nd) {
+    static Optional<Object> newtypeConstantArg(Hir.NewData nd, Symbols symbols) {
         if (nd.spreads().isEmpty() && nd.inits().size() == 1
                 && nd.inits().get(0).name().equals("value")) {
-            return ConstEval.eval(nd.inits().get(0).value());
+            return ConstEval.against(symbols).eval(nd.inits().get(0).value());
         }
         return Optional.empty();
     }
@@ -711,8 +711,8 @@ public final class CallElaborator {
      * literal is one such expression and so is a {@code ++} of literals and of a module's values,
      * which is what lets several formats share a part (issue #208). What is validated is the string
      * the whole expression composes to, not the pieces it was written in. */
-    static void validateRegexPattern(Hir.Expr e) {
-        String pattern = ConstEval.evalString(e).orElse(null);
+    static void validateRegexPattern(Hir.Expr e, Symbols symbols) {
+        String pattern = ConstEval.against(symbols).evalString(e).orElse(null);
         if (pattern == null) {
             throw CompileException.of(Diagnostic
                             .at(e.pos()).say(new TypeMessage.ThePatternMustBeWrittenOut()).build());

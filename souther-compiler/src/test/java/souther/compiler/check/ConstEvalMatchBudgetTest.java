@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.ConstructionOrigin;
@@ -26,7 +27,10 @@ class ConstEvalMatchBudgetTest {
 
     private static Optional<Object> fold(String pattern, String subject) {
         ValueName.Stdlib.Operation matches = ValueName.Stdlib.operation("String", "matches");
-        return ConstEval.eval(new Hir.Apply("String.matches",
+        // Folded against the real library, because which operation folds is asked as the kernel
+        // that library declares it to be. No module of its own: the call names a library operation
+        // and nothing else.
+        return ConstEval.against(Symbols.none(DefaultStdlib.get())).eval(new Hir.Apply("String.matches",
                 new ReachName.OfLibrary(matches),
                 List.of(new Hir.StringLit(pattern, POS, null), new Hir.StringLit(subject, POS, null)),
                 ConstructionOrigin.own(), POS, null));

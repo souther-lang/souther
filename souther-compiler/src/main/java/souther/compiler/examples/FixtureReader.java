@@ -8,6 +8,8 @@ import souther.compiler.check.CallElaborator;
 import souther.compiler.check.FixtureEvidence;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
+import souther.compiler.core.Kernel;
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.observe.Limits;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.BindingId;
@@ -1627,12 +1629,21 @@ public final class FixtureReader {
     }
 
     /** Whether {@code c} is the collection notation a fixture writes as its elements — asked of what
-     *  the callee reaches, as every other question about which operation a call applies is. */
-    private static boolean isFromList(Hir.Apply c) {
-        return c.answered() != null
-                && c.answered().denotes() instanceof ValueName.Stdlib operation
-                && ("Set.fromList".equals(operation.qualified())
-                        || "Map.fromList".equals(operation.qualified()));
+     *  the callee reaches, as every other question about which operation a call applies is.
+     *
+     *  <p>Which two operations those are is the library's to say, so this asks which kernel the
+     *  operation is declared to be rather than writing out what the library publishes it as. The
+     *  alias is the library's own, and a reader that spelt one was right for as long as the two
+     *  agreed. */
+    private boolean isFromList(Hir.Apply c) {
+        if (c.answered() == null
+                || !(c.answered().denotes() instanceof ValueName.Stdlib operation)) {
+            return false;
+        }
+        Stdlib.Intrinsic intrinsic = symbols.library().intrinsicOf(operation);
+        return intrinsic != null
+                && (intrinsic.kernel() == Kernel.SET_FROM_LIST
+                        || intrinsic.kernel() == Kernel.MAP_FROM_LIST);
     }
 
     private Object newtypeInner(Hir.Apply c, Position at, Admission admission) {

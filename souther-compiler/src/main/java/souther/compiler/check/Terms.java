@@ -56,6 +56,13 @@ final class Terms {
     private final ReadingPolicy policy;
 
     private final Symbols symbols;
+
+    /** The symbols this reading was made against — what a reader holding this reading folds an
+     *  expression of it against, rather than reaching for a library of its own. */
+    Symbols symbols() {
+        return symbols;
+    }
+
     /**
      * What a clause states, read through this very reading.
      *
@@ -463,6 +470,11 @@ final class Terms {
         return AffineForms.outcome(raw, at, new AffineForms.Reading<FactSubject, Denotations>() {
 
             @Override
+            public Symbols symbols() {
+                return Terms.this.symbols;
+            }
+
+            @Override
             public LinearForm<FactSubject> leafOf(Core e, Denotations where) {
                 LinearForm<FactSubject> named = affineReading.leafOf(e, where);
                 return named == null || named.coefs().keySet().stream().allMatch(names)
@@ -498,6 +510,11 @@ final class Terms {
      */
     private final AffineForms.Reading<FactSubject, Denotations> affineReading =
             new AffineForms.Reading<>() {
+
+                @Override
+                public Symbols symbols() {
+                    return Terms.this.symbols;
+                }
 
                 @Override
                 public LinearForm<FactSubject> leafOf(Core e, Denotations at) {
@@ -564,15 +581,18 @@ final class Terms {
     }
 
     /** What {@code e} folds to where every part of it is written out, or {@code null} where any part
-     * of it is computed at run time and there is nothing to fold. */
-    static Object folded(Core e) {
+     * of it is computed at run time and there is nothing to fold.
+     *
+     * <p>Folded against {@code symbols}, because which operations fold is a fact about the library
+     * the expression was resolved against and not about the expression. */
+    static Object folded(Core e, Symbols symbols) {
         Hir.Expr written = asWrittenValue(e);
-        return written == null ? null : ConstEval.eval(written).orElse(null);
+        return written == null ? null : ConstEval.against(symbols).eval(written).orElse(null);
     }
 
     /** The number {@code e} folds to at compile time, or {@code null} where it folds to none. */
-    static BigDecimal constantNumber(Core e) {
-        Object folded = folded(e);
+    static BigDecimal constantNumber(Core e, Symbols symbols) {
+        Object folded = folded(e, symbols);
         if (folded instanceof Long n) {
             return BigDecimal.valueOf(n);
         }

@@ -1928,7 +1928,8 @@ public final class Bodies {
                 // grows a collection into a walk over a builder and joins two such walks into one,
                 // after which nothing in the tree says which container an element came from. It
                 // renames no binding, so what is read now is as true of what it answers with.
-                return Answer.of(new CheckedBody(GrowingFold.rewrite(core),
+                return Answer.of(new CheckedBody(
+                        GrowingFold.rewrite(core, scope.value().theWalk()),
                         souther.compiler.check.ElementBindings.of(core,
                                 body.value().provenance()),
                         // Who owns the rule each fork decides by, read off the declarations that
@@ -2113,7 +2114,8 @@ public final class Bodies {
                     && contracts.present() && !contracts.hasError()
                     && shapes.present() && !shapes.hasError();
             Map<String, Core> helperBodies = new LinkedHashMap<>();
-            reported.emittedHelpers().forEach((h, core) -> helperBodies.put(h, GrowingFold.rewrite(core)));
+            reported.emittedHelpers().forEach((h, core) ->
+                    helperBodies.put(h, GrowingFold.rewrite(core, scope.value().theWalk())));
             return Answer.of(new Of(helperBodies, sound, reported.stopped()), reports);
         }
     }

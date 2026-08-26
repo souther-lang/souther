@@ -246,6 +246,26 @@ public final class Stdlib {
     private static final ValueName.Stdlib.Operation THE_WALK =
             ValueName.Stdlib.operation("List", "foldFrom");
 
+    /**
+     * The one distinctness this library publishes: that a list holds no two elements with the same
+     * key.
+     *
+     * <p>An invariant written over it is a constraint a backend can represent, so the pass that
+     * reads invariants has to say which operation that is. Here for the same reason
+     * {@link #theWalk} is: nothing else has a kernel to ask about, both being operations the
+     * library writes in Souther, and a pass spelling one out would be deciding what this library
+     * publishes it as.
+     *
+     * <p>That this library has it is checked while the library is built.
+     */
+    public ValueName.Stdlib.Operation theDistinctness() {
+        return THE_DISTINCTNESS;
+    }
+
+    /** Which operation the distinctness is. Named beside the walk for the same reason. */
+    private static final ValueName.Stdlib.Operation THE_DISTINCTNESS =
+            ValueName.Stdlib.operation("List", "allDistinctBy");
+
     /** What the language declares of its kernels, as the one value everything emitting a call to
      *  one reads. What a checked program carries across the boundary and what a backend derives its
      *  descriptors from is this, so neither is reading a library of its own. */
@@ -468,9 +488,11 @@ public final class Stdlib {
             Map<String, ValueName.Stdlib> named = new LinkedHashMap<>(operations);
             SUGARED.forEach(sugar -> named.put(sugar.written().qualified(), sugar.written()));
             Set<String> published = published(sugars.keySet(), named);
-            if (!helpers.containsKey(THE_WALK)) {
-                throw new IllegalStateException("a library publishes the walk `" + THE_WALK
-                        + "` as a body of its own, and this one publishes no such body");
+            for (ValueName.Stdlib.Operation ascribed : List.of(THE_WALK, THE_DISTINCTNESS)) {
+                if (!helpers.containsKey(ascribed)) {
+                    throw new IllegalStateException("a library publishes `" + ascribed
+                            + "` as a body of its own, and this one publishes no such body");
+                }
             }
             return new Stdlib(
                     Collections.unmodifiableMap(new LinkedHashMap<>(entries)),

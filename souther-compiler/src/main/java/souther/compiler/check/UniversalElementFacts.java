@@ -84,7 +84,7 @@ record UniversalElementFacts(Map<String, Bounds> byPath) {
         Map<String, Bounds> held = new LinkedHashMap<>();
         Type element = Terms.elementType(container.type());
         guaranteed(element, symbols, policy).forEach((path, bounds) -> holds(held, path, bounds));
-        writtenOut(container, element, held);
+        writtenOut(container, element, symbols, held);
         transferred(container, given.at(), terms, symbols, policy, held);
         return held.isEmpty() ? NONE : new UniversalElementFacts(held);
     }
@@ -160,7 +160,8 @@ record UniversalElementFacts(Map<String, Bounds> byPath) {
      * one of them is decided at run time — and saying nothing is what leaves a reader unbounded
      * rather than wrongly bounded.
      */
-    private static void writtenOut(Core container, Type element, Map<String, Bounds> held) {
+    private static void writtenOut(Core container, Type element, Symbols symbols,
+                                   Map<String, Bounds> held) {
         if (element == null || !(container instanceof Core.ListLit list)
                 || list.elements().isEmpty()) {
             return;
@@ -168,7 +169,7 @@ record UniversalElementFacts(Map<String, Bounds> byPath) {
         BigDecimal low = null;
         BigDecimal high = null;
         for (Core each : list.elements()) {
-            BigDecimal written = Terms.constantNumber(each);
+            BigDecimal written = Terms.constantNumber(each, symbols);
             if (written == null) {
                 return;
             }

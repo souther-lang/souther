@@ -52,8 +52,32 @@ public final class Symbols implements NameSense {
      * where reaching {@link #library()} would be an output that could put any question to the
      * library, which {@code TheBackendEmitsAgainstTheLanguageItWasHanded} keeps closed.
      */
-    public ValueName.Stdlib theWalk() {
+    public ValueName.Stdlib.Operation theWalk() {
         return stdlib.theWalk();
+    }
+
+    /**
+     * The one distinctness the library publishes, which an invariant written over it is a
+     * constraint rather than a call.
+     *
+     * <p>Handed on for the reason {@link #theWalk} is.
+     */
+    public ValueName.Stdlib.Operation theDistinctness() {
+        return stdlib.theDistinctness();
+    }
+
+    /**
+     * Which kernel {@code operation} is declared to be, or null where it is not a kernel.
+     *
+     * <p>The question a pass asks when it recognises an operation by what it does rather than by
+     * what it is called: a kernel is the language's own vocabulary and is the same whatever alias a
+     * library publishes the operation under. Answered here rather than by reaching
+     * {@link #library()} so that a reader holding these symbols has it — a {@code Kernel} is
+     * {@code core}'s, so an output asking this is not naming the library.
+     */
+    public souther.compiler.core.Kernel kernelOf(ValueName.Stdlib operation) {
+        Stdlib.Intrinsic intrinsic = stdlib.intrinsicOf(operation);
+        return intrinsic == null ? null : intrinsic.kernel();
     }
 
     /** The library this module is compiled against. */

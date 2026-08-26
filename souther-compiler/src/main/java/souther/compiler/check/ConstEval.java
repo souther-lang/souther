@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.types.BinOp;
 import souther.compiler.ast.Hir;
+import souther.compiler.core.Kernel;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -36,18 +37,32 @@ import java.util.regex.PatternSyntaxException;
  * read — so a {@code let} whose body is constant folds, and a parameter or a field read does not.
  */
 public final class ConstEval {
-    private ConstEval() {}
+
+    /** The symbols this folds against. Which operations fold is a fact about the library the
+     *  expression was resolved against, so it is held here rather than asked at each call: an
+     *  expression folded against one library and read against another would be answered from
+     *  whichever the reader happened to reach. */
+    private final Symbols symbols;
+
+    private ConstEval(Symbols symbols) {
+        this.symbols = symbols;
+    }
+
+    /** Folding against the library {@code symbols} names. */
+    public static ConstEval against(Symbols symbols) {
+        return new ConstEval(symbols);
+    }
 
     /**
      * The string {@code e} evaluates to at compile time, or empty when it does not evaluate to one:
      * what a position accepting a written string but not a computed one is asking about.
      */
-    public static Optional<String> evalString(Hir.Expr e) {
+    public Optional<String> evalString(Hir.Expr e) {
         return eval(e).filter(String.class::isInstance).map(String.class::cast);
     }
 
     /** Folds {@code e} to its constant value, or empty when it is not a compile-time constant. */
-    static Optional<Object> eval(Hir.Expr e) {
+    Optional<Object> eval(Hir.Expr e) {
         return switch (e) {
             case Hir.IntLit i -> Optional.of(i.value());
             case Hir.DecimalLit d -> Optional.of(d.value());
@@ -70,7 +85,7 @@ public final class ConstEval {
         return Optional.empty();
     }
 
-    private static Optional<Object> binary(Hir.Binary bin) {
+    private Optional<Object> binary(Hir.Binary bin) {
         Optional<Object> l = eval(bin.left());
         // `&&` and `||` settle on their left operand, and what settles them is the answer whatever
         // the right operand is. Read eagerly, a right operand this cannot fold would take a settled
@@ -249,22 +264,27 @@ public final class ConstEval {
         }
     }
 
-    private static Optional<Object> call(Hir.Apply call) {
+    private Optional<Object> call(Hir.Apply call) {
         List<Hir.Expr> args = call.args();
         // Applying a name nothing declares is not a constant. There is no operation to fold it to,
         // and the name is reported where it is written.
         if (call.answered() == null) {
             return Optional.empty();
         }
-        // Which operation this is, asked of what the name reaches and answered by the key the
-        // library holds its own operations under. Read off the reference rendered, this would be
-        // deciding what to evaluate from how the call happens to be written.
+        // What this call does, asked as the kernel the library declares the operation to be. The
+        // three below fold because of what they compute, which is what a kernel names; the alias
+        // they are published under is the library's own, and a fold selected by one would be right
+        // for exactly as long as the two agreed.
         if (!(call.answered().denotes() instanceof souther.compiler.types.ValueName.Stdlib
                 operation)) {
             return Optional.empty();
         }
-        switch (operation.qualified()) {
-            case "String.length" -> {
+        Kernel kernel = symbols.kernelOf(operation);
+        if (kernel == null) {
+            return Optional.empty();
+        }
+        switch (kernel) {
+            case STRING_LENGTH -> {
                 if (args.size() == 1 && eval(args.get(0)).orElse(null) instanceof String s) {
                     return Optional.of((long) s.length());
                 }
@@ -272,14 +292,14 @@ public final class ConstEval {
             // matches(pattern, s): the pattern is written first and the subject last (spec §pipe).
             // The pattern of a declaration is already required to be a written constant, so a call
             // over a written subject is one the compiler answers rather than the run time.
-            case "String.matches" -> {
+            case STRING_MATCHES -> {
                 if (args.size() == 2
                         && eval(args.get(0)).orElse(null) instanceof String pattern
                         && eval(args.get(1)).orElse(null) instanceof String s) {
                     return matches(pattern, s);
                 }
             }
-            case "String.contains" -> {
+            case STRING_CONTAINS -> {
                 // contains(sub, s): the string being searched is the last argument (spec §pipe)
                 if (args.size() == 2
                         && eval(args.get(0)).orElse(null) instanceof String sub
