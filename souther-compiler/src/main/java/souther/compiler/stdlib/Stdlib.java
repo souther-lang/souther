@@ -2,6 +2,7 @@ package souther.compiler.stdlib;
 
 import souther.compiler.Reserved;
 import souther.compiler.ast.Hir;
+import souther.compiler.core.Core;
 import souther.compiler.core.Kernel;
 import souther.compiler.core.KernelSignature;
 import souther.compiler.core.KernelSignatures;
@@ -438,6 +439,14 @@ public final class Stdlib {
             Map<String, ValueName.Stdlib> named = new LinkedHashMap<>(operations);
             SUGARED.forEach(sugar -> named.put(sugar.written().qualified(), sugar.written()));
             Set<String> published = published(sugars.keySet(), named);
+            // The walk the language names is one this library has to have. An output lowers a call
+            // to it as a loop and says which operation that is by naming it; a library that
+            // published its walk as something else would leave that output emitting a call for the
+            // one thing the language guarantees is a loop, and nothing would say so.
+            if (!helpers.containsKey(Core.THE_WALK.qualified())) {
+                throw new IllegalStateException("the language's walk is `" + Core.THE_WALK
+                        + "` and this library publishes no such body");
+            }
             return new Stdlib(
                     Collections.unmodifiableMap(new LinkedHashMap<>(entries)),
                     Collections.unmodifiableSet(new LinkedHashSet<>(privateNames)),

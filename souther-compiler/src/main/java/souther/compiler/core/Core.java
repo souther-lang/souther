@@ -194,6 +194,31 @@ public sealed interface Core {
          */
         record OfDeclaration(ReachName name) implements Reached {
 
+            /**
+             * What running this call means: a method of the emitting module, or a behavior.
+             *
+             * <p>Derived and not held. What a call reaches is on the reference already, and the two
+             * kinds of thing a residual call can reach are the arms this refuses to be built with —
+             * so an emitter reading this is reading the reference rather than a second answer that
+             * could come to disagree with it.
+             *
+             * <p>Not a property of a {@link ValueName}. Whether the library implements an operation
+             * as a helper, an intrinsic or a builtin is the library's own business and is
+             * deliberately not on the name; what holds here is narrower — that a call this
+             * compilation kept standing over a library operation is a call to a method, because a
+             * kernel would be {@link OfKernel} and anything else would have been expanded. That is
+             * true of this phase and is said at this phase.
+             */
+            public Reaches reaches() {
+                return switch (name.denotes()) {
+                    case ValueName.Helper helper -> new Reaches.AHelper(helper);
+                    case ValueName.Stdlib operation -> new Reaches.AHelper(operation);
+                    case ValueName.Behavior behavior -> new Reaches.ABehavior(behavior);
+                    // Refused at construction, so there is no fourth answer to give.
+                    default -> throw new IllegalStateException("refused at construction: " + name);
+                };
+            }
+
             public OfDeclaration {
                 switch (name == null ? null : name.denotes()) {
                     case ValueName.Helper _, ValueName.Stdlib _, ValueName.Behavior _ -> { }
@@ -244,6 +269,68 @@ public sealed interface Core {
             }
         }
     }
+
+    /**
+     * What a call to a declaration runs, for whoever has to emit it.
+     *
+     * <p>The two kinds of thing a call that survived to here can reach, and the division an emitter
+     * writes its arms over. Not provenance: a module's own helper, another module's and a library
+     * operation written in Souther are one answer, because one thing is emitted for all three — a
+     * call to a method the emitting module holds. What differs between them is where the
+     * declaration came from, which is a different question and is asked of the declaration.
+     *
+     * <p>Read off a call rather than stored on one ({@link Reached.OfDeclaration#reaches}), so this
+     * cannot come to say something the reference does not.
+     *
+     * <p>Sealed, and the switches over it carry no {@code default}: a third kind of callee is a
+     * compile error at every emitter rather than a call one of them quietly does nothing for.
+     */
+    sealed interface Reaches {
+
+        /** The declaration reached. */
+        ValueName declaration();
+
+        /**
+         * A method the emitting module holds, which is where this program's recursions live.
+         *
+         * <p>{@code declaration} is what the module holds a copy of, and which module wrote it is
+         * that identity's to say — {@code souther.list} for an operation reached as
+         * {@code List.foldFrom}. Where the module holds the method is not here: that follows from
+         * how the call reaches it, and a reader emitting one works it out from the reference.
+         */
+        record AHelper(ValueName declaration) implements Reaches { }
+
+        /**
+         * A behavior, whose implementation is somewhere else — another module's, or supplied from
+         * outside this program altogether.
+         *
+         * <p>Where the value of it stands when this call runs is the emitter's own question: a
+         * field of the class being emitted, a parameter, a slot. That is a fact about how one
+         * output lays a frame out and is no part of what the call reaches.
+         */
+        record ABehavior(ValueName.Behavior behavior) implements Reaches {
+
+            @Override
+            public ValueName declaration() {
+                return behavior;
+            }
+        }
+    }
+
+    /**
+     * The one walk the language has: the recursion every fold in a program is.
+     *
+     * <p>Written in Souther in {@code souther.list} and published under {@code List}, so a call to
+     * it is a call to a method like any other — except where an output lowers it as a loop, which
+     * is a decision about how to emit this operation and needs to say which operation that is.
+     *
+     * <p>Here, in what the language's own vocabulary is written in, and not on either side that
+     * reads it. Named by the emitter it would be the emitter deciding what the library publishes
+     * its walk as; reached through the library it would be an output asking the library questions
+     * of its own, which is the arrangement {@code TheBackendEmitsAgainstTheLanguageItWasHanded}
+     * keeps closed. The library is held to publishing it when the library is built.
+     */
+    ValueName.Stdlib THE_WALK = ValueName.Stdlib.operation("List", "foldFrom");
 
     /**
      * An operation this compiler emits, which no source names and no module declares.

@@ -62,10 +62,6 @@ final class CodegenContext {
     final boolean exposeAll;
     /** Base names the module exposes (only these are public when {@link #exposeAll} is false). */
     final Set<String> exposed;
-    /** The module's recursive helpers, lowered to static methods on {@code $Fns} (spec §fn-declaration), keyed
-     * by helper name. A call to one is an {@code invokestatic}, not an inlined body. */
-    final Map<String, Hir.FnDef> emittedHelpers;
-
     /**
      * What a call this module leaves standing is typed against, by the name it is reached by.
      *
@@ -366,7 +362,7 @@ final class CodegenContext {
     CodegenContext(String pkg, Symbols symbols, KernelSignatures kernels,
                    Map<String, List<GeneratedClass>> caseToSums,
                    Map<String, String> typePackage, boolean exposeAll, Set<String> exposed,
-                   Map<String, Hir.FnDef> emittedHelpers, Map<String, Type> standingCalls) {
+                   Map<String, Type> standingCalls) {
         this.pkg = pkg;
         this.symbols = symbols;
         this.kernels = kernels;
@@ -374,7 +370,6 @@ final class CodegenContext {
         this.typePackage = typePackage;
         this.exposeAll = exposeAll;
         this.exposed = exposed;
-        this.emittedHelpers = emittedHelpers;
         this.standingCalls = standingCalls;
     }
 

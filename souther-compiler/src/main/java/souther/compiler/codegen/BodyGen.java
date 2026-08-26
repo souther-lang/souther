@@ -990,7 +990,8 @@ final class BodyGen {
          *  became. What it decides is whether a value being constructed can stay on the stack while its
          *  fields are built. */
         private static boolean walksInside(Core e) {
-            if (e instanceof Core.Call c && (c.name().equals(FOLD)
+            if (e instanceof Core.Call c
+                    && ((c.fn() instanceof Core.Reached r && Core.THE_WALK.equals(r.denotes()))
                     || c.fn() == Core.Emitted.BUILD_LIST || c.fn() == Core.Emitted.BUILD_MAP)) {
                 return true;
             }
@@ -1229,18 +1230,34 @@ final class BodyGen {
                 putIntoMap(call);
                 return;
             }
-            if (ctx.emittedHelpers.containsKey(call.name())) {
-                // The one loop the language has is emitted where it stands, not called.
-                if (!call.name().equals(FOLD) || !folded(call)) {
-                    recursiveHelperCall(call);
-                }
-            } else if (behaviorOf(call) != null && reqNames.contains(behaviorOf(call))) {
-                requiredCall(call);
-            } else if (behaviorOf(call) != null
-                    && ctx.calleeSig(behaviorOf(call)) != null) {
-                behaviorCall(call);
-            } else {
+            // What running this call means, asked of the call. Matched against the tables this
+            // emitter happens to hold, the answer was whichever table the rendered name hit first —
+            // and a helper the module holds under a name this call renders differently was no
+            // helper at all.
+            if (!(call.fn() instanceof Core.Reached.OfDeclaration reached)) {
                 throw new IllegalStateException("unknown function `" + call.name() + "`");
+            }
+            switch (reached.reaches()) {
+                case Core.Reaches.AHelper _ -> {
+                    // The one loop the language has is emitted where it stands, not called.
+                    if (!Core.THE_WALK.equals(reached.denotes()) || !folded(call)) {
+                        recursiveHelperCall(call);
+                    }
+                }
+                // Which of the two it is, is where the value of the behavior stands in this frame:
+                // one supplied to the class being emitted is read off it, one implemented elsewhere
+                // is called. Neither is a question about what the call reaches.
+                case Core.Reaches.ABehavior(ValueName.Behavior behavior) -> {
+                    if (reqNames.contains(behavior)) {
+                        requiredCall(call);
+                    } else if (ctx.calleeSig(behavior) != null) {
+                        behaviorCall(call);
+                    } else {
+                        throw new IllegalStateException("`" + call.name() + "` reaches the behavior "
+                                + behavior + ", which is neither supplied to this class nor"
+                                + " implemented by a module this one was told about");
+                    }
+                }
             }
         }
 
@@ -1467,10 +1484,6 @@ final class BodyGen {
             code.invokestatic(ctx.cd(new GeneratedClass.Helpers(pkg)), CodegenContext.helperMethod(call.name()),
                     MethodTypeDesc.of(CD_Object, params));
         }
-
-        /** The self-hosted walk of {@code souther.list}: a recursive helper everywhere else, and the
-         *  loop every fold in a program is, which is why the emitter knows its name. */
-        private static final String FOLD = "List.foldFrom";
 
         /**
          * {@code divide}/{@code remainder} on Int: a zero divisor takes the DivisionByZero case,
