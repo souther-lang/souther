@@ -149,7 +149,7 @@ The compiler suite and every example pass under the flag (`mvn test -DargLine="-
 
 The VS Code extension lives in [souther-lang/souther-vscode](https://github.com/souther-lang/souther-vscode) and is published to the Visual Studio Marketplace and Open VSX. It bundles the language server and fetches a Java 25 runtime by itself when the machine does not already have one, so installing it and opening a `.sou` file is enough. It gives diagnostics, the document outline, hover, go-to-definition, find-references, rename, completion, quick-fix code actions, formatting, and semantic tokens.
 
-The server is `souther-lsp`, a self-contained jar that speaks LSP over stdio, attached to every release here. Other editors can launch it with `java -Xss4m -jar souther-lsp.jar`. The stack flag is the compiler's supported one, not a tuning knob: what a definition may say is bounded, and a source at that bound needs about a megabyte to walk. The `souther` binary sets it for itself. Formatting is also on the command line: `souther fmt <file.sou>` prints the canonical form, `-w` rewrites in place, and `--check` exits non-zero when a file is not formatted, printing each difference as the rule it answers to, where in your own source it is, and what the two forms write there.
+The server is `souther-lsp`, a self-contained jar that speaks LSP over stdio, attached to every release here. Other editors can launch it with `java -Xss4m -jar souther-lsp.jar`. Where the `souther` binary is already on the path, `souther lsp` serves the same server and needs no jar path and no stack flag — this is what an agent harness takes, alongside `souther mcp`. The stack flag is the compiler's supported one, not a tuning knob: what a definition may say is bounded, and a source at that bound needs about a megabyte to walk. The `souther` binary sets it for itself. Formatting is also on the command line: `souther fmt <file.sou>` prints the canonical form, `-w` rewrites in place, and `--check` exits non-zero when a file is not formatted, printing each difference as the rule it answers to, where in your own source it is, and what the two forms write there.
 
 ## Documentation on the command line
 
@@ -233,7 +233,7 @@ Souther is deliberately small:
 
 It intentionally does not provide exceptions, `null`, mutable state, asynchronous execution, arbitrary JVM calls, type classes or higher-kinded types, a package manager, or a REPL. These omissions keep construction paths, value constraints, and outside-world dependencies tractable.
 
-Not yet implemented: incremental compilation, static invariant proofs, handwritten codec syntax, and JSON Schema / Wasm / JavaScript output. Generated classes carry `SourceFile` / `LineNumberTable` debug info, so a runtime stack trace (an invariant abort above all) points back to the `.sou` source line. An LSP server ships (`souther-lsp`); its name resolution is per-module, and workspace-wide (cross-module) resolution is future work.
+Not yet implemented: incremental compilation, static invariant proofs, handwritten codec syntax, and JSON Schema / Wasm / JavaScript output. Generated classes carry `SourceFile` / `LineNumberTable` debug info, so a runtime stack trace (an invariant abort above all) points back to the `.sou` source line. An LSP server ships (`souther-lsp`), resolving names over the workspace the editor announces.
 
 ## Details and examples
 

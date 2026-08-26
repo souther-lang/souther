@@ -31,6 +31,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.GeneratedRows;
 import souther.compiler.report.UnifiedDiff;
+import souther.lsp.LspServer;
 import souther.cli.init.InitCommand;
 
 import java.io.IOException;
@@ -157,6 +158,7 @@ public final class Main {
             case API -> () -> ApiCommand.run(rest, System.out, System.err);
             case JAPI -> () -> JapiCommand.run(rest, System.out, System.err);
             case MCP -> () -> mcpSubcommand(rest);
+            case LSP -> () -> lspSubcommand(rest);
             case HELP -> () -> helpSubcommand(rest);
         };
     }
@@ -445,6 +447,24 @@ public final class Main {
             return 2;
         }
         return McpServer.serve(System.in, System.out);
+    }
+
+    /**
+     * {@code souther lsp}: serves the language server over LSP stdio, and takes no arguments for
+     * the reason {@code mcp} takes none.
+     *
+     * <p>The same server an editor launches from the shaded jar, in this process. A protocol on
+     * stdio has the whole of stdout, so nothing this command line writes for a reader may be
+     * written under it, and the refusal above goes to stderr like every other one.
+     */
+    private static int lspSubcommand(String[] args) {
+        if (args.length > 0) {
+            System.err.println(Messages.get("cli.lsp.arguments",
+                    RenderOptions.asking(null).locale(), String.join(", ", args)));
+            System.err.println(Usage.of(CliCommand.LSP));
+            return 2;
+        }
+        return LspServer.serve(System.in, System.out);
     }
 
     /**

@@ -514,6 +514,31 @@ The cursor is this server's to read, so it goes out as it came in: where it poin
 against the answer it is carried back to, and one measured against a different answer is refused
 rather than resumed at.
 
+<!-- souther-section: lsp -->
+## lsp
+
+```
+souther lsp
+```
+
+Serves the language server over the Language Server Protocol on stdio: diagnostics, the document
+outline, hover, go-to-definition, find-references, name completion, quick-fix code actions, rename,
+formatting, code lenses and semantic tokens. Names are resolved over the workspace the client
+announces, so a definition, a reference and a rename reach the module that imported the name and
+the module that exposed it alike.
+
+The same server the shaded `souther-lsp.jar` runs, in this command line's own process. An editor
+that already has this compiler on the path has the server too, and cannot end up running one built
+from a different release than the compiler its build uses.
+
+An agent harness that speaks both protocols takes this alongside `souther mcp`, and what each
+answers is a different question. `mcp` says what Souther is — the specification, the stdlib surface,
+a dependency's API — and answers it without a source file. `lsp` says what one source means, and
+answers nothing without one.
+
+Nothing but the protocol goes to stdout, since the protocol has all of it; a refusal to start goes
+to stderr.
+
 <!-- souther-section: help -->
 ## help
 

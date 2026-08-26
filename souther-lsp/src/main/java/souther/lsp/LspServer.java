@@ -22,6 +22,8 @@ import souther.lsp.transport.MessageConnection;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -43,6 +45,8 @@ public final class LspServer {
 
     /** Whether this client said it reads completion placeholders. False until it says so. */
     private boolean readsSnippets;
+    /** Whether this client sent the {@code shutdown} request. What the exit code answers. */
+    private boolean askedToShutDown;
     private final Workspace workspace = new Workspace();
     private int nextRequestId = 1;
 
@@ -51,11 +55,31 @@ public final class LspServer {
     }
 
     public static void main(String[] args) {
-        new LspServer(new MessageConnection(System.in, System.out)).run();
+        System.exit(serve(System.in, System.out));
     }
 
-    /** Reads and dispatches messages until end of input or an {@code exit} notification. */
-    public void run() {
+    /**
+     * Serves one session over the given streams and returns what a command line exits with.
+     *
+     * <p>The entry point a caller that is not a {@code java -jar} line uses. {@code souther lsp}
+     * launches this server in the command line's own process, so what starts a session cannot be a
+     * {@code main} that owns the exit: a method returning the code leaves that decision where the
+     * process is, which is one level up from here either way.
+     *
+     * <p>What the code says is whether the client shut the server down before it went: the protocol
+     * has a session end on it, and a session that stopped without one stopped for a reason nobody
+     * here can name. {@code exit} after {@code shutdown} is zero, and so is a client that closed the
+     * stream once it had shut the server down; anything else is one.
+     */
+    public static int serve(InputStream in, OutputStream out) {
+        return new LspServer(new MessageConnection(in, out)).run();
+    }
+
+    /**
+     * Reads and dispatches messages until end of input or an {@code exit} notification, and answers
+     * with the code the protocol asks the process to end under.
+     */
+    public int run() {
         String message;
         while ((message = conn.read()) != null) {
             JsonNode m;
@@ -81,9 +105,10 @@ public final class LspServer {
                 continue;
             }
             if (stop) {
-                return;     // exit
+                break;      // exit
             }
         }
+        return askedToShutDown ? 0 : 1;
     }
 
     /** Replies to a request the server could not answer. A notification (no id) has no reply. */
@@ -156,7 +181,16 @@ public final class LspServer {
             case CODE_LENS -> { respond(id, codeLenses(params)); yield false; }
             case RENAME -> { respond(id, rename(params)); yield false; }
             case FORMATTING -> { respond(id, formatting(params)); yield false; }
-            case SHUTDOWN -> { respond(id, null); yield false; }
+            // Only as the request it is. A `shutdown` written as a notification asked nothing, so
+            // there is nothing to reply to and nothing the exit code can hold the client to; the
+            // session still stops, because a client that wrote it is leaving either way.
+            case SHUTDOWN -> {
+                if (id != null && !id.isNull()) {
+                    askedToShutDown = true;
+                    respond(id, null);
+                }
+                yield false;
+            }
             case EXIT -> true;
         };
     }

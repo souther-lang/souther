@@ -28,6 +28,14 @@
             <groupId>org.souther-lang</groupId>
             <artifactId>souther-runtime</artifactId>
         </dependency>
+        <!-- `souther lsp` serves the language server from this command line rather than from a
+             second launcher, so an editor that has the compiler has the server. The plain jar, not
+             the `all` one an editor downloads: that is this module's own dependencies again, and
+             the uber jar this build writes bundles them once. -->
+        <dependency>
+            <groupId>org.souther-lang</groupId>
+            <artifactId>souther-lsp</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
@@ -68,10 +76,11 @@
             </resource>
         </resources>
         <plugins>
-            <!-- The `*IT` tests run the shaded jar itself, after `package` has produced it. What
-                 they cover is what only packaging decides: that the specification and the doc sets
-                 are inside the artifact, and that two jars' set registries were merged rather than
-                 one replacing the other. -->
+            <!-- The `*IT` tests run the shipped artifacts themselves, after `package` has produced
+                 them. What they cover is what only packaging decides: that the specification and
+                 the doc sets are inside the artifact, that two jars' set registries were merged
+                 rather than one replacing the other, and that the language server this module
+                 depends on survived being shaded and reached the prepended launcher. -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-failsafe-plugin</artifactId>
@@ -79,6 +88,7 @@
                 <configuration>
                     <systemPropertyVariables>
                         <souther.jar>${project.build.directory}/souther.jar</souther.jar>
+                        <souther.binary>${project.build.directory}/souther</souther.binary>
                     </systemPropertyVariables>
                 </configuration>
                 <executions>
