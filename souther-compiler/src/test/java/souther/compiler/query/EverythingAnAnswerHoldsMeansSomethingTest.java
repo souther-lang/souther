@@ -40,9 +40,15 @@ class EverythingAnAnswerHoldsMeansSomethingTest {
     /**
      * A module the compiler has something to say about.
      *
-     * <p>An unused import and nothing else wrong with it. What is wanted is an answer whose reports
-     * are not empty, so the smallest thing that puts one there is what is written: a model with an
-     * error in it would stop the compile short of the answers this is about.
+     * <p>What is wanted is an answer whose reports are not empty, and a warning rather than an error
+     * is what puts one there without taking anything else away: a module with a mistake in it is
+     * still answered about, and it is answered about less — the questions past the mistake come back
+     * absent, and the places they hold go unvisited. So the model is one nothing is wrong with except
+     * a name it brought in and never used.
+     *
+     * <p>Which diagnostic it is does not matter, and the register says so: what a report holds sits
+     * in the half of an answer every answer has, so it is one place whichever question happened to
+     * speak.
      */
     private static final String SPOKEN_ABOUT = """
             module m.spoken
@@ -116,8 +122,8 @@ class EverythingAnAnswerHoldsMeansSomethingTest {
                             each.why() + " " + key.getClass().getSimpleName() + each.at()
                                     + " in " + scenario));
                     for (Divergence each : walk.found()) {
-                        String place = key.getClass().getSimpleName() + each.at() + " "
-                                + each.cause();
+                        String place = each.at().place(key.getClass().getSimpleName(),
+                                each.cause());
                         if (each.kind() == Divergence.Kind.DIFFERENT_THINGS) {
                             differentThings.computeIfAbsent(place, _ -> new TreeSet<>())
                                     .add(scenario.toString());

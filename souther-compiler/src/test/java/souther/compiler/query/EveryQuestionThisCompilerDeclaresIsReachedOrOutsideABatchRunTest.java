@@ -84,9 +84,12 @@ class EveryQuestionThisCompilerDeclaresIsReachedOrOutsideABatchRunTest {
      * arranged, and this failing to find it is that change being noticed rather than a limit of the
      * scan.
      */
-    private static Set<String> declared() throws Exception {
+    private record Scanned(Set<String> declared, Set<String> unreadable) {}
+
+    private static Scanned scan() throws Exception {
         Path root = Path.of(Key.class.getProtectionDomain().getCodeSource().getLocation().toURI());
         Set<String> out = new TreeSet<>();
+        Set<String> unreadable = new TreeSet<>();
         try (Stream<Path> files = Files.walk(root.resolve("souther/compiler/query"))) {
             for (Path each : files.filter(p -> p.toString().endsWith(".class")).toList()) {
                 String name = root.relativize(each).toString()
@@ -96,7 +99,11 @@ class EveryQuestionThisCompilerDeclaresIsReachedOrOutsideABatchRunTest {
                 try {
                     type = Class.forName(name, false, Key.class.getClassLoader());
                 } catch (Throwable notLoadable) {
-                    continue;   // nothing to ask of a class this cannot hold
+                    // A class the scan compiled against and cannot hold. Said out loud: skipped, it
+                    // leaves the vocabulary smaller than it is and the arithmetic below adds up over
+                    // whatever is left.
+                    unreadable.add(name + " (" + notLoadable.getClass().getSimpleName() + ")");
+                    continue;
                 }
                 if (Key.class.isAssignableFrom(type) && !type.isInterface()
                         && !Modifier.isAbstract(type.getModifiers())) {
@@ -104,7 +111,25 @@ class EveryQuestionThisCompilerDeclaresIsReachedOrOutsideABatchRunTest {
                 }
             }
         }
-        return out;
+        return new Scanned(out, unreadable);
+    }
+
+    private static Set<String> declared() throws Exception {
+        return scan().declared();
+    }
+
+    /**
+     * The scan read every class it found.
+     *
+     * <p>Asked before the arithmetic is. A class the scan cannot load drops out of the left-hand
+     * side, and every equation below goes on balancing over a world one question smaller — which is
+     * the failure this whole test exists to prevent, arriving through the thing that counts.
+     */
+    @Test
+    void theScanReadEveryClassItFound() throws Exception {
+        assertEquals(Set.of(), scan().unreadable(),
+                "a class in the query package the scan could not load, so the vocabulary it counted"
+                        + " is smaller than the one that is there");
     }
 
     /** And every question this project's own operations put over the corpus. */

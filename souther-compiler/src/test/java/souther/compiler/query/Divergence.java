@@ -220,7 +220,7 @@ record Divergence(Locus at, String cause, Divergence.Kind kind) {
                 for (int i = 0; i < length; i++) {
                     whole &= at(java.lang.reflect.Array.get(a, i),
                             java.lang.reflect.Array.get(b, i),
-                            path.then(new Locus.Step.ArrayElement()));
+                            path.then(new Locus.Step.Element()));
                 }
                 // An array compares by identity, so where the elements agree the caller's own
                 // check is what names it.
@@ -271,11 +271,11 @@ record Divergence(Locus at, String cause, Divergence.Kind kind) {
                         theirs = f.get(b);
                     } catch (ReflectiveOperationException | RuntimeException | Error _) {
                         stopped(Interruption.Why.A_FIELD_THAT_WOULD_NOT_OPEN,
-                                path.thenMemberOf(k, f.getName()));
+                                path.thenMember(f.getName()));
                         whole = false;
                         continue;
                     }
-                    whole &= at(mine, theirs, path.thenMemberOf(k, f.getName()));
+                    whole &= at(mine, theirs, path.thenMember(f.getName()));
                 }
             }
             return whole;

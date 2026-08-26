@@ -38,7 +38,7 @@ final class AnswerWalk {
 
         /** Which answer, where in it, and what — which is what a register of places is keyed by. */
         String place() {
-            return question + at + " " + offender;
+            return at.place(question, offender);
         }
     }
 
@@ -205,7 +205,7 @@ final class AnswerWalk {
             if (each.getClass().isArray()) {
                 boolean whole = true;
                 for (int i = 0; i < Array.getLength(each); i++) {
-                    whole &= at(Array.get(each, i), where.then(new Locus.Step.ArrayElement()));
+                    whole &= at(Array.get(each, i), where.then(new Locus.Step.Element()));
                 }
                 return whole;
             }
@@ -231,7 +231,7 @@ final class AnswerWalk {
                         whole = false;
                         continue;
                     }
-                    whole &= at(held, where.thenMemberOf(at, field.getName()));
+                    whole &= at(held, where.thenMember(field.getName()));
                 }
             }
             return whole;

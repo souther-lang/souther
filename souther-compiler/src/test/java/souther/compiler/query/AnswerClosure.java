@@ -98,7 +98,8 @@ final class AnswerClosure {
             }
         }
 
-        /** The place, as both detectors write one. */
+        /** The place, as both detectors write one. A question of {@code *} is a place every
+         *  answer has rather than a place in one. */
         String place() {
             return question + at + " " + offender;
         }
@@ -197,7 +198,7 @@ final class AnswerClosure {
             new Known(new Identity("Checked", ".value",
                     "souther.compiler.query.Bodies$Elaborated", Nature.NOT_READ,
                     Cause.UNCLASSIFIED), BOTH_EVERYWHERE, "as above"),
-            new Known(new Identity("UnusedImports", ".reports[].diagnostic",
+            new Known(new Identity("*", ".reports[].diagnostic",
                     "souther.compiler.diag.Diagnostic", Nature.VALUE,
                     Cause.MISSING_VALUE_EQUALITY),
                     Set.of(walked(Scenario.A_MODULE_SPOKEN_ABOUT),
@@ -205,7 +206,10 @@ final class AnswerClosure {
                     "a report says what this compile found, and two compiles that found the same "
                             + "thing found the same thing — so what it wants is equality over what "
                             + "it says. Reached because an answer is its value and its reports "
-                            + "together, which is what the store compares to stop work"));
+                            + "together, which is what the store compares to stop work, and named "
+                            + "without a question because the reports are the half every answer "
+                            + "has: which question happens to have said anything is the scenario's "
+                            + "and not this defect's"));
 
     /** Every place written down here, whichever detector or scenario meets it. */
     static Set<String> places() {
