@@ -310,7 +310,7 @@ class ARowIsNotHandedToAnAnswerFromAnotherBuildTest {
         return ExampleVerifier.check(
                 c.db().ask(new Shapes.Prepared(name)).value().forExamples(),
                 Scopes.derived(c.db(), name).value(),
-                c.db().ask(new Bodies.Signatures(name)).value(),
+                c.db().ask(new Bodies.Reachable(name)).value(),
                 artifact,
                 declared,
                 c.db().ask(new Bodies.Requirements(name)).value(),
@@ -319,7 +319,8 @@ class ARowIsNotHandedToAnAnswerFromAnotherBuildTest {
                 Deadline.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis()),
                 EvaluationPolicy.DEFAULT,
                 answering,
-                CheckedEnsures.executable(c.db().ask(new Bodies.Contracts(name)).value()));
+                CheckedEnsures.executableOf(
+                        c.db().ask(new Bodies.ReachableContracts(name)).value()));
     }
 
     /** The classes one build of {@code source} emits, read for what they were stamped with. */

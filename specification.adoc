@@ -2451,6 +2451,8 @@ behavior preApprove : (
 
 What is written is the name of a behavior whose *requirement set is not empty* (<<requirement-propagation>>) — one with no implementation (<<injected-behavior>>), or one whose own `+let+` declares `+depends on+` — declared in this module or imported from another (<<modules>>). Write it if the `+let+` uses that name. Even when used indirectly by passing it to a helper `+let+`, the one passing is you, so you write it.
 
+Two entries of one clause MUST go by different bare names, however they are written and whichever modules declare them (<<e1011>>). What the clause decides is the implementing `+let+`'s trailing parameters, and each is named after the entry it takes; `+depends on up.now, other.now+` names two behaviors and leaves no `+let+` that could be written for them. Which behaviors they are is settled by resolving the names, so the same pair under an alias is refused the same way.
+
 A behavior with an empty requirement set is not written here. It depends on nothing, so there is nothing to inject, and it is called directly (<<calling-a-behavior>>). Writing one in `+depends on+` is rejected where the clause is written (<<e1607>>), as is a `+>->+` composition — whose requirements are inferred from its stages and are not written, so requiring one would make a caller declare a set that changes when an upstream stage changes — and as is a name that is no behavior in scope.
 
 Only a simple behavior whose implementation is Souther's may have `+depends on+`. An injection target does not write it: it is the leaf of the dependency, and its name being listed is itself the statement of dependency. Writing the clause is what says the implementation is Souther's, so a behavior that writes it and has no `+let+` yet is one nobody has written rather than an injection target (<<unwritten-behavior>>). A `+>->+` composition does not write it either: it is decided by the union over stages, readable from the stages (<<composition-with-requirements>>).
@@ -3205,6 +3207,10 @@ When a row does not hold, the diagnostic (<<e1905>>) shows what the behavior pro
 
 [[example-dependency-has-a-usable-fake]]Every dependency required to evaluate a row MUST have a usable fake: one supplied, by a `+with+` on the row or a `+fake+` table, and one whose fixture builds as a value of what that dependency answers with.
 
+[[a-stand-in-names-a-behavior]]A `+fake+` and a `+with+` MUST name a behavior in scope (<<e1932>>). Which behavior is settled by resolving the name, as it is wherever a behavior is named (<<qualified-reference>>), so what a table stands in for is decided once and not worked out again from its spelling.
+
+What that behavior is *implemented* by is not required to be anything. A stand-in is a written statement about what a behavior answers, and it stays one when the behavior it names turns out to have a body: a model written example-first passes through a state where the `+let+` has not arrived, and the table beside the rows goes on being read against them afterwards (<<stand-in-and-recorded-row-agree>>). A table nothing depends on and no row records an answer for is built all the same, because it is written.
+
 [[fake-answers-the-inputs-it-is-asked]]A `+fake+` table MUST answer every input it is asked for, by listing it or by carrying a `+_+` default row.
 
 [[fake-table-builds]]Building a `+fake+` table MUST come to a value within the budget and the wait it is held to; where it does not, the table states nothing that was checked.
@@ -3231,7 +3237,18 @@ fake findManager
     | _                   -> EmployeeId("unknown")
 ----
 
-Each dependency of the target must have a fake — a `+with+` on the row or a `+fake+` table — or it is a compile error (<<e1908>>). A fake, like an example, is written inline or in an attached `+examples for+` file, and is local to its module. `+fake+` is a contextual keyword.
+Each dependency of the target must have a fake — a `+with+` on the row or a `+fake+` table — or it is a compile error (<<e1908>>). A fake, like an example, is written inline or in an attached `+examples for+` file. `+fake+` is a contextual keyword.
+
+The stand-in is local to the module that writes it; the behavior it stands in for need not be. A module declaring a requirement, another importing it and carrying it through its own `+depends on+`, and a `+fake+` where that module's rows are run is one construct, and the fake names the dependency the way a `+depends on+` clause names it: bare where the scope settles it, or qualified through the module that declares it (<<qualified-reference>>).
+
+[,souther]
+----
+fake catalog.currentPrice
+    | (Sku("a-1")) -> Price(10.00m)
+    | _            -> Price(0.00m)
+----
+
+Writing one does not put a fake into the other module: nothing is added to what that module declares or emits, and no other module sees this table. What the name settles is which behavior is stood in for, so a module declaring a behavior of the same spelling as an imported one has two, and a stand-in written here answers the one it names. A row of the table is held to what the *declaring* module states about that behavior (<<e1929>>), by the check that module emitted.
 
 A `+fake+` table is built because it is written. Each table that answers for a dependency — the first one written for it (<<example-pending>>) — is built once, where it is written, whether or not any row reads it: a module may write a table nothing depends on and no row records an answer for, and what is wrong with such a table is wrong wherever it is read from. A table with a row that will not build is an error at the fake (<<e1908>>), said once however many rows would have read it; a table that does not finish being built is a warning there (<<e1921>>). A row that would have stood in with a table that will not build does not run, and says nothing of its own about the table.
 
@@ -3241,6 +3258,8 @@ A composition's dependencies are its stages' (<<composition-with-requirements>>)
 === A row waits for the implementation it is about
 
 [[stand-in-and-recorded-row-agree]]A stand-in and a recorded row MUST NOT state different answers for one input. Which of the two the model is to be held to is not readable from the text, so neither is named as the right one.
+
+The two are statements about a behavior and need not be written in one module. A row records what a behavior owes where that behavior is declared (<<example-evaluable>>), and a table stands in for it where the rows it is run against are — so a requirement carried across a module boundary has its two statements in two files of two modules, and they are read against each other all the same. Which module reads them is the one that wrote the stand-in: it is what added the second statement, and its own reading already carries the classes of every module it reaches, so both values are built in one execution and compared by the language's own equality (<<equality>>). The report marks the recorded row and points at the stand-in, wherever each is written.
 
 [[stand-in-comparison-completes]]Reading a `+fake+` against the rows recorded for that behavior MUST come to a value, so that what the two state was compared. Being told nothing was found and being told nothing was compared are different answers.
 
@@ -6425,6 +6444,21 @@ A warning, and only where the build asked for a bar that refuses over it (<<a-ba
 Told apart from <<e1915>> by what is missing. That one is a case the type declares and no row applies the behavior to; this is a class the model's rules divide the position into and no row's value falls in. The same `+C+` can be both, and one row closes both — which is why they are two findings rather than one: a position with no sum has classes, and a sum an invariant narrows has fewer classes than cases.
 
 Not raised for a class a measurement could not place a row in. A row whose value at the position could not be read leaves the class undecided rather than uncovered, and an author told to write a row may already have written one.
+
+[#e1932]
+=== A stand-in does not name a behavior
+
+[,text]
+----
+`quotes` is no behavior in scope, so there is nothing for this to stand in for.
+Hint: Declare it here or import it.
+----
+
+Emitted where a `+fake+` or a `+with+` names something no behavior in scope answers to (<<example-fakes>>). The name is read as a behavior is read anywhere else, so a dependency another module declares is admitted, and a behavior of that spelling declared here is not mistaken for it (<<qualified-reference>>).
+
+Told apart from <<e1908>> by which side is missing. There a row wants a dependency and nothing supplies it; here something was supplied and it names nothing to supply. The fix differs, so the two do not share a code.
+
+What the named behavior is implemented by is not asked. A stand-in is a statement about what that behavior answers, and a table written for one that has a body states what it states (<<example-pending>>).
 
 [#e2001]
 === A helper does not carry the termination guarantee it claims

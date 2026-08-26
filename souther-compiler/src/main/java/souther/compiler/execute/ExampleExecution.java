@@ -9,6 +9,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.examples.Deadline;
 import souther.compiler.examples.EvaluationPolicy;
 import souther.compiler.source.SourceId;
+import souther.compiler.types.ValueName;
 
 import java.util.List;
 import java.util.Map;
@@ -41,20 +42,24 @@ public final class ExampleExecution {
 
     private final Prepared prepared;
     private final Symbols symbols;
-    private final Map<String, Sig> signatures;
+    private final Map<ValueName.Behavior, Sig> signatures;
     private final Map<String, List<BehaviorRequirement>> requirements;
     private final Map<String, Hir.FnDef> definitions;
-    private final Map<String, Contract> contracts;
+    private final Map<ValueName.Behavior, Contract> contracts;
     private final Deadline deadline;
     private final EvaluationPolicy policy;
+    private final Map<String, ExampleExecution> declaring;
 
-    public ExampleExecution(Prepared prepared, Symbols symbols, Map<String, Sig> signatures,
+    public ExampleExecution(Prepared prepared, Symbols symbols,
+                            Map<ValueName.Behavior, Sig> signatures,
                             Map<String, List<BehaviorRequirement>> requirements,
                             Map<String, Hir.FnDef> definitions,
-                            Map<String, Contract> contracts,
-                            Deadline deadline, EvaluationPolicy policy) {
+                            Map<ValueName.Behavior, Contract> contracts,
+                            Deadline deadline, EvaluationPolicy policy,
+                            Map<String, ExampleExecution> declaring) {
         this.prepared = prepared;
         this.symbols = symbols;
+        this.declaring = declaring;
         // Taken as they are and not copied. Each is another question's settled answer, and this is
         // put together afresh every time it is asked for — it cannot be memoised, because a
         // `Symbols` closes over the store it resolves against — so copying four maps here would be
@@ -87,9 +92,35 @@ public final class ExampleExecution {
         return symbols;
     }
 
-    /** The shape of each of the module's behaviors. */
-    public Map<String, Sig> signatures() {
+    /**
+     * The shape of every behavior the rows may name: this module's own, and the ones it borrows.
+     *
+     * <p>Keyed by the declaration and not by the spelling, because a stand-in may name a dependency
+     * another module declares and this module may declare one of that name too.
+     */
+    public Map<ValueName.Behavior, Sig> signatures() {
         return signatures;
+    }
+
+    /**
+     * The reading of each module this one writes a stand-in for a behavior of.
+     *
+     * <p>What a {@code fake} states and what the rows recorded for that behavior state are two
+     * statements about one thing, and the second lives where the behavior is declared — a row names
+     * a behavior of its own module, and a stand-in may name another module's. So reading the two
+     * against each other takes both, and the second is here.
+     *
+     * <p>The rows of the other module as that module writes them: its own values and its own names,
+     * because a fixture is read in the scope it was written in. What is not taken from it is the
+     * execution — the values are built and compared in this module's, so nothing crosses a loader
+     * and the comparison is the language's own equality rather than a second one that would agree
+     * with it until a value's identity mattered.
+     *
+     * <p>One level. What the other module borrows is that module's own reading to make, and
+     * following it further would read a statement nothing here writes about.
+     */
+    public Map<String, ExampleExecution> declaring() {
+        return declaring;
     }
 
     /** What each behavior needs supplied to it. */
@@ -104,7 +135,7 @@ public final class ExampleExecution {
 
     /** What each behavior declares of what it answers, which is what holds a row's values to
      *  something. */
-    public Map<String, Contract> contracts() {
+    public Map<ValueName.Behavior, Contract> contracts() {
         return contracts;
     }
 

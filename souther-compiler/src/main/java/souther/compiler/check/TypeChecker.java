@@ -354,6 +354,13 @@ public final class TypeChecker {
                     // A name nothing answered is no name for another to be a duplicate of, and it
                     // was reported where it is written.
                     if (req.answered() instanceof Hir.Var.Denoting named) {
+                        // The bare name, and deliberately not the declaration. Two dependencies are
+                        // two behaviors whatever modules declared them, and the clause is still
+                        // refused when they go by one spelling: what it decides is the implementing
+                        // `let`'s trailing parameters, which are named after these (§depends-on), so
+                        // a pair here that shared a spelling would be a `let` taking one name twice.
+                        // Comparing the declarations would admit `up.now, other.now` and leave that
+                        // `let` unwritable.
                         required.add(named.denotes().name());
                     }
                 }

@@ -3,7 +3,8 @@
 // Written for this compiler rather than taken from a model that had its own reasons, so what it
 // reaches is chosen. This file holds the shapes and the arithmetic over them; conformance.shipping
 // holds the behaviors that are composed and faked, and names everything in Japanese.
-module conformance.catalog exposing ( Sku, Price, Weight, Rate, Item, Discounted, TooCheap )
+module conformance.catalog exposing
+    ( Sku, Price, Weight, Rate, Item, Discounted, TooCheap, 現価を引く )
 
 // Imported for the bare spelling below. What another module declares is reachable qualified whether
 // or not it is imported, so an entry here has to be written bare somewhere to earn its place.
@@ -37,6 +38,12 @@ data Rate = Decimal
 behavior discount : (item: Item, rate: Rate) -> Discounted | TooCheap
     constructs Discounted, Price
     ensures Discounted -> value.sku == item.sku
+
+// この catalog が自分では答えられないもの。ここにあるのは品目が何であるかで、いま市場でいくらな
+// のかはここにない——それを見ているのは外側で、この module には書きようがない。だから宣言だけを
+// 置いて実装は注入される。台帳が shipping の外にあるのと同じ形が、こちら側にもひとつある。
+behavior 現価を引く : (品目: List<Sku>) -> Price
+    constructs Price
 
 // A helper the behavior reaches. `private` is not written on it: that modifier is a core privilege
 // the reserved namespace holds, and a model outside it has no way to write one.
@@ -79,3 +86,10 @@ example discount
         (Item { sku = Sku("a-4"), price = Price(0.00m), weight = Weight(1), note = None },
             Rate(0.10m))
         -> TooCheap
+
+// 注入 behavior の行。実装は外から来るが、何を答えるべきかはここで述べられる。これらは記録され
+// るだけで走らない。conformance.shipping が書く `fake` は別の module の別の statement であって、
+// これらと比べられはしない。
+example 現価を引く
+    | "a basket of one is worth what that one is worth" : ([ Sku("a-1") ]) -> Price(1000.00m)
+    | "an empty basket is worth nothing" : ([]) -> Price(0.00m)

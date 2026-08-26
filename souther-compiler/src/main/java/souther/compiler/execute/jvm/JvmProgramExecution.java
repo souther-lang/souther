@@ -23,7 +23,9 @@ import souther.compiler.observe.TableBuild;
 import souther.compiler.source.SourceId;
 
 import java.math.BigDecimal;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -90,9 +92,18 @@ public final class JvmProgramExecution implements ProgramExecution {
         if (image == null) {
             return new StatementReading.NotReadHere();
         }
+        // The rows of the modules this one stands in for a behavior of, as those modules write
+        // them. Their executions are not taken: the values are built on this image's loader, which
+        // carries every module this one reaches, so the two sides of a comparison are of one
+        // execution and the equality that decides it is the language's own.
+        Map<String, ExampleStatements.Declaring> declaring = new LinkedHashMap<>();
+        asked.declaring().forEach((name, reading) -> declaring.put(name,
+                new ExampleStatements.Declaring(reading.rows(), reading.symbols(),
+                        reading.definitions())));
         return new StatementReading.Read(ExampleStatements.disagreements(asked.rows(),
                 asked.symbols(), asked.signatures(), image.program().classes(), image.around(),
-                asked.definitions(), asked.deadline(), asked.policy(), asked.contracts()));
+                asked.definitions(), asked.deadline(), asked.policy(), asked.contracts(),
+                declaring));
     }
 
     @Override

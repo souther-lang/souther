@@ -2,6 +2,7 @@ package souther.compiler.examples;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -44,26 +45,23 @@ public final class ExampleProvisioning {
      *
      * @param onTheRow the {@code with}s written on the row; empty for a row not written yet
      */
-    public static Standin standingIn(List<Hir.With> onTheRow, String dependency,
+    public static Standin standingIn(List<Hir.With> onTheRow, ValueName.Behavior dependency,
                                      Prepared.Examples module) {
         for (Hir.With written : onTheRow) {
-            if (written.dep().equals(dependency)) {
+            if (dependency.equals(written.standsInFor())) {
                 return new Standin.OnTheRow(written);
             }
         }
-        for (Prepared.FakeTable table : module.fakes()) {
-            if (table.target().equals(dependency)) {
-                return new Standin.InTheModule(table);
-            }
-        }
-        return new Standin.Nothing();
+        Prepared.FakeTable table = module.standingInFor(dependency);
+        return table == null ? new Standin.Nothing() : new Standin.InTheModule(table);
     }
 
     /** Of {@code required}, the ones nothing stands in for, in the order they were required. */
-    public static List<String> unsupplied(List<Hir.With> onTheRow, List<String> required,
-                                          Prepared.Examples module) {
-        List<String> owed = new ArrayList<>();
-        for (String dependency : required) {
+    public static List<ValueName.Behavior> unsupplied(List<Hir.With> onTheRow,
+                                                      List<ValueName.Behavior> required,
+                                                      Prepared.Examples module) {
+        List<ValueName.Behavior> owed = new ArrayList<>();
+        for (ValueName.Behavior dependency : required) {
             if (standingIn(onTheRow, dependency, module) instanceof Standin.Nothing) {
                 owed.add(dependency);
             }

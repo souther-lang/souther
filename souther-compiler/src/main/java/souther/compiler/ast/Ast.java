@@ -229,16 +229,22 @@ public interface Ast {
      * evaluate an example of a behavior that {@code depends on} it. The rows form an input→output
      * table matched by value equality; a {@code _ -> out} row is the default when no input matches
      * (otherwise a miss is an error). A fake produces no run-time class (it is a proxy at evaluation).
+     *
+     * <p>The target is a name to be resolved and not a spelling to be looked up later. What it means
+     * is what the module's scope says a behavior of that spelling means, which is the same reading a
+     * {@code depends on} clause gets — so a dependency declared in another module is named here the
+     * way it is named there.
      */
-    record Fake(String target, List<FakeRow> rows, SourcePos pos) implements Ast {}
+    record Fake(Var target, List<FakeRow> rows, SourcePos pos) implements Ast {}
 
     /** One fake row: input argument expressions mapped to an output, or the default ({@code inputs}
      * null / {@code isDefault} true). */
     record FakeRow(List<Expr> inputs, Expr output, boolean isDefault, SourcePos pos) implements Ast {}
 
     /** {@code with <dep> = <value>} on an example row — a value fake for an injected dependency
-     * (a zero-argument behavior whose faked result is a constant). */
-    record With(String dep, Expr value, SourcePos pos) implements Ast {}
+     * (a zero-argument behavior whose faked result is a constant). The dependency is named as a
+     * {@link Fake}'s target is. */
+    record With(Var dep, Expr value, SourcePos pos) implements Ast {}
 
     /**
      * {@code example <target> | row ...} — compile-time-checked examples for a behavior or a pure

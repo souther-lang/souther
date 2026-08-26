@@ -160,4 +160,42 @@ class CompileDependsOnClauseTest {
         assertTrue(absent.getMessage().startsWith("9:16 "),
                 "and at the `nosuch` of `depends on nosuch`: " + absent.getMessage());
     }
+
+    /**
+     * Two entries of one clause go by different bare names, whichever modules declare them.
+     *
+     * <p>They are two behaviors and the clause is refused all the same, because what it decides is
+     * the implementing {@code let}'s trailing parameters and each is named after the entry it takes
+     * (spec §depends-on). A pair sharing a spelling leaves no {@code let} that could be written, so
+     * comparing the declarations rather than the names would admit a behavior nobody can implement.
+     */
+    @Test
+    void twoDependenciesOfOneBareNameAreRefusedHoweverTheyAreWritten() {
+        CompileException refused = assertThrows(CompileException.class,
+                () -> Compiler.compileModules(List.of("""
+                        module probe.up exposing ( N, lookup )
+                        data N = Int
+                        behavior lookup : (n: N) -> N
+                        """, """
+                        module probe.other exposing ( M, lookup )
+                        data M = Int
+                        behavior lookup : (m: M) -> M
+                        """, """
+                        module probe.down
+                        import probe.up as Up ( N )
+                        import probe.other as Other ( M )
+
+                        data Out = { n: N }
+
+                        behavior use : (n: N, m: M) -> Out
+                            constructs Out
+                            depends on Up.lookup, Other.lookup
+
+                        let use (n, m, lookup, lookup) = Out { n = lookup(n) }
+                        """), souther.compiler.meta.ModulePath.EMPTY));
+
+        assertEquals("E1011", refused.code(), refused.getMessage());
+        assertTrue(refused.getMessage().contains("lookup"),
+                "the spelling the two would take is the one named: " + refused.getMessage());
+    }
 }

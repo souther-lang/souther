@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.core.Contract;
+import souther.compiler.types.ValueName;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -33,6 +34,19 @@ public record CheckedEnsures(BehaviorContract read, Contract checked) {
      */
     public static Map<String, Contract> executable(Map<String, CheckedEnsures> declared) {
         Map<String, Contract> out = new LinkedHashMap<>();
+        declared.forEach((behavior, ensures) -> out.put(behavior, ensures.checked()));
+        return out;
+    }
+
+    /**
+     * The same, where the declarations are keyed by the behavior each belongs to.
+     *
+     * <p>What a stand-in is held to, which may be another module's clause. The same one place picks
+     * the executable half; only what the reader has in hand to ask by differs.
+     */
+    public static Map<ValueName.Behavior, Contract> executableOf(
+            Map<ValueName.Behavior, CheckedEnsures> declared) {
+        Map<ValueName.Behavior, Contract> out = new LinkedHashMap<>();
         declared.forEach((behavior, ensures) -> out.put(behavior, ensures.checked()));
         return out;
     }

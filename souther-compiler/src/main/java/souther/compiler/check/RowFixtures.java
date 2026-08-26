@@ -5,6 +5,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.ast.RowPosition;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.types.Type;
+import souther.compiler.types.ValueName;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -71,23 +72,28 @@ public final class RowFixtures {
      * so nothing downstream counts the rows a second time. Two counts would be two orders, and a row
      * would run the value beside the one it wrote.
      */
-    public static List<Placed> placed(Hir.Module module, Map<String, Sig> signatures) {
+    public static List<Placed> placed(Hir.Module module,
+                                      Map<ValueName.Behavior, Sig> signatures) {
         List<Placed> out = new java.util.ArrayList<>();
         for (Hir.Example ex : module.examples()) {
-            Sig sig = signatures.get(ex.target());
+            // A row names a behavior of the module it is written in, and a stand-in names the
+            // behavior it stands in for — which may be another module's. So the target is lifted to
+            // a declaration of this module and the stand-in's is read off what it resolved to.
+            Sig sig = signatures.get(new ValueName.Behavior(module.name(), ex.target()));
             for (Hir.ExampleRow row : ex.rows()) {
                 for (int i = 0; i < row.inputs().size(); i++) {
                     out.add(new Placed(row.inputs().get(i), supplies(sig, i)));
                 }
                 for (Hir.With w : row.withs()) {
                     out.add(new Placed(w.value(),
-                            new RowPosition.Supplies(answersWith(signatures.get(w.dep())))));
+                            new RowPosition.Supplies(answersWith(sigOf(signatures,
+                                    w.standsInFor())))));
                 }
                 out.add(new Placed(row.expected(), new RowPosition.Asserts(answersWith(sig))));
             }
         }
         for (Hir.Fake fake : module.fakes()) {
-            Sig sig = signatures.get(fake.target());
+            Sig sig = sigOf(signatures, fake.standsInFor());
             for (Hir.FakeRow row : fake.rows()) {
                 if (row.inputs() != null) {
                     for (int i = 0; i < row.inputs().size(); i++) {
@@ -98,6 +104,13 @@ public final class RowFixtures {
             }
         }
         return out;
+    }
+
+    /** The shape of the behavior a stand-in names, or null where the name denoted none. Asked here
+     *  so that a target nothing resolved is one position with nothing to say rather than a lookup
+     *  under a key of the wrong kind, which answers null for every stand-in there is. */
+    private static Sig sigOf(Map<ValueName.Behavior, Sig> signatures, ValueName.Behavior named) {
+        return named == null ? null : signatures.get(named);
     }
 
     /** What a behavior takes at its {@code i}th input, or null where nothing says. */
@@ -131,7 +144,7 @@ public final class RowFixtures {
      * answered with and nothing under it, so there is no value to compute and nothing to emit.
      */
     public static Emitted emitted(Hir.Module module, Symbols symbols,
-                                  Map<String, Sig> signatures) {
+                                  Map<ValueName.Behavior, Sig> signatures) {
         Map<String, Hir.FnDef> out = new LinkedHashMap<>();
         Map<Hir.Expr, String> methods = new java.util.IdentityHashMap<>();
         List<Placed> placed = placed(module, signatures);

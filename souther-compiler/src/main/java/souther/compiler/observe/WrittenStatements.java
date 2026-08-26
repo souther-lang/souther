@@ -1,7 +1,6 @@
 package souther.compiler.observe;
 
 import souther.compiler.diag.Region;
-import souther.compiler.diag.SourcePos;
 
 import java.util.List;
 
@@ -51,14 +50,20 @@ public final class WrittenStatements {
      * A fake whose table did not finish being built within the budget, so what it states and what the
      * rows recorded for the behavior state were never compared.
      *
-     * <p>Carries what it takes to report it. The position and its width are measured here, where the
-     * text is, the way a {@link Statement}'s are; the budget is the one the wait was actually held to,
-     * rather than a second reading of the setting taken later, which a budget that stops being one
-     * number for the whole compile would make wrong with nothing to say so.
+     * <p>Carries what it takes to report it. The stretch of source is taken here, where the text is,
+     * the way a {@link Statement}'s is; the budget is the one the wait was actually held to, rather
+     * than a second reading of the setting taken later, which a budget that stops being one number
+     * for the whole compile would make wrong with nothing to say so.
+     *
+     * <p>The region and not a position with a width beside it. A target may be written through the
+     * module that declares the behavior, and how far such a name reaches is not its canonical
+     * length: a qualifier, the dots, and whatever the author put between them are all part of what
+     * the marker covers, which is why {@link souther.compiler.ast.WrittenName} keeps the stretch
+     * rather than deriving one.
      *
      * @param at where the fake names the behavior it stands in for, which is what the report marks
      */
-    public record UnreadFake(String target, SourcePos at, int width, Unread why) {}
+    public record UnreadFake(String target, Region at, Unread why) {}
 
     /**
      * Why a written statement was not read.

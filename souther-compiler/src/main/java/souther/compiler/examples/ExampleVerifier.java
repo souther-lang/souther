@@ -139,14 +139,14 @@ public final class ExampleVerifier {
      * @throws IllegalArgumentException where the artifact is of another module
      */
     public static Observations check(souther.compiler.check.Prepared.Examples module,
-                                     Symbols symbols, Map<String, Sig> sigs,
+                                     Symbols symbols, Map<ValueName.Behavior, Sig> sigs,
                                      EvaluationArtifact artifact,
                                      Supplier<PublishedClasses> declared,
                                      Map<String, List<BehaviorRequirement>> requirements,
                                      ClassLoader parent, Map<String, Hir.FnDef> values,
                                      Deadline deadline, EvaluationPolicy policy,
                                      Answering answering,
-                                     Map<String, Contract> contracts) {
+                                     Map<ValueName.Behavior, Contract> contracts) {
         if (!artifact.implementations().module().equals(module.name())) {
             throw new IllegalArgumentException("the rows are `" + module.name()
                     + "`'s and the artifact is `" + artifact.implementations().module()
@@ -197,14 +197,14 @@ public final class ExampleVerifier {
      * what an implementation answers out of changes between one row and the next.
      */
     public static ExampleVerifier evaluating(souther.compiler.check.Prepared.Examples module,
-                                      Symbols symbols, Map<String, Sig> sigs,
+                                      Symbols symbols, Map<ValueName.Behavior, Sig> sigs,
                                       EvaluationArtifact artifact,
                                       Supplier<PublishedClasses> declared,
                                       Map<String, List<BehaviorRequirement>> requirements,
                                       ClassLoader parent, Map<String, Hir.FnDef> values,
                                       Deadline deadline, EvaluationPolicy policy,
                                       Answering answering,
-                                      Map<String, Contract> contracts) {
+                                      Map<ValueName.Behavior, Contract> contracts) {
         MemoryClassLoader loader = new MemoryClassLoader(artifact.classes(), parent);
         return new ExampleVerifier(module, symbols, sigs, requirements, loader, values,
                 deadline, policy, answering.over(artifact.implementations(), loader), declared,
@@ -228,7 +228,7 @@ public final class ExampleVerifier {
             throw new IllegalStateException("`" + behavior + "` has no target to run its rows"
                     + " against, and a row of it should not have been enumerated");
         }
-        Sig sig = sigs.get(behavior);
+        Sig sig = sigs.get(module.targeted(behavior));
         if (sig == null) {
             throw new IllegalStateException("`" + behavior + "` is evaluable and has no signature");
         }
@@ -270,20 +270,16 @@ public final class ExampleVerifier {
      * row rather than a statement about the dependency.
      */
     List<StandinEntry> standinEntries(BoundExamples of, String behavior) {
-        Sig sig = sigs.get(behavior);
+        Sig sig = sigs.get(module.targeted(behavior));
         if (sig == null) {
             return List.of();
         }
-        Hir.Fake first = null;
-        for (souther.compiler.check.Prepared.FakeTable written : module.fakes()) {
-            if (written.target().equals(behavior)) {
-                first = written.read();
-                break;
-            }
-        }
-        if (first == null) {
+        souther.compiler.check.Prepared.FakeTable answering =
+                module.standingInFor(module.targeted(behavior));
+        if (answering == null) {
             return List.of();
         }
+        Hir.Fake first = answering.read();
         FixtureReader fixtures = newFixtureReader();
         ExampleStatements.BuiltTable built = ExampleStatements.standins(fixtures, first, sig.ins(),
                 sig.out(), new ArrayList<>());
@@ -406,7 +402,7 @@ public final class ExampleVerifier {
      * {@link ContractObservation.NothingStated} reports after a row has run, asked before one is.
      */
     boolean states(String behavior) {
-        return ensures.states(behavior);
+        return ensures.states(module.targeted(behavior));
     }
 
     /**
@@ -437,7 +433,7 @@ public final class ExampleVerifier {
     }
 
     private ContractObservation checkingContract(String behavior, Hir.ExampleRow row) {
-        Sig sig = sigs.get(behavior);
+        Sig sig = sigs.get(module.targeted(behavior));
         ExampleTarget target = targetOf(behavior);
         if (sig == null || target == null) {
             return new ContractObservation.Unobserved(
@@ -463,7 +459,7 @@ public final class ExampleVerifier {
         // a call to learn what the declaration already said — and asking this first would answer
         // "the model states nothing" for a binding nothing may be handed to, sending its author to
         // write a clause that would still not run.
-        if (!ensures.states(behavior)) {
+        if (!ensures.states(module.targeted(behavior))) {
             return new ContractObservation.NothingStated(behavior);
         }
         FixtureReader fixtures = newFixtureReader();
@@ -512,7 +508,7 @@ public final class ExampleVerifier {
                     new StandinObservation.Reason.AValueCouldNotCross(
                             String.valueOf(e.getMessage())));
         }
-        String why = ensures.notHeld(new ValueName.Behavior(module.name(), behavior), args, here);
+        String why = ensures.notHeld(module.targeted(behavior), args, here);
         // Written here and not in the arm. What writes a value the way a fixture writes one needs the
         // module's declarations to tell a newtype from what it wraps, and an arm holding neither
         // could only fall back on the value's own `toString` — a shape no report should be written
@@ -568,7 +564,7 @@ public final class ExampleVerifier {
     }
 
     private StandinObservation observing(String behavior, StandinEntry entry) {
-        Sig sig = sigs.get(behavior);
+        Sig sig = sigs.get(module.targeted(behavior));
         ExampleTarget target = targetOf(behavior);
         if (sig == null || target == null) {
             return new StandinObservation.Unobserved(
@@ -654,7 +650,10 @@ public final class ExampleVerifier {
 
     private final souther.compiler.check.Prepared.Examples module;
     private final Symbols symbols;
-    private final Map<String, Sig> sigs;
+    /** The shape of every behavior a row here may name: this module's own, and the ones a stand-in
+     * reaches in another module. Keyed by the declaration, so a borrowed dependency and a namesake
+     * declared here are two entries. */
+    private final Map<ValueName.Behavior, Sig> sigs;
     /** What each behavior of this module takes injected, in the order its constructor takes it. */
     private final Map<String, List<BehaviorRequirement>> requirements;
     private final MemoryClassLoader loader;
@@ -706,13 +705,13 @@ public final class ExampleVerifier {
     private final EnsuresChecks ensures;
 
     private ExampleVerifier(souther.compiler.check.Prepared.Examples module,
-                            Symbols symbols, Map<String, Sig> sigs,
+                            Symbols symbols, Map<ValueName.Behavior, Sig> sigs,
                             Map<String, List<BehaviorRequirement>> requirements,
                             MemoryClassLoader loader, Map<String, Hir.FnDef> values,
                             Deadline deadline, EvaluationPolicy policy, Answerer answerer,
                             Supplier<PublishedClasses> declared,
-                            Map<String, Contract> contracts) {
-        this.ensures = new EnsuresChecks(module.name(), loader, contracts);
+                            Map<ValueName.Behavior, Contract> contracts) {
+        this.ensures = new EnsuresChecks(loader, contracts, sigs.keySet());
         this.module = module;
         this.symbols = symbols;
         this.sigs = sigs;
@@ -753,7 +752,7 @@ public final class ExampleVerifier {
                 && said.add(target.name())) {
             out.add(cannotBeHeldTo(ex.pos(), target.name(), target.agreement()));
         }
-        Sig sig = sigs.get(target.name());
+        Sig sig = sigs.get(module.targeted(target.name()));
         if (sig == null) {
             throw new IllegalStateException("`" + target.name() + "` is evaluable but has no signature");
         }
@@ -1538,7 +1537,7 @@ public final class ExampleVerifier {
             // be constructed with. Nothing was applied, so the row stops where a row whose dependency
             // has no fake stops, and says the same thing about itself.
             out.add(ExampleStatements.unbuildableFake(whereDeclared(e.dependency(), row),
-                    e.dependency(), e.getMessage()));
+                    spelling(e.dependency()), e.getMessage()));
             state.failed(FailurePhase.FAKE_RESOLUTION);
             return;
         }
@@ -1678,7 +1677,7 @@ public final class ExampleVerifier {
     private boolean keepsWhatIsDeclared(Hir.ExampleRow row, ExampleTarget target, Object[] args,
                                         Evidence evidence, Sig sig, List<Diagnostic> out,
                                         RowState state) {
-        ValueName.Behavior behavior = new ValueName.Behavior(module.name(), target.name());
+        ValueName.Behavior behavior = module.targeted(target.name());
         String why = switch (evidence) {
             case Evidence.Answer(Object value) ->
                     ensures.notHeld(behavior, args, projected(value, sig.outputType()));
@@ -1738,7 +1737,7 @@ public final class ExampleVerifier {
             state.incomplete(FailurePhase.VALUE_CROSSING);
             return false;
         }
-        ValueName.Behavior behavior = new ValueName.Behavior(module.name(), target.name());
+        ValueName.Behavior behavior = module.targeted(target.name());
         String why = ensures.notHeld(behavior, args, here);
         if (why == null) {
             return true;
@@ -1805,19 +1804,16 @@ public final class ExampleVerifier {
     private DependencyStandin resolveFake(FixtureReader fixtures, String target,
                                           BehaviorRequirement req, Hir.ExampleRow row,
                                           List<Diagnostic> out) {
-        // The name the dependency is written under here. A `fake` names one identifier
-        // (spec [#fake]), so this is what a row can say; a dependency another module declares is
-        // reached by its own name and is not an injection target of this module, which is what the
-        // refusal below says.
-        String depName = req.dependency().name();
-        Hir.SpecBehavior dep = injectedSpec(depName);
-        if (dep == null) {
-            out.add(fakeMissingDiag(target, req, row, "`" + depName
-                    + "` is not an injected behavior of this module"));
-            return null;
-        }
-        Sig depSig = sigs.get(depName);
+        // The behavior, as the declaration it is. What a requirement is, is settled where the
+        // `depends on` clause is read; the name this module happens to reach it by is not asked for
+        // here and never decides which behavior a stand-in is built against.
+        ValueName.Behavior dependency = req.dependency();
+        String depName = dependency.name();
+        Sig depSig = sigs.get(dependency);
         if (depSig == null) {
+            // Nothing this module can name says what it answers, which is not a missing fake. A
+            // dependency reaches here only after the check accepted the clause that named it, so a
+            // signature that is not here is a module that did not build far enough to have one.
             out.add(fakeMissingDiag(target, req, row, "`" + depName
                     + "` has no signature to build a stand-in against"));
             return null;
@@ -1825,13 +1821,13 @@ public final class ExampleVerifier {
         BoundaryOutput outType = depSig.out();
         // What stands in, and where it was written, is ExampleProvisioning's; building the value it
         // answers with is this reader's.
-        return switch (ExampleProvisioning.standingIn(row.withs(), depName, module)) {
+        return switch (ExampleProvisioning.standingIn(row.withs(), dependency, module)) {
             case ExampleProvisioning.Standin.OnTheRow onTheRow -> {
                 Hir.With w = onTheRow.written();
                 try {
                     Object value = fixtures.buildFixture(w.value(), outType).value();
                     // a constant: it ignores its inputs
-                    yield new DependencyStandin(depName, dep.params().size(), _ -> value);
+                    yield new DependencyStandin(dependency, depSig.ins().size(), _ -> value);
                 } catch (FixtureException fe) {
                     // The row does supply a fake. What failed is building its value, which is a
                     // different problem from a dependency nothing stands in for.
@@ -1843,13 +1839,19 @@ public final class ExampleVerifier {
                 }
             }
             case ExampleProvisioning.Standin.InTheModule inTheModule ->
-                    tableStandin(fixtures, inTheModule.table().read(), dep, depSig);
+                    tableStandin(fixtures, inTheModule.table().read(), dependency, depSig);
             case ExampleProvisioning.Standin.Nothing _ -> {
-                out.add(fakeMissingDiag(target, req, row, "add `with " + depName
-                        + " = ...` on the row, or a `fake " + depName + "` table"));
+                String spelt = spelling(dependency);
+                out.add(fakeMissingDiag(target, req, row, "add `with " + spelt
+                        + " = ...` on the row, or a `fake " + spelt + "` table"));
                 yield null;
             }
         };
+    }
+
+    /** How to write {@code dependency} here, for a hint that shows what to type. */
+    private String spelling(ValueName.Behavior dependency) {
+        return souther.compiler.check.Requirements.writtenIn(module.name(), dependency);
     }
 
     /**
@@ -1879,8 +1881,8 @@ public final class ExampleVerifier {
      * answers by matching an actual input tuple by value equality, falling back to the {@code _}
      * default or a miss. Works for any arity: a 0/1-input dep's tuple has 0/1 elements, a 2+-input
      * dep's has one per parameter (issue #57). */
-    private DependencyStandin tableStandin(FixtureReader fixtures, Hir.Fake fk, Hir.SpecBehavior dep,
-                                           Sig depSig) {
+    private DependencyStandin tableStandin(FixtureReader fixtures, Hir.Fake fk,
+                                           ValueName.Behavior dependency, Sig depSig) {
         // The dependency's own signature, which admitted what its boundary carries. Rebuilding the
         // types from what it declared would put them through that walk a second time, and a
         // stand-in stands where the behavior does.
@@ -1894,7 +1896,7 @@ public final class ExampleVerifier {
         if (built == null) {
             return null;
         }
-        if (!ExampleStatements.notKept(ensures, module.name(), fk, built).isEmpty()) {
+        if (!ExampleStatements.notKept(ensures, fk, built).isEmpty()) {
             // A table stating what the dependency declares cannot happen is not one to stand in
             // with, as a table that will not build is not. The row stops without a fake and says
             // nothing of its own: what is wrong is wrong about the table, and is said once where the
@@ -1906,7 +1908,7 @@ public final class ExampleVerifier {
         // The dispatch, which is what a row runs against. What the table was written with and cannot
         // dispatch to is said where the fake is written, and is nothing a stand-in can answer with.
         ExampleStatements.Standins table = built.standins();
-        String depName = fk.target();
+        String depName = ExampleStatements.wrote(fk);
         int arity = paramTypes.size();
         java.util.function.Function<Object[], Object> body = a -> {
             Object[] key = java.util.Arrays.copyOf(a, arity);
@@ -1919,14 +1921,24 @@ public final class ExampleVerifier {
             }
             return answering.answer().value();
         };
-        return new DependencyStandin(depName, dep.params().size(), body);
+        return new DependencyStandin(dependency, arity, body);
     }
 
-    /** Where the dependency a stand-in was written for is declared, for a report about the stand-in to
-     * be quoted against. The row's own position where this module declares nothing of that name, which
-     * cannot arise for a stand-in that was resolved and is not worth a second reading to rule out. */
-    private SourcePos whereDeclared(String dependency, Hir.ExampleRow row) {
-        Hir.SpecBehavior dep = injectedSpec(dependency);
+    /**
+     * Where the dependency a stand-in was written for is declared, for a report about the stand-in
+     * to be quoted against.
+     *
+     * <p>The row's own position for a dependency another module declares. The declaration is a place
+     * in a source this report is not about, and sending an author there would send them to a file
+     * with nothing wrong in it — what they can act on is the stand-in they wrote, which is on the
+     * row. A dependency this module declares is quoted at its declaration, which is where the shape
+     * a stand-in has to be made into is stated.
+     */
+    private SourcePos whereDeclared(ValueName.Behavior dependency, Hir.ExampleRow row) {
+        if (!dependency.module().equals(module.name())) {
+            return row.pos();
+        }
+        Hir.SpecBehavior dep = injectedSpec(dependency.name());
         return dep == null ? row.pos() : dep.pos();
     }
 

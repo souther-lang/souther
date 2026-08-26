@@ -1,5 +1,7 @@
 package souther.compiler.examples;
 
+import souther.compiler.types.ValueName;
+
 import java.util.function.Function;
 
 /**
@@ -29,8 +31,11 @@ import java.util.function.Function;
  * {@link #answers} would then be crossing loaders, and the crossing that carries a row's arguments
  * ({@link Handed}) would have to carry a stand-in's arguments and its answer too.
  *
- * @param dependency the behavior this stands in for, as the module names it
+ * @param dependency the behavior this stands in for, as the declaration it is. The module is part of
+ *                   it because the base an instance extends is generated where the behavior is
+ *                   declared, which is not always the module the row is written in
  * @param inputs     how many inputs that behavior takes, which decides what an instance of it can be
  * @param answers    what it answers, for the arguments it is called with
  */
-public record DependencyStandin(String dependency, int inputs, Function<Object[], Object> answers) {}
+public record DependencyStandin(ValueName.Behavior dependency, int inputs,
+                                Function<Object[], Object> answers) {}

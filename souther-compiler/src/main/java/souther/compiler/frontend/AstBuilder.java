@@ -259,7 +259,7 @@ public final class AstBuilder {
         List<Ast.With> withs = new ArrayList<>();
         n.child(SyntaxKind.WITH_CLAUSE).ifPresent(clause -> {
             for (SyntaxNode b : childNodes(clause, SyntaxKind.WITH_BINDING)) {
-                withs.add(new Ast.With(firstIdentText(b), expr(firstExprChild(b)), pos(b)));
+                withs.add(new Ast.With(behaviorNameAfter(b, 0), expr(firstExprChild(b)), pos(b)));
             }
         });
         // the expected is the row's own expr child (ARG_LIST holds the inputs; WITH_CLAUSE the fakes)
@@ -269,16 +269,31 @@ public final class AstBuilder {
     }
 
     /** {@code fake <target> | rows}. The contextual {@code fake} lexes as an identifier, so the
-     * target is the second identifier token. */
+     * target is the name after it — bare, or qualified through the module that declares it. */
     private Ast.Fake fake(SyntaxNode n) {
-        List<SyntaxToken> idents = identTokens(n);
-        String target = idents.size() >= 2 ? ident(idents.get(1)) : "";
-        SourcePos pos = idents.size() >= 2 ? posOf(idents.get(1)) : pos(n);
+        Ast.Var target = behaviorNameAfter(n, 1);
         List<Ast.FakeRow> rows = new ArrayList<>();
         for (SyntaxNode row : childNodes(n, SyntaxKind.FAKE_ROW)) {
             rows.add(fakeRow(row));
         }
-        return new Ast.Fake(target, rows, pos);
+        return new Ast.Fake(target, rows, target.pos());
+    }
+
+    /**
+     * The dotted name written at {@code from} in {@code n}'s meaningful children, as a behavior
+     * reference.
+     *
+     * <p>Empty where the parser recovered from a form with no name at that position. A name is what
+     * the following passes ask about, so there has to be one to ask about; what is wrong with the
+     * text was said where it was read.
+     */
+    private Ast.Var behaviorNameAfter(SyntaxNode n, int from) {
+        List<SyntaxElement> es = meaningful(n);
+        if (from >= es.size() || !isToken(es.get(from), SyntaxKind.IDENT)) {
+            return Ast.Var.desugared("", pos(n));
+        }
+        int[] at = {from};
+        return Ast.Var.written(dottedName(es, at).name());
     }
 
     /** {@code ( args ) -> out} or {@code _ -> out}. A row with no {@code ARG_LIST} is the default. */

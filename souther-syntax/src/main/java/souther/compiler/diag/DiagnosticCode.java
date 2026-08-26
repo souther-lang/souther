@@ -184,6 +184,7 @@ public enum DiagnosticCode {
     E1929("a-fake-row-keeps-what-the-dependency-states", "check.example.title"),
     E1930("an-implementation-keeps-what-the-behavior-states", "check.example.title"),
     E1931("every-axis-class-has-a-row", "check.example.title"),
+    E1932("a-stand-in-names-a-behavior", "check.example.title"),
 
     // --- totality, invariant discharge, attempted construction ---
     E2001("helper-carries-its-termination-guarantee", "check.totality.title"),

@@ -11,6 +11,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -35,21 +36,29 @@ import java.util.concurrent.ConcurrentHashMap;
  * over as it stands, and which rules the declaration decides from either is worked out where the
  * check was emitted.
  *
- * <p>A behavior is named by the module that declares it and not by the word a caller writes. What is
- * held here is one module's contracts, and being asked about another module's behavior is refused
- * rather than answered with "declares nothing" — a fixture for a behavior declared elsewhere is a
- * thing the language does not admit today (a {@code fake} names an injection target of its own
- * module), and the day it does, this has to be given that module's contracts and load its class.
- * Answered by name against the current module, that day arrives as silence.
+ * <p>A behavior is named by the module that declares it and not by the word a caller writes. A
+ * {@code fake} may stand in for a dependency another module declares, and what such a value has to
+ * keep is that module's clause, checked by the class that module emitted. So what is held here is
+ * every reachable behavior's contract under the declaration it belongs to, and the module a check is
+ * loaded from is the one on the behavior. Keyed by the spelling a row writes, a borrowed dependency
+ * would be held to a namesake's clause or to none.
  */
 final class EnsuresChecks {
 
-    /** The behaviors of the module being evaluated that state something, under the name a row and a
-     *  fake write. */
-    private final Map<String, Contract> contracts;
+    /** Every behavior a row or a fake here may state something about — this module's and the ones it
+     *  borrows — under the declaration each is. Only the ones that state something are here. */
+    private final Map<ValueName.Behavior, Contract> contracts;
 
-    /** The module whose contracts these are, and whose classes carry their checks. */
-    private final String module;
+    /**
+     * Every behavior this reading was given, whether or not it declares anything.
+     *
+     * <p>Beside {@link #contracts} so that being absent from that one means "states nothing" and
+     * only that. Without it a behavior whose module was never read would answer the same as one
+     * with no {@code ensures}, and a reading that came up short would pass for a model that had
+     * nothing to say.
+     */
+    private final Set<ValueName.Behavior> reachable;
+
     private final ClassLoader loader;
 
     /**
@@ -62,17 +71,18 @@ final class EnsuresChecks {
      * up is work done twice and nothing else; the map coming apart while they do is a failure that
      * would not reproduce.
      */
-    private final Map<String, Method> found = new ConcurrentHashMap<>();
+    private final Map<ValueName.Behavior, Method> found = new ConcurrentHashMap<>();
 
     /** The same for the check asked about a case. Kept apart from {@link #found} rather than under a
      *  spelled-together key: two questions, and a key that joined them would be a spelling to keep
      *  unique. */
-    private final Map<String, Method> foundForCase = new ConcurrentHashMap<>();
+    private final Map<ValueName.Behavior, Method> foundForCase = new ConcurrentHashMap<>();
 
-    EnsuresChecks(String module, ClassLoader loader, Map<String, Contract> contracts) {
-        this.module = module;
+    EnsuresChecks(ClassLoader loader, Map<ValueName.Behavior, Contract> contracts,
+                  Set<ValueName.Behavior> reachable) {
         this.loader = loader;
         this.contracts = contracts;
+        this.reachable = reachable;
     }
 
     /**
@@ -84,7 +94,7 @@ final class EnsuresChecks {
      * declares does not turn on an input — {@link #contractOf} reads the name and uses the arguments
      * only to check their number against it.
      */
-    boolean states(String behavior) {
+    boolean states(ValueName.Behavior behavior) {
         return contracts.containsKey(behavior);
     }
 
@@ -106,7 +116,7 @@ final class EnsuresChecks {
         }
         Object[] handed = Arrays.copyOf(args, args.length + 1);
         handed[args.length] = answer;
-        return said(behavior.name(), () -> check(behavior.name(), contract).invoke(null, handed));
+        return said(behavior.name(), () -> check(behavior, contract).invoke(null, handed));
     }
 
     /**
@@ -128,25 +138,27 @@ final class EnsuresChecks {
         Object[] handed = Arrays.copyOf(args, args.length + 1);
         handed[args.length] = SoutherJvmAbi.caseTokenOf(answered).qualified();
         return said(behavior.name(),
-                () -> checkForCase(behavior.name(), contract).invoke(null, handed));
+                () -> checkForCase(behavior, contract).invoke(null, handed));
     }
 
     /**
      * What {@code behavior} declares, where these arguments can be held to it; null where it
      * declares nothing.
      *
-     * <p>A behavior is named by the module that declares it and not by the word a caller writes.
-     * Being asked about another module's behavior is refused rather than answered with "declares
-     * nothing" — see the note on this class.
+     * <p>Asked by the declaration, so a behavior another module declares is answered with that
+     * module's clause. Being asked about one this reading cannot name at all is refused rather than
+     * answered with "declares nothing": the two are told apart because {@code reachable} says which
+     * behaviors were read, and a caller handed silence for the second would take a reading that came
+     * up short for a model with nothing to say.
      */
     private Contract contractOf(ValueName.Behavior behavior, Object[] args) {
-        if (!module.equals(behavior.module())) {
-            throw new IllegalStateException("these are `" + module + "`'s contracts and `"
-                    + behavior.module() + "." + behavior.name() + "` is not one of them; what a "
-                    + "module other than the one being evaluated declares is checked with that "
-                    + "module's contracts and its own class");
+        if (!reachable.contains(behavior)) {
+            throw new IllegalStateException("`" + behavior + "` is not among the behaviors this"
+                    + " reading was given, so what it declares cannot be answered here; a value is"
+                    + " held to a clause by the module that declares it and that module's contracts"
+                    + " were not read");
         }
-        Contract contract = contracts.get(behavior.name());
+        Contract contract = contracts.get(behavior);
         if (contract == null) {
             return null;
         }
@@ -204,13 +216,13 @@ final class EnsuresChecks {
     }
 
     /** {@code <module>.<behavior>$Ensures.check}, opened. */
-    private Method check(String behavior, Contract contract)
+    private Method check(ValueName.Behavior behavior, Contract contract)
             throws ReflectiveOperationException {
         return opened(found, behavior, "check", Object.class, contract);
     }
 
     /** {@code …$Ensures.checkCase}, opened. */
-    private Method checkForCase(String behavior, Contract contract)
+    private Method checkForCase(ValueName.Behavior behavior, Contract contract)
             throws ReflectiveOperationException {
         return opened(foundForCase, behavior, "checkCase", String.class, contract);
     }
@@ -223,14 +235,16 @@ final class EnsuresChecks {
      * of the case it is. One place loads the class and spells the lookup, so the two entry points
      * cannot come to be reached in two ways.
      */
-    private Method opened(Map<String, Method> cache, String behavior, String name, Class<?> last,
-                          Contract contract) throws ReflectiveOperationException {
+    private Method opened(Map<ValueName.Behavior, Method> cache, ValueName.Behavior behavior,
+                          String name, Class<?> last, Contract contract)
+            throws ReflectiveOperationException {
         Method known = cache.get(behavior);
         if (known != null) {
             return known;
         }
-        Class<?> c = GeneratedClasses.load(loader,
-                new GeneratedClass.Ensures(new GeneratedClass.BehaviorInterface(module, behavior)));
+        // Loaded from the module that declares the behavior, which is where its check was emitted.
+        Class<?> c = GeneratedClasses.load(loader, new GeneratedClass.Ensures(
+                new GeneratedClass.BehaviorInterface(behavior.module(), behavior.name())));
         Class<?>[] params = new Class<?>[contract.params().size() + 1];
         Arrays.fill(params, Object.class);
         params[contract.params().size()] = last;

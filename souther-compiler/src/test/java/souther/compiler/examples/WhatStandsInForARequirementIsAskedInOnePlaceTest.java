@@ -4,6 +4,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
+import souther.compiler.types.ValueName;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -79,15 +80,16 @@ class WhatStandsInForARequirementIsAskedInOnePlaceTest {
     void aTableStandsInWhereTheRowSaysNothing() {
         Model model = modelOf(FAKED);
         assertInstanceOf(ExampleProvisioning.Standin.InTheModule.class,
-                ExampleProvisioning.standingIn(model.row().withs(), "findMember", model.execution()));
+                ExampleProvisioning.standingIn(model.row().withs(), model.of("findMember"),
+                        model.execution()));
     }
 
     /** And the row is looked at first, so what it writes stands in over the table beside it. */
     @Test
     void theRowIsLookedAtBeforeTheTableBesideIt() {
         Model model = modelOf(WITH_ON_THE_ROW);
-        ExampleProvisioning.Standin found =
-                ExampleProvisioning.standingIn(model.row().withs(), "findMember", model.execution());
+        ExampleProvisioning.Standin found = ExampleProvisioning.standingIn(model.row().withs(),
+                model.of("findMember"), model.execution());
         assertInstanceOf(ExampleProvisioning.Standin.OnTheRow.class, found,
                 "the `with` on the row was passed over for the table beside it");
     }
@@ -97,8 +99,26 @@ class WhatStandsInForARequirementIsAskedInOnePlaceTest {
     void aRequirementNeitherSuppliesIsOwed() {
         Model model = modelOf(FAKED);
         assertInstanceOf(ExampleProvisioning.Standin.Nothing.class,
-                ExampleProvisioning.standingIn(model.row().withs(), "somethingElse",
+                ExampleProvisioning.standingIn(model.row().withs(), model.of("somethingElse"),
                         model.execution()));
+    }
+
+    /**
+     * The question is asked about a behavior and not about a spelling.
+     *
+     * <p>A dependency another module declares goes by a name this module may also declare something
+     * under, so a stand-in written here for {@code findMember} answers the requirement it was
+     * written for and not one of that name declared elsewhere. Asked with a name of another module
+     * there is nothing here that stands in for it, however the spellings line up.
+     */
+    @Test
+    void aStandInAnswersTheBehaviorItWasWrittenForAndNotItsSpelling() {
+        Model model = modelOf(FAKED);
+        assertInstanceOf(ExampleProvisioning.Standin.Nothing.class,
+                ExampleProvisioning.standingIn(model.row().withs(),
+                        new ValueName.Behavior("example.elsewhere", "findMember"),
+                        model.execution()),
+                "a table written for this module's `findMember` answered another module's");
     }
 
     /**
@@ -113,16 +133,25 @@ class WhatStandsInForARequirementIsAskedInOnePlaceTest {
     void aRowNotWrittenYetSuppliesNothingOfItsOwn() {
         Model model = modelOf(WITH_ON_THE_ROW);
         assertInstanceOf(ExampleProvisioning.Standin.InTheModule.class,
-                ExampleProvisioning.standingIn(List.of(), "findMember", model.execution()),
+                ExampleProvisioning.standingIn(List.of(), model.of("findMember"),
+                        model.execution()),
                 "the table beside the rows answers a row that has not been written");
         assertEquals(List.of(),
-                ExampleProvisioning.unsupplied(List.of(), List.of("findMember"), model.execution()));
-        assertEquals(List.of("somethingElse"),
-                ExampleProvisioning.unsupplied(List.of(), List.of("findMember", "somethingElse"),
+                ExampleProvisioning.unsupplied(List.of(), List.of(model.of("findMember")),
+                        model.execution()));
+        assertEquals(List.of(model.of("somethingElse")),
+                ExampleProvisioning.unsupplied(List.of(),
+                        List.of(model.of("findMember"), model.of("somethingElse")),
                         model.execution()));
     }
 
-    private record Model(Hir.ExampleRow row, Prepared.Examples execution) {}
+    private record Model(String module, Hir.ExampleRow row, Prepared.Examples execution) {
+
+        /** One of the model's own behaviors, as the declaration a requirement is. */
+        ValueName.Behavior of(String name) {
+            return new ValueName.Behavior(module, name);
+        }
+    }
 
     private static Model modelOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
@@ -131,6 +160,6 @@ class WhatStandsInForARequirementIsAskedInOnePlaceTest {
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         assertNotNull(prepared, "the model under test compiles");
         Hir.ExampleRow row = prepared.rows().get(0).read().rows().get(0);
-        return new Model(row, prepared.forExamples());
+        return new Model(module, row, prepared.forExamples());
     }
 }

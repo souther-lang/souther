@@ -4,6 +4,12 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
 import souther.compiler.Reserved;
+import souther.compiler.check.BehaviorRequirement;
+import souther.compiler.check.Prepared;
+import souther.compiler.query.Bodies;
+import souther.compiler.query.Compilation;
+import souther.compiler.query.Shapes;
+import souther.compiler.types.ValueName;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.cst.CstLexer;
 import souther.compiler.cst.CstParser;
@@ -16,10 +22,12 @@ import souther.compiler.cst.TopLevelForm;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
  * What the conformance corpus has to reach, asked of the language rather than of a list kept beside
@@ -38,6 +46,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * <p>Japanese identifiers are the one thing here with no enum behind them. They are a fact about the
  * lexer rather than about any domain, and a corpus written in English reaches none of them, so the
  * claim is made directly.
+ *
+ * <p>Not every construct is a form the parser opens. Where a behavior's body comes from and whether
+ * the module writing about it is the one that declared it are two enumerations the language already
+ * keeps, and what a corpus reaches of their product is asked here as the tokens are asked above —
+ * computed from the corpus rather than written out beside it.
  */
 class AConformanceCorpusReachesEveryConstructTheLanguageDeclaresTest {
 
@@ -177,6 +190,72 @@ class AConformanceCorpusReachesEveryConstructTheLanguageDeclaresTest {
         }
         assertEquals(new TreeSet<String>(), missing,
                 "standard library modules the conformance corpus never uses");
+    }
+
+    /** One module of one corpus, compiled, with what the compiler answers about it. */
+    private record Module(Compilation compiled, String name) {}
+
+    private static List<Module> modules() {
+        List<Module> out = new ArrayList<>();
+        for (ConformanceCorpus corpus : ConformanceCorpus.all()) {
+            Compilation compiled = corpus.analyse().compilation();
+            for (String name : compiled.modules()) {
+                out.add(new Module(compiled, name));
+            }
+        }
+        return out;
+    }
+
+    /**
+     * The corpus carries a requirement across a module boundary.
+     *
+     * <p>Two halves, because it takes two modules to write and either alone is a construct the
+     * corpus already had. A behavior of one module requires one another module declares — which is
+     * what a {@code depends on} naming a borrowed name comes to, read off {@code Requirements}
+     * rather than off the clause, since that is the answer the emitter and the rows are built from.
+     * And a stand-in written where the rows run answers it, which is what makes the requirement
+     * something a row can be evaluated through rather than only declared.
+     *
+     * <p>Made directly, as the claim about Japanese identifiers is. There is no enum of the ways two
+     * modules can be arranged, and a product of the two enums that are here — where a body comes
+     * from, and whether the module writing about it declared it — would be a table of cells nobody
+     * checked against the rules. What is claimed is the arrangement the compiler answers questions
+     * about that a whole-corpus run left unasked (issue #1108).
+     */
+    @Test
+    void aRequirementIsCarriedAcrossAModuleBoundary() {
+        List<String> closed = new ArrayList<>();
+        List<String> owed = new ArrayList<>();
+        for (Module module : modules()) {
+            Prepared prepared =
+                    module.compiled().db().ask(new Shapes.Prepared(module.name())).value();
+            Map<String, List<BehaviorRequirement>> requirements =
+                    module.compiled().db().ask(new Bodies.Requirements(module.name())).value();
+            if (prepared == null || requirements == null) {
+                continue;
+            }
+            // The stand-ins this module writes, as the behaviors they answer for. A requirement is
+            // closed by one of these or by nothing: `with` supplies a dependency taking no input,
+            // and what this is about takes one.
+            Set<ValueName.Behavior> standsInFor =
+                    prepared.forExamples().tablesThatAnswer().keySet();
+            requirements.forEach((behavior, required) -> {
+                for (BehaviorRequirement each : required) {
+                    if (each.dependency().module().equals(module.name())) {
+                        continue;
+                    }
+                    String said = module.name() + "." + behavior + " requires " + each.dependency();
+                    // The same behavior on both sides. Collected apart, a requirement borrowed by
+                    // one module and a table written in another for something nothing requires
+                    // would answer this together while the construct was written nowhere.
+                    (standsInFor.contains(each.dependency()) ? closed : owed).add(said);
+                }
+            });
+        }
+        assertFalse(closed.isEmpty(), "no behavior of the conformance corpus requires one another"
+                + " module declares and closes it with a stand-in written where its rows run, so"
+                + " nothing here carries a requirement across a module boundary and runs through"
+                + " it. Borrowed and left owed: " + owed);
     }
 
     /**

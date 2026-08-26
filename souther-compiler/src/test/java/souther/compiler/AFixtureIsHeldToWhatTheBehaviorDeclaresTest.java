@@ -515,18 +515,20 @@ class AFixtureIsHeldToWhatTheBehaviorDeclaresTest {
     }
 
     /**
-     * What another module declares is checked with that module's contracts, and a fixture here has
-     * none of them. The language does not admit one either: a {@code fake} names an injection target
-     * of its own module, and a behavior another module declares is not one — so this is refused
-     * before anything would be held.
+     * A stand-in for a dependency another module declares is held to that module's clause.
      *
-     * <p>Written down because the check's own refusal rests on it. {@code EnsuresChecks} holds one
-     * module's contracts and raises rather than answering "declares nothing" when asked about
-     * another module's behavior, so the day this refusal is lifted the fixture side has to be given
-     * that module's contracts rather than quietly passing everything.
+     * <p>Which clause a value has to keep travels with the behavior and not with the file the
+     * stand-in was written in. The table below is written in {@code down} and stands in for
+     * {@code up.lookup}, whose {@code ensures} says the answer carries the id it was asked about;
+     * the row states another, and it is refused here for the reason a table for a local dependency
+     * is refused.
+     *
+     * <p>What this used to be is the record of a limit that was not the language's: a fake could
+     * only name a behavior of its own module, so the clause was never reached and a cross-module
+     * requirement had no way to be exampled at all (issue #1108).
      */
     @Test
-    void aFakeForABehaviorAnotherModuleDeclaresIsNotAdmitted() {
+    void aStandInForABorrowedDependencyIsHeldToTheDeclaringModulesClause() {
         List<String> codes = codesOf(Compilation.ofSources(List.of("""
                 module up exposing ( Id, Found, lookup )
 
@@ -555,10 +557,45 @@ class AFixtureIsHeldToWhatTheBehaviorDeclaresTest {
                     | "placed for the one asked" : (Id(1)) -> Placed { by = Id(1) }
                 """), ModulePath.EMPTY));
 
-        assertTrue(codes.contains("E1908"),
-                "`lookup` is not an injected behavior of `down`, so nothing stands in: " + codes);
-        assertFalse(codes.contains("E1929"), "nothing was held against a contract this module has "
-                + "none of: " + codes);
+        assertTrue(codes.contains("E1929"),
+                "the row stands in with a value `up.lookup` declares it cannot answer: " + codes);
+        assertFalse(codes.contains("E1908"),
+                "the table does stand in for the dependency, so none is missing: " + codes);
+    }
+
+    /** And one that keeps the borrowed clause is admitted, so the refusal above is about the value
+     *  and not about the boundary it was written across. */
+    @Test
+    void aStandInThatKeepsTheBorrowedClauseIsAdmitted() {
+        List<String> codes = codesOf(Compilation.ofSources(List.of("""
+                module up exposing ( Id, Found, lookup )
+
+                data Id = Int
+                data Found = { id: Id }
+
+                behavior lookup : (id: Id) -> Found
+                    ensures asked = value.id.value == id.value
+                """, """
+                module down
+
+                import up ( Id, Found, lookup )
+
+                data Placed = { by: Id }
+
+                behavior place : (id: Id) -> Placed
+                    depends on lookup
+                    constructs Placed
+
+                let place (id, lookup) = Placed { by = lookup(id).id }
+
+                fake lookup
+                    | (Id(1)) -> Found { id = Id(1) }
+
+                example place
+                    | "placed for the one asked" : (Id(1)) -> Placed { by = Id(1) }
+                """), ModulePath.EMPTY));
+
+        assertEquals(List.of(), codes, "a requirement carried across a module boundary runs");
     }
 
     /**

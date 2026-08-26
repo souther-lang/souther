@@ -372,6 +372,46 @@ public final class Bodies {
     }
 
     /**
+     * What every behavior this module can name declares of its answer — its own and the ones it
+     * borrows — each under the declaration it belongs to.
+     *
+     * <p>What a stand-in is held to. A {@code fake} row and a {@code with} state what a dependency
+     * answers, and that dependency may be declared in another module, whose clause is the one the
+     * value has to keep; the check it is held by is emitted where the behavior is declared, so the
+     * module travels with the contract rather than being taken from wherever the row was written.
+     *
+     * <p>Beside {@link Contracts} and not in place of it: a module's own contracts are what its
+     * emitter and its report read, and widening that answer would hand every reader of it clauses
+     * belonging to somewhere else.
+     */
+    public record ReachableContracts(String name)
+            implements Key<Map<ValueName.Behavior, CheckedEnsures>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<ValueName.Behavior, CheckedEnsures>> compute(Db db) {
+            Answer<Map<String, CheckedEnsures>> own = db.ask(new Contracts(name));
+            if (!own.present()) {
+                return Answer.absent();
+            }
+            Map<ValueName.Behavior, CheckedEnsures> out = new LinkedHashMap<>();
+            own.value().forEach((behavior, ensures) ->
+                    out.put(new ValueName.Behavior(name, behavior), ensures));
+            for (ValueName.Behavior each : borrowed(db, name)) {
+                Map<String, CheckedEnsures> there = db.ask(new Contracts(each.module())).value();
+                CheckedEnsures ensures = there == null ? null : there.get(each.name());
+                if (ensures != null) {
+                    out.put(each, ensures);
+                }
+            }
+            return Answer.of(Ordered.map(out));
+        }
+    }
+
+    /**
      * What each of a module's behaviors declares about its answer, by the name it is declared under.
      *
      * <p>The one reading of a module's {@code ensures} clauses. A clause is resolved, typed, and

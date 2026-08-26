@@ -797,7 +797,7 @@ public final class Output {
             // Which of the three it was travels into the message, because what to do about them
             // differs — and one of them is not about the model at all.
             WrittenStatements.Unread why = f.why();
-            Diagnostic.Builder said = Diagnostic.at(f.at(), f.width())
+            Diagnostic.Builder said = Diagnostic.at(f.at())
                     .say(why.isDepth()
                             ? new ExampleMessage.NotComparedTheTableReachedItsDepthLimit(
                                     f.target(), why.limitShown())

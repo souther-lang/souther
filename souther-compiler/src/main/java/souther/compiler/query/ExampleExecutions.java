@@ -8,7 +8,9 @@ import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Contract;
 import souther.compiler.execute.ExampleExecution;
+import souther.compiler.types.ValueName;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -43,9 +45,25 @@ public final class ExampleExecutions {
     /** The environment {@code module}'s examples are evaluated in, or null where this compile has
      *  not settled it. */
     public static ExampleExecution of(Db db, String module) {
+        return of(db, module, true);
+    }
+
+    /**
+     * The same, {@code withDeclaring} saying whether to take the readings of the modules this one
+     * writes stand-ins for behaviors of.
+     *
+     * <p>False for those readings themselves. What a module borrows statements about is its own
+     * question, and following it further would assemble a reading nothing asks anything of — one
+     * level is what a stand-in written here reaches.
+     */
+    private static ExampleExecution of(Db db, String module, boolean withDeclaring) {
         Answer<Prepared> prepared = db.ask(new Shapes.Prepared(module));
         Answer<Symbols> scope = Names.derivedSymbols(db, module);
-        Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(module));
+        // Every behavior the rows may name, keyed by the declaration it is. A row targets one of
+        // this module's own and a stand-in may name one another module declares, and both are asked
+        // of this one answer — the narrower question, this module's own signatures under their bare
+        // names, cannot tell a borrowed dependency from a namesake declared here.
+        Answer<Map<ValueName.Behavior, Sig>> sigs = db.ask(new Bodies.Reachable(module));
         if (!prepared.present() || !scope.present() || !sigs.present()) {
             return null;
         }
@@ -56,18 +74,49 @@ public final class ExampleExecutions {
         // whose requirements are not settled is not one to read statements off yet.
         Map<String, List<BehaviorRequirement>> requirements =
                 db.ask(new Bodies.Requirements(module)).value();
-        Map<String, CheckedEnsures> declared = db.ask(new Bodies.Contracts(module)).value();
+        // Every behavior a row or a stand-in here may state something about, its clause under the
+        // declaration it belongs to. A stand-in for a dependency another module declares is held to
+        // that module's clause, by the check that module emitted.
+        Map<ValueName.Behavior, CheckedEnsures> declared =
+                db.ask(new Bodies.ReachableContracts(module)).value();
         if (requirements == null || declared == null) {
             return null;
         }
         // The reading that runs. What decides a row is the emitted check (spec §example-ensures),
         // and this is what that check was emitted from.
-        Map<String, Contract> contracts = CheckedEnsures.executable(declared);
+        Map<ValueName.Behavior, Contract> contracts = CheckedEnsures.executableOf(declared);
         // The one part that may be empty rather than missing. A module defining no value of its own
         // reaches none by name, which is a module rather than an unanswered question.
         Map<String, Hir.FnDef> values = db.ask(new Bodies.ModuleDefinitions(module)).value();
         return new ExampleExecution(prepared.value(), scope.value(), sigs.value(),
                 requirements, values == null ? Map.of() : values, contracts,
-                Output.deadlineOf(db), Output.policyOf(db));
+                Output.deadlineOf(db), Output.policyOf(db),
+                withDeclaring ? declaringOf(db, prepared.value()) : Map.of());
+    }
+
+    /**
+     * The reading of each module {@code prepared} writes a stand-in for a behavior of.
+     *
+     * <p>Read off the stand-ins, so a module is here because a statement written here is about one
+     * of its behaviors — not because an import line reached it. Both forms: a {@code with} states
+     * what a dependency answers as a {@code fake} does, and taking the tables for the whole of what
+     * is written here would pass over every behavior a row supplies without one. The module's own is
+     * not among them: its rows are what the reading already has.
+     *
+     * <p>A module whose reading this compile has not settled is left out. Nothing was compared, and
+     * saying so by absence is what every other unsettled reading here says.
+     */
+    private static Map<String, ExampleExecution> declaringOf(Db db, Prepared prepared) {
+        Map<String, ExampleExecution> out = new LinkedHashMap<>();
+        for (ValueName.Behavior each : prepared.forExamples().standsInFor()) {
+            if (each.module().equals(prepared.name()) || out.containsKey(each.module())) {
+                continue;
+            }
+            ExampleExecution reading = of(db, each.module(), false);
+            if (reading != null) {
+                out.put(each.module(), reading);
+            }
+        }
+        return out;
     }
 }
