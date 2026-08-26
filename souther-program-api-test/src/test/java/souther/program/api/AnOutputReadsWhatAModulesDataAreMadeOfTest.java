@@ -111,10 +111,9 @@ class AnOutputReadsWhatAModulesDataAreMadeOfTest {
      * module that declares it is on the name, and the reader neither picks it nor is told to.
      */
     private static CheckedData layout(CheckedProgram program, TypeSymbol.AtModule name) {
-        Declared.Available available = assertInstanceOf(Declared.Available.class,
-                program.declaration(name), name::toString);
-        assertEquals(DeclaredBy.A_MODULE, available.declaredBy(), name::toString);
-        return available.data();
+        Declared declared = program.declaration(name);
+        assertEquals(DeclaredBy.A_MODULE, declared.declaredBy(), name::toString);
+        return declared.data();
     }
 
     private static CheckedData declared(CheckedModule module, String name) {

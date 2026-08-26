@@ -8,7 +8,6 @@ import souther.compiler.types.TypeSymbols;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -51,39 +50,26 @@ class WhatTheLanguageDeclaresCrossesAsADeclarationTest {
     }
 
     /**
-     * One address is declared by the language or by a module, and never by both.
+     * One address belongs to one world.
      *
-     * <p>Nothing of a compilation is in the reserved namespace, so the two never meet — and were
-     * they to, whichever was filed second would silently be the answer every reader got. Refused
-     * where the index is built, which is the one place both are in hand.
+     * <p>Nothing of a compilation is in the reserved namespace, and a module of this compile takes
+     * its name over one of the same name on the path, so the three never meet. Were two of them to,
+     * whichever was filed last would silently be the answer every reader got, and nothing would say
+     * the other had been there. Refused where the index is built, which is the one place all three
+     * are in hand.
      */
     @Test
-    void oneAddressIsNotDeclaredByBothWorlds() {
+    void oneAddressBelongsToOneWorld() {
         CheckedData twice = new CheckedData.Unit(named("demo", "Mode"));
 
-        IllegalStateException refused = assertThrows(IllegalStateException.class,
-                () -> new CheckedProgram(List.of(module("demo", twice)), List.of(twice), Set.of()));
-
-        assertEquals("`demo.Mode` is declared by the language and by a module", refused.getMessage());
-    }
-
-    /**
-     * And an identity is declared here or read off the path, and never both.
-     *
-     * <p>A module of this compile takes the name over a module of the same name on the path, so what
-     * is read off the path is what nothing here declares. Held because the lookup tries one and then
-     * the other: with an identity in both, which arm a reader was answered with would be the order
-     * the tries happen to be written in.
-     */
-    @Test
-    void anIdentityIsNotBothDeclaredHereAndReadOffThePath() {
-        CheckedData here = new CheckedData.Unit(named("demo", "Mode"));
-
-        IllegalStateException refused = assertThrows(IllegalStateException.class,
-                () -> new CheckedProgram(List.of(module("demo", here)), List.of(),
-                        Set.of(named("demo", "Mode"))));
-
-        assertEquals("`demo.Mode` is declared here and read off the path", refused.getMessage());
+        assertEquals("`demo.Mode` is declared by A_MODULE and by THE_LANGUAGE",
+                assertThrows(IllegalStateException.class, () -> new CheckedProgram(
+                        List.of(module("demo", twice)), List.of(twice), List.of()))
+                        .getMessage());
+        assertEquals("`demo.Mode` is declared by A_MODULE and by A_MODULE_ON_THE_PATH",
+                assertThrows(IllegalStateException.class, () -> new CheckedProgram(
+                        List.of(module("demo", twice)), List.of(), List.of(twice)))
+                        .getMessage());
     }
 
     private static TypeSymbol.AtModule named(String module, String name) {

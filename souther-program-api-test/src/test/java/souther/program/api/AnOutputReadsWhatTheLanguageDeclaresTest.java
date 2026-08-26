@@ -26,7 +26,6 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -41,10 +40,10 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  * value it could not lay out. What is held here is that the question is asked of the program with
  * the identity, and that a declaration the language gives is read exactly as a module's own is.
  *
- * <p>And that the two absences that are not one another stay apart. A module read off the path
- * declares data of its own, and what a value of one is made of was settled by the compile that
- * built it — so this program says where it is rather than that it has none. A name nothing declares
- * is neither, and is refused.
+ * <p>And that a dependency's data is read the same way again. Such a declaration is one this
+ * compile read to check the module that names it, so what a value of one is made of is here as
+ * well; who declared it says who emits it. A name nothing declares is not a third state of that and
+ * is refused.
  */
 class AnOutputReadsWhatTheLanguageDeclaresTest {
 
@@ -74,11 +73,10 @@ class AnOutputReadsWhatTheLanguageDeclaresTest {
     void aSumTheLanguageDeclaresIsReadAsAnyOtherSumIs() {
         CheckedProgram program = CheckedProgram.of(List.of(ROUNDS));
 
-        Declared.Available available = assertInstanceOf(Declared.Available.class,
-                program.declaration(ROUNDING_MODE));
-        assertEquals(DeclaredBy.THE_LANGUAGE, available.declaredBy(),
+        Declared declared = program.declaration(ROUNDING_MODE);
+        assertEquals(DeclaredBy.THE_LANGUAGE, declared.declaredBy(),
                 "no module of a compilation declares it");
-        CheckedData.Sum sum = assertInstanceOf(CheckedData.Sum.class, available.data());
+        CheckedData.Sum sum = assertInstanceOf(CheckedData.Sum.class, declared.data());
         assertEquals(
                 List.of("HALF_UP", "HALF_EVEN", "HALF_DOWN", "UP", "DOWN", "CEILING", "FLOOR"),
                 sum.cases().stream().map(TypeSymbol::name).toList(),
@@ -90,10 +88,9 @@ class AnOutputReadsWhatTheLanguageDeclaresTest {
     void aCaseOfItIsTheUnitDataItIs() {
         CheckedProgram program = CheckedProgram.of(List.of(ROUNDS));
 
-        Declared.Available available = assertInstanceOf(Declared.Available.class,
-                program.declaration(HALF_UP));
-        assertEquals(DeclaredBy.THE_LANGUAGE, available.declaredBy());
-        assertEquals(HALF_UP, assertInstanceOf(CheckedData.Unit.class, available.data()).name());
+        Declared declared = program.declaration(HALF_UP);
+        assertEquals(DeclaredBy.THE_LANGUAGE, declared.declaredBy());
+        assertEquals(HALF_UP, assertInstanceOf(CheckedData.Unit.class, declared.data()).name());
     }
 
     /**
@@ -120,17 +117,17 @@ class AnOutputReadsWhatTheLanguageDeclaresTest {
     /**
      * Every identity a checked program reaches is one this program answers for.
      *
-     * <p>The wider of the two holdings: an identity in a body was resolved by this compile, so
-     * something knows what declares it, and a program that refused one would be handing an output a
-     * name with nothing behind it. Whether the declaration is here or in the compile that built a
-     * dependency is the next question and not this one.
+     * <p>An identity in a body was resolved by this compile, so something here knows what declares
+     * it, and a program that refused one would be handing an output a name with nothing behind it.
+     * Whichever world declared it, what a value of it is made of is the answer — so this holds at
+     * every position a reader can arrive at and not only where a value is laid out.
      */
     @Test
     void everyIdentityAProgramReachesIsOneItAnswersFor() {
         Map<String, byte[]> classes = Compiler.compile(PUBLISHED);
-        // Both programs, because the two arms are what this is about: one reaches a declaration the
-        // language gives and the other one a dependency made, and a walk over either alone would
-        // hold while the other went unanswered.
+        // Both programs, because the two worlds a declaration can come from besides this
+        // compilation's own are one each, and a walk over either alone would hold while the other
+        // went unanswered.
         CheckedProgram language = CheckedProgram.of(List.of(ROUNDS));
         CheckedProgram dependency =
                 CheckedProgram.of(List.of(IMPORTS), (ModulePath) classes::get);
@@ -149,31 +146,15 @@ class AnOutputReadsWhatTheLanguageDeclaresTest {
         }
     }
 
-    /**
-     * And where a value of one is being laid out, the declaration is here.
-     *
-     * <p>The narrower holding, and the one an output emits by. These are the places a backend has to
-     * know what a value is made of — what a construction fills, what a unit value stands for, what a
-     * field is read off, and which cases an arm selects — and a declaration that was somewhere else
-     * would leave it with nothing to emit.
-     */
-    @Test
-    void andWhereAValueIsLaidOutTheDeclarationIsHere() {
-        CheckedProgram program = CheckedProgram.of(List.of(ROUNDS));
-        Set<TypeSymbol.AtModule> laidOut = everyIdentityLaidOutIn(program);
-
-        assertFalse(laidOut.isEmpty(), "this module lays values out");
-        for (TypeSymbol.AtModule named : laidOut) {
-            assertInstanceOf(Declared.Available.class, program.declaration(named),
-                    named::toString);
-        }
-    }
-
     /** Published by another project, and on the path rather than among the sources. */
     private static final String PUBLISHED = """
-            module lib.money exposing ( Amount )
+            module lib.money exposing ( Amount, Kind )
 
-            data Amount = Int
+            data Amount =
+                { cents: Int }
+                invariant cents > 0
+
+            data Kind = Untouched | AlsoUntouched
             """;
 
     private static final String IMPORTS = """
@@ -185,28 +166,90 @@ class AnOutputReadsWhatTheLanguageDeclaresTest {
             behavior bill : (a: Amount) -> Receipt constructs Receipt
 
             let bill (a) = Receipt { total = a }
+
+            behavior cents : (a: Amount) -> Int
+
+            let cents (a) = a.cents
             """;
 
     /**
-     * A declaration a module off the path makes is said to be there, and not said to be missing.
+     * A field read off a dependency's data is one this program says how to place.
      *
-     * <p>What a value of it is made of was decided when that module was compiled and is in that
-     * compile's own snapshot. Answered because this compile read the module and found the name among
-     * what it declares — so a declaration arriving some fourth way would fall through to being
-     * refused rather than be taken for one of these.
+     * <p>A field of an exposed data is readable across modules, so this body is one the language
+     * admits, and the read is a load an output has to emit. What it loads is at the position the
+     * check placed it — which this compile worked out when it checked this module, and which an
+     * output told to go and ask the build that made the dependency would have to work out again.
      */
     @Test
-    void aDeclarationOffThePathIsSaidToBeThere() {
-        Map<String, byte[]> classes = Compiler.compile(PUBLISHED);
-        ModulePath path = classes::get;
-        CheckedProgram program = CheckedProgram.of(List.of(IMPORTS), path);
+    void aFieldReadOffADependencysDataIsOneThisProgramPlaces() {
+        CheckedProgram program = CheckedProgram.of(List.of(IMPORTS), dependency());
+        CheckedModule module = program.module("app.bills");
+        assertNotNull(module);
+        TypeSymbol.AtModule amount = theTypeRead(module, "cents");
+
+        Declared declared = program.declaration(amount);
+
+        assertEquals(DeclaredBy.A_MODULE_ON_THE_PATH, declared.declaredBy(),
+                "a dependency's, and not this compile's to emit");
+        CheckedData.Product product =
+                assertInstanceOf(CheckedData.Product.class, declared.data());
+        assertEquals(0, product.positionOf("cents"), "where the load goes");
+        assertEquals(1, product.invariants().size(),
+                "what must hold of one, as the dependency's author wrote it");
+    }
+
+    /** And the same data reached as a field's type, which is the reading a construction needs. */
+    @Test
+    void andTheSameDataReachedAsAFieldsType() {
+        CheckedProgram program = CheckedProgram.of(List.of(IMPORTS), dependency());
         CheckedModule module = program.module("app.bills");
         assertNotNull(module);
 
         TypeSymbol.AtModule amount = assertInstanceOf(TypeSymbol.AtModule.class,
                 assertInstanceOf(Type.Ref.class, fieldOf(module, "Receipt", "total").type()).name());
+
         assertEquals("lib.money", amount.module(), "the field's type is the dependency's data");
-        assertInstanceOf(Declared.OnThePath.class, program.declaration(amount));
+        assertEquals(DeclaredBy.A_MODULE_ON_THE_PATH,
+                program.declaration(amount).declaredBy());
+    }
+
+    /**
+     * And what a dependency declares is here whether or not this program names it.
+     *
+     * <p>A snapshot holding what one walk of this program reached would be right about the names
+     * that walk thought to visit. A value of any of them can arrive from anywhere the dependency's
+     * own artifact reaches.
+     */
+    @Test
+    void andWhatADependencyDeclaresIsHereWhetherOrNotThisProgramNamesIt() {
+        CheckedProgram program = CheckedProgram.of(List.of(IMPORTS), dependency());
+
+        Declared unnamed = program.declaration(
+                TypeSymbols.declared(new TypeKey("lib.money", "Untouched")));
+
+        assertEquals(DeclaredBy.A_MODULE_ON_THE_PATH, unnamed.declaredBy());
+        assertInstanceOf(CheckedData.Unit.class, unnamed.data());
+    }
+
+    private static ModulePath dependency() {
+        Map<String, byte[]> classes = Compiler.compile(PUBLISHED);
+        return classes::get;
+    }
+
+    /** The declaration whose field the behavior called {@code named} reads. */
+    private static TypeSymbol.AtModule theTypeRead(CheckedModule module, String named) {
+        for (CheckedBehavior behavior : module.behaviors()) {
+            if (!behavior.name().name().equals(named)) {
+                continue;
+            }
+            List<Core.FieldAccess> reads = new ArrayList<>();
+            collect(((CheckedImplementation.Body) behavior.implementation()).body(),
+                    Core.FieldAccess.class, reads);
+            assertEquals(1, reads.size(), () -> named + " reads one field");
+            return assertInstanceOf(TypeSymbol.AtModule.class,
+                    assertInstanceOf(Type.Ref.class, reads.get(0).target().type()).name());
+        }
+        throw new AssertionError(named + " is no behavior of " + module.name());
     }
 
     /**
@@ -248,7 +291,7 @@ class AnOutputReadsWhatTheLanguageDeclaresTest {
                         "CEILING", "FLOOR"),
                 language.stream().map(each -> each.name().name()).toList());
         for (CheckedData declared : language) {
-            assertEquals(new Declared.Available(declared, DeclaredBy.THE_LANGUAGE),
+            assertEquals(new Declared(declared, DeclaredBy.THE_LANGUAGE),
                     program.declaration(declared.name()),
                     "the list and the lookup are one index read two ways");
         }

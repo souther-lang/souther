@@ -1,10 +1,10 @@
 package souther.compiler.program;
 
-import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.AtomSpace;
 import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.check.CoreBinders;
+import souther.compiler.check.Derived;
 import souther.compiler.check.Lower;
 import souther.compiler.check.Sig;
 import souther.compiler.check.SpecImplementation;
@@ -26,15 +26,12 @@ import souther.compiler.query.Shapes;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
-import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * Takes the snapshot: reads what the compiler decided and writes it down as a {@link
@@ -104,31 +101,43 @@ final class CheckedProgramAssembler {
     }
 
     /**
-     * Every declaration this compile read off the path: the identities it resolved against a module
-     * it did not check.
+     * What every module this compile read off the path declares, as a value of one is laid out.
      *
-     * <p>Taken from what the front end read rather than from what is left over. A reader asking
-     * about one of these is asking about a declaration that was made when that module was compiled,
-     * so what is recorded here is that the compile found the name among what that module declares —
-     * and an identity nothing declares reaches none of this and is refused instead.
+     * <p>Read here and not left to the compile that built the dependency. This one read those
+     * declarations already — it had to, to check a module that constructs one of them or reads a
+     * field off one — so what is handed over is the reading the checker itself used, and an output
+     * laying such a value out places its fields exactly where the check placed them.
      *
-     * <p>The identities and not the declarations. What one is made of belongs to the compile that
-     * made it, and reading it here would be this compiler deciding a second time what another one
-     * already settled.
+     * <p>Which modules those are is {@link Front.FromPath}'s answer: the ones this compilation may
+     * read declarations from, which is not every module on the path and never one it refused. What
+     * each of them declares comes from the derivation this compile ran over it, in the same three
+     * forms a module of its own is read in.
      *
-     * <p>Each identity comes off the declaration that says which one it is. Paired together out of
-     * the module a declaration was read under and the name it is indexed by, it would be this
-     * answering for a declaration whatever the two strings came from.
+     * <p>The whole of what each declares, and not the part something here happens to name. Which
+     * declarations a body reaches is a walk, and a snapshot carrying only what one walk found would
+     * be right about the names that walk thought to visit.
      */
-    private static Set<TypeSymbol.AtModule> declaredOnThePath(Db db) {
+    private static List<CheckedData> declaredOnThePath(Db db) {
         Front.FromPath.Of read = db.ask(new Front.FromPath()).value();
-        Set<TypeSymbol.AtModule> declared = new LinkedHashSet<>();
+        List<CheckedData> declared = new ArrayList<>();
         if (read == null) {
             return declared;
         }
-        for (Front.FromPath.OnThePath onThePath : read.modules().values()) {
-            for (Ast.Def def : onThePath.declarations().values()) {
-                declared.add(TypeSymbols.declared(def.declaredKey()));
+        for (String module : read.modules().keySet()) {
+            Map<String, Derived.Def> defs = db.ask(new Shapes.DerivedDeclarations(module)).value();
+            Map<TypeSymbol.AtModule, ValueShape> shapes =
+                    db.ask(new Shapes.ValueShapes(module)).value();
+            Symbols symbols = Names.derivedSymbols(db, module).value();
+            if (defs == null || shapes == null || symbols == null) {
+                // This compile read the module and checked a module against it, so what it declares
+                // is something this compile already worked out. Letting it through would hand an
+                // output a program whose identities it cannot all lay out, which is the thing this
+                // is here to end.
+                throw new IllegalStateException("`" + module + "` was read off the path and this"
+                        + " compile has nothing to say about what it declares");
+            }
+            for (Derived.Def def : defs.values()) {
+                declared.add(declaredAs(def.read(), symbols, shapes));
             }
         }
         return declared;

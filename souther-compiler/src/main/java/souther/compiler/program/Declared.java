@@ -1,50 +1,29 @@
 package souther.compiler.program;
 
 /**
- * What {@link CheckedProgram#declaration} answers: where the declaration an identity names is, and
- * — where this snapshot holds it — what a value of it is made of.
+ * What {@link CheckedProgram#declaration} answers: what a value of the data an identity names is
+ * made of, and who declared it.
  *
- * <p>Two arms and two questions, kept apart. Whether the snapshot holds the declaration is this
- * sum; who declared it is {@link DeclaredBy}, under the arm that holds one. Answered as one they
- * were the same question for as long as every declaration a body could name was one this compile
- * checked, and the day the language's own had to be reached the reader was left choosing which
- * owner to ask.
+ * <p>One answer and not two questions. Every declaration this compile resolved is here — its own
+ * modules', the language's, and those of the modules it read off the path — so which world a
+ * declaration came from decides who emits it and never whether it can be laid out. A reader that
+ * had to ask where a declaration was before it could ask what it is would be choosing, of every
+ * identity it holds, which world to look in; and one told that a dependency's data is somewhere
+ * else has been told to go and find a snapshot that was never made — what a dependency ships is an
+ * artifact, and the layout in it is this compile's own reading of that artifact.
  *
- * <p>No arm for a name nothing declares. An identity comes from a declaration world having said one
- * is at an address, so a reader that assembled one from two strings is asking about something that
- * is not a declaration — and {@link CheckedProgram#declaration} refuses rather than answering, for
- * the reason {@link CheckedData.Product#positionOf} does. An arm for it would be an output handling
+ * <p>Nothing for a name nothing declares. An identity comes from a declaration world having said
+ * one is at an address, so a reader that assembled one from two strings is asking about something
+ * that is not a declaration — {@link CheckedProgram#declaration} refuses rather than answering, for
+ * the reason {@link CheckedData.Product#positionOf} does. A case for it would be an output handling
  * a mistake of its own as one of the states a checked program is in.
  */
-public sealed interface Declared {
+public record Declared(CheckedData data, DeclaredBy declaredBy) {
 
-    /**
-     * The declaration is here, and this is what a value of it is made of.
-     *
-     * <p>One arm for both worlds, which is what makes a language-declared sum and a module-declared
-     * sum read the same way rather than by two readers agreeing to. A reader that only lays values
-     * out takes {@link #data} and never looks at {@link #declaredBy}.
-     */
-    record Available(CheckedData data, DeclaredBy declaredBy) implements Declared {
-
-        public Available {
-            if (data == null || declaredBy == null) {
-                throw new IllegalArgumentException(
-                        "an available declaration is what it is made of and who declared it");
-            }
+    public Declared {
+        if (data == null || declaredBy == null) {
+            throw new IllegalArgumentException(
+                    "a declaration is what it is made of and who declared it");
         }
     }
-
-    /**
-     * The declaration is in a module this compile read off the path, and this snapshot does not
-     * hold it.
-     *
-     * <p>Said because the compile resolved the identity against a module it read off the path, and
-     * not because nothing else answered: a fourth way for a declaration to arrive would fall
-     * through to being refused rather than being taken for this one. What such a declaration is
-     * made of was decided when that module was compiled, and is in that compile's own snapshot.
-     *
-     * <p>It carries nothing. Which module it is, is on the identity the reader asked with.
-     */
-    record OnThePath() implements Declared {}
 }
