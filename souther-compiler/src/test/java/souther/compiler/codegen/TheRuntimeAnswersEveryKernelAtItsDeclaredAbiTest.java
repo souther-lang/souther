@@ -3,7 +3,6 @@ package souther.compiler.codegen;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.core.Kernel;
 import souther.compiler.core.KernelSignature;
-import souther.compiler.types.Type;
 
 import org.junit.jupiter.api.Test;
 
@@ -27,23 +26,20 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * the declared ones, and nothing about the call goes into it. That makes it a claim about two
  * artifacts that are built apart — the {@code .sou} declarations this compiler ships, and the
  * methods {@code souther-runtime} declares — and no construction can hold it, because neither side
- * knows the other. Held here, by deriving the descriptor exactly as an emitter does and asking the
+ * knows the other. Held here, by asking for the descriptor a call is emitted at and asking the
  * runtime class whether it has that method.
  *
  * <p>This replaces the invariant that used to say a descriptor built from the call agreed with the
  * declaration where nothing could arrive narrower. There is no descriptor built from a call left to
  * say it of; what is worth saying now is that the one rule reaches something real.
  *
- * <p>Asked with {@link Intrinsics#boundaryDesc}, the same reading the emitters use. A second reading
- * written here would be a second answer for the two to agree on, and the day they differed this
- * would be holding the runtime to a rule nothing emits.
+ * <p>Asked with {@link Intrinsics#descriptorOf}, which is what the emitter calls the method at. A
+ * derivation written here instead would be a second answer for the two to agree on, and the day
+ * they differed this would be holding the runtime to a rule nothing emits.
  *
- * <p>What this does not reach: the comparator the ordered family prepends, which is emitted through
- * {@link Intrinsics#emitWithComparator} for the kernels {@code BodyGen} routes there. Which kernels
- * those are is knowledge of {@code BodyGen}'s arms and not a set anything holds, and a set invented
- * to be read here would be a second statement of what the backend does. What holds it is
- * {@code CompileEnumerationOrderTest}, which sorts values whose order lives on their sum and runs
- * the result.
+ * <p>Both forms a kernel can be called at. The ordered family reaches its runtime method with a
+ * comparator ahead of what the declaration names, and that is a second method — held here too, off
+ * the kernels {@code BodyGen}'s arm is driven by.
  */
 class TheRuntimeAnswersEveryKernelAtItsDeclaredAbiTest {
 
@@ -74,23 +70,25 @@ class TheRuntimeAnswersEveryKernelAtItsDeclaredAbiTest {
     void everyRuntimeKernelIsAnsweredAtTheDescriptorItsDeclarationGives() {
         List<String> unanswered = new ArrayList<>();
         for (Map.Entry<Kernel, Intrinsics.Emit> row : Intrinsics.emitters().entrySet()) {
-            List<Type> inOrder = switch (row.getValue()) {
-                case Intrinsics.RuntimeStatic r -> inOrder(declared(row.getKey()), r.argOrder());
-                case Intrinsics.TakesAFunction _ -> declared(row.getKey()).parameters();
-                case Intrinsics.NumericFold _, Intrinsics.JdkVirtual _ -> null;
-            };
-            if (inOrder == null) {
+            Kernel kernel = row.getKey();
+            if (ANSWERED_PER_REPRESENTATION.contains(kernel)
+                    || ANSWERED_BY_THE_HOST.contains(kernel)) {
                 continue;
             }
-            ClassDesc[] params = new ClassDesc[inOrder.size()];
-            for (int i = 0; i < params.length; i++) {
-                params[i] = Intrinsics.boundaryDesc(inOrder.get(i));
-            }
-            MethodTypeDesc derived = MethodTypeDesc.of(
-                    Intrinsics.boundaryDesc(declared(row.getKey()).result()), params);
-            String missing = whatTheRuntimeHasInstead(row.getValue(), derived);
+            KernelSignature declared = declared(kernel);
+            String missing = whatTheRuntimeHasInstead(row.getValue(),
+                    Intrinsics.descriptorOf(declared, row.getValue()));
             if (missing != null) {
-                unanswered.add(row.getKey().key() + ": " + missing);
+                unanswered.add(kernel.key() + ": " + missing);
+            }
+            // And the ordered family's other method, which takes a comparator the declaration does
+            // not name ahead of the arguments it does.
+            if (BodyGen.ORDERED_BY_COMPARATOR.contains(kernel)) {
+                String ordered = whatTheRuntimeHasInstead(row.getValue(),
+                        Intrinsics.descriptorWithComparator(declared, row.getValue()));
+                if (ordered != null) {
+                    unanswered.add(kernel.key() + " with a comparator: " + ordered);
+                }
             }
         }
 
@@ -156,18 +154,9 @@ class TheRuntimeAnswersEveryKernelAtItsDeclaredAbiTest {
                 + " kernel it answers declares");
     }
 
-    /** What the library declares {@code kernel} to take and answer. */
+    /** What the language declares {@code kernel} to take and answer. */
     private static KernelSignature declared(Kernel kernel) {
-        return DefaultStdlib.get().intrinsic(kernel).signature();
-    }
-
-    /** The declared parameters in the order the row puts them on the stack. */
-    private static List<Type> inOrder(KernelSignature declared, int[] argOrder) {
-        List<Type> ordered = new ArrayList<>();
-        for (int src : argOrder) {
-            ordered.add(declared.parameters().get(src));
-        }
-        return ordered;
+        return DefaultStdlib.get().kernelSignatures().signatureOf(kernel);
     }
 
     /**

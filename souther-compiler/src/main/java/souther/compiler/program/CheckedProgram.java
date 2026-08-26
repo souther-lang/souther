@@ -2,12 +2,12 @@ package souther.compiler.program;
 
 import souther.compiler.core.Kernel;
 import souther.compiler.core.KernelSignature;
+import souther.compiler.core.KernelSignatures;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -80,11 +80,10 @@ public final class CheckedProgram {
      * each call site it would be one statement copied as many times as the program happens to reach
      * the library.
      */
-    private final Map<Kernel, KernelSignature> kernels;
+    private final KernelSignatures kernels;
 
     CheckedProgram(List<CheckedModule> modules, List<CheckedData> languageDeclarations,
-                   List<CheckedData> declaredOnThePath,
-                   Map<Kernel, KernelSignature> kernels) {
+                   List<CheckedData> declaredOnThePath, KernelSignatures kernels) {
         this.modules = List.copyOf(modules);
         Map<String, CheckedModule> named = new LinkedHashMap<>();
         for (CheckedModule module : this.modules) {
@@ -110,7 +109,7 @@ public final class CheckedProgram {
         // data in an order and a reader listing them is shown one. A map that kept none would show
         // an order nothing decided, which can differ between two runs of one compiler.
         this.declarations = Collections.unmodifiableMap(index);
-        this.kernels = Collections.unmodifiableMap(new EnumMap<>(kernels));
+        this.kernels = kernels;
     }
 
     /**
@@ -206,10 +205,9 @@ public final class CheckedProgram {
      * the two part company wherever a declared parameter is a type a value can arrive narrower than,
      * which a sum-typed parameter is. An output building a boundary form for a call reads it here.
      *
-     * <p>Total over the kernels, and never a null. The language names a fixed set of them and the
-     * library refuses to finish while one of them is declared nowhere, so there is no kernel a
-     * program can reach that this has nothing for. A gap all the same is this compiler having read
-     * its own library wrong, and is said rather than handed over as an absence to interpret.
+     * <p>Total over the kernels, and never a null. The language names a fixed set of them and a
+     * snapshot holding fewer cannot be made, so there is no kernel a program can reach that this
+     * has nothing for.
      *
      * <p>Asked of the program, because a program was checked against one version of the language.
      * A signature read from a library obtained some other way would be a second reading of what a
@@ -217,12 +215,7 @@ public final class CheckedProgram {
      * the same version.
      */
     public KernelSignature kernelSignature(Kernel kernel) {
-        KernelSignature declared = kernels.get(kernel);
-        if (declared == null) {
-            throw new IllegalStateException(
-                    "this program was checked against a library declaring nothing for " + kernel);
-        }
-        return declared;
+        return kernels.signatureOf(kernel);
     }
 
     /**

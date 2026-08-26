@@ -79,7 +79,8 @@ public final class Output {
             }
             try {
                 Emissions emitted = Backend.generate(
-                        shipped(in), in.scope(), in.typePackages(), in.sigs(), in.imported(),
+                        shipped(in), in.scope(), in.scope().library().kernelSignatures(),
+                        in.typePackages(), in.sigs(), in.imported(),
                         in.injected(),
                         in.callees(), in.requirements(), in.checked(), in.compositions(),
                         in.dischargeClauses(), in.shapes(), in.checks(), in.standingCalls());
@@ -374,7 +375,8 @@ public final class Output {
             }
             try {
                 Emissions emitted = Backend.generate(
-                        in.lowered(), in.scope(), in.typePackages(), in.sigs(), in.imported(),
+                        in.lowered(), in.scope(), in.scope().library().kernelSignatures(),
+                        in.typePackages(), in.sigs(), in.imported(),
                         in.injected(),
                         in.callees(), in.requirements(), in.checked(), in.compositions(),
                         in.dischargeClauses(), in.shapes(), in.checks(), in.standingCalls(),

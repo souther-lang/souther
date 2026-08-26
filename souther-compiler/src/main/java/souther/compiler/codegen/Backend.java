@@ -19,6 +19,7 @@ import souther.compiler.core.ValueShape;
 import souther.compiler.check.Sig;
 import souther.compiler.check.SpecImplementation;
 import souther.compiler.core.EnsuresEnforcement;
+import souther.compiler.core.KernelSignatures;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.check.TypeOps;
@@ -140,6 +141,7 @@ public final class Backend {
      * construction is refused by and is the checker's answer rather than this emitter's
      * (issue #1080). */
     public static Emissions generate(Hir.Module module, Symbols symbols,
+                                               KernelSignatures kernels,
                                                Map<String, String> typePackage,
                                                Map<ValueName.Behavior, Sig> sigs,
                                                Map<ValueName.Behavior, Sig> importedSigs,
@@ -152,8 +154,8 @@ public final class Backend {
                                                Map<TypeSymbol.AtModule, ValueShape> shapes,
                                                Map<ValueName.Behavior, EnsuresEnforcement> checks,
                                                Map<String, Type> standingCalls) {
-        return generate(module, symbols, typePackage, sigs, importedSigs, importedInjected, calleeSigs,
-                requirements, checked, compositions, dischargeInvariants, shapes, checks,
+        return generate(module, symbols, kernels, typePackage, sigs, importedSigs, importedInjected,
+                calleeSigs, requirements, checked, compositions, dischargeInvariants, shapes, checks,
                 standingCalls, Instrumentation.NONE);
     }
 
@@ -171,6 +173,7 @@ public final class Backend {
      * the arm that ran as one nothing reaches.
      */
     public static Emissions generate(Hir.Module module, Symbols symbols,
+                                               KernelSignatures kernels,
                                                Map<String, String> typePackage,
                                                Map<ValueName.Behavior, Sig> sigs,
                                                Map<ValueName.Behavior, Sig> importedSigs,
@@ -185,9 +188,9 @@ public final class Backend {
                                                Map<String, Type> standingCalls,
                                                Instrumentation instrumentation) {
         try {
-            return generating(module, symbols, typePackage, sigs, importedSigs, importedInjected,
-                    calleeSigs, requirements, checked, compositions, dischargeInvariants, shapes,
-                    checks, standingCalls, instrumentation);
+            return generating(module, symbols, kernels, typePackage, sigs, importedSigs,
+                    importedInjected, calleeSigs, requirements, checked, compositions,
+                    dischargeInvariants, shapes, checks, standingCalls, instrumentation);
         } catch (IllegalArgumentException e) {
             // Something the writer would not hold, from a member no definition here claimed — a
             // synthesised class, a shared one. It belongs to the module, which is as near as anything
@@ -197,6 +200,7 @@ public final class Backend {
     }
 
     private static Emissions generating(Hir.Module module, Symbols symbols,
+                                        KernelSignatures kernels,
                                                   Map<String, String> typePackage,
                                                   Map<ValueName.Behavior, Sig> sigs,
                                                   Map<ValueName.Behavior, Sig> importedSigs,
@@ -236,7 +240,7 @@ public final class Backend {
                 recHelpers.put(fn.name(), fn);
             }
         }
-        CodegenContext ctx = new CodegenContext(module.name(), symbols, caseToSums, typePackage,
+        CodegenContext ctx = new CodegenContext(module.name(), symbols, kernels, caseToSums, typePackage,
                 module.exposing().isEmpty(), exposed, recHelpers, standingCalls);
         ctx.setDischargeInvariants(dischargeInvariants);
         ctx.setValueShapes(shapes);

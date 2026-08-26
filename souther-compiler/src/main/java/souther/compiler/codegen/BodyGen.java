@@ -1162,27 +1162,18 @@ final class BodyGen {
          * library, which {@link Intrinsics#emit} says.
          */
         private void kernel(Kernel kernel, Core.Call call) {
+            if (ORDERED_BY_COMPARATOR.contains(kernel)) {
+                TypeSymbol ordering = orderingFor(kernel, call);
+                // No sum to take an ordering off: an element the JVM already compares, or a `sortBy`
+                // whose key answers one. Those go to the table row, which is the same runtime method
+                // without the comparator.
+                if (ordering != null) {
+                    code.invokestatic(cd(ordering), ORDERING_METHOD, MTD_ordering, true);
+                    Intrinsics.emitWithComparator(this, kernel, call);
+                    return;
+                }
+            }
             switch (kernel) {
-                case LIST_SORT, LIST_MAX, LIST_MIN -> {
-                    TypeSymbol ordering = elementOrdering(call.args().get(0));
-                    if (ordering == null) {
-                        break;
-                    }
-                    code.invokestatic(cd(ordering), ORDERING_METHOD, MTD_ordering, true);
-                    Intrinsics.emitWithComparator(this, kernel, call);
-                    return;
-                }
-                // `sortBy` orders by what its key answers, not by what the list holds, so its
-                // comparator is read off the key's result type.
-                case LIST_SORT_BY -> {
-                    if (!(call.args().get(0).type() instanceof Type.FnOf key)
-                            || !(sumOrdering(key.result()) instanceof TypeSymbol ordering)) {
-                        break;
-                    }
-                    code.invokestatic(cd(ordering), ORDERING_METHOD, MTD_ordering, true);
-                    Intrinsics.emitWithComparator(this, kernel, call);
-                    return;
-                }
                 case INT_DIVIDE -> {
                     intDivide(call, true);
                     return;
@@ -1195,6 +1186,26 @@ final class BodyGen {
             }
             Intrinsics.emit(this, kernel, call);
         }
+
+        /** The sum an ordered kernel takes its comparator off, or null where there is none.
+         *
+         * <p>{@code sortBy} orders by what its key answers, not by what the list holds, so its
+         * comparator is read off the key's result type; the rest order the elements themselves. */
+        private TypeSymbol orderingFor(Kernel kernel, Core.Call call) {
+            if (kernel == Kernel.LIST_SORT_BY) {
+                return call.args().get(0).type() instanceof Type.FnOf key
+                        ? sumOrdering(key.result()) : null;
+            }
+            return elementOrdering(call.args().get(0));
+        }
+
+        /** The kernels whose runtime method takes a comparator ahead of what the declaration names,
+         *  where the element has a sum to take an ordering off. Read by the arm above rather than
+         *  written out in it, so that the kernels routed there are the kernels this names — what
+         *  holds the derived boundary form of one is a test, and a test can only reach the ones it
+         *  can be told about. */
+        static final Set<Kernel> ORDERED_BY_COMPARATOR = EnumSet.of(
+                Kernel.LIST_SORT, Kernel.LIST_MAX, Kernel.LIST_MIN, Kernel.LIST_SORT_BY);
 
         /** The kernels this emits itself, which are the kernels {@link Intrinsics}' table has no row
          *  for. Named rather than left to be read off the arms above, so the two sets can be held

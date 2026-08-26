@@ -1,17 +1,14 @@
 package souther.compiler.program;
 
 import souther.compiler.DefaultStdlib;
-import souther.compiler.core.Kernel;
-import souther.compiler.core.KernelSignature;
+import souther.compiler.core.KernelSignatures;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 
 import org.junit.jupiter.api.Test;
 
-import java.util.EnumMap;
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -79,11 +76,8 @@ class WhatTheLanguageDeclaresCrossesAsADeclarationTest {
     /** What the language declares its kernels to take, as an assembled program carries them. The
      *  fixtures below are about which world an address belongs to, so everything else about them is
      *  a program as one really is. */
-    private static Map<Kernel, KernelSignature> kernels() {
-        Map<Kernel, KernelSignature> declared = new EnumMap<>(Kernel.class);
-        DefaultStdlib.get().intrinsics()
-                .forEach((kernel, intrinsic) -> declared.put(kernel, intrinsic.signature()));
-        return declared;
+    private static KernelSignatures kernels() {
+        return DefaultStdlib.get().kernelSignatures();
     }
 
     private static TypeSymbol.AtModule named(String module, String name) {

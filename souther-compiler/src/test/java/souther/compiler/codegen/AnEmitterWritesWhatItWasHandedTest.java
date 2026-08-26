@@ -144,8 +144,8 @@ class AnEmitterWritesWhatItWasHandedTest {
                 }
             }
         }
-        return new CodecGen(new CodegenContext("m", symbols, caseToSums, Map.of(), true, Set.of(),
-                Map.of(), Map.of()));
+        return new CodecGen(new CodegenContext("m", symbols, symbols.library().kernelSignatures(),
+                caseToSums, Map.of(), true, Set.of(), Map.of(), Map.of()));
     }
 
     private static Hir.Module derive(String source) {

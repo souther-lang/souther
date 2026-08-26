@@ -93,8 +93,8 @@ final class Intrinsics {
 
         public void emit(BodyGen g, Kernel kernel, Core.Call call) {
             KernelSignature declared = g.kernelSignature(kernel);
-            g.emitInvokeStatic(owner, method, MethodTypeDesc.of(boundaryDesc(declared.result()),
-                    pushArguments(g, declared, call, this)));
+            pushArguments(g, declared, call, this);
+            g.emitInvokeStatic(owner, method, descriptorOf(declared, this));
         }
     }
 
@@ -115,8 +115,8 @@ final class Intrinsics {
                           Function<Type, List<Type>> paramTypes) implements Emit {
         public void emit(BodyGen g, Kernel kernel, Core.Call call) {
             KernelSignature declared = g.kernelSignature(kernel);
-            g.emitInvokeStatic(owner, method, MethodTypeDesc.of(boundaryDesc(declared.result()),
-                    pushArguments(g, declared, call, this)));
+            pushArguments(g, declared, call, this);
+            g.emitInvokeStatic(owner, method, descriptorOf(declared, this));
         }
     }
 
@@ -180,37 +180,75 @@ final class Intrinsics {
     }
 
     /**
-     * Puts {@code call}'s arguments on the stack the way {@code row} takes them, and answers the
-     * descriptor slot each one went into.
+     * The slots a call to a kernel goes into: the boundary form of each declared parameter, in the
+     * order the row puts them on the stack.
      *
-     * <p>One walk, so what is emitted and what is described cannot disagree. Split in two — a caller
-     * emitting and this deciding the descriptor — the two would be right about each other for as
-     * long as nobody changed one of them, which is the coupling the comparator family used to have.
-     *
-     * <p>The slots are the declaration's. A value going into one the runtime takes as a reference is
-     * boxed, which is a no-op for a reference; a declared function parameter is materialised as an
-     * {@code Fn}, at the parameter types the container it walks supplies.
+     * <p>Pure, and the only statement of what a kernel is called at. What emits the call reads it,
+     * and so does what holds this backend to the runtime's own methods — a second derivation
+     * written for either would be a second answer for the two to agree on.
      */
-    private static ClassDesc[] pushArguments(BodyGen g, KernelSignature declared, Core.Call call,
-                                             Emit row) {
+    private static ClassDesc[] slotsOf(KernelSignature declared, Emit row) {
         int[] order = row instanceof RuntimeStatic runtime ? runtime.argOrder()
                 : identity(declared.parameters().size());
         ClassDesc[] slots = new ClassDesc[order.length];
         for (int j = 0; j < slots.length; j++) {
+            slots[j] = boundaryDesc(declared.parameters().get(order[j]));
+        }
+        return slots;
+    }
+
+    /** The descriptor a call to a kernel is emitted at. */
+    static MethodTypeDesc descriptorOf(KernelSignature declared, Emit row) {
+        return MethodTypeDesc.of(boundaryDesc(declared.result()), slotsOf(declared, row));
+    }
+
+    /** And the descriptor the ordered family is emitted at: the same, with the comparator the
+     *  runtime method takes ahead of what the declaration names. */
+    static MethodTypeDesc descriptorWithComparator(KernelSignature declared, Emit row) {
+        ClassDesc[] slots = slotsOf(declared, row);
+        ClassDesc[] params = new ClassDesc[slots.length + 1];
+        params[0] = CD_Comparator;
+        System.arraycopy(slots, 0, params, 1, slots.length);
+        return MethodTypeDesc.of(boundaryDesc(declared.result()), params);
+    }
+
+    /**
+     * Puts {@code call}'s arguments on the stack the way {@code row} takes them, each adapted to the
+     * slot its declared parameter fixes.
+     *
+     * <p>One walk over the same slots the descriptor is built from, so what is emitted and what is
+     * described cannot disagree.
+     *
+     * <p>The adaptation is one step and every argument goes through it. What varies is how the value
+     * is produced — a declared function parameter is materialised as an {@code Fn} the kernel can
+     * apply, at the parameter types the container it walks supplies, and anything else is the
+     * expression — and an arm that produced a value and returned without adapting it would be the
+     * declared carrier and the arrived carrier parting company again, in whichever kernels that arm
+     * happened to serve.
+     */
+    private static void pushArguments(BodyGen g, KernelSignature declared, Core.Call call, Emit row) {
+        int[] order = row instanceof RuntimeStatic runtime ? runtime.argOrder()
+                : identity(declared.parameters().size());
+        ClassDesc[] slots = slotsOf(declared, row);
+        for (int j = 0; j < order.length; j++) {
             int src = order[j];
-            Type parameter = declared.parameters().get(src);
-            slots[j] = boundaryDesc(parameter);
-            if (row instanceof TakesAFunction takes && parameter instanceof Type.FnOf) {
-                g.emitFn(call.args().get(src),
-                        takes.paramTypes().apply(call.args().get(takes.container()).type()));
-                continue;
-            }
-            Type arrived = g.genExpr(call.args().get(src));
+            Type arrived = produce(g, call, src, declared.parameters().get(src), row);
             if (slots[j].equals(CD_Object)) {
+                // What the runtime takes as a reference, a primitive has to become one for. A no-op
+                // for a value that is one already.
                 g.emitBox(arrived);
             }
         }
-        return slots;
+    }
+
+    /** The value the argument at {@code src} leaves on the stack, and what it is. */
+    private static Type produce(BodyGen g, Core.Call call, int src, Type parameter, Emit row) {
+        Core argument = call.args().get(src);
+        if (parameter instanceof Type.FnOf && row instanceof TakesAFunction takes) {
+            g.emitFn(argument, takes.paramTypes().apply(call.args().get(takes.container()).type()));
+            return argument.type();
+        }
+        return g.genExpr(argument);
     }
 
     private static int[] identity(int n) {
@@ -225,10 +263,9 @@ final class Intrinsics {
      * their raw interface, a function as an {@code Fn}, everything else (references, type variables,
      * tuples) as {@code Object}.
      *
-     * <p>The one reading of a declared type this backend has. Read by the test that holds the ABI
-     * this derives against the runtime's own methods, which asks the question with the same reading
-     * the emitters use — a second one written there would be a second answer to agree with. */
-    static ClassDesc boundaryDesc(Type t) {
+     * <p>The one reading of a declared type this backend has. What a kernel is called at is built
+     * out of it in {@link #slotsOf} and nowhere else, so nothing outside needs it. */
+    private static ClassDesc boundaryDesc(Type t) {
         if (t instanceof Type.Prim p) {
             return switch (p) {
                 case INT -> ConstantDescs.CD_long;
@@ -313,12 +350,8 @@ final class Intrinsics {
             case null -> throw new IllegalStateException(
                     "the JVM emits nothing for `" + kernel.key() + "`");
         }
-        ClassDesc[] slots = pushArguments(g, declared, call, row);
-        ClassDesc[] params = new ClassDesc[slots.length + 1];
-        params[0] = CD_Comparator;
-        System.arraycopy(slots, 0, params, 1, slots.length);
-        g.emitInvokeStatic(owner, method,
-                MethodTypeDesc.of(boundaryDesc(declared.result()), params));
+        pushArguments(g, declared, call, row);
+        g.emitInvokeStatic(owner, method, descriptorWithComparator(declared, row));
     }
 
     /** How each kernel is emitted — read by the test that holds the descriptor invariant. */

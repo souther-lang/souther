@@ -13,8 +13,6 @@ import souther.compiler.check.TypeOps;
 import souther.compiler.core.Composition;
 import souther.compiler.core.Core;
 import souther.compiler.core.EnsuresEnforcement;
-import souther.compiler.core.Kernel;
-import souther.compiler.core.KernelSignature;
 import souther.compiler.core.ValueShape;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Acceptance;
@@ -31,7 +29,6 @@ import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
-import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -65,9 +62,8 @@ final class CheckedProgramAssembler {
         for (String module : compilation.modules()) {
             modules.add(moduleOf(db, module));
         }
-        Stdlib library = libraryOf(db);
         return new CheckedProgram(modules, languageDataOf(db), declaredOnThePath(db),
-                kernelsOf(library));
+                libraryOf(db).kernelSignatures());
     }
 
     /** The library this compilation was checked against. Asked for here rather than fetched: what a
@@ -79,21 +75,6 @@ final class CheckedProgramAssembler {
             throw new IllegalStateException("this compilation was checked against no library");
         }
         return stdlib;
-    }
-
-    /**
-     * What each kernel of the language was declared to take and answer.
-     *
-     * <p>Read off the library rather than gathered by walking the bodies for the kernels they
-     * reach. Which kernels there are is the language's answer and not this program's: a walk would
-     * be right about the calls it found, and a kernel nothing here happens to reach would be one an
-     * output was never told the shape of.
-     */
-    private static Map<Kernel, KernelSignature> kernelsOf(Stdlib library) {
-        Map<Kernel, KernelSignature> declared = new EnumMap<>(Kernel.class);
-        library.intrinsics().forEach((kernel, intrinsic) ->
-                declared.put(kernel, intrinsic.signature()));
-        return declared;
     }
 
     /**

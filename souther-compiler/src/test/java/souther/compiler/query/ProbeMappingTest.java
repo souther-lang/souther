@@ -62,7 +62,8 @@ class ProbeMappingTest {
         assertTrue(somewhereElse.sites().size() > 0, "the other compile has arms of its own");
 
         IllegalStateException stopped = assertThrows(IllegalStateException.class,
-                () -> Backend.generate(in.lowered(), in.scope(), in.typePackages(), in.sigs(),
+                () -> Backend.generate(in.lowered(), in.scope(),
+                        in.scope().library().kernelSignatures(), in.typePackages(), in.sigs(),
                         in.imported(), in.injected(), in.callees(), in.requirements(), in.checked(),
                         in.compositions(), in.dischargeClauses(), in.shapes(), in.checks(),
                         in.standingCalls(),
@@ -99,7 +100,8 @@ class ProbeMappingTest {
                         real.forkByNode(), real.comparisons());
 
         IllegalStateException stopped = assertThrows(IllegalStateException.class,
-                () -> Backend.generate(in.lowered(), in.scope(), in.typePackages(), in.sigs(),
+                () -> Backend.generate(in.lowered(), in.scope(),
+                        in.scope().library().kernelSignatures(), in.typePackages(), in.sigs(),
                         in.imported(), in.injected(), in.callees(), in.requirements(), in.checked(),
                         in.compositions(), in.dischargeClauses(), in.shapes(), in.checks(),
                         in.standingCalls(),
