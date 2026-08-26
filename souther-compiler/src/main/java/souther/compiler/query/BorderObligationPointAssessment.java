@@ -35,6 +35,8 @@ import java.util.Map;
  * that mistake would come out as a report asking for a row at a point some other line owns.
  */
 public record BorderObligationPointAssessment(BorderObligationPoint point, String axis,
+                                              souther.compiler.partition.PointAttribution
+                                                      attribution,
                                               Demand demand, ItemAssessment.Owed item,
                                               java.util.SequencedMap<Reading, BorderAssessment>
                                                       met) {
@@ -77,9 +79,10 @@ public record BorderObligationPointAssessment(BorderObligationPoint point, Strin
             throw new IllegalArgumentException(
                     "a point is what its readings came to, and this is none of them: " + point);
         }
-        if (demand == null || item == null) {
+        if (demand == null || item == null || attribution == null) {
             throw new IllegalArgumentException(
-                    "a point owed a row asks for one and came to something: " + point);
+                    "a point owed a row asks for one, came to something, and is owed to somebody: "
+                            + point);
         }
         if (axis == null) {
             throw new IllegalArgumentException("a line is a line on something: " + point);
@@ -97,13 +100,26 @@ public record BorderObligationPointAssessment(BorderObligationPoint point, Strin
      */
     public static List<BorderObligationPointAssessment> across(
             Map<String, List<BorderAssessment>> byBehavior,
+            java.util.function.Predicate<souther.compiler.partition.OwedPoint> keep,
             java.util.function.Function<BorderObligationPoint, String> named) {
         Map<BorderObligationPoint, java.util.SequencedMap<Reading, BorderAssessment>> byPoint =
+                new LinkedHashMap<>();
+        Map<BorderObligationPoint, souther.compiler.partition.PointAttribution> attribution =
                 new LinkedHashMap<>();
         byBehavior.forEach((behavior, readings) -> {
             for (BorderAssessment reading : readings) {
                 Reading where = new Reading(behavior, reading.border().cut().left());
-                for (BorderObligationPoint owed : reading.border().owes()) {
+                for (souther.compiler.partition.OwedPoint each : reading.border().owes()) {
+                    if (!keep.test(each)) {
+                        continue;
+                    }
+                    BorderObligationPoint owed = each.point();
+                    // What settled the point is the reading's, so a point read twice is settled by
+                    // what either reading says settled it. Kept as the first reading's, a point one
+                    // module's declaration narrowed at one position and another's at another would
+                    // be attributed to whichever the walk reached first.
+                    attribution.merge(owed, each.attribution(),
+                            souther.compiler.partition.PointAttribution::and);
                     BorderAssessment already = byPoint
                             .computeIfAbsent(owed, _ -> new LinkedHashMap<>()).put(where, reading);
                     if (already != null) {
@@ -118,7 +134,8 @@ public record BorderObligationPointAssessment(BorderObligationPoint point, Strin
             }
         });
         List<BorderObligationPointAssessment> out = new ArrayList<>();
-        byPoint.forEach((point, met) -> out.add(of(point, named.apply(point), met)));
+        byPoint.forEach((point, met) ->
+                out.add(of(point, named.apply(point), attribution.get(point), met)));
         return List.copyOf(out);
     }
 
@@ -131,12 +148,13 @@ public record BorderObligationPointAssessment(BorderObligationPoint point, Strin
      * the type; what the author wrote is {@code String.length(value)}, and it is read from the
      * declaration ({@link souther.compiler.check.DeclaredBorders}).
      */
-    public static BorderObligationPointAssessment of(BorderObligationPoint point, String axis,
-                                                     java.util.SequencedMap<Reading,
-                                                             BorderAssessment> met) {
+    public static BorderObligationPointAssessment of(
+            BorderObligationPoint point, String axis,
+            souther.compiler.partition.PointAttribution attribution,
+            java.util.SequencedMap<Reading, BorderAssessment> met) {
         List<BorderAssessment> readings = List.copyOf(met.values());
         Demand asked = asked(point, readings);
-        return new BorderObligationPointAssessment(point, axis, asked,
+        return new BorderObligationPointAssessment(point, axis, attribution, asked,
                 came(point.role(), readings, asked), met);
     }
 

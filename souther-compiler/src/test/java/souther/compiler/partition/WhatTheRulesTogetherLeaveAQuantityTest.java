@@ -72,6 +72,12 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
                 "a parted end without a reach is not a state a run can be in");
     }
 
+    /** What stops the first run of {@code arranged} at its high end, without who can move it. */
+    private static List<FarEnd> farEndsOf(QuantityArrangement arranged) {
+        return arranged.runs().get(0).endsAt(Towards.ABOVE).stream()
+                .map(each -> ((RegionBasis.Beside) each.basis()).farEnd()).toList();
+    }
+
     /** Each place with a line of its own against it, these being tests about where the values part
      *  and not about who parted them. */
     private static List<Parting> byItsOwnRule(Seam... parted) {
@@ -251,11 +257,11 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
                 List.of(Parting.by(upTo("100"), aLine(0))), null, upTo100);
 
         assertEquals(List.of(new FarEnd.AtTheDomain(upTo100)),
-                withoutTheLine.runs().get(0).endsAt(Towards.ABOVE),
+                farEndsOf(withoutTheLine),
                 "with no line there, the run stops where the rules leave the quantity");
         assertEquals(List.of(new FarEnd.AtALine(aLine(0), upTo("100")),
                         new FarEnd.AtTheDomain(upTo100)),
-                withTheLine.runs().get(0).endsAt(Towards.ABOVE),
+                farEndsOf(withTheLine),
                 "and with one, at the line as well — the end it had is still an end");
         assertTrue(new Criterion.Within(withoutTheLine.bands().get(0), null, Towards.BELOW)
                         .sameAs(new Criterion.Within(withTheLine.bands().get(0), null,
@@ -278,7 +284,7 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
                 List.of(Parting.by(upTo("100"), aLine(0))), null, Bound.at(at("50"), true));
 
         assertEquals(List.of(new FarEnd.AtTheDomain(Bound.at(at("50"), true))),
-                arranged.runs().get(0).endsAt(Towards.ABOVE),
+                farEndsOf(arranged),
                 "the rules stop it at fifty, so the line at a hundred settles nothing here");
     }
 

@@ -227,9 +227,9 @@ public record BorderAssessment(Border border, Map<PointRole, ItemAssessment> ite
          * be measured for is still a line its values are held to, and the block that says so is
          * telling an author about the type they wrote.
          */
-        public java.util.List<souther.compiler.partition.BorderObligationPoint> owedHere() {
+        public java.util.List<souther.compiler.partition.OwedPoint> owedHere() {
             return border.border().owes(role).stream()
-                    .filter(point -> !point.owedToDeclarations()).toList();
+                    .filter(owed -> !owed.attribution().owedToDeclarations()).toList();
         }
 
         /** The measured half, or null where no row is owed here. */

@@ -20,6 +20,12 @@ package souther.compiler.partition;
  * <p><b>Not where it was read.</b> Which position of which behavior met the line is an occurrence,
  * and it is evidence: it says a row was looked for and what became of it. Held here, one clause of a
  * type is asked for once per position of every behavior carrying it.
+ *
+ * <p><b>And not who can move what settled it.</b> That is a fact about the surroundings of the
+ * reading rather than about which point this is — two readings that answer it differently are still
+ * one point — and it is carried beside this ({@link OwedPoint}). Worked out from what is in here
+ * instead, a run stopping where a declaration took the position in came back owed to the line below
+ * it and to nobody else.
  */
 public sealed interface BorderObligationPoint {
 
@@ -28,56 +34,6 @@ public sealed interface BorderObligationPoint {
 
     /** Which of the four points of it. */
     PointRole role();
-
-    /**
-     * Every line of the model this point is owed for: the border's own, and whatever else settled
-     * the region beside it.
-     *
-     * <p>A point at the line is one line's. A run beside it is that line's and the far side's at
-     * once — an author can move either and the run moves with it — so a row inside it answers for
-     * both. An end the rules leave together and an end of the order are nobody's line, and add
-     * none.
-     */
-    default java.util.List<AuthoredLine> authors() {
-        AuthoredLine own = line().line();
-        if (!(this instanceof InRegion region)) {
-            return java.util.List.of(own);
-        }
-        return region.region() instanceof RegionBasis.Beside(FarEnd.AtALine far)
-                ? java.util.List.of(own, far.line()) : java.util.List.of(own);
-    }
-
-    /**
-     * Whether every line this point is owed for is a declaration's.
-     *
-     * <p>Which is what says whether one row anywhere settles it. A clause of a {@code data} states
-     * something about the type wherever the type is carried, so a row at a point owed only to
-     * clauses is evidence about the type; a comparison is written in a body and states something
-     * about that body, so a run that stops at one exists in that body and nowhere else.
-     */
-    default boolean owedToDeclarations() {
-        return authors().stream().noneMatch(each -> each.obligationOwners().isEmpty());
-    }
-
-    /**
-     * The declarations of {@code module} that owe a row here, in the order the lines name them.
-     *
-     * <p>The union over what this point is owed for, because each of them owes it: a run bounded by
-     * one declaration's clause and another's is both of theirs, and taking either away moves it.
-     * Empty where none of them is this module's, which is a point this module keeps no account of
-     * ({@link AuthoredLine#ownersIn}).
-     */
-    default java.util.List<souther.compiler.types.TypeSymbol.AtModule> ownersIn(String module) {
-        java.util.List<souther.compiler.types.TypeSymbol.AtModule> out = new java.util.ArrayList<>();
-        for (AuthoredLine each : authors()) {
-            for (souther.compiler.types.TypeSymbol.AtModule owner : each.ownersIn(module)) {
-                if (!out.contains(owner)) {
-                    out.add(owner);
-                }
-            }
-        }
-        return java.util.List.copyOf(out);
-    }
 
     /**
      * A row at the line itself.

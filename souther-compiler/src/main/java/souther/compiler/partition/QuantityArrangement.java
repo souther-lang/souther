@@ -45,7 +45,7 @@ public record QuantityArrangement(List<Parting> partings, List<Run> runs) {
      * @param below  what independently stops it at the low end. Never empty
      * @param above  the same at the high end
      */
-    public record Run(Band values, List<FarEnd> below, List<FarEnd> above) {
+    public record Run(Band values, List<RegionClaim> below, List<RegionClaim> above) {
 
         public Run {
             if (values == null) {
@@ -53,9 +53,33 @@ public record QuantityArrangement(List<Parting> partings, List<Run> runs) {
             }
             below = List.copyOf(below);
             above = List.copyOf(above);
-            if (below.isEmpty() || above.isEmpty()) {
+            agree(values.lower(), below, Towards.BELOW);
+            agree(values.upper(), above, Towards.ABOVE);
+        }
+
+        /**
+         * That the run and what stops it say the same thing about one end.
+         *
+         * <p>Checked rather than trusted, because this is the answer about what stops a run and a
+         * value saying one thing in its geometry and another in its claims would be two answers to
+         * the question it exists to settle. What is checked is what the two share: a run nothing
+         * stops that way is stopped by the end of the order and by nothing else, and a run something
+         * stops is stopped by something that is not the end of the order.
+         */
+        private static void agree(BandEnd end, List<RegionClaim> claims, Towards side) {
+            if (claims.isEmpty()) {
                 throw new IllegalArgumentException(
-                        "a run stops at each end because something stops it: " + values);
+                        "a run stops at its " + side + " end because something stops it");
+            }
+            boolean order = claims.stream().anyMatch(each ->
+                    each.basis() instanceof RegionBasis.Beside(FarEnd.AtTheOrderEnd _));
+            if (order != (end.reaches() == null)) {
+                throw new IllegalArgumentException("a run whose " + side + " end is " + end
+                        + " and is stopped by " + claims);
+            }
+            if (order && claims.size() != 1) {
+                throw new IllegalArgumentException("nothing stops a run at the end of the order,"
+                        + " so nothing else stops it there either: " + claims);
             }
         }
 
@@ -69,7 +93,7 @@ public record QuantityArrangement(List<Parting> partings, List<Run> runs) {
          * shape of the end says — and a reader that took the line because there was one wrote down a
          * rule that is not what settles the region.
          */
-        public List<FarEnd> endsAt(Towards side) {
+        public List<RegionClaim> endsAt(Towards side) {
             return side == Towards.ABOVE ? above : below;
         }
     }
@@ -88,21 +112,26 @@ public record QuantityArrangement(List<Parting> partings, List<Run> runs) {
      *
      * @param inward which way the run lies from this end
      */
-    private static List<FarEnd> stoppedBy(BandEnd end, Parting parted, Bound leaves,
-                                          Towards inward) {
+    private static List<RegionClaim> stoppedBy(BandEnd end, Parting parted, DomainEnd leaves,
+                                               Towards inward) {
         Bound reaches = end.reaches();
         if (reaches == null) {
-            return List.of(new FarEnd.AtTheOrderEnd(inward.opposite()));
+            return List.of(new RegionClaim(
+                    new RegionBasis.Beside(new FarEnd.AtTheOrderEnd(inward.opposite())),
+                    PointAttribution.NONE));
         }
-        List<FarEnd> out = new ArrayList<>();
+        List<RegionClaim> out = new ArrayList<>();
         if (parted != null
                 && Band.atTheLine(parted.geometry(), inward).canonical().equals(
                         reaches.canonical())) {
-            parted.alternatives().forEach(line ->
-                    out.add(new FarEnd.AtALine(line, parted.geometry())));
+            parted.alternatives().forEach(line -> out.add(new RegionClaim(
+                    new RegionBasis.Beside(new FarEnd.AtALine(line, parted.geometry())),
+                    PointAttribution.by(line))));
         }
-        if (leaves != null && leaves.canonical().equals(reaches.canonical())) {
-            out.add(new FarEnd.AtTheDomain(leaves));
+        if (leaves != null && leaves.bound().canonical().equals(reaches.canonical())) {
+            out.add(new RegionClaim(
+                    new RegionBasis.Beside(new FarEnd.AtTheDomain(leaves.bound())),
+                    PointAttribution.byNarrowing(leaves.narrowers())));
         }
         if (out.isEmpty()) {
             // Where the run reaches is the tighter of the two, so one of them is it. Reaching here
@@ -111,7 +140,7 @@ public record QuantityArrangement(List<Parting> partings, List<Run> runs) {
                     + " that neither the line beside it nor the end the rules leave stops there: "
                     + parted + " / " + leaves);
         }
-        return List.copyOf(out);
+        return RegionClaim.byBasis(out);
     }
 
     /** The runs as what a row inside each has to be, for a reader that is not asking what any of
@@ -128,7 +157,14 @@ public record QuantityArrangement(List<Parting> partings, List<Run> runs) {
      * are kept beside it, while what the quantity is divided into is a property of the quantity.
      */
     public static QuantityArrangement of(LevelSpace space, List<Parting> parted) {
-        return of(space, parted, null, null);
+        return of(space, parted, (DomainEnd) null, null);
+    }
+
+    /** The same, told where the rules leave the quantity and nothing about who took those ends in.
+     *  For a caller reading an arrangement rather than accounting for one. */
+    public static QuantityArrangement of(LevelSpace space, List<Parting> parted, Bound from,
+                                         Bound to) {
+        return of(space, parted, DomainEnd.at(from), DomainEnd.at(to));
     }
 
     /**
@@ -146,14 +182,14 @@ public record QuantityArrangement(List<Parting> partings, List<Run> runs) {
      *             refuses
      * @param to   the same at the high end
      */
-    public static QuantityArrangement of(LevelSpace space, List<Parting> parted, Bound from,
-                                         Bound to) {
+    public static QuantityArrangement of(LevelSpace space, List<Parting> parted, DomainEnd from,
+                                         DomainEnd to) {
         Map<String, Parting> distinct = new LinkedHashMap<>();
         for (Parting each : parted) {
             // A place the rules leave nothing at divides nothing. The values it would tell apart are
             // values no row can be written at, so it is dropped rather than kept as a run holding
             // none — which is a class an author would be told to write a row for and could not.
-            if (outside(each.geometry(), from, to)) {
+            if (outside(each.geometry(), DomainEnd.boundOf(from), DomainEnd.boundOf(to))) {
                 continue;
             }
             // One place, and every line the model wrote there against it. Which is the whole of what
@@ -176,12 +212,14 @@ public record QuantityArrangement(List<Parting> partings, List<Run> runs) {
 
     /** The run between two of the places the values part, held to what the rules leave either
      *  side. */
-    private static Run runBetween(Parting under, Parting over, Bound from, Bound to) {
+    private static Run runBetween(Parting under, Parting over, DomainEnd from, DomainEnd to) {
         // The places and not the lines against them go into the values. What a run asks a row for is
         // the same however many rules wrote a line where it stops, and which of them did is kept
         // beside it — carried in, it would be inside every value that says what is asked of a row.
-        BandEnd lower = Band.endAt(under == null ? null : under.geometry(), from, Towards.ABOVE);
-        BandEnd upper = Band.endAt(over == null ? null : over.geometry(), to, Towards.BELOW);
+        BandEnd lower = Band.endAt(under == null ? null : under.geometry(),
+                DomainEnd.boundOf(from), Towards.ABOVE);
+        BandEnd upper = Band.endAt(over == null ? null : over.geometry(),
+                DomainEnd.boundOf(to), Towards.BELOW);
         return new Run(new Band(lower, upper),
                 stoppedBy(lower, under, from, Towards.ABOVE),
                 stoppedBy(upper, over, to, Towards.BELOW));

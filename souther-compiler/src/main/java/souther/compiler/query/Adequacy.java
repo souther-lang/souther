@@ -3697,15 +3697,13 @@ public final class Adequacy {
             }
             Map<String, List<BorderAssessment>> readings = new LinkedHashMap<>();
             partitions.forEach((behavior, evidence) -> {
-                for (BorderAssessment line : evidence.boundaries()) {
-                    // Asked of the line, which is what a reading of it shares with every other
-                    // reading of it. A body's line is nobody's declaration and answers no owner; a
-                    // declaration's line answers the declarations that wrote it, and this keeps the
-                    // ones this module's author can act on.
-                    if (line.border().origin().authoredLine().owedIn(name)) {
-                        readings.computeIfAbsent(behavior, _ -> new ArrayList<>()).add(line);
-                    }
-                }
+                // Every reading, because which of them this module keeps an account of is a question
+                // about the points they owe and not about the lines they are readings of. A line
+                // another module wrote can be stopped where this module's declaration takes the
+                // position in, and the run beside it is then this module's to answer for — dropped
+                // here, that point was accounted nowhere at all.
+                readings.computeIfAbsent(behavior, _ -> new ArrayList<>())
+                        .addAll(evidence.boundaries());
             });
             if (readings.isEmpty()) {
                 return Answer.of(List.of());
@@ -3721,17 +3719,20 @@ public final class Adequacy {
             Map<TypeSymbol, souther.compiler.check.DeclaredBorders> declarations =
                     new LinkedHashMap<>();
             List<DeclaredDebt> out = new ArrayList<>();
+            // A run that stops at a body's own rule exists in that body and nowhere else, so no
+            // declaration is owed a row inside it however the line beside it was written; and this
+            // module keeps an account only where its own declarations are among what settled the
+            // point. Both are asked of what settled it rather than of what identifies it — a
+            // declaration that took the position in put the end there without being a line of the
+            // point at all. A module reading a line another module wrote and narrowing nothing about
+            // it owes nothing here, which is the dependency it carries rather than a debt (#1077).
             for (BorderObligationPointAssessment debt : BorderObligationPointAssessment.across(
-                    readings, point -> axisOf(point.line(), declarations, symbols, policy))) {
-                // A run that stops at a body's own rule exists in that body and nowhere else, so no
-                // declaration is owed a row inside it however the line beside it was written. Asked
-                // of the point rather than of its line, which answers only for the half of it that
-                // is the line.
-                if (!debt.point().owedToDeclarations()) {
-                    continue;
-                }
+                    readings,
+                    owed -> owed.attribution().owedToDeclarations()
+                            && !owed.attribution().ownersIn(name).isEmpty(),
+                    point -> axisOf(point.line(), declarations, symbols, policy))) {
                 List<DeclaredDebt.Owner> owners = new ArrayList<>();
-                for (TypeSymbol.AtModule owner : debt.point().ownersIn(name)) {
+                for (TypeSymbol.AtModule owner : debt.attribution().ownersIn(name)) {
                     owners.add(new DeclaredDebt.Owner(owner,
                             read(declarations, owner, symbols, policy).at()));
                 }
@@ -3974,12 +3975,14 @@ public final class Adequacy {
                 // module, from every reading of it.
                 // One finding per thing this reading is owed a row for, and not one per role: a
                 // place two of this body's rules drew a line at leaves a run owed to each of them,
-                // and each is its own row to write. The axis, the value, the rule and the role used
-                // to be copied out here, and a reader then matched the copy back against the
-                // assessments to find the one it came from.
-                for (souther.compiler.partition.BorderObligationPoint owed : point.owedHere()) {
+                // and each is one obligation to be told about — a single row may well answer both.
+                // The axis, the value, the rule and the role used to be copied out here, and a
+                // reader then matched the copy back against the assessments to find the one it came
+                // from.
+                for (souther.compiler.partition.OwedPoint owed : point.owedHere()) {
                     out.add(Finding.by(behavior.name(), point.item().weakeningSource(),
-                            Citation.of(behavior.pos()), new About.APointOfABorder(point, owed)));
+                            Citation.of(behavior.pos()),
+                            new About.APointOfABorder(point, owed.point())));
                 }
             }
             // What the model divides this position no way at all, which is the classes question and

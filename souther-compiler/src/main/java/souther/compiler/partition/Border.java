@@ -90,15 +90,20 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, PointA
      * rows asks this rather than building a point out of the parts it happened to know — which is
      * how a debt came to carry the reading it was met at.
      */
-    public java.util.List<BorderObligationPoint> owes(PointRole role) {
+    public java.util.List<OwedPoint> owes(PointRole role) {
         BorderObligationId line = obligation();
+        // The line's own rule is behind every point of it, whatever else settled the region beside
+        // it: it is the line a row here stands at or beside, and an author moving it moves the
+        // point.
+        PointAttribution own = PointAttribution.by(origin.authoredLine());
         return switch (answer(role)) {
             case PointAnswer.NotOwed _ -> java.util.List.of();
-            case PointAnswer.AtLine _ ->
-                    java.util.List.of(new BorderObligationPoint.AtLine(line, role));
-            case PointAnswer.InRegion in -> in.bases().stream()
-                    .map(basis -> (BorderObligationPoint)
-                            new BorderObligationPoint.InRegion(line, role, basis))
+            case PointAnswer.AtLine _ -> java.util.List.of(
+                    new OwedPoint(new BorderObligationPoint.AtLine(line, role), own));
+            case PointAnswer.InRegion in -> in.claims().stream()
+                    .map(claim -> new OwedPoint(
+                            new BorderObligationPoint.InRegion(line, role, claim.basis()),
+                            own.and(claim.attribution())))
                     .toList();
         };
     }
@@ -133,7 +138,7 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, PointA
     }
 
     /** The same over all four roles, in role order. */
-    public java.util.List<BorderObligationPoint> owes() {
+    public java.util.List<OwedPoint> owes() {
         return EnumSet.allOf(PointRole.class).stream().flatMap(role -> owes(role).stream()).toList();
     }
 
@@ -224,6 +229,19 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, PointA
      */
     public static Border at(BoundaryTarget target, OriginRef origin, NumericDomain.Bounds within,
                             java.util.List<Parting> parted) {
+        return at(target, origin, within, parted, NarrowedEnds.NONE);
+    }
+
+    /**
+     * The same, told which declarations took in where the position stops.
+     *
+     * <p>Which is what a run stopping at one of those ends is owed to besides the line it lies
+     * against. Carried from the reading that placed the end, because nothing downstream can work it
+     * out: an end is where every rule about the position leaves off, and the number it leaves off at
+     * says nothing about who moved it.
+     */
+    public static Border at(BoundaryTarget target, OriginRef origin, NumericDomain.Bounds within,
+                            java.util.List<Parting> parted, NarrowedEnds narrowed) {
         NumericDomain.Bounds reach = within == null ? new NumericDomain.Bounds(null, null) : within;
         LevelSpace space = target.levels();
         Level cut = target.at();
@@ -244,8 +262,8 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, PointA
             all.add(mine);
         }
         QuantityArrangement arrangement = QuantityArrangement.of(space, all,
-                endOf(space, reach.min(), Towards.ABOVE, cut),
-                endOf(space, reach.max(), Towards.BELOW, cut));
+                leaves(endOf(space, reach.min(), Towards.ABOVE, cut), narrowed.below()),
+                leaves(endOf(space, reach.max(), Towards.BELOW, cut), narrowed.above()));
         boolean holdsHere = holdsAtTheValue(origin);
         Map<PointRole, PointAnswer> demands = new EnumMap<>(PointRole.class);
         if (!ordersAroundTheCut(origin)) {
@@ -424,9 +442,16 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, PointA
         // is named for is the border's own, and the far side is where the run stops — which is the
         // end lying the way the run does.
         return inside.region().parts().stream().anyMatch(part -> space.inspect(part).any())
-                ? new PointAnswer.InRegion(inside, run.endsAt(away).stream()
-                        .map(end -> (RegionBasis) new RegionBasis.Beside(end)).toList())
+                ? new PointAnswer.InRegion(inside, run.endsAt(away))
                 : new PointAnswer.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT);
+    }
+
+    /** Where the rules leave the quantity, with the declarations that took that end in beside it.
+     *  Null where they leave it everything that way and there is no end at all. */
+    private static DomainEnd leaves(Bound end,
+                                    java.util.List<souther.compiler.types.TypeSymbol.AtModule>
+                                            narrowers) {
+        return end == null ? null : new DomainEnd(end, narrowers);
     }
 
     /** The level a point against the line stands at, or null where no row is owed there. */
@@ -637,8 +662,8 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, PointA
                                       NumericDomain.Bounds within) {
         return provablyHoldsNothing(side, space, within)
                 ? new PointAnswer.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT)
-                : new PointAnswer.InRegion(side,
-                        java.util.List.of(RegionBasis.TheRest.INSTANCE));
+                : new PointAnswer.InRegion(side, java.util.List.of(new RegionClaim(
+                        RegionBasis.TheRest.INSTANCE, PointAttribution.NONE)));
     }
 
     /**

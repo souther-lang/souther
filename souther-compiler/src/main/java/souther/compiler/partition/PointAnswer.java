@@ -46,19 +46,25 @@ public sealed interface PointAnswer {
      * A row somewhere in the region on one side of the line.
      *
      * @param criterion what such a row has to do
-     * @param bases     what it is owed for, beside the line: one per thing that settled where the
-     *                  region stops, each of them enough on its own. Never empty
+     * @param claims    what it is owed for and who can move that, one per thing that settled where
+     *                  the region stops, each of them enough on its own. Never empty, and one entry
+     *                  per basis
      */
-    record InRegion(Criterion criterion, List<RegionBasis> bases) implements PointAnswer {
+    record InRegion(Criterion criterion, List<RegionClaim> claims) implements PointAnswer {
 
         public InRegion {
             if (criterion == null) {
                 throw new IllegalArgumentException("a row in the region has something to do");
             }
-            bases = List.copyOf(bases);
-            if (bases.isEmpty()) {
+            claims = List.copyOf(claims);
+            if (claims.isEmpty()) {
                 throw new IllegalArgumentException(
                         "a region a row is owed in is owed for something: " + criterion);
+            }
+            List<RegionBasis> bases = claims.stream().map(RegionClaim::basis).toList();
+            if (bases.size() != java.util.Set.copyOf(bases).size()) {
+                throw new IllegalArgumentException("a region owed twice for one thing, which is"
+                        + " once: " + bases);
             }
             // The whole of the quantity but one value is not a run and stops nowhere, so nothing
             // stands beside it. Held together with a run's ends, a reader would be told the region
@@ -102,8 +108,15 @@ public sealed interface PointAnswer {
                 ? new Demand.NotOwed(((NotOwed) this).reason()) : new Demand.Owed(asked);
     }
 
-    /** What a row here is owed for beside the line, which is nothing for a point against it. */
+    /** What a row here is owed for beside the line and who can move it, which is nothing for a
+     *  point against the line. */
+    default List<RegionClaim> claims() {
+        return this instanceof InRegion in ? in.claims() : List.of();
+    }
+
+    /** The same, as what a row is owed for alone — which is what a point is identified by and what
+     *  two readings of one border are compared on. */
     default List<RegionBasis> bases() {
-        return this instanceof InRegion in ? in.bases() : List.of();
+        return claims().stream().map(RegionClaim::basis).toList();
     }
 }

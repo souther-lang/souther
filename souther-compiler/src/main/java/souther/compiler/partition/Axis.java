@@ -69,7 +69,8 @@ import java.util.List;
  *                 from the other end
  */
 public record Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> classes,
-                   List<Cut> cuts, List<Parting> parted, ReadingResidue residue,
+                   List<Cut> cuts, List<Parting> parted, NarrowedEnds narrowed,
+                   ReadingResidue residue,
                    StructuralInspection.Continuation pending, LeftAtThePosition leftWith) {
 
     public Axis {
@@ -84,7 +85,8 @@ public record Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> 
 
     public Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> classes,
                 List<Cut> cuts) {
-        this(id, term, type, classes, cuts, List.of(), ReadingResidue.NOTHING, null, null);
+        this(id, term, type, classes, cuts, List.of(), NarrowedEnds.NONE, ReadingResidue.NOTHING,
+                null, null);
     }
 
     /**
@@ -97,7 +99,7 @@ public record Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> 
     public static Axis pendingAt(AxisId id, NumericTerm term, Type type, ReadingResidue residue,
                                  StructuralInspection.Continuation found,
                                  LeftAtThePosition leftWith) {
-        return new Axis(id, term, type, List.of(), List.of(), List.of(),
+        return new Axis(id, term, type, List.of(), List.of(), List.of(), NarrowedEnds.NONE,
                 residue, found, leftWith);
     }
 
@@ -112,12 +114,14 @@ public record Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> 
      * as one the model divides no way.
      */
     public Axis measuredAt(AxisId id, NumericTerm term) {
-        return new Axis(id, term, type, classes, cuts, parted, residue, pending, leftWith);
+        return new Axis(id, term, type, classes, cuts, parted, narrowed, residue, pending,
+                leftWith);
     }
 
     /** The same position, with what a body's rules divided it into and the lines they drew. */
     public Axis carrying(List<PartitionClass> classes, List<Cut> cuts, List<Parting> parted) {
-        return new Axis(id, term, type, classes, cuts, parted, residue, pending, leftWith);
+        return new Axis(id, term, type, classes, cuts, parted, narrowed, residue, pending,
+                leftWith);
     }
 
     /** Where the value this axis is about sits, which is where a row is walked to before the term is
