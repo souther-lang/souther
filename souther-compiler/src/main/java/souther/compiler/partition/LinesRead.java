@@ -17,11 +17,16 @@ import java.util.Set;
  * so an empty account of what went missing is what a whole reading and a lossy one both produce.
  * That is issue #1079, and holding these two against each other is what refuses it.
  *
- * <p><b>Both producers, because there are two.</b> A line that divides a position leaves its border
- * on the position ({@link Partitions#bordersOf}) and a line between two positions leaves its border
- * beside them ({@link Border#allOf}). They are the same reading and the same kind of loss, and an
- * accounting over one of them says nothing about the other — which is how a check written for the
- * first would have watched a {@code continue} go into the second.
+ * <p><b>Every producer, and not the two there are today.</b> A line that divides a position leaves
+ * its border on the position ({@link Partitions#bordersOf}) and a line between two positions leaves
+ * its border beside them ({@link Border#allOf}). They are the same reading and the same kind of
+ * loss, and an accounting over one of them says nothing about the other — which is how a check
+ * written for the first would have watched a {@code continue} go into the second.
+ *
+ * <p>Which is why the borders the reading hands back are held against this as well
+ * ({@link #returning}). Kept by the producers alone, the account is worth what a producer
+ * remembered to write in it, and a third one added later is off the books from the day it is
+ * written — the same silence, one level up, and this whole arrangement is against exactly that.
  *
  * <p><b>Identity and not a count.</b> Two lines are one line where they are at one place and drawn
  * by one rule, which is what {@link Line} is. Counted instead, a reading that lost one line and made
@@ -46,6 +51,7 @@ public final class LinesRead {
 
     private final Set<Line> found = new LinkedHashSet<>();
     private final List<Border> drawn = new ArrayList<>();
+    private final List<Border> returning = new ArrayList<>();
 
     /**
      * One line the rules draw, as the reading meets it and before anything is made of it.
@@ -62,6 +68,17 @@ public final class LinesRead {
     public Border drew(Border border) {
         drawn.add(border);
         return border;
+    }
+
+    /**
+     * The borders this reading is about to hand back, whoever made them.
+     *
+     * <p>Told at the one place they are assembled rather than by each producer. What a producer
+     * volunteers is what a producer remembered to volunteer, and the point of an account is to hold
+     * a reading to what it returns.
+     */
+    public void returning(java.util.Collection<Border> borders) {
+        returning.addAll(borders);
     }
 
     /**
@@ -95,6 +112,26 @@ public final class LinesRead {
         if (!unaccounted.isEmpty()) {
             throw new IllegalStateException(
                     "a border this reading cannot account for: " + said(unaccounted));
+        }
+        // And what the reading returns is what it wrote down. A border reaching a caller off the
+        // books is a producer this account does not know about, and one written down and not
+        // returned is a loss between the two — both leave the closure resting on a reading it did
+        // not see the whole of.
+        List<Line> offTheBooks = returning.stream()
+                .map(each -> new Line(each.cut(), each.origin()))
+                .filter(each -> !made.containsKey(each)).distinct().toList();
+        if (!offTheBooks.isEmpty()) {
+            throw new IllegalStateException(
+                    "a border returned by a reading that did not write it down: "
+                            + said(offTheBooks));
+        }
+        List<Line> dropped = made.keySet().stream()
+                .filter(each -> returning.stream()
+                        .noneMatch(had -> new Line(had.cut(), had.origin()).equals(each)))
+                .toList();
+        if (!dropped.isEmpty()) {
+            throw new IllegalStateException(
+                    "a border this reading drew and did not return: " + said(dropped));
         }
     }
 

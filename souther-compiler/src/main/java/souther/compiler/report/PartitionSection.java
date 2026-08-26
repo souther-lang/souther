@@ -18,10 +18,12 @@ import souther.compiler.query.PartitionEvidence;
  * What it may not do is work out for itself whether the result exists, because that is a fact about
  * the measurement and the surfaces then disagree about the model rather than about how much to say.
  *
- * <p>So the two states here are about the measurement and not about either surface. A behavior
- * measured at its stages has a section, and both surfaces say why the measures do not apply to it;
- * the two absences below are measurements nobody made, and there is nothing for a section to be
- * about.
+ * <p><b>And what is decided here is whether the section is written, not whether the measurement
+ * exists.</b> One of the two absences below is a measurement nobody made; the other is a measure
+ * that was asked for, started and could not be finished, and what is left of it is said as the
+ * behavior's own weakening rather than as a section with no number in it. Read as one sentence
+ * about the model, the second would have this deciding what a measurement is — which is the thing
+ * the split is against, pointed the other way.
  */
 sealed interface PartitionSection {
 
@@ -46,13 +48,15 @@ sealed interface PartitionSection {
      * of the report — which is how a model bounded only on a {@code Decimal} came back adequate with
      * no measure printed anywhere.
      *
-     * <p>Two absences here, and both are a measurement nobody made. A null is the compile not
-     * having got far enough to be asked, which is not a measure that came back with nothing —
-     * every measure that ran says why it has no number. And a boundary that could not be worked
-     * out leaves this section nothing to qualify, for the reason the signature section is left out
-     * where its cases could not be counted: what it owes is the positions, the lines and the size
-     * of the space they make, and every one of those is a product over positions nobody could
-     * count. What weakened the behavior is said once, as the behavior's own weakening.
+     * <p>Two absences here and they are not the same absence. A null is the compile not having got
+     * far enough to be asked, which is not a measure that came back with nothing — every measure
+     * that ran says why it has no number. A boundary that could not be worked out is the other way
+     * about: the measures exist and both failed, and what this section owes is the positions, the
+     * lines and the size of the space they make — every one of those a product over positions
+     * nobody could count, so there is no number here to qualify. That is a policy about the
+     * section and not a claim about the model, and what weakened the behavior is said once, as the
+     * behavior's own weakening. It is the same reason the signature section is left out where its
+     * cases could not be counted.
      */
     static PartitionSection of(PartitionEvidence evidence) {
         if (evidence == null || evidence.boundaryNotDerived()) {
