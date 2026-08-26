@@ -65,7 +65,8 @@ public record AuthoredLine(RuleRef rule, int conjunct, LineFacts facts,
         // One entry per declaration. Several of these are one answer about one end, so a
         // declaration written twice would be one owner counted twice — and what counts them is what
         // says how many places a finding about the line names.
-        if (narrowedWithin.size() != Set.copyOf(narrowedWithin).size()) {
+        if (narrowedWithin.size() > 1
+                && narrowedWithin.size() != Set.copyOf(narrowedWithin).size()) {
             throw new IllegalArgumentException(
                     "one declaration took this end in twice, which is once: " + narrowedWithin);
         }
@@ -94,9 +95,24 @@ public record AuthoredLine(RuleRef rule, int conjunct, LineFacts facts,
      * in both places, the two spellings of one narrowing read as two.
      */
     public String said(String rule) {
-        return rule + (narrowedWithin.isEmpty() ? ""
-                : " within " + narrowedWithin.stream().map(TypeSymbol::name)
-                        .collect(java.util.stream.Collectors.joining(" or ")));
+        return rule + (narrowedWithin.isEmpty() ? "" : " within " + naming(narrowedWithin));
+    }
+
+    /**
+     * Several declarations that answer for one thing together, as a report says them.
+     *
+     * <p>One place, because a report says such a list in more than one: which declarations took an
+     * end in, and which of them a finding is about. They are not the same list — the second is of
+     * one module, and a line nothing took in has an owner that is in neither — and the reason to
+     * spell them alike is that a reader meets both about one line. Written twice, the two spellings
+     * are free to come apart.
+     *
+     * <p>{@code or} rather than {@code and}, because that is what the list means: any one of them
+     * is as much the answer as the others, and the reading does not know which.
+     */
+    public static String naming(List<TypeSymbol.AtModule> declarations) {
+        return declarations.stream().map(TypeSymbol::name)
+                .collect(java.util.stream.Collectors.joining(" or "));
     }
 
     /**

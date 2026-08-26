@@ -3692,7 +3692,7 @@ public final class Adequacy {
      * the question for everybody, so a module carrying the type is asked for work it cannot do and
      * cannot check. Reading it is what there is to measure with — what a point asks of a row is read
      * off the readings — so a module that owes a line no behavior of it carries holds no debt for it
-     * here, and the line is answered wherever it is read.
+     * here, and nothing is said about the line at all.
      */
     public record DeclaredBorders(String name) implements Key<List<DeclaredDebt>> {
 

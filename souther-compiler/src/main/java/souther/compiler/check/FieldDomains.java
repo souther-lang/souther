@@ -489,7 +489,7 @@ public final class FieldDomains {
             }
         }
         if (!held.isEmpty()) {
-            return byName(held);
+            return inDeclarationOrder(held);
         }
         // None on its own: two or more of them say what the edge says, and taking away any one
         // leaves the others saying it. Which is not a reason to name one — each is as much the
@@ -504,7 +504,7 @@ public final class FieldDomains {
                 saying.add(each);
             }
         }
-        return byName(saying.isEmpty() ? candidates : saying);
+        return inDeclarationOrder(saying.isEmpty() ? candidates : saying);
     }
 
     /** In one order, whoever found them. Several of these are one answer and the answer is what a
@@ -515,7 +515,7 @@ public final class FieldDomains {
      * written in two modules — an inner record's clause and an outer record's reaching the same
      * coordinate at the same value — and two modules may each declare a {@code Span}, so a name is
      * not what tells those two apart. */
-    private static List<TypeSymbol.AtModule> byName(List<TypeSymbol.AtModule> found) {
+    private static List<TypeSymbol.AtModule> inDeclarationOrder(List<TypeSymbol.AtModule> found) {
         return found.stream().sorted().toList();
     }
 

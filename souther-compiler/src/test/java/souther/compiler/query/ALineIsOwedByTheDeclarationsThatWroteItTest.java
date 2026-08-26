@@ -166,7 +166,8 @@ class ALineIsOwedByTheDeclarationsThatWroteItTest {
                 .filter(each -> each.owners().size() > 1).toList();
 
         assertEquals(1, narrowed.size(),
-                () -> "the end at 50 is held by both records: " + subjects(compilation));
+                () -> "the end at 50 is held by both records: "
+                        + subjects(compilation, "example.together"));
         assertEquals("Inner or Outer", narrowed.get(0).subject().named(),
                 "and a finding about it names both, because the reading does not know which");
 
@@ -286,10 +287,6 @@ class ALineIsOwedByTheDeclarationsThatWroteItTest {
                     return each.named() + ": " + about.debt().said(about.role());
                 })
                 .toList();
-    }
-
-    private static List<String> subjects(Compilation compilation) {
-        return subjects(compilation, "example.together");
     }
 
     private static List<String> subjects(Compilation compilation, String module) {

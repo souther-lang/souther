@@ -71,22 +71,16 @@ public sealed interface FindingSubject {
             }
         }
 
-        /** One of them, for a reader with room for one word. */
-        public OfADeclaration(TypeSymbol.AtModule declaration) {
-            this(java.util.List.of(declaration));
-        }
-
         /**
          * What a report calls them.
          *
-         * <p>The same join the line's own name uses for the declarations that took an end in
-         * ({@link souther.compiler.partition.AuthoredLine#said}), because it is the same set of
-         * declarations being said — a second spelling of one list reads as two.
+         * <p>Said where such a list is said ({@link
+         * souther.compiler.partition.AuthoredLine#naming}), because a reader meets this list and the
+         * one the line's own name carries about one line.
          */
         @Override
         public String named() {
-            return declarations.stream().map(TypeSymbol::name)
-                    .collect(java.util.stream.Collectors.joining(" or "));
+            return souther.compiler.partition.AuthoredLine.naming(declarations);
         }
     }
 

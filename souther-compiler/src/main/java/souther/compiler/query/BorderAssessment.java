@@ -205,9 +205,11 @@ public record BorderAssessment(Border border, Map<PointRole, ItemAssessment> ite
         /**
          * Whether the behavior this reading belongs to is the one owed a row here.
          *
-         * <p>Two of a border's four points can be owed to the declaration that drew the line rather
-         * than to any body carrying the type: what a row standing at the line shows is a fact about
-         * the type, and one row anywhere settles it (issue #1062). The other two are the regions
+         * <p>Two of a border's four points can be owed to a declaration rather than to any body
+         * carrying the type: what a row standing at the line shows is a fact about the type, and one
+         * row anywhere settles it. Which declarations owe it is the line's answer and is not this
+         * question — a body's line has none, and that is the whole of what this reads. The other two
+         * are the regions
          * either side, and where a region stops is settled by every other rule reaching this
          * position — so they are this reading's whatever drew the line.
          *
@@ -223,7 +225,7 @@ public record BorderAssessment(Border border, Map<PointRole, ItemAssessment> ite
          */
         public boolean owedHere() {
             return !role.againstTheLine()
-                    || border.origin().owedToTheDeclaration().isEmpty();
+                    || border.origin().authoredLine().obligationOwners().isEmpty();
         }
 
         /** The measured half, or null where no row is owed here. */
