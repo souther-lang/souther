@@ -4,6 +4,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.PlacementFiling;
+import souther.compiler.inputs.PlacementOutcome;
 import souther.compiler.inputs.PlacementSeed;
 import souther.compiler.inputs.Position;
 import souther.compiler.inputs.PositionId;
@@ -56,13 +57,21 @@ public final class LinesWhereTheyFall {
         List<LineDrawn> outBetween = new ArrayList<>();
         List<RuleWithoutALine> notPlaced = new ArrayList<>();
         for (Threshold each : thresholds) {
-            for (NumericTerm term : termsOf(inputs, each.term(), symbols)) {
+            Reached where = termsOf(inputs, each.term(), symbols, each.origin());
+            if (where.nowhere()) {
+                continue;
+            }
+            for (NumericTerm term : where.terms()) {
                 outThresholds.add(new Threshold(term, each.parts(), each.valueBelongsBelow(),
                         each.origin()));
             }
         }
         for (GuardThresholds.Guards.Singled each : singled) {
-            for (NumericTerm term : termsOf(inputs, each.term(), symbols)) {
+            Reached where = termsOf(inputs, each.term(), symbols, each.origin());
+            if (where.nowhere()) {
+                continue;
+            }
+            for (NumericTerm term : where.terms()) {
                 outSingled.add(new GuardThresholds.Guards.Singled(term, each.value(),
                         each.origin()));
             }
@@ -86,10 +95,15 @@ public final class LinesWhereTheyFall {
         List<NumericTerm> crossing = new ArrayList<>();
         java.util.Map<NumericTerm, List<NumericTerm>> reaches = new java.util.LinkedHashMap<>();
         for (NumericTerm term : line.cuts().of().terms()) {
-            List<NumericTerm> where = termsOf(inputs, term, symbols);
-            if (where.size() > 1) {
+            Reached where = termsOf(inputs, term, symbols, line.by());
+            // A name the reading followed and came to nothing takes the line with it. Handed on,
+            // the line falls at a name no row is written at and the generator answers for it.
+            if (where.nowhere()) {
+                return;
+            }
+            if (where.crosses()) {
                 crossing.add(term);
-                reaches.put(term, where);
+                reaches.put(term, where.terms());
             }
         }
         if (crossing.size() > 1) {
@@ -133,20 +147,22 @@ public final class LinesWhereTheyFall {
      * moving — what a rule of one value calls a place is that value's to say, and this is not the
      * reader that decides it.
      */
-    private static List<NumericTerm> termsOf(InputDomain inputs, NumericTerm term,
-                                             Symbols symbols) {
+    private static Reached termsOf(InputDomain inputs, NumericTerm term, Symbols symbols,
+                                   OriginRef origin) {
+        souther.compiler.check.RuleRef by = origin.rule();
+        souther.compiler.check.RuleCitation cited = origin.cited();
         TermPath path = term.path();
         if (inputs.at(path) != null) {
-            return List.of(term);
+            return new Reached(List.of(term), false);
         }
         // The value a rule naming this location is read of, which the reading answers. A location
         // already naming a case is under no name of that value's, and comes back with none rather
         // than with one this worked out for itself.
         InputDomain.RuleRoot root = inputs.rootNaming(path);
         if (root == null) {
-            return List.of(term);
+            return new Reached(List.of(term), false);
         }
-        PlacementFiling filing = inputs.file(PlacementSeed.of(root.at(), term));
+        PlacementFiling filing = inputs.file(PlacementSeed.of(root.at(), term, by, cited));
         List<NumericTerm> out = new ArrayList<>();
         for (PositionId at : filing.filedAt()) {
             Position position = inputs.at(at.at());
@@ -164,9 +180,51 @@ public final class LinesWhereTheyFall {
             }
             out.add(moved);
         }
-        // Nothing to move it to, and the filing says why. The line stays as it was so that whoever
-        // reads it reads the name the model wrote.
-        return out.isEmpty() ? List.of(term) : List.copyOf(out);
+        if (!out.isEmpty()) {
+            return new Reached(List.copyOf(out), false);
+        }
+        // Nowhere, and which nowhere is the filing's to say. A location this reading stopped short
+        // of is a location all the same — the walk's depth is where a report stops being about one
+        // input, not a claim about the model — so a line there is measured where it was written and
+        // the position above it already says the walk stopped. A name no position answers to is the
+        // other thing: handing it on puts the line at a place no row is written at, and the
+        // generator answers for a place nobody meant.
+        return new Reached(List.of(term), !onlyStoppedShort(filing));
+    }
+
+    /** Whether every place this name would have stood is one the reading stopped short of, rather
+     *  than one nothing of that name is at. */
+    private static boolean onlyStoppedShort(PlacementFiling filing) {
+        boolean any = false;
+        for (PlacementOutcome each : filing.outcomes()) {
+            if (each instanceof PlacementOutcome.Unresolved it) {
+                any = true;
+                if (!(it.why() instanceof PlacementOutcome.Reason.TheReadingStoppedThere)) {
+                    return false;
+                }
+            }
+        }
+        return any;
+    }
+
+    /**
+     * Where a name reached, and whether the reading answered that it reached nowhere.
+     *
+     * <p>The two apart, because they are two answers. A name at a position of this reading is at
+     * one and nothing was followed; a name the rules of no value here can write is one this has no
+     * business moving; and a name that was followed and came to nothing is a line the model draws
+     * that this build cannot hold against any row. A list of terms says the first two and the third
+     * alike, which is how the third came to be handed on as though it were the first.
+     */
+    private record Reached(List<NumericTerm> terms, boolean nowhere) {
+
+        Reached {
+            terms = List.copyOf(terms);
+        }
+
+        boolean crosses() {
+            return terms.size() > 1;
+        }
     }
 
 

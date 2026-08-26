@@ -20,15 +20,21 @@ public final class PlacementFiling {
     private final List<PlacementOutcome> outcomes;
 
     /**
-     * Package-private, so the resolution is the way one of these is made.
+     * Made only by following a name against what the walk observed, which is what {@code followed}
+     * is proof of: nothing outside {@link InputDomain} can make one.
      *
      * <p>Being non-empty is not the whole of what has to hold. A list of outcomes anybody can write
      * lets a name that stands under three cases come back having answered for one of them, which is
      * the silence this exists to remove — said out loud for the case it reached, and said nothing
      * about for the two it did not. So the list is not an argument a caller assembles: it is what
-     * following the name against what the walk observed came to, and following it is here.
+     * following the name came to, and only the following can hand it over.
      */
-    PlacementFiling(PlacementSeed seed, List<PlacementOutcome> outcomes) {
+    PlacementFiling(InputDomain.Following followed, PlacementSeed seed,
+                    List<PlacementOutcome> outcomes) {
+        if (followed == null) {
+            throw new IllegalArgumentException(
+                    "a filing is what following a name came to, and this followed none");
+        }
         if (seed == null) {
             throw new IllegalArgumentException("something was placed");
         }

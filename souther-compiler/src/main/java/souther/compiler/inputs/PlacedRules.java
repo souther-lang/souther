@@ -153,12 +153,12 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      */
     List<PlacementSeed> placed() {
         List<PlacementSeed> out = new ArrayList<>();
-        for (FieldDomains.Placed each : bounds().placed()) {
-            out.add(PlacementSeed.of(root, each.at()));
-        }
-        for (String where : bounds().valuesNarrowedAt()) {
-            out.add(PlacementSeed.of(root, new souther.compiler.check.Owed.AdmittedValues(where)));
-        }
+        // Rule by rule, and every question each of them raised. What a reading holds afterwards is
+        // what the rules came to together — a field two clauses narrow is one narrowed field — so an
+        // account taken from there is one either clause can go missing from with nothing to see.
+        bounds().accounting().forEach((rule, accounting) ->
+                accounting.answers().keySet().forEach(owed ->
+                        out.add(PlacementSeed.of(root, owed, rule, accounting.cited()))));
         return List.copyOf(out);
     }
 

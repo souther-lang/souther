@@ -968,16 +968,6 @@ public final class FieldDomains {
                 : AdmissibleSet.wider(values, spread);
     }
 
-    /**
-     * Every position of this value whose values a rule narrowed, as the rules name it.
-     *
-     * <p>What was placed and not what could be asked. {@link #admits} answers at any name at all,
-     * because a position no rule was written about holds every value — so a caller counting what the
-     * rules of this value did place has to be told, and cannot find out by asking.
-     */
-    public Set<String> valuesNarrowedAt() {
-        return Set.copyOf(admittedByField.keySet());
-    }
 
     /** {@code these} and one more, in the order they are written here: the rule's own reason is
      *  what an author acts on, and what the reading could not hold together is beside it. */

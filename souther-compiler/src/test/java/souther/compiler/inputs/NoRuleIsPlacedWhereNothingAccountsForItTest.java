@@ -22,6 +22,7 @@ import java.util.TreeMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Every rule that placed anything ends somewhere this compiler said out loud.
@@ -51,7 +52,27 @@ class NoRuleIsPlacedWhereNothingAccountsForItTest {
      * rules of these models write reaches a position or stops at a depth.
      */
     private static final Map<String, Integer> ALLOWED = Map.of(
-            "the reading stopped there: DepthLimit", 144);
+            "the reading stopped there: DepthLimit", 136);
+
+    /**
+     * The account is taken rule by rule, and no rule that placed anything is outside it.
+     *
+     * <p>What the readings hold afterwards is what the rules came to together — a field two clauses
+     * narrow is one narrowed field, and an end one clause moved past another is one end. An account
+     * taken from there counts places rather than placements, and either clause could go missing with
+     * nothing to see. So it is taken from the rules, and this says the rules are all of them.
+     */
+    @Test
+    void everyRuleThatPlacedAnEndIsInTheAccount() throws Exception {
+        for (PlacedRules rules : everyValueRead()) {
+            java.util.Set<souther.compiler.check.RuleRef> counted = rules.bounds().accounting().keySet();
+            for (souther.compiler.check.FieldDomains.Placed each : rules.bounds().placed()) {
+                assertTrue(counted.contains(each.from()),
+                        () -> "`" + each.from() + "` placed an end at " + each.path()
+                                + " and is not among the rules this build accounts for");
+            }
+        }
+    }
 
     @Test
     void everyPlacementEndsInAnAnswerThisCompilerGave() throws Exception {
@@ -115,6 +136,14 @@ class NoRuleIsPlacedWhereNothingAccountsForItTest {
             behavior atTheSum : (q: Q) -> Ok
             """;
 
+    /** Every corpus this repository carries, as the files each is compiled from. */
+    private static final List<List<String>> CORPORA = List.of(
+            List.of("souther-bench/src/main/resources/souther/bench/corpus/crm/crm.sou",
+                    "souther-bench/src/main/resources/souther/bench/corpus/crm/pipeline.sou",
+                    "souther-bench/src/main/resources/souther/bench/corpus/crm/quoting.sou"),
+            List.of("souther-bench/src/main/resources/souther/bench/corpus/issuetracker/issues.sou"),
+            List.of("souther-bench/src/main/resources/souther/bench/corpus/runtime/runtime.sou"));
+
     /** The reading of every behavior of every model this repository carries. */
     private static List<InputDomain> everyReading() throws Exception {
         List<InputDomain> out = new ArrayList<>();
@@ -126,12 +155,7 @@ class NoRuleIsPlacedWhereNothingAccountsForItTest {
         crossed.answerEverything();
         readings(crossed, out);
         Path root = souther.test.RepositoryLayout.ofWorkingDirectory().root();
-        for (List<String> corpus : List.of(
-                List.of("souther-bench/src/main/resources/souther/bench/corpus/crm/crm.sou",
-                        "souther-bench/src/main/resources/souther/bench/corpus/crm/pipeline.sou",
-                        "souther-bench/src/main/resources/souther/bench/corpus/crm/quoting.sou"),
-                List.of("souther-bench/src/main/resources/souther/bench/corpus/issuetracker/issues.sou"),
-                List.of("souther-bench/src/main/resources/souther/bench/corpus/runtime/runtime.sou"))) {
+        for (List<String> corpus : CORPORA) {
             List<String> sources = new ArrayList<>();
             for (String each : corpus) {
                 sources.add(Files.readString(root.resolve(each)));
@@ -142,6 +166,47 @@ class NoRuleIsPlacedWhereNothingAccountsForItTest {
             readings(compilation, out);
         }
         return out;
+    }
+
+    /** The rules of every value every reading of this repository's models opens. */
+    private static List<PlacedRules> everyValueRead() throws Exception {
+        List<PlacedRules> out = new ArrayList<>();
+        for (ConformanceCorpus corpus : ConformanceCorpus.all()) {
+            valuesRead(corpus.analyse().compilation(), out);
+        }
+        Compilation crossed = Compilation.ofSources(List.of(NAMES_THROUGH_A_SUM),
+                souther.compiler.meta.ModulePath.EMPTY);
+        crossed.answerEverything();
+        valuesRead(crossed, out);
+        Path root = souther.test.RepositoryLayout.ofWorkingDirectory().root();
+        for (List<String> corpus : CORPORA) {
+            List<String> sources = new ArrayList<>();
+            for (String each : corpus) {
+                sources.add(Files.readString(root.resolve(each)));
+            }
+            Compilation compilation =
+                    Compilation.ofSources(sources, souther.compiler.meta.ModulePath.EMPTY);
+            compilation.answerEverything();
+            valuesRead(compilation, out);
+        }
+        return out;
+    }
+
+    private static void valuesRead(Compilation compilation, List<PlacedRules> out) {
+        for (String module : compilation.modules()) {
+            Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
+            Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
+            Symbols symbols = Scopes.derived(compilation.db(), module).value();
+            for (Hir.BehaviorDef def : prepared.behaviors()) {
+                if (!(def instanceof Hir.SpecBehavior spec) || sigs.get(spec.name()) == null) {
+                    continue;
+                }
+                for (souther.compiler.types.Type type : sigs.get(spec.name()).inputTypes()) {
+                    out.add(PlacedRules.of(TermPath.of("p"), type, symbols,
+                            ReadAs.THE_COMPILATION_DOES));
+                }
+            }
+        }
     }
 
     private static void readings(Compilation compilation, List<InputDomain> out) {

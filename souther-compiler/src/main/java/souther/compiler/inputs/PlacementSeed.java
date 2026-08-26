@@ -2,6 +2,8 @@ package souther.compiler.inputs;
 
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.Owed;
+import souther.compiler.check.RuleCitation;
+import souther.compiler.check.RuleRef;
 
 /**
  * What a rule placed, taken apart into where it was written and what it says there.
@@ -23,11 +25,15 @@ import souther.compiler.check.Owed;
  * its cases, so one of these becomes a filing at each of them. Nothing here says where, and nothing
  * here says a name reached nowhere.
  */
-public record PlacementSeed(RuleAddress address, Placed placed) {
+public record PlacementSeed(RuleAddress address, Placed placed, RuleRef by, RuleCitation cited) {
 
     public PlacementSeed {
         if (address == null || placed == null) {
             throw new IllegalArgumentException("a rule placed something somewhere");
+        }
+        if (by == null || cited == null) {
+            throw new IllegalArgumentException(
+                    "and it was some rule that placed it, which a reader can be sent to look at");
         }
     }
 
@@ -67,7 +73,8 @@ public record PlacementSeed(RuleAddress address, Placed placed) {
      * <p>Exhaustive over {@link NumericTerm}, with no {@code default}: a term of a third kind is a
      * name this would have to read, and stopping the compile is what says so.
      */
-    public static PlacementSeed of(TermPath root, NumericTerm term) {
+    public static PlacementSeed of(TermPath root, NumericTerm term, RuleRef by,
+                                   RuleCitation cited) {
         RuleAddress address = RuleAddress.of(root, term.path());
         if (address == null) {
             return null;
@@ -76,33 +83,28 @@ public record PlacementSeed(RuleAddress address, Placed placed) {
             case NumericTerm.ValueOf _ -> new FieldDomains.CoordinateKind.OfItsOwnValue();
             case NumericTerm.TakenOf taken ->
                     new FieldDomains.CoordinateKind.OfWhatAnOperationAnswers(taken.operation());
-        }));
+        }), by, cited);
     }
 
     /**
-     * The seed for a coordinate a clause of the value at {@code root} placed an end on.
-     *
-     * <p>Already what those rules call the place, so nothing is translated: a coordinate is read of
-     * a value and carries that value's name for the location. Spelled back out as a path and read
-     * again, the one place a name and a position part company would be crossed twice.
-     */
-    public static PlacementSeed of(TermPath root, FieldDomains.Coordinate coordinate) {
-        return new PlacementSeed(new RuleAddress(root, coordinate.path()),
-                new Placed.ANumberOfIt(coordinate.kind()));
-    }
-
-    /**
-     * The seed for a question a clause of the value at {@code root} raised.
+     * The seed for a question one rule of the value at {@code root} raised.
      *
      * <p>Exhaustive over {@link Owed}, with no {@code default}. The two arms are the two things a
      * rule says at a location, and they are the two here for the same reason.
+     *
+     * <p><b>One rule and one question, and never a field something was said about.</b> Two clauses
+     * narrowing one field are two placements: dropping either leaves the field narrowed and the
+     * other standing, so an account keyed on the field is one a rule can go missing from without
+     * anything to see. What tells them apart is the rule, so the rule is carried.
      */
-    public static PlacementSeed of(TermPath root, Owed owed) {
+    public static PlacementSeed of(TermPath root, Owed owed, RuleRef by, RuleCitation cited) {
         return switch (owed) {
             case Owed.AdmittedValues values ->
                     new PlacementSeed(new RuleAddress(root, values.path()),
-                            new Placed.TheValuesThere());
-            case Owed.Boundary boundary -> of(root, boundary.on());
+                            new Placed.TheValuesThere(), by, cited);
+            case Owed.Boundary boundary ->
+                    new PlacementSeed(new RuleAddress(root, boundary.on().path()),
+                            new Placed.ANumberOfIt(boundary.on().kind()), by, cited);
         };
     }
 }

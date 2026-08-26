@@ -76,10 +76,11 @@ class ANameIsReadOnceHoweverTheRuleSpelledItTest {
         assertInstanceOf(NumericTerm.ValueOf.class, own, "and this one on its own values");
 
         TermPath root = TermPath.of("h");
-        assertEquals(PlacementSeed.of(root, own).address(),
-                PlacementSeed.of(root, taken).address());
-        assertNotEquals(PlacementSeed.of(root, own).placed(),
-                PlacementSeed.of(root, taken).placed(),
+        souther.compiler.check.RuleRef.Invariant rule = someRule(measuredIn(TWO_WAYS));
+        assertEquals(PlacementSeed.of(root, own, rule, someCitation(rule)).address(),
+                PlacementSeed.of(root, taken, rule, someCitation(rule)).address());
+        assertNotEquals(PlacementSeed.of(root, own, rule, someCitation(rule)).placed(),
+                PlacementSeed.of(root, taken, rule, someCitation(rule)).placed(),
                 "and what each says about the location is what tells them apart");
     }
 
@@ -93,9 +94,12 @@ class ANameIsReadOnceHoweverTheRuleSpelledItTest {
     @Test
     void twoQuestionsAboutOneLocationAreAtOneAddress() {
         TermPath root = TermPath.of("h");
-        PlacementSeed values = PlacementSeed.of(root, new Owed.AdmittedValues("name"));
+        souther.compiler.check.RuleRef.Invariant rule = someRule(measuredIn(TWO_WAYS));
+        PlacementSeed values = PlacementSeed.of(root, new Owed.AdmittedValues("name"), rule,
+                someCitation(rule));
         PlacementSeed line = PlacementSeed.of(root,
-                new Owed.Boundary(FieldDomains.Coordinate.value("name")));
+                new Owed.Boundary(FieldDomains.Coordinate.value("name")), rule,
+                someCitation(rule));
 
         assertEquals(values.address(), line.address());
         assertEquals(new PlacementSeed.Placed.TheValuesThere(), values.placed());
@@ -140,10 +144,13 @@ class ANameIsReadOnceHoweverTheRuleSpelledItTest {
                 "and the sum's own rules do not reach into a case either: what relates a name at "
                         + "the sum to that position is the crossing, and an address that stepped "
                         + "through the narrowing would be a second way to say it");
-        assertNull(PlacementSeed.of(a, new NumericTerm.ValueOf(b.then("limit"))),
+        souther.compiler.check.RuleRef.Invariant rule = someRule(caseNamedAtModule(read, sum, "A"));
+        assertNull(PlacementSeed.of(a, new NumericTerm.ValueOf(b.then("limit")), rule,
+                        someCitation(rule)),
                 "so nothing was placed there, which is not the same as a placement with nowhere "
                         + "to go");
-        assertNotNull(PlacementSeed.of(a, new NumericTerm.ValueOf(a.then("limit"))),
+        assertNotNull(PlacementSeed.of(a, new NumericTerm.ValueOf(a.then("limit")), rule,
+                        someCitation(rule)),
                 "and the same rule about its own value does place something");
     }
 
@@ -163,6 +170,38 @@ class ANameIsReadOnceHoweverTheRuleSpelledItTest {
             }
         }
         throw new IllegalStateException("no case named " + name);
+    }
+
+    /** A declaration of the model to hang a made-up rule on. */
+    private static TypeSymbol.AtModule measuredIn(String source) {
+        souther.compiler.types.Type type =
+                reading(source, "byLength").at(TermPath.of("h")).view().declared();
+        if (type instanceof souther.compiler.types.Type.Ref ref
+                && ref.name() instanceof TypeSymbol.AtModule at) {
+            return at;
+        }
+        throw new IllegalStateException("the parameter is a declaration of the module");
+    }
+
+    /** The case's own name, where a declaration is what is wanted. */
+    private static TypeSymbol.AtModule caseNamedAtModule(InputDomain read, TermPath sum,
+                                                         String name) {
+        return (TypeSymbol.AtModule) caseNamed(read, sum, name);
+    }
+
+    /** A rule to hang a placement on, so that a seed made here is one some rule placed. */
+    private static souther.compiler.check.RuleRef.Invariant someRule(
+            souther.compiler.types.TypeSymbol.AtModule on) {
+        return new souther.compiler.check.RuleRef.Invariant(
+                new souther.compiler.check.Clause.Ref(
+                        new souther.compiler.check.Clause.Id(on, 0),
+                        java.util.Optional.of(new souther.compiler.check.ClauseName("here"))));
+    }
+
+    /** How a report would send a reader to it. */
+    private static souther.compiler.check.RuleCitation someCitation(
+            souther.compiler.check.RuleRef.Invariant rule) {
+        return souther.compiler.check.RuleCitation.named(rule);
     }
 
     private static InputDomain reading(String source, String behavior) {

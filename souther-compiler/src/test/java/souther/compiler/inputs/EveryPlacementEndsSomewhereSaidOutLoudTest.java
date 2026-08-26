@@ -77,7 +77,8 @@ class EveryPlacementEndsSomewhereSaidOutLoudTest {
         PlacementFiling filing = read.file(new PlacementSeed(
                 new RuleAddress(TermPath.of("q"), "limit"),
                 new PlacementSeed.Placed.ANumberOfIt(
-                        new FieldDomains.CoordinateKind.OfItsOwnValue())));
+                        new FieldDomains.CoordinateKind.OfItsOwnValue()),
+                aRule(read), someCitation(aRule(read))));
 
         assertEquals(List.of("q@A.limit", "q@B.limit"),
                 filing.filedAt().stream().map(PositionId::toString).toList());
@@ -96,7 +97,7 @@ class EveryPlacementEndsSomewhereSaidOutLoudTest {
         InputDomain read = reading(SHARED, "read");
         PlacementFiling filing = read.file(new PlacementSeed(
                 new RuleAddress(TermPath.of("h"), "q.limit"),
-                new PlacementSeed.Placed.TheValuesThere()));
+                new PlacementSeed.Placed.TheValuesThere(), aRule(read), someCitation(aRule(read))));
 
         assertEquals(List.of("h.q@A.limit", "h.q@B.limit"),
                 filing.filedAt().stream().map(PositionId::toString).toList());
@@ -113,7 +114,7 @@ class EveryPlacementEndsSomewhereSaidOutLoudTest {
         InputDomain read = reading(TOO_DEEP, "read");
         PlacementFiling filing = read.file(new PlacementSeed(
                 new RuleAddress(TermPath.of("o"), "held.q.limit"),
-                new PlacementSeed.Placed.TheValuesThere()));
+                new PlacementSeed.Placed.TheValuesThere(), aRule(read), someCitation(aRule(read))));
 
         assertEquals(List.of(), filing.filedAt());
         assertTrue(filing.anythingUnresolved(), "and nothing else stands in its place");
@@ -133,15 +134,21 @@ class EveryPlacementEndsSomewhereSaidOutLoudTest {
      * A placement with no outcome at all cannot be written down.
      *
      * <p>Which is what keeps a rule from going nowhere quietly: an empty answer is what a reader
-     * further on would have to make a cause out of, and there is no way to hand one over.
+     * further on would have to make a cause out of, and following a name is the only thing that
+     * hands one over — so there is nowhere for a caller to write one at all.
      */
     @Test
-    void aPlacementWithNoOutcomeIsNotAnAnswer() {
-        PlacementSeed seed = new PlacementSeed(new RuleAddress(TermPath.of("q"), "limit"),
-                new PlacementSeed.Placed.TheValuesThere());
-
-        assertThrows(IllegalArgumentException.class,
-                () -> new PlacementFiling(seed, List.of()));
+    void everyPlacementOfEveryRuleComesBackWithAnAnswer() {
+        for (String source : List.of(SHARED, TOO_DEEP, MIXED)) {
+            for (String behavior : behaviorsOf(source)) {
+                InputDomain read = reading(source, behavior);
+                for (PlacementFiling filing : read.placements()) {
+                    assertFalse(filing.outcomes().isEmpty(),
+                            () -> "`" + filing.seed().address() + "` was placed by "
+                                    + filing.seed().by() + " and came to nothing");
+                }
+            }
+        }
     }
 
     /**
@@ -199,6 +206,32 @@ class EveryPlacementEndsSomewhereSaidOutLoudTest {
 
     private static void assertThrows(Class<? extends Throwable> expected, Runnable run) {
         org.junit.jupiter.api.Assertions.assertThrows(expected, run::run);
+    }
+
+    /** A rule of the model to hang a made-up placement on. */
+    private static souther.compiler.check.RuleRef.Invariant aRule(InputDomain read) {
+        for (Position each : read.positions()) {
+            if (each.type() instanceof souther.compiler.types.Type.Ref ref
+                    && ref.name() instanceof souther.compiler.types.TypeSymbol.AtModule at) {
+                return someRule(at);
+            }
+        }
+        throw new IllegalStateException("no declaration to hang a rule on");
+    }
+
+    /** A rule to hang a placement on, so that a seed made here is one some rule placed. */
+    private static souther.compiler.check.RuleRef.Invariant someRule(
+            souther.compiler.types.TypeSymbol.AtModule on) {
+        return new souther.compiler.check.RuleRef.Invariant(
+                new souther.compiler.check.Clause.Ref(
+                        new souther.compiler.check.Clause.Id(on, 0),
+                        java.util.Optional.of(new souther.compiler.check.ClauseName("here"))));
+    }
+
+    /** How a report would send a reader to it. */
+    private static souther.compiler.check.RuleCitation someCitation(
+            souther.compiler.check.RuleRef.Invariant rule) {
+        return souther.compiler.check.RuleCitation.named(rule);
     }
 
     private static InputDomain reading(String source, String behavior) {

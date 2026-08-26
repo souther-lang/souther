@@ -320,8 +320,22 @@ public final class InputDomain {
         followed.reached().forEach(each -> outcomes.add(
                 new PlacementOutcome.Filed(new PositionId(each))));
         outcomes.addAll(followed.otherwise());
-        return new PlacementFiling(seed, outcomes);
+        return new PlacementFiling(FOLLOWED, seed, outcomes);
     }
+
+    /**
+     * That a name was followed, which is the only way a filing is made.
+     *
+     * <p>Its constructor is this class's own, so nothing else can say a name was followed — which is
+     * what keeps a filing from being a list of outcomes a caller assembled. A caller that could
+     * write one could answer for one case of three and leave the other two unsaid, and being
+     * non-empty would not notice.
+     */
+    static final class Following {
+        private Following() {}
+    }
+
+    private static final Following FOLLOWED = new Following();
 
     /** Where following a name got to, and what became of it everywhere it did not get to. */
     private record Followed(List<TermPath> reached, List<PlacementOutcome> otherwise) {}
@@ -798,7 +812,7 @@ public final class InputDomain {
                                     new java.util.LinkedHashSet<>(shared));
                     walkBranch(branch, placed.root(), path, depth, symbols, policy, found, roots,
                             visited, handoffs, observed, crossing, account);
-                    crossed(observed, path, shared, branch.refinement(), found, before);
+                    crossed(observed, path, shared, branch.refinement(), found, before, crossing);
                 }
             }
         }
@@ -816,15 +830,24 @@ public final class InputDomain {
      *              looked through is what this branch put there
      */
     private static void crossed(NameReach.Observed observed, TermPath at, List<String> shared,
-                                Refinement branch, List<Position> found, int from) {
+                                Refinement branch, List<Position> found, int from,
+                                PlacedRules.Reaching crossing) {
         if (shared.isEmpty()) {
             return;
         }
         TermPath narrowed = at.refine(branch);
         List<Position> made = found.subList(from, found.size());
         for (String field : shared) {
-            TermPath stands = narrowed.then(field);
-            if (made.stream().anyMatch(each -> each.path().equals(stands))) {
+            // What the value above calls this position, asked of the one thing that answers it —
+            // which is what the reading of the position asks when a clause of that value is read
+            // here. Worked out again, this would be a second statement of one relation, and a break
+            // in either would leave the other answering as though nothing had happened: the rules
+            // would stop arriving and the account would go on saying they had.
+            TermPath stands = made.stream()
+                    .map(Position::path)
+                    .filter(each -> at.then(field).equals(crossing.outerPathOf(each)))
+                    .findFirst().orElse(null);
+            if (stands != null) {
                 observed.crosses(at, field, branch, stands);
                 continue;
             }
