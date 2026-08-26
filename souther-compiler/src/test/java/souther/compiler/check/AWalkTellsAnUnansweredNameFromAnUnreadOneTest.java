@@ -45,7 +45,7 @@ class AWalkTellsAnUnansweredNameFromAnUnreadOneTest {
     private static Hir.Var bound() {
         ValueName.Local n = new ValueName.Local("n", BOUND);
         return new Hir.Var.Denoting(WrittenName.of("n", POS),
-                new ReachName.Bare(n), WrittenName.of("n", POS).region());
+                new ReachName.InScope(n), WrittenName.of("n", POS).region());
     }
 
     /** A name resolution read and found nothing for. */

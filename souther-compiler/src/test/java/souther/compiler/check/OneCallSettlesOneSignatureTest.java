@@ -41,7 +41,7 @@ class OneCallSettlesOneSignatureTest {
         Hir.Block predicate = new Hir.Block(List.of(BINDERS.binder("x", POS)),
                 new Hir.BoolLit(true, POS, null), souther.compiler.types.RuleOrigin.unwritten(), POS, null);
         return new Hir.Apply("List.filter",
-                new ReachName.OfLibrary(new ValueName.Stdlib("List", "filter")),
+                new ReachName.OfLibrary(ValueName.Stdlib.operation("List", "filter")),
                 List.of(predicate, new Hir.ListLit(List.of(), POS, null)), ConstructionOrigin.own(), POS, null);
     }
 
@@ -129,10 +129,10 @@ class OneCallSettlesOneSignatureTest {
         // holds, so the option beside it is what decides — the other order holds the option to the
         // element type of nothing.
         Hir.Expr call = new Hir.Apply("Option.withDefault",
-                new ReachName.OfLibrary(new ValueName.Stdlib("Option", "withDefault")),
+                new ReachName.OfLibrary(ValueName.Stdlib.operation("Option", "withDefault")),
                 List.of(new Hir.ListLit(List.of(), POS, null),
                         new Hir.Apply("List.get",
-                new ReachName.OfLibrary(new ValueName.Stdlib("List", "get")),
+                new ReachName.OfLibrary(ValueName.Stdlib.operation("List", "get")),
                                 List.of(new Hir.IntLit(0, POS, null),
                                         new Hir.ListLit(List.of(new Hir.ListLit(
                                                 List.of(new Hir.IntLit(1, POS, null)), POS, null)),

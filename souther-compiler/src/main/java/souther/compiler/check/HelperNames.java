@@ -204,7 +204,7 @@ public final class HelperNames {
      * carried over from what stood here.
      */
     private static ReachName reachingTheSameTypeAs(ValueName.OfType marked) {
-        return new ReachName.Bare(marked);
+        return new ReachName.InScope(marked);
     }
 
     /** {@code name} written qualified where it denotes a helper {@code which} accepts. */

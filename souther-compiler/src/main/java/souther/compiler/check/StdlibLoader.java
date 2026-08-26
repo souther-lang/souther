@@ -87,7 +87,7 @@ public final class StdlibLoader {
         for (int i = 0; i < resolved.size(); i++) {
             String alias = sources.get(i).declared().qualifier();
             for (Hir.FnDef fn : resolved.get(i).fns()) {
-                ValueName.Stdlib operation = new ValueName.Stdlib(alias, fn.name());
+                ValueName.Stdlib operation = ValueName.Stdlib.operation(alias, fn.name());
                 building.declares(operation,
                         new Stdlib.Entry(fn, signatureOf(fn, operation.qualified())),
                         fn.isPrivate());

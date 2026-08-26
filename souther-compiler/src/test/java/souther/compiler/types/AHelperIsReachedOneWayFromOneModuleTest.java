@@ -24,7 +24,7 @@ class AHelperIsReachedOneWayFromOneModuleTest {
 
     private static final ValueName.Helper OURS = new ValueName.Helper("app", "flatten");
     private static final ValueName.Helper THEIRS = new ValueName.Helper("lib", "flatten");
-    private static final ValueName.Stdlib LIBRARY =
+    private static final ValueName.Stdlib.Operation LIBRARY =
             ValueName.Stdlib.operation("List", "foldFrom");
 
     /**
@@ -39,7 +39,7 @@ class AHelperIsReachedOneWayFromOneModuleTest {
         assertEquals(Set.of(new ReachName.OfModule(THEIRS)),
                 reachedFrom("app", THEIRS, "flatten", "lib.flatten"),
                 "another module's helper is reached under the module that declares it");
-        assertEquals(Set.of(new ReachName.Bare(OURS)),
+        assertEquals(Set.of(new ReachName.Own(OURS)),
                 reachedFrom("app", OURS, "flatten", "app.flatten"),
                 "and the module's own is reached bare");
     }
@@ -62,7 +62,7 @@ class AHelperIsReachedOneWayFromOneModuleTest {
      */
     @Test
     void whichModuleIsReadingDecidesIt() {
-        assertEquals(new ReachName.Bare(THEIRS), ReachName.of(THEIRS, "flatten", "lib"));
+        assertEquals(new ReachName.Own(THEIRS), ReachName.of(THEIRS, "flatten", "lib"));
         assertEquals(new ReachName.OfModule(THEIRS), ReachName.of(THEIRS, "flatten", "app"));
     }
 

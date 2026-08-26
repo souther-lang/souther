@@ -523,7 +523,7 @@ public final class HelperInliner {
         }
         // Its own module is reading here, so it reaches its own declaration bare — which is the
         // reference the graph over that module's table is keyed by.
-        ReachName here = new ReachName.Bare(new ValueName.Helper(module, fn.name()));
+        ReachName here = new ReachName.Own(new ValueName.Helper(module, fn.name()));
         Hir.Expr closed = graph.recurses(here)
                 ? inlineRecursiveBody(fn) : inline(fn.writtenBody(), bodyOf(fn.name()));
         return fn.reachedAs(new ReachName.OfModule(new ValueName.Helper(module, fn.name())))
@@ -646,7 +646,7 @@ public final class HelperInliner {
             // A parameter hides the module's own helper of that name, which is the one a bare name
             // here reaches. Another module's and the library's are reached under a qualifier that
             // no parameter can be written as, so there is nothing of theirs for one to hide.
-            parameters.add(new ReachName.Bare(new ValueName.Helper(table.module(), p.name())));
+            parameters.add(new ReachName.Own(new ValueName.Helper(table.module(), p.name())));
         }
         HelperTable outer = table;
         // Narrowed, not rebuilt: what a call reaches changes, what recurses does not. A graph taken
@@ -1110,7 +1110,7 @@ public final class HelperInliner {
                 ValueName.Local applied = new ValueName.Local(f.name(), f.id());
                 yield inline(new Hir.LetIn(f, raw.function(), null, false, null,
                         new Hir.Apply(Hir.Var.respelled(f.name(),
-                                new ReachName.Bare(applied), raw.function().pos(),
+                                new ReachName.InScope(applied), raw.function().pos(),
                                 raw.function().region()),
                                 raw.args(), raw.origin(), spelling(raw.function()), raw.pos(),
                                 raw.region()),
@@ -1423,7 +1423,10 @@ public final class HelperInliner {
                     // somewhere — a helper's own parameter, a binding, a function an
                     // enclosing call gave — and that declaration is carried on the boundary,
                     // so the two are read against each other without either being re-typed.
-                    subst.put(p.binder().id(), new Substituted(fnName.name(), fnName.denotes()));
+                    // The reference it was reached by, carried across rather than rebuilt: what a
+                    // name handed to a function parameter stands for is reached exactly as the
+                    // caller reached it.
+                    subst.put(p.binder().id(), new Substituted(fnName.name(), fnName.reachedAs()));
                 } else if (arg instanceof Hir.Block lambda) {
                     Hir.Binder f = ours.binder(suppliedAs(p.name()), lambda.pos());
                     subst.put(p.binder().id(), Substituted.of(f));
@@ -1800,13 +1803,13 @@ public final class HelperInliner {
          *
          * <p>A whole reference, so that a route and a declaration from two different references are
          * never paired. What this moves is a binding and nothing else, and a binding is reached
-         * where it is bound — so where it moved, the reference this module reaches it by is the
-         * bare one for the binding it moved to, and where it did not, the reference is the one that
-         * stood here.
+         * where it is bound — so where it moved, the reference is the one for the binding it moved
+         * to, and where it did not, the reference is the one that stood here.
          */
         ReachName of(ReachName reference) {
-            ValueName moved = of(reference.denotes());
-            return moved.equals(reference.denotes()) ? reference : new ReachName.Bare(moved);
+            return of(reference.denotes()) instanceof ValueName.Local moved
+                    && !moved.equals(reference.denotes())
+                    ? new ReachName.InScope(moved) : reference;
         }
     }
 
@@ -1819,16 +1822,18 @@ public final class HelperInliner {
      * that was supposed to answer it — and the two could only be made to agree by a check, never by
      * construction. Here the name and its answer are put in together or not at all.
      */
-    private record Substituted(String name, ValueName denotes) {
+    private record Substituted(String name, ReachName reachedAs) {
 
-        /** The binding an expansion made, read as the name the body will read. */
+        /** The binding an expansion made, read as the name the body will read. A binding is reached
+         *  where it is bound, so its own name is the whole of it. */
         static Substituted of(Hir.Binder binder) {
-            return new Substituted(binder.name(), new ValueName.Local(binder.name(), binder.id()));
+            return new Substituted(binder.name(),
+                    new ReachName.InScope(new ValueName.Local(binder.name(), binder.id())));
         }
 
-        /** A binding is reached where it is bound, so its own name is the whole of it. */
-        ReachName reachedAs() {
-            return new ReachName.Bare(denotes);
+        /** What stands here reaches. */
+        ValueName denotes() {
+            return reachedAs.denotes();
         }
     }
 

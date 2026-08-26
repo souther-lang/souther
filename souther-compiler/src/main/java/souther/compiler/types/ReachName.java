@@ -37,6 +37,22 @@ public sealed interface ReachName {
     /** What this reference reaches. */
     ValueName denotes();
 
+    /**
+     * A reference that reaches a declaration: a module's own, another module's, or an operation the
+     * library publishes.
+     *
+     * <p>What a call can be emitted for, said before anything has to emit one. The other references
+     * a body holds reach something that is no declaration — a binding is applied where it stands, a
+     * type used as a value is a construction, the library's namespace applied builds a primitive —
+     * and each of those is a different thing to emit, decided somewhere else.
+     *
+     * <p>Held as a type because every producer knows which it is making. Left to a check, the
+     * producers hand over a reference that says nothing and the consumer sorts them out again — and
+     * a name added to the language would arrive at that consumer as something to throw on, in
+     * whatever program first wrote one.
+     */
+    sealed interface Declaration extends ReachName permits Own, OfModule, OfLibrary { }
+
     /** The spelling this route reaches it by — what a report quotes, and what a name built for a
      * machine is built from. Never what a source wrote: the source may write a module's own
      * behavior through its own module, and this is what the module reaches it by. */
@@ -49,9 +65,36 @@ public sealed interface ReachName {
      * <p>What these have in common is that no qualifier gets between the reference and what it
      * reaches, so the declaration's own name is the whole of it.
      */
-    record Bare(ValueName denotes) implements ReachName {
+    record Own(ValueName.OfAModule denotes) implements Declaration {
 
-        public Bare {
+        public Own {
+            if (denotes == null) {
+                throw new IllegalArgumentException("a reference reaches something");
+            }
+        }
+
+        @Override
+        public String rendered() {
+            return denotes.name();
+        }
+
+        @Override
+        public String toString() {
+            return rendered();
+        }
+    }
+
+    /**
+     * A name that means what it means where it stands: a binding in force, a type written where a
+     * value goes, a name the language gives a meaning.
+     *
+     * <p>No qualifier gets between the reference and what it reaches, as for {@link Own} — and
+     * nothing routes it either, which is the difference. What it reaches is no declaration, so
+     * there is no method to emit a call to and this is not a {@link Declaration}.
+     */
+    record InScope(ValueName.InScope denotes) implements ReachName {
+
+        public InScope {
             if (denotes == null) {
                 throw new IllegalArgumentException("a reference reaches something");
             }
@@ -75,7 +118,7 @@ public sealed interface ReachName {
      * is a property of this route rather than of declarations — {@link OfLibrary} reads the same
      * declaration and renders it under an alias the declaration knows nothing about.
      */
-    record OfModule(ValueName.OfAModule denotes) implements ReachName {
+    record OfModule(ValueName.OfAModule denotes) implements Declaration {
 
         public OfModule {
             if (denotes == null) {
@@ -101,9 +144,37 @@ public sealed interface ReachName {
      * publishes, or the module applied as a constructor ({@code Date("2026-09-30")}) — so the route
      * needs nothing beside it.
      */
-    record OfLibrary(ValueName.Stdlib denotes) implements ReachName {
+    record OfLibrary(ValueName.Stdlib.Operation denotes) implements Declaration {
 
         public OfLibrary {
+            if (denotes == null) {
+                throw new IllegalArgumentException("a reference reaches something");
+            }
+        }
+
+        @Override
+        public String rendered() {
+            return denotes.qualified();
+        }
+
+        @Override
+        public String toString() {
+            return rendered();
+        }
+    }
+
+    /**
+     * The library's namespace, applied: {@code Date("2026-09-30")} builds from the module the alias
+     * names.
+     *
+     * <p>A reference to a name the library publishes, and not to a declaration a call reaches. What
+     * applying it does is build a primitive ({@link ValueName.Stdlib#constructs}), which is a
+     * different thing to emit — so this is beside {@link Declaration} rather than inside it, and no
+     * reader that emits calls can be handed one.
+     */
+    record TheNamespace(ValueName.Stdlib.Namespace denotes) implements ReachName {
+
+        public TheNamespace {
             if (denotes == null) {
                 throw new IllegalArgumentException("a reference reaches something");
             }
@@ -148,20 +219,22 @@ public sealed interface ReachName {
                     + "` has not been resolved, so nothing here says how it is reached");
         }
         return switch (denotes) {
-            case ValueName.Helper helper -> helper.module().equals(self)
-                    ? new Bare(helper) : new OfModule(helper);
-            // A behavior is declared by a module, so it is reached the two ways a helper is, and
-            // the answer is read off the declaration rather than off the spelling. Written it can
-            // be either — a module's own behavior may be written through its own module, and
-            // another's may be written bare where an import brought it in — and neither spelling
-            // says which module declares what it reaches.
-            case ValueName.Behavior behavior -> behavior.module().equals(self)
-                    ? new Bare(behavior) : new OfModule(behavior);
-            case ValueName.Stdlib library -> new OfLibrary(library);
+            // A module declares these, so which module decides the route, and the answer is read
+            // off the declaration rather than off the spelling. Written it can be either — a
+            // module's own behavior may be written through its own module, and another's may be
+            // written bare where an import brought it in — and neither spelling says which module
+            // declares what it reaches.
+            case ValueName.OfAModule declared -> declared.module().equals(self)
+                    ? new Own(declared) : new OfModule(declared);
+            // The library's two shapes are two references. Which of them a name is, the library
+            // said when it published it; this is the one place that is turned into a route, and
+            // everything after it holds the route and asks nothing.
+            case ValueName.Stdlib.Operation operation -> new OfLibrary(operation);
+            case ValueName.Stdlib.Namespace namespace -> new TheNamespace(namespace);
             // Each of these is reached by the name it is bound or written under, which is the name
             // the denotation carries: a binding is named where it is bound, and a type used as a
             // value by what this module calls it.
-            case ValueName.Local _, ValueName.OfType _, ValueName.Builtin _ -> new Bare(denotes);
+            case ValueName.InScope here -> new InScope(here);
         };
     }
 

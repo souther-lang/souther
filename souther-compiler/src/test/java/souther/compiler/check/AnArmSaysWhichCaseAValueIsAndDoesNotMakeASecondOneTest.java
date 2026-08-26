@@ -225,21 +225,21 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
 
     private static Core answer() {
         return new Core.Call(new Core.Reached.OfDeclaration(
-                ReachName.of(FIND, "findIt", "demo")), List.of(),
+                new ReachName.Own(FIND)), List.of(),
                 Type.ref(FOUND), POS);
     }
 
     /** The same call, answering an optional — what an arm naming a present carrier is written over. */
     private static Core optionalAnswer() {
         return new Core.Call(new Core.Reached.OfDeclaration(
-                ReachName.of(FIND, "findIt", "demo")), List.of(),
+                new ReachName.Own(FIND)), List.of(),
                 Type.option(Type.INT), POS);
     }
 
     /** A call answering {@code Int | Missing}, which an arm may name either case of. */
     private static Core numericAnswer() {
         return new Core.Call(new Core.Reached.OfDeclaration(
-                ReachName.of(FIND, "findIt", "demo")), List.of(),
+                new ReachName.Own(FIND)), List.of(),
                 Type.union(new java.util.LinkedHashSet<>(List.of(AN_INT, MISSING))), POS);
     }
 

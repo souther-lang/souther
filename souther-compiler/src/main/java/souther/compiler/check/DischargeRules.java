@@ -49,7 +49,7 @@ final class DischargeRules {
      * reaching it denotes. Written as the two values it is, so that a row here says which library it
      * is about without a reader splitting a spelling to find out. */
     private static ValueName op(String alias, String name) {
-        return new ValueName.Stdlib(alias, name);
+        return ValueName.Stdlib.operation(alias, name);
     }
 
     /** The argument the signature already says the elements come from, where the operation takes a
@@ -677,7 +677,7 @@ final class DischargeRules {
 
     /** Which library operation the rounding policy is read off, and where in its arguments. */
     private static final ValueName.Stdlib ROUNDING_POLICY_ANCHOR =
-            new ValueName.Stdlib("Decimal", "round");
+            ValueName.Stdlib.operation("Decimal", "round");
 
     /** {@code round(scale, mode, d)} — the second of them. */
     private static final int ROUNDING_POLICY_ARGUMENT = 1;

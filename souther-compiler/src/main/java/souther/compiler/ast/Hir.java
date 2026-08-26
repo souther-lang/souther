@@ -1701,7 +1701,7 @@ public interface Hir {
         static Var local(Binder binder, SourcePos pos) {
             ValueName.Local local = new ValueName.Local(binder.name(), binder.id());
             WrittenName written = WrittenName.synthetic(binder.name(), pos);
-            return new Denoting(written, new ReachName.Bare(local), written.region());
+            return new Denoting(written, new ReachName.InScope(local), written.region());
         }
 
         /** The bare name this reaches its declaration by, whatever the source spelled. */

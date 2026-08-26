@@ -58,7 +58,7 @@ class TheRecursiveHelpersAreAnsweredInDeclarationOrderTest {
         for (souther.compiler.types.ReachName reference : answered) {
             // The module's own are reached as they stand; everything else is reached under a
             // module or an alias. Which arm it is says so, rather than whether it holds a dot.
-            if (reference instanceof souther.compiler.types.ReachName.Bare) {
+            if (reference instanceof souther.compiler.types.ReachName.Own) {
                 own.add(reference.rendered());
             }
         }

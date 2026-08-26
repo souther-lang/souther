@@ -45,7 +45,7 @@ class WhetherAWrongLibraryCallIsTheAuthorsIsTheLibrarysToSayTest {
 
     /** A call of {@code qualifier.operation} applied to {@code args} integers, standing unexpanded. */
     private static Hir.Expr callTo(String qualifier, String operation, int args) {
-        ValueName.Stdlib name = new ValueName.Stdlib(qualifier, operation);
+        ValueName.Stdlib.Operation name = ValueName.Stdlib.operation(qualifier, operation);
         List<Hir.Expr> given = new java.util.ArrayList<>();
         for (int i = 0; i < args; i++) {
             given.add(new Hir.IntLit(i, POS, null));

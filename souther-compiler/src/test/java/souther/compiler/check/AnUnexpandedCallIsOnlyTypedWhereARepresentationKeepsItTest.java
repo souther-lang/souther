@@ -27,7 +27,7 @@ class AnUnexpandedCallIsOnlyTypedWhereARepresentationKeepsItTest {
     @Test
     void aStandardLibraryCallLeftStandingIsNotSomethingToType() {
         Hir.Expr call = new Hir.Apply("List.map",
-                new ReachName.OfLibrary(new ValueName.Stdlib("List", "map")),
+                new ReachName.OfLibrary(ValueName.Stdlib.operation("List", "map")),
                 List.of(new Hir.IntLit(1, POS, null)), ConstructionOrigin.own(), POS, null);
 
         assertThrows(RuntimeException.class, () -> Elaborator.elaborate(call, Scope.NONE,
@@ -41,7 +41,7 @@ class AnUnexpandedCallIsOnlyTypedWhereARepresentationKeepsItTest {
         // namespace the name was in
         ValueName.Helper half = new ValueName.Helper("demo", "half");
         Hir.Expr call = new Hir.Apply("half",
-                new ReachName.Bare(half), List.of(new Hir.IntLit(1, POS, null)),
+                new ReachName.Own(half), List.of(new Hir.IntLit(1, POS, null)),
                 ConstructionOrigin.own(), POS, null);
 
         assertThrows(RuntimeException.class, () -> Elaborator.elaborate(call, Scope.NONE,

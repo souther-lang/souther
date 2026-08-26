@@ -31,13 +31,13 @@ class ABehaviorOfAnotherModuleIsReachedUnderItTest {
 
     @Test
     void theModulesOwnIsReachedAsItStands() {
-        assertEquals(new ReachName.Bare(OURS), ReachName.of(OURS, "f", "app.own"));
+        assertEquals(new ReachName.Own(OURS), ReachName.of(OURS, "f", "app.own"));
     }
 
     /** The module's own, written through its own module. The qualifier says which module, and this
      *  is that module, so nothing is in the way of the name. */
     @Test
     void andSoIsOneWrittenThroughItsOwnModule() {
-        assertEquals(new ReachName.Bare(OURS), ReachName.of(OURS, "app.own.f", "app.own"));
+        assertEquals(new ReachName.Own(OURS), ReachName.of(OURS, "app.own.f", "app.own"));
     }
 }

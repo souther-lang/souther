@@ -1409,7 +1409,7 @@ public final class Resolve {
             if (Reserved.isNamespace(reachable.module())
                     || !symbols.library().privateOperations().contains(written)) {
                 return new Reach.Reaches(dot < 0 ? ValueName.Stdlib.namespace(written)
-                        : new ValueName.Stdlib(written.substring(0, dot),
+                        : ValueName.Stdlib.operation(written.substring(0, dot),
                                 written.substring(dot + 1)));
             }
             return Reach.NOT_IN_SCOPE;

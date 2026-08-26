@@ -187,7 +187,7 @@ final class Accumulations {
      * two values a library name is made of — the spelling {@link Reductions} states its own rows
      * in. */
     private static ValueName op(String alias, String name) {
-        return new ValueName.Stdlib(alias, name);
+        return ValueName.Stdlib.operation(alias, name);
     }
 
     private Accumulations() {}

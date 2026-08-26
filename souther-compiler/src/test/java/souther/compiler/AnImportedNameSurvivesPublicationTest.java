@@ -125,7 +125,7 @@ class AnImportedNameSurvivesPublicationTest {
      */
     @Test
     void theTwoSpellingsDenoteTheSameLibraryOperation() {
-        assertEquals(Set.of(new ValueName.Stdlib("String", "length")), libraryNamesDenotedBy(BARE));
+        assertEquals(Set.of(ValueName.Stdlib.operation("String", "length")), libraryNamesDenotedBy(BARE));
         assertEquals(libraryNamesDenotedBy(QUALIFIED), libraryNamesDenotedBy(BARE),
                 "an import line changes how a name is written and not what it means");
     }

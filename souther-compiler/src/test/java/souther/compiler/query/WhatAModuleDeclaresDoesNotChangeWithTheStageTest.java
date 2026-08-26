@@ -199,7 +199,7 @@ class WhatAModuleDeclaresDoesNotChangeWithTheStageTest {
                 db.ask(new Bodies.Expanding("app", souther.compiler.check.InliningPolicy.FULL))
                         .value().table();
         rowMethods.forEach(method -> assertFalse(
-                table.reaches(new souther.compiler.types.ReachName.Bare(
+                table.reaches(new souther.compiler.types.ReachName.Own(
                         new souther.compiler.types.ValueName.Helper("app", method))),
                 method + " is reachable by name"));
         assertEquals(Set.of(), Set.copyOf(db.ask(new Bodies.RequiredRecursiveDefs("app")).value()),

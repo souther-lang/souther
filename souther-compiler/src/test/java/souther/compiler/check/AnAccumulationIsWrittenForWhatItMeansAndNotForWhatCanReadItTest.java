@@ -87,6 +87,6 @@ class AnAccumulationIsWrittenForWhatItMeansAndNotForWhatCanReadItTest {
     }
 
     private static ValueName op(String alias, String name) {
-        return new ValueName.Stdlib(alias, name);
+        return ValueName.Stdlib.operation(alias, name);
     }
 }

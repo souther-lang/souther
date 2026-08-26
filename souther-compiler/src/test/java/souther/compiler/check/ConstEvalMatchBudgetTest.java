@@ -25,7 +25,7 @@ class ConstEvalMatchBudgetTest {
     private static final SourcePos POS = new SourcePos(1, 1);
 
     private static Optional<Object> fold(String pattern, String subject) {
-        ValueName.Stdlib matches = new ValueName.Stdlib("String", "matches");
+        ValueName.Stdlib.Operation matches = ValueName.Stdlib.operation("String", "matches");
         return ConstEval.eval(new Hir.Apply("String.matches",
                 new ReachName.OfLibrary(matches),
                 List.of(new Hir.StringLit(pattern, POS, null), new Hir.StringLit(subject, POS, null)),

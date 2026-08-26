@@ -135,7 +135,7 @@ public final class Exposing {
                 // The import line writes both halves of a library name: the module it names is the
                 // alias, and each name in its list is the operation. What is brought in is that
                 // pair, so nothing downstream has to take a spelling apart to get at either.
-                ValueName.Stdlib operation = new ValueName.Stdlib(imp.module(), name);
+                ValueName.Stdlib operation = ValueName.Stdlib.operation(imp.module(), name);
                 if (library.isLibraryFunction(operation.qualified())) {
                     claims.add(new Scoping.Claim.Stands(imp, name, true,
                             new Scoping.Brought.ALibraryOperation(operation)));

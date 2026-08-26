@@ -85,7 +85,7 @@ class EveryCaseALibraryDefinitionIsWrittenInBecomesAnArmTest {
      * bound it by a span over them. */
     @Test
     void anOperationDefinedInNoCasesIsNoChoice() {
-        assertNull(Choice.of(callTo(new ValueName.Stdlib("Int", "add"))),
+        assertNull(Choice.of(callTo(ValueName.Stdlib.operation("Int", "add"))),
                 "what `a + b` answers is not `a` and not `b`");
     }
 

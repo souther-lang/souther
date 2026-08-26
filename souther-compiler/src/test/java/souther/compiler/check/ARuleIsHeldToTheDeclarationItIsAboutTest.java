@@ -28,7 +28,7 @@ class ARuleIsHeldToTheDeclarationItIsAboutTest {
      * what several of these are for, so it takes the spelling apart rather than asking the library. */
     private static ValueName op(String qualified) {
         int dot = qualified.lastIndexOf('.');
-        return new ValueName.Stdlib(qualified.substring(0, dot), qualified.substring(dot + 1));
+        return ValueName.Stdlib.operation(qualified.substring(0, dot), qualified.substring(dot + 1));
     }
 
     private static void bindCarried(String operation, ArgumentRef container) {

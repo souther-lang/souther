@@ -192,7 +192,7 @@ public sealed interface Core {
          * and has no third arm to write, and that is true because this refuses to build a fourth
          * rather than because the emitters have all been counted.
          */
-        record OfDeclaration(ReachName name) implements Reached {
+        record OfDeclaration(ReachName.Declaration name) implements Reached {
 
             /**
              * What running this call means: a method of the emitting module, or a behavior.
@@ -210,17 +210,22 @@ public sealed interface Core {
              * true of this phase and is said at this phase.
              */
             public Reaches reaches() {
-                return switch (name.denotes()) {
+                return switch (name) {
+                    // A helper of this module and one of another are the same thing to emit: a call
+                    // to a method the module holds. So is an operation the library wrote in
+                    // Souther — what differs between the three is where the declaration came from,
+                    // which is a different question and is asked of the declaration.
+                    case ReachName.Own(ValueName.OfAModule declared) -> ofAModule(declared);
+                    case ReachName.OfModule(ValueName.OfAModule declared) -> ofAModule(declared);
+                    case ReachName.OfLibrary(ValueName.Stdlib.Operation operation) ->
+                            new Reaches.AHelper(operation);
+                };
+            }
+
+            private static Reaches ofAModule(ValueName.OfAModule declared) {
+                return switch (declared) {
                     case ValueName.Helper helper -> new Reaches.AHelper(helper);
-                    case ValueName.Stdlib operation -> new Reaches.AHelper(operation);
                     case ValueName.Behavior behavior -> new Reaches.ABehavior(behavior);
-                    // The three the constructor refuses. Written out rather than left to a
-                    // `default`, so a kind of name added to `ValueName` is a compile error here and
-                    // somebody says which of the two answers it is — under a `default` it would
-                    // become a call nothing can be emitted for, at run time, in whatever program
-                    // first wrote one.
-                    case ValueName.Local _, ValueName.OfType _, ValueName.Builtin _ ->
-                            throw new IllegalStateException("refused at construction: " + name);
                 };
             }
 
@@ -228,15 +233,6 @@ public sealed interface Core {
                 if (name == null) {
                     throw new IllegalArgumentException(
                             "a call applies something this compilation resolved");
-                }
-                switch (name.denotes()) {
-                    case ValueName.Helper _, ValueName.Stdlib _, ValueName.Behavior _ -> { }
-                    // Not a report. A binding is applied where it stands, and a type used as a
-                    // value is a construction, so neither is a call to a declaration; one arriving
-                    // here is this compiler having built a call for it.
-                    case ValueName.Local _, ValueName.OfType _, ValueName.Builtin _ ->
-                            throw new IllegalStateException("`" + name
-                                    + "` reaches no declaration a call can be emitted for");
                 }
             }
 
@@ -261,14 +257,13 @@ public sealed interface Core {
          * declarations naming one kernel is a thing the library is refused for while it is built,
          * not a thing this collapses.
          */
-        record OfKernel(ReachName name, Kernel kernel) implements Reached {
+        record OfKernel(ReachName.OfLibrary name, Kernel kernel) implements Reached {
 
             public OfKernel {
-                // Only the library declares a kernel, so only a library reference reaches one.
-                if (name == null || !(name.denotes() instanceof ValueName.Stdlib)) {
-                    throw new IllegalStateException(
-                            "a kernel is declared by the standard library and reached as one: "
-                                    + name);
+                // Only the library declares a kernel, and only an operation of it is one. Both are
+                // the type of the reference, so there is nothing here to turn away.
+                if (name == null) {
+                    throw new IllegalArgumentException("a kernel call reaches the operation it is");
                 }
             }
 

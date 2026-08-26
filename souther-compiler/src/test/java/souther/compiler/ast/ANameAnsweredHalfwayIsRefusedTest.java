@@ -66,9 +66,11 @@ class ANameAnsweredHalfwayIsRefusedTest {
      */
     @Test
     void andAReferenceReachesSomething() {
-        assertThrows(IllegalArgumentException.class, () -> new ReachName.Bare(null));
+        assertThrows(IllegalArgumentException.class, () -> new ReachName.Own(null));
         assertThrows(IllegalArgumentException.class, () -> new ReachName.OfModule(null));
         assertThrows(IllegalArgumentException.class, () -> new ReachName.OfLibrary(null));
+        assertThrows(IllegalArgumentException.class, () -> new ReachName.TheNamespace(null));
+        assertThrows(IllegalArgumentException.class, () -> new ReachName.InScope(null));
     }
 
     /**

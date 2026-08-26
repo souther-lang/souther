@@ -309,8 +309,8 @@ class CompilePostfixApplicationTest {
     @Test
     void anApplicationSaysWhetherItAppliesAName() {
         SourcePos at = new SourcePos(1, 1);
-        souther.compiler.types.ValueName.Stdlib map =
-                new souther.compiler.types.ValueName.Stdlib("List", "map");
+        souther.compiler.types.ValueName.Stdlib.Operation map =
+                souther.compiler.types.ValueName.Stdlib.operation("List", "map");
         Hir.Apply named = new Hir.Apply("List.map",
                 new ReachName.OfLibrary(map), java.util.List.of(),
                 souther.compiler.types.ConstructionOrigin.own(), at, null);
@@ -339,7 +339,7 @@ class CompilePostfixApplicationTest {
         BindingId id = new BindingId(new BindingOwner.OfValue("demo", "go"), 0);
         ValueName.Local fn0 = new ValueName.Local("$fn0", id);
         Hir.Apply lowered = new Hir.Apply(
-                Hir.Var.denoting("$fn0", new ReachName.Bare(fn0), at),
+                Hir.Var.denoting("$fn0", new ReachName.InScope(fn0), at),
                 java.util.List.of(), souther.compiler.types.ConstructionOrigin.own(), "d.count", at, null);
 
         assertEquals("d.count", lowered.written(), "a report quotes what the author wrote");

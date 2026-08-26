@@ -28,7 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AReductionsShapeIsReadOffItsDeclarationTest {
 
     private static ValueName op(String alias, String name) {
-        return new ValueName.Stdlib(alias, name);
+        return ValueName.Stdlib.operation(alias, name);
     }
 
     /** The walk itself: the seed is the second argument, and it arrives on the step's first

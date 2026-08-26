@@ -112,7 +112,7 @@ public final class HelperTable {
         Map<DefinitionName, HelperEntry> own = new LinkedHashMap<>();
         for (Map.Entry<String, Hir.FnDef> e : declared.entrySet()) {
             HelperEntry entry = HelperEntry.own(
-                    new ReachName.Bare(new ValueName.Helper(module, e.getKey())), e.getValue());
+                    new ReachName.Own(new ValueName.Helper(module, e.getKey())), e.getValue());
             own.put(entry.address(), entry);
         }
         Map<DefinitionName, HelperEntry> emits = new LinkedHashMap<>(own);

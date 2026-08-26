@@ -48,8 +48,8 @@ class TheCallGraphReadsASugarFromTheLibraryThatDeclaresItTest {
     /** A call of {@code qualified} applied to {@code args} integers. */
     private static Hir.Expr callTo(String qualified, int args) {
         int dot = qualified.lastIndexOf('.');
-        ValueName.Stdlib name =
-                new ValueName.Stdlib(qualified.substring(0, dot), qualified.substring(dot + 1));
+        ValueName.Stdlib.Operation name =
+                ValueName.Stdlib.operation(qualified.substring(0, dot), qualified.substring(dot + 1));
         List<Hir.Expr> given = new ArrayList<>();
         for (int i = 0; i < args; i++) {
             given.add(new Hir.IntLit(i, POS, null));

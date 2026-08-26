@@ -52,7 +52,7 @@ class AKeptCallsFunctionArgumentIsRefusedWhereItIsWrittenTest {
         Hir.Block answersAnInt = new Hir.Block(List.of(binders.binder("x", ARGUMENT)),
                 new Hir.IntLit(1, ARGUMENT, null), souther.compiler.types.RuleOrigin.unwritten(), ARGUMENT, null);
         Hir.Expr call = new Hir.Apply("List.flatMap",
-                new ReachName.OfLibrary(new ValueName.Stdlib("List", "flatMap")),
+                new ReachName.OfLibrary(ValueName.Stdlib.operation("List", "flatMap")),
                 List.of(answersAnInt, new Hir.ListLit(List.of(new Hir.IntLit(2, CALL, null)), CALL, null)),
                 ConstructionOrigin.own(), CALL, null);
 
@@ -75,7 +75,7 @@ class AKeptCallsFunctionArgumentIsRefusedWhereItIsWrittenTest {
         Hir.Block answersAnInt = new Hir.Block(List.of(binders.binder("x", ARGUMENT)),
                 new Hir.IntLit(1, ARGUMENT, null), souther.compiler.types.RuleOrigin.unwritten(), ARGUMENT, null);
         Hir.Expr call = new Hir.Apply("List.flatMap",
-                new ReachName.OfLibrary(new ValueName.Stdlib("List", "flatMap")),
+                new ReachName.OfLibrary(ValueName.Stdlib.operation("List", "flatMap")),
                 List.of(answersAnInt, new Hir.ListLit(List.of(new Hir.IntLit(2, CALL, null)), CALL, null)),
                 ConstructionOrigin.own(), CALL, null);
 

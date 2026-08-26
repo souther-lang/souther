@@ -125,7 +125,7 @@ class WhatAModuleMustEmitIsWhatItsExpansionsCouldNotRemoveTest {
         assertEquals(Set.of("size"),
                 db.ask(new Bodies.Expanding("deep", souther.compiler.check.InliningPolicy.FULL))
                         .value().graph()
-                        .calls(new souther.compiler.types.ReachName.Bare(
+                        .calls(new souther.compiler.types.ReachName.Own(
                                 new souther.compiler.types.ValueName.Helper("deep", "size")))
                         .stream().map(souther.compiler.types.ReachName::rendered)
                         .collect(java.util.stream.Collectors.toSet()),

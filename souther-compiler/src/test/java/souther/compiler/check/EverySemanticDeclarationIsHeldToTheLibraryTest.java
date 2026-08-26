@@ -59,7 +59,7 @@ class EverySemanticDeclarationIsHeldToTheLibraryTest {
         List<OperationFacts.Declared> gained =
                 new ArrayList<>(OperationFacts.declarations());
         gained.add(new OperationFacts.Declared(
-                new ValueName.Stdlib("Decimal", "fromInt"),
+                ValueName.Stdlib.operation("Decimal", "fromInt"),
                 new OperationFact.AnswersAFormOfItsArguments(
                         souther.compiler.numeric.NumericDomain.LinearForm.atom(
                                 new ArgumentRef.At(7)))));
@@ -89,7 +89,7 @@ class EverySemanticDeclarationIsHeldToTheLibraryTest {
         List<OperationFacts.Declared> gained =
                 new ArrayList<>(OperationFacts.declarations());
         gained.add(new OperationFacts.Declared(
-                new ValueName.Stdlib("List", "get"),
+                ValueName.Stdlib.operation("List", "get"),
                 new OperationFact.AnswersAFormOfItsArguments(
                         souther.compiler.numeric.NumericDomain.LinearForm.atom(
                                 new ArgumentRef.At(0)))));
@@ -118,7 +118,7 @@ class EverySemanticDeclarationIsHeldToTheLibraryTest {
         List<OperationFacts.Declared> gained =
                 new ArrayList<>(OperationFacts.declarations());
         gained.add(new OperationFacts.Declared(
-                new ValueName.Stdlib("List", "get"),
+                ValueName.Stdlib.operation("List", "get"),
                 new OperationFact.BoundsItsResult(new ResultBound(null, BigDecimal.ZERO,
                         Rel.GE, new ResultBound.Provided.Always()))));
 
@@ -148,7 +148,7 @@ class EverySemanticDeclarationIsHeldToTheLibraryTest {
         List<OperationFacts.Declared> gained =
                 new ArrayList<>(OperationFacts.declarations());
         gained.add(new OperationFacts.Declared(
-                new ValueName.Stdlib("List", "howManyThereAreNot"),
+                ValueName.Stdlib.operation("List", "howManyThereAreNot"),
                 new OperationFact.AnswersANumberTakenOfTheOneValueItIsGiven(
                         new souther.compiler.semantics.TakenAs.HowManyItHolds())));
 
@@ -185,7 +185,7 @@ class EverySemanticDeclarationIsHeldToTheLibraryTest {
         List<OperationFacts.Declared> gained =
                 new ArrayList<>(OperationFacts.declarations());
         gained.add(new OperationFacts.Declared(
-                new ValueName.Stdlib("Int", "abs"),
+                ValueName.Stdlib.operation("Int", "abs"),
                 new OperationFact.AnswersANumberTakenOfTheOneValueItIsGiven(
                         new souther.compiler.semantics.TakenAs.HowManyItHolds())));
 
@@ -215,7 +215,7 @@ class EverySemanticDeclarationIsHeldToTheLibraryTest {
         List<OperationFacts.Declared> gained =
                 new ArrayList<>(OperationFacts.declarations());
         gained.add(new OperationFacts.Declared(
-                new ValueName.Stdlib("Decimal", "fromInt"),
+                ValueName.Stdlib.operation("Decimal", "fromInt"),
                 new OperationFact.AnswersANumberTakenOfTheOneValueItIsGiven(
                         new souther.compiler.semantics.TakenAs.HowManyItHolds())));
 
@@ -237,7 +237,7 @@ class EverySemanticDeclarationIsHeldToTheLibraryTest {
         List<OperationFacts.Declared> gained =
                 new ArrayList<>(OperationFacts.declarations());
         gained.add(new OperationFacts.Declared(
-                new ValueName.Stdlib("Decimal", "fromNothingAtAll"),
+                ValueName.Stdlib.operation("Decimal", "fromNothingAtAll"),
                 new OperationFact.AnswersAFormOfItsArguments(
                         souther.compiler.numeric.NumericDomain.LinearForm.atom(
                                 new ArgumentRef.At(0)))));

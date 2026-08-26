@@ -82,7 +82,7 @@ public final class Stdlib {
      * <p>A sugar supplies constants and nothing else, which is why {@code supplied} holds numbers;
      * one that had to supply anything else could not be written down as this and would say so.
      */
-    public record Rewrite(ValueName.Stdlib target, List<Integer> supplied, int keptArgs) {
+    public record Rewrite(ValueName.Stdlib.Operation target, List<Integer> supplied, int keptArgs) {
         public Rewrite {
             supplied = List.copyOf(supplied);
         }
@@ -110,7 +110,7 @@ public final class Stdlib {
     /** And which kernel each operation that is one reaches, so a reader holding a name asks the
      *  library rather than the declaration it would have to open to find out. */
     private final Map<String, Intrinsic> kernelOperations;
-    private final Map<ValueName.Stdlib, Hir.FnDef> helpers;
+    private final Map<ValueName.Stdlib.Operation, Hir.FnDef> helpers;
     private final Set<String> published;
     private final Map<String, List<String>> candidates;
     /** The projection a resolver takes, worked out once with everything else. A set built on each
@@ -121,7 +121,7 @@ public final class Stdlib {
                    Map<String, ValueName.Stdlib> operations, Map<String, Rewrite> sugars,
                    Map<TypeKey, Hir.Def> language, Map<Kernel, Intrinsic> intrinsics,
                    Map<String, Intrinsic> kernelOperations,
-                   Map<ValueName.Stdlib, Hir.FnDef> helpers, Set<String> published,
+                   Map<ValueName.Stdlib.Operation, Hir.FnDef> helpers, Set<String> published,
                    Map<String, List<String>> candidates) {
         this.entries = entries;
         this.privateNames = privateNames;
@@ -222,7 +222,7 @@ public final class Stdlib {
 
     /** The Souther-bodied declarations (expanded inline at each call site), by the operation each
      *  is the body of, in declaration order. */
-    public Map<ValueName.Stdlib, Hir.FnDef> helpers() {
+    public Map<ValueName.Stdlib.Operation, Hir.FnDef> helpers() {
         return helpers;
     }
 
@@ -237,13 +237,13 @@ public final class Stdlib {
      *
      * <p>That there is one, and that this library has it, is checked while the library is built.
      */
-    public ValueName.Stdlib theWalk() {
+    public ValueName.Stdlib.Operation theWalk() {
         return THE_WALK;
     }
 
     /** Which operation the walk is. Named where the library is described, so a library that
      *  published it under another alias is refused rather than silently lowered as a call. */
-    private static final ValueName.Stdlib THE_WALK =
+    private static final ValueName.Stdlib.Operation THE_WALK =
             ValueName.Stdlib.operation("List", "foldFrom");
 
     /** What the language declares of its kernels, as the one value everything emitting a call to
@@ -343,12 +343,13 @@ public final class Stdlib {
      * library, and a loader is a thing that reads sources. What each rewrite keeps in place is
      * worked out at {@link Builder#freeze()}, where the target's declaration is to hand.
      */
-    private record Sugar(ValueName.Stdlib written, ValueName.Stdlib target, List<Integer> supplied) {
+    private record Sugar(ValueName.Stdlib.Operation written, ValueName.Stdlib.Operation target,
+                         List<Integer> supplied) {
     }
 
     private static final List<Sugar> SUGARED = List.of(
-            new Sugar(new ValueName.Stdlib("List", "fold"),
-                    new ValueName.Stdlib("List", "foldFrom"), List.of(0)));
+            new Sugar(ValueName.Stdlib.operation("List", "fold"),
+                    ValueName.Stdlib.operation("List", "foldFrom"), List.of(0)));
 
     /** What a loader hands its declarations to. */
     public static Builder builder() {
@@ -424,7 +425,7 @@ public final class Stdlib {
             Map<String, Kernel> byKey = kernelsByKey();
             Map<Kernel, Intrinsic> intrinsics = new EnumMap<>(Kernel.class);
             Map<String, Intrinsic> kernelOperations = new LinkedHashMap<>();
-            Map<ValueName.Stdlib, Hir.FnDef> helpers = new LinkedHashMap<>();
+            Map<ValueName.Stdlib.Operation, Hir.FnDef> helpers = new LinkedHashMap<>();
             for (Map.Entry<String, Entry> e : entries.entrySet()) {
                 Hir.FnBody body = e.getValue().declaration().body();
                 if (body instanceof Hir.FnBody.Intrinsic written) {
@@ -454,8 +455,8 @@ public final class Stdlib {
                     // written with, a reader wanting the operation would have to ask for it back —
                     // and the library is the only thing that can say which part of that key is the
                     // alias, which is why nobody else may take it apart.
-                    ValueName.Stdlib operation = operations.get(e.getKey());
-                    if (operation == null) {
+                    if (!(operations.get(e.getKey()) instanceof ValueName.Stdlib.Operation
+                            operation)) {
                         throw new IllegalStateException("the standard library declares a body for `"
                                 + e.getKey() + "` and publishes no operation under that name");
                     }

@@ -109,7 +109,9 @@ public final class CallElaborator {
      * the two apart — which is what keeps a growing fold's seed the seed it was.
      */
     static Core libraryValue(Hir.Var.Denoting v, CheckContext ctx, Type expected) {
-        if (!(v.denotes() instanceof ValueName.Stdlib lib)) {
+        // An operation of the library. The namespace applied is a construction and not a value the
+        // library declares, so it takes none of the paths below.
+        if (!(v.denotes() instanceof ValueName.Stdlib.Operation lib)) {
             return null;
         }
         Stdlib.Entry entry = ctx.symbols().library().entry(lib.qualified());
@@ -138,11 +140,11 @@ public final class CallElaborator {
      * kernel is a property of the declaration the resolver picked, and the two are one string apart
      * only for as long as they happen to be.
      */
-    private static Core.Reached reached(ReachName name, CheckContext ctx) {
-        if (name.denotes() instanceof ValueName.Stdlib operation) {
-            Stdlib.Intrinsic kernel = ctx.symbols().library().intrinsicOf(operation);
+    private static Core.Reached reached(ReachName.Declaration name, CheckContext ctx) {
+        if (name instanceof ReachName.OfLibrary library) {
+            Stdlib.Intrinsic kernel = ctx.symbols().library().intrinsicOf(library.denotes());
             if (kernel != null) {
-                return new Core.Reached.OfKernel(name, kernel.kernel());
+                return new Core.Reached.OfKernel(library, kernel.kernel());
             }
         }
         return new Core.Reached.OfDeclaration(name);
@@ -202,7 +204,14 @@ public final class CallElaborator {
         ReachName reaches = dependency == null
                 ? callee.reachedAs()
                 : ReachName.of(dependency, callee.name(), ctx.symbols().module());
-        return new Core.Call(reached(reaches, ctx), ca.cores(), result, call.pos());
+        if (!(reaches instanceof ReachName.Declaration declaration)) {
+            // The typing above refused what is not a name, and a binding applied became an apply
+            // rather than a call. So what is left reaches a declaration, and one that does not is
+            // this compiler having built a call for something no method stands behind.
+            throw new IllegalStateException("`" + call.written() + "` was elaborated as a call and"
+                    + " reaches " + reaches + ", which no method is emitted for");
+        }
+        return new Core.Call(reached(declaration, ctx), ca.cores(), result, call.pos());
     }
 
     /**

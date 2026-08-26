@@ -160,14 +160,14 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
                 reachability.fromHelper(new ReachName.OfModule(
                         new ValueName.Helper("maths", "wrapped"))));
         assertEquals(Optional.empty(),
-                reachability.fromHelper(new ReachName.Bare(
+                reachability.fromHelper(new ReachName.Own(
                         new ValueName.Helper("order", "throughWrapped"))));
         // The rule stops at the boundary rather than everywhere: a `partial` helper of another
         // module is still one, and what this module wrote is still walked to find it.
         assertEquals(Optional.of(List.of(
-                        new ReachName.Bare(new ValueName.Helper("order", "straightToSpin")),
+                        new ReachName.Own(new ValueName.Helper("order", "straightToSpin")),
                         new ReachName.OfModule(new ValueName.Helper("maths", "spin")))),
-                reachability.fromHelper(new ReachName.Bare(
+                reachability.fromHelper(new ReachName.Own(
                         new ValueName.Helper("order", "straightToSpin"))));
     }
 
@@ -237,7 +237,7 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
      */
     @Test
     void theNameAHelperIsReachedByDoesNotHoldTheModuleThatWroteIt() {
-        ValueName.Stdlib walk = DefaultStdlib.get().theWalk();
+        ValueName.Stdlib.Operation walk = DefaultStdlib.get().theWalk();
         Hir.FnDef foldFrom = DefaultStdlib.get().helpers().get(walk);
 
         assertEquals("List", walk.alias(), "reached under the alias the library publishes it as");

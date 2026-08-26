@@ -96,7 +96,7 @@ class ABareNameIsLookedUpInTheTableThatListsItTest {
         assertEquals(new ValueName.Helper("up", "price"), byName.get("price"),
                 "a published value is reached bare, under the module that wrote it");
         assertEquals(new ValueName.Behavior("down", "sizes"), byName.get("sizes"));
-        assertEquals(new ValueName.Stdlib("String", "length"), byName.get("length"));
+        assertEquals(ValueName.Stdlib.operation("String", "length"), byName.get("length"));
         assertFalse(byName.containsKey("s"), "a binding in force is not in a module's table");
     }
 }

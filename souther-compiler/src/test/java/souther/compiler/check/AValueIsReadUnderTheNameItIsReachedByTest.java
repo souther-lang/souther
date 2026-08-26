@@ -68,7 +68,7 @@ class AValueIsReadUnderTheNameItIsReachedByTest {
         // declared it reaches bare.
         Map<ReachName, String> heldAt = new LinkedHashMap<>();
         table.forEach((at, def) -> heldAt.put(def.takenOnAs() != null ? def.takenOnAs()
-                : new ReachName.Bare(new ValueName.Helper(m.name(), def.name())), at));
+                : new ReachName.Own(new ValueName.Helper(m.name(), def.name())), at));
         Set<String> out = new LinkedHashSet<>();
         ValueCycles.valuesRead(HelperInliner.helpersOf(m).get(fn).writtenBody(), table,
                 reference -> heldAt.get(reference) == null ? null

@@ -159,7 +159,7 @@ class ResolvedValueNamesTest {
                 let f (xs) = List.length(xs)
                 """;
 
-        assertEquals(new ValueName.Stdlib("List", "length"), denotationOf(source, "List.length"));
+        assertEquals(ValueName.Stdlib.operation("List", "length"), denotationOf(source, "List.length"));
     }
 
     /**

@@ -1165,7 +1165,7 @@ public final class Bodies {
                 // Asked of what the name reaches there, which is the one relation this module has any
                 // business asking of another module's table.
                 Hir.FnDef def = against.table().reached(ownHelper
-                        ? new ReachName.Bare(reached) : new ReachName.OfModule(reached));
+                        ? new ReachName.Own(reached) : new ReachName.OfModule(reached));
                 if (def == null) {
                     continue;   // a prelude helper, which every module emits for itself
                 }
@@ -1942,7 +1942,7 @@ public final class Bodies {
                                 // Reached as this module reaches its own behavior, which is bare —
                                 // the forks below are looked up by the reference a call carries,
                                 // and this declaration is the one nothing calls.
-                                Map.of(new ReachName.Bare(
+                                Map.of(new ReachName.Own(
                                         new ValueName.Behavior(module, behavior)), fn.value())),
                         body.value().supplied()), reports);
             } catch (Unanswerable _) {

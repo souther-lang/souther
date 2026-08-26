@@ -2581,8 +2581,10 @@ final class Terms {
             // line be drawn where the compiler knows no value. What is written is the node now, and
             // nothing here decides it.
             case Core.Temporal t -> {
-                ValueName.Stdlib namespace = ValueName.Stdlib.namespace(t.kind().shown());
-                yield new Hir.Apply(namespace.qualified(), reachOf(namespace),
+                ValueName.Stdlib.Namespace namespace =
+                        ValueName.Stdlib.namespace(t.kind().shown());
+                yield new Hir.Apply(namespace.qualified(),
+                        new ReachName.TheNamespace(namespace),
                         List.of(new Hir.StringLit(t.text(), t.pos(), null)),
                         ConstructionOrigin.own(), t.pos(), null);
             }
@@ -2590,7 +2592,7 @@ final class Terms {
             case Core.UnitValue unit -> {
                 ValueName.OfType named = new ValueName.OfType(unit.data().name(), unit.data(),
                         ConstructionOrigin.own());
-                yield Hir.Var.respelled(unit.data().name(), new ReachName.Bare(named),
+                yield Hir.Var.respelled(unit.data().name(), new ReachName.InScope(named),
                         unit.pos(), null);
             }
             case null, default -> null;
@@ -2685,9 +2687,10 @@ final class Terms {
         return op == BinOp.ADD || op == BinOp.SUB || op == BinOp.MUL || op == BinOp.DIV;
     }
     /** How a preserved call's operation is reached: it is the library's, named under the alias the
-     * library publishes it under. */
+     * library publishes it under. A call this representation kept standing applies an operation —
+     * the namespace applied is a construction, and is written back as one. */
     private static ReachName reachOf(ValueName operation) {
-        return new ReachName.OfLibrary((ValueName.Stdlib) operation);
+        return new ReachName.OfLibrary((ValueName.Stdlib.Operation) operation);
     }
 
 }
