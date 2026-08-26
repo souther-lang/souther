@@ -9,6 +9,7 @@ import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.AdmissibleSet;
 
 import java.util.List;
+import java.util.Set;
 
 /**
  * One position of a behavior's input, read once.
@@ -174,7 +175,7 @@ public sealed interface Position permits ReadPosition {
      * <p>Empty where the rules this position was owed were all reached. In the order they were
      * found, so that two runs over one model produce the same value.
      */
-    java.util.Set<RulesLeftUnread> rulesLeftUnread();
+    Set<RulesLeftUnread> rulesLeftUnread();
 
     /**
      * What stopped the reading of which values this position may hold, or null where nothing did.

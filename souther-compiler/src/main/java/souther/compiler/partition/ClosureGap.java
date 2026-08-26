@@ -65,6 +65,14 @@ public sealed interface ClosureGap {
      * ({@link souther.compiler.inputs.RulesLeftUnread}): a position the reading entered and lost a
      * clause of its own is an independent finding, and a fold on the path would take it with the
      * other (issue #1084).
+     *
+     * <p><b>And two of those ways reach a document as this one word.</b> A reading that lost a
+     * clause of its own and a recipient that got no reading are different causes and both are
+     * things an author is told about; what they are told is that the rules at this position were
+     * not all reached, which is what this says. The reason stays inside
+     * ({@link souther.compiler.inputs.RulesLeftUnread}) because a document naming it would make a
+     * change to how this compiler traverses a model into a change to what its documents carry. Two
+     * of these at one axis are one entry, which is that sentence said once.
      */
     record RulesNotReached(AxisId at) implements ClosureGap {}
 

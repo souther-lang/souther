@@ -8,7 +8,10 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.AdmissibleSet;
 
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * The one reading of a position, and what it came to.
@@ -36,7 +39,7 @@ record ReadPosition(TermPath path, TypeView view, NumericTerm term,
                     BlockReason.ReadingStopReason valuesUnread,
                     List<RuleWithoutALine> rulesWithoutALine,
                     List<StandingQuestion> unansweredQuestions,
-                    java.util.Set<RulesLeftUnread> rulesLeftUnread,
+                    Set<RulesLeftUnread> rulesLeftUnread,
                     StructuralInspection structure) implements Position {
 
     ReadPosition {
@@ -47,8 +50,7 @@ record ReadPosition(TermPath path, TypeView view, NumericTerm term,
         unansweredQuestions = List.copyOf(unansweredQuestions);
         // Kept in the order the readers found them, so that two runs over one model produce the
         // same value — the reason `MeasureClosure` keeps its gaps that way too.
-        rulesLeftUnread = java.util.Collections.unmodifiableSet(
-                new java.util.LinkedHashSet<>(rulesLeftUnread));
+        rulesLeftUnread = Collections.unmodifiableSet(new LinkedHashSet<>(rulesLeftUnread));
     }
 
     @Override

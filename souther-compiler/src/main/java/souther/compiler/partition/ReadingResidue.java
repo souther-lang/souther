@@ -58,9 +58,4 @@ public record ReadingResidue(BlockedDescent blockedDescent,
         return new ReadingResidue(BlockedDescent.of(position.structure()),
                 position.rulesLeftUnread());
     }
-
-    /** Whether anything here leaves a measure short. */
-    public boolean isEmpty() {
-        return blockedDescent == null && rulesLeftUnread.isEmpty();
-    }
 }

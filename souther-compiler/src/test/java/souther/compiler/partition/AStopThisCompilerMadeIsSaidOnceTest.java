@@ -69,6 +69,25 @@ class AStopThisCompilerMadeIsSaidOnceTest {
             """;
 
     /**
+     * The same map again, with the line drawn by the body rather than by a declaration.
+     *
+     * <p>The other way an axis is rebuilt. Nothing divides the map, so the axis is re-pointed at the
+     * number the body measures ({@link Axis#measuredAt}) — a caller writing the parts of an axis out
+     * by hand, and the place a position that had stopped once came back with nothing to say so.
+     * Named for a module of its own because {@code guard} is a word of the language.
+     */
+    private static final String A_MAP_A_BODY_MEASURES = """
+            module probe.bodyline
+
+            data Amount = Int
+                invariant ranged = value >= 0 && value <= 100
+            data Req = { cost: Map<String, Amount> }
+
+            behavior f : (r: Req) -> Int
+            let f (r) = if Map.size(r.cost) > 0 then 1 else 2
+            """;
+
+    /**
      * A rule about the map's own size that nothing answered, at a position the walk could not enter.
      *
      * <p>Two facts about two different rules at one path. What {@code notEmpty} says about the size
@@ -126,6 +145,26 @@ class AStopThisCompilerMadeIsSaidOnceTest {
         assertTrue(said.stream().noneMatch(each -> each instanceof Weakening.ModelReadingIncomplete(
                         ClosureGap.RulesNotReached _)),
                 () -> "and the handing over it left standing is that same stop: " + said);
+    }
+
+    /**
+     * And it survives the axis being re-pointed at the number a body measures.
+     *
+     * <p>Both ways an axis is rebuilt, because what holds the two facts together is that they
+     * travel as one value and every rebuild is a place a caller can drop one. This one goes through
+     * {@link Axis#measuredAt}; the test above goes through the division. The finding names the term
+     * the axis was re-pointed to, which is the axis carrying the fact and not the position that was
+     * blocked — the position is that axis's path.
+     */
+    @Test
+    void andItSurvivesTheAxisBeingRePointedAtWhatABodyMeasures() {
+        List<Weakening> said = weakeningOf(A_MAP_A_BODY_MEASURES, "f");
+
+        assertEquals(1, said.size(), () -> "one stop, one finding: " + said);
+        assertTrue(said.getFirst() instanceof Weakening.ModelReadingIncomplete(
+                        ClosureGap.PositionNotReachedInto gap)
+                        && gap.why() instanceof BlockReason.UnsupportedTraversal,
+                () -> "the walk did not go into the map, and the axis is now the size: " + said);
     }
 
     /**
