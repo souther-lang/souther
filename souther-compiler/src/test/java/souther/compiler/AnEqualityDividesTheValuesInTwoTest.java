@@ -138,7 +138,7 @@ class AnEqualityDividesTheValuesInTwoTest {
         compilation.answerEverything();
         Map<String, Adequacy.Filling> all = Adequacy.generatedOf(compilation.db(), compilation.modules().get(0));
         assertNotNull(all, "the model under test compiles");
-        return GeneratedRows.of("example.ratio", all, Map.of(), false,
+        return GeneratedRows.of("example.ratio", all, null, Map.of(), false,
                 SourceNameResolver.identity()).text();
     }
 

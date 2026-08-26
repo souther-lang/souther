@@ -5,7 +5,12 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.partition.GenerationOutcome;
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.BorderObligationAssessment;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.DeclarationResolution;
+import souther.compiler.query.DeclaredRows;
+import souther.compiler.query.GenerationScope;
+import souther.compiler.query.SearchCoverage;
 import souther.compiler.report.GeneratedRows;
 
 import java.util.List;
@@ -177,7 +182,10 @@ class EveryFindingHasAGenerationDispositionTest {
         assertFalse(declared.isEmpty(), "the model under test has lines its declarations are owed");
 
         List<Adequacy.GenerationDisposition> answered =
-                Adequacy.generatedForDeclarationsOf(compilation.db(), "example.policy", null);
+                Adequacy.generatedForDeclarationsOf(compilation.db(), "example.policy",
+                        new GenerationScope.Module()).dispositions(
+                                compilation.db().ask(new Adequacy.Findings("example.policy"))
+                                        .value());
         assertEquals(declared, answered.stream()
                         .map(Adequacy.GenerationDisposition::finding).toList(),
                 "every one of them, and each with its own answer");
@@ -195,28 +203,332 @@ class EveryFindingHasAGenerationDispositionTest {
      * request that searched only {@code held} would say a row is on offer because {@code anywhere}
      * had one, and print no row beside it (issue #1062).
      *
-     * <p>Which reading to search when the one asked about composes nothing is the question
-     * {@code --generate} does not ask yet, and the answer says that rather than borrowing another
-     * reading's row.
+     * <p>Which is what makes the scope a question rather than a saving. A row composed at {@code
+     * anywhere} is written in that behavior's terms and belongs in that behavior's block, so it is
+     * not an answer to a request about {@code held} however well it settles the line.
      */
     @Test
     void aGenerationNarrowedToOneBehaviorAnswersFromWhatThatBehaviorSearched() {
         Compilation compilation = compiled(NARROWED);
-        assertFalse(Adequacy.generatedForDeclarationsOf(compilation.db(), "example.narrowed",
-                        "held").isEmpty(),
-                "the line is owed at both, so both are asked about");
+        List<DeclarationResolution> atHeld = drawnBy(resolved(compilation, "example.narrowed",
+                new GenerationScope.Behavior("held")), "Code");
+        List<DeclarationResolution> atAnywhere = drawnBy(resolved(compilation, "example.narrowed",
+                new GenerationScope.Behavior("anywhere")), "Code");
 
-        assertTrue(Adequacy.generatedForDeclarationsOf(compilation.db(), "example.narrowed", "anywhere")
-                        .stream().allMatch(each ->
-                                each.outcome() instanceof GenerationOutcome.Generated),
-                "the search of `anywhere` composed a row at the line");
-        assertTrue(Adequacy.generatedForDeclarationsOf(compilation.db(), "example.narrowed",
-                        "held").stream().allMatch(each ->
-                                each.outcome() instanceof GenerationOutcome.NotSupported),
-                "and the search of `held` composed none, whatever `anywhere` did");
+        assertFalse(atHeld.isEmpty(), "the line is owed at both, so both are asked about");
+        assertFalse(atAnywhere.isEmpty(), "the line is owed at both, so both are asked about");
+        assertTrue(atAnywhere.stream()
+                        .anyMatch(each -> each instanceof DeclarationResolution.Generated),
+                "the search of `anywhere` composed a row at the line: " + atAnywhere);
+        assertTrue(atHeld.stream()
+                        .noneMatch(each -> each instanceof DeclarationResolution.Generated),
+                "and the search of `held` composed none, whatever `anywhere` did: " + atHeld);
     }
 
-    /** One line, at a position one behavior can hold a row at and the other cannot. */
+    /**
+     * The answers about the lines one declaration drew.
+     *
+     * <p>Asked by the declaration the line is owed to, because a model has more than one: what
+     * {@code Narrow} says about its own field is a line too, and a reading that can compose nothing
+     * at {@code Code}'s line composes one at that.
+     */
+    private static List<DeclarationResolution> drawnBy(DeclaredRows rows, String declaredOn) {
+        return rows.resolved().entrySet().stream()
+                .filter(each -> each.getKey().line().origin().owedToTheDeclaration()
+                        .map(on -> on.name().equals(declaredOn)).orElse(false))
+                .map(each -> each.getValue().resolution()).toList();
+    }
+
+    /**
+     * A line the first reading composes nothing at is searched at the next.
+     *
+     * <p>The whole of what a search over the readings is for. {@code Narrow} holds its field to four
+     * characters or more, so the reading of the line at {@code held} cannot stand a row at length 1
+     * — and a line one reading composes nothing at is not a line nothing composes a row for
+     * (issue #1076). Stopping at the first reading, the module's own declaration was reported as
+     * work nobody could do while the row was two behaviors further down.
+     */
+    @Test
+    void aLineTheFirstReadingComposesNothingAtIsSearchedAtTheNext() {
+        List<DeclarationResolution> atCode = drawnBy(
+                resolved(compiled(HELD_FIRST), "example.held", new GenerationScope.Module()), "Code");
+
+        assertFalse(atCode.isEmpty(), "the model under test has a line owed at both");
+        assertEquals(List.of("anywhere"), atCode.stream()
+                        .filter(each -> each instanceof DeclarationResolution.Generated)
+                        .map(each -> ((DeclarationResolution.Generated) each).composedBy())
+                        .distinct().toList(),
+                "the walk went past the reading that composed nothing, and the row is written in"
+                        + " the terms of the one that did: " + atCode);
+    }
+
+    /**
+     * One row for one line, however many readings could compose one.
+     *
+     * <p>What a person has to write is one row, and a block offering it once per position of every
+     * behavior carrying the type is the same work put in front of them four times (issue #1076).
+     * How many there are is settled where the search is resolved and not where the block is laid
+     * out, so it is asked of the resolution.
+     */
+    @Test
+    void oneLineIsOfferedOneRow() {
+        DeclaredRows rows = resolved(compiled(NARROWED), "example.narrowed",
+                new GenerationScope.Module());
+
+        assertFalse(rows.resolved().isEmpty(), "the model under test has a line owed at both");
+        assertEquals(rows.resolved().size(),
+                rows.resolved().keySet().stream().distinct().count(),
+                "one answer per point of a line");
+        assertEquals(rows.resolved().values().stream()
+                        .filter(each -> each.resolution()
+                                instanceof DeclarationResolution.Generated).count(),
+                rows.rowsByCarrier().values().stream().mapToLong(List::size).sum(),
+                "and one row per answer that composed one");
+    }
+
+    /**
+     * A walk that could not see every reading does not settle the line.
+     *
+     * <p>What the readings prove about the line takes all of them: where a region stops is settled
+     * by every other rule reaching a position, so one reading proving there is nothing at the point
+     * proves it of that position. A request about {@code held} leaves {@code anywhere} unwalked —
+     * and {@code anywhere} is where the row is — so nothing it comes back with may be read as the
+     * line refusing one.
+     *
+     * <p>Asked of what was walked and never of which scope this was. A line one behavior carries is
+     * walked entirely by a request about that behavior, and a rule reading the shape of the request
+     * would refuse it the answer its own evidence supports.
+     */
+    @Test
+    void aWalkThatCouldNotSeeEveryReadingDoesNotSettleTheLine() {
+        List<SearchCoverage> narrowed = drawnBy(resolved(compiled(NARROWED), "example.narrowed",
+                new GenerationScope.Behavior("held")), "Code").stream()
+                .filter(each -> each instanceof DeclarationResolution.Unresolved)
+                .map(each -> ((DeclarationResolution.Unresolved) each).coverage()).toList();
+
+        assertFalse(narrowed.isEmpty(), "the reading this asked about composed nothing");
+        assertTrue(narrowed.stream().noneMatch(SearchCoverage::walkedEveryReading),
+                "a reading of the line was left out of the walk: " + narrowed);
+        assertTrue(narrowed.stream().noneMatch(SearchCoverage::provesTheLineCannotBeWritten),
+                "so nothing here says a row cannot be written at the line: " + narrowed);
+    }
+
+    /**
+     * Where more than one reading can compose the row, the module's declaration order settles which.
+     *
+     * <p>Not the order the requests happened to arrive in, and not what some earlier caller had
+     * already paid to search. Both are readings of one line and either row settles it, so what is
+     * left to decide is which one a person is handed — and that has to be the same on every run of
+     * one model.
+     *
+     * <p>And it is settled relative to what was asked. A request about {@code second} is a different
+     * question from a request about the module, so "the first that composed one" is the first of the
+     * readings the request admits — read off the module regardless, the request would be handed a
+     * row written in another behavior's terms.
+     */
+    @Test
+    void theFirstReadingTheRequestAdmitsComposesTheRow() {
+        Compilation compilation = compiled(EITHER);
+
+        assertEquals(List.of("first"), composedBy(drawnBy(
+                        resolved(compilation, "example.either", new GenerationScope.Module()),
+                        "Code")),
+                "the module declares `first` before `second`");
+        assertEquals(List.of("second"), composedBy(drawnBy(
+                        resolved(compilation, "example.either",
+                                new GenerationScope.Behavior("second")), "Code")),
+                "and a request about `second` is answered from `second`");
+    }
+
+    /**
+     * A behavior carrying the type twice is two readings of the line, and both are accounted for.
+     *
+     * <p>What a search of one position came to is a fact about that position — the rules reaching
+     * it, the values its decoder took — so a coverage keyed by the behavior holds one of the two
+     * answers and which one is whichever the search walked first. Which is the shape a debt-level
+     * answer exists to refuse, one level down: the terminal claim about the line is released on
+     * every reading having been walked, and a walk that recorded one of two positions has not
+     * walked them.
+     */
+    @Test
+    void oneBehaviorCarryingTheTypeTwiceIsTwoReadings() {
+        List<SearchCoverage> coverage = drawnBy(
+                resolved(compiled(TWICE), "example.twice", new GenerationScope.Module()), "Code")
+                .stream()
+                .filter(each -> each instanceof DeclarationResolution.Unresolved)
+                .map(each -> ((DeclarationResolution.Unresolved) each).coverage()).toList();
+
+        assertFalse(coverage.isEmpty(), "the model under test composes nothing at the line");
+        for (SearchCoverage each : coverage) {
+            assertEquals(List.of(
+                            new BorderObligationAssessment.Reading("one", "String.length(x.a)"),
+                            new BorderObligationAssessment.Reading("one", "String.length(x.b)")),
+                    each.readings(),
+                    "both positions the behavior meets the line at");
+            assertEquals(List.of("String.length(x.a) = 1", "String.length(x.b) = 1"),
+                    each.attempted().stream()
+                            .map(souther.compiler.partition.Generator.UnresolvedCombination::subject)
+                            .toList(),
+                    "and what each of them said, in its own position's words");
+        }
+    }
+
+    /** One line, met twice by one behavior, and composable at neither position. */
+    private static final String TWICE = """
+            module example.twice
+
+            data Code = String
+                invariant nonempty = String.length(value) >= 1
+
+            data Both = { a: Code, b: Code }
+                invariant fixedA = String.matches("[a-z][a-z][a-z]+", a.value)
+                invariant fixedB = String.matches("[a-z][a-z][a-z]+", b.value)
+
+            data Ok
+
+            behavior one : (x: Both) -> Ok
+            let one (x) = Ok
+            """;
+
+    /**
+     * Two lines one clause drew are searched apart.
+     *
+     * <p>A clause with both ends draws two lines — {@code >= 1 && <= 3} is one at each — and they
+     * are two debts, not one thing with two sides (issue #1062). So which reading composes the row
+     * for one of them says nothing about the other: {@code Narrow} takes three letters or more,
+     * which refuses the value at the bottom of {@code Code}'s range and takes the one at the top.
+     * Resolved per clause, a line would be handed to an author as a single piece of work whose two
+     * ends are owed at different positions.
+     *
+     * <p>The point against a line and the point beside it are kept apart the same way, and there is
+     * nothing here to hold that with: a line a declaration drew is the type's own rule, so the value
+     * off it is not a value of the type at all and no row is owed there. Every model checked here
+     * answers {@code NotOwed} at that point, so a test of it would be asserting over an empty set.
+     */
+    @Test
+    void twoLinesOneClauseDrewAreSearchedApart() {
+        Map<souther.compiler.partition.Level, String> composers = new java.util.LinkedHashMap<>();
+        resolved(compiled(EITHER_END), "example.ends", new GenerationScope.Module()).resolved()
+                .forEach((at, answer) -> {
+                    if (answer.resolution() instanceof DeclarationResolution.Generated(var by, var _)
+                            && at.line().origin().owedToTheDeclaration()
+                                    .map(on -> on.name().equals("Code")).orElse(false)) {
+                        composers.put(at.line().at(), by);
+                    }
+                });
+
+        assertEquals(2, composers.size(),
+                "one clause drew two lines and a row stands at each: " + composers);
+        assertEquals(2, java.util.Set.copyOf(composers.values()).size(),
+                "and the two were composed at different readings: " + composers);
+    }
+
+    /** Which reading composed each row, in the order the points were resolved. */
+    private static List<String> composedBy(List<DeclarationResolution> resolutions) {
+        return resolutions.stream()
+                .filter(each -> each instanceof DeclarationResolution.Generated)
+                .map(each -> ((DeclarationResolution.Generated) each).composedBy())
+                .distinct().toList();
+    }
+
+    /** One line, at two positions either of which can hold a row at it. */
+    private static final String EITHER = """
+            module example.either
+
+            data Code = String
+                invariant nonempty = String.length(value) >= 1
+
+            data A = { c: Code }
+            data B = { c: Code }
+
+            data Ok
+
+            behavior first : (a: A) -> Ok
+            let first (a) = Ok
+
+            behavior second : (b: B) -> Ok
+            let second (b) = Ok
+            """;
+
+    /** A line with a value at each end, and a reading that can hold one of them and not the other. */
+    private static final String EITHER_END = """
+            module example.ends
+
+            data Code = String
+                invariant sized = String.length(value) >= 1 && String.length(value) <= 3
+
+            data Narrow = { c: Code }
+                invariant fixed = String.matches("[a-z][a-z][a-z]+", c.value)
+
+            data Wide = { c: Code }
+
+            data Ok
+
+            behavior held : (n: Narrow) -> Ok
+            let held (n) = Ok
+
+            behavior anywhere : (w: Wide) -> Ok
+            let anywhere (w) = Ok
+            """;
+
+    /**
+     * A block says what a reading came to as that reading's, and says nothing about the line.
+     *
+     * <p>The sentence a reader may act on is that no row can be written at the line, and it takes
+     * every reading of it having been searched. A request about {@code held} leaves {@code
+     * anywhere} unwalked — and {@code anywhere} is where the row is — so whatever {@code held}
+     * found is a fact about {@code held}. Written under the declaration's own name, an author is
+     * told a row cannot be written where the next behavior writes one.
+     */
+    @Test
+    void whatOneReadingCameToIsSaidAsThatReadings() {
+        Compilation compilation = compiled(NARROWED);
+
+        String block = GeneratedRows.of(compilation, "example.narrowed", "held", true,
+                SourceNameResolver.identity()).text();
+
+        assertTrue(block.contains("in `held`"),
+                "what the reading this asked about came to, named as its own: " + block);
+        assertFalse(block.contains("no row can be written at"),
+                "and nothing said about the line, which this walk did not see the whole of: "
+                        + block);
+    }
+
+    private static DeclaredRows resolved(Compilation compilation, String module,
+                                         GenerationScope scope) {
+        return Adequacy.generatedForDeclarationsOf(compilation.db(), module, scope);
+    }
+
+    /** The same line, with the reading that can compose nothing at it declared first. */
+    private static final String HELD_FIRST = """
+            module example.held
+
+            data Code = String
+                invariant nonempty = String.length(value) >= 1
+
+            data Narrow = { c: Code }
+                invariant fixed = String.matches("[a-z][a-z][a-z]+", c.value)
+
+            data Wide = { c: Code }
+
+            data Ok
+
+            behavior held : (n: Narrow) -> Ok
+            let held (n) = Ok
+
+            behavior anywhere : (w: Wide) -> Ok
+            let anywhere (w) = Ok
+            """;
+
+
+    /**
+     * One line, at a position one behavior can hold a row at and the other cannot.
+     *
+     * <p>Both readings owe a row at {@code String.length(value) = 1} — the line cuts inside what
+     * either position admits — and only one of them can hold one: {@code Narrow} takes three
+     * letters or more, so every one-character value composed at {@code held} is refused where it is
+     * constructed, and the plain field at {@code anywhere} takes it.
+     */
     private static final String NARROWED = """
             module example.narrowed
 
@@ -226,7 +538,7 @@ class EveryFindingHasAGenerationDispositionTest {
             data Wide = { c: Code }
 
             data Narrow = { c: Code }
-                invariant fixed = String.length(c.value) >= 4
+                invariant fixed = String.matches("[a-z][a-z][a-z]+", c.value)
 
             data Ok
 
@@ -235,13 +547,8 @@ class EveryFindingHasAGenerationDispositionTest {
 
             behavior held : (n: Narrow) -> Ok
             let held (n) = Ok
-
-            example anywhere
-                | "a" : (Wide { c = Code("abc") }) -> Ok
-
-            example held
-                | "a" : (Narrow { c = Code("abcd") }) -> Ok
             """;
+
 
     /** A guard on an input, whose line is the behavior's own and is owed a row either side. */
     private static final String GUARDED = """
@@ -576,7 +883,7 @@ class EveryFindingHasAGenerationDispositionTest {
                                     souther.compiler.partition.GenerationReason alsoAtTheEdges) {
         return GeneratedRows.of("example.kind",
                 Map.of("pick", new Adequacy.Filling(stopped(why), atTheEdges(alsoAtTheEdges),
-                        List.of())),
+                        List.of())), null,
                 Map.of(), true, SourceNameResolver.identity()).text();
     }
 
@@ -650,7 +957,10 @@ class EveryFindingHasAGenerationDispositionTest {
         Compilation compilation = compiled(POLICY);
         Map<String, Adequacy.Filling> generated =
                 Adequacy.generatedOf(compilation.db(), "example.policy");
-        String block = GeneratedRows.of("example.policy", generated, Map.of(), true, SourceNameResolver.identity()).text();
+        String block = GeneratedRows.of("example.policy", generated,
+                Adequacy.generatedForDeclarationsOf(compilation.db(), "example.policy",
+                        new GenerationScope.Module()),
+                Map.of(), true, SourceNameResolver.identity()).text();
 
         assertTrue(block.contains("`then`"),
                 "the arm nothing offers a row for is named: " + block);

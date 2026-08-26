@@ -73,7 +73,11 @@ class AGeneratedRowIsNamedForWhatItWasComposedForTest {
         compilation.answerEverything();
         Map<String, Adequacy.Filling> filling = Adequacy.generatedOf(compilation.db(), compilation.modules().get(0));
         assertNotNull(filling, "the model under test compiles");
-        return GeneratedRows.of(compilation.modules().get(0), filling, Map.of(), boundaries,
+        return GeneratedRows.of(compilation.modules().get(0), filling,
+                boundaries ? Adequacy.generatedForDeclarationsOf(compilation.db(),
+                        compilation.modules().get(0),
+                        new souther.compiler.query.GenerationScope.Module()) : null,
+                Map.of(), boundaries,
                 SourceNameResolver.identity()).text();
     }
 

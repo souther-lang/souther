@@ -8,7 +8,6 @@ import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -69,7 +68,7 @@ class WhatAnOptionalHoldsIsOwedAndOfferedARowTest {
      */
     @Test
     void theRowOfferedForItHoldsAValueThere() {
-        List<String> offered = offeredFor("String.length(query.tag@Some) = 1", TAGGED);
+        List<String> offered = offeredFor("String.length(query.tag@Some) = 1", ONLY_TAGGED);
 
         assertFalse(offered.isEmpty(), "a row is offered for the line under `Some`");
         for (String row : offered) {
@@ -79,6 +78,30 @@ class WhatAnOptionalHoldsIsOwedAndOfferedARowTest {
                     "and a row with nothing at the position stands at no point under it: " + row);
         }
     }
+
+    /**
+     * The same, with nothing else carrying the type.
+     *
+     * <p>The line is the declaration's and is owed once over every reading of it, so where a record
+     * holds a second `Tag` outright the row is composed at whichever reading the search reached
+     * first (issue #1076). What this is about is what a row composed under the narrowing holds,
+     * which takes the narrowing being where it is composed.
+     */
+    private static final String ONLY_TAGGED = """
+            module example.filter
+
+            data Tag = String
+                invariant String.length(value) >= 1
+
+            data Query = { tag: Tag? }
+            data Page = { count: Int }
+
+            behavior readArticles : (query: Query) -> Page
+
+            example readArticles
+                | "no filter" : (Query { }) -> Page { count = 0 }
+                | "a tag"     : (Query { tag = Tag("dragons") }) -> Page { count = 1 }
+            """;
 
     private static Compilation measured(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
@@ -93,10 +116,13 @@ class WhatAnOptionalHoldsIsOwedAndOfferedARowTest {
 
     private static List<String> offeredFor(String point, String source) {
         Compilation compilation = measured(source);
-        Map<String, Adequacy.Filling> all =
-                Adequacy.generatedOf(compilation.db(), compilation.modules().get(0));
-        assertNotNull(all, "the model under test compiles");
-        return all.get("readArticles").boundaries().rows().stream()
+        assertNotNull(Adequacy.generatedOf(compilation.db(), compilation.modules().get(0)),
+                "the model under test compiles");
+        // Both of what a person is offered at this behavior's lines. A line an `invariant` drew is
+        // the declaration's and is resolved once for the module (issue #1076); a line this body
+        // drew is its own.
+        return souther.compiler.OfferedAtTheLines.of(compilation,
+                        compilation.modules().get(0), "readArticles").rows().stream()
                 .filter(row -> row.purposes().stream().anyMatch(p -> p.toString().contains(point)))
                 .map(row -> String.join(", ", row.inputs().stream().map(i -> i.text()).toList()))
                 .toList();

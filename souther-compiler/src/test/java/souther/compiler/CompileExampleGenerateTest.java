@@ -48,15 +48,32 @@ class CompileExampleGenerateTest {
                 | (Request { kind = Domestic, urgent = true }) -> Accepted { at = "now" }
             """;
 
-    private static Map<String, Adequacy.Filling> generated(String source) {
+    private static Compilation compiledOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         // What `souther examples` asks for. A line a `guard` drew is only decidable where the arms
         // were measured, so below this the generator has nothing to say about one.
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
+        return compilation;
+    }
+
+    private static Map<String, Adequacy.Filling> generated(String source) {
+        Compilation compilation = compiledOf(source);
         Map<String, Adequacy.Filling> all = Adequacy.generatedOf(compilation.db(), compilation.modules().get(0));
         assertNotNull(all, "the model under test compiles");
         return all;
+    }
+
+    /**
+     * What one behavior is offered at the lines its values are held to.
+     *
+     * <p>Two authorities and one question. A line an {@code invariant} drew is owed once over every
+     * behavior carrying the type and is resolved for the module; a line this body drew is its own
+     * and is in its filling (issue #1076). A person reading the block beside the behavior sees both.
+     */
+    private static Generator.GenerationResult atTheLines(String source, String behavior) {
+        Compilation compilation = compiledOf(source);
+        return OfferedAtTheLines.of(compilation, compilation.modules().get(0), behavior);
     }
 
     private static List<String> inputs(souther.compiler.partition.FillResult result) {
@@ -174,11 +191,13 @@ class CompileExampleGenerateTest {
         assertEquals(List.of("Request { kind = Domestic, cost = Amount(0) }",
                         "Request { kind = Overseas, cost = Amount(0) }"),
                 inputs(filling.composed()), "the classes, at whatever cost builds");
-        assertEquals(List.of("Request { kind = Domestic, cost = Amount(0) }",
-                        "Request { kind = Domestic, cost = Amount(1) }",
-                        "Request { kind = Domestic, cost = Amount(1000) }",
-                        "Request { kind = Domestic, cost = Amount(999) }"),
-                inputs(filling.boundaries()),
+        // The two regions first, which are this reading's, and then the two against the line, which
+        // the declaration is owed and which are resolved once for the module.
+        assertEquals(List.of("Request { kind = Domestic, cost = Amount(1) }",
+                        "Request { kind = Domestic, cost = Amount(999) }",
+                        "Request { kind = Domestic, cost = Amount(0) }",
+                        "Request { kind = Domestic, cost = Amount(1000) }"),
+                inputs(atTheLines(bounded, "submit")),
                 "the points against each line at exactly the value the rule names, and the points"
                         + " away from them at a value the side holds");
     }
@@ -216,10 +235,10 @@ class CompileExampleGenerateTest {
                     | (Draft { cost = Amount(500) }) -> Waiting { cost = Amount(500) }
                 """;
 
-        assertEquals(List.of("Draft { cost = Amount(0) }",
-                        "Draft { cost = Amount(100) }",
-                        "Draft { cost = Amount(101) }"),
-                inputs(generated(guarded).get("submit").boundaries()),
+        assertEquals(List.of("Draft { cost = Amount(100) }",
+                        "Draft { cost = Amount(101) }",
+                        "Draft { cost = Amount(0) }"),
+                inputs(atTheLines(guarded, "submit")),
                 "the invariant's edge and both sides of the guard's line");
     }
 
@@ -329,7 +348,7 @@ class CompileExampleGenerateTest {
                 inputs(generated(tabbed).get("take").composed()),
                 "the tab is written the way a literal spells one");
 
-        String block = GeneratedRows.of("example.tabbed", generated(tabbed), Map.of(), false,
+        String block = GeneratedRows.of("example.tabbed", generated(tabbed), null, Map.of(), false,
                 SourceNameResolver.identity()).text();
         String pasted = tabbed + block.lines()
                 .filter(line -> line.startsWith("//     ") || line.equals("// example take"))
@@ -655,7 +674,7 @@ class CompileExampleGenerateTest {
 
     /** The rows of the block, with the placeholder answered the way an author answers it. */
     private static String answered(String source, String expected) {
-        String block = GeneratedRows.of("example.trip", generated(source), Map.of(), false,
+        String block = GeneratedRows.of("example.trip", generated(source), null, Map.of(), false,
                 SourceNameResolver.identity()).text();
         String rows = block.lines()
                 .filter(line -> line.startsWith("//     ") || line.equals("// example submit"))
@@ -701,7 +720,7 @@ class CompileExampleGenerateTest {
             assertEquals(souther.compiler.observe.Disposition.HELD, row.disposition(),
                     row.identity().shown() + " -> " + row.failurePhase());
         }
-        assertEquals("", GeneratedRows.of("example.trip", generated(source), Map.of(), false,
+        assertEquals("", GeneratedRows.of("example.trip", generated(source), null, Map.of(), false,
                         SourceNameResolver.identity()).text(),
                 "nothing is left to fill");
     }
@@ -729,7 +748,7 @@ class CompileExampleGenerateTest {
      */
     @Test
     void theBlockPastedUnchangedLeavesTheModelWhereItWas() {
-        String block = GeneratedRows.of("example.trip", generated(TRIP), Map.of(), false,
+        String block = GeneratedRows.of("example.trip", generated(TRIP), null, Map.of(), false,
                 SourceNameResolver.identity()).text();
         String pasted = TRIP + block;
 
@@ -737,7 +756,7 @@ class CompileExampleGenerateTest {
         compilation.answerEverything();
 
         assertEquals(1, outcomes(compilation).size(), "no row was added");
-        assertEquals(block, GeneratedRows.of("example.trip", generated(pasted), Map.of(), false,
+        assertEquals(block, GeneratedRows.of("example.trip", generated(pasted), null, Map.of(), false,
                         SourceNameResolver.identity()).text(),
                 "the same rows are still owed");
     }
@@ -808,7 +827,7 @@ class CompileExampleGenerateTest {
             assertEquals(souther.compiler.observe.Disposition.HELD, row.disposition(),
                     row.identity().shown() + " -> " + row.failurePhase());
         }
-        assertEquals("", GeneratedRows.of("example.trip", generated(source), Map.of(), false,
+        assertEquals("", GeneratedRows.of("example.trip", generated(source), null, Map.of(), false,
                         SourceNameResolver.identity()).text(),
                 "and nothing is left to offer once they are answered");
     }
@@ -1018,7 +1037,7 @@ class CompileExampleGenerateTest {
      */
     @Test
     void theBlockIsWrittenInTheFormattersOwnShape() {
-        String block = GeneratedRows.of("example.trip", generated(TRIP), Map.of(), false,
+        String block = GeneratedRows.of("example.trip", generated(TRIP), null, Map.of(), false,
                 SourceNameResolver.identity()).text();
         String rows = block.lines()
                 .filter(line -> line.startsWith("//     ") || line.equals("// example submit"))
@@ -1095,7 +1114,7 @@ class CompileExampleGenerateTest {
                     | (Request { kind = Overseas, urgent = false }) -> Accepted { at = "now" }
                 """;
 
-        assertEquals("", GeneratedRows.of("example.trip", generated(covered), Map.of(), false,
+        assertEquals("", GeneratedRows.of("example.trip", generated(covered), null, Map.of(), false,
                 SourceNameResolver.identity()).text());
     }
 
@@ -1137,9 +1156,9 @@ class CompileExampleGenerateTest {
     void aNoteAboutABorderPointIsSaidWhereTheBordersWereAskedFor() {
         Map<String, Adequacy.Filling> generated = generated(EVERY_POINT_UNFILLED);
 
-        String asked = GeneratedRows.of("sz.gen", generated, Map.of(), true,
+        String asked = GeneratedRows.of("sz.gen", generated, null, Map.of(), true,
                 SourceNameResolver.identity()).text();
-        String notAsked = GeneratedRows.of("sz.gen", generated, Map.of(), false,
+        String notAsked = GeneratedRows.of("sz.gen", generated, null, Map.of(), false,
                 SourceNameResolver.identity()).text();
 
         // One against the line and one away from it, so neither kind is answering for the other.
@@ -1193,12 +1212,12 @@ class CompileExampleGenerateTest {
 
                 let submit (bill, request) = Accepted { at = "now" }
                 """;
-        Adequacy.Filling filling = generated(correlated).get("submit");
+        Generator.GenerationResult offered = atTheLines(correlated, "submit");
 
-        Generator.GeneratedRow atTheEdge = filling.boundaries().rows().stream()
+        Generator.GeneratedRow atTheEdge = offered.rows().stream()
                 .filter(row -> row.labels().contains("bill = 0")).findFirst().orElse(null);
         assertNotNull(atTheEdge, "the edge on `bill` is a row somebody can write: "
-                + filling.boundaries().unresolved());
+                + offered.unresolved());
         assertEquals("Paired { n = Count(1), xs = [0] }",
                 atTheEdge.inputs().get(1).text(),
                 "as many elements as the n this row settled on asks for");
