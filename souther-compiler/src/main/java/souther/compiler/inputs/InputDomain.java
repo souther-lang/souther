@@ -164,7 +164,7 @@ public final class InputDomain {
         // rules on would have to be read after everything under it, and the order positions are
         // reported in is the order they are declared and descended into.
         List<Position> settled = found.stream()
-                .map(each -> handoffs.unresolvedAt(each.path()) ? shortOfHandedOnRules(each) : each)
+                .map(each -> shortOfHandedOnRules(each, handoffs.unresolvedAt(each.path())))
                 .toList();
         return settled.isEmpty() ? NONE
                 : new InputDomain(settled, read, parameters, roots, policy);
@@ -424,16 +424,51 @@ public final class InputDomain {
      * <p>Read off the ledger and not off whether a reading exists somewhere under the path: an
      * obligation discharged by whatever happens to be below it is one no descent ever had to meet
      * ({@link RuleHandoffs}).
+     *
+     * <p><b>This is where the two readings are joined, and the only place that may be.</b> The
+     * ledger knows that no recipient was named; the structural reading knows whether the walk could
+     * go into the position at all. Neither is the provenance on its own, and whoever asked later
+     * would be joining whatever state each phase still happened to be holding — which for the
+     * structural side is nothing, since a position a body's rule measures keeps no continuation
+     * (issue #1084). So the answer is settled here and carried from here.
+     *
+     * <p>Added to whatever the position already found. A reading that lost a clause of its own and
+     * handed rules on that nobody took is short of both, and answering with the first was how the
+     * second went missing.
      */
-    private static Position shortOfHandedOnRules(Position position) {
+    private static Position shortOfHandedOnRules(Position position,
+                                                 RuleHandoffs.Shortfall shortfall) {
+        if (shortfall == null) {
+            return position;
+        }
         ReadPosition read = (ReadPosition) position;
-        return read.rulesNotReached() ? read
-                : new ReadPosition(read.path(), read.view(), read.term(), read.numericDomain(),
-                        read.ownEnds(), read.narrowedEnds(), read.rangeLeft(), read.narrowedLower(),
-                        read.narrowedUpper(), read.nothingExists(), read.projection(),
-                        read.declared(), read.reading(), read.obligations(), read.completeness(),
-                        read.valuesUnread(), read.rulesWithoutALine(), read.unansweredQuestions(),
-                        true, read.structure());
+        BlockedDescent blocked = BlockedDescent.of(read.structure());
+        RulesLeftUnread.HandoffUnread why = switch (shortfall) {
+            case RuleHandoffs.Shortfall.NothingExpected _ ->
+                    new RulesLeftUnread.HandoffUnread.FromBlockedDescent();
+            case RuleHandoffs.Shortfall.NotFullyAccepted _ ->
+                    new RulesLeftUnread.HandoffUnread.NotFullyAccepted();
+        };
+        // The whole agreement and not the half this arm happens to need. Over an owed handing over,
+        // nobody was named as a recipient exactly where the walk could not go in — so a ledger that
+        // named nobody at a position this entered and a ledger that named somebody at a position it
+        // could not enter are both two walks over one model disagreeing about one path, joined by
+        // the spelling of it. Held one way, the second would arrive as an arm nothing folds beside a
+        // descent that is reported, which is #1084's own two entries, reached by a different road.
+        if (why.namesABlockedDescent() != (blocked != null)) {
+            throw new IllegalStateException(
+                    "the ledger and the walk disagree at " + read.path() + ": " + shortfall
+                            + " beside " + read.structure());
+        }
+        java.util.Set<RulesLeftUnread> left =
+                new java.util.LinkedHashSet<>(read.rulesLeftUnread());
+        left.add(new RulesLeftUnread.Handoff(why));
+        return new ReadPosition(read.path(), read.view(), read.term(), read.numericDomain(),
+                read.ownEnds(), read.narrowedEnds(), read.rangeLeft(), read.narrowedLower(),
+                read.narrowedUpper(), read.nothingExists(), read.projection(),
+                read.declared(), read.reading(), read.obligations(), read.completeness(),
+                read.valuesUnread(), read.rulesWithoutALine(), read.unansweredQuestions(),
+                left, read.structure());
     }
 
     /**
@@ -722,7 +757,12 @@ public final class InputDomain {
                 // say every rule was accounted for. Read off the reading's own reason instead, a
                 // position carrying both a rule it could not read and a subtree it never entered
                 // answered with the first and lost the second.
-                !placed.everyRuleReachedAt(path),
+                //
+                // Only this reading's own loss is known here. Whether a handing over was taken up
+                // is the descent's to say, and it is added afterwards
+                // ({@link #shortOfHandedOnRules}).
+                placed.everyRuleReachedAt(path) ? java.util.Set.of()
+                        : java.util.Set.of(new RulesLeftUnread.ClauseOfThisReadingWasUnread()),
                 structure);
     }
 

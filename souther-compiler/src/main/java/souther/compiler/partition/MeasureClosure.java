@@ -1,7 +1,8 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.CoverageObligation;
-import souther.compiler.inputs.StructuralInspection;
+import souther.compiler.inputs.BlockedDescent;
+import souther.compiler.inputs.RulesLeftUnread;
 
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -31,7 +32,7 @@ import java.util.Set;
  *
  * <p><b>And two facts no question carries.</b> A position whose rules were never enumerated
  * raises none, and a set of raised questions all answered is what a reading that never looked also
- * produces ({@link Axis#rulesNotReached}). And a rule the model wrote that this could not use is one
+ * produces ({@link ReadingResidue}). And a rule the model wrote that this could not use is one
  * whose question a reading may well have answered before the position refused the answer — two
  * clauses placing ends on a {@code String}'s two coordinates are read, accounted for, and then
  * both dropped, and the accounting is right to say they were read. What an accounting cannot say
@@ -42,6 +43,19 @@ import java.util.Set;
  * because what is not known about them is not known for either. And a rule set aside answers
  * through its own reason ({@link souther.compiler.inputs.BlockReason.RuleWithoutLineReason#leavesShort}),
  * which for a comparison relating two positions is neither measure.
+ *
+ * <p><b>One stop, one gap, and the fold is on where the gap came from.</b> Two of the things a
+ * reading can be short of are one stop said from two ends: the walk could not go into a position,
+ * and so the rules it handed on reached nobody. The second is a consequence of the first, and the
+ * arm that says so is what this reads to leave it out ({@link #derived}). Never the path — a
+ * position the reading did enter and lost a clause of its own is an independent finding sitting at
+ * the same place, and a fold on "there is already something here" takes that one with it (#1084).
+ *
+ * <p><b>And a question stands whatever else was found at its position.</b> A question comes off a
+ * rule this compiler read and neither reader answered, so the rules a stop left unread raise none —
+ * which means a suppression by position could only ever reach the real ones. What it did reach was a
+ * rule about a {@code Map}'s size that nothing answered, dropped because the map's contents are out
+ * of reach, which is a fact about other rules entirely.
  *
  * <p><b>A clause's question may stand and a comparison's may not.</b> A comparison raises a question
  * exactly where the reading of it reached a line, and that line answers it — both come off the one
@@ -169,33 +183,33 @@ public final class MeasureClosure {
                 border.add(new ClosureGap.RuleUnread(rule));
             }
         }
-        // The positions a gap of their own already stands for. A position whose rules nothing
-        // enumerated, and one the walk could not reach into: neither raises a question, so neither
-        // can be short of one, and what is short there is said once for the position rather than
-        // once per question it never got as far as raising.
-        Set<souther.compiler.inputs.TermPath> unreached = new LinkedHashSet<>();
         for (Axis axis : axes) {
-            if (axis.rulesNotReached()) {
-                ClosureGap gap = new ClosureGap.RulesNotReached(axis.id());
-                partition.add(gap);
-                border.add(gap);
-                unreached.add(axis.path());
-            }
-            if (axis.pending() instanceof StructuralInspection.Continuation.Blocked blocked) {
+            // Read off what the reading settled and never off what the axis is still waiting on. A
+            // position a body's rule divides keeps no continuation, and was still never entered:
+            // asked of the continuation, the one model where the two come apart said nothing at all
+            // about the position it could not read (issue #1084).
+            BlockedDescent blocked = axis.residue().blockedDescent();
+            if (blocked != null) {
                 ClosureGap gap = new ClosureGap.PositionNotReachedInto(axis.id(), blocked.why());
                 partition.add(gap);
                 border.add(gap);
-                unreached.add(axis.path());
+            }
+            for (RulesLeftUnread unread : axis.residue().rulesLeftUnread()) {
+                if (derived(unread)) {
+                    continue;
+                }
+                ClosureGap gap = new ClosureGap.RulesNotReached(axis.id());
+                partition.add(gap);
+                border.add(gap);
             }
         }
-        // Asked of the question and of the position it is about, and not of whichever axis it was
-        // found beside. One position can be measured at more than one number, and an axis is
-        // re-pointed at another term as a body's rules are read — so an axis is not what a question
-        // belongs to, and a suppression written per axis decided from whichever one the loop met.
+        // Every question that stands, whatever else was found at the same path. A question is
+        // raised by a rule this compiler read and neither reader answered, so the rules a stop left
+        // unread raise none — and the only questions a suppression here could ever reach are the
+        // real ones. Written as "there is already a finding at this path", a rule about a `Map`'s
+        // size that nothing answered went unsaid because the walk could not read what the map holds,
+        // which are two facts about two different rules (issue #1084).
         for (souther.compiler.inputs.StandingQuestion each : asked) {
-            if (unreached.contains(each.asks().path())) {
-                continue;
-            }
             ClosureGap gap = new ClosureGap.QuestionUnanswered(each);
             switch (each.obligation().answeredBy()) {
                 case PARTITION -> partition.add(gap);
@@ -205,6 +219,34 @@ public final class MeasureClosure {
         return new Both(
                 partition.isEmpty() ? new OfThePartition.Closed() : new OfThePartition.Open(partition),
                 border.isEmpty() ? new OfTheBorder.Closed() : new OfTheBorder.Open(border));
+    }
+
+    /**
+     * Whether this way of leaving the rules unread is already reported by a finding beside it.
+     *
+     * <p><b>The fold, and the whole of it.</b> One way of leaving the rules unread is a consequence
+     * of another finding rather than a second thing that went wrong: a handing over nobody took
+     * because the walk could not go into the position is the blocked descent written above, said
+     * from the other end. Both sentences are true and a reader is told the stop once.
+     *
+     * <p><b>On the provenance and never on the path.</b> A position the reading did enter and lost a
+     * clause of its own is an independent finding, and it can sit at the same path as anything else.
+     * Suppressed by "there is already a finding here", that one would go with it — which is why this
+     * asks the arm and is handed nothing else to decide from.
+     *
+     * <p>Exhaustive with no {@code default}: a way of leaving the rules unread added later is
+     * answered here or is a compile error, rather than quietly folding into somebody else's finding.
+     */
+    private static boolean derived(RulesLeftUnread unread) {
+        return switch (unread) {
+            // The reading was there and lost a rule of its own. Nothing else says so.
+            case RulesLeftUnread.ClauseOfThisReadingWasUnread _ -> false;
+            case RulesLeftUnread.Handoff handoff -> switch (handoff.why()) {
+                case RulesLeftUnread.HandoffUnread.FromBlockedDescent _ -> true;
+                // The walk went on and left a recipient with no reading. Nothing else says so.
+                case RulesLeftUnread.HandoffUnread.NotFullyAccepted _ -> false;
+            };
+        };
     }
 
     /** An open closure's own account of itself: never empty, and in the order the readers found it,

@@ -15,9 +15,11 @@ import souther.compiler.query.Shapes;
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -58,8 +60,9 @@ class TakingRulesOverIsSaidAndNotInferredTest {
         assertThrows(IllegalArgumentException.class,
                 () -> handoffs.accepts(P, HANDS_ON, P.then("y")),
                 "a reading at a position this handoff never named is not one it passed rules to");
-        assertTrue(handoffs.unresolvedAt(HANDS_ON),
-                "and the handoff is where it was");
+        assertInstanceOf(RuleHandoffs.Shortfall.NotFullyAccepted.class,
+                handoffs.unresolvedAt(HANDS_ON),
+                "and the handoff is where it was: a recipient was named and none was opened");
     }
 
     /** And a handoff no descent ever reached stands however many readings were opened elsewhere. */
@@ -72,8 +75,12 @@ class TakingRulesOverIsSaidAndNotInferredTest {
         handoffs.passesTo(P, elsewhere, List.of(elsewhere.element()));
         handoffs.accepts(P, elsewhere, elsewhere.element());
 
-        assertFalse(handoffs.unresolvedAt(elsewhere), "that one was passed on and taken");
-        assertTrue(handoffs.unresolvedAt(HANDS_ON),
+        assertNull(handoffs.unresolvedAt(elsewhere), "that one was passed on and taken");
+        // And which of the two ways it is left standing, because that is what tells a reader
+        // whether anything else already reports the stop. A descent that named nobody is one the
+        // walk could not make; a recipient left unopened is a walk that went on.
+        assertInstanceOf(RuleHandoffs.Shortfall.NothingExpected.class,
+                handoffs.unresolvedAt(HANDS_ON),
                 "and this one was never passed to anybody, whatever happened beside it");
     }
 
@@ -93,10 +100,11 @@ class TakingRulesOverIsSaidAndNotInferredTest {
         handoffs.passesTo(P, HANDS_ON, List.of(one, other));
 
         handoffs.accepts(P, HANDS_ON, one);
-        assertTrue(handoffs.unresolvedAt(HANDS_ON), "the other case was passed the rules too");
+        assertInstanceOf(RuleHandoffs.Shortfall.NotFullyAccepted.class,
+                handoffs.unresolvedAt(HANDS_ON), "the other case was passed the rules too");
 
         handoffs.accepts(P, HANDS_ON, other);
-        assertFalse(handoffs.unresolvedAt(HANDS_ON), "and now both of them were opened");
+        assertNull(handoffs.unresolvedAt(HANDS_ON), "and now both of them were opened");
     }
 
     /**
@@ -147,7 +155,7 @@ class TakingRulesOverIsSaidAndNotInferredTest {
     void aReadingThatTookTheRulesOverAndCameBackShortIsShortByItself() {
         InputDomain read = read(THE_READING_OPENED_IS_SHORT);
 
-        assertFalse(read.at(TermPath.of("p").then("x")).rulesNotReached(),
+        assertEquals(java.util.Set.of(), read.at(TermPath.of("p").then("x")).rulesLeftUnread(),
                 "the optional passed the rules on and something took them");
         assertTrue(shortSomewhereUnder(read, TermPath.of("p").then("x")),
                 "and the reading that took them says what it could not read");
@@ -157,7 +165,7 @@ class TakingRulesOverIsSaidAndNotInferredTest {
         return read.positions().stream()
                 .anyMatch(each -> !each.path().equals(above)
                         && each.path().toString().startsWith(above.toString())
-                        && each.rulesNotReached());
+                        && !each.rulesLeftUnread().isEmpty());
     }
 
     private static InputDomain read(String source) {

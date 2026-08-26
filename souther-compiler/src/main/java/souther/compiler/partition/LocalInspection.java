@@ -56,8 +56,10 @@ final class LocalInspection {
         // that value can be refused, wherever in it the rule is written.
         CutEvidence drawn = cuts.isEmpty() ? new CutEvidence.None()
                 : new CutEvidence.Present(cuts, position.projection());
-        return new LocalPartition.Divided(classes, drawn,
-                position.rulesNotReached());
+        // What the reading was short of is not restated here. It is the position's own answer and
+        // travels as one value from there (`ReadingResidue`), so a local inspection copying half of
+        // it would be a second place the pair could come apart.
+        return new LocalPartition.Divided(classes, drawn);
     }
 
     /**

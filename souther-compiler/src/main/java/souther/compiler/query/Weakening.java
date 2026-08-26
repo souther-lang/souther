@@ -26,6 +26,20 @@ import souther.compiler.types.CoverageOrigin;
  * collapse — one rule this compiler could not read, found from three behaviors, is one thing to tell
  * an author — and two that are not must not. A bare probe number is not a fact, which is why the
  * arms that are about one behavior say which.
+ *
+ * <p><b>What a set of these is.</b> Not every true thing that follows from a measurement being
+ * weaker than it looks: the causes a reader is to be told about, each said once. A stop this
+ * compiler made has consequences that are true sentences about the model — a position nothing could
+ * be read into is a position whose rules nothing read — and a reader given both has to work out that
+ * the second follows from the first (issue #1084).
+ *
+ * <p>So one of two findings is left out exactly where a provenance says it is derived from the
+ * other, and never because the two arrive with the same path on them. A path is where something is
+ * and not what caused it: at one position a reading can enter and lose a clause of its own while a
+ * rule about the value from outside goes unanswered, and those are two causes an author acts on
+ * separately. Which findings stand in that relation is written down where the arms are
+ * ({@link souther.compiler.partition.MeasureClosure}), so a fold is a case of a {@code switch} with
+ * no {@code default} rather than a rule anybody applies by eye.
  */
 public sealed interface Weakening {
 

@@ -435,9 +435,9 @@ final class Coverages {
         // different question, and borrowing it left a reader with a sentence that named neither
         // (issue #842).
         PartitionEvidence.AxisCoverage.Reading read = new PartitionEvidence.AxisCoverage.Reading(
-                axis.rulesNotReached()
-                        ? PartitionEvidence.AxisCoverage.Reach.SOME_OUT_OF_SIGHT
-                        : PartitionEvidence.AxisCoverage.Reach.EVERY_RULE,
+                axis.residue().rulesLeftUnread().isEmpty()
+                        ? PartitionEvidence.AxisCoverage.Reach.EVERY_RULE
+                        : PartitionEvidence.AxisCoverage.Reach.SOME_OUT_OF_SIGHT,
                 // Of the questions standing at this position, the ones this measure is the reader
                 // of. What classes are made of is which values may stand somewhere; where the line
                 // falls is the border measure's question, and counting it here would put a number

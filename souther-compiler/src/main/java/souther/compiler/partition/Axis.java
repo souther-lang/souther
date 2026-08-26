@@ -51,10 +51,15 @@ import java.util.List;
  *                 path is how a reason came to be recovered by string match. A reason travels with
  *                 the position or it is a reason about whatever the strings happened to pair it
  *                 with.
- * @param rulesNotReached whether the walk reached the rules written about this position at all.
- *                 Beside the questions and not among them: a position whose rules were never
+ * @param residue  what the reading of this position left behind that nothing later takes away: the
+ *                 rules it was owed and did not reach, and whether the walk could go into what it
+ *                 holds. Beside the questions and not among them — a position whose rules were never
  *                 enumerated raises no question and is not one whose rules were all accounted for,
- *                 and an empty list says the second (issue #791)
+ *                 and an empty list says the second (issue #791).
+ *
+ *                 <p>Apart from {@link #pending} because the two do not live as long. A position a
+ *                 body's rule divides keeps no continuation to be pending on, and was still never
+ *                 entered; read off the continuation, that stop went unsaid (issue #1084)
  * @param leftWith what the position is left with where the local reading gave it no axis, or null
  *                 where nothing is. Which of the two it is comes with it: a reading stopped, or a
  *                 rule was read to the end and draws no line. Carried for the same reason
@@ -64,18 +69,22 @@ import java.util.List;
  *                 from the other end
  */
 public record Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> classes,
-                   List<Cut> cuts, List<Seam> parted, boolean rulesNotReached,
+                   List<Cut> cuts, List<Seam> parted, ReadingResidue residue,
                    StructuralInspection.Continuation pending, LeftAtThePosition leftWith) {
 
     public Axis {
         classes = List.copyOf(classes);
         cuts = List.copyOf(cuts);
         parted = List.copyOf(parted);
+        if (residue == null) {
+            throw new IllegalArgumentException(
+                    "an axis with no account of what its reading came to");
+        }
     }
 
     public Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> classes,
                 List<Cut> cuts) {
-        this(id, term, type, classes, cuts, List.of(), false, null, null);
+        this(id, term, type, classes, cuts, List.of(), ReadingResidue.NOTHING, null, null);
     }
 
     /**
@@ -85,11 +94,11 @@ public record Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> 
      * and only where none does is what was found here what a report says — an absence where every
      * reading ran to the end and found nothing, and what stopped one where it did not.
      */
-    public static Axis pendingAt(AxisId id, NumericTerm term, Type type, boolean rulesNotReached,
+    public static Axis pendingAt(AxisId id, NumericTerm term, Type type, ReadingResidue residue,
                                  StructuralInspection.Continuation found,
                                  LeftAtThePosition leftWith) {
         return new Axis(id, term, type, List.of(), List.of(), List.of(),
-                rulesNotReached, found, leftWith);
+                residue, found, leftWith);
     }
 
     /**
@@ -103,12 +112,12 @@ public record Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> 
      * as one the model divides no way.
      */
     public Axis measuredAt(AxisId id, NumericTerm term) {
-        return new Axis(id, term, type, classes, cuts, parted, rulesNotReached, pending, leftWith);
+        return new Axis(id, term, type, classes, cuts, parted, residue, pending, leftWith);
     }
 
     /** The same position, with what a body's rules divided it into and the lines they drew. */
     public Axis carrying(List<PartitionClass> classes, List<Cut> cuts, List<Seam> parted) {
-        return new Axis(id, term, type, classes, cuts, parted, rulesNotReached, pending, leftWith);
+        return new Axis(id, term, type, classes, cuts, parted, residue, pending, leftWith);
     }
 
     /** Where the value this axis is about sits, which is where a row is walked to before the term is

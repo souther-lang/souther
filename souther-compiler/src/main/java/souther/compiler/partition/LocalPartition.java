@@ -29,8 +29,7 @@ public sealed interface LocalPartition {
      * dressed as a divided one, and the phase after this one would never be reached for it.
      *
      */
-    record Divided(List<PartitionClass> classes, CutEvidence cuts,
-                   boolean rulesNotReached) implements LocalPartition {
+    record Divided(List<PartitionClass> classes, CutEvidence cuts) implements LocalPartition {
 
         public Divided {
             classes = List.copyOf(classes);

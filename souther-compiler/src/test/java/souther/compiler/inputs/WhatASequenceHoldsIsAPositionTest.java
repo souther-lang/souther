@@ -113,10 +113,11 @@ class WhatASequenceHoldsIsAPositionTest {
      */
     @Test
     void nothingIsShortOfARuleThatWasNeverWritten() {
-        assertFalse(at("people[*]").rulesNotReached(),
+        assertTrue(at("people[*]").rulesLeftUnread().isEmpty(),
                 "no clause of this list says anything about what it holds");
-        assertFalse(at("people[*].age").rulesNotReached(), "nor at a field of what it holds");
-        assertFalse(at("people").rulesNotReached(),
+        assertTrue(at("people[*].age").rulesLeftUnread().isEmpty(),
+                "nor at a field of what it holds");
+        assertTrue(at("people").rulesLeftUnread().isEmpty(),
                 "and the list's own rules are reached, as any other position's are");
     }
 
@@ -154,9 +155,9 @@ class WhatASequenceHoldsIsAPositionTest {
         InputDomain read = compilation.db().ask(new Adequacy.Inputs(MODULE)).value().get("roster");
         assertNotNull(read, "the model under test compiles");
 
-        assertFalse(read.at(pathTo("people", "[*]")).rulesNotReached(),
+        assertTrue(read.at(pathTo("people", "[*]")).rulesLeftUnread().isEmpty(),
                 "the element is read by a reading of its own, and this clause is not its");
-        assertFalse(read.positions().get(0).rulesNotReached(),
+        assertTrue(read.positions().get(0).rulesLeftUnread().isEmpty(),
                 "and the list itself was read: the clause is written about it and arrived");
         assertFalse(read.positions().get(0).unansweredQuestions().isEmpty(),
                 "what the clause leaves is a question about the list that nothing answered");
