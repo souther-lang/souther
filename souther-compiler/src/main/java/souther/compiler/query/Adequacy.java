@@ -1300,7 +1300,7 @@ public final class Adequacy {
 
         @Override
         public Answer<List<BorderAssessment>> compute(Db db) {
-            List<BorderAssessment> measured = db.ask(new Boundaries(name, behavior)).value();
+            List<BorderAssessment> measured = db.ask(new Readings(name, behavior)).value();
             if (measured == null) {
                 return Answer.absent();
             }
@@ -1324,11 +1324,11 @@ public final class Adequacy {
             souther.compiler.partition.BehaviorInputs inputs =
                     new souther.compiler.partition.BehaviorInputs(parameters, sig.inputTypes(),
                             symbols, policy);
-            return Answer.of(Coverages.searched(measured, inputs,
+            return Answer.of(Coverages.merged(Coverages.searched(measured, inputs,
                     probing(spec.name(), divided, sig, symbols, policy, parameters,
                             constructing(db, name),
                             domain),
-                    domain.quantities(symbols), divided.reaching()));
+                    domain.quantities(symbols), divided.reaching())));
         }
 
         /**
@@ -1644,6 +1644,32 @@ public final class Adequacy {
      * readings of this one answer and not three measurements.
      */
     public record Boundaries(String name, String behavior)
+            implements Key<List<BorderAssessment>> {
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<List<BorderAssessment>> compute(Db db) {
+            Answer<List<BorderAssessment>> readings = db.ask(new Readings(name, behavior));
+            return readings.present() && readings.value() != null
+                    ? Answer.of(Coverages.merged(readings.value()))
+                    : Answer.absent();
+        }
+    }
+
+    /**
+     * The same lines, one entry per reading of one.
+     *
+     * <p>Below {@link Boundaries} and asked by whatever has something to do while the readings are
+     * still apart. A guard inside a non-recursive helper is read once per call of that helper, and
+     * each of those is reached under its caller's own conditions — so what a row for it may be
+     * composed out of is a reading's own answer, and a search made after the readings are one has
+     * to pick one of them to compose against.
+     */
+    public record Readings(String name, String behavior)
             implements Key<List<BorderAssessment>> {
 
         @Override
