@@ -18,30 +18,47 @@ import java.util.function.Function;
 import static souther.compiler.codegen.Descriptors.*;
 
 /**
- * What the JVM emits for each kernel of the standard library.
+ * What the JVM emits for each kernel this table backs.
  *
- * <p>One row per kernel, and one rule for what a call to one is emitted at: the descriptor comes
- * from the kernel's declaration, parameter by parameter and the result, through {@link #slotsOf}.
- * The declaration belongs to the callee, and a descriptor built from the types observed at a call
+ * <p>Not every kernel of the language. {@code Int}'s partial division and its truncating remainder
+ * are a branch and not a call, and {@code BodyGen} writes them out itself; which kernels are here
+ * and which are there is held apart by {@code EveryKernelIsEmittedInOnePlaceTest} rather than
+ * counted in a sentence.
+ *
+ * <p>One rule for what a call to a kernel here is emitted at: the descriptor comes from the
+ * kernel's declaration, parameter by parameter and the result, through {@link #slotsOf}.
+ *
+ * <pre>{@code
+ *   KernelSignature -> slotsOf -> descriptorOf
+ * }</pre>
+ *
+ * <p>The declaration belongs to the callee, and a descriptor built from the types observed at a call
  * agrees with it only while no value can arrive narrower than the parameter it goes into. A
  * sum-typed parameter ends that, so nothing here reads the call for the shape of what it is calling.
  *
- * <pre>{@code
- *   KernelSignature -> slotsOf -> descriptorOf  (+ the comparator delta, where one is taken)
- * }</pre>
- *
  * <p>What a row carries is what the declaration cannot say: which runtime class and method answer
  * the kernel, and the order that method takes the arguments in — Souther puts the subject last for
- * pipe reading, and the runtime method takes it where it takes it. Adding a kernel is a {@code .sou}
- * declaration, a runtime method, and one row.
+ * pipe reading, and the runtime method takes it where it takes it. So a kernel answered by a Souther
+ * runtime static is a {@code .sou} declaration, a runtime method, and one row here.
  *
- * <p>Three rows are not that rule, each for a reason of its own. {@link JdkVirtual} calls a JDK
- * method, whose descriptor is the JDK's to say ({@code CharSequence}, {@code int}) and no
- * declaration of ours settles. {@link #emitWithComparator} reaches a runtime method that takes a
- * comparator the declaration does not name, which is added to the derived descriptor rather than
- * replacing it. And {@link NumericFold} is declared over any number and answered by a method per
- * representation, so the type the checker settled picks which — an instantiation choosing between
- * two implementations of one operation, which is the only thing a call-site type decides here.
+ * <p>Three things stand beside that rule, and only one of them sets it aside.
+ *
+ * <p>{@link #emitWithComparator} adds to it. The ordered family reaches a runtime method taking a
+ * comparator the declaration does not name, so the derived descriptor is what the comparator is put
+ * in front of — the base form and a delta, not a second derivation.
+ *
+ * <p>{@link NumericFold} keeps the descriptor and chooses the method. Such a kernel is declared over
+ * any number and the runtime answers it with an implementation per representation, so the type the
+ * checker settled picks which — an instantiation choosing between two implementations of one
+ * operation, and the only thing a call-site type decides here.
+ *
+ * <p>{@link JdkVirtual} is the one that does not derive. It calls a JDK method, whose descriptor is
+ * the JDK's to say ({@code CharSequence}, {@code int}) and no declaration of ours settles, so it
+ * carries an explicit one.
+ *
+ * <p>Which kernels are in the last two is written down in
+ * {@code TheRuntimeAnswersEveryKernelAtItsDeclaredAbiTest}, which is also what holds every other
+ * kernel here to the runtime method its declaration derives.
  */
 final class Intrinsics {
 
@@ -73,11 +90,12 @@ final class Intrinsics {
      * and a sum-typed parameter ends that — the argument's type is the case it happens to be, while
      * the declaration names the sum.
      *
-     * <p>{@code argOrder} is the one thing here the declaration does not settle: Souther puts the
-     * subject last for pipe reading and the runtime method takes it where it takes it, so the row
-     * carries the permutation. An argument going into a slot the runtime erases is boxed, which the
-     * declaration says too — a parameter whose boundary form is {@code Object} is one the runtime
-     * takes as a reference — so there is nothing to list.
+     * <p>Everything a row carries is something the declaration does not settle. Which class and
+     * method answer the kernel is one; the order is another — Souther puts the subject last for pipe
+     * reading and the runtime method takes it where it takes it, so the row carries the permutation.
+     * What a value goes over as is not among them: an argument going into a slot the runtime takes
+     * as a reference is boxed, and which slots those are is what the declaration says, so there is
+     * nothing to list.
      */
     record RuntimeStatic(ClassDesc owner, String method, int[] argOrder) implements Emit {
 
@@ -311,9 +329,9 @@ final class Intrinsics {
         if (t instanceof Type.OptionOf) {
             return CD_Option;
         }
-        // A declared function parameter is what the runtime applies, which is an `Fn`. Named here
-        // rather than at the one row that takes one, so that the descriptor of every kernel comes
-        // out of the same reading of its declaration.
+        // A declared function parameter is what the runtime applies, which is an `Fn`. Named in
+        // this reading rather than in the rows that take one, so that the descriptor of every kernel
+        // comes out of one reading of its declaration.
         if (t instanceof Type.FnOf) {
             return CD_Fn;
         }
