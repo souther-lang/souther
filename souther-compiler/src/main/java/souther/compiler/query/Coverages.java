@@ -609,7 +609,7 @@ final class Coverages {
         List<BorderAssessment> out = new ArrayList<>();
         for (BorderAssessment border : measured.each()) {
             OneSearchOfABorder search = searching(border.border(), where, probe, realizer,
-                    regionFor(border.border(), rules, reaching));
+                    wayTo(border.border(), reaching), rules);
             java.util.EnumMap<PointRole, ItemAssessment> items =
                     new java.util.EnumMap<>(PointRole.class);
             for (PointRole role : PointRole.values()) {
@@ -625,25 +625,24 @@ final class Coverages {
     }
 
     /**
-     * Where a row for one border may be written.
+     * How a row for one border came to be looked for where it is.
      *
      * <p>Beside the border and not part of it. What a border is is what the rows are owed at, and it
      * is the same border wherever a row for it is looked for — put inside, two readings of one line
      * reached under different conditions would be two obligations, and a count of what an author
      * owes would move with how much of a body this compiler managed to read.
      *
-     * <p>What the declarations leave, for a line a declaration draws. An invariant is about the
-     * values and holds wherever one stands, so there is nothing on the way to it; a guard is at a
+     * <p>Nothing on the way, for a line a declaration draws. An invariant is about the values and
+     * holds wherever one stands, so there is nowhere for a row to have come from; a guard is at a
      * place in a body, and a row that never arrives there is no row at its line whatever it holds.
      * Read off which kind of rule it is rather than off whether anything was collected: a guard
-     * nothing narrows and a clause are then the same region for the same stated reason, and each
-     * says so in its own account rather than by coming back with nothing.
+     * nothing narrows and a clause then say the same thing for the same stated reason, and each says
+     * it in its own account rather than by coming back with nothing.
      */
-    private static souther.compiler.partition.RegionForARow regionFor(
-            Border border, souther.compiler.inputs.Quantities rules, ReachingCuts reaching) {
-        return border.origin().comparisonAt()
-                .map(site -> reaching.narrowing(rules.region(), site))
-                .orElseGet(() -> souther.compiler.partition.RegionForARow.untouched(rules.region()));
+    private static souther.compiler.partition.WayToTheBorder wayTo(
+            Border border, ReachingCuts reaching) {
+        return border.origin().comparisonAt().map(reaching::wayTo)
+                .orElse(souther.compiler.partition.WayToTheBorder.UNTOUCHED);
     }
 
     /**
@@ -761,8 +760,13 @@ final class Coverages {
      */
     private static OneSearchOfABorder searching(Border border, BehaviorInputs where, Probe probe,
                                                 LevelRealizer realizer,
-                                                souther.compiler.partition.RegionForARow within) {
+                                                souther.compiler.partition.WayToTheBorder within,
+                                                souther.compiler.inputs.Quantities rules) {
         BorderQuantity quantity = border.cut().of();
+        // Built here and gone when the search is. A region is a way of asking about values rather
+        // than something that says what it is, so it is what the walk runs against and never what
+        // the answer keeps; the account it was built from is what travels.
+        souther.compiler.inputs.SearchRegion region = within.narrowing(rules.region());
         return new OneSearchOfABorder() {
 
             @Override
@@ -777,7 +781,7 @@ final class Coverages {
                 // the realizer. What it composes is a candidate and no part of the item: another row
                 // in the same side is at the point as much as this one would be, so what the row is
                 // offered for goes in beside it rather than being read back off it.
-                return switch (realizer.realize(quantity.standingAt(criterion), within.where())) {
+                return switch (realizer.realize(quantity.standingAt(criterion), region)) {
                     case Realization.Found found -> whatCameOfIt(
                             probe.attempt(label, quantity::carrierOf, found.fixing()),
                             label, within);
@@ -1056,7 +1060,7 @@ final class Coverages {
 
     /** A search that came to nothing at {@code subject}, which is what a point is written as. */
     private static ItemAssessment.Attempt nothingComposedOne(
-            String subject, souther.compiler.partition.RegionForARow within) {
+            String subject, souther.compiler.partition.WayToTheBorder within) {
         return new ItemAssessment.Attempt.Unresolved(
                 new souther.compiler.partition.Generator.UnresolvedCombination(List.of(subject),
                         souther.compiler.partition.Generator.UnresolvedCombination.Reason
@@ -1080,7 +1084,7 @@ final class Coverages {
      */
     private static ItemAssessment.Attempt.Searched whatCameOfIt(
             souther.compiler.partition.Generator.BoundaryAttempt made, String subject,
-            souther.compiler.partition.RegionForARow within) {
+            souther.compiler.partition.WayToTheBorder within) {
         return switch (made) {
             case null -> new ItemAssessment.Attempt.Unresolved(
                     new souther.compiler.partition.Generator.UnresolvedCombination(

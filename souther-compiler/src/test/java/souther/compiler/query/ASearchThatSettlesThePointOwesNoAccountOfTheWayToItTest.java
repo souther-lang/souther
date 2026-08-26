@@ -1,23 +1,15 @@
 package souther.compiler.query;
 
-import souther.compiler.query.ItemAssessment;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourcePos;
-import souther.compiler.inputs.EmptyInput;
-import souther.compiler.inputs.NumericTerm;
-import souther.compiler.inputs.SearchRegion;
-import souther.compiler.numeric.Count;
-import souther.compiler.numeric.NumericDomain;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.OnTheWay;
-import souther.compiler.partition.RegionForARow;
+import souther.compiler.partition.WayToTheBorder;
 import souther.compiler.source.SourceId;
 
 import java.util.List;
-import java.util.Map;
-import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -37,53 +29,32 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * <p>Held here rather than against a report. Two outcomes of one search differ only in what the
  * search came to, and no pair of models produces that pair: a condition a reading takes in narrows
  * the region and draws a line of its own, so the two sides of a model-level comparison differ in
- * more than the thing under test. At this end the region is held still and the outcome varied,
- * which is the comparison the rule is about.
+ * more than the thing under test. At this end the way is held still and the outcome varied, which is
+ * the comparison the rule is about.
+ *
+ * <p>No region is built here, and that is the shape of the thing rather than an economy. What an
+ * outcome carries is the account of the way to the point; where a row was looked for is worked out
+ * from that account by whoever is looking, and a search that has finished is not.
  */
-class ASearchThatSettlesThePointOwesNoAccountOfItsRegionTest {
-
-    /** A region that answers nothing, which is all a decline needs: nothing narrows it. */
-    private static final class Inert implements SearchRegion {
-
-        @Override
-        public SearchRegion assuming(NumericDomain.LinearForm<NumericTerm> form,
-                                     NumericDomain.Rel rel) {
-            throw new UnsupportedOperationException("nothing here was taken in");
-        }
-
-        @Override
-        public SearchRegion given(Map<NumericTerm, Count> fixed) {
-            throw new UnsupportedOperationException("nothing here fixes a position");
-        }
-
-        @Override
-        public NumericDomain.Bounds runsBetween(NumericDomain.LinearForm<NumericTerm> form) {
-            throw new UnsupportedOperationException("nothing here reads a value");
-        }
-
-        @Override
-        public Optional<EmptyInput> emptiness() {
-            throw new UnsupportedOperationException("nothing here asks what is left");
-        }
-    }
+class ASearchThatSettlesThePointOwesNoAccountOfTheWayToItTest {
 
     private static final OnTheWay.Declined LEFT_OUT = new OnTheWay.Declined(
             Citation.of(new SourcePos(4, 3, new SourceId("m.sou"))),
             new OnTheWay.Why.NoWordsForTheShape());
 
-    /** One region, with one condition on the way to it that nothing took in. */
-    private static RegionForARow region() {
-        return RegionForARow.narrowed(new Inert(), List.of(LEFT_OUT));
+    /** One way to a point, with one condition on it that nothing took in. */
+    private static WayToTheBorder way() {
+        return new WayToTheBorder(List.of(LEFT_OUT));
     }
 
     private static ItemAssessment.Attempt came(Generator.UnresolvedCombination.Reason to) {
         return new ItemAssessment.Attempt.Unresolved(
-                new Generator.UnresolvedCombination(List.of("p.x = 11"), to), region());
+                new Generator.UnresolvedCombination(List.of("p.x = 11"), to), way());
     }
 
     /** A search that settled nothing owes the account: the box it looked in is half the answer. */
     @Test
-    void aSearchThatSettledNothingOwesWhatItsRegionLeftOut() {
+    void aSearchThatSettledNothingOwesWhatTheWayLeftOut() {
         assertEquals(List.of(LEFT_OUT),
                 came(Generator.UnresolvedCombination.Reason.SEARCH_LIMIT).unaccountedFor());
         assertEquals(List.of(LEFT_OUT),
@@ -92,7 +63,7 @@ class ASearchThatSettlesThePointOwesNoAccountOfItsRegionTest {
                 came(Generator.UnresolvedCombination.Reason.LINKAGE_FAILED).unaccountedFor());
     }
 
-    /** And one that proved there is nothing there owes none of it, over the same region. */
+    /** And one that proved there is nothing there owes none of it, over the same way. */
     @Test
     void aSearchThatProvedThereIsNothingThereOwesNothing() {
         assertEquals(List.of(), came(
@@ -103,14 +74,14 @@ class ASearchThatSettlesThePointOwesNoAccountOfItsRegionTest {
     /**
      * A search nobody made owes none of it either, and neither does one that produced a row.
      *
-     * <p>A row at the point answers the question the search was asked; what it was looked for over
-     * is then a fact about how it was found rather than a caveat on an answer nobody got.
+     * <p>A row at the point answers the question the search was asked; how it came to be looked for
+     * there is then a fact about how it was found rather than a caveat on an answer nobody got.
      */
     @Test
     void anAnsweredPointAndAnUnmadeSearchOweNothing() {
         assertEquals(List.of(), new ItemAssessment.Attempt.Built(
                 new Generator.GeneratedRow(
-                        new Generator.Purpose.ForAPoint("p.x = 11"), List.of()), region())
+                        new Generator.Purpose.ForAPoint("p.x = 11"), List.of()), way())
                 .unaccountedFor());
         assertEquals(List.of(), new ItemAssessment.Attempt.Unavailable(
                 ItemAssessment.Attempt.Reason.NO_CLASSES).unaccountedFor());
