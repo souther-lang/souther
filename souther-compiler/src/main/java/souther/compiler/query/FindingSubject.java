@@ -43,23 +43,50 @@ public sealed interface FindingSubject {
     }
 
     /**
-     * A declaration of the module: what its own rules say, wherever the type is carried.
+     * The declarations of the module that owe the line: what their own rules say, wherever the type
+     * is carried.
      *
      * <p>The declaration and not the clause. Which rule of it a finding is about is the finding's
      * own ({@link About}), and a subject that carried the clause would be two answers about one
      * question — what a report prints this under is the declaration either way.
+     *
+     * <p><b>Several, and one finding.</b> A bound an inner record and an outer record both take in
+     * at one value is one line and one row to write, and each of them is one where taking it away
+     * leaves the end where it is — so there is no one of them to file this under, and choosing would
+     * name a declaration as the answer when the reading does not know which is
+     * ({@link souther.compiler.partition.AuthoredLine#obligationOwners}). Every owner and not one of
+     * them, because the work is theirs together.
+     *
+     * <p>Of this module. An owner written in another module owes the line there and is not what an
+     * author reading this report can change; the line is still one the values here are held to, and
+     * what says so is the block about the behavior carrying it.
      */
-    record OfADeclaration(TypeSymbol declaration) implements FindingSubject {
+    record OfADeclaration(java.util.List<TypeSymbol.AtModule> declarations)
+            implements FindingSubject {
 
         public OfADeclaration {
-            if (declaration == null) {
+            declarations = java.util.List.copyOf(declarations);
+            if (declarations.isEmpty()) {
                 throw new IllegalArgumentException("a finding about a declaration says which");
             }
         }
 
+        /** One of them, for a reader with room for one word. */
+        public OfADeclaration(TypeSymbol.AtModule declaration) {
+            this(java.util.List.of(declaration));
+        }
+
+        /**
+         * What a report calls them.
+         *
+         * <p>The same join the line's own name uses for the declarations that took an end in
+         * ({@link souther.compiler.partition.AuthoredLine#said}), because it is the same set of
+         * declarations being said — a second spelling of one list reads as two.
+         */
         @Override
         public String named() {
-            return declaration.name();
+            return declarations.stream().map(TypeSymbol::name)
+                    .collect(java.util.stream.Collectors.joining(" or "));
         }
     }
 

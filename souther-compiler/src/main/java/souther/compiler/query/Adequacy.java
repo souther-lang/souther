@@ -1536,7 +1536,7 @@ public final class Adequacy {
                 }
                 String said = debt.said(role);
                 resolved.put(new souther.compiler.partition.BorderObligationPoint(debt.id(), role),
-                        new DeclaredRows.Answer(said, owed.declaration().name(),
+                        new DeclaredRows.Answer(said, owed.subject().named(),
                                 DeclarationResolver.resolveAt(said, at,
                                         List.copyOf(debt.met().keySet()),
                                         reading -> readingOf(db, module, scope, debt, role,
@@ -3624,17 +3624,51 @@ public final class Adequacy {
      * under that declaration, and a generation answers what it can do about it. Each of those
      * working it out from the readings is what the debt was introduced to stop.
      *
-     * @param debt        what the readings of the line came to
-     * @param declaration whose clause drew it, which is what a finding about it is about
-     * @param at          where that declaration is written, which is where a reader is sent
+     * <p>One of these per line the module owes, and never one per owner of it. A line two of the
+     * module's declarations took an end in together is one row to write, so it is one debt, one
+     * finding, one item of the verdict and one thing to generate; who owes it is a list and that is
+     * all the list is.
+     *
+     * @param debt   what the readings of the line came to
+     * @param owners the module's own declarations that owe it, each with where it is written. Never
+     *               empty: a line no declaration here owes is not this module's debt and is not one
+     *               of these
      */
-    public record DeclaredDebt(BorderObligationAssessment debt, TypeSymbol declaration,
-                               Citation at) {
+    public record DeclaredDebt(BorderObligationAssessment debt, List<Owner> owners) {
+
+        /** One declaration that owes the line, and where a reader is sent to it. */
+        public record Owner(TypeSymbol.AtModule declaration, Citation at) {
+
+            public Owner {
+                if (declaration == null || at == null) {
+                    throw new IllegalArgumentException("an owner is some declaration, somewhere");
+                }
+            }
+        }
 
         public DeclaredDebt {
-            if (debt == null || declaration == null || at == null) {
+            owners = List.copyOf(owners);
+            if (debt == null || owners.isEmpty()) {
                 throw new IllegalArgumentException("a debt is some declaration's, somewhere");
             }
+        }
+
+        /** What a finding about it is about, which is every declaration that owes it. */
+        public FindingSubject.OfADeclaration subject() {
+            return new FindingSubject.OfADeclaration(
+                    owners.stream().map(Owner::declaration).toList());
+        }
+
+        /**
+         * One place to point at, for a reader that has room for one.
+         *
+         * <p>The first in the order the line names its owners, which is the declarations' own order
+         * and not the order a walk found them in. A choice about where to put a mark and not about
+         * whose the line is: what a finding is about is every one of {@link #owners}, and a reader
+         * wanting the rest asks for them.
+         */
+        public Citation at() {
+            return owners.getFirst().at();
         }
     }
 
@@ -3650,6 +3684,15 @@ public final class Adequacy {
      * what a verdict rests on as much as one nothing stands at: read off the findings, the debts
      * that are covered are not there at all, and a bar would be settled by a denominator made of
      * the gaps.
+     *
+     * <p><b>The module's own, which takes two things and not one.</b> A line is here when one of
+     * this module's declarations owes it and some behavior of this module reads it. Owing it is the
+     * line's answer ({@link souther.compiler.partition.AuthoredLine#ownersIn}): a clause of an
+     * imported type says what it says wherever the type is carried, and a row written for it settles
+     * the question for everybody, so a module carrying the type is asked for work it cannot do and
+     * cannot check. Reading it is what there is to measure with — what a point asks of a row is read
+     * off the readings — so a module that owes a line no behavior of it carries holds no debt for it
+     * here, and the line is answered wherever it is read.
      */
     public record DeclaredBorders(String name) implements Key<List<DeclaredDebt>> {
 
@@ -3667,7 +3710,11 @@ public final class Adequacy {
             Map<String, List<BorderAssessment>> readings = new LinkedHashMap<>();
             partitions.forEach((behavior, evidence) -> {
                 for (BorderAssessment line : evidence.boundaries()) {
-                    if (line.border().origin().owedToTheDeclaration().isPresent()) {
+                    // Asked of the line, which is what a reading of it shares with every other
+                    // reading of it. A body's line is nobody's declaration and answers no owner; a
+                    // declaration's line answers the declarations that wrote it, and this keeps the
+                    // ones this module's author can act on.
+                    if (line.border().origin().authoredLine().owedIn(name)) {
                         readings.computeIfAbsent(behavior, _ -> new ArrayList<>()).add(line);
                     }
                 }
@@ -3688,9 +3735,12 @@ public final class Adequacy {
             List<DeclaredDebt> out = new ArrayList<>();
             for (BorderObligationAssessment debt : BorderObligationAssessment.across(readings,
                     id -> axisOf(id, declarations, symbols, policy))) {
-                TypeSymbol declaredOn = debt.id().owedToTheDeclaration().orElseThrow();
-                out.add(new DeclaredDebt(debt, declaredOn,
-                        read(declarations, declaredOn, symbols, policy).at()));
+                List<DeclaredDebt.Owner> owners = new ArrayList<>();
+                for (TypeSymbol.AtModule owner : debt.id().line().ownersIn(name)) {
+                    owners.add(new DeclaredDebt.Owner(owner,
+                            read(declarations, owner, symbols, policy).at()));
+                }
+                out.add(new DeclaredDebt(debt, owners));
             }
             return Answer.of(List.copyOf(out));
         }
@@ -3817,7 +3867,7 @@ public final class Adequacy {
                     if (!item.isUnmetGap()) {
                         continue;
                     }
-                    out.add(Finding.by(new FindingSubject.OfADeclaration(owed.declaration()),
+                    out.add(Finding.by(owed.subject(),
                             item.weakeningSource(), owed.at(),
                             new About.APointOfADeclaredBorder(owed.debt(), role)));
                 }
