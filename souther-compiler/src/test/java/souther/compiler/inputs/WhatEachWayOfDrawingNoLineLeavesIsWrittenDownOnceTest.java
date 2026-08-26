@@ -129,13 +129,40 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
     }
 
     /**
-     * Every member of the seal, one of each.
+     * Every member of the seal is in the lists above.
      *
-     * <p>Listed rather than found by reflection, because what this test is about is the answers and
-     * a list that built itself from the same source would move with them. A member added is refused
-     * by the switch in {@code leavesShort} before it reaches here, and one added and left out of the
-     * table is what the assertions above catch.
+     * <p>The lists are written out rather than found by reflection, because what this test is about
+     * is the answers and a list that built itself from the reasons would move with them. That is
+     * what this check is for: written out, a list is a thing to forget, and a fourteenth reason
+     * added and answered for in {@code leavesShort} would leave the rows above passing over
+     * thirteen.
      */
+    @Test
+    void everyReasonThereIsHasARowAbove() {
+        assertEquals(named(BlockReason.RuleWithoutLineReason.class.getPermittedSubclasses()),
+                theRulesWithNoLine().keySet(),
+                "a rule with no line, answered for and not written down");
+        assertEquals(named(BlockReason.AboutThePosition.class.getPermittedSubclasses()),
+                theStopsAtAPosition().keySet(),
+                "a stop at a position, answered for and not written down");
+    }
+
+    /**
+     * The names of a seal's members, less the halves that are seals of their own.
+     *
+     * <p>{@link BlockReason.RuleReadingStopped} is a member of both capabilities and a seal rather
+     * than a reason, so its own members are what the rows are about and it is not one of them.
+     */
+    private static java.util.Set<String> named(Class<?>[] members) {
+        return java.util.Arrays.stream(members)
+                .flatMap(each -> each.isSealed()
+                        ? java.util.Arrays.stream(each.getPermittedSubclasses())
+                        : java.util.stream.Stream.of(each))
+                .map(Class::getSimpleName)
+                .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
+    }
+
+    /** One of each, for the rows to be read off. */
     private static List<BlockReason.RuleWithoutLineReason> everyRuleWithoutALine() {
         return List.of(
                 new BlockReason.UnreadComparisonForm(),

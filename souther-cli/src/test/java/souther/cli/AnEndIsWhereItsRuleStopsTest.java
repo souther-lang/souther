@@ -83,8 +83,11 @@ class AnEndIsWhereItsRuleStopsTest {
                         "no ON point is owed at h.p = 0 (invariant Positive (positive)):"
                                 + " this order names no value there, so the point cannot be written"),
                 () -> report);
-        assertTrue(report.contains("adequacy: undetermined"),
-                () -> "and the row inside each line is owed and unwritten:\n" + report);
+        // Two of the eight items these lines owe are asked for and nobody measured them, which
+        // are the two rows inside the bounds. Read off `adequacy` instead, the sentence would be
+        // true of this model for having no rows at all and would say nothing about the lines.
+        assertTrue(report.contains("(2 not measured: no row names this behavior)"),
+                () -> "and the row inside each line is one somebody is owed:\n" + report);
     }
 
     /**

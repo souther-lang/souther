@@ -28,30 +28,15 @@ sealed interface PartitionSection {
     /** There is a section, and this is the reading it is written from. */
     record Present(PartitionEvidence evidence) implements PartitionSection {}
 
-    /** There is none, and this is what settled it. */
-    record Omitted(Why why) implements PartitionSection {}
-
-    /** Why a behavior has no section about its positions. */
-    enum Why {
-
-        /**
-         * The compile did not get far enough to be asked. Not a measure that came back with
-         * nothing: every measure that ran says why it has no number, and this is the absence of
-         * the run.
-         */
-        THE_COMPILE_DID_NOT_GET_THERE,
-
-        /**
-         * The boundary the positions come off could not be worked out.
-         *
-         * <p>The same reason the signature section is left out where its cases could not be
-         * counted. What this section owes is the positions, the lines and the size of the space
-         * they make, and every one of those is a product over positions nobody could count — so
-         * there is no number here to qualify. What weakened the behavior is said once, as the
-         * behavior's own weakening.
-         */
-        THE_BOUNDARY_WAS_NOT_DERIVED
-    }
+    /**
+     * There is none.
+     *
+     * <p>Carrying no reason, because nothing reads one. Two things settle it and they are two
+     * different absences — see {@link #of} — and what a surface does about either is the same
+     * thing: there is no measurement for a section to be about. The day one of them is worth
+     * saying out loud, the reason comes back with the reader that says it.
+     */
+    record Omitted() implements PartitionSection {}
 
     /**
      * Which of the two {@code evidence} comes to.
@@ -60,13 +45,18 @@ sealed interface PartitionSection {
      * whose measures both had something to say and whose lists happened to be empty was written out
      * of the report — which is how a model bounded only on a {@code Decimal} came back adequate with
      * no measure printed anywhere.
+     *
+     * <p>Two absences here, and both are a measurement nobody made. A null is the compile not
+     * having got far enough to be asked, which is not a measure that came back with nothing —
+     * every measure that ran says why it has no number. And a boundary that could not be worked
+     * out leaves this section nothing to qualify, for the reason the signature section is left out
+     * where its cases could not be counted: what it owes is the positions, the lines and the size
+     * of the space they make, and every one of those is a product over positions nobody could
+     * count. What weakened the behavior is said once, as the behavior's own weakening.
      */
     static PartitionSection of(PartitionEvidence evidence) {
-        if (evidence == null) {
-            return new Omitted(Why.THE_COMPILE_DID_NOT_GET_THERE);
-        }
-        if (evidence.boundaryNotDerived()) {
-            return new Omitted(Why.THE_BOUNDARY_WAS_NOT_DERIVED);
+        if (evidence == null || evidence.boundaryNotDerived()) {
+            return new Omitted();
         }
         return new Present(evidence);
     }

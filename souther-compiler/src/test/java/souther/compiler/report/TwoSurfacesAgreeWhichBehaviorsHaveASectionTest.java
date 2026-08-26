@@ -13,7 +13,6 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -101,7 +100,6 @@ class TwoSurfacesAgreeWhichBehaviorsHaveASectionTest {
     @Test
     void andTheAnswerIsNotThatNobodyHasOne() {
         assertEquals(Set.of("widen", "narrow", "both", "take", "judge"), inTheText());
-        assertFalse(inTheText().isEmpty());
     }
 
     /**
