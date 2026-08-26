@@ -30,6 +30,12 @@ public record LevelInterval(Bound low, Bound high) {
     /** Every value the order has. */
     public static final LevelInterval EVERYTHING = new LevelInterval(null, null);
 
+    /** The same run with its ends written the one way, for an identity to be built from. */
+    public LevelInterval canonical() {
+        return new LevelInterval(low == null ? null : low.canonical(),
+                high == null ? null : high.canonical());
+    }
+
     /** The one level, and nothing else. */
     public static LevelInterval point(Level at) {
         return new LevelInterval(Bound.at(at, true), Bound.at(at, true));

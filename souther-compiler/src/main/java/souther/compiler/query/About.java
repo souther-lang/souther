@@ -76,10 +76,26 @@ public sealed interface About {
      * found with the line itself ({@link BorderAssessment#owedAt}). This carries the measurement
      * because that is what a finding is about: a search settles what can be written at the point and
      * changes nothing about the point being missed.
+     *
+     * <p><b>What is owed and where it was measured, apart.</b> One role of one reading can owe more
+     * than one row — a place two rules of this body drew a line at leaves a run owed to each — so
+     * which of them this is is {@code owed}, and where it was measured is {@code point}. Said as the
+     * reading's role alone, two things to write came out as one finding, and the reading was
+     * standing in for the debt again.
+     *
+     * @param point where it was measured: this reading, in this role
+     * @param owed  what a row here is owed for, which is one of the things that role owes
      */
-    record APointOfABorder(BorderAssessment.Point point) implements About {
+    record APointOfABorder(BorderAssessment.Point point,
+                           souther.compiler.partition.BorderObligationPoint owed)
+            implements About {
         public APointOfABorder {
             java.util.Objects.requireNonNull(point, "a finding is about something");
+            java.util.Objects.requireNonNull(owed, "and a row here is owed for something");
+            if (owed.role() != point.role()) {
+                throw new IllegalArgumentException("a finding about the " + point.role()
+                        + " point of a reading, owed for the " + owed.role() + " point of a line");
+            }
         }
     }
 

@@ -723,7 +723,7 @@ public final class GeneratedRows {
             // above ({@code saidOf}). Spelled out here as well, the two vocabularies differed by
             // the role: a point away from the line was written as the value the line is at, which
             // is the one place in reach that such a point is not.
-            case About.APointOfABorder(var point) -> point.said();
+            case About.APointOfABorder(var point, var _) -> point.said();
             // The same words on what the declaration wrote. Nothing composes a row for one of
             // these yet — the search walks one behavior's inputs and this line is owed once over
             // all of them — so what is printed beside it is that, in its own sentence.

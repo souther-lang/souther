@@ -34,8 +34,10 @@ public sealed interface PointAnswer {
     record AtLine(Criterion criterion) implements PointAnswer {
 
         public AtLine {
-            if (criterion == null) {
-                throw new IllegalArgumentException("a row against the line has something to do");
+            if (!(criterion instanceof Criterion.AtTheLevel)) {
+                throw new IllegalArgumentException(
+                        "a row against the line stands at a level of the quantity, and this asks "
+                                + criterion);
             }
         }
     }
@@ -61,10 +63,20 @@ public sealed interface PointAnswer {
             // The whole of the quantity but one value is not a run and stops nowhere, so nothing
             // stands beside it. Held together with a run's ends, a reader would be told the region
             // both is and is not bounded.
-            if (bases.contains(RegionBasis.TheRest.INSTANCE) && bases.size() != 1) {
+            boolean theRest = bases.contains(RegionBasis.TheRest.INSTANCE);
+            if (theRest && bases.size() != 1) {
                 throw new IllegalArgumentException(
                         "what a rule leaves outside the value it names is not beside anything: "
                                 + bases);
+            }
+            // And what is asked of a row says the same thing the basis does. The two are made
+            // together and a reader that had to tell one from the other would be reading the basis
+            // back out of the shape of the demand — which is what the value-naming branch exists to
+            // stop it doing.
+            if (theRest != criterion instanceof Criterion.AnythingBut
+                    || !theRest && !(criterion instanceof Criterion.Within)) {
+                throw new IllegalArgumentException("a region owed for " + bases
+                        + " and asked for as " + criterion);
             }
         }
     }

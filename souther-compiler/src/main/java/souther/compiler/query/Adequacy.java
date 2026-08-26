@@ -2694,7 +2694,7 @@ public final class Adequacy {
                 GenerationOutcome none = whereNoRowCouldAnswer(finding.about());
                 out.add(new GenerationDisposition(finding, none != null ? none
                         : switch (finding.about()) {
-                            case About.APointOfABorder(var point) -> atEdge(finding, point, edges);
+                            case About.APointOfABorder(var point, var _) -> atEdge(finding, point, edges);
                             case About.ACaseNoRowAppliesItTo(var input, var missing) ->
                                     atCase(input, missing, composed, spec);
                             case About.AClassNoRowIsIn(var missing) -> atClass(missing, composed);
@@ -2971,7 +2971,7 @@ public final class Adequacy {
                 // well, one authored line came out as a row per position of every behavior that
                 // carries it (issue #1076). They are offered once, where the line is resolved
                 // ({@link DeclaredRows}).
-                if (!point.owedHere()) {
+                if (point.owedHere().isEmpty()) {
                     continue;
                 }
                 if (!(point.item() instanceof ItemAssessment.Owed each)) {
@@ -3558,7 +3558,7 @@ public final class Adequacy {
                 // the same two codes.
                 case About.APointOfADeclaredBorder(var debt) -> debt.role().againstTheLine()
                         ? Kind.BOUNDARY_UNMET : Kind.DOMAIN_POINT_UNCOVERED;
-                case About.APointOfABorder(var point) -> point.role().againstTheLine()
+                case About.APointOfABorder(var point, var _) -> point.role().againstTheLine()
                         ? Kind.BOUNDARY_UNMET : Kind.DOMAIN_POINT_UNCOVERED;
                 case About.APositionNoLineDivides _ -> Kind.PARTITION_NOT_DERIVABLE;
                 case About.ARuleWithoutALine _ -> Kind.PARTITION_NOT_READ;
@@ -3972,16 +3972,15 @@ public final class Adequacy {
                 // kind it is: which of them are the declaration's is the rule's own answer.
                 // This behavior's own. A line a declaration is owed is answered once for the
                 // module, from every reading of it.
-                if (!point.owedHere()) {
-                    continue;
+                // One finding per thing this reading is owed a row for, and not one per role: a
+                // place two of this body's rules drew a line at leaves a run owed to each of them,
+                // and each is its own row to write. The axis, the value, the rule and the role used
+                // to be copied out here, and a reader then matched the copy back against the
+                // assessments to find the one it came from.
+                for (souther.compiler.partition.BorderObligationPoint owed : point.owedHere()) {
+                    out.add(Finding.by(behavior.name(), point.item().weakeningSource(),
+                            Citation.of(behavior.pos()), new About.APointOfABorder(point, owed)));
                 }
-                // The point itself, and one finding for either kind. Which of the two a build is
-                // told about is the role's answer and is read off this where the kind is asked
-                // for; the axis, the value, the rule and the role used to be copied out here, and
-                // a reader then matched the copy back against the assessments to find the one it
-                // came from.
-                out.add(Finding.by(behavior.name(), point.item().weakeningSource(),
-                        Citation.of(behavior.pos()), new About.APointOfABorder(point)));
             }
             // What the model divides this position no way at all, which is the classes question and
             // is answered only for a position that has none.
@@ -4190,7 +4189,7 @@ public final class Adequacy {
                                                 .NoRowIsAtThePointAwayFromTheBorderARuleDrew(
                                                 debt.role().name(), debt.axis(), debt.against(),
                                                 debt.id().named());
-                        case About.APointOfABorder(var point) ->
+                        case About.APointOfABorder(var point, var _) ->
                                 point.role().againstTheLine()
                                         ? point.border().origin().isWrittenRatherThanNamed()
                                                 ? new ExampleMessage
@@ -4237,7 +4236,7 @@ public final class Adequacy {
                 // The same hints, asked of the role. What a row at each point shows is a fact
                 // about the point and not about which of the two questions raised it.
                 case About.APointOfADeclaredBorder(var debt) -> hintFor(debt.role(), built);
-                case About.APointOfABorder(var point) -> {
+                case About.APointOfABorder(var point, var _) -> {
                     // Asked of the point, and in the point's own vocabulary. A hint saying which
                     // side of the line the value falls on would be keyed on the border being closed
                     // or open rather than on the role — `n <= 100` is at its ON point on the line

@@ -186,7 +186,20 @@ public sealed interface Criterion {
      * whether the two are one demand, which is narrower than whether one row answers both.
      */
     default boolean sameAs(Criterion other) {
-        return other != null && canonical().equals(other.canonical());
+        if (!(this instanceof Within in)) {
+            return other != null && canonical().equals(other.canonical());
+        }
+        // A run is what it holds, and not how it came to stop there. The same values are left by a
+        // line at the end and by the rules stopping the quantity at that same place, and a run
+        // bounded both ways is bounded once — so a reading that has both and a reading that has one
+        // ask a row for the same thing. Compared as the run was built, a rule that moves nothing
+        // would have two readings of one point asking two things, which is what this check calls a
+        // defect in the identity.
+        return other instanceof Within also && in.away() == also.away()
+                && (in.except() == null ? also.except() == null
+                        : also.except() != null
+                                && in.except().canonical().equals(also.except().canonical()))
+                && in.region().canonical().equals(also.region().canonical());
     }
 
     /** How this relates a row's quantity to what it is against. */

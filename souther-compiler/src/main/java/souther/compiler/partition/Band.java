@@ -51,7 +51,7 @@ public record Band(BandEnd lower, BandEnd upper) {
      * none. Written as the line, the run above a seam that keeps its own value would hold that
      * value; written as the value, a run over an order whose values fill would have no end at all.
      */
-    private static Bound atTheLine(Seam parted, Towards inward) {
+    static Bound atTheLine(Seam parted, Towards inward) {
         Level edge = inward == Towards.ABOVE ? parted.above() : parted.below();
         return edge != null ? Bound.at(edge, true) : new Bound(parted.at(), false);
     }

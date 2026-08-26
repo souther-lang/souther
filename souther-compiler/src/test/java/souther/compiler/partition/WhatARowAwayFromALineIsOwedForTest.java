@@ -140,6 +140,47 @@ class WhatARowAwayFromALineIsOwedForTest {
                 "everything but the value the rule names, and nothing beside it");
     }
 
+    /** Two rules of one behavior cutting at one number, with a clause's line below them. */
+    private static final String TWICE_AT_ONE_PLACE = """
+            module example.twice
+
+            data Amount = Int
+                invariant atLeastNothing = value >= 0
+
+            data Small
+            data Large
+            data Size = Small | Large
+
+            behavior twice : (a: Amount) -> Size
+                ensures Small -> a.value <= 10
+            let twice (a) = if a.value <= 10 then Small else Large
+
+            example twice
+                | "x" : (Amount(1)) -> Small
+            """;
+
+    /**
+     * A run stopping where two of a body's rules drew a line is owed to each of them.
+     *
+     * <p>Each is enough on its own: taking either comparison away leaves the run stopping at ten.
+     * So there are two rows to write there and not one — the values are the same values, and a row
+     * inside answers both, but what an author is told about and what a verdict counts are the two
+     * rules, since either can be moved without the other.
+     */
+    @Test
+    void aRunTwoRulesStopIsOwedToEachOfThem() {
+        PointAnswer answer = borderAt(TWICE_AT_ONE_PLACE, "example.twice", "twice", "a = 0")
+                .border().answer(PointRole.IN);
+
+        assertEquals(2, answer.bases().size(),
+                () -> "two comparisons stop the run at ten: " + answer.bases());
+        assertEquals(1, answer.bases().stream()
+                        .map(each -> ((FarEnd.AtALine) ((RegionBasis.Beside) each).farEnd())
+                                .where().key())
+                        .distinct().count(),
+                "at one place, since the values part once");
+    }
+
     /** The one thing a row at that point is owed for, refusing where there is more than one. */
     private static RegionBasis onlyBasis(String model, String module, String behavior, String label,
                                          PointRole role) {

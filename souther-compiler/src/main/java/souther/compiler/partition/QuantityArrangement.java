@@ -42,57 +42,76 @@ public record QuantityArrangement(List<Parting> partings, List<Run> runs) {
      * a value that answered both would have the second inside every comparison of the first.
      *
      * @param values what a row inside it has to be
-     * @param below  the place the values part at the low end, or null where nothing parts them there
+     * @param below  what independently stops it at the low end. Never empty
      * @param above  the same at the high end
      */
-    public record Run(Band values, Parting below, Parting above) {
+    public record Run(Band values, List<FarEnd> below, List<FarEnd> above) {
 
         public Run {
             if (values == null) {
                 throw new IllegalArgumentException("a run is a run of values");
             }
-            agree(values.lower(), below, Towards.BELOW);
-            agree(values.upper(), above, Towards.ABOVE);
-        }
-
-        /**
-         * That the run and the place it stops at say the same thing about one end.
-         *
-         * <p>Checked rather than derived, because they are put here by one caller out of two
-         * readings of the arrangement: the run is what the values come to and the place is what the
-         * model wrote, and an end that is a line in one and not in the other is those two readings
-         * having come apart.
-         */
-        private static void agree(BandEnd end, Parting parted, Towards side) {
-            if ((end instanceof BandEnd.AtParting) != (parted != null)) {
-                throw new IllegalArgumentException("a run parted at its " + side
-                        + " end and no line there, or a line and no parting: " + end + " " + parted);
-            }
-            if (parted != null && !parted.geometry().key().equals(end.seam().key())) {
-                throw new IllegalArgumentException("a run stopping at one place and a line at"
-                        + " another: " + end.seam().key() + " against " + parted.key());
+            below = List.copyOf(below);
+            above = List.copyOf(above);
+            if (below.isEmpty() || above.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "a run stops at each end because something stops it: " + values);
             }
         }
 
         /**
-         * What a row inside this run is owed to at one end: one answer per rule that could have
-         * stopped it there, and one where no rule did.
+         * What a row inside this run is owed to at one end: one answer per thing that stops it
+         * there on its own.
          *
-         * <p>Each line at a place is enough on its own to have stopped the run — taking either of
-         * two away leaves it where it is — so each is one thing a row here answers for. An end the
-         * rules leave together and an end of the order are one answer apiece, neither being any one
-         * rule's doing.
+         * <p>Worked out where the run was built, which is the one place holding everything that goes
+         * into it. A line at the end and the end the rules leave are two answers to one question and
+         * either can be the tighter, so which of them the run actually stops at is not something the
+         * shape of the end says — and a reader that took the line because there was one wrote down a
+         * rule that is not what settles the region.
          */
         public List<FarEnd> endsAt(Towards side) {
-            BandEnd end = side == Towards.ABOVE ? values.upper() : values.lower();
-            Parting parted = side == Towards.ABOVE ? above : below;
-            return switch (end) {
-                case BandEnd.AtParting at -> parted.alternatives().stream()
-                        .map(line -> (FarEnd) new FarEnd.AtALine(line, at.seam())).toList();
-                case BandEnd.AtDomain at -> List.of(new FarEnd.AtTheDomain(at.reaches()));
-                case BandEnd.AtOrderEnd at -> List.of(new FarEnd.AtTheOrderEnd(at.towards()));
-            };
+            return side == Towards.ABOVE ? above : below;
         }
+    }
+
+    /**
+     * What stops a run at one end, one answer per thing that does it on its own.
+     *
+     * <p>A line the model wrote and the end every rule leaves together can fall in one place, and
+     * then each of them stops the run there without the other: taking either away leaves it where it
+     * is, so a row inside is owed for both. Where they fall apart, only the tighter stops it, and the
+     * other is a line the run never reaches — writing that one down would name a rule that does not
+     * settle the region, and two readings whose regions differ would come back as one point.
+     *
+     * <p>Compared as places rather than as they are written, so that two spellings of one end are
+     * one end ({@link Bound#canonical()}).
+     *
+     * @param inward which way the run lies from this end
+     */
+    private static List<FarEnd> stoppedBy(BandEnd end, Parting parted, Bound leaves,
+                                          Towards inward) {
+        Bound reaches = end.reaches();
+        if (reaches == null) {
+            return List.of(new FarEnd.AtTheOrderEnd(inward.opposite()));
+        }
+        List<FarEnd> out = new ArrayList<>();
+        if (parted != null
+                && Band.atTheLine(parted.geometry(), inward).canonical().equals(
+                        reaches.canonical())) {
+            parted.alternatives().forEach(line ->
+                    out.add(new FarEnd.AtALine(line, parted.geometry())));
+        }
+        if (leaves != null && leaves.canonical().equals(reaches.canonical())) {
+            out.add(new FarEnd.AtTheDomain(leaves));
+        }
+        if (out.isEmpty()) {
+            // Where the run reaches is the tighter of the two, so one of them is it. Reaching here
+            // is this reading and the one that built the run disagreeing about where it stops.
+            throw new IllegalStateException("a run reaching " + reaches
+                    + " that neither the line beside it nor the end the rules leave stops there: "
+                    + parted + " / " + leaves);
+        }
+        return List.copyOf(out);
     }
 
     /** The runs as what a row inside each has to be, for a reader that is not asking what any of
@@ -161,10 +180,11 @@ public record QuantityArrangement(List<Parting> partings, List<Run> runs) {
         // The places and not the lines against them go into the values. What a run asks a row for is
         // the same however many rules wrote a line where it stops, and which of them did is kept
         // beside it — carried in, it would be inside every value that says what is asked of a row.
-        return new Run(
-                new Band(Band.endAt(under == null ? null : under.geometry(), from, Towards.ABOVE),
-                        Band.endAt(over == null ? null : over.geometry(), to, Towards.BELOW)),
-                under, over);
+        BandEnd lower = Band.endAt(under == null ? null : under.geometry(), from, Towards.ABOVE);
+        BandEnd upper = Band.endAt(over == null ? null : over.geometry(), to, Towards.BELOW);
+        return new Run(new Band(lower, upper),
+                stoppedBy(lower, under, from, Towards.ABOVE),
+                stoppedBy(upper, over, to, Towards.BELOW));
     }
 
     /**

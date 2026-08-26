@@ -615,10 +615,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 // below, from every reading of it: read here as well, a row standing at it in one
                 // behavior would be weighed against another behavior having no rows, and the
                 // verdict would hold open what the aggregation had settled (issue #1062).
+                // One measurement per thing the reading is owed a row for, since each of them is a
+                // row to write: a place two of this body's rules drew a line at leaves a run owed
+                // to each, and a verdict counting the role once would be short by the rest.
                 BorderAssessment.pointsOf(behavior.partition().boundaries()).stream()
                         .filter(p -> held.requires(p.role()))
-                        .filter(BorderAssessment.Point::owedHere)
-                        .forEach(p -> add(measures, measurementOf(p.item())));
+                        .forEach(p -> p.owedHere()
+                                .forEach(_ -> add(measures, measurementOf(p.item()))));
                 // Which of the four those are is the bar's answer and not a second reading of it
                 // here: a build refusing over a missing IN row and calling a model satisfied while
                 // the IN point could not be measured would be held to one bar in one place and
@@ -1100,7 +1103,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // together, and printed in that order the two halves would be interleaved.
         for (boolean againstTheLine : List.of(true, false)) {
             for (Adequacy.Finding f : behavior.findings()) {
-                if (f.about() instanceof About.APointOfABorder(var point)
+                if (f.about() instanceof About.APointOfABorder(var point, var _)
                         && point.role().againstTheLine() == againstTheLine) {
                     // `the` for a point and `an` for a run. Two of the four are one value and the
                     // other two are met anywhere in a run of them, so a reader told there is no row
@@ -2426,7 +2429,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     missing.name() + " (in #" + (input.at() + 1) + ")";
             // What the point asks of a row, which is what joins it to one of a border's `items`.
             // Asked of the point, which is where the two readers of that name meet.
-            case About.APointOfABorder(var point) -> point.said();
+            case About.APointOfABorder(var point, var _) -> point.said();
             // The same sentence, on what the declaration wrote. A line owed once over every reading
             // of it is named by the terms the author used and not by the position some behavior met
             // it at, which is what the debt is (issue #1062).

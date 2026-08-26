@@ -203,7 +203,7 @@ public record BorderAssessment(Border border, Map<PointRole, ItemAssessment> ite
         }
 
         /**
-         * Whether the behavior this reading belongs to is the one owed a row here.
+         * What the behavior this reading belongs to is owed a row for here.
          *
          * <p>A point can be owed to a declaration rather than to any body carrying the type: what a
          * row standing at the line shows is a fact about the type, and one row anywhere settles it.
@@ -211,9 +211,11 @@ public record BorderAssessment(Border border, Map<PointRole, ItemAssessment> ite
          * — and this reading's where a rule of this body did, since such a run exists in this body
          * and nowhere else.
          *
-         * <p>Asked of the points the reading owes rather than of the role, because one role can owe
-         * more than one: a place two rules drew a line at leaves a run owed to each of them, and a
-         * body's rule among them is a row this behavior owes whatever the others are.
+         * <p>The points and not whether there are any, because one role can owe more than one: a
+         * place two rules drew a line at leaves a run owed to each of them, and each is its own row
+         * to be told about. Answered as a yes, everything downstream went on accounting in this
+         * reading's roles — which is the occurrence standing in for the debt, one level down from
+         * where it was taken out.
          *
          * <p>Asked here and not at each reader. Everything that measures a behavior, counts what it
          * covers or raises a finding about it has to leave the declaration's points out, and the
@@ -225,9 +227,9 @@ public record BorderAssessment(Border border, Map<PointRole, ItemAssessment> ite
          * be measured for is still a line its values are held to, and the block that says so is
          * telling an author about the type they wrote.
          */
-        public boolean owedHere() {
+        public java.util.List<souther.compiler.partition.BorderObligationPoint> owedHere() {
             return border.border().owes(role).stream()
-                    .anyMatch(point -> !point.owedToDeclarations());
+                    .filter(point -> !point.owedToDeclarations()).toList();
         }
 
         /** The measured half, or null where no row is owed here. */

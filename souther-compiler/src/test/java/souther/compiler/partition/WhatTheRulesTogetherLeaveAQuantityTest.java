@@ -233,6 +233,55 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
         return new Criterion.Within(arranged.bands().get(1), null, Towards.ABOVE);
     }
 
+    /**
+     * A line where the rules already stop the quantity stops the run as well, and neither replaces
+     * the other.
+     *
+     * <p>Each of them stops it there without the other: taking the line away leaves the run at the
+     * end the rules leave, and taking that away leaves it at the line. So a row inside answers for
+     * both, and adding the line to a model that already had the end leaves what was owed there owed
+     * and adds one — which is what a rule that moves nothing may do and no more.
+     */
+    @Test
+    void aLineWhereTheRulesAlreadyStopTheQuantityStopsTheRunAsWell() {
+        Bound upTo100 = Bound.at(at("100"), true);
+        QuantityArrangement withoutTheLine =
+                QuantityArrangement.of(NUMBERS, List.of(), null, upTo100);
+        QuantityArrangement withTheLine = QuantityArrangement.of(NUMBERS,
+                List.of(Parting.by(upTo("100"), aLine(0))), null, upTo100);
+
+        assertEquals(List.of(new FarEnd.AtTheDomain(upTo100)),
+                withoutTheLine.runs().get(0).endsAt(Towards.ABOVE),
+                "with no line there, the run stops where the rules leave the quantity");
+        assertEquals(List.of(new FarEnd.AtALine(aLine(0), upTo("100")),
+                        new FarEnd.AtTheDomain(upTo100)),
+                withTheLine.runs().get(0).endsAt(Towards.ABOVE),
+                "and with one, at the line as well — the end it had is still an end");
+        assertTrue(new Criterion.Within(withoutTheLine.bands().get(0), null, Towards.BELOW)
+                        .sameAs(new Criterion.Within(withTheLine.bands().get(0), null,
+                                Towards.BELOW)),
+                "and the run asks a row for exactly what it did: the values are the values, however"
+                        + " many things stop it where it stops");
+    }
+
+    /**
+     * A line the rules stop the quantity short of does not stop the run.
+     *
+     * <p>The run reaches the tighter of the two, and a line past that is a line it never gets to.
+     * Written down as what stopped it, a rule that settles nothing about the region would be named
+     * as the thing a row inside answers for — and two readings whose runs stop in different places
+     * would come back as one point asking two different things.
+     */
+    @Test
+    void aLineTheRulesStopShortOfDoesNotStopTheRun() {
+        QuantityArrangement arranged = QuantityArrangement.of(NUMBERS,
+                List.of(Parting.by(upTo("100"), aLine(0))), null, Bound.at(at("50"), true));
+
+        assertEquals(List.of(new FarEnd.AtTheDomain(Bound.at(at("50"), true))),
+                arranged.runs().get(0).endsAt(Towards.ABOVE),
+                "the rules stop it at fifty, so the line at a hundred settles nothing here");
+    }
+
     /** And a rule read twice is one rule, which is what says how many runs a row answers for. */
     @Test
     void oneRuleReadTwiceIsOneLineAgainstThePlace() {
