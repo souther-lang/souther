@@ -175,6 +175,51 @@ class AStandInNamesTheBehaviorItStandsInForTest {
     }
 
     /**
+     * A {@code with} is read against the declaring module's rows as a {@code fake} is.
+     *
+     * <p>Its own claim because it is written without a table, and what says which modules a reading
+     * takes the rows of is what this module writes stand-ins for. Asked of the tables instead — the
+     * question of which table answers for a dependency — a row that supplies one with a {@code with}
+     * and writes no table names a module the reading never reads, and the two statements are
+     * compared against nothing.
+     */
+    @Test
+    void aWithForABorrowedDependencyIsReadAgainstThoseRowsToo() {
+        List<String> codes = new java.util.ArrayList<>();
+        Compilation compiled = Compilation.ofSources(List.of("""
+                module probe.clocks exposing ( Stamp, now )
+
+                data Stamp = String
+
+                behavior now : () -> Stamp
+
+                example now
+                    | "the hour it is" : () -> Stamp("09:00")
+                """, """
+                module probe.filing exposing ( Filed )
+                import probe.clocks as Clocks ( Stamp )
+
+                data Filed = { at: Stamp }
+
+                behavior file : (at: Stamp) -> Filed
+                    constructs Filed
+                    depends on Clocks.now
+
+                let file (at, now) = Filed { at = now() }
+
+                example file
+                    | "filed at the hour" : (Stamp("x"))
+                        with Clocks.now = Stamp("10:00") -> Filed { at = Stamp("10:00") }
+                """), ModulePath.EMPTY);
+        compiled.answerEverything();
+        compiled.errors().forEach(e -> codes.add(e.diagnostic().code()));
+        compiled.warnings().forEach(w -> codes.add(w.diagnostic().code()));
+
+        assertEquals(List.of("E1919"), codes,
+                "the `with` says ten and the clock's own row says nine");
+    }
+
+    /**
      * A borrowed dependency taking more than one input is stood in for too.
      *
      * <p>Its own claim because it is its own path. A dependency taking one input is injected as a

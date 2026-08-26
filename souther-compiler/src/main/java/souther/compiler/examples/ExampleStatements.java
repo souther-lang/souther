@@ -545,21 +545,16 @@ public final class ExampleStatements {
     private static Set<ValueName.Behavior> contested(
             souther.compiler.check.Prepared.Examples module, Map<ValueName.Behavior, Sig> sigs,
             Map<String, Declaring> declaring) {
-        Set<ValueName.Behavior> stoodIn =
-                new LinkedHashSet<>(module.tablesThatAnswer().keySet());
-        for (souther.compiler.check.Prepared.Rows block : module.rows()) {
-            for (Hir.ExampleRow row : block.read().rows()) {
-                for (Hir.With w : row.withs()) {
-                    Sig depSig = shapeOf(sigs, w);
-                    if (depSig != null && depSig.inputTypes().isEmpty()) {
-                        stoodIn.add(w.standsInFor());
-                    }
-                }
-            }
-        }
         Set<ValueName.Behavior> both = new LinkedHashSet<>();
-        for (ValueName.Behavior each : stoodIn) {
-            if (!recordedFor(each, module, declaring).isEmpty()) {
+        for (ValueName.Behavior each : module.standsInFor()) {
+            // What the module writes a stand-in for is the whole frontier; which of those can be
+            // held against a recorded row is this reading's question. A `with` states no input, so
+            // it and a row are about one call only where the dependency takes none — every other
+            // input reaching it is what the parent behavior computed, which no recorded row states.
+            Sig sig = sigs.get(each);
+            boolean comparable = module.tablesThatAnswer().containsKey(each)
+                    || (sig != null && sig.inputTypes().isEmpty());
+            if (comparable && !recordedFor(each, module, declaring).isEmpty()) {
                 both.add(each);
             }
         }

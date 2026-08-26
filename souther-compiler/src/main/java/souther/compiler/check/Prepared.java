@@ -9,7 +9,9 @@ import souther.compiler.types.ValueName;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * The module a check and a codegen run over: its imported names written as the definitions they
@@ -458,6 +460,35 @@ public final class Prepared {
                 }
             }
             return answering;
+        }
+
+        /**
+         * Every behavior this module writes a stand-in for: the target of a {@code fake} and the
+         * dependency a {@code with} on a row supplies.
+         *
+         * <p>Both forms, because both are stand-ins (spec §example-fakes) and a reader asking what
+         * this module states about a behavior wants either. Told apart from
+         * {@link #tablesThatAnswer}, which asks which *table* answers for a dependency: a
+         * {@code with} writes no table, so a reader taking that answer for this one passes over
+         * every behavior a row supplies without one — which is how a {@code with} for a dependency
+         * another module declares came to be compared against nothing.
+         *
+         * <p>What is written and not what is comparable. Whether a stand-in can be held against a
+         * recorded row turns on what the dependency takes, and that is the reading's question to
+         * ask; this one is answered from the text.
+         */
+        public Set<ValueName.Behavior> standsInFor() {
+            Set<ValueName.Behavior> named = new LinkedHashSet<>(tablesThatAnswer().keySet());
+            for (Rows block : rows) {
+                for (Hir.ExampleRow row : block.read().rows()) {
+                    for (Hir.With supplied : row.withs()) {
+                        if (supplied.standsInFor() != null) {
+                            named.add(supplied.standsInFor());
+                        }
+                    }
+                }
+            }
+            return named;
         }
 
         /** Which method each row operand runs as, whole-module like the fakes: the methods were

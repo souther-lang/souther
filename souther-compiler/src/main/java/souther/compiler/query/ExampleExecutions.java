@@ -97,16 +97,18 @@ public final class ExampleExecutions {
     /**
      * The reading of each module {@code prepared} writes a stand-in for a behavior of.
      *
-     * <p>Read off the tables, so a module is here because a statement written here is about one of
-     * its behaviors — not because an import line reached it. The module's own is not among them: its
-     * rows are what the reading already has.
+     * <p>Read off the stand-ins, so a module is here because a statement written here is about one
+     * of its behaviors — not because an import line reached it. Both forms: a {@code with} states
+     * what a dependency answers as a {@code fake} does, and taking the tables for the whole of what
+     * is written here would pass over every behavior a row supplies without one. The module's own is
+     * not among them: its rows are what the reading already has.
      *
      * <p>A module whose reading this compile has not settled is left out. Nothing was compared, and
      * saying so by absence is what every other unsettled reading here says.
      */
     private static Map<String, ExampleExecution> declaringOf(Db db, Prepared prepared) {
         Map<String, ExampleExecution> out = new LinkedHashMap<>();
-        for (ValueName.Behavior each : prepared.forExamples().tablesThatAnswer().keySet()) {
+        for (ValueName.Behavior each : prepared.forExamples().standsInFor()) {
             if (each.module().equals(prepared.name()) || out.containsKey(each.module())) {
                 continue;
             }
