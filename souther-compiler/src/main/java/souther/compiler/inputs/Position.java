@@ -57,9 +57,8 @@ public sealed interface Position permits ReadPosition {
      *
      * <p>One answer. Which declarations hold an end is worked out against that end by taking their
      * clauses away, so it is true of that number and of no other — and a position under a case is
-     * read by two values whose ends are met here. Handed out apart, a caller put the names back
-     * beside whichever end it held, and the value a case was narrowed out of had its names kept
-     * against an end it does not stop at (issue #1112).
+     * read by two values whose ends are met here. Answered apart, the names came back from a reading
+     * whose end lies further out than the one the position stops at.
      */
     NarrowedBounds narrowedEnds();
 

@@ -55,7 +55,7 @@ class EveryAnswerAboutAPositionSaysWhatItDoesAboutTheValueAboveTest {
                 "what both leave, met — and the declarations holding each end follow the end that "
                         + "survived, which is why they are one answer",
                 "AClauseAboveASumIsReadAtTheFieldItIsAboutTest"
-                        + ".theDeclarationHoldingAnEndAboveIsNamedUnderEachCase"));
+                        + ".aCaseThatStopsTheFieldShorterThanTheValueAboveHoldsThatEndAlone"));
         table.put("leftAt", new Decided(Above.ASKED, "what both leave, met",
                 "AClauseAboveASumIsReadAtTheFieldItIsAboutTest.theEndStandsUnderEachCase"));
         table.put("admits", new Decided(Above.ASKED,

@@ -17,8 +17,10 @@ import java.util.List;
  * different readings of the same position — a case's own and the value a case was narrowed out of —
  * and the declaration holding one value's end was named as holding the other's ({@link #meet}).
  *
- * <p>Which is why there is no way to ask for the declarations alone. A caller with the names and
- * without the number is a caller that will pair them with whatever end it has.
+ * <p>Which is why no reading answers with the declarations alone. A caller that could ask for the
+ * names without the number is a caller that will pair them with whatever end it has, and there is
+ * no reading here to say whether that end is the one they are about. Taking them out of this to
+ * carry across to a reading of another range is a decision, and it is made where that reading is.
  *
  * @param bounds where the coordinate stops either way, or null where nothing stops it at all
  * @param minBy  the declarations holding {@code bounds.min()}, empty where there is no such end
@@ -45,11 +47,6 @@ public record NarrowedBounds(NumericDomain.Bounds bounds,
             throw new IllegalArgumentException(
                     "no upper end to hold, and " + maxBy + " named as holding it");
         }
-    }
-
-    /** These ends and nobody holding them, which is what a reading that relates nothing arrives at. */
-    public static NarrowedBounds held(NumericDomain.Bounds bounds) {
-        return bounds == null ? NOTHING : new NarrowedBounds(bounds, List.of(), List.of());
     }
 
     /**

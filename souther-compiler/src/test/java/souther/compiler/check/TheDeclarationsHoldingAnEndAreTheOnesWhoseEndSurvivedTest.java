@@ -88,7 +88,7 @@ class TheDeclarationsHoldingAnEndAreTheOnesWhoseEndSurvivedTest {
     /** Each side is its own question: one declaration can hold a floor while another holds a
      *  ceiling. */
     @Test
-    void thetwoEndsAreHeldSeparately() {
+    void theTwoEndsAreHeldSeparately() {
         NarrowedBounds floor = new NarrowedBounds(
                 new NumericDomain.Bounds(endAt(0, true), null), List.of(A), List.of());
         NarrowedBounds ceiling = upper(10, true, B);
@@ -173,7 +173,8 @@ class TheDeclarationsHoldingAnEndAreTheOnesWhoseEndSurvivedTest {
                 upper(3, true, A), upper(3, true, B), upper(3, true, A, B),
                 upper(3, false, A), upper(3, false, C),
                 upper(10, true, A), upper(10, true, B),
-                NarrowedBounds.held(new NumericDomain.Bounds(null, endAt(3, true))),
+                new NarrowedBounds(new NumericDomain.Bounds(null, endAt(3, true)),
+                        List.of(), List.of()),
                 new NarrowedBounds(new NumericDomain.Bounds(endAt(0, true), endAt(10, true)),
                         List.of(C), List.of(A)));
     }

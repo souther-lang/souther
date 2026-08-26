@@ -97,9 +97,13 @@ final class LocalInspection {
      * @param bounds   where the position stops, the record it sits in taken into account
      * @param own      where its own type stops, so that an end the record moved can say so
      * @param narrowed what the value this sits in leaves the position, and who is holding each end
-     *                 of that. Per end, because one declaration can be holding a minimum while
-     *                 another holds the maximum — and each name arrives beside the end it was worked
-     *                 out against rather than beside a side of a number
+     *                 of that. Read per end because they are separate answers: one declaration can
+     *                 be holding a minimum while another holds the maximum, and one slot for both
+     *                 names the wrong one for at least one of them. Not the ends {@code bounds}
+     *                 carries — those are what the position's own type stops at, taken in to where
+     *                 every rule reaching it leaves it, and these names were worked out against what
+     *                 the value it sits in projects. Whether a name may be carried from the one to
+     *                 the other is what {@code moved} below decides
      */
     private static List<Cut> cutsOf(DeclaredBounds.Bounds bounds, DeclaredBounds.Bounds own,
                                     NarrowedBounds narrowed) {
