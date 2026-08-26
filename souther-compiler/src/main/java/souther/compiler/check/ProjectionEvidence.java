@@ -167,7 +167,7 @@ public sealed interface ProjectionEvidence {
          * Two values state rules about this position, and what they state together was never closed.
          *
          * <p>A field every case of a sum spreads is a position of the case and a name the value the
-         * sum sits in writes about, so the rules reaching it are two systems and not one. What a
+         * sum sits in writes about, so the rules reaching it can be two systems and not one. What a
          * certificate says is about a system whose relations carry nothing its box does not already
          * describe — a fixed point — and two systems that each reach it separately need not reach it
          * together: relations from one can carry a bound of the other's further.
@@ -175,6 +175,11 @@ public sealed interface ProjectionEvidence {
          * <p>So neither certificate is one for the pair, and this says so rather than handing back
          * whichever was to hand. What would lift it is closing the two as one system, which is not
          * something either reading did.
+         *
+         * <p><b>Two that said something, and not two a name reaches.</b> That a name reaches here
+         * from the value above says that value can name it; a sum writes no clause of its own, and a
+         * value that states nothing has lost nothing on the way to a box. One system and an empty
+         * one are one system, and the certificate for it is the certificate for what is here.
          */
         record TwoValuesStateRulesAboutIt() implements Cause {}
 

@@ -281,6 +281,49 @@ class AClauseAboveASumIsReadAtTheFieldItIsAboutTest {
                 "a field of the case the value above cannot name keeps the case's own proof");
     }
 
+    /**
+     * A value that states nothing is not a second system.
+     *
+     * <p>A sum writes no clause of its own, so a shared field of one is reached by a name from a
+     * value that has said nothing — and a value that has said nothing has lost nothing on the way to
+     * a box. Read off the name reaching here, the plainest model there is would give up the case's
+     * certificate to a pair that is really one, and the cause would say two values stated rules
+     * where one of them stated none.
+     */
+    @Test
+    void aValueThatStatesNothingIsNotASecondSystem() {
+        String model = """
+                module g
+
+                data Paging = { limit: Int }
+                data A = { ...Paging, x: Int }
+                data B = { ...Paging, y: Int }
+                data Q = A | B
+
+                data Ok
+
+                behavior read : (q: HELD) -> Ok
+                """;
+        InputDomain record = reading(model.replace("HELD", "A"));
+        InputDomain sum = reading(model.replace("HELD", "Q"));
+
+        assertEquals(record.at(TermPath.of("q").then("limit")).projection(),
+                sum.at(TermPath.of("q").refine(caseNamedAt(sum, TermPath.of("q"), "A"))
+                        .then("limit")).projection(),
+                "the shared field says what it says with no sum in the way, and the sum states "
+                        + "nothing to change it");
+    }
+
+    /** The narrowing that names this case of the sum standing at {@code sum}. */
+    private static Refinement caseNamedAt(InputDomain read, TermPath sum, String name) {
+        for (Case each : read.at(sum).obligationCases()) {
+            if (each instanceof Case.SumCase one && one.leaf().name().equals(name)) {
+                return Refinement.sumCase(one.leaf());
+            }
+        }
+        throw new IllegalStateException("no case named " + name);
+    }
+
     /** Every position something puts a ceiling on, spelled the way a report names it. */
     private static List<String> boundedIn(InputDomain read) {
         return read.positions().stream()

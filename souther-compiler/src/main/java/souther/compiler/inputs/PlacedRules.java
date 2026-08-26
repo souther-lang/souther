@@ -317,20 +317,53 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      * came back proved exactly representable by a reading that never saw them.
      */
     ProjectionEvidence projection(TermPath path) {
+        return proofAt(path).evidence();
+    }
+
+    /**
+     * The evidence about {@code path}, and how many values actually stated rules that reach it.
+     *
+     * <p>The second is carried and not read off the first. Whether a value states anything and
+     * whether what it states is exactly representable are two questions, and a value that states
+     * nothing answers the second with a certificate — it has lost nothing, having nothing to lose.
+     * Taken for the first, a shared field of a sum nobody wrote a clause about would be a position
+     * two systems reach, and the case's own certificate would be given up to a pair that is really
+     * one.
+     *
+     * <p>Nor is it read off the narrowing. That a name reaches here from the value above says the
+     * value above can name it, which is not the same as its having said anything — and the two come
+     * apart at the plainest model there is, a sum with no clause of its own.
+     *
+     * <p>Counted through the whole way up, because a sum that states nothing may sit in a value that
+     * states plenty: what reaches this position is every value on the way that wrote rules, and
+     * stopping at the first empty one would lose the ones above it.
+     */
+    private Proof proofAt(TermPath path) {
+        ProjectionEvidence here = rules.projection();
+        int mine = rules instanceof Rules.NoneWritten ? 0 : 1;
         TermPath above = alsoAt(path);
         if (above == null) {
-            return rules.projection();
+            return new Proof(here, mine);
         }
-        ProjectionEvidence here = rules.projection();
-        ProjectionEvidence outer = alsoReaching.outer().projection(above);
+        Proof outer = alsoReaching.outer().proofAt(above);
+        int stating = mine + outer.stating();
         List<ProjectionEvidence.Cause> causes = new ArrayList<>();
         causesOf(here, causes);
-        causesOf(outer, causes);
-        if (causes.isEmpty()) {
-            causes.add(new ProjectionEvidence.Cause.TwoValuesStateRulesAboutIt());
+        causesOf(outer.evidence(), causes);
+        if (!causes.isEmpty()) {
+            return new Proof(new ProjectionEvidence.NotCertified(causes), stating);
         }
-        return new ProjectionEvidence.NotCertified(causes);
+        // At most one value said anything, so what reaches this position is that one system and the
+        // certificate for it is a certificate for what is here.
+        if (stating < 2) {
+            return new Proof(mine == 1 ? here : outer.evidence(), stating);
+        }
+        return new Proof(new ProjectionEvidence.NotCertified(
+                List.of(new ProjectionEvidence.Cause.TwoValuesStateRulesAboutIt())), stating);
     }
+
+    /** What is known about a position, and how many values stated rules that reach it. */
+    private record Proof(ProjectionEvidence evidence, int stating) {}
 
     /** The causes this evidence gives, and none where it certifies. */
     private static void causesOf(ProjectionEvidence evidence,

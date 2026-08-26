@@ -16,6 +16,7 @@ import souther.compiler.query.Shapes;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -70,19 +71,23 @@ class NoRuleIsPlacedWhereNothingAccountsForItTest {
     @Test
     void whatTheRulesRaisedIsWhatThisBuildTakesAsPlaced() throws Exception {
         for (PlacedRules rules : everyValueRead()) {
-            Map<String, Integer> raised = new TreeMap<>();
+            Map<SourcePlacement, Integer> raised = new LinkedHashMap<>();
             rules.bounds().accounting().forEach((rule, accounting) ->
                     accounting.answers().keySet().forEach(owed ->
-                            raised.merge(rule + " " + owed, 1, Integer::sum)));
-            Map<String, Integer> taken = new TreeMap<>();
-            rules.placed().forEach(seed ->
-                    taken.merge(seed.by() + " " + questionOf(seed), 1, Integer::sum));
+                            raised.merge(new SourcePlacement(rule, owed), 1, Integer::sum)));
+            Map<SourcePlacement, Integer> taken = new LinkedHashMap<>();
+            rules.placed().forEach(seed -> taken.merge(
+                    new SourcePlacement(seed.by(), questionOf(seed)), 1, Integer::sum));
 
             assertEquals(raised, taken,
                     () -> "every question the rules of " + rules.root() + " raised is one this "
                             + "build takes as placed, and each of them once");
         }
     }
+
+    /** One rule and one question it raised, which is what a placement is one of. */
+    private record SourcePlacement(souther.compiler.check.RuleRef rule,
+                                   souther.compiler.check.Owed owed) {}
 
     /**
      * The question a seed was made from, put back together.
