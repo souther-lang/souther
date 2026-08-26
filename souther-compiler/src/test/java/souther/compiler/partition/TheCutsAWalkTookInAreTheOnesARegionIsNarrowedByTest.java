@@ -24,11 +24,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
 /**
- * A region is narrowed by exactly the conditions its account says were taken in.
+ * A region is narrowed by exactly the conditions the account it is built from says were taken in.
  *
- * <p>The other half of what {@link RegionForARow} promises. That the cuts a walk took in hold of
- * every row that arrives is about the walk and is held elsewhere; this is about the pair — that the
- * region beside an account is the one that account describes, in the order it describes, and that a
+ * <p>The other half of what {@link WayToTheBorder} promises. That the cuts a walk took in hold of
+ * every row that arrives is about the walk and is held elsewhere; this is about what the account
+ * means — that the region it makes is the one it describes, in the order it describes, and that a
  * condition written down as declined reaches the domains not at all.
  *
  * <p>Measured against a region that records what it is told rather than against what the numbers
@@ -88,13 +88,13 @@ class TheCutsAWalkTookInAreTheOnesARegionIsNarrowedByTest {
         ReachingCuts.Cut second = cut("y", Rel.LT);
         Recording region = new Recording();
 
-        RegionForARow narrowed = RegionForARow.narrowed(region, List.of(
+        SearchRegion narrowed = new WayToTheBorder(List.of(
                 new OnTheWay.TakenIn(somewhere(1), first),
-                new OnTheWay.TakenIn(somewhere(2), second)));
+                new OnTheWay.TakenIn(somewhere(2), second))).narrowing(region);
 
         assertEquals(List.of(first, second), region.told,
                 "the region is narrowed by the cuts the account says it was narrowed by");
-        assertSame(region, narrowed.where(), "and by nothing after them");
+        assertSame(region, narrowed, "and by nothing after them");
     }
 
     /**
@@ -109,14 +109,15 @@ class TheCutsAWalkTookInAreTheOnesARegionIsNarrowedByTest {
         ReachingCuts.Cut only = cut("x", Rel.GE);
         Recording region = new Recording();
 
-        RegionForARow narrowed = RegionForARow.narrowed(region, List.of(
+        WayToTheBorder way = new WayToTheBorder(List.of(
                 new OnTheWay.Declined(somewhere(1), new OnTheWay.Why.NoWordsForTheShape()),
                 new OnTheWay.TakenIn(somewhere(2), only),
                 new OnTheWay.Declined(somewhere(3), new OnTheWay.Why.OneOfTwoThings())));
+        way.narrowing(region);
 
         assertEquals(List.of(only), region.told, "a decline is a record and not a cut");
-        assertEquals(2, narrowed.declined().size(), "and it is still on the account");
-        assertEquals(3, narrowed.provenance().size(),
+        assertEquals(2, way.declined().size(), "and it is still on the account");
+        assertEquals(3, way.onTheWay().size(),
                 "which holds every condition on the way, in the order the walk met them");
     }
 
@@ -125,12 +126,12 @@ class TheCutsAWalkTookInAreTheOnesARegionIsNarrowedByTest {
     void aRegionWithNothingOnTheWayIsToldNothing() {
         Recording region = new Recording();
 
-        RegionForARow untouched = RegionForARow.untouched(region);
+        SearchRegion untouched = WayToTheBorder.UNTOUCHED.narrowing(region);
 
         assertEquals(List.of(), region.told, "nothing stood on the way, so nothing was taken in");
-        assertEquals(List.of(), untouched.provenance(),
+        assertEquals(List.of(), WayToTheBorder.UNTOUCHED.onTheWay(),
                 "and the account says that rather than being absent");
-        assertSame(region, untouched.where());
+        assertSame(region, untouched);
     }
 
     /** A cut with a constant in it is handed over as written, since a domain is told `f rel 0`. */
@@ -141,7 +142,7 @@ class TheCutsAWalkTookInAreTheOnesARegionIsNarrowedByTest {
                         .minus(LinearForm.constant(new BigDecimal("17"))), Rel.LE);
         Recording region = new Recording();
 
-        RegionForARow.narrowed(region, List.of(new OnTheWay.TakenIn(somewhere(1), shifted)));
+        new WayToTheBorder(List.of(new OnTheWay.TakenIn(somewhere(1), shifted))).narrowing(region);
 
         assertEquals(List.of(shifted), region.told);
     }

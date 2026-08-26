@@ -6,6 +6,7 @@ import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+import souther.compiler.report.AdequacyReport;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -96,12 +97,20 @@ public record ConformanceCorpus(String name, List<String> files, List<String> so
      * <p>The analysing entry point rather than the compiling one. What the rows cover is answered
      * from whatever was observed, and an entry point that raises at the first error would make
      * every failure here a report about the one thing that stopped it.
+     *
+     * <p><b>And the report is written, not merely asked for.</b> {@link Adequacy.Asked#fullReport()}
+     * says how much to measure and makes no measurement happen: what puts the questions is somebody
+     * building the report, so a compilation handed that and left alone holds none of the adequacy
+     * answers at all. Since this is what says a corpus was analysed, whoever reads the store
+     * afterwards would be reading a compile that measured nothing while saying it measured
+     * everything. Built here, the sentence this method is named for is true of what it hands back.
      */
     public Analysed analyse() {
         List<Located> warnings = new ArrayList<>();
         Compilation compilation = Compiler.analyzedModules(sources, ModulePath.EMPTY, warnings,
                 Adequacy.Asked.fullReport());
-        return new Analysed(this, compilation, compilation.errors(), warnings);
+        return new Analysed(this, compilation, compilation.errors(), warnings,
+                AdequacyReport.of(compilation));
     }
 
     @Override
@@ -109,9 +118,17 @@ public record ConformanceCorpus(String name, List<String> files, List<String> so
         return name;
     }
 
-    /** One analysis of one corpus: what it came to, and everything it said getting there. */
+    /**
+     * One analysis of one corpus: what it came to, everything it said getting there, and what it
+     * measured.
+     *
+     * <p>The report is carried rather than left to a reader to build. Two readers building one over
+     * the same compilation get the same document — the measures are answers and are kept — so what
+     * this settles is not which document but that there is one: the questions are put where the
+     * analysis happens, and no caller can have the analysis without them.
+     */
     public record Analysed(ConformanceCorpus corpus, Compilation compilation,
-                           List<Located> errors, List<Located> warnings) {
+                           List<Located> errors, List<Located> warnings, AdequacyReport report) {
 
         /** Everything said about this corpus, errors before warnings, as the report writes them. */
         public List<Located> said() {

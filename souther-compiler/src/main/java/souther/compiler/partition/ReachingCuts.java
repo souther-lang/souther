@@ -60,17 +60,17 @@ public record ReachingCuts(Map<ComparisonOccurrence, List<OnTheWay>> byCompariso
     public record Cut(LinearForm<NumericTerm> form, Rel rel) {}
 
     /**
-     * Where a row for a border at {@code site} is looked for: {@code region} narrowed by what the
-     * walk to it took in, beside the whole account of that walk.
+     * How a row for a border at {@code site} came to be looked for where it is: the whole account of
+     * the walk to it.
      *
-     * <p>{@code region} itself where nothing was collected there — and the answer says so, rather
-     * than leaving a reader to tell a comparison at the top of a body from one this could read
-     * nothing on the way to. Both leave a region as wide as the declarations and both are sound;
-     * only one of them is a limit of this compiler, and an author who is told nothing has no way to
-     * find out which they are looking at.
+     * <p>Empty where nothing was collected there — and the answer says so, rather than leaving a
+     * reader to tell a comparison at the top of a body from one this could read nothing on the way
+     * to. Both leave a region as wide as the declarations and both are sound; only one of them is a
+     * limit of this compiler, and an author who is told nothing has no way to find out which they
+     * are looking at.
      */
-    public RegionForARow narrowing(SearchRegion region, ComparisonOccurrence site) {
-        return RegionForARow.narrowed(region, byComparison.getOrDefault(site, List.of()));
+    public WayToTheBorder wayTo(ComparisonOccurrence site) {
+        return new WayToTheBorder(byComparison.getOrDefault(site, List.of()));
     }
 
     /**

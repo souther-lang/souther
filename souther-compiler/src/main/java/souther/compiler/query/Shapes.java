@@ -297,31 +297,6 @@ public final class Shapes {
     }
 
     /**
-     * One definition with the newtype constructions in its body rewritten — its own question, so
-     * its failure is the named definition's and not the ones beside it. It is read through
-     * {@link DesugaredFns}, which works every definition out, so what it depends on is still the
-     * module; what it is about is the one definition.
-     */
-    public record DesugaredFn(String module, String fn)
-            implements Key<souther.compiler.check.Desugared.Fn> {
-        @Override
-        public String module() {
-            return module;
-        }
-
-        @Override
-        public Answer<souther.compiler.check.Desugared.Fn> compute(Db db) {
-            Answer<Map<String, souther.compiler.check.Desugared.Fn>> fns =
-                    db.ask(new DesugaredFns(module));
-            if (!fns.present()) {
-                return Answer.absent();
-            }
-            souther.compiler.check.Desugared.Fn came = fns.value().get(fn);
-            return came == null ? Answer.absent() : Answer.of(came);
-        }
-    }
-
-    /**
      * The module a check and a codegen actually run over: the desugared one with every imported name
      * written as the definition it denotes, plus the recursive helpers it reaches, as its own fns
      * under those names.

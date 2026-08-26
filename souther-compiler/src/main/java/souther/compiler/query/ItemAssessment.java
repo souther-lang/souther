@@ -418,13 +418,14 @@ public sealed interface ItemAssessment {
          */
         sealed interface Searched extends Attempt {
 
-            /** Where the row was looked for, and what the way to the point took in and could not. */
-            souther.compiler.partition.RegionForARow region();
+            /** What the way to the point took in and what it could not, which is what says how much
+             *  the outcome beside it is worth. */
+            souther.compiler.partition.WayToTheBorder way();
         }
 
         /** A value at the point, built and accepted by the module's own decoders. */
         record Built(Generator.GeneratedRow row,
-                     souther.compiler.partition.RegionForARow region) implements Searched {}
+                     souther.compiler.partition.WayToTheBorder way) implements Searched {}
 
         /**
          * The search ran and no row came of it.
@@ -435,12 +436,11 @@ public sealed interface ItemAssessment {
          * name that said "refused" would invite a reader to take the other two for a decision the
          * decoder made — which is the mistake this type exists to prevent, one size down.
          *
-         * <p>What a search that settled nothing was looking over is the half of the answer that
-         * says how much the other half is worth, so it carries the region like every other outcome
-         * of a search.
+         * <p>How the point came to be searched where it was is the half of the answer that says how
+         * much the other half is worth, so it carries the way like every other outcome of a search.
          */
         record Unresolved(Generator.UnresolvedCombination why,
-                          souther.compiler.partition.RegionForARow region) implements Searched {}
+                          souther.compiler.partition.WayToTheBorder way) implements Searched {}
 
         /**
          * A search was asked for and there was nothing to run it against.
@@ -482,7 +482,7 @@ public sealed interface ItemAssessment {
             return switch (this) {
                 case Built _, Unavailable _ -> List.of();
                 case Unresolved left -> left.why().reason().provesInfeasible()
-                        ? List.of() : left.region().declined();
+                        ? List.of() : left.way().declined();
             };
         }
     }

@@ -54,7 +54,7 @@ import java.util.Set;
  * a registry, a scope over one, a loader — is the same as another when the store is, which is where
  * it came from. Those are built inside a {@code compute} and used there, which is also what makes
  * their reads land on the question being answered. {@link Names#derivedSymbols} is one, handed out
- * and not kept, and {@code EquivalentDatabasesAnswerTheSameTest} is what says which answers still
+ * and not kept, and {@code EverythingAnAnswerHoldsMeansSomethingTest} is what says which answers still
  * break the rule.
  *
  * <p>An edge is what its consumer means. A collection gathered per module is an index, and a

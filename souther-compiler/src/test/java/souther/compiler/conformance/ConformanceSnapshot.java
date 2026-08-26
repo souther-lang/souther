@@ -38,7 +38,7 @@ final class ConformanceSnapshot {
      * alone while swapping what it covers shows nowhere else.
      */
     static String report(ConformanceCorpus.Analysed analysed) {
-        AdequacyReport report = AdequacyReport.of(analysed.compilation());
+        AdequacyReport report = analysed.report();
         SourceNameResolver names = analysed.corpus().names();
         return report.json(names).replace("\"" + report.compilerVersion() + "\"",
                 "\"" + VERSION_PLACEHOLDER + "\"") + System.lineSeparator();

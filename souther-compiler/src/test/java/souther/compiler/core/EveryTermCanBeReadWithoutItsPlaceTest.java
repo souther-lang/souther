@@ -122,7 +122,9 @@ class EveryTermCanBeReadWithoutItsPlaceTest {
                         "the module written to reach the rest of the kinds compiles");
             }
             for (String module : c.modules()) {
-                Set<String> names = c.db().ask(new Bodies.BehaviorNames(module)).value();
+                // The behaviors a module declares, asked through the accessor a build asks it
+                // through. There was a query of its own for this and nothing but this reached it.
+                Set<String> names = c.declaredBehaviors(module);
                 if (names == null) {
                     continue;
                 }

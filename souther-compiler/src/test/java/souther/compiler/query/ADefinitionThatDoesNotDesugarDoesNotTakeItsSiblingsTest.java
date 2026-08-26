@@ -39,13 +39,23 @@ class ADefinitionThatDoesNotDesugarDoesNotTakeItsSiblingsTest {
         return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
     }
 
+    /**
+     * Asked of the map every definition is worked out into, which is where the answer is.
+     *
+     * <p>A definition used to have a question of its own, answered by looking this one up. That
+     * question had no caller but this test: what a per-definition question buys is a definition
+     * surviving an edit to the one beside it, and nothing asks for that — so what it was was a
+     * reading written for a test, in a vocabulary whose every entry is something the store keeps and
+     * compares.
+     */
     @Test
     void theDefinitionWithTheMistakeHasNoAnswerAndTheOneBesideItHasOne() {
-        Compilation c = compiled();
+        Map<String, souther.compiler.check.Desugared.Fn> fns =
+                compiled().db().ask(new Shapes.DesugaredFns("m.a")).value();
 
-        assertFalse(c.db().ask(new Shapes.DesugaredFn("m.a", "f")).present(),
+        assertFalse(fns.containsKey("f"),
                 "what `f` wrote is not an application of a newtype");
-        assertTrue(c.db().ask(new Shapes.DesugaredFn("m.a", "g")).present(),
+        assertTrue(fns.containsKey("g"),
                 "which is nothing to do with what `g` is");
     }
 

@@ -387,7 +387,7 @@ public final class Scoping {
          * <p>This one is not one yet. Two of these assembled from one input are unequal, because
          * the way of asking the universe a further question holds the store it asks — which is a
          * capability in an answer, and is on the register
-         * {@code EquivalentDatabasesAnswerTheSameTest} keeps.
+         * {@code EverythingAnAnswerHoldsMeansSomethingTest} keeps.
          */
         public Scoped {
             refused = List.copyOf(refused);
