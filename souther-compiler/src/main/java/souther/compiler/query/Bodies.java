@@ -1850,22 +1850,6 @@ public final class Bodies {
         }
     }
 
-    /** The names of the behaviors a module declares — what a body reads to tell a call to one of them
-     * from a call to anything else. */
-    public record BehaviorNames(String name) implements Key<Set<String>> {
-        @Override
-        public String module() {
-            return name;
-        }
-
-        @Override
-        public Answer<Set<String>> compute(Db db) {
-            Answer<Hir.Module> settled = db.ask(new Settled(name));
-            return settled.present()
-                    ? Answer.of(Names.behaviorNames(settled.value())) : Answer.absent();
-        }
-    }
-
     /** What {@code fn}'s behavior declares in {@code depends on}, or nothing where {@code fn}
      * implements no behavior — a helper has no such parameters (spec §depends-on). */
     private static Set<String> dependencyParams(Db db, String module, String fn) {
