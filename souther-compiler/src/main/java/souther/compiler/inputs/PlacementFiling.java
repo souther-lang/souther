@@ -13,6 +13,13 @@ import java.util.List;
  * saying so, which is the thing this exists to make impossible: where a name reaches no position,
  * that is an outcome and is written down as one. So a reader counting what a build took in never has
  * to read an absence, and a reader reporting a cause never has to invent one.
+ *
+ * <p><b>No accessor hands out the filings alone.</b> The filings say where a rule went and nothing
+ * about why the rest of it did not, so a caller handed them by themselves has been handed the one
+ * part of this that carries no reason. What it does about a case the reading refused and about a
+ * name it never reached is then something it may leave unsaid, which is what these three arms exist
+ * to stop. So a caller reads them, says what each one does about the thing it is placing, and is
+ * told by javac when a fourth arrives.
  */
 public final class PlacementFiling {
 
@@ -71,14 +78,6 @@ public final class PlacementFiling {
     @Override
     public String toString() {
         return seed.address() + " -> " + outcomes;
-    }
-
-    /** Where this placement was filed, which is empty where none of its outcomes was a filing. */
-    public List<PositionId> filedAt() {
-        return outcomes.stream()
-                .filter(each -> each instanceof PlacementOutcome.Filed)
-                .map(each -> ((PlacementOutcome.Filed) each).at())
-                .toList();
     }
 
     /** Whether anything about this placement is still waiting on this compiler. */

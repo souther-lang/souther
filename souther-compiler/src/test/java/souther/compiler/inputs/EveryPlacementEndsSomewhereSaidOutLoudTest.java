@@ -81,7 +81,7 @@ class EveryPlacementEndsSomewhereSaidOutLoudTest {
                 aRule(read), someCitation(aRule(read))));
 
         assertEquals(List.of("q@A.limit", "q@B.limit"),
-                filing.filedAt().stream().map(PositionId::toString).toList());
+                filedAt(filing));
         assertFalse(filing.anythingUnresolved(), "both cases took it");
     }
 
@@ -100,7 +100,7 @@ class EveryPlacementEndsSomewhereSaidOutLoudTest {
                 new PlacementSeed.Placed.TheValuesThere(), aRule(read), someCitation(aRule(read))));
 
         assertEquals(List.of("h.q@A.limit", "h.q@B.limit"),
-                filing.filedAt().stream().map(PositionId::toString).toList());
+                filedAt(filing));
     }
 
     /**
@@ -116,7 +116,7 @@ class EveryPlacementEndsSomewhereSaidOutLoudTest {
                 new RuleAddress(TermPath.of("o"), "held.q.limit"),
                 new PlacementSeed.Placed.TheValuesThere(), aRule(read), someCitation(aRule(read))));
 
-        assertEquals(List.of(), filing.filedAt());
+        assertEquals(List.of(), filedAt(filing));
         assertTrue(filing.anythingUnresolved(), "and nothing else stands in its place");
         assertEquals(2, filing.outcomes().size(),
                 "one per case, because the name would have stood under each of them");
@@ -214,6 +214,20 @@ class EveryPlacementEndsSomewhereSaidOutLoudTest {
 
     private static void assertThrows(Class<? extends Throwable> expected, Runnable run) {
         org.junit.jupiter.api.Assertions.assertThrows(expected, run::run);
+    }
+
+    /**
+     * Where the filings among a placement's outcomes are, as this test wants to read them.
+     *
+     * <p>Written here and not on {@link PlacementFiling}. What a caller does about a refusal and
+     * about a name left unresolved is what a filing is read for, and an accessor handing out the
+     * positions alone lets that be settled by how many came back.
+     */
+    private static List<String> filedAt(PlacementFiling filing) {
+        return filing.outcomes().stream()
+                .filter(each -> each instanceof PlacementOutcome.Filed)
+                .map(each -> ((PlacementOutcome.Filed) each).at().toString())
+                .toList();
     }
 
     /** A rule of the model to hang a made-up placement on. */
