@@ -39,8 +39,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * would be holding the runtime to a rule nothing emits.
  *
  * <p>What this does not reach: the comparator the ordered family prepends, which is emitted through
- * {@link Intrinsics#emitWithComparator} for the kernels {@code BodyGen} routes there and is exercised
- * by the tests that run the compiled code.
+ * {@link Intrinsics#emitWithComparator} for the kernels {@code BodyGen} routes there. Which kernels
+ * those are is knowledge of {@code BodyGen}'s arms and not a set anything holds, and a set invented
+ * to be read here would be a second statement of what the backend does. What holds it is
+ * {@code CompileEnumerationOrderTest}, which sorts values whose order lives on their sum and runs
+ * the result.
  */
 class TheRuntimeAnswersEveryKernelAtItsDeclaredAbiTest {
 
@@ -128,6 +131,10 @@ class TheRuntimeAnswersEveryKernelAtItsDeclaredAbiTest {
      * is no ordering of its own length, which is a fact about the row; that the length is the
      * kernel's arity is a fact about the two together, and a row one short would derive a descriptor
      * for a call it emitted the wrong number of arguments for.
+     *
+     * <p>Of the rows that carry a count. A kernel applying a function walks the declaration's own
+     * parameters and a numeric fold takes the one it is declared with, so for those two there is no
+     * second number to disagree with the first.
      */
     @Test
     void andEachRowTakesAsManyArgumentsAsItsKernelDeclares() {
@@ -168,10 +175,19 @@ class TheRuntimeAnswersEveryKernelAtItsDeclaredAbiTest {
      * it has under that name — so a failure says what to change rather than that something differs.
      */
     private static String whatTheRuntimeHasInstead(Intrinsics.Emit row, MethodTypeDesc want) {
-        ClassDesc owner = row instanceof Intrinsics.RuntimeStatic r ? r.owner()
-                : ((Intrinsics.TakesAFunction) row).owner();
-        String name = row instanceof Intrinsics.RuntimeStatic r ? r.method()
-                : ((Intrinsics.TakesAFunction) row).method();
+        ClassDesc owner;
+        String name;
+        switch (row) {
+            case Intrinsics.RuntimeStatic each -> {
+                owner = each.owner();
+                name = each.method();
+            }
+            case Intrinsics.TakesAFunction each -> {
+                owner = each.owner();
+                name = each.method();
+            }
+            default -> throw new IllegalStateException(row + " reaches no runtime static");
+        }
         String owning = owner.packageName().isEmpty() ? owner.displayName()
                 : owner.packageName() + "." + owner.displayName();
         List<String> under = new ArrayList<>();

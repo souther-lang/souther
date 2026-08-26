@@ -608,15 +608,14 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
     void andItSaysSoForEveryKernelTheLanguageHas() {
         CheckedProgram program = CheckedProgram.of(List.of(ROUNDS));
 
-        List<Kernel> unanswered = new ArrayList<>();
+        List<String> answered = new ArrayList<>();
         for (Kernel kernel : Kernel.values()) {
-            KernelSignature declared = program.kernelSignature(kernel);
-            if (declared == null || declared.result() == null) {
-                unanswered.add(kernel);
-            }
+            // Refused rather than answered with an absence, so asking is the assertion.
+            answered.add(Type.show(program.kernelSignature(kernel).result()));
         }
 
-        assertEquals(List.of(), unanswered, "kernels the program says nothing about");
+        assertEquals(Kernel.values().length, answered.size(),
+                "every kernel the language has says what it answers");
     }
 
     /** Every helper a call in {@code body} reaches, walking every node of it. */

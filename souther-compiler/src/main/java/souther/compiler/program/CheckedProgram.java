@@ -8,11 +8,9 @@ import souther.compiler.types.TypeSymbol;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumMap;
-import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * A Souther program the compiler checked, for an output that lives outside this compiler.
@@ -112,16 +110,6 @@ public final class CheckedProgram {
         // data in an order and a reader listing them is shown one. A map that kept none would show
         // an order nothing decided, which can differ between two runs of one compiler.
         this.declarations = Collections.unmodifiableMap(index);
-        // Every kernel, checked here rather than where one is asked for. The library refuses to
-        // finish without a declaration for each ({@code stdlib.Stdlib.Builder#freeze}), so a gap
-        // arriving here is this compiler having read its own library wrong — said once, at the one
-        // place the answers come in, rather than as a branch every reader has to pass through.
-        Set<Kernel> missing = EnumSet.allOf(Kernel.class);
-        missing.removeAll(kernels.keySet());
-        if (!missing.isEmpty()) {
-            throw new IllegalStateException(
-                    "this program was checked against a library declaring nothing for " + missing);
-        }
         this.kernels = Collections.unmodifiableMap(new EnumMap<>(kernels));
     }
 
@@ -218,8 +206,10 @@ public final class CheckedProgram {
      * the two part company wherever a declared parameter is a type a value can arrive narrower than,
      * which a sum-typed parameter is. An output building a boundary form for a call reads it here.
      *
-     * <p>Total over the kernels, and never a null. The language names a fixed set of them and
-     * declares every one, so there is no kernel a program can reach that this has nothing for.
+     * <p>Total over the kernels, and never a null. The language names a fixed set of them and the
+     * library refuses to finish while one of them is declared nowhere, so there is no kernel a
+     * program can reach that this has nothing for. A gap all the same is this compiler having read
+     * its own library wrong, and is said rather than handed over as an absence to interpret.
      *
      * <p>Asked of the program, because a program was checked against one version of the language.
      * A signature read from a library obtained some other way would be a second reading of what a
@@ -227,7 +217,12 @@ public final class CheckedProgram {
      * the same version.
      */
     public KernelSignature kernelSignature(Kernel kernel) {
-        return kernels.get(kernel);
+        KernelSignature declared = kernels.get(kernel);
+        if (declared == null) {
+            throw new IllegalStateException(
+                    "this program was checked against a library declaring nothing for " + kernel);
+        }
+        return declared;
     }
 
     /**

@@ -9,6 +9,7 @@ import souther.compiler.core.KernelSignature;
 import java.lang.constant.ClassDesc;
 import java.lang.constant.ConstantDescs;
 import java.lang.constant.MethodTypeDesc;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -82,7 +83,7 @@ final class Intrinsics {
             for (int src : argOrder) {
                 if (src < 0 || src >= seen.length || seen[src]) {
                     throw new IllegalArgumentException(owner.displayName() + "." + method
-                            + " takes its arguments in " + java.util.Arrays.toString(argOrder)
+                            + " takes its arguments in " + Arrays.toString(argOrder)
                             + ", which is no ordering of " + argOrder.length + " of them");
                 }
                 seen[src] = true;
@@ -92,18 +93,8 @@ final class Intrinsics {
 
         public void emit(BodyGen g, Kernel kernel, Core.Call call) {
             KernelSignature declared = g.kernelSignature(kernel);
-            ClassDesc[] params = new ClassDesc[argOrder.length];
-            for (int j = 0; j < params.length; j++) {
-                int src = argOrder[j];
-                params[j] = boundaryDesc(declared.parameters().get(src));
-                Type arrived = g.genExpr(call.args().get(src));
-                if (params[j].equals(CD_Object)) {
-                    // What the runtime takes as a reference, a primitive has to become one for.
-                    g.emitBox(arrived);
-                }
-            }
-            g.emitInvokeStatic(owner, method,
-                    MethodTypeDesc.of(boundaryDesc(declared.result()), params));
+            g.emitInvokeStatic(owner, method, MethodTypeDesc.of(boundaryDesc(declared.result()),
+                    pushArguments(g, declared, call, this)));
         }
     }
 
@@ -124,19 +115,8 @@ final class Intrinsics {
                           Function<Type, List<Type>> paramTypes) implements Emit {
         public void emit(BodyGen g, Kernel kernel, Core.Call call) {
             KernelSignature declared = g.kernelSignature(kernel);
-            Type held = call.args().get(container).type();
-            ClassDesc[] params = new ClassDesc[declared.parameters().size()];
-            for (int i = 0; i < params.length; i++) {
-                Type parameter = declared.parameters().get(i);
-                params[i] = boundaryDesc(parameter);
-                if (parameter instanceof Type.FnOf) {
-                    g.emitFn(call.args().get(i), paramTypes.apply(held));
-                } else {
-                    g.genExpr(call.args().get(i));
-                }
-            }
-            g.emitInvokeStatic(owner, method,
-                    MethodTypeDesc.of(boundaryDesc(declared.result()), params));
+            g.emitInvokeStatic(owner, method, MethodTypeDesc.of(boundaryDesc(declared.result()),
+                    pushArguments(g, declared, call, this)));
         }
     }
 
@@ -199,6 +179,48 @@ final class Intrinsics {
         }
     }
 
+    /**
+     * Puts {@code call}'s arguments on the stack the way {@code row} takes them, and answers the
+     * descriptor slot each one went into.
+     *
+     * <p>One walk, so what is emitted and what is described cannot disagree. Split in two — a caller
+     * emitting and this deciding the descriptor — the two would be right about each other for as
+     * long as nobody changed one of them, which is the coupling the comparator family used to have.
+     *
+     * <p>The slots are the declaration's. A value going into one the runtime takes as a reference is
+     * boxed, which is a no-op for a reference; a declared function parameter is materialised as an
+     * {@code Fn}, at the parameter types the container it walks supplies.
+     */
+    private static ClassDesc[] pushArguments(BodyGen g, KernelSignature declared, Core.Call call,
+                                             Emit row) {
+        int[] order = row instanceof RuntimeStatic runtime ? runtime.argOrder()
+                : identity(declared.parameters().size());
+        ClassDesc[] slots = new ClassDesc[order.length];
+        for (int j = 0; j < slots.length; j++) {
+            int src = order[j];
+            Type parameter = declared.parameters().get(src);
+            slots[j] = boundaryDesc(parameter);
+            if (row instanceof TakesAFunction takes && parameter instanceof Type.FnOf) {
+                g.emitFn(call.args().get(src),
+                        takes.paramTypes().apply(call.args().get(takes.container()).type()));
+                continue;
+            }
+            Type arrived = g.genExpr(call.args().get(src));
+            if (slots[j].equals(CD_Object)) {
+                g.emitBox(arrived);
+            }
+        }
+        return slots;
+    }
+
+    private static int[] identity(int n) {
+        int[] order = new int[n];
+        for (int i = 0; i < n; i++) {
+            order[i] = i;
+        }
+        return order;
+    }
+
     /** The JVM type a value takes at a runtime-method boundary: primitives unboxed, containers as
      * their raw interface, a function as an {@code Fn}, everything else (references, type variables,
      * tuples) as {@code Object}.
@@ -254,8 +276,8 @@ final class Intrinsics {
 
     private static final Map<Kernel, Emit> TABLE = buildTable();
 
-    /** Every kernel this table emits. One here with no declaration naming it is a kernel the library
-     *  ships and no signature describes, which is what {@code BUILTINS} used to be. */
+    /** Every kernel this table emits — which is every kernel the language has, less the few
+     *  {@code BodyGen} writes out itself. */
     static Set<Kernel> kernels() {
         return TABLE.keySet();
     }
@@ -265,43 +287,36 @@ final class Intrinsics {
      * this table already holds for it, taking a comparator ahead of what it was already taking.
      *
      * <p>The one place a runtime method takes an argument the declaration does not name. Everything
-     * else about the descriptor is the declaration's, as it is everywhere else; what is added is the
-     * comparator, and it is added rather than the whole descriptor being written out again.
+     * else is the same walk every kernel goes through — the arguments go on the stack where the row
+     * puts them and the descriptor says where they went — with the comparator added in front. The
+     * caller has put the comparator there and settled nothing else.
      *
      * <p>Both row shapes that can take one. A kernel walking a container takes the container alone;
-     * one applying a function takes the function too, as an {@code Fn}. The caller has already put
-     * the comparator and the kernel's own arguments on the stack.
+     * one applying a function takes the function too, as an {@code Fn}.
      */
-    static void emitWithComparator(BodyGen g, Kernel kernel) {
+    static void emitWithComparator(BodyGen g, Kernel kernel, Core.Call call) {
         KernelSignature declared = g.kernelSignature(kernel);
         ClassDesc owner;
         String method;
-        List<Type> inOrder;
-        switch (TABLE.get(kernel)) {
-            case RuntimeStatic row -> {
-                owner = row.owner();
-                method = row.method();
-                List<Type> byArg = new java.util.ArrayList<>();
-                for (int src : row.argOrder()) {
-                    byArg.add(declared.parameters().get(src));
-                }
-                inOrder = byArg;
+        Emit row = TABLE.get(kernel);
+        switch (row) {
+            case RuntimeStatic each -> {
+                owner = each.owner();
+                method = each.method();
             }
-            case TakesAFunction row -> {
-                owner = row.owner();
-                method = row.method();
-                inOrder = declared.parameters();
+            case TakesAFunction each -> {
+                owner = each.owner();
+                method = each.method();
             }
-            case Emit row -> throw new IllegalStateException("`" + kernel.key() + "` is emitted as "
-                    + row + ", which takes no comparator");
+            case Emit each -> throw new IllegalStateException("`" + kernel.key() + "` is emitted as "
+                    + each + ", which takes no comparator");
             case null -> throw new IllegalStateException(
                     "the JVM emits nothing for `" + kernel.key() + "`");
         }
-        ClassDesc[] params = new ClassDesc[inOrder.size() + 1];
+        ClassDesc[] slots = pushArguments(g, declared, call, row);
+        ClassDesc[] params = new ClassDesc[slots.length + 1];
         params[0] = CD_Comparator;
-        for (int i = 0; i < inOrder.size(); i++) {
-            params[i + 1] = boundaryDesc(inOrder.get(i));
-        }
+        System.arraycopy(slots, 0, params, 1, slots.length);
         g.emitInvokeStatic(owner, method,
                 MethodTypeDesc.of(boundaryDesc(declared.result()), params));
     }

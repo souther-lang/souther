@@ -482,18 +482,17 @@ public final class Stdlib {
         /**
          * One kernel's declaration in the language's own vocabulary.
          *
-         * <p>Where the declaration writes no return type there is no such value, and what says so
-         * is {@link KernelSignature} rather than a second reading of the same rule here. What is
-         * added here is which declaration tripped it: the library is this compiler's own source, so
-         * a fault in it is nobody's mistake to be told about and is refused where it is read.
+         * <p>A kernel has no body to infer an answer from, so its calls are checked against the
+         * declared result and there is nothing else to check them against. A declaration that
+         * writes none is refused here, where which one it is can be said: the library is this
+         * compiler's own source, so a fault in it is nobody's mistake to be told about.
          */
         private static KernelSignature declaredAs(String qualified, Signature declared) {
-            try {
-                return new KernelSignature(declared.params(), declared.result());
-            } catch (NullPointerException refused) {
+            if (declared.result() == null) {
                 throw new IllegalStateException("the standard library declares the kernel `"
-                        + qualified + "`: " + refused.getMessage(), refused);
+                        + qualified + "`, which states no return type");
             }
+            return new KernelSignature(declared.params(), declared.result());
         }
 
         /** Each sugar with what it keeps in place: the target's own parameter count, less what the

@@ -31,10 +31,10 @@ import java.util.Objects;
 public record KernelSignature(List<Type> parameters, Type result) {
 
     /**
-     * @throws NullPointerException where the declaration writes no return type. A kernel has no body
-     *     to infer one from, so what it answers is only ever what it declared — there is no state of
-     *     this value standing for a kernel whose answer is not yet known, and nothing downstream has
-     *     to ask whether there is one.
+     * @throws NullPointerException where {@code result} is null. There is no state of this value
+     *     standing for a kernel whose answer is not yet known, so nothing downstream asks whether
+     *     there is one. What refuses a declaration that states no return type — and says which — is
+     *     the library, where the declaration is read.
      */
     public KernelSignature {
         parameters = List.copyOf(parameters);
