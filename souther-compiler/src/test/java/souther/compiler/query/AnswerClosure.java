@@ -151,9 +151,13 @@ final class AnswerClosure {
         return new Locus(List.of(steps)).of(question, offender);
     }
 
+    /** A member step, by what the declaring type is called rather than what it is shown as. Two
+     *  types of one short name are two types, and a place is told from a place by the first. */
     private static Locus.Step m(String owner, String name) {
         return new Locus.Step.Member(owner, name);
     }
+
+    private static final String ANSWER = "souther.compiler.query.Answer";
 
     private static final Locus.Step ELEMENT = new Locus.Step.Element();
     private static final Locus.Step VALUE = new Locus.Step.MapValue();
@@ -166,28 +170,28 @@ final class AnswerClosure {
     private static final String Q = "souther.compiler.query.";
 
     private static final List<Known> KNOWN = List.of(
-            bytes(Q + "Output$All", m("Answer", "value"), VALUE),
-            bytes(Q + "Output$Classes", m("Answer", "value"), VALUE),
-            bytes(Q + "Output$Evaluated", m("Answer", "value"),
-                    m("EvaluationArtifact", "classes"), VALUE),
-            bytes(Q + "Output$EvaluationLinked", m("Answer", "value"),
-                    m("EvaluationArtifact", "classes"), VALUE),
+            bytes(Q + "Output$All", m(ANSWER, "value"), VALUE),
+            bytes(Q + "Output$Classes", m(ANSWER, "value"), VALUE),
+            bytes(Q + "Output$Evaluated", m(ANSWER, "value"),
+                    m("souther.compiler.generated.EvaluationArtifact", "classes"), VALUE),
+            bytes(Q + "Output$EvaluationLinked", m(ANSWER, "value"),
+                    m("souther.compiler.generated.EvaluationArtifact", "classes"), VALUE),
             // The one of the five a module on its own does not reach: nothing is linked against
             // where there is nothing to link against.
-            new Known(new Identity(at(Q + "Output$Linked", "byte[]", m("Answer", "value"), VALUE),
+            new Known(new Identity(at(Q + "Output$Linked", "byte[]", m(ANSWER, "value"), VALUE),
                     Nature.VALUE, Cause.MISSING_VALUE_EQUALITY),
                     Set.of(walked(Scenario.VALID_CORPUS), compared(Scenario.VALID_CORPUS)),
                     CLASS_BYTES),
             new Known(new Identity(at(Q + "Names$ModuleScope", Q + "Db",
-                    m("Answer", "value"), m("Scoped", "values"), m("Values", "elsewhere"),
-                    m("OfTheUniverse", "universe"), m("CompilationUniverse", "db")),
+                    m(ANSWER, "value"), m("souther.compiler.check.Scoping$Scoped", "values"), m("souther.compiler.check.Resolve$Values", "elsewhere"),
+                    m("souther.compiler.check.Scoping$OfTheUniverse", "universe"), m("souther.compiler.query.CompilationUniverse", "db")),
                     Nature.NON_VALUE, Cause.CAPABILITY), BOTH_EVERYWHERE,
                     "Scoping.Scoped carries a way of asking the modules around this one a further "
                             + "question, and it holds this store to ask with. Where a scope has "
                             + "been taken apart already, that is the half of the assembly nobody "
                             + "has yet — it belongs inside the compute that asks"),
             new Known(new Identity(at(Q + "Front$Path", "souther.compiler.meta.ModulePath$$Lambda",
-                    m("Answer", "value")), Nature.NON_VALUE, Cause.CAPABILITY),
+                    m(ANSWER, "value")), Nature.NON_VALUE, Cause.CAPABILITY),
                     // A function is not compared, so two of them never come apart under a walk that
                     // holds one against another; only the walk that asks each object what it is
                     // meets this.
@@ -195,7 +199,7 @@ final class AnswerClosure {
                     "a module path resolves a module by running something, and a function never "
                             + "equals the same function computed again"),
             new Known(new Identity(at(Q + "Front$Library", "souther.compiler.stdlib.Stdlib",
-                    m("Answer", "value")), Nature.VALUE, Cause.MISSING_VALUE_EQUALITY),
+                    m(ANSWER, "value")), Nature.VALUE, Cause.MISSING_VALUE_EQUALITY),
                     ONLY_WALKED,
                     "a value, and here for a reason the others are not: one is built per process "
                             + "and every answer of a compilation holds that one, so identity is the "
@@ -204,20 +208,20 @@ final class AnswerClosure {
                             + "and writing \"any library equals any other\" would be true only "
                             + "while there is one of them"),
             new Known(new Identity(at(Q + "Bodies$Expanding", "souther.compiler.stdlib.Stdlib",
-                    m("Answer", "value"), m("Of", "table"), m("HelperTable", "stdlib")),
+                    m(ANSWER, "value"), m("souther.compiler.query.Bodies$Expanding$Of", "table"), m("souther.compiler.check.HelperTable", "stdlib")),
                     Nature.VALUE, Cause.MISSING_VALUE_EQUALITY), ONLY_WALKED,
                     "the same library, reached through the table an expansion reads. One thing to "
                             + "fix and two places it is held"),
             new Known(new Identity(at(Q + "Adequacy$Inputs", "souther.compiler.inputs.InputDomain",
-                    m("Answer", "value"), VALUE), Nature.NOT_READ, Cause.UNCLASSIFIED),
+                    m(ANSWER, "value"), VALUE), Nature.NOT_READ, Cause.UNCLASSIFIED),
                     BOTH_EVERYWHERE,
                     "whether it is something that says what it is or something that does something "
                             + "has to be read before it is either, so the fix is to read it"),
             new Known(new Identity(at(Q + "Bodies$Checked", Q + "Bodies$Elaborated",
-                    m("Answer", "value")), Nature.NOT_READ, Cause.UNCLASSIFIED), BOTH_EVERYWHERE,
+                    m(ANSWER, "value")), Nature.NOT_READ, Cause.UNCLASSIFIED), BOTH_EVERYWHERE,
                     "as above"),
             new Known(new Identity(at("*", "souther.compiler.diag.Diagnostic",
-                    m("Answer", "reports"), ELEMENT, m("Report", "diagnostic")),
+                    m(ANSWER, "reports"), ELEMENT, m("souther.compiler.query.Report", "diagnostic")),
                     Nature.VALUE, Cause.MISSING_VALUE_EQUALITY),
                     Set.of(walked(Scenario.A_MODULE_SPOKEN_ABOUT),
                             compared(Scenario.A_MODULE_SPOKEN_ABOUT)),

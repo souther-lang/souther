@@ -42,29 +42,9 @@ final class AnswerWalk {
         }
     }
 
-    /**
-     * What the walk found, and how much of the store it covered.
-     *
-     * <p>The coverage beside the findings rather than swallowed. A field the runtime will not hand
-     * over is a subtree nothing asked about, and a graph that holds itself is walked from one place
-     * only — both leave a walk covering less than it looks like it covered, and a register agreeing
-     * with one of those agrees about less than it names.
-     */
-    record Walked(int visited, Set<String> classes, List<Found> found,
-                  Set<String> notOpened, Set<String> loops) {
-
-        /** Whether the walk got to the end of what there was to walk. */
-        boolean complete() {
-            return notOpened.isEmpty() && loops.isEmpty();
-        }
-
-        /** Every place one of them sits. */
-        Set<Locus.Place> places() {
-            Set<Locus.Place> out = new java.util.TreeSet<>();
-            found.forEach(each -> out.add(each.place()));
-            return out;
-        }
-    }
+    /** What the walk found and how much of the store it covered, beside how much of it there was
+     *  — which is what says a walk reached the answers a caller is asking about at all. */
+    record Walked(int visited, Set<String> classes, Covered<Found> covered) {}
 
     private AnswerWalk() {
     }
@@ -119,13 +99,12 @@ final class AnswerWalk {
         private final Set<Object> visited = Collections.newSetFromMap(new IdentityHashMap<>());
         private final Set<String> classes = new LinkedHashSet<>();
         private final List<Found> out = new ArrayList<>();
-        private final Set<String> notOpened = new LinkedHashSet<>();
-        private final Set<String> loops = new LinkedHashSet<>();
+        private final List<Gap> gaps = new ArrayList<>();
         /** Which answer the walk is inside, so a place says which question holds it. */
         private String question = "";
 
         Walked walked() {
-            return new Walked(visited.size(), classes, List.copyOf(out), notOpened, loops);
+            return new Walked(visited.size(), classes, Covered.of(out, gaps));
         }
 
         /** @return whether what is under {@code each} was covered, so a caller may remember it */
@@ -147,7 +126,8 @@ final class AnswerWalk {
                 return true;
             }
             if (!walking.add(each)) {
-                loops.add(each.getClass().getName() + " at " + where);
+                gaps.add(new Gap(Gap.Why.A_GRAPH_THAT_LOOPS,
+                        question + where + " " + each.getClass().getName()));
                 return false;
             }
             visited.add(each);
@@ -173,12 +153,11 @@ final class AnswerWalk {
         private boolean under(Object each, Locus where) {
             classes.add(each.getClass().getName());
             if (!declaresEquals(each.getClass())) {
-                // A lambda's class name carries the JVM's own counter, which differs per run, and an
-                // array is named the way the other detector names one, so a register keyed by what
-                // was found holds one line for a thing whichever walk met it.
-                out.add(new Found(question, each.getClass().isArray()
-                        ? each.getClass().getSimpleName()
-                        : each.getClass().getName().replaceFirst("/0x[0-9a-f]+$", ""), where));
+                // A lambda's class name carries the JVM's own counter, which differs per run. What
+                // is left is what the type is called, which is what the other walk calls it too, so
+                // a register keyed by what was found holds one line for a thing whichever met it.
+                out.add(new Found(question,
+                        each.getClass().getTypeName().replaceFirst("/0x[0-9a-f]+$", ""), where));
                 return true;    // what it holds is unreachable through an equality that never holds
             }
             if (each instanceof Collection<?> items) {
@@ -227,7 +206,8 @@ final class AnswerWalk {
                     } catch (RuntimeException | ReflectiveOperationException opaque) {
                         // A field this cannot open is a subtree it did not ask about. Said out loud,
                         // because what is under it would otherwise be counted as looked at and clean.
-                        notOpened.add(at.getName() + "." + field.getName());
+                        gaps.add(new Gap(Gap.Why.A_FIELD_THAT_WOULD_NOT_OPEN,
+                                question + where.thenMember(at, field.getName())));
                         whole = false;
                         continue;
                     }

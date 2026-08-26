@@ -10,6 +10,7 @@ import java.lang.reflect.Modifier;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Stream;
@@ -79,19 +80,28 @@ class EveryQuestionThisCompilerDeclaresIsReachedOrOutsideABatchRunTest {
      * added and not registered would leave the arithmetic below adding up while the question went
      * unreached.
      *
-     * <p>The whole of what {@link Key} was compiled beside, and not the package it sits in. Scanning
-     * the package would make the vocabulary's own arrangement the thing that bounds the count: a key
-     * declared somewhere else would be in neither what is declared nor what is reached, and every
-     * equation below would go on balancing while the question went unwatched. Where they are allowed
-     * to sit is a claim of its own and is made by {@link #everyQuestionIsDeclaredWhereTheyBelong}.
+     * <p>The whole of what {@link Key} was compiled beside, and not a package under it. Any bound
+     * narrower than that makes the count's own perimeter the thing that decides it: a key declared
+     * outside would be in neither what is declared nor what is reached, and every equation below
+     * would go on balancing while the question went unwatched — which is what a package bound did,
+     * and what a package-tree bound would do one step further out. Where a key is allowed to sit is
+     * a claim of its own and is made by {@link #everyQuestionIsDeclaredWhereTheyBelong}.
      */
-    private record Scanned(Set<String> declared, Set<String> unreadable) {}
+    static Covered<String> scan() throws Exception {
+        return scanOf(Path.of(
+                Key.class.getProtectionDomain().getCodeSource().getLocation().toURI()));
+    }
 
-    private static Scanned scan() throws Exception {
-        Path root = Path.of(Key.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+    /**
+     * Every concrete key under {@code root}, and every class there this could not load.
+     *
+     * <p>Takes where to look, so that what happens when a class will not load is something a test
+     * can build rather than something nobody sees until it happens.
+     */
+    static Covered<String> scanOf(Path root) throws Exception {
         Set<String> out = new TreeSet<>();
-        Set<String> unreadable = new TreeSet<>();
-        try (Stream<Path> files = Files.walk(root.resolve("souther/compiler"))) {
+        List<Gap> gaps = new java.util.ArrayList<>();
+        try (Stream<Path> files = Files.walk(root)) {
             for (Path each : files.filter(p -> p.toString().endsWith(".class")).toList()) {
                 String name = root.relativize(each).toString()
                         .replace(java.io.File.separatorChar, '.')
@@ -100,10 +110,11 @@ class EveryQuestionThisCompilerDeclaresIsReachedOrOutsideABatchRunTest {
                 try {
                     type = Class.forName(name, false, Key.class.getClassLoader());
                 } catch (Throwable notLoadable) {
-                    // A class the scan compiled against and cannot hold. Said out loud: skipped, it
-                    // leaves the vocabulary smaller than it is and the arithmetic below adds up over
-                    // whatever is left.
-                    unreadable.add(name + " (" + notLoadable.getClass().getSimpleName() + ")");
+                    // A class the scan found and cannot hold. Said out loud: skipped, it leaves the
+                    // vocabulary smaller than it is and the arithmetic below adds up over whatever
+                    // is left.
+                    gaps.add(new Gap(Gap.Why.A_CLASS_THAT_WOULD_NOT_LOAD,
+                            name + " (" + notLoadable.getClass().getSimpleName() + ")"));
                     continue;
                 }
                 if (Key.class.isAssignableFrom(type) && !type.isInterface()
@@ -112,11 +123,15 @@ class EveryQuestionThisCompilerDeclaresIsReachedOrOutsideABatchRunTest {
                 }
             }
         }
-        return new Scanned(out, unreadable);
+        return Covered.of(List.copyOf(out), gaps);
     }
 
+    /** What the scan counted, whether or not it read everything it found. */
     private static Set<String> declared() throws Exception {
-        return scan().declared();
+        return new TreeSet<>(switch (scan()) {
+            case Covered.Whole<String>(List<String> all) -> all;
+            case Covered.Partly<String>(List<String> all, List<Gap> _) -> all;
+        });
     }
 
     /** Where the query vocabulary is kept. */
@@ -150,9 +165,14 @@ class EveryQuestionThisCompilerDeclaresIsReachedOrOutsideABatchRunTest {
      */
     @Test
     void theScanReadEveryClassItFound() throws Exception {
-        assertEquals(Set.of(), scan().unreadable(),
-                "a class in the query package the scan could not load, so the vocabulary it counted"
-                        + " is smaller than the one that is there");
+        Set<String> fellShort = new TreeSet<>();
+        if (scan() instanceof Covered.Partly<String>(List<String> _, List<Gap> gaps)) {
+            gaps.forEach(each -> fellShort.add(each.toString()));
+        }
+
+        assertEquals(Set.of(), fellShort,
+                "a class the scan could not load, so the vocabulary it counted is smaller than the"
+                        + " one that is there");
     }
 
     /** And every question this project's own operations put over the corpus. */

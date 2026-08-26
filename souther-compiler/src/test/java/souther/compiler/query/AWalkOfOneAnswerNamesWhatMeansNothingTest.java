@@ -10,8 +10,6 @@ import java.util.Set;
 import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * What the walk of one answer says, asked of the walk itself rather than through a compile.
@@ -40,9 +38,26 @@ class AWalkOfOneAnswerNamesWhatMeansNothingTest {
 
     private record Root(Holder one, Holder two) {}
 
+    private static List<AnswerWalk.Found> foundBy(AnswerWalk.Walked walked) {
+        return switch (walked.covered()) {
+            case Covered.Whole<AnswerWalk.Found>(List<AnswerWalk.Found> all) -> all;
+            case Covered.Partly<AnswerWalk.Found>(List<AnswerWalk.Found> all, List<Gap> _) -> all;
+        };
+    }
+
     private static Set<String> places(AnswerWalk.Walked walked) {
         Set<String> out = new TreeSet<>();
-        walked.places().forEach(each -> out.add(each.toString()));
+        foundBy(walked).forEach(each -> out.add(each.place().toString()));
+        return out;
+    }
+
+    /** And where the walk fell short, which is empty exactly where it did not. */
+    private static Set<String> gaps(AnswerWalk.Walked walked) {
+        Set<String> out = new TreeSet<>();
+        if (walked.covered() instanceof Covered.Partly<AnswerWalk.Found>(
+                List<AnswerWalk.Found> _, List<Gap> gaps)) {
+            gaps.forEach(each -> out.add(each.toString()));
+        }
         return out;
     }
 
@@ -63,8 +78,7 @@ class AWalkOfOneAnswerNamesWhatMeansNothingTest {
         assertEquals(Set.of("Q.Root#one.Holder#held " + Address.class.getName(),
                         "Q.Root#two.Holder#held " + Address.class.getName()),
                 places(walked), "the thing that means nothing, named at each place that holds it");
-        assertTrue(walked.complete(),
-                () -> "nothing stopped this walk: " + walked.notOpened() + walked.loops());
+        assertEquals(Set.of(), gaps(walked), "nothing stopped this walk");
     }
 
     /**
@@ -142,8 +156,7 @@ class AWalkOfOneAnswerNamesWhatMeansNothingTest {
 
         AnswerWalk.Walked walked = AnswerWalk.of("Q", ring);
 
-        assertFalse(walked.complete(), "the walk met what it was already walking");
-        assertEquals(Set.of("java.util.ArrayList at []"), walked.loops(),
+        assertEquals(Set.of("A_GRAPH_THAT_LOOPS Q[] java.util.ArrayList"), gaps(walked),
                 "for what it is, and where");
     }
 
@@ -161,8 +174,8 @@ class AWalkOfOneAnswerNamesWhatMeansNothingTest {
         AnswerWalk.Walked walked = AnswerWalk.of("Q",
                 new Dated(java.time.LocalDateTime.of(2026, 1, 1, 0, 0)));
 
-        assertFalse(walked.complete(), "java.base opens nothing to this");
-        assertFalse(walked.notOpened().isEmpty(),
-                () -> "and says which field: " + walked.notOpened());
+        assertEquals(Set.of("A_FIELD_THAT_WOULD_NOT_OPEN Q.Dated#at.LocalDateTime#date",
+                        "A_FIELD_THAT_WOULD_NOT_OPEN Q.Dated#at.LocalDateTime#time"),
+                gaps(walked), "and says which fields");
     }
 }

@@ -40,70 +40,11 @@ record Divergence(Locus at, String cause, Divergence.Kind kind) {
         DIFFERENT_THINGS
     }
 
-    /**
-     * What a walk of two answers came to: what it found, and how much of them it covered.
-     *
-     * <p>Two answers rather than one, because a list of findings on its own does not say whether it
-     * is the whole list. A walk that ran out of budget, or met a field it could not open, finds less
-     * than there is to find — and a caller comparing findings with a register it keeps would read
-     * that shortfall as agreement. So the coverage is handed over beside the findings and is a
-     * caller's first question, not a footnote in a message.
-     */
-    record Walked(List<Divergence> found, Traversal traversal) {}
-
-    /**
-     * How much of the two answers the walk covered.
-     *
-     * <p>Complete is the absence of interruptions and nothing else. What is counted beside them is
-     * how many pairs were walked, which is what tells a caller its model reached anything at all.
-     */
-    record Traversal(int visited, List<Interruption> interruptions) {
-
-        /** Whether the walk got to the end of what there was to walk. */
-        boolean complete() {
-            return interruptions.isEmpty();
-        }
-    }
-
-    /** Somewhere the walk could not go, and what stopped it. */
-    record Interruption(Interruption.Why why, Locus at) {
-
-        /** What stops a walk. */
-        enum Why {
-            /** The walk was cut short by its own bound before it reached the end. */
-            BUDGET_EXHAUSTED,
-            /** A field the runtime would not hand over, so what is under it was not compared. */
-            A_FIELD_THAT_WOULD_NOT_OPEN,
-            /** A pair that holds itself. What is under it is reported where the walk first met it,
-             *  and this arm is what keeps the holder from being named for finding nothing. */
-            A_GRAPH_THAT_LOOPS,
-            /**
-             * A container of one size whose members do not line up one to one by what they say.
-             *
-             * <p>Not a finding, because which of the two it is cannot be told from here: members
-             * that hold a way of reading a store and members that name different things both arrive
-             * as something with nothing to pair it with. Said as somewhere the walk could not go, so
-             * that whoever meets it is told what is in front of them rather than handed a guess.
-             */
-            MEMBERS_THAT_DO_NOT_PAIR,
-            /**
-             * A collection whose equality is neither its order nor what it holds.
-             *
-             * <p>What pairs two containers is their own contract: a list is equal to another by
-             * position, a set by membership. A collection that is neither answers to neither rule,
-             * and pairing it by the order an iterator happens to give would compare a member with
-             * something that is not its counterpart — which comes back as one input having compiled
-             * to two different answers, the worst thing this can say wrongly.
-             */
-            A_CONTAINER_WITH_NO_RULE_FOR_PAIRING
-        }
-    }
-
     /** A walk of two whole answers is bounded, so a graph nobody meant to walk stops. */
     private static final int FAR_ENOUGH = 400_000;
 
     /** Where {@code a} and {@code b} come apart, and how much of them was looked at. */
-    static Walked between(Object a, Object b) {
+    static Covered<Divergence> between(Object a, Object b) {
         return between(a, b, FAR_ENOUGH);
     }
 
@@ -114,11 +55,10 @@ record Divergence(Locus at, String cause, Divergence.Kind kind) {
      * the bound a compile is walked under is larger than anything here, so the path out would rot
      * unread and the arm reporting it would go with it.
      */
-    static Walked between(Object a, Object b, int budget) {
+    static Covered<Divergence> between(Object a, Object b, int budget) {
         Walk walk = new Walk(budget);
         walk.at(a, b, Locus.ROOT);
-        return new Walked(List.copyOf(walk.out),
-                new Traversal(walk.visited, List.copyOf(walk.interruptions)));
+        return Covered.of(walk.out, walk.gaps);
     }
 
     private static final class Walk {
@@ -146,8 +86,7 @@ record Divergence(Locus at, String cause, Divergence.Kind kind) {
         /** The pairs on the way down, so a graph that holds itself is met rather than followed. */
         private final Set<Pair> walking = new HashSet<>();
         private final List<Divergence> out = new ArrayList<>();
-        private final List<Interruption> interruptions = new ArrayList<>();
-        private int visited;
+        private final List<Gap> gaps = new ArrayList<>();
         private int budget;
 
         Walk(int budget) {
@@ -160,11 +99,13 @@ record Divergence(Locus at, String cause, Divergence.Kind kind) {
         }
 
         private void say(Locus at, Class<?> c, Kind kind) {
-            out.add(new Divergence(at, c.isArray() ? c.getSimpleName() : c.getName(), kind));
+            // What it is called and not what a reader calls it, arrays included: two arrays of
+            // same-named components in two packages are two types.
+            out.add(new Divergence(at, c.getTypeName(), kind));
         }
 
-        private void stopped(Interruption.Why why, Locus at) {
-            interruptions.add(new Interruption(why, at));
+        private void stopped(Gap.Why why, Locus at) {
+            gaps.add(new Gap(why, at.toString()));
         }
 
         /**
@@ -178,11 +119,22 @@ record Divergence(Locus at, String cause, Divergence.Kind kind) {
                 return true;
             }
             if (budget-- <= 0) {
-                stopped(Interruption.Why.BUDGET_EXHAUSTED, path);
+                stopped(Gap.Why.BUDGET_EXHAUSTED, path);
                 return false;
             }
-            if (a == null || b == null || a.getClass() != b.getClass()) {
+            if (a == null || b == null) {
                 say(path, (a == null ? b : a).getClass(), Kind.DIFFERENT_THINGS);
+                return true;
+            }
+            // What they say before what they are. A concrete class is not what makes a value: a
+            // `HashMap` and a `LinkedHashMap` holding one thing are one value by the contract both
+            // of them answer to, and telling them apart by their class would call an answer that
+            // reproduced a compile that did not.
+            if (a.equals(b)) {
+                return true;
+            }
+            if (a.getClass() != b.getClass()) {
+                say(path, a.getClass(), Kind.DIFFERENT_THINGS);
                 return true;
             }
             Class<?> c = a.getClass();
@@ -206,10 +158,9 @@ record Divergence(Locus at, String cause, Divergence.Kind kind) {
                 return true;
             }
             if (!walking.add(pair)) {
-                stopped(Interruption.Why.A_GRAPH_THAT_LOOPS, path);
+                stopped(Gap.Why.A_GRAPH_THAT_LOOPS, path);
                 return false;
             }
-            visited++;
             int before = out.size();
             boolean whole;
             try {
@@ -287,7 +238,7 @@ record Divergence(Locus at, String cause, Divergence.Kind kind) {
                         mine = f.get(a);
                         theirs = f.get(b);
                     } catch (ReflectiveOperationException | RuntimeException | Error _) {
-                        stopped(Interruption.Why.A_FIELD_THAT_WOULD_NOT_OPEN,
+                        stopped(Gap.Why.A_FIELD_THAT_WOULD_NOT_OPEN,
                                 path.thenMember(k, f.getName()));
                         whole = false;
                         continue;
@@ -313,11 +264,11 @@ record Divergence(Locus at, String cause, Divergence.Kind kind) {
          * holds one to one or does not, and the second is worth saying.
          */
         private boolean members(Collection<?> left, Collection<?> right, Class<?> c, Locus path) {
-            if (left.size() != right.size()) {
-                say(path, c, Kind.DIFFERENT_THINGS);
-                return true;
-            }
             if (left instanceof List<?> mine && right instanceof List<?> yours) {
+                if (mine.size() != yours.size()) {
+                    say(path, c, Kind.DIFFERENT_THINGS);
+                    return true;
+                }
                 boolean whole = true;
                 for (int i = 0; i < mine.size(); i++) {
                     whole &= at(mine.get(i), yours.get(i), path.then(new Locus.Step.Element()));
@@ -325,9 +276,24 @@ record Divergence(Locus at, String cause, Divergence.Kind kind) {
                 return whole;
             }
             if (left instanceof Set<?> && right instanceof Set<?>) {
-                return pairedOneToOne(left, right, path.then(new Locus.Step.Element())) != null;
+                if (left.size() != right.size()) {
+                    say(path, c, Kind.DIFFERENT_THINGS);
+                    return true;
+                }
+                if (!pairedOneToOne(left, right, path.then(new Locus.Step.Element()))) {
+                    return false;
+                }
+                // Paired by what they say and still not equal, which is the container saying its
+                // membership is not what its members mean.
+                if (!left.equals(right)) {
+                    say(path, c, Kind.THE_SAME_THING_TWICE);
+                }
+                return true;
             }
-            stopped(Interruption.Why.A_CONTAINER_WITH_NO_RULE_FOR_PAIRING, path);
+            // Said before the sizes are compared. That two containers of different sizes hold
+            // different things is a container's own contract as much as how its members line up, and
+            // this is where that contract is unknown.
+            stopped(Gap.Why.A_CONTAINER_WITH_NO_RULE_FOR_PAIRING, path);
             return false;
         }
 
@@ -341,8 +307,7 @@ record Divergence(Locus at, String cause, Divergence.Kind kind) {
          * side then pairs with whatever survived. Counting what the map kept is what says the
          * correspondence is the one it looks like.
          */
-        private Map<Object, Object> pairedOneToOne(Collection<?> left, Collection<?> right,
-                                                   Locus path) {
+        private boolean pairedOneToOne(Collection<?> left, Collection<?> right, Locus path) {
             Map<Object, Object> theirs = new HashMap<>();
             for (Object each : right) {
                 theirs.put(each, each);
@@ -353,10 +318,10 @@ record Divergence(Locus at, String cause, Divergence.Kind kind) {
             }
             if (theirs.size() != right.size() || mine.size() != left.size()
                     || !theirs.keySet().equals(mine.keySet())) {
-                stopped(Interruption.Why.MEMBERS_THAT_DO_NOT_PAIR, path);
-                return null;
+                stopped(Gap.Why.MEMBERS_THAT_DO_NOT_PAIR, path);
+                return false;
             }
-            return theirs;
+            return true;
         }
 
         /**
@@ -385,9 +350,17 @@ record Divergence(Locus at, String cause, Divergence.Kind kind) {
                 say(path, c, Kind.DIFFERENT_THINGS);
                 return true;
             }
-            if (pairedOneToOne(left.keySet(), right.keySet(),
-                    path.then(new Locus.Step.MapKey())) == null) {
+            if (!pairedOneToOne(left.keySet(), right.keySet(),
+                    path.then(new Locus.Step.MapKey()))) {
                 return false;
+            }
+            // Judged here and not from what the walk finds underneath. A container has an equality
+            // of its own beside whatever its values hold, and the rule that names a thing for
+            // finding nothing below it would let one wrap a defect that is already written down and
+            // go unnamed. What says this one is its own is that its keys pair by what they say and
+            // it says they do not.
+            if (!left.keySet().equals(right.keySet())) {
+                say(path, c, Kind.THE_SAME_THING_TWICE);
             }
             Map<Object, Object> theirs = new HashMap<>();
             for (Map.Entry<?, ?> each : right.entrySet()) {

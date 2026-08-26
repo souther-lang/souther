@@ -6,7 +6,6 @@ import souther.compiler.diag.SourceNameResolver;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -87,73 +86,57 @@ class EverythingAnAnswerHoldsMeansSomethingTest {
      * @param asDifferently questions the two stores were not both asked, which is the ground the
      *                      comparison stands on rather than something it can report on
      */
-    private record Met(Map<Locus.Place, Set<String>> byPlace, Set<String> stopped,
-                       Map<Locus.Place, Set<String>> differentThings, Set<String> askedDifferently,
-                       int visited) {}
+    private record Met(Map<Locus.Place, Set<String>> byPlace, Set<String> fellShort,
+                       Map<Locus.Place, Set<String>> differentThings, int visited) {}
 
     private static Met met() {
         Map<Locus.Place, Set<String>> byPlace = new TreeMap<>();
         Map<Locus.Place, Set<String>> differentThings = new TreeMap<>();
-        Set<String> stopped = new TreeSet<>();
-        Set<String> askedDifferently = new TreeSet<>();
+        Set<String> fellShort = new TreeSet<>();
         int visited = 0;
         for (AnswerClosure.Scenario scenario : AnswerClosure.Scenario.values()) {
             for (Db one : storesOf(scenario)) {
                 AnswerWalk.Walked walked = AnswerWalk.of(one);
                 visited += walked.visited();
-                walked.notOpened().forEach(each ->
-                        stopped.add("A_FIELD_THAT_WOULD_NOT_OPEN " + each + " in " + scenario));
-                walked.loops().forEach(each ->
-                        stopped.add("A_GRAPH_THAT_LOOPS " + each + " in " + scenario));
-                walked.found().forEach(each -> byPlace
+                List<AnswerWalk.Found> found = switch (walked.covered()) {
+                    case Covered.Whole<AnswerWalk.Found>(List<AnswerWalk.Found> all) -> all;
+                    case Covered.Partly<AnswerWalk.Found>(List<AnswerWalk.Found> all,
+                            List<Gap> gaps) -> {
+                        gaps.forEach(each -> fellShort.add(each + " in " + scenario));
+                        yield all;
+                    }
+                };
+                found.forEach(each -> byPlace
                         .computeIfAbsent(each.place(), _ -> new TreeSet<>())
                         .add(new AnswerClosure.Observation(
                                 AnswerClosure.Detector.ONE_ANSWER_WALKED, scenario).toString()));
             }
             // And the same scenario compiled twice, which is what the other detector needs.
-            List<Db> again = storesOf(scenario);
             List<Db> first = storesOf(scenario);
+            List<Db> again = storesOf(scenario);
             for (int i = 0; i < first.size(); i++) {
-                Map<Key<?>, Answer<?>> mine = first.get(i).everyAnswer();
-                Map<Key<?>, Answer<?>> theirs = again.get(i).everyAnswer();
-                // Which questions the two were put is what the comparison below stands on, and it
-                // is asked here rather than assumed. Compared over what they have in common, a
-                // question one of them was never put drops out of the comparison without a word,
-                // and this would go on holding a register about the answers that remained.
-                mine.keySet().stream().filter(key -> !theirs.containsKey(key))
-                        .forEach(key -> askedDifferently.add(
-                                "only the first time: " + key + " in " + scenario));
-                theirs.keySet().stream().filter(key -> !mine.containsKey(key))
-                        .forEach(key -> askedDifferently.add(
-                                "only the second time: " + key + " in " + scenario));
-                Set<Key<?>> asked = new HashSet<>(mine.keySet());
-                asked.retainAll(theirs.keySet());
-                for (Key<?> key : asked) {
-                    Answer<?> a = mine.get(key);
-                    Answer<?> b = theirs.get(key);
-                    if (a.equals(b)) {
+                List<TwoStores.Found> found = switch (TwoStores.compared(first.get(i), again.get(i))) {
+                    case Covered.Whole<TwoStores.Found>(List<TwoStores.Found> all) -> all;
+                    case Covered.Partly<TwoStores.Found>(List<TwoStores.Found> all,
+                            List<Gap> gaps) -> {
+                        gaps.forEach(each -> fellShort.add(each + " in " + scenario));
+                        yield all;
+                    }
+                };
+                for (TwoStores.Found each : found) {
+                    if (each.kind() == Divergence.Kind.DIFFERENT_THINGS) {
+                        differentThings.computeIfAbsent(each.place(), _ -> new TreeSet<>())
+                                .add(scenario.toString());
                         continue;
                     }
-                    Divergence.Walked walk = Divergence.between(a, b);
-                    walk.traversal().interruptions().forEach(each -> stopped.add(
-                            each.why() + " " + key.getClass().getName() + each.at()
-                                    + " in " + scenario));
-                    for (Divergence each : walk.found()) {
-                        Locus.Place place = each.at().of(key.getClass().getName(), each.cause());
-                        if (each.kind() == Divergence.Kind.DIFFERENT_THINGS) {
-                            differentThings.computeIfAbsent(place, _ -> new TreeSet<>())
-                                    .add(scenario.toString());
-                            continue;
-                        }
-                        byPlace.computeIfAbsent(place, _ -> new TreeSet<>())
-                                .add(new AnswerClosure.Observation(
-                                        AnswerClosure.Detector.TWO_ANSWERS_COMPARED,
-                                        scenario).toString());
-                    }
+                    byPlace.computeIfAbsent(each.place(), _ -> new TreeSet<>())
+                            .add(new AnswerClosure.Observation(
+                                    AnswerClosure.Detector.TWO_ANSWERS_COMPARED,
+                                    scenario).toString());
                 }
             }
         }
-        return new Met(byPlace, stopped, differentThings, askedDifferently, visited);
+        return new Met(byPlace, fellShort, differentThings, visited);
     }
 
     /**
@@ -170,10 +153,8 @@ class EverythingAnAnswerHoldsMeansSomethingTest {
         // compile reaches is as much what it did as what it said: two stores over one input
         // reaching different graphs would mean the dependencies recorded in one are not the ones
         // the other would keep. Asked of every scenario, because every scenario is compiled twice.
-        assertEquals(Set.of(), met.askedDifferently(),
-                "a question one of two compilations of one input was put and the other was not");
-        assertEquals(Set.of(), met.stopped(),
-                "somewhere a walk of the answers could not go");
+        assertEquals(Set.of(), met.fellShort(),
+                "somewhere a search of the answers fell short of what it was asked to cover");
         assertEquals(Map.of(), met.differentThings(),
                 "one input compiled twice answered two different things, which no equality can fix");
     }

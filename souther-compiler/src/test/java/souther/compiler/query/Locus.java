@@ -68,8 +68,19 @@ record Locus(List<Locus.Step> steps) {
          * one class under a component of one name, and a walk that reached them through a collection
          * writes the same steps for both — so one line would stand for two places, one of them would
          * be fixed, and the line would stay because the other still holds.
+         *
+         * <p><b>{@code owner} is what the type is called and not what a reader calls it.</b> Two
+         * classes of one simple name are two types, so a step that kept the short name would put
+         * them back together — the collision this exists to prevent, one level in. What is shown is
+         * shortened where it is written out, which is a reader's business and not this one's.
          */
-        record Member(String owner, String name) implements Step {}
+        record Member(String owner, String name) implements Step {
+
+            /** What to call it where somebody is reading. */
+            String shown() {
+                return owner.substring(Math.max(owner.lastIndexOf('.'), owner.lastIndexOf('$')) + 1);
+            }
+        }
 
         /** An element of an array or of a collection. Which one is not kept: an answer is not more
          *  or less exposed at the third element than at the first, and the index would put the
@@ -96,7 +107,7 @@ record Locus(List<Locus.Step> steps) {
      * it instead of leaving a string nobody notices is stale.
      */
     private static final Step.Member WHAT_WAS_SAID = new Step.Member(
-            Answer.class.getSimpleName(), Answer.class.getRecordComponents()[1].getName());
+            Answer.class.getName(), Answer.class.getRecordComponents()[1].getName());
 
     /**
      * Whether this is a place every answer has, rather than a place in one answer's value.
@@ -132,7 +143,7 @@ record Locus(List<Locus.Step> steps) {
 
     /** The member {@code owner} declares under {@code name}. */
     Locus thenMember(Class<?> owner, String name) {
-        return then(new Step.Member(owner.getSimpleName(), name));
+        return then(new Step.Member(owner.getName(), name));
     }
 
     /**
@@ -159,7 +170,7 @@ record Locus(List<Locus.Step> steps) {
         StringBuilder out = new StringBuilder();
         for (Step step : steps) {
             out.append(switch (step) {
-                case Step.Member(String owner, String name) -> "." + owner + "#" + name;
+                case Step.Member member -> "." + member.shown() + "#" + member.name();
                 case Step.Element _ -> "[]";
                 case Step.MapKey _ -> "{key}";
                 case Step.MapValue _ -> "{value}";
