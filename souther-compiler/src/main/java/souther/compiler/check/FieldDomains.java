@@ -527,10 +527,14 @@ public final class FieldDomains {
     /**
      * Whether {@code end} is where {@code other} leaves this coordinate on the side asked for.
      *
-     * <p>Asked of the ends and not of how the two readings wrote them. A reading with a declaration
-     * left out states its bounds over again, and a number arriving by another route is written as
-     * that route wrote it — so a derived equality answers that the end moved wherever {@code 3.0}
-     * came back as {@code 3.00}, and the declaration that moved it nowhere is named as holding it.
+     * <p>Whether the end moved, which is a question about where the coordinate stops and not about
+     * what the two readings hold: {@link Endpoint#sameAs} and not a derived equality. The two are
+     * different questions here and not two spellings of one — a decimal's scale says which grid a
+     * quantity was rounded onto, so the layer these ends come from keeps representations apart where
+     * they carry something, and {@code 5} and {@code 5.00} are one place held two ways.
+     *
+     * <p>So this does not rest on every end arriving here already written the one way. Nothing
+     * states that, and the reading below is under no obligation to make it true.
      *
      * <p>An end neither reading has is the same absence, which is why a null on both sides is true
      * here and is not {@link Endpoint#sameAs}'s answer: that one is asked of an end that is there.
