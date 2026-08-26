@@ -141,15 +141,16 @@ final class Clauses {
      */
     StatedClauses statedAt(TypeSymbol.AtModule named, Hir.Data data, Map<BindingId, Core> given) {
         List<Stated> stated = new ArrayList<>();
-        int declared = 0;
+        List<RuleRef.Invariant> lost = new ArrayList<>();
         for (TypeOps.Declared inv : declared(named, data)) {
-            declared++;
             Core one = statedAt(inv.clause().expr(), named, data, given);
             if (one != null) {
                 stated.add(new Stated(Clause.of(inv), one));
+            } else {
+                lost.add(new RuleRef.Invariant(Clause.of(inv).ref()));
             }
         }
-        return new StatedClauses(List.copyOf(stated), stated.size() == declared);
+        return new StatedClauses(List.copyOf(stated), List.copyOf(lost));
     }
 
     /**
@@ -161,15 +162,26 @@ final class Clauses {
      * two are the same list with different things missing from it. Said here, where the dropping
      * happens, rather than counted again by whoever needs to know.
      *
-     * @param everyClauseStated whether every clause the declaration writes is in {@code clauses}.
-     *                          A caller that asked for none of them was not asked to lose any and
-     *                          is told so
+     * @param lost which clauses the declaration writes are not in {@code clauses}, named rather
+     *             than counted. A caller told only that something was lost has to find out what it
+     *             was about by reading the declaration again, and a reader that answers for the
+     *             rules it was handed would otherwise answer for a rule it never saw
      */
-    record StatedClauses(List<Stated> clauses, boolean everyClauseStated) {
+    record StatedClauses(List<Stated> clauses, List<RuleRef.Invariant> lost) {
+
+        public StatedClauses {
+            clauses = List.copyOf(clauses);
+            lost = List.copyOf(lost);
+        }
 
         /** What a reading told to leave a declaration's clauses out gets: none of them, and nothing
          * lost. */
-        static final StatedClauses NONE_ASKED_FOR = new StatedClauses(List.of(), true);
+        static final StatedClauses NONE_ASKED_FOR = new StatedClauses(List.of(), List.of());
+
+        /** Whether every clause the declaration writes is in {@link #clauses}. */
+        boolean everyClauseStated() {
+            return lost.isEmpty();
+        }
     }
 
     /**

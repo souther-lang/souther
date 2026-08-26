@@ -1119,20 +1119,27 @@ public final class TypeOps {
     }
 
     /**
-     * The fields a sum exposes: those contributed by a data that every one of its cases spreads,
-     * transitively. What holds of every case is a property of the sum, and a spread is nominal
-     * (ADR-0012), so what makes the fields shared is that the author wrote `...Common` in each case —
-     * not that two cases happen to agree on a field name, which would be the structural reading
-     * ADR-0012 declines. Empty when the cases share no spread, so the read stays the error it is.
+     * The part a sum's cases hold in common: the declarations every one of them spreads,
+     * transitively, and the fields those declare.
+     *
+     * <p>What holds of every case is a property of the sum, and a spread is nominal, so what makes
+     * the part shared is that the author wrote `...Common` in each case — not that two cases happen
+     * to agree on a field name, which is the structural reading the language declines.
+     * {@link Shape.CommonProduct.None} when they share no spread, so a read of a field stays the
+     * error it is.
+     *
+     * <p>Package-private, and the answer travels as {@link Shape.Sum#common}. Every reader of a
+     * sum's shared part is a reader of what a position is, which is {@link Shape}'s to say; asked
+     * here directly, a reader would have a second way to find out what kind of sum it is holding.
      */
-    public static Map<String, Type> commonSpreadFields(Hir.SumData sum, Symbols symbols) {
-        return commonSpreadFields(AtomSpace.subjectAtoms(Type.ref(sum.declares()), symbols), symbols);
+    static Shape.CommonProduct commonSpreadOf(Hir.SumData sum, Symbols symbols) {
+        return commonSpreadOf(AtomSpace.subjectAtoms(Type.ref(sum.declares()), symbols), symbols);
     }
 
-    /** As {@link #commonSpreadFields(Hir.SumData, Symbols)}, for cases already flattened to leaves. */
-    public static Map<String, Type> commonSpreadFields(List<TypeSymbol> cases, Symbols symbols) {
+    /** As {@link #commonSpreadOf(Hir.SumData, Symbols)}, for cases already flattened to leaves. */
+    static Shape.CommonProduct commonSpreadOf(List<TypeSymbol> cases, Symbols symbols) {
         if (cases == null || cases.isEmpty()) {
-            return Map.of();
+            return new Shape.CommonProduct.None();
         }
         Set<TypeSymbol> common = null;
         for (TypeSymbol c : cases) {
@@ -1144,16 +1151,36 @@ public final class TypeOps {
                 common.retainAll(spreads);
             }
             if (common.isEmpty()) {
-                return Map.of();
+                return new Shape.CommonProduct.None();
             }
         }
         Map<String, Type> fields = new LinkedHashMap<>();
+        List<TypeSymbol> origins = new ArrayList<>();
         for (TypeSymbol ancestor : common) {
             if (symbols.declarations().declaration(ancestor) instanceof Hir.Data d) {
+                origins.add(ancestor);
                 fields.putAll(fieldTypes(d, symbols));
             }
         }
-        return fields;
+        // A data declaring no field is a unit data and is written without a body (E1008), so this
+        // is empty only where the cases share nothing at all.
+        return fields.isEmpty() ? new Shape.CommonProduct.None()
+                : new Shape.CommonProduct.Shared(origins, fields);
+    }
+
+    /**
+     * The declaration {@code name} denotes where it writes fields, with the name it was reached by,
+     * and null where it denotes none.
+     *
+     * <p>The one resolution. What kind of position a name makes is {@link Shape}'s answer and is
+     * settled before anything asks this; what is left is finding the declaration that answer is
+     * about, and a reader doing that for itself has a second way to decide what stands at a
+     * position.
+     */
+    static PositionReading.Owner writingFields(TypeSymbol name, Symbols symbols) {
+        return name instanceof TypeSymbol.AtModule at
+                && symbols.declarations().declaration(at) instanceof Hir.Data data
+                ? new PositionReading.Owner(at, data) : null;
     }
 
     /** Every data reachable from {@code data} through spreads, transitively — the set two cases are

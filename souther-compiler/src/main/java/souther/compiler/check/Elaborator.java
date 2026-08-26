@@ -485,11 +485,16 @@ public final class Elaborator {
             // sealed interface declares the accessor its cases already carry (issue #160). Only a
             // named sum, whose interface this compile emits — an anonymous union's cases are not
             // written together, so nothing declares their shared part.
-            if (target instanceof Type.Ref ref && ctx.symbols().declarations().declaration(ref.name()) instanceof Hir.SumData) {
-                Type shared = TypeOps.commonSpreadFields(cases, ctx.symbols()).get(fa.field());
-                if (shared != null) {
-                    return new Core.FieldAccess(targetCore, fa.field(), shared, fa.pos());
-                }
+            // Asked of the type as written and not through the names it wears: how far a read looks
+            // through a newtype is this elaboration's policy, and a `data X = S` over a sum is a
+            // value of X, whose fields are X's. `TypeView` keeps both directions available for that
+            // reason, and this reader takes the one it has always taken.
+            TypeView view = TypeView.of(target, ctx.symbols());
+            if (!view.isWrapped() && view.shape() instanceof Shape.Sum shape
+                    && shape.common() instanceof Shape.CommonProduct.Shared shared
+                    && shared.fields().get(fa.field()) != null) {
+                return new Core.FieldAccess(targetCore, fa.field(),
+                        shared.fields().get(fa.field()), fa.pos());
             }
             // A sum carries no fields of its own — its cases do, and which case it is is not known
             // until it is opened. Saying that is the difference between "this value has no such

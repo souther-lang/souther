@@ -31,6 +31,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * nothing here has shown to be the same walk. What is guarded is the duplicated descent that decided
  * where a row's positions are, and the one step the two readers of that question now share.
  *
+ * <p>The invariant reading is a third reader of the same step, which is why the one place is beside
+ * {@code Shape} rather than in this package: what is under a type is a fact about a shape, and every
+ * reader of one already looks there.
+ *
  * <p>A tripwire and not a proof. The same fact is reachable by other spellings, so a helper in
  * between defeats it; what it does see is the line that has to be added first.
  */
@@ -40,7 +44,7 @@ class TheReadingAndThePlanTakeOneStepDownATypeTest {
     private static final RepositoryLayout REPOSITORY = RepositoryLayout.ofWorkingDirectory();
 
     /** Where the fields are taken off a product shape. */
-    private static final String THE_ONE_PLACE = "inputs/StructuralDescent.java";
+    private static final String THE_ONE_PLACE = "check/StructuralDescent.java";
 
     /**
      * The fields of a {@code Shape.Product} are read in one place.

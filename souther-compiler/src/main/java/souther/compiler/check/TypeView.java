@@ -100,7 +100,7 @@ public record TypeView(Type declared, List<TypeOps.Layer> wrappers, Shape shape)
      */
     private static Shape denoted(TypeSymbol name, Symbols symbols) {
         return switch (symbols.declarations().declaration(name)) {
-            case Hir.SumData _ -> new Shape.Sum(name);
+            case Hir.SumData sum -> new Shape.Sum(name, TypeOps.commonSpreadOf(sum, symbols));
             case Hir.UnitData _ -> new Shape.Unit(name);
             case Hir.Data data when data.newtype() -> new Shape.Unresolved(name);
             case Hir.Data data -> new Shape.Product(name, TypeOps.fieldTypes(data, symbols));

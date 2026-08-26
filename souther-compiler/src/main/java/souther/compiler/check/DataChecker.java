@@ -879,13 +879,13 @@ public final class DataChecker {
      * can see in every case. */
     private static Map<String, Type> spreadOfSum(String name, Hir.SumData sum, Type bound,
                                                  SourcePos pos, CheckContext ctx) {
-        Map<String, Type> shared = TypeOps.commonSpreadFields(sum, ctx.symbols());
-        if (shared.isEmpty()) {
+        if (!(TypeView.of(Type.ref(sum.declares()), ctx.symbols()).shape() instanceof Shape.Sum shape)
+                || !(shape.common() instanceof Shape.CommonProduct.Shared shared)) {
             throw CompileException.of(Diagnostic.at(pos)
                     .say(new DataMessage.SpreadOfASumWhoseCasesShareNothing(name, Type.show(bound)))
                     .build());
         }
-        return shared;
+        return shared.fields();
     }
 
     private static void checkEncoder(Hir.EncoderDef enc, CheckContext ctx) {

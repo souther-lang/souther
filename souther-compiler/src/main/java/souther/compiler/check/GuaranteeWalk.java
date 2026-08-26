@@ -4,7 +4,9 @@ import souther.compiler.core.Core;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.function.Predicate;
 
@@ -47,22 +49,26 @@ final class GuaranteeWalk {
     /**
      * How far a reader is asking this walk to go.
      *
+     * <p>The last two are asked of different things, and are different types for that reason. A
+     * name supposed to hold values is a position; a rule left out is a rule, and one a spread
+     * carries in was written where it was written whatever value it is read at.
+     *
      * @param extent          how far down to read
      * @param stopAt          names this reader is supposing hold values whatever is written under
      *                        them, so nothing under one of them is read
-     * @param withoutClauses  names whose own clauses this reader asked to leave out, what is under
-     *                        them still being read
+     * @param withoutClauses  rules this reader asked to leave out, what is under the declarations
+     *                        that wrote them still being read
      */
-    record Scope(Extent extent, Predicate<TypeSymbol> stopAt, Predicate<TypeSymbol> withoutClauses) {
+    record Scope(Extent extent, Predicate<TypeSymbol> stopAt, RulesLeftOut withoutClauses) {
 
         /** Every rule down to {@code positions} positions, wherever it is written. */
         static Scope asFarAs(int positions) {
-            return new Scope(new Extent.AsFarAs(positions), _ -> false, _ -> false);
+            return new Scope(new Extent.AsFarAs(positions), _ -> false, RulesLeftOut.NONE);
         }
 
         /** Every rule the model writes under this value. */
         static Scope everyPosition() {
-            return new Scope(new Extent.EveryPosition(), _ -> false, _ -> false);
+            return new Scope(new Extent.EveryPosition(), _ -> false, RulesLeftOut.NONE);
         }
     }
 
@@ -112,7 +118,7 @@ final class GuaranteeWalk {
         }
     }
 
-    /** Told what was read, and where the reading stopped. */
+    /** Told what was read, what another reading answers for, and where this walk stopped. */
     interface Reader {
 
         /** What the declaration at {@code path} guarantees of the value there. */
@@ -121,32 +127,41 @@ final class GuaranteeWalk {
         /** Where the walk went no further, and what stood there. */
         default void stopped(String path, Type type, Stop why) {}
 
-        /** That a declaration at {@code path} writes clauses this reading could not state, so what
-         * they were about is not among what was handed over. */
-        default void lostAClause(String path) {}
+        /**
+         * That rules stand under {@code path} which no reading here takes in, and which a reading
+         * opened elsewhere answers for — the cases of a sum, what a container holds.
+         *
+         * <p>Not a stop. The position was read and what it states was heard; this says only that
+         * something below it belongs to somebody else. Reported as a stop, a sum whose cases share a
+         * spread would have to be either read or handed on, and it is both.
+         */
+        default void handedOn(String path, Type type) {}
+
+        /** That a declaration at {@code path} writes these clauses and this reading could not state
+         * them, so what they were about is not among what was handed over. */
+        default void lostAClause(String path, List<RuleRef.Invariant> lost) {}
     }
 
-    /** Why a walk went no further. */
+    /**
+     * Why a walk went no further.
+     *
+     * <p>Every one of them is this walk's own doing. A position it did not enter because nothing
+     * there belongs to it is not a stop at all — that is {@link Reader#handedOn}, and it is answered
+     * by the reading rather than by the walk. Held here as a stop, a position that both states rules
+     * and leaves something below to another reading could only be one of the two.
+     */
     enum Stop {
 
         /** As far down as the reader asked to be taken. Not a limit on the model: a rule four
          * records down refuses the outermost construction exactly as one on its own fields does. */
         PAST_THE_DEPTH,
 
-        /** Nothing is declared here that could hold a rule about every value standing at it: a
-         * container or an optional, a type nothing is written under, or a choice between
-         * declarations, whose rules are about values of one case and not about every value here. */
-        NOTHING_DECLARED,
-
         /** A name the reader is supposing holds values, so what is under it says nothing here. */
         ASKED_TO_STOP,
 
         /** Met already on the way down, and read where it was met. A record holding one of its own
          * kind stops here and nothing is short of anything for it. */
-        ALREADY_ENTERED,
-
-        /** A declaration names a position the walk could find no value for. */
-        NO_VALUE_THERE
+        ALREADY_ENTERED
     }
 
     /**
@@ -168,57 +183,66 @@ final class GuaranteeWalk {
             reader.stopped(path, root.type(), Stop.PAST_THE_DEPTH);
             return;
         }
-        if (!(root.type() instanceof Type.Ref ref)) {
-            // Nothing here is named, so there is nothing this walk could have been told to stop at
-            // and nothing to record as entered.
-            reader.stopped(path, root.type(), Stop.NOTHING_DECLARED);
-            return;
+        // The reading first, because what stands here is what this walk's own limits are about: the
+        // name it was told to stop at and the name it has already entered are the declaration's, and
+        // asking the type for one beside the reading is a second answer to that.
+        TypeGuarantees.At here = guarantees.at(root, at);
+        TypeSymbol name = here.name();
+        if (name != null) {
+            if (scope.stopAt().test(name)) {
+                reader.stopped(path, root.type(), Stop.ASKED_TO_STOP);
+                return;
+            }
+            // A name already entered was read where it was met, so reading it again would be the
+            // same reading done twice — which costs, and which a reader that remembers what it was
+            // asked would see twice.
+            if (entered.contains(name)) {
+                reader.stopped(path, root.type(), Stop.ALREADY_ENTERED);
+                return;
+            }
         }
-        // Asked of the name and before the reading, because being told to stop at a name is this
-        // walk's business and says nothing about what the declaration states.
-        if (scope.stopAt().test(ref.name())) {
-            reader.stopped(path, root.type(), Stop.ASKED_TO_STOP);
-            return;
+        // What the declarations state is read whatever this walk was asked for; which of them this
+        // reader hears is the scope's answer, asked of each rule. A rule the reader asked to leave
+        // out is not one it was asked to lose, so nothing is reported lost for it either — and the
+        // rules read here need not have been written on the declaration standing here, which is why
+        // this is not one question about the position.
+        List<RuleRef.Invariant> lost = new ArrayList<>();
+        if (here.coverage() instanceof TypeGuarantees.At.Coverage.Incomplete incomplete) {
+            for (RuleRef.Invariant each : incomplete.lost()) {
+                if (!scope.withoutClauses().excludes(each)) {
+                    lost.add(each);
+                }
+            }
         }
-        // Asked before the declaration is read, and of the type's own name, which is the name a
-        // reading here would answer with. A name already entered was read where it was met, so
-        // reading it again would be the same reading done twice — which costs, and which a reader
-        // that remembers what it was asked would see twice.
-        if (entered.contains(ref.name())) {
-            reader.stopped(path, root.type(), Stop.ALREADY_ENTERED);
-            return;
+        if (!lost.isEmpty()) {
+            reader.lostAClause(path, lost);
         }
-        if (!(guarantees.at(root, at) instanceof TypeGuarantees.At.Declared here)) {
-            reader.stopped(path, root.type(), Stop.NOTHING_DECLARED);
-            return;
+        for (TypeGuarantee guarantee : here.here()) {
+            if (!scope.withoutClauses().excludes(guarantee.rule())) {
+                reader.guaranteed(path, guarantee);
+            }
+        }
+        // Said whether or not anything was read here, and never instead of it. Both are true of a
+        // sum whose cases share a spread.
+        if (here.handedOn() instanceof TypeGuarantees.At.HandedOn.ToAnotherReading) {
+            reader.handedOn(path, root.type());
         }
         // Entered before anything under it is walked, so that the one name and the other stay
         // paired: a stop taken after entering would leave the name on the path with nothing to take
         // it off, and the next field of the same type would be passed over as one already read.
-        entered.add(here.name());
-        // What the declaration states is read whatever this walk was asked for; whether this reader
-        // hears it is the scope's answer. A reader told to leave a declaration's clauses out was not
-        // asked to lose any, so nothing is reported lost for them either.
-        if (!scope.withoutClauses().test(here.name())) {
-            if (!here.everyClauseStated()) {
-                reader.lostAClause(path);
-            }
-            for (TypeGuarantee guarantee : here.guarantees()) {
-                reader.guaranteed(path, guarantee);
-            }
+        if (name != null) {
+            entered.add(name);
         }
         for (TypeGuarantees.At.Beneath under : here.beneath()) {
             // A position wearing a name is at a path of its own; a newtype's value is the same
             // position and keeps this one's, which is the rule a path walks by: wearing a name is
             // not being somewhere else.
             String there = under.field().isEmpty() ? path : under(path, under.field());
-            if (under.value() == null) {
-                reader.stopped(there, under.type(), Stop.NO_VALUE_THERE);
-            } else {
-                walk(under.value(), there, at, depth + 1, scope, entered, reader);
-            }
+            walk(under.value(), there, at, depth + 1, scope, entered, reader);
         }
-        entered.remove(here.name());
+        if (name != null) {
+            entered.remove(name);
+        }
     }
 
     /** A field of the value at {@code path}. The root of a newtype's own reading is the value it

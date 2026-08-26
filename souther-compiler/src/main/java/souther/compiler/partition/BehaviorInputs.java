@@ -5,7 +5,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.Refinement;
-import souther.compiler.inputs.StructuralDescent;
+import souther.compiler.check.StructuralDescent;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;

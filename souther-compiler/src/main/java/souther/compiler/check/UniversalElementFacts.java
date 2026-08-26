@@ -117,21 +117,29 @@ record UniversalElementFacts(Map<String, Bounds> byPath) {
      * the container's elements.
      */
     static Map<String, Bounds> guaranteed(Type type, Symbols symbols, ReadingPolicy policy) {
-        if (!(type instanceof Type.Ref(TypeSymbol.AtModule named))
-                || !(symbols.declarations().declaration(named) instanceof Hir.Data data)) {
-            return Map.of();
-        }
-        InvariantChecker.Seeded seeded = seededOf(named, data, symbols, policy);
-        if (seeded == null) {
-            return Map.of();
-        }
+        // Whose clauses hold of a value of this type is the one reading's answer. Asked here from
+        // the declaration instead, an element that is a sum is an element nothing is known about,
+        // while the same value read as a field of a record carries the shared part's bounds.
+        List<PositionReading.Owner> owners = PositionReading.of(type, symbols).owners();
         Map<String, Bounds> guaranteed = new LinkedHashMap<>();
-        seeded.atoms().forEach((path, atom) -> {
-            Bounds bounds = seeded.numbers().boundsOf(atom);
-            if (bounds != null && !bounds.saysNothing()) {
-                guaranteed.put(path, bounds);
+        for (PositionReading.Owner owner : owners) {
+            InvariantChecker.Seeded seeded =
+                    seededOf(owner.named(), owner.data(), symbols, policy);
+            if (seeded == null) {
+                // All of them or none, which is what leaves an element unbounded rather than bounded
+                // by half of what the declarations say.
+                return Map.of();
             }
-        });
+            seeded.atoms().forEach((path, atom) -> {
+                Bounds bounds = seeded.numbers().boundsOf(atom);
+                if (bounds != null && !bounds.saysNothing()) {
+                    // A shared part reached through two of its own ancestors is read twice and reads
+                    // alike both times, since a declaration's clauses are what it writes and what it
+                    // spreads.
+                    guaranteed.putIfAbsent(path, bounds);
+                }
+            });
+        }
         return guaranteed;
     }
 
