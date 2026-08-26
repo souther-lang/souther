@@ -53,6 +53,14 @@ cannot be loaded or run at compile time, CTFE degrades to the run-time check. Th
 still does not depend on Raoh — CTFE runs the bare boolean invariant, not the
 Raoh-returning decoder or `__construct`.
 
+That degradation is not a refusal, and ADR-0115 is the decision it sits next to. What Souther
+accepts is bounded by what the JVM can *emit*: a declaration no JVM would load is refused to the
+author at the declaration (E2101, E2102, E2103). What the JVM can *run* on the day of the compile
+bounds nothing. A `$Ctfe.check` that will not load leaves the construction in
+`ConstantOutcome.NotEvaluatedHere` — one of three answers to running one check, and the one that
+says the invariant is checked when the program runs. A compile that stopped there would be reading
+this ADR backwards.
+
 Two alternatives were rejected. A capitalization convention marking constructors (which
 would enable `Amount 500`) is incompatible with free Japanese naming. Type-ascription
 construction (`let money: Amount = 500`) opens a nominal hole, letting a bare `Int` become a

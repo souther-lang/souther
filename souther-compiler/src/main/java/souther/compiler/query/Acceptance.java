@@ -32,6 +32,17 @@ import java.util.List;
  * whether or not the language had anything against it. That is a fact about how a row is evaluated
  * rather than about this: it moves when evaluation stops needing one backend, and until then a
  * verdict here is never more permissive than the one a JVM build gives.
+ *
+ * <p>Which is the decision and not the arrangement (ADR-0115): a program Souther accepts is one the
+ * JVM can emit, so the refusal above reaches the author naming the machine's rule, and an output
+ * that is not the JVM's may emit only what the JVM could have emitted.
+ * {@code AnOutputOutsideTheCompilerReadsACheckedProgramTest} holds it at the boundary it is about.
+ *
+ * <p>What the JVM can run bounds nothing. A constant construction whose check will not load is
+ * {@code ConstantOutcome.NotEvaluatedHere} and is left to the check that runs when the program does
+ * (ADR-0032); a row whose classes will not link is recorded as {@code LINKAGE_FAILED} and observes
+ * nothing. Neither refuses the program, and what does is a declaration no JVM would load, decided
+ * before anything runs.
  */
 public final class Acceptance {
 

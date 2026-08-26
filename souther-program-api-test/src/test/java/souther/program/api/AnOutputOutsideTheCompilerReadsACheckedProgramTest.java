@@ -5,6 +5,7 @@ import souther.compiler.core.Composition;
 import souther.compiler.diag.CompileException;
 import souther.compiler.core.Core;
 import souther.compiler.program.CheckedBehavior;
+import souther.compiler.program.CheckedData;
 import souther.compiler.program.CheckedHelper;
 import souther.compiler.program.CheckedImplementation;
 import souther.compiler.program.CheckedModule;
@@ -202,6 +203,48 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
 
         // and the batch compiler refuses it for the same reason, which is the point
         assertThrows(CompileException.class, () -> Compiler.compile(WRONG_ROW));
+    }
+
+    /**
+     * And so is a program the JVM cannot emit, which is a program of a different kind.
+     *
+     * <p>Where the row above is refused by the language, this one is refused by the machine: a JVM
+     * constructor takes at most 254 argument slots and an {@code Int} is carried as a {@code long},
+     * so a record of 128 of them turns into a class no JVM would load. What this holds is the
+     * boundary rather than the diagnostic — the same declaration crosses at 127 fields and is
+     * refused at 128, and an output reading a checked program is told which rule stopped it.
+     *
+     * <p>Refused all the same, and this is the decision rather than an accident of the order things
+     * happen in (ADR-0115): a checked program is reachable only through a compile that emits one for
+     * the JVM, so what an output outside this compiler may be handed is bounded by what the JVM can
+     * hold. A snapshot for a program the JVM build stops at would be an artifact shipped for
+     * something no other reading of the same program agrees is buildable.
+     *
+     * <p>Which rule the width comes from is ADR-0115's to state and not this test's to demonstrate:
+     * two widths would pass the same way against a language that had a width rule of its own.
+     */
+    @Test
+    void aProgramTheJvmCannotEmitIsRefusedHereToo() {
+        CheckedProgram narrower = CheckedProgram.of(List.of(wideData(127)));
+        assertEquals(127, ((CheckedData.Product) narrower.module("demo").data().get(0))
+                .fields().size(), "a record this wide crosses the boundary");
+
+        CompileException refused = assertThrows(CompileException.class,
+                () -> CheckedProgram.of(List.of(wideData(128))));
+
+        assertEquals("E2101", refused.code(), refused.getMessage());
+        assertTrue(refused.getMessage().contains("JVM parameter slots"),
+                "the refusal names whose rule it is: " + refused.getMessage());
+    }
+
+    /** A record of {@code fields} {@code Int} fields, and a behavior so the module has one. */
+    private static String wideData(int fields) {
+        StringBuilder declared = new StringBuilder("module demo\n\ndata Wide = { ");
+        for (int i = 0; i < fields; i++) {
+            declared.append(i == 0 ? "" : ", ").append("f").append(i).append(": Int");
+        }
+        return declared.append(" }\n\nbehavior keep : (w: Wide) -> Wide\n\nlet keep (w) = w\n")
+                .toString();
     }
 
     private static final String WRONG_ROW = """
