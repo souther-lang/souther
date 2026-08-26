@@ -227,6 +227,20 @@ public final class HelperTable {
     }
 
     /**
+     * Where this module holds what {@code reference} reaches, or null where it reaches nothing
+     * here.
+     *
+     * <p>The one place the two coordinates are put together for a caller that has one and needs the
+     * other. A caller building the correspondence for itself — out of {@link #held} or
+     * {@link #declarations} — would be a fourth copy of what an entry already pairs, and the day one
+     * of them was built from a different reading the four would stop agreeing.
+     */
+    public DefinitionName heldAt(ReachName reference) {
+        HelperEntry entry = byReference.get(reference);
+        return entry == null ? null : entry.address();
+    }
+
+    /**
      * What this module holds at {@code address}, or null where it holds nothing there.
      *
      * <p>An address lookup and not a resolution. What comes back is the entry that was filed there,

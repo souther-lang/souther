@@ -22,6 +22,25 @@ public sealed interface ValueName {
     String name();
 
     /**
+     * A name a module of some compilation declares.
+     *
+     * <p>The two of them, said as a type. What is reached under a module's own name is exactly what
+     * a module declares, so whoever writes that reference takes one of these and has nothing to
+     * refuse — where this was a check, a name the language declares and a binding could be handed
+     * over and turned away at run time, and every reader after it had to be told they could not be
+     * here.
+     *
+     * <p>Which module, and under what name. A library operation is not one: {@code souther.list}
+     * declares {@code foldFrom} and a reader reaches it under an alias the library publishes, which
+     * is a different relation and has {@link ReachName.OfLibrary} for it.
+     */
+    sealed interface OfAModule extends ValueName permits Helper, Behavior {
+
+        /** The module that declares it. */
+        String module();
+    }
+
+    /**
      * A name bound inside a body: a parameter, a {@code let}, a {@code match} arm's binding, or a
      * block's parameter. {@code id} is the binding it was answered with, which is what tells two
      * bindings of one spelling apart; {@code name} is only how it was written.
@@ -35,7 +54,7 @@ public sealed interface ValueName {
     }
 
     /** A module's own {@code let} — a helper, which is expanded into the body that called it. */
-    record Helper(String module, String name) implements ValueName {
+    record Helper(String module, String name) implements OfAModule {
 
         /** Whether the language declares it rather than a module of some compilation.
          *  @see TypeSymbol#isDeclaredByLanguage() */
@@ -185,7 +204,7 @@ public sealed interface ValueName {
     }
 
     /** A behavior, and the module that declares it. */
-    record Behavior(String module, String name) implements ValueName {
+    record Behavior(String module, String name) implements OfAModule {
 
         public Behavior {
             if (module == null || name == null) {

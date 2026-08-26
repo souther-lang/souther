@@ -1531,10 +1531,9 @@ public final class Bodies {
             // definitions this module carries and asks of each whether it is one of them, which is
             // a question about where they sit rather than about what reaches them.
             Set<String> recursiveAt = new LinkedHashSet<>();
-            recursive.value().forEach(
-                    reference -> recursiveAt.add(DefinitionName.of(reference).text()));
             for (ReachName reference : recursive.value()) {
                 String required = DefinitionName.of(reference).text();
+                recursiveAt.add(required);
                 if (!declaredHere.contains(required)) {
                     Answer<Hir.FnDef> def = db.ask(new SettledFn(name, required));
                     if (!def.present()) {

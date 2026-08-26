@@ -5,6 +5,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.NameMessage;
+import souther.compiler.ast.DefinitionName;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 
@@ -55,14 +56,12 @@ public final class ValueCycles {
         // What the module declared, which is what a value cycle is about: a value written in terms of
         // itself is a defect in what the author wrote, and a helper the module only took on to emit
         // was written by somebody else and answered for there.
-        // What the module holds each declaration at, and which reference reaches it. Both come off
-        // one entry, so an edge found by what a call reaches is recorded at the address the report
-        // names, and neither is worked out from the other.
+        // What the module holds each declaration at. Where a reference is held is the table's
+        // answer, so an edge found by what a call reaches is recorded at the address the report
+        // names without a correspondence kept here.
         Map<String, Hir.FnDef> declared = new LinkedHashMap<>();
-        Map<ReachName, String> heldAt = new LinkedHashMap<>();
         for (HelperEntry entry : table.declarations().values()) {
             declared.put(entry.address().text(), entry.definition());
-            heldAt.put(entry.reachedAs(), entry.address().text());
         }
         Map<String, Set<String>> callsOf = new LinkedHashMap<>();
         for (HelperEntry entry : table.declarations().values()) {
@@ -71,14 +70,14 @@ public final class ValueCycles {
                     table.reachable(), called);
             Set<String> here = new LinkedHashSet<>();
             called.forEach(reference -> {
-                String at = heldAt.get(reference);
+                DefinitionName at = table.heldAt(reference);
                 if (at != null) {
-                    here.add(at);
+                    here.add(at.text());
                 }
             });
             callsOf.put(entry.address().text(), here);
         }
-        reject(declared, callsOf, heldAt);
+        reject(declared, callsOf, table::heldAt);
     }
 
     /**
@@ -89,7 +88,7 @@ public final class ValueCycles {
      * are keyed by the name a reference reaches its target by, and neither by a spelling.
      */
     static void reject(Map<String, Hir.FnDef> own, Map<String, Set<String>> callsOf,
-                       Map<ReachName, String> heldAt) {
+                       HeldAt heldAt) {
         Map<String, Set<String>> edges = new LinkedHashMap<>();
         for (Map.Entry<String, Hir.FnDef> e : own.entrySet()) {
             Set<String> out = new LinkedHashSet<>(callsOf.getOrDefault(e.getKey(), Set.of()));
@@ -143,8 +142,8 @@ public final class ValueCycles {
      * an import may let a name go without its qualifier: it agreed with the key only where a pass had
      * already written the spelling out qualified.
      */
-    static void valuesRead(Hir.Expr e, Map<String, Hir.FnDef> reachable,
-                           Map<ReachName, String> heldAt, Set<String> out) {
+    static void valuesRead(Hir.Expr e, Map<String, Hir.FnDef> reachable, HeldAt heldAt,
+                           Set<String> out) {
         if (e == null) {
             return;
         }
@@ -152,13 +151,27 @@ public final class ValueCycles {
             // Which name this reads is what the reference reaches, and where that is held is what
             // the graph is keyed by. Read off the spelling, a value named through its own module
             // would be an edge to a node this graph has not got.
-            String at = heldAt.get(v.reachedAs());
-            Hir.FnDef d = at == null ? null : reachable.get(at);
+            DefinitionName at = heldAt.of(v.reachedAs());
+            Hir.FnDef d = at == null ? null : reachable.get(at.text());
             if (d != null && d.params().isEmpty()) {
-                out.add(at);
+                out.add(at.text());
             }
         }
         Hir.forEachChild(e, c -> valuesRead(c, reachable, heldAt, out));
+    }
+
+    /**
+     * Where a module holds what a reference reaches — {@link HelperTable#heldAt}.
+     *
+     * <p>Taken as the question rather than as a map of the answers, so that whoever asks it is
+     * asking the table that paired the two. A caller handed a map would have had to build one, and
+     * a correspondence built beside the table is a second statement of what its entries say.
+     */
+    @FunctionalInterface
+    interface HeldAt {
+
+        /** Where {@code reference} is held, or null where it reaches nothing there. */
+        DefinitionName of(ReachName reference);
     }
 
     /**

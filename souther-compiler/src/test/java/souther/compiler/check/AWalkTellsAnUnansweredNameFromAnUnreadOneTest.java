@@ -80,8 +80,7 @@ class AWalkTellsAnUnansweredNameFromAnUnreadOneTest {
     @Test
     void aNameNothingDeclaresIsNoEdge() {
         Set<String> read = new LinkedHashSet<>();
-        ValueCycles.valuesRead(unanswered("nosuch"), new LinkedHashMap<>(),
-                new LinkedHashMap<>(), read);
+        ValueCycles.valuesRead(unanswered("nosuch"), new LinkedHashMap<>(), _ -> null, read);
 
         assertEquals(Set.of(), read);
     }

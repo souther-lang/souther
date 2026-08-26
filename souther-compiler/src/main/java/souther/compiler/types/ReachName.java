@@ -75,32 +75,17 @@ public sealed interface ReachName {
      * is a property of this route rather than of declarations — {@link OfLibrary} reads the same
      * declaration and renders it under an alias the declaration knows nothing about.
      */
-    record OfModule(ValueName denotes) implements ReachName {
+    record OfModule(ValueName.OfAModule denotes) implements ReachName {
 
         public OfModule {
-            // Only a module declares one of these, and only these are reached under a module. A
-            // library operation reaches `OfLibrary` and a binding is reached where it is bound, so
-            // one arriving here is a caller that decided the route without asking the declaration.
-            switch (denotes) {
-                case ValueName.Helper _, ValueName.Behavior _ -> { }
-                case null -> throw new IllegalArgumentException("a reference reaches something");
-                default -> throw new IllegalArgumentException(
-                        "`" + denotes + "` is not declared by a module and is not reached under one");
+            if (denotes == null) {
+                throw new IllegalArgumentException("a reference reaches something");
             }
-        }
-
-        /** The module that declares what this reaches, which is what it is reached under. */
-        public String module() {
-            return switch (denotes) {
-                case ValueName.Helper helper -> helper.module();
-                case ValueName.Behavior behavior -> behavior.module();
-                default -> throw new IllegalStateException("refused at construction: " + denotes);
-            };
         }
 
         @Override
         public String rendered() {
-            return module() + "." + denotes.name();
+            return denotes.module() + "." + denotes.name();
         }
 
         @Override

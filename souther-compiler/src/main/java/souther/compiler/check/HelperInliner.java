@@ -514,9 +514,17 @@ public final class HelperInliner {
      * body of something else it imported.
      */
     public Hir.FnDef closeAcross(Hir.FnDef fn, String module) {
+        if (!module.equals(table.module())) {
+            // The two below would be about different modules. The body is closed against this
+            // table, so what recurses is this module's answer; the reference is what a reader
+            // reaches the declaration by, and a declaring module that is not this one would be a
+            // body closed against one module's declarations and handed over as another's.
+            throw new IllegalArgumentException("`" + module + "` is not the module this expands"
+                    + " into, which is `" + table.module() + "`");
+        }
         // Its own module is reading here, so it reaches its own declaration bare — which is the
         // reference the graph over that module's table is keyed by.
-        ReachName here = new ReachName.Bare(new ValueName.Helper(table.module(), fn.name()));
+        ReachName here = new ReachName.Bare(new ValueName.Helper(module, fn.name()));
         Hir.Expr closed = graph.recurses(here)
                 ? inlineRecursiveBody(fn) : inline(fn.writtenBody(), bodyOf(fn.name()));
         return fn.reachedAs(new ReachName.OfModule(new ValueName.Helper(module, fn.name())))
@@ -535,6 +543,13 @@ public final class HelperInliner {
      * a call applies is not decided by how it is spelled. */
     public Hir.FnDef helper(ReachName reference) {
         return table.reached(reference);
+    }
+
+    /** Where this module holds what {@code reference} reaches, or null where it reaches nothing
+     *  here. The table's answer: a caller that paired the two itself would be keeping a second
+     *  statement of what an entry says. */
+    public souther.compiler.ast.DefinitionName heldAt(ReachName reference) {
+        return table.heldAt(reference);
     }
 
     /** The body {@code call} applies, or null where it applies something no body stands behind. */

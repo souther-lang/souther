@@ -51,19 +51,18 @@ final class TotalityChecker {
     /** Checks every non-{@code partial}, module-own recursive helper (or group) for size-change
      * termination. */
     static void check(HelperInliner inliner) {
-        // What this module holds, at the addresses it holds them, and which reference reaches each.
-        // The two are read off one entry, so a call is matched to a definition by what it reaches
-        // and the group bookkeeping below goes on naming what the author wrote.
+        // What this module holds, at the addresses it holds them. Where a call's reference is held
+        // is the table's answer ({@link HelperInliner#heldAt}), so this walk matches a call by what
+        // it reaches and goes on naming what the author wrote, without keeping a correspondence of
+        // its own.
         Map<String, Hir.FnDef> own = new java.util.LinkedHashMap<>();
-        Map<souther.compiler.types.ReachName, String> heldAt = new java.util.LinkedHashMap<>();
-        inliner.held().values().forEach(entry -> {
-            own.put(entry.address().text(), entry.definition());
-            heldAt.put(entry.reachedAs(), entry.address().text());
-        });
-        Map<String, Set<String>> ownEdges = ownCallGraph(own, heldAt);
+        inliner.held().values().forEach(
+                entry -> own.put(entry.address().text(), entry.definition()));
+        Map<String, Set<String>> ownEdges = ownCallGraph(own, inliner);
         Set<String> handled = new HashSet<>();
         for (souther.compiler.types.ReachName reference : inliner.recursiveHelpers()) {
-            String name = heldAt.get(reference);
+            souther.compiler.ast.DefinitionName at = inliner.heldAt(reference);
+            String name = at == null ? null : at.text();
             Hir.FnDef h = name == null ? null : own.get(name);
             // Only what this module declared is checked. A recursive helper it took on to emit — a
             // prelude `List.foldFrom`, one another module published — carries its declaring module's
@@ -426,13 +425,12 @@ final class TotalityChecker {
 
     // --- call graph over module-own helpers (for grouping mutual recursion) ---
 
-    private static Map<String, Set<String>> ownCallGraph(
-            Map<String, Hir.FnDef> own,
-            Map<souther.compiler.types.ReachName, String> heldAt) {
+    private static Map<String, Set<String>> ownCallGraph(Map<String, Hir.FnDef> own,
+                                                        HelperInliner inliner) {
         Map<String, Set<String>> edges = new HashMap<>();
         for (Map.Entry<String, Hir.FnDef> h : own.entrySet()) {
             Set<String> called = new HashSet<>();
-            collectOwnCalls(h.getValue().writtenBody(), heldAt, called);
+            collectOwnCalls(h.getValue().writtenBody(), inliner, own.keySet(), called);
             edges.put(h.getKey(), called);
         }
         return edges;
@@ -447,16 +445,16 @@ final class TotalityChecker {
      * written through its own module reaches {@code f} and is recorded as {@code app.own.f}, so the
      * edge goes to a name the graph has no node for and the cycle it is on is not found.
      */
-    private static void collectOwnCalls(Hir.Expr e,
-                                        Map<souther.compiler.types.ReachName, String> heldAt,
+    private static void collectOwnCalls(Hir.Expr e, HelperInliner inliner, Set<String> own,
                                         Set<String> out) {
         if (e instanceof Hir.Apply call && call.answered() != null) {
-            String held = heldAt.get(call.answered().reachedAs());
-            if (held != null) {
-                out.add(held);
+            souther.compiler.ast.DefinitionName at =
+                    inliner.heldAt(call.answered().reachedAs());
+            if (at != null && own.contains(at.text())) {
+                out.add(at.text());
             }
         }
-        forEachChild(e, c -> collectOwnCalls(c, heldAt, out));
+        forEachChild(e, c -> collectOwnCalls(c, inliner, own, out));
     }
 
     /** The helpers on {@code name}'s recursive cycle: those reachable from {@code name} that also reach

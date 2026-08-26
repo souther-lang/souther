@@ -247,12 +247,9 @@ public final class HelperTyping {
      */
     private static List<Hir.FnDef> valuesBeforeTheValuesThatNameThem(
             HelperInliner inliner, Stdlib stdlib, Map<String, Hir.FnDef> held) {
-        // Where this module holds what it reaches each way. The walk below finds edges by what a
-        // name reaches and records them at the addresses this ordering is over, so neither is read
-        // off the other's spelling.
-        Map<souther.compiler.types.ReachName, String> heldAt = new LinkedHashMap<>();
-        inliner.held().values().forEach(
-                entry -> heldAt.put(entry.reachedAs(), entry.address().text()));
+        // The walk below finds edges by what a name reaches and records them at the addresses this
+        // ordering is over. Where a reference is held is the table's answer, so neither coordinate
+        // is read off the other's spelling and nothing here keeps a pairing of its own.
         Map<String, Set<String>> names = new LinkedHashMap<>();
         for (Map.Entry<String, Hir.FnDef> e : held.entrySet()) {
             if (!(e.getValue().body() instanceof Hir.FnBody.Written written)) {
@@ -262,12 +259,12 @@ public final class HelperTyping {
             HelperInliner.helperCallsIn(stdlib, written.expr(), inliner.reachable(), reached);
             Set<String> here = new LinkedHashSet<>();
             reached.forEach(reference -> {
-                String at = heldAt.get(reference);
-                if (at != null && held.containsKey(at)) {
-                    here.add(at);
+                souther.compiler.ast.DefinitionName at = inliner.heldAt(reference);
+                if (at != null && held.containsKey(at.text())) {
+                    here.add(at.text());
                 }
             });
-            ValueCycles.valuesRead(written.expr(), held, heldAt, here);
+            ValueCycles.valuesRead(written.expr(), held, inliner::heldAt, here);
             here.retainAll(held.keySet());
             names.put(e.getKey(), here);
         }

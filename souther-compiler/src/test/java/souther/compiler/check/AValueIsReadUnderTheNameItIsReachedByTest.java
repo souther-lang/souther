@@ -70,7 +70,10 @@ class AValueIsReadUnderTheNameItIsReachedByTest {
         table.forEach((at, def) -> heldAt.put(def.takenOnAs() != null ? def.takenOnAs()
                 : new ReachName.Bare(new ValueName.Helper(m.name(), def.name())), at));
         Set<String> out = new LinkedHashSet<>();
-        ValueCycles.valuesRead(HelperInliner.helpersOf(m).get(fn).writtenBody(), table, heldAt, out);
+        ValueCycles.valuesRead(HelperInliner.helpersOf(m).get(fn).writtenBody(), table,
+                reference -> heldAt.get(reference) == null ? null
+                        : new souther.compiler.ast.DefinitionName(heldAt.get(reference)),
+                out);
         return out;
     }
 

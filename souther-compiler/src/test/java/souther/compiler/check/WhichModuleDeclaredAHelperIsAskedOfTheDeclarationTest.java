@@ -76,13 +76,14 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
     }
 
     /**
-     * A helper the module declared, filed under a qualified name — the shape a published body is
-     * closed into, read back in the module that wrote it. Its descent is still required.
+     * A helper `maths` wrote, held at a qualified address — the shape a published body is closed
+     * into. Its descent is still `maths`'s to require.
      *
-     * <p>Reading the dot skips this, and skipping it is accepting a recursion nobody proved.
+     * <p>The address is not the answer. It is where the module puts the method, and a rule that
+     * read the dot in it would skip this one — which is accepting a recursion nobody proved.
      */
     @Test
-    void aQualifiedNameIsNotAnExemption() {
+    void whereItIsHeldIsNotAnExemption() {
         Hir.FnDef own = spinOf("maths");
         HelperInliner maths = HelperInliner.forHelpers("maths", Map.of("spin", own), DefaultStdlib.get());
         Hir.FnDef closed = maths.closeAcross(own, "maths");
@@ -90,34 +91,28 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
         assertEquals("maths.spin", closed.name());
         assertEquals("maths", closed.declaredIn());
 
-        // Held as what it is: a definition `maths` reaches under the module that declares it, which
-        // is `maths` itself. The rename put it at a qualified address and the reference it carries
-        // is what the self-call in its body reaches, so the two meet and the recursion is seen.
         CompileException refused = assertThrows(CompileException.class,
                 () -> check("maths", Map.of(), Map.of(closed.name(), closed)));
         assertEquals("E2001", refused.code());
     }
 
     /**
-     * A helper another module declared, reached here under a bare name. Its descent is not this
-     * module's to require: the module that wrote it required it there, and an unmarked published
-     * helper answers for its whole closure (ADR-0098).
+     * The same definition, held by a module that did not write it. Its descent is not that module's
+     * to require: the module that wrote it required it there, and an unmarked published helper
+     * answers for its whole closure (ADR-0098).
      *
-     * <p>Reading the dot checks this one, and a rejection here names a definition the author of this
-     * module never wrote.
+     * <p>Which is decided by the declaration and by nothing about the address. Both modules hold it
+     * at {@code maths.spin} and both reach it the same way — so the address, the reference and the
+     * rendering are all the same in the two, and the only thing that differs is who wrote it.
      */
     @Test
-    void aBareNameIsNotADeclaration() {
-        Hir.FnDef foreign = spinOf("maths");
+    void aDefinitionAnotherModuleWroteIsNotThisOnesToProve() {
+        Hir.FnDef own = spinOf("maths");
+        HelperInliner maths = HelperInliner.forHelpers("maths", Map.of("spin", own), DefaultStdlib.get());
+        Hir.FnDef closed = maths.closeAcross(own, "maths");
 
-        assertEquals("spin", foreign.name());
-        assertEquals("maths", foreign.declaredIn());
-
-        // Reached here as it stands, which is what "a bare name" is. What it says about the
-        // declaring module is the declaration's, and it is `maths` either way.
-        Hir.FnDef here = foreign.reachedAs(
-                new ReachName.Bare(new ValueName.Helper("maths", "spin")));
-        assertDoesNotThrow(() -> check("order", Map.of(), Map.of(here.name(), here)));
+        assertEquals("maths", closed.declaredIn());
+        assertDoesNotThrow(() -> check("order", Map.of(), Map.of(closed.name(), closed)));
     }
 
     /**

@@ -214,20 +214,29 @@ public sealed interface Core {
                     case ValueName.Helper helper -> new Reaches.AHelper(helper);
                     case ValueName.Stdlib operation -> new Reaches.AHelper(operation);
                     case ValueName.Behavior behavior -> new Reaches.ABehavior(behavior);
-                    // Refused at construction, so there is no fourth answer to give.
-                    default -> throw new IllegalStateException("refused at construction: " + name);
+                    // The three the constructor refuses. Written out rather than left to a
+                    // `default`, so a kind of name added to `ValueName` is a compile error here and
+                    // somebody says which of the two answers it is — under a `default` it would
+                    // become a call nothing can be emitted for, at run time, in whatever program
+                    // first wrote one.
+                    case ValueName.Local _, ValueName.OfType _, ValueName.Builtin _ ->
+                            throw new IllegalStateException("refused at construction: " + name);
                 };
             }
 
             public OfDeclaration {
-                switch (name == null ? null : name.denotes()) {
-                    case ValueName.Helper _, ValueName.Stdlib _, ValueName.Behavior _ -> { }
-                    case null -> throw new IllegalArgumentException(
+                if (name == null) {
+                    throw new IllegalArgumentException(
                             "a call applies something this compilation resolved");
-                    // Not a report. A name that reaches none of the three is one no source could
-                    // write as a callee, so a call holding it is this compiler having built one.
-                    default -> throw new IllegalStateException("`" + name
-                            + "` reaches no declaration a call can be emitted for");
+                }
+                switch (name.denotes()) {
+                    case ValueName.Helper _, ValueName.Stdlib _, ValueName.Behavior _ -> { }
+                    // Not a report. A binding is applied where it stands, and a type used as a
+                    // value is a construction, so neither is a call to a declaration; one arriving
+                    // here is this compiler having built a call for it.
+                    case ValueName.Local _, ValueName.OfType _, ValueName.Builtin _ ->
+                            throw new IllegalStateException("`" + name
+                                    + "` reaches no declaration a call can be emitted for");
                 }
             }
 
