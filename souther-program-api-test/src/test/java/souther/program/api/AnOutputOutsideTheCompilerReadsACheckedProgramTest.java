@@ -206,27 +206,28 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
     }
 
     /**
-     * And so is a program the language has nothing against, where the JVM cannot emit it.
+     * And so is a program the JVM cannot emit, which is a program of a different kind.
      *
-     * <p>A record of 128 {@code Int} fields is a record like any other to read. What refuses it is
-     * the JVM: a constructor takes at most 254 argument slots and an {@code Int} is carried as a
-     * {@code long}, so the class this declaration turns into is one no JVM would load. The same
-     * declaration one field narrower is answered with a snapshot, which is what says the count is
-     * the machine's limit rather than a rule of the language.
+     * <p>Where the row above is refused by the language, this one is refused by the machine: a JVM
+     * constructor takes at most 254 argument slots and an {@code Int} is carried as a {@code long},
+     * so a record of 128 of them turns into a class no JVM would load. What this holds is the
+     * boundary rather than the diagnostic — the same declaration crosses at 127 fields and is
+     * refused at 128, and an output reading a checked program is told which rule stopped it.
      *
      * <p>Refused all the same, and this is the decision rather than an accident of the order things
-     * happen in (ADR-0115): a checked program is reachable only through a compile that emits and
-     * runs one on the JVM, so what an output outside this compiler may be handed is bounded by what
-     * the JVM can hold. An output reading this program is told the machine's rule in the machine's
-     * words, which is a refusal it can act on — a snapshot for a program the JVM build stops at
-     * would be an artifact shipped for something no other reading of the same program agrees is
-     * buildable.
+     * happen in (ADR-0115): a checked program is reachable only through a compile that emits one for
+     * the JVM, so what an output outside this compiler may be handed is bounded by what the JVM can
+     * hold. A snapshot for a program the JVM build stops at would be an artifact shipped for
+     * something no other reading of the same program agrees is buildable.
+     *
+     * <p>Which rule the width comes from is ADR-0115's to state and not this test's to demonstrate:
+     * two widths would pass the same way against a language that had a width rule of its own.
      */
     @Test
-    void aProgramTheLanguageAcceptsAndTheJvmCannotEmitIsRefusedHereToo() {
+    void aProgramTheJvmCannotEmitIsRefusedHereToo() {
         CheckedProgram narrower = CheckedProgram.of(List.of(wideData(127)));
         assertEquals(127, ((CheckedData.Product) narrower.module("demo").data().get(0))
-                .fields().size(), "the language has nothing against a record this wide");
+                .fields().size(), "a record this wide crosses the boundary");
 
         CompileException refused = assertThrows(CompileException.class,
                 () -> CheckedProgram.of(List.of(wideData(128))));

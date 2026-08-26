@@ -1,4 +1,4 @@
-# ADR-0115: A program Souther accepts is one the JVM can emit and run
+# ADR-0115: A program Souther accepts is one the JVM can emit
 
 Status: Accepted.
 
@@ -32,9 +32,6 @@ constants. Measured through the boundary this ADR is about:
 | `data Wide` of 127 `Int` fields | a snapshot, the product carrying its 127 fields |
 | the same declaration one field wider | `CompileException` E2101, and no snapshot |
 
-One field is the whole difference, and it is a count of JVM slots. The language says nothing about
-how wide a record may be.
-
 Until #957 the question could not be asked, every output being the JVM's. #971 changed what
 acceptance depends on and not what it does — it asks `ProgramExecution` now rather than reflecting
 over generated classes itself, and the implementation that answers is the generated JVM program. So
@@ -47,12 +44,12 @@ arranged rather than as something chosen.
 
 ## Decision
 
-**A program Souther accepts is one the JVM can emit and run.**
+**A program Souther accepts is one the JVM can emit.**
 
 There is one state at this boundary and not two. A program the language checked and a program an
 output may be handed are the same program, and it is reachable only through a compile that emits it
-for the JVM and runs it there. A program the JVM cannot emit is refused to the author, whether or
-not the language had anything against it.
+for the JVM. A program the JVM cannot emit is refused to the author, whether or not the language had
+anything against it.
 
 Three things follow from stating it this way rather than leaving it to the arrangement.
 
@@ -67,12 +64,35 @@ consequence worth stating out loud, because it is a statement about Souther and 
 step. A WebAssembly output has no argument-slot limit; it will still never be handed a program that
 exceeds one.
 
-**What moves it is evaluation, not this boundary.** The JVM is in front of a reader here for one
-reason: a row is decided by running the program, and running it means running one backend's classes.
-When evaluating a row stops needing a particular backend, this decision is the one to revisit, and
-whether the two states then need separate names is a question to answer then.
+**What moves it is evaluation, not this boundary.** The JVM stands in front of a reader here because
+emitting is how a compile reaches a program at all, and because a row is decided by running what was
+emitted. When neither needs a particular backend, this decision is the one to revisit, and whether
+the two states then need separate names is a question to answer then.
 
-Two answers were weighed and rejected.
+### Emitting bounds acceptance; running does not
+
+The bound is what the JVM can **emit**. What it runs is how the language reaches its own verdicts —
+a row that disagrees, a constant construction that violates an invariant — and a run that cannot
+happen is not a refusal of the program. The two are separate states and the code already holds them
+apart in both places a compile-time run is asked for:
+
+| what the JVM cannot do | what the program comes to |
+|---|---|
+| emit the declaration | refused: E2101, E2102, E2103 |
+| load or run a constant construction's check | `ConstantOutcome.NotEvaluatedHere` — left to the check that runs when the program does (ADR-0032) |
+| link the classes a row would be evaluated against | `Incompleteness.Code.LINKAGE_FAILED` — nothing was observed, and no gap is reported where none was left |
+
+ADR-0032's degradation is the second row. It reads as a near-miss of the decision above and is not
+one: a newtype whose `$Ctfe.check` will not load has *not* been refused, and the invariant it carries
+is checked when the program runs. Reading that as "the JVM could not run it, so the program is
+refused" would turn a compile that continues into a compile that stops, which is the opposite of what
+that ADR decided.
+
+So a program refused here is refused for a class no JVM would load, decided at the declaration and
+before anything runs. Nothing about whether this compiler could execute the result on the day it was
+compiled reaches the verdict.
+
+### What was weighed and rejected
 
 Naming a `CheckedProgram` and an `AcceptedProgram` introduces a public lifecycle for a distinction
 nothing today can observe. The one observable difference it would create — an output holding a
@@ -88,10 +108,13 @@ this reversed is the evidence, and until one exists the deferral would be design
 ## Consequences
 
 `AnOutputOutsideTheCompilerReadsACheckedProgramTest` says it, beside the case where the language is
-what refuses. It compiles the declaration one field under the limit and reads its 127 fields off the
-snapshot, so what it holds is that the count is the machine's limit and not a rule of the language —
-a test that only showed the wide one refused would pass just as well if Souther had a width rule of
-its own.
+what refuses. It reads the 127 fields off a snapshot before asking for the 128th, so what it holds
+is the boundary and not the diagnostic: the same declaration crosses at one width and is refused at
+the next with the JVM's rule named. Which rule the width came from is this ADR's to state — a test
+of two widths passes just as well against a language that has a width rule of its own.
+
+ADR-0032 gains a paragraph saying what its degradation is not, so the two states above are told
+apart where the degradation is decided rather than only where this is read.
 
 `Acceptance`'s javadoc now records a decision rather than an arrangement.
 
@@ -109,5 +132,7 @@ the trigger named above.
 - Issue #957 (an output outside the compiler reads a checked program), #971 (acceptance asks
   `ProgramExecution`), #1065 (what a backend other than the JVM reads)
 - Specification: `[#e2101]`, `[#e2102]`, `[#e2103]`
+- ADR-0032 (a constant construction whose check cannot be loaded or run at compile time is left to
+  the check that runs when the program does)
 - ADR-0046 (an `example` row that disagrees is a compile error, which is why acceptance runs the
   program at all)
