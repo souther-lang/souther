@@ -272,6 +272,58 @@ class AStandInNamesTheBehaviorItStandsInForTest {
         assertEquals(List.of(), codes, "both rows run against the two-input borrowed dependency");
     }
 
+    /**
+     * A dependency implemented in Souther says it cannot be stood in for, rather than aborting.
+     *
+     * <p>What may be depended on is a behavior whose requirement set is not empty, and a written
+     * {@code let} declaring its own {@code depends on} has one (spec §depends-on) — so a dependency
+     * is not always something Java supplies. The two are emitted differently: Java's as an abstract
+     * base to extend, Souther's as an interface with its body on the {@code $Impl}. A stand-in
+     * taking any count of inputs but one is a generated class, and generating one against an
+     * interface produces a class that will not link.
+     *
+     * <p>Written down as a limit and not as a crash. The reading that used to refuse this refused
+     * every dependency another module declares with it, which is what this change removed; taking
+     * the whole refusal out left the assumption underneath it with no owner.
+     *
+     * <p>Taking nothing, so the unary {@code Behavior} proxy — which proxies an interface and so
+     * never met the difference — is not the path this takes.
+     */
+    @Test
+    void aDependencyImplementedInSoutherCannotBeStoodInFor() {
+        List<String> codes = new java.util.ArrayList<>();
+        Compilation compiled = Compilation.ofSource("""
+                module probe.layered
+
+                data Stamp = String
+                data Noted = { at: Stamp }
+                data Filed = { at: Noted }
+
+                behavior now : () -> Stamp
+
+                behavior note : () -> Noted
+                    constructs Noted
+                    depends on now
+                let note (now) = Noted { at = now() }
+
+                behavior file : () -> Filed
+                    constructs Filed
+                    depends on note
+                let file (note) = Filed { at = note() }
+
+                fake note
+                    | _ -> Noted { at = Stamp("t") }
+
+                example file
+                    | "one" : () -> Filed { at = Noted { at = Stamp("t") } }
+                """, "Main");
+        compiled.answerEverything();
+        compiled.errors().forEach(e -> codes.add(e.diagnostic().code()));
+
+        assertEquals(List.of("E1908"), codes,
+                "the stand-in could not be made, said at the row rather than thrown");
+    }
+
     /** A name no behavior answers to is refused where it is written, rather than leaving a table
      *  nothing could ever read. */
     @Test

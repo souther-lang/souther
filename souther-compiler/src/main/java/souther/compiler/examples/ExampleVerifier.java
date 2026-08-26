@@ -508,7 +508,7 @@ public final class ExampleVerifier {
                     new StandinObservation.Reason.AValueCouldNotCross(
                             String.valueOf(e.getMessage())));
         }
-        String why = ensures.notHeld(new ValueName.Behavior(module.name(), behavior), args, here);
+        String why = ensures.notHeld(module.targeted(behavior), args, here);
         // Written here and not in the arm. What writes a value the way a fixture writes one needs the
         // module's declarations to tell a newtype from what it wraps, and an arm holding neither
         // could only fall back on the value's own `toString` — a shape no report should be written
@@ -1677,7 +1677,7 @@ public final class ExampleVerifier {
     private boolean keepsWhatIsDeclared(Hir.ExampleRow row, ExampleTarget target, Object[] args,
                                         Evidence evidence, Sig sig, List<Diagnostic> out,
                                         RowState state) {
-        ValueName.Behavior behavior = new ValueName.Behavior(module.name(), target.name());
+        ValueName.Behavior behavior = module.targeted(target.name());
         String why = switch (evidence) {
             case Evidence.Answer(Object value) ->
                     ensures.notHeld(behavior, args, projected(value, sig.outputType()));
@@ -1737,7 +1737,7 @@ public final class ExampleVerifier {
             state.incomplete(FailurePhase.VALUE_CROSSING);
             return false;
         }
-        ValueName.Behavior behavior = new ValueName.Behavior(module.name(), target.name());
+        ValueName.Behavior behavior = module.targeted(target.name());
         String why = ensures.notHeld(behavior, args, here);
         if (why == null) {
             return true;
@@ -1804,10 +1804,6 @@ public final class ExampleVerifier {
     private DependencyStandin resolveFake(FixtureReader fixtures, String target,
                                           BehaviorRequirement req, Hir.ExampleRow row,
                                           List<Diagnostic> out) {
-        // The name the dependency is written under here. A `fake` names one identifier
-        // (spec [#fake]), so this is what a row can say; a dependency another module declares is
-        // reached by its own name and is not an injection target of this module, which is what the
-        // refusal below says.
         // The behavior, as the declaration it is. What a requirement is, is settled where the
         // `depends on` clause is read; the name this module happens to reach it by is not asked for
         // here and never decides which behavior a stand-in is built against.

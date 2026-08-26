@@ -211,6 +211,21 @@ final class GeneratedImplementation implements Answerer {
                 standin.dependency().module(), standin.dependency().name());
         try {
             Class<?> base = GeneratedClasses.load(loader, baseClass);
+            if (base.isInterface()) {
+                // Not a behavior Java supplies. What may be depended on is anything whose
+                // requirement set is not empty, and a written `let` declaring its own `depends on`
+                // has one (spec §depends-on) — such a behavior is emitted as an interface with its
+                // body on the `$Impl`, and what an injecting constructor takes for it is that
+                // interface rather than a base to extend. Nothing here can make one: the class this
+                // would generate has no body to be, and the constructor this instance would be
+                // handed to is read off the stand-in's own superclass, which an interface has none
+                // of. Said as a stand-in that could not be made, which is a row that does not run
+                // rather than this compiler failing to reach its own output.
+                throw new StandinNotBuilt(standin.dependency(), "`"
+                        + standin.dependency().name() + "` is implemented in Souther and takes "
+                        + standin.inputs() + " input(s); only a behavior Java supplies, or one "
+                        + "taking a single input, can be stood in for");
+            }
             java.lang.reflect.Method apply = null;
             for (java.lang.reflect.Method m : base.getDeclaredMethods()) {
                 if (m.getName().equals("apply") && java.lang.reflect.Modifier.isAbstract(m.getModifiers())) {

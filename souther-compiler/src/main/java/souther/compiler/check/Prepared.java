@@ -476,10 +476,16 @@ public final class Prepared {
          * <p>What is written and not what is comparable. Whether a stand-in can be held against a
          * recorded row turns on what the dependency takes, and that is the reading's question to
          * ask; this one is answered from the text.
+         *
+         * <p>The module's, not one file's, as {@link #fakes} is: a module's stand-ins are what its
+         * attached files' rows run against and the other way round, so which modules a reading has
+         * to take the rows of is a fact about the module. Read off {@link #rows} it would be one
+         * file's {@code with}s wherever this is a projection of a source, and the modules the other
+         * files reach would go unread — which is the reading this answer exists to complete.
          */
         public Set<ValueName.Behavior> standsInFor() {
             Set<ValueName.Behavior> named = new LinkedHashSet<>(tablesThatAnswer().keySet());
-            for (Rows block : rows) {
+            for (Rows block : module.examples) {
                 for (Hir.ExampleRow row : block.read().rows()) {
                     for (Hir.With supplied : row.withs()) {
                         if (supplied.standsInFor() != null) {
