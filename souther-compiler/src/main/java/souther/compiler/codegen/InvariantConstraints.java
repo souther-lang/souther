@@ -286,7 +286,10 @@ public final class InvariantConstraints {
      * constraint to map it to, and the clause keeps the check it already has.
      */
     private static boolean applies(Hir.Apply call, String operation) {
-        return call.answered() != null && operation.equals(call.answered().reaches());
+        return call.answered() != null
+                && call.answered().denotes() instanceof souther.compiler.types.ValueName.Stdlib
+                        applied
+                && operation.equals(applied.qualified());
     }
 
     /** Whether a projection hands back what it was given — {@code x -> x}, however the parameter is

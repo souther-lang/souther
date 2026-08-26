@@ -558,8 +558,12 @@ public final class CallElaborator {
             throw new IllegalStateException("`" + call.written()
                     + "` applies something that is not a name, at " + call.pos());
         }
+        // Asked with the name the library keys itself by, which the denotation carries. Asked with
+        // the reference rendered, this would be the library looked up by a spelling — the same
+        // string today, and the library's to change.
         boolean library = callee.denotes() instanceof ValueName.Stdlib;
-        Stdlib.Entry entry = library ? ctx.symbols().library().entry(callee.reaches()) : null;
+        Stdlib.Entry entry = callee.denotes() instanceof ValueName.Stdlib operation
+                ? ctx.symbols().library().entry(operation.qualified()) : null;
         // A declaration written with no parameter list is a value ([#fn-declaration]), and an empty
         // `()` would be a second spelling of it. The library was the last place that spelling was
         // still accepted.

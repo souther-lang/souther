@@ -256,7 +256,14 @@ public final class ConstEval {
         if (call.answered() == null) {
             return Optional.empty();
         }
-        switch (call.answered().reaches()) {
+        // Which operation this is, asked of what the name reaches and answered by the key the
+        // library holds its own operations under. Read off the reference rendered, this would be
+        // deciding what to evaluate from how the call happens to be written.
+        if (!(call.answered().denotes() instanceof souther.compiler.types.ValueName.Stdlib
+                operation)) {
+            return Optional.empty();
+        }
+        switch (operation.qualified()) {
             case "String.length" -> {
                 if (args.size() == 1 && eval(args.get(0)).orElse(null) instanceof String s) {
                     return Optional.of((long) s.length());

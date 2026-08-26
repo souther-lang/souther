@@ -5,6 +5,7 @@ import souther.compiler.semantics.ArgumentRef;
 import souther.compiler.semantics.Combinator;
 import souther.compiler.semantics.ElementLineage;
 import souther.compiler.ast.DefinitionName;
+import souther.compiler.core.Core;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.StructuralCost;
 import souther.compiler.ast.WrittenName;
@@ -547,7 +548,7 @@ public final class HelperInliner {
      * argument index. The other combinators (map/filter/all/any) are ordinary prelude helpers derived
      * from fold (ADR-0028), so they need no such desugaring — a name reaches their function parameter
      * directly. */
-    private static final Map<String, Integer> BLOCK_ARG = Map.of("List.foldFrom", 0);
+    private static final Map<ValueName, Integer> BLOCK_ARG = Map.of(Core.THE_WALK, 0);
 
     /**
      * The rewrite {@code call} takes, or null where it takes none.
@@ -567,7 +568,13 @@ public final class HelperInliner {
         if (call.answered() == null) {
             return null;   // it reaches no library name, so there is no sugar to write out
         }
-        Stdlib.Rewrite rewrite = stdlib.rewriteOf(call.answered().reaches());
+        // Whether a name is sugar is the library's answer about one of its own operations, so it is
+        // asked with the operation rather than with the reference rendered. Anything else reaches
+        // no library name and has no sugar to write out.
+        if (!(call.answered().denotes() instanceof ValueName.Stdlib operation)) {
+            return null;
+        }
+        Stdlib.Rewrite rewrite = stdlib.rewriteOf(operation.qualified());
         return rewrite != null && call.args().size() == rewrite.keptArgs() ? rewrite : null;
     }
 
@@ -1707,7 +1714,7 @@ public final class HelperInliner {
         if (call.answered() == null) {
             return call;   // it reaches nothing, so it is no named block to desugar
         }
-        Integer idx = BLOCK_ARG.get(call.answered().reaches());
+        Integer idx = BLOCK_ARG.get(call.answered().denotes());
         if (idx == null || idx >= call.args().size()
                 || !(call.args().get(idx) instanceof Hir.Var v)
                 || !(v.answered() instanceof Hir.Var.Denoting named)) {

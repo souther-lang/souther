@@ -1332,8 +1332,7 @@ public final class FixtureReader {
             case Hir.Apply c when c.answered() != null
                     && ((c.answered().denotes() instanceof ValueName.Stdlib library
                                     && library.constructs() != null)
-                            || "Set.fromList".equals(c.answered().reaches())
-                            || "Map.fromList".equals(c.answered().reaches())) ->
+                            || isFromList(c)) ->
                     STATES_NO_NAME;
             case Hir.Apply _ -> ELSEWHERE;
             case Hir.FieldAccess fa -> {
@@ -1631,8 +1630,9 @@ public final class FixtureReader {
      *  the callee reaches, as every other question about which operation a call applies is. */
     private static boolean isFromList(Hir.Apply c) {
         return c.answered() != null
-                && ("Set.fromList".equals(c.answered().reaches())
-                        || "Map.fromList".equals(c.answered().reaches()));
+                && c.answered().denotes() instanceof ValueName.Stdlib operation
+                && ("Set.fromList".equals(operation.qualified())
+                        || "Map.fromList".equals(operation.qualified()));
     }
 
     private Object newtypeInner(Hir.Apply c, Position at, Admission admission) {
