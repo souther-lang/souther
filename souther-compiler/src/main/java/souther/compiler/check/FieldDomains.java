@@ -688,6 +688,23 @@ public final class FieldDomains {
     }
 
     /**
+     * Whether any rule at all was written about this value.
+     *
+     * <p>The declarations it spreads included, because a clause of one of those is a rule of every
+     * value that spreads it — asked of the declaration's own clauses, a case that writes none of its
+     * own would come back having said nothing while a spread clause of its was being read here.
+     *
+     * <p>Its own answer and not one read off something else. That a declaration is one clauses may
+     * be written on is a different question, and every {@code data} answers it yes; that the rules
+     * leave the bounds exactly representable is another, and a value with no rules answers it yes as
+     * well, having lost nothing on the way to a box. Either taken for this says a value spoke when
+     * it did not.
+     */
+    public boolean anythingWasWritten() {
+        return !accounting().isEmpty();
+    }
+
+    /**
      * Every rule reaching this value, every question it raises, and what answered each.
      *
      * <p>The questions come from the rules and the answers from whichever reading took the rule in.
@@ -968,6 +985,7 @@ public final class FieldDomains {
                 : AdmissibleSet.wider(values, spread);
     }
 
+
     /** {@code these} and one more, in the order they are written here: the rule's own reason is
      *  what an author acts on, and what the reading could not hold together is beside it. */
     private static Set<AdmissibleSet.Widening> with(Set<AdmissibleSet.Widening> these,
@@ -1085,6 +1103,9 @@ public final class FieldDomains {
             case ProjectionEvidence.Cause.NothingIsLeft _ -> "5";
             case ProjectionEvidence.Cause.PositionsSpacedDifferently _ -> "6";
             case ProjectionEvidence.Cause.ARuleTheReadingCannotName _ -> "7";
+            // Last, because it is the one cause about the pair of readings rather than about
+            // anything either of them met.
+            case ProjectionEvidence.Cause.TwoValuesStateRulesAboutIt _ -> "8";
         };
     }
 

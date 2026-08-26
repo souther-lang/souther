@@ -48,6 +48,11 @@ public final class ReportedReason {
                     UndividedPosition.Reason.UNSUPPORTED_DOMAIN;
             case BlockReason.CompetingCoordinates _ ->
                     UndividedPosition.Reason.COMPETING_COORDINATES;
+            // Its own word, and not the shape one below. Both sides of this line are read and
+            // ordered and a line is drawn on them; what is missing is which positions the line runs
+            // between, which is a question about the model and not about the form it was written in.
+            case BlockReason.CasePairingNotDetermined _ ->
+                    UndividedPosition.Reason.UNRESOLVED_CASE_PAIRING;
             case BlockReason.ComparisonBetweenPositions _ ->
                     UndividedPosition.Reason.UNSUPPORTED_PARTITION_SHAPE;
             // The same word, from the other reading of the same rule. What a document promises its

@@ -1234,6 +1234,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // so a sentence saying "a rule about it" would name the rule and then not say so.
             case UNSUPPORTED_SYNTAX -> "written in a form this compiler does not read";
             case UNSUPPORTED_DOMAIN -> "compared against values no line can be drawn on here";
+            case UNRESOLVED_CASE_PAIRING -> "it reaches case-specific positions on both sides, and "
+                    + "how those positions pair up is not worked out";
             case COMPETING_COORDINATES ->
                     "a rule beside it is about the position's other coordinate, so neither can be"
                             + " chosen";

@@ -50,6 +50,22 @@ public sealed interface Rules {
     record NoneWritten() implements Rules {}
 
     /**
+     * Whether any rule at all was written about this value.
+     *
+     * <p>Not which arm this is. A sum and a unit data carry no clause and are {@link NoneWritten};
+     * every other {@code data} is a declaration clauses may be written on and is {@link Read}
+     * whether or not any were. So the arm says what kind of thing was looked at, and this says what
+     * was found — and a caller wanting the second and reading the first counts a record nobody wrote
+     * a rule about as a value that spoke.
+     */
+    default boolean anythingWasWritten() {
+        return switch (this) {
+            case Read read -> read.domains().anythingWasWritten();
+            case NoneWritten _ -> false;
+        };
+    }
+
+    /**
      * Whether the gathering reached every rule written about the position at {@code path}.
      *
      * <p>The same two answers this type exists to keep apart, asked of reach. A value of a kind that

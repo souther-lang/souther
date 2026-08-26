@@ -100,11 +100,23 @@ final class Coverages {
         // rules at one value are one cut and stay separate obligations, which is what the merge
         // below does — applied one producer at a time, a clause and a guard naming one number would
         // divide the position twice.
+        // And each of them at the positions the name it was drawn on reaches, before anything is
+        // matched against an axis. A field every case of a sum spreads is named at the sum and
+        // written under a case, so one line there is one line per case — on the same number and from
+        // the same rule.
+        souther.compiler.partition.LinesWhereTheyFall.Filed filed =
+                souther.compiler.partition.LinesWhereTheyFall.of(inputs,
+                        both(clauses.thresholds(), guards.thresholds()),
+                        both(clauses.singled(), guards.singled()),
+                        both(clauses.between(), guards.between()), quantities, symbols);
         return new Partitioned(Partitions.withThresholds(partitioning, quantities,
-                both(clauses.thresholds(), guards.thresholds()), symbols, policy,
-                both(clauses.rulesWithoutALine(), guards.rulesWithoutALine()),
-                both(clauses.singled(), guards.singled()),
-                both(clauses.between(), guards.between()), arrives,
+                filed.thresholds(), symbols, policy,
+                // And the lines this had nowhere to put, which are findings of the same kind: a rule
+                // of the model that came to no line at a position it is about.
+                both(both(clauses.rulesWithoutALine(), guards.rulesWithoutALine()),
+                        filed.notPlaced()),
+                filed.singled(),
+                filed.between(), arrives,
                 // What a row had to satisfy to arrive at each comparison, from the walk that
                 // assumed it. A clause of a declaration is not written at a place in a body and has
                 // nothing on the way to it, so only the guards have any of this.
