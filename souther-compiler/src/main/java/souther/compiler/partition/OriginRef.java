@@ -209,7 +209,12 @@ public sealed interface OriginRef {
      * — an invariant and a guard naming the same number — and not for one line two rules settled
      * together.
      *
-     * @param bound  the rule that put an edge here
+     * @param bound  the rule that put an edge here, which is a clause of a {@code data} and can be
+     *               nothing else. A narrowing moves an end a type already has, and the two rules
+     *               that draw a line in a body — a comparison and an {@code ensures} clause — say
+     *               something about that body at that position rather than placing an end anything
+     *               can take in. Written wide, whoever asked such a reading whose line it was had to
+     *               know what builds one to answer
      * @param within the declarations whose own clauses decided where it stopped, and not the value
      *               the position sits in: the same relation can be written on the record, on a
      *               record inside it, or on a name wrapped round either, and only the one that wrote
@@ -219,7 +224,8 @@ public sealed interface OriginRef {
      *               where an inner record's clause and an outer record's reach one coordinate at one
      *               value, so this is not a set with a module of its own
      */
-    record NarrowedOrigin(OriginRef bound, List<TypeSymbol.AtModule> within) implements OriginRef {
+    record NarrowedOrigin(InvariantOrigin bound, List<TypeSymbol.AtModule> within)
+            implements OriginRef {
 
         public NarrowedOrigin {
             within = List.copyOf(within);

@@ -39,8 +39,9 @@ import java.util.Set;
  *
  * @param rule           which rule of the model drew it
  * @param conjunct       which of that rule's lines this is, counted over the conjuncts the author
- *                       wrote. Zero for a rule that draws one line, which is what a comparison and
- *                       an {@code ensures} clause each do
+ *                       wrote. Zero for a comparison, which is a rule apiece: a condition holding
+ *                       three of them is three rules, so there is no second line of one to tell
+ *                       this from
  * @param facts          what the rule says about its own line
  * @param narrowedWithin the declarations that took a bound's end in, kept so that a narrowed line
  *                       stays apart from the bare one it narrows: {@code MinuteOfDay}'s maximum is
@@ -62,6 +63,15 @@ public record AuthoredLine(RuleRef rule, int conjunct, LineFacts facts,
                     "a conjunct of a rule is counted from zero: " + conjunct);
         }
         narrowedWithin = List.copyOf(narrowedWithin);
+        // An end is something a clause of a `data` places, so those are the only lines a declaration
+        // can take in. Said here rather than left to whoever reads the pair: a line answering that
+        // a body's rule was narrowed has an owner that owes a row for a comparison, and every reader
+        // of it would be deciding what to do about a line the language cannot write.
+        if (!narrowedWithin.isEmpty() && !(rule instanceof RuleRef.Invariant)) {
+            throw new IllegalArgumentException(
+                    "a rule written in a body places no end for a declaration to take in: " + rule
+                            + " within " + narrowedWithin);
+        }
         // One entry per declaration. Several of these are one answer about one end, so a
         // declaration written twice would be one owner counted twice — and what counts them is what
         // says how many places a finding about the line names.
@@ -169,10 +179,12 @@ public record AuthoredLine(RuleRef rule, int conjunct, LineFacts facts,
      * {@link #ownersIn}.
      */
     public List<TypeSymbol.AtModule> obligationOwners() {
-        if (!(rule instanceof RuleRef.Invariant i)) {
-            return List.of();
+        if (!narrowedWithin.isEmpty()) {
+            return narrowedWithin;
         }
-        return narrowedWithin.isEmpty() ? List.of(i.clause().id().declaredOn()) : narrowedWithin;
+        return rule instanceof RuleRef.Invariant i
+                ? List.of(i.clause().id().declaredOn())
+                : List.of();
     }
 
     /**

@@ -148,7 +148,8 @@ final class LocalInspection {
         }
     }
 
-    private static void put(Map<String, Cut> into, Carrier carrier, Place at, OriginRef drawnBy,
+    private static void put(Map<String, Cut> into, Carrier carrier, Place at,
+                            OriginRef.InvariantOrigin drawnBy,
                             List<TypeSymbol.AtModule> narrowedBy) {
         // The rule as the end already names it. Narrowing is the one thing said here, and it is
         // said about the rule rather than in place of it: which declarations took the end in is a

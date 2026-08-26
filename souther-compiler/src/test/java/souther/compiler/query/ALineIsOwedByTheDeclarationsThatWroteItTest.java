@@ -8,8 +8,10 @@ import souther.compiler.partition.BorderObligationId;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -240,6 +242,53 @@ class ALineIsOwedByTheDeclarationsThatWroteItTest {
                 around.debt().id().line().obligationOwners().stream()
                         .map(each -> each.module() + "." + each.name()).toList(),
                 "the owners of the line are not one module's");
+    }
+
+    /** A comparison written in a body, which draws a line and places no end. */
+    private static final String GUARDED = """
+            module example.guarded
+
+            data Ok
+            data Small
+
+            behavior f : (n: Int) -> Ok | Small
+            let f (n) = {
+                guard n >= 3 else Small
+                Ok
+            }
+            """;
+
+    /**
+     * A rule written in a body is not something a declaration can take in.
+     *
+     * <p>The state the owners would have to have an answer for, and the reason there is none: a
+     * comparison places no end, so nothing is there to be taken in, and a line saying otherwise
+     * would owe a declaration a row for a rule that is some behavior's. Refused where a line is
+     * made, so no reader downstream has to decide what to do with one.
+     */
+    @Test
+    void aRuleWrittenInABodyCannotBeTakenIn() {
+        souther.compiler.partition.AuthoredLine comparison =
+                lineOf(compiled(GUARDED), "example.guarded", "f");
+        assertEquals(List.of(), comparison.obligationOwners(),
+                "the line under test is a body's, so nothing owes it");
+
+        assertThrows(IllegalArgumentException.class,
+                () -> new souther.compiler.partition.AuthoredLine(comparison.rule(),
+                        comparison.conjunct(), comparison.facts(),
+                        List.of(souther.compiler.types.TypeSymbols.declared(
+                                new souther.compiler.types.TypeKey("example.guarded", "Ok")))),
+                "and no declaration can be said to have taken its end in");
+    }
+
+    /** The first line {@code behavior} reads, whatever drew it. */
+    private static souther.compiler.partition.AuthoredLine lineOf(Compilation compilation,
+                                                                  String module, String behavior) {
+        List<BorderAssessment> lines =
+                Adequacy.boundariesOf(compilation.db(), module).get(behavior);
+        assertNotNull(lines, "the behavior under test reads a line");
+        assertFalse(lines.isEmpty(), "the behavior under test reads a line");
+        return lines.get(0).border().origin().authoredLine();
     }
 
     /** The module's debts, in the order the query answers them. */
