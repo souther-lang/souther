@@ -42,7 +42,7 @@ class AClosedReadingIsOneThatDrewEveryLineItFoundTest {
     void aReadingThatDrewItsLineMayBeClosed() {
         LinesRead read = new LinesRead();
         read.found(aLine(), bound("cap"));
-        read.drew(aBorder("cap"));
+        read.returning(List.of(read.drew(aBorder("cap"))));
 
         MeasureClosure.Both closed =
                 MeasureClosure.of(List.of(anAxis()), List.of(), List.of(), read);
@@ -105,6 +105,47 @@ class AClosedReadingIsOneThatDrewEveryLineItFoundTest {
                 () -> MeasureClosure.of(List.of(anAxis()), List.of(), List.of(), read));
 
         assertTrue(refused.getMessage().startsWith("a border this reading cannot account for"),
+                refused.getMessage());
+    }
+
+    /**
+     * And a border the reading hands back that it never wrote down.
+     *
+     * <p>The other end of the account, and the one that does not depend on a producer having
+     * remembered. Every producer there is writes into this today; a third one added later would be
+     * off the books from the day it is written, and what it made would still reach a caller — so
+     * what the reading returns is held against what it says it made.
+     */
+    @Test
+    void aBorderReturnedThatWasNeverWrittenDownIsRefused() {
+        LinesRead read = new LinesRead();
+        read.found(aLine(), bound("cap"));
+        read.drew(aBorder("cap"));
+        read.returning(List.of(aBorder("cap"), aBorder("floor")));
+
+        IllegalStateException refused = assertThrows(IllegalStateException.class,
+                () -> MeasureClosure.of(List.of(anAxis()), List.of(), List.of(), read));
+
+        assertTrue(refused.getMessage().startsWith(
+                        "a border returned by a reading that did not write it down"),
+                refused.getMessage());
+    }
+
+    /**
+     * And one it wrote down and did not hand back, which is a loss between the two.
+     */
+    @Test
+    void aBorderDrawnAndNotReturnedIsRefused() {
+        LinesRead read = new LinesRead();
+        read.found(aLine(), bound("cap"));
+        read.drew(aBorder("cap"));
+        read.returning(List.of());
+
+        IllegalStateException refused = assertThrows(IllegalStateException.class,
+                () -> MeasureClosure.of(List.of(anAxis()), List.of(), List.of(), read));
+
+        assertTrue(refused.getMessage().startsWith(
+                        "a border this reading drew and did not return"),
                 refused.getMessage());
     }
 

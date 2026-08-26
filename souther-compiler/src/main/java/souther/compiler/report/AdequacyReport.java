@@ -942,9 +942,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      */
     private void partition(StringBuilder out, BehaviorReport behavior,
                                   SourceId declaredIn, SourceNameResolver names) {
-        PartitionEvidence partition = behavior.partition();
-        if (partition == null || (partition.axes().isEmpty() && partition.boundaries().isEmpty()
-                && partition.notDerivable().isEmpty() && behavior.claimed().all().isEmpty())) {
+        // Whether there is a section at all is settled once, for every surface, and asked of the
+        // measurement rather than of the entries beside it. Asked of the entries, a behavior whose
+        // measures both had something to say and whose lists happened to be empty was left out of
+        // the page while the document wrote what they said (issue #1079).
+        if (!(PartitionSection.of(behavior.partition())
+                instanceof PartitionSection.Present(PartitionEvidence partition))) {
             return;
         }
         ReportMeasurement<List<PartitionEvidence.AxisCoverage>> partitioned =
@@ -2000,14 +2003,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
 
     private void partition(ObjectNode behavior, PartitionEvidence partition,
                                   ClaimAnnotations claimed, DocumentSources sources) {
-        if (partition == null) {
-            return;
-        }
-        // And no section where the boundary the positions come off was not worked out, for the
-        // reason the signature section is left out: what this section owes is the positions, the
-        // lines and the size of the space they make, and every one of those is a product over
-        // positions nobody could count. Said here as the behavior's `weakening`, once.
-        if (partition.boundaryNotDerived()) {
+        // The one decision, the same one the page reads. Written here as well, the two surfaces
+        // answered a reader differently about which behaviors have a section at all.
+        if (!(PartitionSection.of(partition) instanceof PartitionSection.Present)) {
             return;
         }
         ObjectNode out = behavior.putObject("partition");

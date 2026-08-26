@@ -167,6 +167,25 @@ class AMeasureWithNoNumberSaysWhyTest {
     }
 
     /**
+     * A composition says why the two measures do not apply to it, rather than leaving them out.
+     *
+     * <p>It is measured at its stages and has no positions of its own, which is a fact about the
+     * model and is what the other two measures say of it in the same breath. Left out, the same page
+     * was what a behavior whose measures had something to say and whose evidence lists were empty
+     * got — and a document written from the same compilation said {@code no_subject} where the page
+     * said nothing at all (issue #1079).
+     */
+    @Test
+    void aCompositionSaysWhyItsPositionsAreNotMeasuredHere() {
+        String both = behaviorBlock(human(), "both");
+
+        assertTrue(both.contains(
+                "partition   not applicable (this behavior is measured at its stages)"), both);
+        assertTrue(both.contains(
+                "border      not applicable (this behavior is measured at its stages)"), both);
+    }
+
+    /**
      * The whole report, fixed.
      *
      * <p>Fixed whole rather than line by line. Every wrong line this issue was about could have been
@@ -191,6 +210,8 @@ class AMeasureWithNoNumberSaysWhyTest {
                     branch      not applicable (this body owes no arm)
                   both                     implemented   rows 1    pending 0
                     signature   not applicable (this behavior's output is not a sum)
+                    partition   not applicable (this behavior is measured at its stages)
+                    border      not applicable (this behavior is measured at its stages)
                     branch      not applicable (this behavior has no body)
                   baseRate                 injected      rows 0    pending 0
                     signature   not applicable (this behavior's output is not a sum)

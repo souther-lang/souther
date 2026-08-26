@@ -234,6 +234,7 @@ public final class Partitions {
         // reading draws a line between two positions.
         LinesRead read = new LinesRead();
         java.util.Map<AxisId, List<Border>> lines = linesAlong(kept, quantities, symbols, read);
+        read.returning(lines.values().stream().flatMap(List::stream).toList());
         MeasureClosure.Both closed = MeasureClosure.of(kept, standing, rulesWithoutALine, read);
         return new Partitioning(kept, standing, uncertain, undividedIn(measured),
                 List.copyOf(rulesWithoutALine), blockedIn(measured), List.copyOf(notSeparated),
@@ -549,6 +550,8 @@ public final class Partitions {
         LinesRead read = new LinesRead();
         java.util.Map<AxisId, List<Border>> lines = linesAlong(out, reading, symbols, read);
         List<Border> across = Border.allOf(between, partedByQuantity(out), read);
+        read.returning(lines.values().stream().flatMap(List::stream).toList());
+        read.returning(across);
         MeasureClosure.Both closed = MeasureClosure.of(out, base.unanswered(), rules, read);
         return new Partitioning(out, base.unanswered(), base.uncertain(),
                 undividedIn(measured), List.copyOf(rules), blockedIn(measured),
