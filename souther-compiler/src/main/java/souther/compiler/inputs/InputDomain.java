@@ -247,6 +247,27 @@ public final class InputDomain {
     }
 
     /**
+     * The value a rule naming {@code path} would be read of, or null where this reading has none.
+     *
+     * <p>Asked here and not worked out from how the path is spelled. Which value's rules reach which
+     * positions is what {@link RuleRoot} settles, and a caller building one from the head of a path
+     * would have a second answer to it — right for as long as every such path starts at a parameter,
+     * and quietly wrong the first time one does not.
+     *
+     * <p>The value the path is under and not the innermost one it passes through. A rule written in
+     * a behavior names a position from the parameter, so the parameter is what it is read of; a rule
+     * of a case is written in the case and reaches this by naming nothing above it.
+     */
+    public RuleRoot rootNaming(TermPath path) {
+        for (RuleRoot root : roots) {
+            if (root.at().equals(TermPath.of(path.head())) && path.fieldKeyUnder(root.at()) != null) {
+                return root;
+            }
+        }
+        return null;
+    }
+
+    /**
      * Everything the rules of this input's values placed, and what became of each of them.
      *
      * <p>The whole of what a build has to account for on this side. Every rule that placed anything

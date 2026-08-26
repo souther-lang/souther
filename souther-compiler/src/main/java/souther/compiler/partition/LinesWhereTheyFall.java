@@ -7,7 +7,6 @@ import souther.compiler.inputs.PlacementFiling;
 import souther.compiler.inputs.PlacementSeed;
 import souther.compiler.inputs.Position;
 import souther.compiler.inputs.PositionId;
-import souther.compiler.inputs.RuleAddress;
 import souther.compiler.inputs.RuleWithoutALine;
 import souther.compiler.inputs.TermPath;
 
@@ -85,9 +84,12 @@ public final class LinesWhereTheyFall {
                               souther.compiler.inputs.Quantities quantities, Symbols symbols,
                               List<LineDrawn> out, List<RuleWithoutALine> notPlaced) {
         List<NumericTerm> crossing = new ArrayList<>();
+        java.util.Map<NumericTerm, List<NumericTerm>> reaches = new java.util.LinkedHashMap<>();
         for (NumericTerm term : line.cuts().of().terms()) {
-            if (termsOf(inputs, term, symbols).size() > 1) {
+            List<NumericTerm> where = termsOf(inputs, term, symbols);
+            if (where.size() > 1) {
                 crossing.add(term);
+                reaches.put(term, where);
             }
         }
         if (crossing.size() > 1) {
@@ -104,16 +106,22 @@ public final class LinesWhereTheyFall {
             return;
         }
         NumericTerm moves = crossing.getFirst();
+        List<NumericTerm> targets = reaches.get(moves);
         List<LineDrawn> made = new ArrayList<>();
-        for (NumericTerm to : termsOf(inputs, moves, symbols)) {
+        for (NumericTerm to : targets) {
             Cutting cut = line.cuts().movedTo(moves, to, inputs.ordersOf(to, symbols), quantities);
-            if (cut != null) {
-                made.add(new LineDrawn(cut, line.by()));
+            // What a quantity can be is settled by the orders its terms are on, and one name
+            // standing at more than one position stands at one field on one order. So the move
+            // holds at all of them or at none, and a subset is this compiler contradicting itself
+            // rather than a line to place at fewer places than the name reaches.
+            if (cut == null) {
+                throw new IllegalStateException(
+                        "`" + moves + "` stands at " + to + " and the line on it cannot be taken "
+                                + "there, though the name reaches " + targets.size() + " positions");
             }
+            made.add(new LineDrawn(cut, line.by()));
         }
-        // Nowhere to move it to and no reading said otherwise: the line stays as the model wrote it
-        // rather than being dropped for having been about a name this could not place.
-        out.addAll(made.isEmpty() ? List.of(line) : made);
+        out.addAll(made);
     }
 
     /**
@@ -131,25 +139,30 @@ public final class LinesWhereTheyFall {
         if (inputs.at(path) != null) {
             return List.of(term);
         }
-        // The value the comparison was written against, which is the parameter the location is
-        // under. A location already naming a case is under no name of that value's, and comes back
-        // with no address rather than with one this rewrote.
-        RuleAddress address = RuleAddress.of(TermPath.of(path.head()), path);
-        if (address == null) {
+        // The value a rule naming this location is read of, which the reading answers. A location
+        // already naming a case is under no name of that value's, and comes back with none rather
+        // than with one this worked out for itself.
+        InputDomain.RuleRoot root = inputs.rootNaming(path);
+        if (root == null) {
             return List.of(term);
         }
-        PlacementFiling filing = inputs.file(PlacementSeed.of(TermPath.of(path.head()), term));
+        PlacementFiling filing = inputs.file(PlacementSeed.of(root.at(), term));
         List<NumericTerm> out = new ArrayList<>();
         for (PositionId at : filing.filedAt()) {
             Position position = inputs.at(at.at());
-            // The same number of what stands there. A shared field is one field with one declared
-            // type, so this holds; asked and answered all the same, because what may not arrive
-            // further down is a term measured by an account written for another shape.
+            // The same number of what stands there. A name that stands at more than one position
+            // stands at one field, and one field has one declared type — so the operation and what
+            // it is taken of agree everywhere or nowhere. Asked at each of them all the same, and a
+            // disagreement is this compiler contradicting itself rather than a place to drop one.
             NumericTerm moved = position == null ? null
                     : term.movedTo(at.at(), position.type(), symbols);
-            if (moved != null) {
-                out.add(moved);
+            if (moved == null) {
+                throw new IllegalStateException(
+                        "`" + term + "` stands at " + at + " and cannot be taken there, though it "
+                                + "is taken at the " + filing.filedAt().size() + " positions one "
+                                + "name reaches");
             }
+            out.add(moved);
         }
         // Nothing to move it to, and the filing says why. The line stays as it was so that whoever
         // reads it reads the name the model wrote.

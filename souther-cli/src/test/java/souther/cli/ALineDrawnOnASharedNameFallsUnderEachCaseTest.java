@@ -222,6 +222,41 @@ class ALineDrawnOnASharedNameFallsUnderEachCaseTest {
                         + report);
     }
 
+    /**
+     * A clause naming a shared field that comes to no line names the positions it is about.
+     *
+     * <p>Not only the ones on its own side of the comparison. {@code q.limit <= cap} relates two
+     * positions and divides neither, and what an author is owed is both of them — read at the sum
+     * alone, the finding named the number beside it and said nothing about the field the clause is
+     * as much about.
+     */
+    @Test
+    void aClauseThatComesToNoLineNamesTheSharedFieldUnderEachCase() throws Exception {
+        String model = """
+                module example.line
+
+                data Paging = { limit: Int }
+                data A = { ...Paging, x: Int }
+                data B = { ...Paging, y: Int }
+                data Q = A | B
+
+                data Holder = { q: HELD, cap: Int }
+                    invariant fits = q.limit <= cap
+
+                data Ok
+
+                behavior read : (h: Holder) -> Ok
+
+                let read (h) = Ok
+                """;
+        String throughTheSum = report(model.replace("HELD", "Q"));
+
+        assertTrue(throughTheSum.contains("about `h.q@A.limit`"), () -> throughTheSum);
+        assertTrue(throughTheSum.contains("about `h.q@B.limit`"), () -> throughTheSum);
+        assertTrue(report(model.replace("HELD", "A")).contains("about `h.q.limit`"),
+                "which is what the same clause says where no sum is in the way");
+    }
+
     /** What a model with no sum in the way answers, which is what the fan-out has to come to. */
     @Test
     void nothingChangesWhereNoNameCrosses() throws Exception {
