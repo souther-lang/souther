@@ -62,24 +62,43 @@ public record QuantityArrangement(List<Parting> partings, List<Run> runs) {
          *
          * <p>Checked rather than trusted, because this is the answer about what stops a run and a
          * value saying one thing in its geometry and another in its claims would be two answers to
-         * the question it exists to settle. What is checked is what the two share: a run nothing
-         * stops that way is stopped by the end of the order and by nothing else, and a run something
-         * stops is stopped by something that is not the end of the order.
+         * the question it exists to settle. Every claim is held to where the run actually reaches:
+         * a line is what stops it only where the run gets to that line, and an end the rules leave
+         * only where the run gets to that end — which is the whole of what the two have to agree
+         * about, and checking less than that left a run reaching one place and claiming to be
+         * stopped at another.
+         *
+         * @param side which end of the run this is, so that the run lies the other way from it
          */
         private static void agree(BandEnd end, List<RegionClaim> claims, Towards side) {
             if (claims.isEmpty()) {
                 throw new IllegalArgumentException(
                         "a run stops at its " + side + " end because something stops it");
             }
-            boolean order = claims.stream().anyMatch(each ->
-                    each.basis() instanceof RegionBasis.Beside(FarEnd.AtTheOrderEnd _));
-            if (order != (end.reaches() == null)) {
-                throw new IllegalArgumentException("a run whose " + side + " end is " + end
-                        + " and is stopped by " + claims);
+            Bound reaches = end.reaches();
+            if (reaches == null) {
+                if (!claims.equals(List.of(new RegionClaim(
+                        new RegionBasis.Beside(new FarEnd.AtTheOrderEnd(side)),
+                        PointAttribution.NONE)))) {
+                    throw new IllegalArgumentException("a run nothing stops at its " + side
+                            + " end, stopped by " + claims);
+                }
+                return;
             }
-            if (order && claims.size() != 1) {
-                throw new IllegalArgumentException("nothing stops a run at the end of the order,"
-                        + " so nothing else stops it there either: " + claims);
+            for (RegionClaim claim : claims) {
+                if (!(claim.basis() instanceof RegionBasis.Beside beside)) {
+                    throw new IllegalArgumentException("a run of the arrangement is beside what"
+                            + " stops it, and this is not: " + claim.basis());
+                }
+                Bound at = switch (beside.farEnd()) {
+                    case FarEnd.AtALine line -> Band.atTheLine(line.where(), side.opposite());
+                    case FarEnd.AtTheDomain domain -> domain.reaches();
+                    case FarEnd.AtTheOrderEnd _ -> null;
+                };
+                if (at == null || !at.canonical().equals(reaches.canonical())) {
+                    throw new IllegalArgumentException("a run reaching " + reaches + " at its "
+                            + side + " end, claimed to be stopped at " + beside.farEnd());
+                }
             }
         }
 

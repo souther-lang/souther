@@ -27,9 +27,14 @@ public record RegionClaim(RegionBasis basis, PointAttribution attribution) {
     /**
      * The same claims with one entry per basis, each carrying everything that settled it.
      *
-     * <p>A basis is what a row is owed for, so two claims of one basis are one thing to write a row
-     * for however many things put it there — an end a line and a declaration's narrowing both stop
-     * the quantity at is one end. Kept as two, the region would be owed twice for one place.
+     * <p>A basis is what a row is owed for, so two claims of one basis are one obligation however
+     * many things put it there: one end the rules leave, arrived at with one declaration named as
+     * having taken it in and again with another, is one end owed to both of them.
+     *
+     * <p><b>Not two things that stop the run in one place.</b> A line and an end the rules leave can
+     * fall together and each stops the run there without the other, so they are two bases and two
+     * obligations — which is what the far side of a run is told apart by. Only claims that are the
+     * same basis are brought together here.
      */
     public static List<RegionClaim> byBasis(List<RegionClaim> claims) {
         List<RegionClaim> out = new ArrayList<>();

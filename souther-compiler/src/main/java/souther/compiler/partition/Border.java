@@ -141,7 +141,14 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, PointA
         for (PointRole role : EnumSet.allOf(PointRole.class)) {
             PointAnswer mine = answer(role);
             PointAnswer also = other.answer(role);
-            if (!mine.demand().sameAs(also.demand()) || !mine.bases().equals(also.bases())) {
+            // What a row here is owed for, as the set it is. Which of them a reading listed first is
+            // the order its arrangement was walked in, and reading that as part of the answer would
+            // put an accident of the derivation into the identity — which is the thing this method
+            // exists to keep out of it. One entry per basis is the answer's own invariant, so the
+            // set loses nothing.
+            if (!mine.demand().sameAs(also.demand())
+                    || !java.util.Set.copyOf(mine.bases()).equals(
+                            java.util.Set.copyOf(also.bases()))) {
                 return false;
             }
         }

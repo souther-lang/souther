@@ -105,6 +105,45 @@ class OneBorderReadTwiceIsOneReadingTest {
                 "and a hundred is a hundred, so it is one line met in one place");
     }
 
+    /**
+     * The order two things that stop a run were arrived at is no part of which reading this is.
+     *
+     * <p>A run stopping at a line and at the end the rules leave is owed to both of them, and which
+     * of the two an arrangement walked to first is how it was walked. Compared in the order they
+     * came, one reading of one line would stop being that the day the walk changed — which is the
+     * kind of accident this comparison is here to keep out of the answer.
+     */
+    @Test
+    void theOrderWhatStopsARunWasFoundInIsNoPartOfTheReading() {
+        Border one = bound(List.of(Parting.by(
+                Seam.of(space(), at(1000), Towards.BELOW), aComparison())));
+        Border other = reversed(one);
+
+        assertNotEquals(one.answer(PointRole.IN).bases(), other.answer(PointRole.IN).bases(),
+                "the two list what stops the run in opposite orders");
+        assertTrue(one.sameReadingAs(other),
+                "and are owed to the same things, so they are one reading of one line");
+    }
+
+    /** The same border with what stops each of its runs listed the other way round. */
+    private static Border reversed(Border border) {
+        java.util.Map<PointRole, PointAnswer> answers =
+                new java.util.EnumMap<>(PointRole.class);
+        for (PointRole role : PointRole.values()) {
+            PointAnswer answer = border.answer(role);
+            answers.put(role, answer instanceof PointAnswer.InRegion in && in.claims().size() > 1
+                    ? new PointAnswer.InRegion(in.criterion(), reversed(in.claims()))
+                    : answer);
+        }
+        return new Border(border.cut(), border.origin(), answers);
+    }
+
+    private static List<RegionClaim> reversed(List<RegionClaim> claims) {
+        List<RegionClaim> out = new java.util.ArrayList<>(claims);
+        java.util.Collections.reverse(out);
+        return out;
+    }
+
     /** And one line met at two positions is two readings, whatever each of them owes. */
     @Test
     void oneLineMetAtTwoPositionsIsTwoReadings() {

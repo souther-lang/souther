@@ -72,6 +72,45 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
                 "a parted end without a reach is not a state a run can be in");
     }
 
+    /**
+     * A run claiming to be stopped where it does not reach is refused.
+     *
+     * <p>The run and what stops it are one value because they are one answer, and a value saying one
+     * thing in its own ends and another in what it is owed to would be two answers to the question
+     * it exists to settle. So each of the things said to stop it is held to where the run actually
+     * gets: a line stops it only where the run reaches that line, and an end the rules leave only
+     * where the run reaches that end.
+     */
+    @Test
+    void aRunClaimingToStopWhereItDoesNotReachIsRefused() {
+        Band values = new Band(new BandEnd.AtOrderEnd(Towards.BELOW),
+                new BandEnd.AtDomain(Bound.at(at("50"), true)));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> new QuantityArrangement.Run(values, stoppedByTheOrder(Towards.BELOW),
+                        stoppedByTheDomain(Bound.at(at("100"), true))),
+                "the run stops at fifty and says it stops at a hundred");
+        assertThrows(IllegalArgumentException.class,
+                () -> new QuantityArrangement.Run(values, stoppedByTheOrder(Towards.BELOW),
+                        List.of(new RegionClaim(RegionBasis.TheRest.INSTANCE,
+                                PointAttribution.NONE))),
+                "and what a rule leaves outside one value is not a run of the arrangement at all");
+        assertThrows(IllegalArgumentException.class,
+                () -> new QuantityArrangement.Run(values, stoppedByTheOrder(Towards.ABOVE),
+                        stoppedByTheDomain(Bound.at(at("50"), true))),
+                "nor is the end of the order the other way round from the end this is");
+    }
+
+    private static List<RegionClaim> stoppedByTheOrder(Towards towards) {
+        return List.of(new RegionClaim(new RegionBasis.Beside(new FarEnd.AtTheOrderEnd(towards)),
+                PointAttribution.NONE));
+    }
+
+    private static List<RegionClaim> stoppedByTheDomain(Bound at) {
+        return List.of(new RegionClaim(new RegionBasis.Beside(new FarEnd.AtTheDomain(at)),
+                PointAttribution.NONE));
+    }
+
     /** What stops the first run of {@code arranged} at its high end, without who can move it. */
     private static List<FarEnd> farEndsOf(QuantityArrangement arranged) {
         return arranged.runs().get(0).endsAt(Towards.ABOVE).stream()
