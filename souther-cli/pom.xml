@@ -28,6 +28,14 @@
             <groupId>org.souther-lang</groupId>
             <artifactId>souther-runtime</artifactId>
         </dependency>
+        <!-- `souther lsp` serves the language server from this command line rather than from a
+             second launcher, so an editor that has the compiler has the server. The plain jar, not
+             the `all` one an editor downloads: that is this module's own dependencies again, and
+             the uber jar this build writes bundles them once. -->
+        <dependency>
+            <groupId>org.souther-lang</groupId>
+            <artifactId>souther-lsp</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>

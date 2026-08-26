@@ -22,6 +22,8 @@ import souther.lsp.transport.MessageConnection;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -51,7 +53,23 @@ public final class LspServer {
     }
 
     public static void main(String[] args) {
-        new LspServer(new MessageConnection(System.in, System.out)).run();
+        System.exit(serve(System.in, System.out));
+    }
+
+    /**
+     * Serves one session over the given streams and returns what a command line exits with.
+     *
+     * <p>The entry point a caller that is not a {@code java -jar} line uses. {@code souther lsp}
+     * launches this server in the command line's own process, so what starts a session cannot be a
+     * {@code main} that owns the exit: a method returning the code leaves that decision where the
+     * process is, which is one level up from here either way.
+     *
+     * <p>A session that reaches the end of its input has been shut down by its client, and that is
+     * this server finishing rather than failing.
+     */
+    public static int serve(InputStream in, OutputStream out) {
+        new LspServer(new MessageConnection(in, out)).run();
+        return 0;
     }
 
     /** Reads and dispatches messages until end of input or an {@code exit} notification. */

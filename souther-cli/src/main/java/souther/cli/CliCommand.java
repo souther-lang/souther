@@ -52,6 +52,7 @@ enum CliCommand {
     JAPI("japi", "<class-or-package>[#<member>]", "a dependency jar's public API, with javadoc",
             Map.of(CliOption.CLASS_PATH, Reads.saying("where to find the jar to read"))),
     MCP("mcp", "", "serve doc, api and japi over MCP stdio"),
+    LSP("lsp", "", "serve the language server over LSP stdio"),
     HELP("help", "[<command>]", "what a command takes, and what its options mean");
 
     private static final Map<String, CliCommand> BY_SPELLING = spellingIndex();

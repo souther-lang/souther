@@ -31,12 +31,14 @@ jobs:
 
       # The CLI's really-executable launcher and the shaded language server are build outputs of the
       # reactor; the grammar is a committed resource that `verify` has just checked is not stale.
+      # The server is attached under a classifier so the plain jar stays the one `souther-cli`
+      # depends on, and is published under the name an editor downloads it by.
       - name: Collect the artifacts
         run: |
           mkdir -p artifacts
           cp souther-cli/target/souther artifacts/
           cp souther-cli/target/souther.jar artifacts/
-          cp souther-lsp/target/souther-lsp.jar artifacts/
+          cp souther-lsp/target/souther-lsp-all.jar artifacts/souther-lsp.jar
           cp souther-compiler/src/main/resources/souther/compiler/highlight/souther.tmLanguage.json artifacts/
 
       # Over whatever the step above collected, rather than a second list of the same four names, and

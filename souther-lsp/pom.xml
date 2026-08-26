@@ -63,8 +63,12 @@
     </dependencies>
 
     <build>
-        <!-- The uber jar is `souther-lsp.jar`; an editor launches it with `java -jar souther-lsp.jar`,
-             which speaks LSP over stdio. -->
+        <!-- The uber jar is `souther-lsp-all.jar`; an editor launches it with
+             `java -jar souther-lsp-all.jar`, which speaks LSP over stdio. It is attached under a
+             classifier rather than put in the module's own place, because `souther-cli` depends on
+             this module to serve the same server from `souther lsp` and would then be shading an
+             uber jar into an uber jar. What that module resolves is the plain one this build
+             leaves alone. -->
         <finalName>souther-lsp</finalName>
         <plugins>
             <plugin>
@@ -79,6 +83,11 @@
                         </goals>
                         <configuration>
                             <createDependencyReducedPom>false</createDependencyReducedPom>
+                            <!-- Written beside the plain jar under a name of its own, rather than
+                                 put in its place. The module's own artifact is what `souther-cli`
+                                 resolves, and an uber jar resolved there would be shaded into an
+                                 uber jar. -->
+                            <finalName>souther-lsp-all</finalName>
                             <filters>
                                 <filter>
                                     <artifact>*:*</artifact>
@@ -108,8 +117,9 @@
     </build>
 
     <profiles>
-        <!-- The shaded LSP server is a runnable binary, not a library; keep it out of the
-             Central bundle (distribute via GitHub Releases instead). -->
+        <!-- What this module ships is the shaded LSP server, a runnable binary rather than a
+             library; keep it out of the Central bundle (distribute via GitHub Releases instead).
+             The plain jar is a dependency inside this reactor and is not published either. -->
         <profile>
             <id>release</id>
             <build>
