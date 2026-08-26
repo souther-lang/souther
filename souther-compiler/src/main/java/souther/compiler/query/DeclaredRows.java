@@ -12,12 +12,16 @@ import java.util.SequencedMap;
 /**
  * The rows a module's declarations are owed: one answer per point of each authored line.
  *
- * <p><b>The authority on how many rows a line is offered.</b> A line is one piece of work however
- * many positions carry the type, and that is a rule about what is owed rather than about how a block
- * is laid out — so it is settled here, where the search is resolved, and every reader below is a
- * projection of this map. Left to the block, one authored line came out as up to four rows because
- * each reading composed its own (issue #1076), and a block written another way would have brought it
- * back.
+ * <p><b>The authority on how many points a line is resolved at, and not on how many rows go out.</b>
+ * A point is one piece of work however many positions carry the type, and that is a rule about what
+ * is owed rather than about how a block is laid out — so it is settled here, where the search is
+ * resolved, and every reader below is a projection of this map. Left to the block, one authored line
+ * came out as up to four answers because each reading composed its own (issue #1076), and a block
+ * written another way would have brought it back.
+ *
+ * <p>How many rows a person is offered is another count and is made further down: two points can be
+ * answered by one row, and a block offers a row once per set of inputs ({@code GeneratedRows}). One
+ * resolution per point does not mean one row per point.
  *
  * <p>In the order the lines were read, so that what a block prints is read against the one before
  * it.
@@ -65,7 +69,8 @@ public record DeclaredRows(GenerationScope scope,
      *
      * <p>A projection and nothing more — no row is chosen here and none is dropped. Which reading
      * composed the row was settled by the search, and a renderer that grouped differently would
-     * still be handed the same one row per point.
+     * still be handed the same row for each point. Two points answered by one row are two entries
+     * here and one row where the block is written, which is where that count is made.
      */
     public SequencedMap<String, List<Generator.GeneratedRow>> rowsByCarrier() {
         SequencedMap<String, List<Generator.GeneratedRow>> out = new LinkedHashMap<>();

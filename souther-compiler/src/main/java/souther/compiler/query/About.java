@@ -92,9 +92,14 @@ public sealed interface About {
         public APointOfABorder {
             java.util.Objects.requireNonNull(point, "a finding is about something");
             java.util.Objects.requireNonNull(owed, "and a row here is owed for something");
-            if (owed.role() != point.role()) {
-                throw new IllegalArgumentException("a finding about the " + point.role()
-                        + " point of a reading, owed for the " + owed.role() + " point of a line");
+            // One of the things this reading owes here, and not something that merely looks like
+            // one. What a role owes is the border's own answer, so a finding naming anything else
+            // would be a second reading of it — and a reader joining the finding back to what was
+            // measured would find nothing to join it to.
+            if (point.owedHere().stream().noneMatch(each -> each.point().equals(owed))) {
+                throw new IllegalArgumentException("a finding about " + owed
+                        + ", which is not among what this reading owes at its " + point.role()
+                        + " point: " + point.owedHere());
             }
         }
     }

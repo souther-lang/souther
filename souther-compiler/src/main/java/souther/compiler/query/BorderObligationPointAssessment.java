@@ -21,7 +21,8 @@ import java.util.Map;
  *
  * <p><b>One of these per point and not per line.</b> A line owes as many as four things and they are
  * not one piece of work: a row at the line and a row beside it are two values, and two runs beside
- * one line that stop in different places are two rows to write. Which of them a reading owes is the
+ * one line that stop in different places are two obligations, whether or not one row answers both.
+ * Which of them a reading owes is the
  * border's own answer ({@link souther.compiler.partition.Border#owes}), so nothing here decides it
  * again — and a line has no assessment of its own, only the points it owes. A report that shows a
  * border whole groups these by the line and joins them with the border's four answers, because a

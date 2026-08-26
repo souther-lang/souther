@@ -212,10 +212,11 @@ public record BorderAssessment(Border border, Map<PointRole, ItemAssessment> ite
          * and nowhere else.
          *
          * <p>The points and not whether there are any, because one role can owe more than one: a
-         * place two rules drew a line at leaves a run owed to each of them, and each is its own row
-         * to be told about. Answered as a yes, everything downstream went on accounting in this
-         * reading's roles — which is the occurrence standing in for the debt, one level down from
-         * where it was taken out.
+         * place two rules drew a line at leaves a run owed to each of them, and each is its own
+         * obligation to be told about — a single row may well answer both, which is a question for
+         * whoever offers rows and not for this. Answered as a yes, everything downstream went on
+         * accounting in this reading's roles, which is the occurrence standing in for the debt one
+         * level down from where it was taken out.
          *
          * <p>Asked here and not at each reader. Everything that measures a behavior, counts what it
          * covers or raises a finding about it has to leave the declaration's points out, and the

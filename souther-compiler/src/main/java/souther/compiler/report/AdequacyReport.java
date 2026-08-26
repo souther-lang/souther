@@ -615,9 +615,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 // below, from every reading of it: read here as well, a row standing at it in one
                 // behavior would be weighed against another behavior having no rows, and the
                 // verdict would hold open what the aggregation had settled (issue #1062).
-                // One measurement per thing the reading is owed a row for, since each of them is a
-                // row to write: a place two of this body's rules drew a line at leaves a run owed
-                // to each, and a verdict counting the role once would be short by the rest.
+                // One measurement per thing the reading is owed a row for, since each of them is an
+                // obligation: a place two of this body's rules drew a line at leaves a run owed to
+                // each, and a verdict counting the role once would be short by the rest. How many
+                // rows answer them is a different count and is the generator's.
                 BorderAssessment.pointsOf(behavior.partition().boundaries()).stream()
                         .filter(p -> held.requires(p.role()))
                         .forEach(p -> p.owedHere()
