@@ -193,7 +193,7 @@ class WhatARuleOnAStringIsMeasuredAtTest {
                         : made.stream().map(FixtureTemplate::text)
                                 .map(WhatARuleOnAStringIsMeasuredAtTest::bare).toList().toString());
             }
-            Partitions.bordersOf(axis, symbols, reading.runsBetween(axis.term()))
+            Partitions.bordersOf(axis, symbols, reading.runsBetween(axis.term()), new LinesRead())
                     .forEach(border -> java.util.stream.Stream.of(PointRole.ON, PointRole.OFF)
                             .filter(role -> border.demand(role).criterion() != null)
                             .forEach(role -> owed.add(role + " "

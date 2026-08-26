@@ -146,6 +146,52 @@
             "point" : "out",
             "notOwed" : "the_rules_refuse_it"
           } ]
+        }, {
+          "axis" : "discount/rate",
+          "origin" : "invariant Rate #1",
+          "kind" : "at_value",
+          "value" : "0",
+          "items" : [ {
+            "point" : "on",
+            "notOwed" : "the_carrier_names_no_neighbour"
+          }, {
+            "point" : "off",
+            "notOwed" : "the_rules_refuse_it"
+          }, {
+            "point" : "in",
+            "relation" : "in",
+            "against" : "0 < rate < 1",
+            "knownWritable" : true,
+            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
+          }, {
+            "point" : "out",
+            "notOwed" : "the_rules_refuse_it"
+          } ]
+        }, {
+          "axis" : "discount/rate",
+          "origin" : "invariant Rate #1",
+          "kind" : "at_value",
+          "value" : "1",
+          "items" : [ {
+            "point" : "on",
+            "notOwed" : "the_carrier_names_no_neighbour"
+          }, {
+            "point" : "off",
+            "notOwed" : "the_rules_refuse_it"
+          }, {
+            "point" : "in",
+            "relation" : "in",
+            "against" : "0 < rate < 1",
+            "knownWritable" : true,
+            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
+          }, {
+            "point" : "out",
+            "notOwed" : "the_rules_refuse_it"
+          } ]
         } ],
         "pairs" : {
           "total" : 0,

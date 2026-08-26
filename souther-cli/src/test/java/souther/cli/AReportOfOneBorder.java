@@ -49,7 +49,16 @@ final class AReportOfOneBorder {
 
     private AReportOfOneBorder() {}
 
-    /** A bound at 100 over a position the rules run from 1 to 1000, so all four points are owed. */
+    /**
+     * A bound at 100 over a position the rules run from 100 to 1000: a point against the line and a
+     * point away from it, both owed.
+     *
+     * <p>The line is where what the bound leaves stops, which is what makes it this position's lower
+     * end rather than a value inside it. Written as a bound at 100 over a run from 1, the fixture
+     * asked for a border no model draws — nothing is below a bound — and got one with an {@code ON}
+     * point at the line and an {@code IN} point over the whole run including the values the bound
+     * refuses.
+     */
     static Border aBoundedBorder() {
         OriginRef origin = new OriginRef.InvariantOrigin(new RuleRef.Invariant(new Clause.Ref(
                 new Clause.Id(TypeSymbols.declared(new TypeKey("example.rate", "Amount")), 0),
@@ -62,7 +71,7 @@ final class AReportOfOneBorder {
                         new souther.compiler.partition.Level.OnACarrier(Carrier.WHOLE,
                                 Count.of(100))),
                 origin,
-                new NumericDomain.Bounds(Endpoint.inclusive(Count.of(1)),
+                new NumericDomain.Bounds(Endpoint.inclusive(Count.of(100)),
                         Endpoint.inclusive(Count.of(1000))));
     }
 

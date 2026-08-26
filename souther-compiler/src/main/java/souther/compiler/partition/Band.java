@@ -12,10 +12,16 @@ import souther.compiler.numeric.Towards;
  * @param under the seam this run starts above, or null where nothing parts it there
  * @param over  the seam it stops below, or null on the same reading
  * @param from  what the rules leave the quantity at the low end, which is where a run with no seam
- *              under it starts. Null where they leave it everything that way
+ *              under it starts. Null where they leave it everything that way.
+ *              <p>Where it stops and whether it keeps the place it stops at, and not the first value
+ *              in it. The two are one thing on a carrier that steps, because a strict end is moved
+ *              onto the value it leaves before it is ever read — and on one with no step there is no
+ *              such value: {@code value > 0.00m} leaves every decimal above zero and no least one.
+ *              Held as the value, such a run either ran to the end of the order or held the very
+ *              value its bound refuses, and the class it is came out spelled {@code 0 <= rate}
  * @param to    the same at the high end
  */
-public record Band(Seam under, Seam over, Level from, Level to) {
+public record Band(Seam under, Seam over, Bound from, Bound to) {
 
     /**
      * How this run reads: the first value in it and the last.
@@ -89,12 +95,24 @@ public record Band(Seam under, Seam over, Level from, Level to) {
 
     /** The first value in this run, or null where the order names none there. */
     public Level first() {
-        return under == null ? from : under.above();
+        return under == null ? valueAt(from) : under.above();
     }
 
     /** The last, on the same reading. */
     public Level last() {
-        return over == null ? to : over.below();
+        return over == null ? valueAt(to) : over.below();
+    }
+
+    /**
+     * The value an end the rules leave stands at, where the run holds it and the quantity has one
+     * there.
+     *
+     * <p>Null for an end the run stops short of, which is what a strict bound on a carrier with no
+     * step leaves: the run has no first value, and saying it starts at the bound's own would put the
+     * one value the rule refuses inside it.
+     */
+    private static Level valueAt(Bound end) {
+        return end == null || !end.inclusive() ? null : end.at().asALevelOfTheQuantity();
     }
 
     /**
@@ -121,12 +139,10 @@ public record Band(Seam under, Seam over, Level from, Level to) {
     public String written(BorderQuantity of, Level except) {
         String low = except != null && same(except, first())
                 ? of.writtenAt(except) + " < "
-                : under != null ? said(of, under, Towards.ABOVE)
-                        : from == null ? "" : of.writtenAt(from) + " <= ";
+                : under != null ? said(of, under, Towards.ABOVE) : leaves(of, from, Towards.ABOVE);
         String high = except != null && same(except, last())
                 ? " < " + of.writtenAt(except)
-                : over != null ? said(of, over, Towards.BELOW)
-                        : to == null ? "" : " <= " + of.writtenAt(to);
+                : over != null ? said(of, over, Towards.BELOW) : leaves(of, to, Towards.BELOW);
         // An end only the rule that drew it can name relates a row to the quantity rather than to
         // the position, so it is a condition of its own beside the rest. Dropped, the run read as
         // reaching past the very line that ends it.
@@ -193,6 +209,24 @@ public record Band(Seam under, Seam over, Level from, Level to) {
         return null;
     }
 
+    /**
+     * One end of the run as the rules leave it, where no line parts the values there.
+     *
+     * <p>The relation is the end's own: a bound that keeps the place it stops at reads {@code <=},
+     * and one that stops short of it reads {@code <}. Written as {@code <=} either way, the class a
+     * strict bound on a carrier with no step leaves was spelled as holding the very value the rule
+     * refuses.
+     */
+    private static String leaves(BorderQuantity of, Bound end, Towards side) {
+        if (end == null) {
+            return "";
+        }
+        Level at = valueOrRefuse(end);
+        return side == Towards.ABOVE
+                ? of.writtenAt(at) + (end.inclusive() ? " <= " : " < ")
+                : (end.inclusive() ? " <= " : " < ") + of.writtenAt(at);
+    }
+
     private static boolean same(Level one, Level other) {
         return one != null && other != null && one.key().equals(other.key());
     }
@@ -251,8 +285,31 @@ public record Band(Seam under, Seam over, Level from, Level to) {
         if (under != null && below == null || over != null && above == null) {
             return null;
         }
-        return new Band(below, above, from == null ? null : onto.apply(from),
-                to == null ? null : onto.apply(to));
+        return new Band(below, above, mapped(from, onto), mapped(to, onto));
+    }
+
+    /** An end the rules leave, read on another order. Whether the run keeps the place it stops at
+     *  is the end's own and does not move with it. */
+    private static Bound mapped(Bound end, java.util.function.UnaryOperator<Level> onto) {
+        return end == null ? null : Bound.at(onto.apply(valueOrRefuse(end)), end.inclusive());
+    }
+
+    /**
+     * Where an end the rules leave stands, as a value of the quantity.
+     *
+     * <p>Always one. Such an end comes off a bound the rules wrote about the quantity itself, so it
+     * is at a level of it — unlike a line, which a rule may draw at a place the quantity stands at
+     * no value of ({@code 3 * d <= 1} cuts at a third). A place with no value has an answer where a
+     * line has one, and it has none here: there is no seam to name it by. So it is refused rather
+     * than written as no end at all, which would leave the run reaching past what the rules leave.
+     */
+    private static Level valueOrRefuse(Bound end) {
+        Level at = end.at().asALevelOfTheQuantity();
+        if (at == null) {
+            throw new IllegalStateException(
+                    "an end the rules leave, at no value of the quantity: " + end);
+        }
+        return at;
     }
 
     /**
@@ -284,8 +341,7 @@ public record Band(Seam under, Seam over, Level from, Level to) {
      * what the rules leave at once. Read as one or the other, a run bounded by a rule and parted by
      * a line reached past whichever of them was not consulted.
      */
-    private static Bound endOf(Seam parted, Level leaves, Towards side) {
-        Bound left = leaves == null ? null : Bound.at(leaves, true);
+    private static Bound endOf(Seam parted, Bound left, Towards side) {
         if (parted == null) {
             return left;
         }

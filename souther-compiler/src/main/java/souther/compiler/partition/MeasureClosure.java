@@ -146,6 +146,10 @@ public final class MeasureClosure {
      * is the second bookkeeping this type exists to prevent.
      *
      * @param axes    every position the reading kept, measured or not
+     * @param lines   what the line reading of this behavior found and what it made of each, from
+     *                both of the producers there are. Here so that a conclusion about the reading is
+     *                drawn from what it produced beside what it found, and not from the gaps alone
+     *                — see {@link LinesRead#everyLineFoundWasDrawn}
      * @param refused the rules of the model this reading set aside, each from the reader that did.
      *                Asked which measures it leaves short rather than counted: a comparison relating
      *                two positions is set aside by what it says and not by anything missing here,
@@ -153,7 +157,8 @@ public final class MeasureClosure {
      *                ({@link souther.compiler.inputs.BlockReason.RuleWithoutLineReason#leavesShort})
      */
     static Both of(List<Axis> axes, List<souther.compiler.inputs.StandingQuestion> asked,
-                   List<souther.compiler.inputs.RuleWithoutALine> refused) {
+                   List<souther.compiler.inputs.RuleWithoutALine> refused, LinesRead lines) {
+        lines.everyLineFoundWasDrawn();
         Set<ClosureGap> partition = new LinkedHashSet<>();
         Set<ClosureGap> border = new LinkedHashSet<>();
         for (souther.compiler.inputs.RuleWithoutALine rule : refused) {

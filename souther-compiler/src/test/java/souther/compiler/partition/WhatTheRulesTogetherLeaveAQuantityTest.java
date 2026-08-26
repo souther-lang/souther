@@ -49,7 +49,8 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
     /** The same, where the rules leave the quantity only what lies between two values. */
     private static List<String> within(String low, String high, Seam... parted) {
         return QuantityArrangement.of(NUMBERS, List.of(parted),
-                        low == null ? null : at(low), high == null ? null : at(high))
+                        low == null ? null : Bound.at(at(low), true),
+                        high == null ? null : Bound.at(at(high), true))
                 .bands().stream().map(Band::key).toList();
     }
 
@@ -74,7 +75,8 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
     /** And a run with no seam under it runs from wherever the rules start the quantity. */
     @Test
     void aRunWithNothingPartingItBelowRunsFromTheStart() {
-        Band first = QuantityArrangement.of(NUMBERS, List.of(upTo("10")), at("0"), null)
+        Band first = QuantityArrangement.of(NUMBERS, List.of(upTo("10")),
+                        Bound.at(at("0"), true), null)
                 .bands().get(0);
 
         assertEquals(false, first.holds(at("-1")), "the rules leave nothing below zero");

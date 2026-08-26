@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -185,26 +186,38 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
     }
 
     /**
-     * The end is read rather than assumed closed, at the one place both kinds are built.
+     * The end is read rather than assumed closed, at the one place both kinds are built, and a bound
+     * that stops short of its own line on a carrier that steps is refused rather than stepped here.
      *
      * <p>A continuous carrier has no step to take, so {@code value > 5.0m} on a {@code Decimal}
      * reaches {@link OriginRef.InvariantOrigin} as an exclusive 5 — measured at the construction
-     * site, where both kinds arrive. No report shows one: such a cut is dropped further down. That
-     * makes the closed end a fact about how far the derivation gets rather than about bounds, and
-     * an origin that assumed it would answer {@code ON} for a value its own type refuses on the day
-     * the derivation reaches further.
+     * site, where both kinds arrive. Where the rule stops is the line either way, and which value
+     * the point against it stands at is the order's answer.
+     *
+     * <p><b>Which is not a licence to step one here.</b> An end a carrier can step is stepped before
+     * it arrives — by {@code InvariantBound} for a type's own clause and by the solver for what a
+     * record leaves — so {@code value > 5} on an {@code Int} is an inclusive 6 by the time a border
+     * is built and never an exclusive 5. Answered by stepping to the 6, this would be a third place
+     * that normalizes ends, and the day either of the two above stopped doing it the border would
+     * still come out right with nothing saying the reading had been repaired on the way through.
+     *
+     * <p>What a {@code Decimal} does with the same shape is {@code
+     * ABoundOnACarrierWithNoStepIsStillALineTest}, over a model rather than a hand-made origin: the
+     * order names no value beside the line, so the point cannot be written down and says so.
      */
     @Test
-    void aBoundThatStopsShortOfItsValueDrawsNoBorderAtIt() {
-        assertEquals(Criterion.AtTheLevel.class,
-                borderOf(new OriginRef.InvariantOrigin(invariant(), THE_ONLY_CONJUNCT, true))
-                        .demand(PointRole.ON).criterion().getClass(),
+    void aBoundThatStopsShortOfItsLineWhereTheOrderStepsIsRefused() {
+        Border kept = borderOf(
+                new OriginRef.InvariantOrigin(invariant(), THE_ONLY_CONJUNCT, true));
+        assertEquals("= 5", kept.demand(PointRole.ON).criterion().asked(kept.cut().of()),
                 "a bound that admits its own end is at that end's ON point");
-        // And where it does not admit it, the position does not reach the line: the value is outside
-        // what the rules leave, so there is no border here and no point of one either. Read as a
-        // border, it would owe an ON point one step in that no carrier here names.
-        assertEquals(null, borderOf(new OriginRef.InvariantOrigin(invariant(), THE_ONLY_CONJUNCT, false)),
-                "a bound whose own end its position refuses draws no line at it");
+
+        IllegalStateException refused = assertThrows(IllegalStateException.class,
+                () -> borderOf(new OriginRef.InvariantOrigin(invariant(), THE_ONLY_CONJUNCT, false)),
+                "an `Int` bounded strictly at 5 is an inclusive 6 long before it reaches a border");
+        assertTrue(refused.getMessage().startsWith(
+                        "a bound that stops short of its own line where the order names 6 beside it"),
+                refused.getMessage());
     }
 
     /** The border a bound draws at 5 on an `Int` whose rules leave 5 and up. */

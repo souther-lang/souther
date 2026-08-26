@@ -1,5 +1,7 @@
 package souther.compiler.partition;
 
+import souther.compiler.numeric.Towards;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -50,13 +52,15 @@ public record QuantityArrangement(List<Seam> seams, List<Band> bands) {
      * is stop the run beside it, which is why the two either side of a line at ten run from the
      * bound rather than from the order's own extent.
      *
-     * @param from the first value the rules leave the quantity, or null where they leave it
-     *             everything that way. A value the quantity takes, and not the number a bound was
-     *             written with: which of those two it is belongs to whoever holds the bound
-     * @param to   the last, on the same reading
+     * @param from where the rules leave off at the low end and whether they keep the place they
+     *             leave off at, or null where they leave it everything that way. Not the first value
+     *             in the run: a strict bound on a carrier with no step leaves no first value, and
+     *             read as one such a run either had no end at all or held the value its bound
+     *             refuses
+     * @param to   the same at the high end
      */
-    public static QuantityArrangement of(LevelSpace space, List<Seam> parted, Level from,
-                                         Level to) {
+    public static QuantityArrangement of(LevelSpace space, List<Seam> parted, Bound from,
+                                         Bound to) {
         Map<String, Seam> distinct = new LinkedHashMap<>();
         for (Seam each : parted) {
             // A place the rules leave nothing at divides nothing. The values it would tell apart are
@@ -119,6 +123,21 @@ public record QuantityArrangement(List<Seam> seams, List<Band> bands) {
         return bands.stream().filter(each -> each.holds(at)).findFirst().orElse(null);
     }
 
+    /**
+     * The run at one end of what the rules leave: the one nothing parts below it, or nothing parts
+     * above it.
+     *
+     * <p>What a bound bounds. A bound's line is where what it leaves stops, so the run it bounds is
+     * the one against that end — and it is found by being the endmost rather than by holding the
+     * line's own value, which a bound that stops short of that value does not leave in any run at
+     * all. Null where the rules leave no run there, which is a point nobody is owed a row at.
+     */
+    public Band endmost(Towards inward) {
+        return bands.stream()
+                .filter(each -> inward == Towards.ABOVE ? each.under() == null : each.over() == null)
+                .findFirst().orElse(null);
+    }
+
     private static boolean is(Seam one, Seam other) {
         return one != null && other != null && one.key().equals(other.key());
     }
@@ -141,8 +160,8 @@ public record QuantityArrangement(List<Seam> seams, List<Band> bands) {
      * read off that value, a bound's own line was dropped from the arrangement and the run it starts
      * belonged to no seam at all.
      */
-    private static boolean outside(Seam seam, Level from, Level to) {
-        return from != null && seam.at().compare(from) > 0
-                || to != null && seam.at().compare(to) < 0;
+    private static boolean outside(Seam seam, Bound from, Bound to) {
+        return from != null && seam.at().compareTo(from.at()) < 0
+                || to != null && seam.at().compareTo(to.at()) > 0;
     }
 }
