@@ -139,7 +139,7 @@ public final class CallElaborator {
      */
     private static Core.Reached reached(ReachName name, ValueName denotes, CheckContext ctx) {
         if (denotes instanceof ValueName.Stdlib operation) {
-            Stdlib.Intrinsic kernel = ctx.symbols().library().intrinsicOf(operation.qualified());
+            Stdlib.Intrinsic kernel = ctx.symbols().library().intrinsicOf(operation);
             if (kernel != null) {
                 return new Core.Reached.OfKernel(name, denotes, kernel.kernel());
             }
@@ -567,7 +567,7 @@ public final class CallElaborator {
         // Souther-bodied library call — a recursive helper such as `List.foldFrom` — is not one of
         // these and takes the paths below, as any helper does.
         Stdlib.Intrinsic declaredKernel = callee.denotes() instanceof ValueName.Stdlib operation
-                ? ctx.symbols().library().intrinsicOf(operation.qualified()) : null;
+                ? ctx.symbols().library().intrinsicOf(operation) : null;
         if (declaredKernel != null) {
             Kernel kernel = declaredKernel.kernel();
             Stdlib.Signature intrinsic = declaredKernel.signature();

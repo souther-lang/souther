@@ -1,18 +1,18 @@
 package souther.compiler.core;
 
-import java.util.LinkedHashMap;
-import java.util.Map;
-
 /**
  * A kernel of the standard library: an operation the language names, and which every output answers
  * with instructions of its own.
  *
  * <p>What a core module declares as {@code intrinsic "string.trim"}, held as the operation rather
  * than as the spelling of it. The written key is how a declaration names one and what a report
- * quotes; it is not what tells two apart here, so nothing reads a kernel back out of a string. The
- * one place a key becomes a kernel is where the library is frozen
- * ({@code stdlib.Stdlib.Builder#freeze}) — the place a declaration written in a {@code .sou}
- * resource becomes what this compiler means by it — and everything after that carries the kernel.
+ * quotes; it is not what tells two apart.
+ *
+ * <p>Reading a key back as a kernel is not something this can do. Turning a written key into the
+ * operation it names is the library's, done where the library is frozen
+ * ({@code stdlib.Stdlib.Builder#freeze}), and a kernel that could hand back the way it was made
+ * would be that route open to everything downstream — which is the thing being closed. What this
+ * publishes is the identity and the key a declaration or a report writes it as.
  *
  * <p>Closed, and that is not a limitation of what the library may declare. Which kernels there are
  * is a decision of the language rather than an extension point: an output that met one it had never
@@ -135,8 +135,6 @@ public enum Kernel {
     // option
     OPTION_MAP("option.map");
 
-    private static final Map<String, Kernel> BY_KEY = byKey();
-
     private final String key;
 
     Kernel(String key) {
@@ -147,42 +145,5 @@ public enum Kernel {
      *  through and what a report quotes — never how two kernels are told apart. */
     public String key() {
         return key;
-    }
-
-    /**
-     * The kernel {@code key} names.
-     *
-     * <p>Called where the library is frozen and nowhere else. A reader downstream of that holds the
-     * kernel already, and one that went back to a key to ask this again would be resolving, by
-     * spelling, what the library had resolved for it.
-     *
-     * @throws IllegalStateException where the library names a kernel this compiler does not have. The
-     *     declaration and this enum are two halves of one vocabulary and a compilation cannot mend a
-     *     disagreement between them, so it is refused while the library is being built rather than
-     *     where some program happens to call it — a kernel nothing calls is wrong just as early.
-     */
-    public static Kernel fromKey(String key) {
-        Kernel kernel = BY_KEY.get(key);
-        if (kernel == null) {
-            throw new IllegalStateException(
-                    "the standard library declares `intrinsic \"" + key
-                            + "\"`, which this compiler has no kernel for");
-        }
-        return kernel;
-    }
-
-    @Override
-    public String toString() {
-        return key;
-    }
-
-    private static Map<String, Kernel> byKey() {
-        Map<String, Kernel> byKey = new LinkedHashMap<>();
-        for (Kernel kernel : values()) {
-            if (byKey.put(kernel.key, kernel) != null) {
-                throw new IllegalStateException("two kernels are written `" + kernel.key + "`");
-            }
-        }
-        return byKey;
     }
 }

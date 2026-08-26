@@ -231,17 +231,22 @@ public final class Stdlib {
     }
 
     /**
-     * What the library declares under {@code qualifiedName} where that operation is a kernel, and
-     * null where it is anything else — a Souther-bodied helper, a sugar, a name the library does not
+     * What the library declares for {@code operation} where that operation is a kernel, and null
+     * where it is anything else — a Souther-bodied helper, a sugar, a name the library does not
      * have.
      *
      * <p>Whether an operation is a kernel is a fact about the library and is answered by the
      * library. A reader that opened the declaration to look at its body would be reading how the
      * library is written to learn what it means, and would go on holding the declaration — which is
      * {@code Hir}, and is this compiler's own.
+     *
+     * <p>Asked with the operation and not with a spelling of it. A qualified name is how this is
+     * stored and a reach name renders as one today, which is a thing that is true rather than a
+     * thing that is held: a reader handing over a rendered name would be asking the library to
+     * resolve a spelling, and would go on doing it correctly for exactly as long as the two agreed.
      */
-    public Intrinsic intrinsicOf(String qualifiedName) {
-        return kernelOperations.get(qualifiedName);
+    public Intrinsic intrinsicOf(ValueName.Stdlib operation) {
+        return kernelOperations.get(operation.qualified());
     }
 
     /**
@@ -380,6 +385,7 @@ public final class Stdlib {
         /** The finished library. */
         public Stdlib freeze() {
             Map<String, Rewrite> sugars = sugars();
+            Map<String, Kernel> byKey = kernelsByKey();
             Map<Kernel, Intrinsic> intrinsics = new EnumMap<>(Kernel.class);
             Map<String, Intrinsic> kernelOperations = new LinkedHashMap<>();
             Map<String, Hir.FnDef> helpers = new LinkedHashMap<>();
@@ -390,8 +396,12 @@ public final class Stdlib {
                     // this holds the kernel, so a key that names none is refused here — while the
                     // library is being built, and so for a kernel nothing goes on to call as much as
                     // for one every program calls.
-                    Intrinsic intrinsic =
-                            new Intrinsic(Kernel.fromKey(written.key()), e.getValue().signature());
+                    Kernel named = byKey.get(written.key());
+                    if (named == null) {
+                        throw new IllegalStateException("the standard library declares `intrinsic \""
+                                + written.key() + "\"`, which this compiler has no kernel for");
+                    }
+                    Intrinsic intrinsic = new Intrinsic(named, e.getValue().signature());
                     // And one kernel is declared once. A backend builds its boundary form out of
                     // the signature this holds, so two declarations of one kernel would be two
                     // answers to a question that has one — and put into a map, the second would
@@ -422,6 +432,24 @@ public final class Stdlib {
                     Collections.unmodifiableMap(helpers),
                     published,
                     candidates(published));
+        }
+
+        /**
+         * The kernels this compiler has, by the key a declaration names one by.
+         *
+         * <p>Here rather than on {@link Kernel}, because turning a written key into an operation is
+         * what this step is and not something a kernel can do. Held there, every reader downstream
+         * could take the key off a kernel and ask for the kernel back, which is the route out of the
+         * operation and into a spelling that this exists to close.
+         */
+        private static Map<String, Kernel> kernelsByKey() {
+            Map<String, Kernel> byKey = new LinkedHashMap<>();
+            for (Kernel kernel : Kernel.values()) {
+                if (byKey.put(kernel.key(), kernel) != null) {
+                    throw new IllegalStateException("two kernels are written `" + kernel.key() + "`");
+                }
+            }
+            return byKey;
         }
 
         /** Each sugar with what it keeps in place: the target's own parameter count, less what the

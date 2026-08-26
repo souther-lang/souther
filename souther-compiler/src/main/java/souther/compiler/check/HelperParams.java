@@ -1077,9 +1077,12 @@ final class HelperParams {
             }
             // Only a kernel's signature: a Souther-bodied library callee here is a recursive
             // helper, and those are answered above with the types their call site instantiated.
-            // Whether the name is a kernel is a fact about the library and is asked of it, rather
-            // than read off the body of the declaration behind the name.
-            Stdlib.Intrinsic kernel = symbols.library().intrinsicOf(fn);
+            // Whether the name is a kernel is a fact about the library, asked of it and asked with
+            // the operation this call was resolved to rather than with the name it renders as.
+            if (!(call.answered().denotes() instanceof ValueName.Stdlib operation)) {
+                return null;
+            }
+            Stdlib.Intrinsic kernel = symbols.library().intrinsicOf(operation);
             if (kernel == null) {
                 return null;
             }

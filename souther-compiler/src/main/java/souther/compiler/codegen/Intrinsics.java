@@ -231,24 +231,45 @@ final class Intrinsics {
     }
 
     /**
-     * The ordered family over an element whose order lives on its sum: the runtime call this table
-     * already holds for {@code kernel}, taking a comparator ahead of the container. The comparator
-     * and the container are on the stack, and {@code container} is the container's type as it was
-     * emitted.
+     * A kernel of the ordered family, over an element whose order lives on its sum: the runtime call
+     * this table already holds for it, taking a comparator ahead of what it was already taking. The
+     * comparator and the kernel's own arguments are on the stack, and {@code byArg} is their types
+     * as they were emitted, in the order the kernel declares them.
      *
      * <p>Here rather than in the emitter that pushes the comparator, because which runtime method
      * answers a kernel and what it answers with are this table's to say. Written out there, the
      * class, the method and the result would each be stated a second time, and a row changed here
      * would leave the second statement behind.
+     *
+     * <p>Both row shapes that can take one. A kernel walking a container takes the container alone;
+     * one applying a function takes the function too, as an {@code Fn}, and which argument the
+     * container is is the row's answer rather than a position written out again.
      */
-    static void emitOrderedByComparator(BodyGen g, Kernel kernel, Type container) {
-        if (!(TABLE.get(kernel) instanceof RuntimeStatic row) || row.result() == null) {
-            throw new IllegalStateException("`" + kernel.key()
-                    + "` is not emitted as a runtime call that works its result out");
+    static void emitWithComparator(BodyGen g, Kernel kernel, List<Type> byArg) {
+        ClassDesc owner;
+        String method;
+        Type result;
+        ClassDesc[] params;
+        switch (TABLE.get(kernel)) {
+            case RuntimeStatic row when row.result() != null && byArg.size() == 1 -> {
+                owner = row.owner();
+                method = row.method();
+                result = row.result().apply(byArg);
+                params = new ClassDesc[] {CD_Comparator, boundaryDesc(byArg.get(0))};
+            }
+            case TakesAFunction row when byArg.size() == 2 -> {
+                owner = row.owner();
+                method = row.method();
+                result = row.result().apply(byArg);
+                params = new ClassDesc[] {
+                        CD_Comparator, CD_Fn, boundaryDesc(byArg.get(row.container()))};
+            }
+            case Emit row -> throw new IllegalStateException("`" + kernel.key() + "` is emitted as "
+                    + row + ", which takes no comparator over " + byArg.size() + " argument(s)");
+            case null -> throw new IllegalStateException(
+                    "the JVM emits nothing for `" + kernel.key() + "`");
         }
-        g.emitInvokeStatic(row.owner(), row.method(),
-                MethodTypeDesc.of(boundaryDesc(row.result().apply(List.of(container))),
-                        CD_Comparator, boundaryDesc(container)));
+        g.emitInvokeStatic(owner, method, MethodTypeDesc.of(boundaryDesc(result), params));
     }
 
     /** How each kernel is emitted — read by the test that holds the descriptor invariant. */

@@ -166,7 +166,7 @@ final class NumericReadings {
         found.addAll(arithmetic);
         // Whether the operation is a kernel is a fact about the library and is asked of it, rather
         // than read off the body of the declaration behind the name.
-        if (stdlib.intrinsicOf(named.qualified()) == null) {
+        if (stdlib.intrinsicOf(named) == null) {
             found.add(new NumericReading.ByTheBodyTheLanguageWritesOut());
         }
         return List.copyOf(found);
