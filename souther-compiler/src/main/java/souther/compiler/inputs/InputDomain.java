@@ -1090,7 +1090,7 @@ public final class InputDomain {
                 // first value is 1, and a line drawn at the 0 is drawn at no value of it.
                 placed.leftAt(path, bySize ? answeredBy(taken) : ITS_OWN_VALUE),
                 placed.narrowedBy(path, true), placed.narrowedBy(path, false), nothingExists,
-                placed.projection(), declared, reading,
+                placed.projection(path), declared, reading,
                 ObligationDomain.of(reading, declared), admitted.completeness(),
                 admitted.whyPartial() == null ? null : Crossing.stopped(admitted.whyPartial()),
                 withoutALine,

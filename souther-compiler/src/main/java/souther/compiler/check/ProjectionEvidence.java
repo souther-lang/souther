@@ -164,6 +164,21 @@ public sealed interface ProjectionEvidence {
         record ARuleTheReadingCannotName() implements Cause {}
 
         /**
+         * Two values state rules about this position, and what they state together was never closed.
+         *
+         * <p>A field every case of a sum spreads is a position of the case and a name the value the
+         * sum sits in writes about, so the rules reaching it are two systems and not one. What a
+         * certificate says is about a system whose relations carry nothing its box does not already
+         * describe — a fixed point — and two systems that each reach it separately need not reach it
+         * together: relations from one can carry a bound of the other's further.
+         *
+         * <p>So neither certificate is one for the pair, and this says so rather than handing back
+         * whichever was to hand. What would lift it is closing the two as one system, which is not
+         * something either reading did.
+         */
+        record TwoValuesStateRulesAboutIt() implements Cause {}
+
+        /**
          * The rules leave no value at all here, so there is no range to be the whole of anything.
          *
          * <p>What is handed over at every position of a value nothing satisfies is unbounded both

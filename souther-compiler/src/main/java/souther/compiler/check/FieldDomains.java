@@ -1086,6 +1086,9 @@ public final class FieldDomains {
             case ProjectionEvidence.Cause.NothingIsLeft _ -> "5";
             case ProjectionEvidence.Cause.PositionsSpacedDifferently _ -> "6";
             case ProjectionEvidence.Cause.ARuleTheReadingCannotName _ -> "7";
+            // Last, because it is the one cause about the pair of readings rather than about
+            // anything either of them met.
+            case ProjectionEvidence.Cause.TwoValuesStateRulesAboutIt _ -> "8";
         };
     }
 

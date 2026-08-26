@@ -175,13 +175,13 @@ public final class LinesWhereTheyFall {
     }
 
     /**
-     * Where a name reached, and whether the reading answered that it reached nowhere.
+     * The term at each position the name reached, which is the term as it was written wherever the
+     * name reached one place.
      *
-     * <p>The two apart, because they are two answers. A name at a position of this reading is at
-     * one and nothing was followed; a name the rules of no value here can write is one this has no
-     * business moving; and a name that was followed and came to nothing is a line the model draws
-     * that this build cannot hold against any row. A list of terms says the first two and the third
-     * alike, which is how the third came to be handed on as though it were the first.
+     * <p>Two kinds of one place and they come to the same thing here: a name already at a position
+     * of this reading, and a name the reading followed to a location it stopped short of. Both leave
+     * the line where the model wrote it. The third kind — a name this reading has nowhere for — does
+     * not arrive, because it is refused where it arises.
      */
     private record Reached(List<NumericTerm> terms) {
 

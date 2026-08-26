@@ -235,6 +235,52 @@ class AClauseAboveASumIsReadAtTheFieldItIsAboutTest {
         }
     }
 
+    /**
+     * The proof that the bounds say everything the rules do is not one value's alone.
+     *
+     * <p>A shared field is a position of the case and a name the value above writes about, so the
+     * rules reaching it are two systems. A certificate is a theorem about one of them — that its
+     * relations carry nothing its box does not already describe — and two systems that each hold it
+     * separately need not hold it together. So the pair is not certified, and a rule of the value
+     * above that the bounds cannot express is not lost on the way down.
+     *
+     * <p>Which is what a whole-value question asked of a value gets wrong once a position has two.
+     * {@code q.limit /= 0} leaves a hole no range holds; through a record the field says so, and
+     * through a sum it came back proved exactly representable by a reading that never saw the rule.
+     */
+    @Test
+    void theProofThatBoundsSayEverythingIsNotOneValuesAlone() {
+        String model = """
+                module g
+
+                data Paging = { limit: Int }
+                data A = { ...Paging, x: Int }
+                data B = { ...Paging, y: Int }
+                data Q = A | B
+
+                data Holder = { q: HELD }
+                    invariant nonzero = q.limit /= 0
+
+                data Ok
+
+                behavior read : (h: Holder) -> Ok
+                """;
+        InputDomain record = reading(model.replace("HELD", "A"));
+        assertFalse(record.at(TermPath.of("h").then("q").then("limit")).projection().isCertified(),
+                "the hole the clause leaves is one no range holds");
+
+        InputDomain sum = reading(model.replace("HELD", "Q"));
+        for (String each : List.of("A", "B")) {
+            Position at = sum.at(TermPath.of("h").then("q")
+                    .refine(caseNamed(sum, each)).then("limit"));
+            assertFalse(at.projection().isCertified(),
+                    () -> "and the same clause reaches the field under case " + each);
+        }
+        assertTrue(sum.at(TermPath.of("h").then("q").refine(caseNamed(sum, "A")).then("x"))
+                        .projection().isCertified(),
+                "a field of the case the value above cannot name keeps the case's own proof");
+    }
+
     /** Every position something puts a ceiling on, spelled the way a report names it. */
     private static List<String> boundedIn(InputDomain read) {
         return read.positions().stream()

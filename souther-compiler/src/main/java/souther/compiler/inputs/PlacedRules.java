@@ -296,14 +296,48 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
     }
 
     /**
-     * How much of what the rules say the bounds of this value are able to state.
+     * How much of what the rules say the bounds at {@code path} are able to state.
      *
-     * <p>Asked of the value and not of one position in it, because that is what it licenses: a row
-     * at an edge is a whole value with that edge in it, so a rule the bounds cannot express is a way
-     * that value can be refused however plainly the numbers beside it were read.
+     * <p>What it licenses is a whole value: a row at an edge is a value with that edge in it, so a
+     * rule the bounds cannot express is a way that value can be refused however plainly the numbers
+     * beside it were read. Which is why it is one answer for every position of a value — and why it
+     * is asked at a position all the same, because a position can be of two values.
+     *
+     * <p><b>A shared field belongs to the case and to the value the sum sits in.</b> A clause
+     * written up there is about the field a row writes down here, so the rules reaching this
+     * position are two systems. A certificate is a theorem about one of them — that its relations
+     * carry nothing its box does not already describe — and two systems that each hold it separately
+     * need not hold it together, since a relation from one can carry a bound of the other's further.
+     * So neither certificate is one for the pair, and what comes back says so
+     * ({@link ProjectionEvidence.Cause.TwoValuesStateRulesAboutIt}) rather than handing over
+     * whichever was to hand.
+     *
+     * <p>Asked of the position and not of the value, because which values reach it is what differs
+     * between one position and the next. Answered for the value alone, a field the rules above bound
+     * came back proved exactly representable by a reading that never saw them.
      */
-    ProjectionEvidence projection() {
-        return rules.projection();
+    ProjectionEvidence projection(TermPath path) {
+        TermPath above = alsoAt(path);
+        if (above == null) {
+            return rules.projection();
+        }
+        ProjectionEvidence here = rules.projection();
+        ProjectionEvidence outer = alsoReaching.outer().projection(above);
+        List<ProjectionEvidence.Cause> causes = new ArrayList<>();
+        causesOf(here, causes);
+        causesOf(outer, causes);
+        if (causes.isEmpty()) {
+            causes.add(new ProjectionEvidence.Cause.TwoValuesStateRulesAboutIt());
+        }
+        return new ProjectionEvidence.NotCertified(causes);
+    }
+
+    /** The causes this evidence gives, and none where it certifies. */
+    private static void causesOf(ProjectionEvidence evidence,
+                                 List<ProjectionEvidence.Cause> into) {
+        if (evidence instanceof ProjectionEvidence.NotCertified it) {
+            it.causes().stream().filter(each -> !into.contains(each)).forEach(into::add);
+        }
     }
 
     /**

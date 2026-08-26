@@ -47,21 +47,60 @@ class NoRuleIsPlacedWhereNothingAccountsForItTest {
      * rule about something deeper is a rule an author is already told about — this is the same fact
      * counted per rule rather than per position.
      *
-     * <p>Nothing else. A name a rule wrote that no position answers to would be
-     * {@code NothingOfThatNameThere}, and there is none: with the fan-out in place, every name the
-     * rules of these models write reaches a position or stops at a depth.
+     * <p>Nothing else, and there is nothing else it could be. A name a rule wrote that reaches a
+     * position this reading did not stop at and puts no such name under is this reading disagreeing
+     * with the language about what may be written, and it is refused where it arises rather than
+     * carried here.
      */
     private static final Map<String, Integer> ALLOWED = Map.of(
             "the reading stopped there: DepthLimit", 136);
 
     /**
-     * The account is taken rule by rule, and no rule that placed anything is outside it.
+     * What a value's rules raised and what this build takes as placed are the same, one for one.
      *
-     * <p>What the readings hold afterwards is what the rules came to together — a field two clauses
-     * narrow is one narrowed field, and an end one clause moved past another is one end. An account
-     * taken from there counts places rather than placements, and either clause could go missing with
-     * nothing to see. So it is taken from the rules, and this says the rules are all of them.
+     * <p>The half the outcomes cannot say anything about. A filing comes back with an answer for
+     * every place its name reaches, so nothing that is taken as a placement is lost after that — but
+     * a placement never taken is one no filing was ever made for, and counting the filings would
+     * find nothing missing.
+     *
+     * <p>As a multiset and not as a total. One dropped and one counted twice come to the same
+     * number, and the point of taking the account rule by rule was that two placements of one field
+     * are two.
      */
+    @Test
+    void whatTheRulesRaisedIsWhatThisBuildTakesAsPlaced() throws Exception {
+        for (PlacedRules rules : everyValueRead()) {
+            Map<String, Integer> raised = new TreeMap<>();
+            rules.bounds().accounting().forEach((rule, accounting) ->
+                    accounting.answers().keySet().forEach(owed ->
+                            raised.merge(rule + " " + owed, 1, Integer::sum)));
+            Map<String, Integer> taken = new TreeMap<>();
+            rules.placed().forEach(seed ->
+                    taken.merge(seed.by() + " " + questionOf(seed), 1, Integer::sum));
+
+            assertEquals(raised, taken,
+                    () -> "every question the rules of " + rules.root() + " raised is one this "
+                            + "build takes as placed, and each of them once");
+        }
+    }
+
+    /**
+     * The question a seed was made from, put back together.
+     *
+     * <p>The question and not how either side happens to print it: a seed is an address and what is
+     * said at it, and putting the two back is what makes the comparison one about the questions
+     * rather than about two spellings agreeing.
+     */
+    private static souther.compiler.check.Owed questionOf(PlacementSeed seed) {
+        return switch (seed.placed()) {
+            case PlacementSeed.Placed.TheValuesThere _ ->
+                    new souther.compiler.check.Owed.AdmittedValues(seed.address().key());
+            case PlacementSeed.Placed.ANumberOfIt it -> new souther.compiler.check.Owed.Boundary(
+                    new souther.compiler.check.FieldDomains.Coordinate(seed.address().key(),
+                            it.which()));
+        };
+    }
+
     @Test
     void everyRuleThatPlacedAnEndIsInTheAccount() throws Exception {
         for (PlacedRules rules : everyValueRead()) {

@@ -166,6 +166,14 @@ class EveryPlacementEndsSomewhereSaidOutLoudTest {
      */
     @Test
     void aSumWhoseNamesCrossHasEveryCaseWalked() {
+        // A sum whose cases share a spread and whose names do cross, said first. Read off the
+        // crossings alone, a day when every case is left takes the crossings with it and the sweep
+        // below passes over a list with nothing in it.
+        InputDomain shared = reading(SHARED, "atTheSum");
+        assertFalse(shared.reach().crossings().isEmpty(), "the cases of `Q` share `limit`");
+        assertEquals(List.of(), shared.reach().branchesNotEntered(),
+                "and the reading went down both of them");
+
         for (String source : List.of(SHARED, TOO_DEEP, MIXED)) {
             for (String behavior : behaviorsOf(source)) {
                 InputDomain read = reading(source, behavior);
