@@ -123,6 +123,45 @@ class TheRuntimeAnswersEveryKernelAtItsDeclaredAbiTest {
     }
 
     /**
+     * And these are the kernels reached through the comparator method.
+     *
+     * <p>The set the arm in {@code BodyGen} is driven by, so a kernel routed there is a kernel this
+     * asks the comparator descriptor of. Held here as well because membership is not decided by any
+     * of that: whether a kernel takes the enumeration's order is what a program answers, and the
+     * witness for each of these is a case in {@code CompileEnumerationOrderTest} that sorts, takes
+     * the extremes of, or keys a list of cases and reads the result. A kernel added to the set and
+     * to nothing else is emitted differently with nothing running it that way.
+     */
+    @Test
+    void andTheseAreTheKernelsReachedThroughTheComparator() {
+        assertEquals(
+                EnumSet.of(Kernel.LIST_SORT, Kernel.LIST_SORT_BY, Kernel.LIST_MAX, Kernel.LIST_MIN),
+                EnumSet.copyOf(BodyGen.ORDERED_BY_COMPARATOR),
+                "which kernels reach a runtime method taking a comparator — each wants a case in"
+                        + " CompileEnumerationOrderTest that runs it over an enumeration");
+    }
+
+    /**
+     * And a row does not hand out the ordering it was checked for.
+     *
+     * <p>{@code RuntimeStatic} refuses an {@code argOrder} that is no ordering of its arguments, and
+     * a check made once on a value a reader can write into holds until a reader writes into it. The
+     * descriptor and the arguments are both derived from this, so an ordering edited afterwards
+     * would emit a call at a shape nothing refused.
+     */
+    @Test
+    void andARowDoesNotHandOutTheOrderingItWasCheckedFor() {
+        Intrinsics.RuntimeStatic row = (Intrinsics.RuntimeStatic)
+                Intrinsics.emitters().get(Kernel.STRING_SLICE);
+        int[] taken = row.argOrder();
+
+        taken[0] = taken[0] + 1;
+
+        assertEquals(2, row.argOrder()[0], "the row still takes its arguments in the order it was"
+                + " written with");
+    }
+
+    /**
      * And a row takes as many arguments as its kernel declares.
      *
      * <p>The half {@code RuntimeStatic} cannot check for itself. It refuses an {@code argOrder} that

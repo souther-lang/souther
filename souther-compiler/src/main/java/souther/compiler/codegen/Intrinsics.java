@@ -18,20 +18,30 @@ import java.util.function.Function;
 import static souther.compiler.codegen.Descriptors.*;
 
 /**
- * The data-driven registry mapping each stdlib intrinsic key to its bytecode emission.
+ * What the JVM emits for each kernel of the standard library.
  *
- * <p>A runtime-backed primitive (a call to {@code Maps}/{@code Sets}/{@code Strings}/{@code Lists}/
- * {@code Temporals}) is emitted from one table row: the row names the runtime class, method, the
- * argument order (Souther puts the subject last for pipe reading; the runtime method takes it in a
- * fixed position, so the row carries the permutation), the argument slots the runtime method erases
- * to {@code Object} (map keys/values, set elements), and how to type the result. The JVM descriptor
- * is <em>derived</em> from the observed argument types and the result type — it is not restated, so
- * adding an intrinsic is a {@code .sou} signature, a runtime method, and one row here.
+ * <p>One row per kernel, and one rule for what a call to one is emitted at: the descriptor comes
+ * from the kernel's declaration, parameter by parameter and the result, through {@link #slotsOf}.
+ * The declaration belongs to the callee, and a descriptor built from the types observed at a call
+ * agrees with it only while no value can arrive narrower than the parameter it goes into. A
+ * sum-typed parameter ends that, so nothing here reads the call for the shape of what it is calling.
  *
- * <p>The JDK-native calls ({@code String} instance methods, {@code java.time} {@code plus*}) keep an
- * explicit descriptor because JDK signatures use {@code CharSequence}/{@code int}, which the boundary
- * derivation does not model. That set is stable — the JDK method surface does not grow with the
- * standard library.
+ * <pre>{@code
+ *   KernelSignature -> slotsOf -> descriptorOf  (+ the comparator delta, where one is taken)
+ * }</pre>
+ *
+ * <p>What a row carries is what the declaration cannot say: which runtime class and method answer
+ * the kernel, and the order that method takes the arguments in — Souther puts the subject last for
+ * pipe reading, and the runtime method takes it where it takes it. Adding a kernel is a {@code .sou}
+ * declaration, a runtime method, and one row.
+ *
+ * <p>Three rows are not that rule, each for a reason of its own. {@link JdkVirtual} calls a JDK
+ * method, whose descriptor is the JDK's to say ({@code CharSequence}, {@code int}) and no
+ * declaration of ours settles. {@link #emitWithComparator} reaches a runtime method that takes a
+ * comparator the declaration does not name, which is added to the derived descriptor rather than
+ * replacing it. And {@link NumericFold} is declared over any number and answered by a method per
+ * representation, so the type the checker settled picks which — an instantiation choosing between
+ * two implementations of one operation, which is the only thing a call-site type decides here.
  */
 final class Intrinsics {
 
@@ -89,6 +99,14 @@ final class Intrinsics {
                 seen[src] = true;
             }
             argOrder = argOrder.clone();
+        }
+
+        /** A copy, because what this answers with is a claim and not a handle on one. Checked once
+         *  where the row is written, an array handed back is an array a reader can write into, and
+         *  the ordering the check established would hold until somebody did. */
+        @Override
+        public int[] argOrder() {
+            return argOrder.clone();
         }
 
         public void emit(BodyGen g, Kernel kernel, Core.Call call) {

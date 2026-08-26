@@ -11,6 +11,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * A Souther program the compiler checked, for an output that lives outside this compiler.
@@ -109,7 +110,8 @@ public final class CheckedProgram {
         // data in an order and a reader listing them is shown one. A map that kept none would show
         // an order nothing decided, which can differ between two runs of one compiler.
         this.declarations = Collections.unmodifiableMap(index);
-        this.kernels = kernels;
+        this.kernels = Objects.requireNonNull(kernels,
+                "a checked program is what the language it was checked with declares of its kernels");
     }
 
     /**

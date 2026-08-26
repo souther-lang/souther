@@ -31,7 +31,6 @@ import java.lang.constant.ConstantDescs;
 import java.lang.constant.MethodTypeDesc;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -1204,7 +1203,7 @@ final class BodyGen {
          *  written out in it, so that the kernels routed there are the kernels this names — what
          *  holds the derived boundary form of one is a test, and a test can only reach the ones it
          *  can be told about. */
-        static final Set<Kernel> ORDERED_BY_COMPARATOR = EnumSet.of(
+        static final Set<Kernel> ORDERED_BY_COMPARATOR = Set.of(
                 Kernel.LIST_SORT, Kernel.LIST_MAX, Kernel.LIST_MIN, Kernel.LIST_SORT_BY);
 
         /** The kernels this emits itself, which are the kernels {@link Intrinsics}' table has no row
@@ -1212,7 +1211,7 @@ final class BodyGen {
          *  apart: a kernel emitted here and held there too would be one operation with two answers,
          *  and the one that ran would be whichever the arm above happened to reach first. */
         static final Set<Kernel> WRITTEN_OUT =
-                EnumSet.of(Kernel.INT_DIVIDE, Kernel.INT_TRUNCATING_REMAINDER);
+                Set.of(Kernel.INT_DIVIDE, Kernel.INT_TRUNCATING_REMAINDER);
 
         private void call(Core.Call call, Type expected) {
             // Which kernel a call reaches is on the call, so what is emitted for one is asked of
