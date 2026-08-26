@@ -127,7 +127,7 @@ final class AnswerWalk {
             }
             if (!walking.add(each)) {
                 gaps.add(new Gap(Gap.Why.A_GRAPH_THAT_LOOPS,
-                        question + where + " " + each.getClass().getName()));
+                        question + where.asText() + " " + each.getClass().getName()));
                 return false;
             }
             visited.add(each);
@@ -207,7 +207,7 @@ final class AnswerWalk {
                         // A field this cannot open is a subtree it did not ask about. Said out loud,
                         // because what is under it would otherwise be counted as looked at and clean.
                         gaps.add(new Gap(Gap.Why.A_FIELD_THAT_WOULD_NOT_OPEN,
-                                question + where.thenMember(at, field.getName())));
+                                question + where.thenMember(at, field.getName()).asText()));
                         whole = false;
                         continue;
                     }

@@ -10,7 +10,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeMap;
 import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -80,11 +79,27 @@ class EverythingAnAnswerHoldsMeansSomethingTest {
         return out;
     }
 
-    /** Places in an order a reader can follow. Sorting is for writing a failure out, which is the
-     *  one place where how a place reads is what matters. */
-    private static Map<String, Set<String>> sorted(Map<Locus.Place, Set<String>> byPlace) {
-        Map<String, Set<String>> out = new TreeMap<>();
-        byPlace.forEach((place, seen) -> out.put(place.toString(), seen));
+    /**
+     * What two accounts of who meets what differ over, in an order a reader can follow.
+     *
+     * <p>Built from the comparison rather than compared. Rendering the two and comparing the text
+     * is the same collapse the step below carries an owner to prevent: two places that read alike
+     * are one line, so a detector that went blind on one of them is hidden by the other. What reads
+     * well is what a failure is written with, and nothing else.
+     */
+    private static List<String> differencesBetween(Map<Locus.Place, Set<String>> written,
+                                                   Map<Locus.Place, Set<String>> met) {
+        List<String> out = new ArrayList<>();
+        Set<Locus.Place> every = new java.util.LinkedHashSet<>(written.keySet());
+        every.addAll(met.keySet());
+        every.forEach(place -> {
+            Set<String> theirs = written.get(place);
+            Set<String> ours = met.get(place);
+            if (!java.util.Objects.equals(theirs, ours)) {
+                out.add(place.asText() + ": written down " + theirs + ", met by " + ours);
+            }
+        });
+        java.util.Collections.sort(out);
         return out;
     }
 
@@ -222,7 +237,8 @@ class EverythingAnAnswerHoldsMeansSomethingTest {
     void andEachIsMetByWhatIsWrittenDownBesideIt() {
         Met met = met();
 
-        assertEquals(sorted(AnswerClosure.observations()), sorted(met.byPlace()),
+        assertEquals(List.of(),
+                differencesBetween(AnswerClosure.observations(), met.byPlace()),
                 "who meets each of them");
     }
 }

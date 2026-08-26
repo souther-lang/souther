@@ -47,7 +47,7 @@ class AWalkOfOneAnswerNamesWhatMeansNothingTest {
 
     private static Set<String> places(AnswerWalk.Walked walked) {
         Set<String> out = new TreeSet<>();
-        foundBy(walked).forEach(each -> out.add(each.place().toString()));
+        foundBy(walked).forEach(each -> out.add(each.place().asText()));
         return out;
     }
 

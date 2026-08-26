@@ -51,12 +51,15 @@ class WhatAPairWalkFindsIsWhatEqualityDeniesTest {
             AGraphNobodyChose.Recipe recipe = AGraphNobodyChose.recipe(random, HOW_DEEP);
             Object one = AGraphNobodyChose.built(recipe, random);
             Object other = AGraphNobodyChose.built(recipe, random);
-            if (AGraphNobodyChose.holdsSomethingWithNoRule(recipe)) {
-                continue;
-            }
-            int denials = AGraphNobodyChose.denialsIn(recipe, one, other);
+            java.util.Set<Gap.Why> shouldFallShortOn = AGraphNobodyChose.fallsShortOn(recipe);
             switch (Divergence.between(one, other)) {
                 case Covered.Whole<Divergence>(List<Divergence> found) -> {
+                    if (!shouldFallShortOn.isEmpty()) {
+                        wrong.add("covered a shape it cannot cover, which holds "
+                                + shouldFallShortOn + ", in " + recipe);
+                        break;
+                    }
+                    int denials = AGraphNobodyChose.denialsIn(recipe, one, other);
                     // Two graphs of one shape are one thing, so nothing in them says two different
                     // things and every denial in them is one of these.
                     List<Divergence> otherwise = found.stream()
@@ -69,9 +72,18 @@ class WhatAPairWalkFindsIsWhatEqualityDeniesTest {
                                 + " things deny being what they are, in " + recipe + ": " + found);
                     }
                 }
-                // A walk that fell short is held to having said so and to nothing else: what it did
-                // not look at is what it cannot be asked about.
-                case Covered.Partly<Divergence> _ -> { }
+                // A walk that fell short is held to falling short on the shapes that make it, and
+                // on no others. Let through whatever came back this way, the property would be one
+                // anything could escape by giving up — and what it lets through is the graphs nobody
+                // wrote down, which is the whole of what this is for.
+                case Covered.Partly<Divergence>(List<Divergence> _, List<Gap> gaps) -> {
+                    java.util.Set<Gap.Why> fellShortOn = new java.util.LinkedHashSet<>();
+                    gaps.forEach(gap -> fellShortOn.add(gap.why()));
+                    if (!fellShortOn.equals(shouldFallShortOn)) {
+                        wrong.add("fell short on " + fellShortOn + " where the shape falls short on "
+                                + shouldFallShortOn + ", in " + recipe);
+                    }
+                }
             }
         }
 

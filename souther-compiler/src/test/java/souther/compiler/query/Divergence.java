@@ -105,7 +105,7 @@ record Divergence(Locus at, String cause, Divergence.Kind kind) {
         }
 
         private void stopped(Gap.Why why, Locus at) {
-            gaps.add(new Gap(why, at.toString()));
+            gaps.add(new Gap(why, at.asText()));
         }
 
         /**
@@ -245,6 +245,40 @@ record Divergence(Locus at, String cause, Divergence.Kind kind) {
             }
         }
 
+        /** Which contract a thing answers to, which is what says how a pair of them line up. */
+        private enum Contract {
+            /** Equal to another by position. */
+            A_LIST,
+            /** Equal to another by what is in it. */
+            A_SET,
+            /** Equal to another by what it holds under what. */
+            A_MAP,
+            /** Equal to another by what is behind it. */
+            AN_ABSENCE,
+            /** A collection answering to none of the above, so nothing here says how two of them
+             *  line up. */
+            SOMETHING_ELSE_THAT_HOLDS_THINGS,
+            /** Everything else, which is compared as what it is made of. */
+            A_THING
+        }
+
+        private static Contract contractOf(Object each) {
+            if (each instanceof List<?>) {
+                return Contract.A_LIST;
+            }
+            if (each instanceof Set<?>) {
+                return Contract.A_SET;
+            }
+            if (each instanceof Map<?, ?>) {
+                return Contract.A_MAP;
+            }
+            if (each instanceof java.util.Optional<?>) {
+                return Contract.AN_ABSENCE;
+            }
+            return each instanceof Collection<?>
+                    ? Contract.SOMETHING_ELSE_THAT_HOLDS_THINGS : Contract.A_THING;
+        }
+
         /**
          * The two walked part by part, over the correspondence their own contract gives them.
          *
@@ -256,6 +290,24 @@ record Divergence(Locus at, String cause, Divergence.Kind kind) {
          * @return whether the shape of the two is one this knows how to take apart
          */
         private boolean takeApart(Object a, Object b, Class<?> c, Locus path, Parts parts) {
+            Contract mineIs = contractOf(a);
+            Contract theirsIs = contractOf(b);
+            if (mineIs != theirsIs) {
+                // Two contracts and not an unknown one. A list and a set are both understood and
+                // neither is the other, so the two are different things — said as that rather than
+                // as somewhere this could not go, which would send a reader after the walk instead
+                // of after the compile.
+                say(path, c, Kind.DIFFERENT_THINGS);
+                parts.theSameThing = false;
+                return true;
+            }
+            if (mineIs == Contract.SOMETHING_ELSE_THAT_HOLDS_THINGS) {
+                // Neither position nor membership is its equality, so there is no rule here to pair
+                // it by. Said before the sizes are compared: that two of different sizes hold
+                // different things is a contract too, and this is where the contract is unknown.
+                stopped(Gap.Why.A_CONTAINER_WITH_NO_RULE_FOR_PAIRING, path);
+                return false;
+            }
             if (a instanceof List<?> mine && b instanceof List<?> yours) {
                 if (mine.size() != yours.size()) {
                     say(path, c, Kind.DIFFERENT_THINGS);
@@ -295,13 +347,6 @@ record Divergence(Locus at, String cause, Divergence.Kind kind) {
                     parts.and(at(mine.get(), yours.get(), path.then(new Locus.Step.Present())));
                 }
                 return true;
-            }
-            if (a instanceof Collection<?> || b instanceof Collection<?>) {
-                // Neither position nor membership is its equality, so there is no rule here to pair
-                // it by. Said before the sizes are compared: that two of different sizes hold
-                // different things is a contract too, and this is where the contract is unknown.
-                stopped(Gap.Why.A_CONTAINER_WITH_NO_RULE_FOR_PAIRING, path);
-                return false;
             }
             // Past the shared contracts, two things of two classes are two things.
             if (a.getClass() != b.getClass()) {

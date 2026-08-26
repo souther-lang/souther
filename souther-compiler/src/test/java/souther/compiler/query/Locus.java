@@ -48,9 +48,16 @@ record Locus(List<Locus.Step> steps) {
      */
     record Place(String question, Locus at, String offender) {
 
-        @Override
-        public String toString() {
-            return question + at + " " + offender;
+        /**
+         * This place as one line, for somebody reading a failure.
+         *
+         * <p>Named rather than left to {@code toString}. What reads well drops what tells two types
+         * of one short name apart, so the short form is a thing to ask for and never the thing a
+         * comparison falls into by writing a value where text was wanted — which is how a register
+         * keyed by place came to be compared by how it reads, twice.
+         */
+        String asText() {
+            return question + at.asText() + " " + offender;
         }
     }
 
@@ -161,13 +168,17 @@ record Locus(List<Locus.Step> steps) {
     }
 
     /**
-     * This locus as one string.
+     * This locus as one string, for somebody reading a failure.
      *
      * <p>The brace forms are what keep a map apart from a member. A record with a component called
      * {@code value} and the value side of a map are different steps and read differently here, which
      * is the whole reason the steps are kept.
+     *
+     * <p>What it does not keep is which type declares a member, so two of one short name read alike.
+     * That is what a reader wants and what a comparison must not have, which is why this is asked
+     * for by name and is not what this is by default.
      */
-    String rendered() {
+    String asText() {
         StringBuilder out = new StringBuilder();
         for (Step step : steps) {
             out.append(switch (step) {
@@ -181,8 +192,4 @@ record Locus(List<Locus.Step> steps) {
         return out.toString();
     }
 
-    @Override
-    public String toString() {
-        return rendered();
-    }
 }

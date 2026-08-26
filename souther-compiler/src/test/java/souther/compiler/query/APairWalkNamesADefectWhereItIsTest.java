@@ -46,7 +46,7 @@ class APairWalkNamesADefectWhereItIsTest {
             case Covered.Partly<Divergence>(List<Divergence> all, List<Gap> _) -> all;
         };
         Set<String> out = new LinkedHashSet<>();
-        each.forEach(one -> out.add(one.at() + " " + one.cause() + " " + one.kind()));
+        each.forEach(one -> out.add(one.at().asText() + " " + one.cause() + " " + one.kind()));
         return out;
     }
 
@@ -192,8 +192,8 @@ class APairWalkNamesADefectWhereItIsTest {
                         new Locus.Step.Member("b.Right$Case", "held")).size(),
                 "two types called Case are two types");
         assertEquals(".Case#held",
-                Locus.ROOT.then(new Locus.Step.Member("a.Left$Case", "held")).toString(),
-                "and a reader is shown the short one");
+                Locus.ROOT.then(new Locus.Step.Member("a.Left$Case", "held")).asText(),
+                "and a reader is shown the short one, where a reader asks for it");
     }
 
     /** And a map that holds different things still says so, which is what the above must not take
@@ -349,6 +349,26 @@ class APairWalkNamesADefectWhereItIsTest {
 
         assertEquals(Set.of("BUDGET_EXHAUSTED .Root#one", "BUDGET_EXHAUSTED .Root#two"),
                 gaps(walked), "one pair is not the whole of that graph");
+    }
+
+    /**
+     * Two things of two contracts are two things, not a shape this cannot pair.
+     *
+     * <p>A list and a set are both understood and neither is the other. Filed as a container with no
+     * rule for pairing, the answer says the walk could not go there — which sends whoever reads it
+     * after the walk, when what is in front of them is two compilations of one input that answered
+     * differently.
+     */
+    @Test
+    void twoThingsOfTwoContractsAreTwoThings() {
+        Address beside = new Address();
+        Covered<Divergence> walked = Divergence.between(
+                new Held(List.of("a"), beside),
+                new Held(new java.util.LinkedHashSet<>(List.of("a")), beside));
+
+        assertEquals(Set.of(".Held#it java.util.ImmutableCollections$List12 DIFFERENT_THINGS"),
+                found(walked), "two contracts, said as two things");
+        assertEquals(Set.of(), gaps(walked), "and not as somewhere the walk could not go");
     }
 
     /** Two maps of one size whose keys line up with nothing. */

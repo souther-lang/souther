@@ -262,7 +262,74 @@ final class AGraphNobodyChose {
     }
 
     private static boolean any(List<Recipe> of) {
+        return anyOnlyItself(of);
+    }
+
+    private static boolean anyWithNoRule(List<Recipe> of) {
         return of.stream().anyMatch(AGraphNobodyChose::holdsSomethingWithNoRule);
+    }
+
+    /**
+     * Where a walk of two graphs of this shape is expected to fall short, and why.
+     *
+     * <p>Said from the shape rather than read off what happened. A walk that gave up is a walk that
+     * says less than it was asked to, so a property that skipped whatever came back that way would
+     * be one anything could escape by giving up — and the graphs it lets through are the ones nobody
+     * wrote down, which is what this whole thing is for.
+     *
+     * <p>Two shapes fall short and no others. A collection whose equality is neither its order nor
+     * what it holds has no rule for pairing, and a set of things that only say which object they are
+     * has members that will not line up one to one.
+     */
+    static java.util.Set<Gap.Why> fallsShortOn(Recipe recipe) {
+        java.util.Set<Gap.Why> out = new java.util.LinkedHashSet<>();
+        collectFallingShort(recipe, out);
+        return out;
+    }
+
+    private static void collectFallingShort(Recipe recipe, java.util.Set<Gap.Why> out) {
+        switch (recipe) {
+            case Recipe.WithNoRule _ -> out.add(Gap.Why.A_CONTAINER_WITH_NO_RULE_FOR_PAIRING);
+            case Recipe.Says _, Recipe.Itself _ -> { }
+            case Recipe.BehindAnAbsence(Recipe of) -> collectFallingShort(of, out);
+            // A set is where the walk pairs and stops, so nothing under one is ever reached and
+            // nothing under one can fall short. What can is the pairing itself.
+            case Recipe.InASet(List<Recipe> of) -> {
+                if (anyOnlyItself(of)) {
+                    out.add(Gap.Why.MEMBERS_THAT_DO_NOT_PAIR);
+                }
+            }
+            case Recipe.Made(List<Recipe> of) -> of.forEach(one -> collectFallingShort(one, out));
+            case Recipe.InAList(List<Recipe> of) -> of.forEach(one -> collectFallingShort(one, out));
+            case Recipe.UnderKeys(List<Recipe> of) -> of.forEach(one ->
+                    collectFallingShort(one, out));
+            case Recipe.UnderAddresses(List<Recipe> of) -> of.forEach(one ->
+                    collectFallingShort(one, out));
+            case Recipe.InAnArray(List<Recipe> of) -> of.forEach(one ->
+                    collectFallingShort(one, out));
+        }
+    }
+
+    /** Whether two things of this shape are never equal, which is what stops a set pairing. */
+    private static boolean saysOnlyWhichObjectItIs(Recipe recipe) {
+        return switch (recipe) {
+            case Recipe.Itself _ -> true;
+            case Recipe.Says _ -> false;
+            // An array is its address, so two of them are never equal whatever they hold.
+            case Recipe.InAnArray _ -> true;
+            // And a map that compares by address is never equal to another of it either.
+            case Recipe.UnderAddresses _ -> true;
+            case Recipe.BehindAnAbsence(Recipe of) -> saysOnlyWhichObjectItIs(of);
+            case Recipe.Made(List<Recipe> of) -> any(of);
+            case Recipe.InAList(List<Recipe> of) -> any(of);
+            case Recipe.InASet(List<Recipe> of) -> any(of);
+            case Recipe.UnderKeys(List<Recipe> of) -> any(of);
+            case Recipe.WithNoRule _ -> true;
+        };
+    }
+
+    private static boolean anyOnlyItself(List<Recipe> of) {
+        return of.stream().anyMatch(AGraphNobodyChose::saysOnlyWhichObjectItIs);
     }
 
     /** Whether a shape holds one the mechanism says it has no rule for pairing. */
@@ -271,12 +338,12 @@ final class AGraphNobodyChose {
             case Recipe.WithNoRule _ -> true;
             case Recipe.Says _, Recipe.Itself _ -> false;
             case Recipe.BehindAnAbsence(Recipe of) -> holdsSomethingWithNoRule(of);
-            case Recipe.Made(List<Recipe> made) -> any(made);
-            case Recipe.InAList(List<Recipe> inAList) -> any(inAList);
-            case Recipe.InASet(List<Recipe> inASet) -> any(inASet);
-            case Recipe.UnderKeys(List<Recipe> underKeys) -> any(underKeys);
-            case Recipe.UnderAddresses(List<Recipe> underAddresses) -> any(underAddresses);
-            case Recipe.InAnArray(List<Recipe> inAnArray) -> any(inAnArray);
+            case Recipe.Made(List<Recipe> made) -> anyWithNoRule(made);
+            case Recipe.InAList(List<Recipe> inAList) -> anyWithNoRule(inAList);
+            case Recipe.InASet(List<Recipe> inASet) -> anyWithNoRule(inASet);
+            case Recipe.UnderKeys(List<Recipe> underKeys) -> anyWithNoRule(underKeys);
+            case Recipe.UnderAddresses(List<Recipe> underAddresses) -> anyWithNoRule(underAddresses);
+            case Recipe.InAnArray(List<Recipe> inAnArray) -> anyWithNoRule(inAnArray);
         };
     }
 }
