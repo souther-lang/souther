@@ -217,7 +217,7 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
         Axis axis = partitioning.axes().stream()
                 .filter(a -> a.path().toString().equals(path)).findFirst().orElseThrow();
         return Partitions.bordersOf(axis, symbols,
-                domain.quantities(symbols).runsBetween(axis.term()));
+                domain.quantities(symbols).runsBetween(axis.term()), new LinesRead());
     }
 
     /** A newtype's own clause, reached through the record that holds it. */

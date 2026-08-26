@@ -233,7 +233,7 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
      * rows the same way, so they are one quantity and their lines are one arrangement.
      */
     public static java.util.List<Border> allOf(java.util.List<LineDrawn> drawn) {
-        return allOf(drawn, java.util.Map.of());
+        return allOf(drawn, java.util.Map.of(), new LinesRead());
     }
 
     /**
@@ -250,7 +250,8 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
      */
     public static java.util.List<Border> allOf(java.util.List<LineDrawn> drawn,
                                                java.util.Map<String,
-                                                       java.util.List<Seam>> alsoParted) {
+                                                       java.util.List<Seam>> alsoParted,
+                                               LinesRead read) {
         // Collected in the quantity's own units, because that is the only order the lines of one
         // quantity are all on. Two rules can write one quantity at two scales — `3a + 6b > 48` and
         // `a + 2b > 20` run the same way — and the numbers they carry are not comparable until both
@@ -282,9 +283,15 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
             // rules — a comparison whose line the quantity does not reach is no line, and says so
             // there ({@code ComparisonAssessment.OutsideTheDomain}) — so nothing here decides it
             // again and nothing is dropped for having come back empty.
+            //
+            // Written down as it is met and again where it lands. One line met twice by this
+            // reading is one line, which is why the second of two equal borders is not a border
+            // this reading lost — the account is asked of the lines and not of how many times the
+            // loop went round.
+            read.found(each.cuts().target(), each.by());
             Border made = at(each.cuts().target(), each.by(), each.cuts().within(), beside);
             if (out.stream().noneMatch(had -> had.equals(made))) {
-                out.add(made);
+                out.add(read.drew(made));
             }
         }
         return java.util.List.copyOf(out);
@@ -428,12 +435,7 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
                     throw new IllegalStateException(
                             "a bound whose line is not an end of what it leaves: " + origin.named());
                 }
-                // The point against the line, asked of the order and never read off the cut. The
-                // cut itself where the position holds it — which is every strict bound on a carrier
-                // that steps, the end having been moved onto the value it leaves before it got here
-                // — and the nearest value the rules leave otherwise. A carrier with no step names
-                // none, and then the technique's point cannot be written down at all.
-                Demand on = pointAt(space, cut, kept, holdsHere, within);
+                Demand on = againstABound(space, cut, kept, holdsHere, within, origin);
                 demands.put(PointRole.ON, on);
                 demands.put(PointRole.OFF, new Demand.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT));
                 // The partition the bound bounds, without the value against the line. Everything
@@ -471,6 +473,43 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
             case THE_CARRIER_NAMES_NO_NEIGHBOUR -> throw new IllegalStateException(
                     "a line with no second side because of the order: " + origin.named());
         }
+    }
+
+    /**
+     * The point against a bound's line: the value a row inside it is written at, or why there is
+     * none.
+     *
+     * <p>Asked of the order and never read off the cut. Where the position holds the line's own
+     * value that value is the point, and where it does not the point is the nearest value the rules
+     * leave — which on a carrier with no step is no value at all, and then the technique's point
+     * cannot be written down.
+     *
+     * <p><b>And a bound that stops short of its own line where the order does name a value beside
+     * it is refused, not repaired.</b> Such an end is not canonical: a strict bound is moved onto
+     * the value it leaves where the carrier steps, by {@code InvariantBound} for a type's own clause
+     * and by the solver for what a record leaves, so {@code value > 5} on an {@code Int} reaches
+     * here as an inclusive 6 and never as an exclusive 5. Answered by stepping to the 6 here, this
+     * would be a third place that normalizes ends — and the day either of the two above stopped
+     * doing it, the border would come out right and nothing would say the reading had been repaired
+     * on its way through.
+     *
+     * <p>No carrier is asked. What tells the two apart is whether the order names a value on the
+     * side the bound keeps, which is the question the point is about anyway.
+     */
+    private static Demand againstABound(LevelSpace space, Level cut, Towards kept, boolean holdsHere,
+                                        NumericDomain.Bounds within, OriginRef origin) {
+        if (holdsHere) {
+            return pointAt(space, cut, kept, true, within);
+        }
+        Optional<Level> beside = beyond(space, cut, kept);
+        if (beside.isPresent()) {
+            throw new IllegalStateException(
+                    "a bound that stops short of its own line where the order names "
+                            + beside.get().key() + " beside it: " + origin.named()
+                            + " — an end this compiler could step was to have been stepped before"
+                            + " it got here");
+        }
+        return new Demand.NotOwed(NotOwedReason.THE_CARRIER_NAMES_NO_NEIGHBOUR);
     }
 
     /**

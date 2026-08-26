@@ -14,37 +14,38 @@ import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 
 import java.util.List;
-import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A reading that lost a line is not a reading that ran out.
  *
  * <p>{@code Closed} is what takes a behavior out of the verdict, and it used to follow from three
- * absences: nothing was set aside, nothing went unanswered, no position went unreached. A rule
+ * absences: nothing was set aside, nothing went unanswered, no position went unreached. A line
  * dropped before it could be set aside leaves all three of those exactly as they were, so a measure
  * built from them reported a model read in full on the strength of a reading that had lost part of
  * it — a {@code Decimal} bounded by two clauses came back as a behavior whose rules draw no line
  * anywhere, and the module was called adequate (issue #1079).
  *
- * <p>So what the reading produced is held against what it found. One rule that drew a cut is one
- * line, and a reading holding fewer lines than cuts has lost one however it went — a null nobody
- * tested for, a {@code continue}, a filter. The count is the only thing that catches all three,
- * since each of them leaves a shorter list and nothing else.
+ * <p>So what the reading produced is held against what it found, by identity. Counted instead, a
+ * reading that lost one line and made another twice comes back whole; asked of the lines themselves,
+ * neither is possible.
  */
 class AClosedReadingIsOneThatDrewEveryLineItFoundTest {
 
     private static final AxisId AT = new AxisId("take", "h.a");
 
-    /** A reading of one bound that drew its line, which is what a closed one is. */
+    /** A reading of one line that drew it, which is what a closed one is. */
     @Test
     void aReadingThatDrewItsLineMayBeClosed() {
+        LinesRead read = new LinesRead();
+        read.found(aLine(), bound("cap"));
+        read.drew(aBorder("cap"));
+
         MeasureClosure.Both closed =
-                MeasureClosure.of(List.of(anAxisWithOneCut()), List.of(), List.of(),
-                        Map.of(AT, List.of(aBorder())));
+                MeasureClosure.of(List.of(anAxis()), List.of(), List.of(), read);
 
         assertInstanceOf(MeasureClosure.OfTheBorder.Closed.class, closed.border(),
                 "every question this measure answers was answered");
@@ -52,58 +53,76 @@ class AClosedReadingIsOneThatDrewEveryLineItFoundTest {
     }
 
     /**
-     * And one that found a cut and came back without its line is refused rather than closed.
+     * One found and not drawn is refused rather than reported as a gap.
      *
-     * <p>Refused and not reported as a gap. What was lost is not known here — a gap says which rule
-     * or which position a measure is short of, and a reading that dropped one has nothing to name.
-     * This is this compiler having lost something, which is the one thing a document may not be
-     * written from.
+     * <p>What was lost is not known: a gap says which rule or which position a measure is short of,
+     * and a reading that dropped one has nothing to name. This is this compiler having lost
+     * something, which is the one thing a document may not be written from.
      */
     @Test
-    void aReadingThatLostItsLineIsRefused() {
-        IllegalStateException refused = assertThrows(IllegalStateException.class,
-                () -> MeasureClosure.of(List.of(anAxisWithOneCut()), List.of(), List.of(),
-                        Map.of()));
+    void aLineFoundAndNotDrawnIsRefused() {
+        LinesRead read = new LinesRead();
+        read.found(aLine(), bound("cap"));
 
-        assertEquals("a reading of `h.a` that found 1 line and drew 0: what a measure is short of"
-                + " cannot be counted from what a reading lost", refused.getMessage());
+        IllegalStateException refused = assertThrows(IllegalStateException.class,
+                () -> MeasureClosure.of(List.of(anAxis()), List.of(), List.of(), read));
+
+        assertTrue(refused.getMessage().startsWith("a line this reading found and did not draw"),
+                refused.getMessage());
+        assertTrue(refused.getMessage().contains("invariant Amount (cap)"), refused.getMessage());
     }
 
     /**
-     * Counted per rule that drew the cut and not per cut.
+     * And one drawn twice, which a count cannot tell from one drawn once beside one lost.
      *
-     * <p>An invariant and a {@code guard} naming one value are two rules and one place, and each of
-     * them is owed a row: reaching the line through one says nothing about the other. Counted by
-     * cuts, a reading that drew one of the two and lost the other came back whole.
+     * <p>Two borders at one place drawn by one rule ask for the same row under two names. Held as a
+     * number, a reading that dropped a line and made another twice adds up to what a whole one does
+     * — which is why the account is of the lines and not of how many there were.
      */
     @Test
-    void aCutTwoRulesDrewIsTwoLines() {
-        Cut both = Cut.at(Carrier.WHOLE, Count.of(5), bound("cap")).and(bound("floor"));
-        Axis axis = new Axis(AT, new NumericTerm.ValueOf(TermPath.of("h").then("a")), Type.INT,
-                List.of(), List.of(both));
+    void aLineDrawnTwiceIsRefused() {
+        LinesRead read = new LinesRead();
+        read.found(aLine(), bound("cap"));
+        read.drew(aBorder("cap"));
+        read.drew(aBorder("cap"));
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
-                () -> MeasureClosure.of(List.of(axis), List.of(), List.of(),
-                        Map.of(AT, List.of(aBorder()))));
+                () -> MeasureClosure.of(List.of(anAxis()), List.of(), List.of(), read));
 
-        assertEquals("a reading of `h.a` that found 2 lines and drew 1: what a measure is short of"
-                + " cannot be counted from what a reading lost", refused.getMessage());
+        assertTrue(refused.getMessage().startsWith("a line drawn more than once"),
+                refused.getMessage());
     }
 
-    /** One position bounded at 5, which is one cut drawn by one rule. */
-    private static Axis anAxisWithOneCut() {
+    /** And a border off a line this reading never met, which is the other way the two come apart. */
+    @Test
+    void aBorderTheReadingNeverFoundIsRefused() {
+        LinesRead read = new LinesRead();
+        read.found(aLine(), bound("cap"));
+        read.drew(aBorder("cap"));
+        read.drew(aBorder("floor"));
+
+        IllegalStateException refused = assertThrows(IllegalStateException.class,
+                () -> MeasureClosure.of(List.of(anAxis()), List.of(), List.of(), read));
+
+        assertTrue(refused.getMessage().startsWith("a border this reading cannot account for"),
+                refused.getMessage());
+    }
+
+    private static Axis anAxis() {
         return new Axis(AT, new NumericTerm.ValueOf(TermPath.of("h").then("a")), Type.INT,
                 List.of(), List.of(Cut.at(Carrier.WHOLE, Count.of(5), bound("cap"))));
     }
 
-    private static Border aBorder() {
-        return Border.at(
-                BoundaryTarget.at(
-                        new BorderQuantity.OfACoordinate(AT,
-                                new NumericTerm.ValueOf(TermPath.of("h").then("a")),
-                                souther.compiler.inputs.TermOrders.itself(Carrier.WHOLE)),
-                        new Level.OnACarrier(Carrier.WHOLE, Count.of(5))),
-                bound("cap"),
+    private static BoundaryTarget aLine() {
+        return BoundaryTarget.at(
+                new BorderQuantity.OfACoordinate(AT,
+                        new NumericTerm.ValueOf(TermPath.of("h").then("a")),
+                        souther.compiler.inputs.TermOrders.itself(Carrier.WHOLE)),
+                new Level.OnACarrier(Carrier.WHOLE, Count.of(5)));
+    }
+
+    private static Border aBorder(String clause) {
+        return Border.at(aLine(), bound(clause),
                 new souther.compiler.numeric.NumericDomain.Bounds(
                         souther.compiler.numeric.Endpoint.inclusive(Count.of(5)), null));
     }

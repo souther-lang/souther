@@ -229,9 +229,12 @@ public final class Partitions {
             keep(new ArrayList<>(), measured, axis, null, rulesWithoutALine);
         }
         // The lines first, because the closure is a conclusion about them: whether the reading ran
-        // out is asked of what it produced beside what it found, and not of the gaps alone.
-        java.util.Map<AxisId, List<Border>> lines = linesAlong(kept, quantities, symbols);
-        MeasureClosure.Both closed = MeasureClosure.of(kept, standing, rulesWithoutALine, lines);
+        // out is asked of what it produced beside what it found, and not of the gaps alone. Both
+        // producers write into the one account — here there is only the one, and no rule of this
+        // reading draws a line between two positions.
+        LinesRead read = new LinesRead();
+        java.util.Map<AxisId, List<Border>> lines = linesAlong(kept, quantities, symbols, read);
+        MeasureClosure.Both closed = MeasureClosure.of(kept, standing, rulesWithoutALine, read);
         return new Partitioning(kept, standing, uncertain, undividedIn(measured),
                 List.copyOf(rulesWithoutALine), blockedIn(measured), List.copyOf(notSeparated),
                 List.of(), lines, ReachingCuts.NONE,
@@ -540,8 +543,13 @@ public final class Partitions {
                     reachable.stream().map(Threshold::parts).toList()),
                     reachable.isEmpty() ? null : new BodyCutInspection.Evidence(), rules);
         }
-        java.util.Map<AxisId, List<Border>> lines = linesAlong(out, reading, symbols);
-        MeasureClosure.Both closed = MeasureClosure.of(out, base.unanswered(), rules, lines);
+        // Both producers into the one account. A line that divides a position leaves its border on
+        // the position and a line between two leaves its border beside them; they are the same
+        // reading, and an accounting over one of them says nothing about the other.
+        LinesRead read = new LinesRead();
+        java.util.Map<AxisId, List<Border>> lines = linesAlong(out, reading, symbols, read);
+        List<Border> across = Border.allOf(between, partedByQuantity(out), read);
+        MeasureClosure.Both closed = MeasureClosure.of(out, base.unanswered(), rules, read);
         return new Partitioning(out, base.unanswered(), base.uncertain(),
                 undividedIn(measured), List.copyOf(rules), blockedIn(measured),
                 // Carried across: what a reading could not hold together is a fact about the
@@ -554,7 +562,7 @@ public final class Partitions {
                 // came from. A line that divides a position leaves its division on the axis and,
                 // where the position has no value beside it, its border over here — and the two
                 // sides of that border are runs of what all of them leave.
-                base.notSeparated(), Border.allOf(between, partedByQuantity(out)),
+                base.notSeparated(), across,
                 lines,
                 reaching, closed.partition(), closed.border());
     }
@@ -571,11 +579,13 @@ public final class Partitions {
      * has no line to draw, and an entry saying so would be a list of nothings per behavior.
      */
     private static java.util.Map<AxisId, List<Border>> linesAlong(
-            List<Axis> axes, souther.compiler.inputs.Quantities reading, Symbols symbols) {
+            List<Axis> axes, souther.compiler.inputs.Quantities reading, Symbols symbols,
+            LinesRead read) {
         Map<AxisId, List<Border>> out = new LinkedHashMap<>();
         for (Axis axis : axes) {
             if (axis.measurable()) {
-                out.put(axis.id(), bordersOf(axis, symbols, reading.runsBetween(axis.term())));
+                out.put(axis.id(),
+                        bordersOf(axis, symbols, reading.runsBetween(axis.term()), read));
             }
         }
         return out;
@@ -784,7 +794,8 @@ public final class Partitions {
      * what the rules leave the term, which is a reading of the declarations — so a caller that could
      * assemble them would be deciding, from a reading of its own, which lines exist to be measured.
      */
-    static List<Border> bordersOf(Axis axis, Symbols symbols, NumericDomain.Bounds within) {
+    static List<Border> bordersOf(Axis axis, Symbols symbols, NumericDomain.Bounds within,
+                                  LinesRead read) {
         List<Border> out = new ArrayList<>();
         // Every place the rules part this position's values, collected before any border is built.
         // What each border owes away from its line is a run of the arrangement they make together,
@@ -823,7 +834,11 @@ public final class Partitions {
                 // nothing to test here and nothing to drop. It used to answer null and be dropped
                 // without a word, which is how a strict bound on a carrier with no step left the
                 // measure saying the behavior's rules draw no line anywhere (issue #1079).
-                out.add(Border.at(target, origin, within, parted));
+                //
+                // The line is written down as it is met and the border where it lands, so that the
+                // day something is written between the two the reading is held to having lost one.
+                read.found(target, origin);
+                out.add(read.drew(Border.at(target, origin, within, parted)));
             }
         }
         return List.copyOf(out);

@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -185,34 +186,38 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
     }
 
     /**
-     * The end is read rather than assumed closed, at the one place both kinds are built, and what
-     * reads it is the point rather than the line.
+     * The end is read rather than assumed closed, at the one place both kinds are built, and a bound
+     * that stops short of its own line on a carrier that steps is refused rather than stepped here.
      *
      * <p>A continuous carrier has no step to take, so {@code value > 5.0m} on a {@code Decimal}
      * reaches {@link OriginRef.InvariantOrigin} as an exclusive 5 — measured at the construction
-     * site, where both kinds arrive. Where the rule stops is the line either way; which value the
-     * point against it stands at is the order's answer, and the two are one value only where the
-     * position holds the line's own.
+     * site, where both kinds arrive. Where the rule stops is the line either way, and which value
+     * the point against it stands at is the order's answer.
      *
-     * <p>Both ends here on one carrier, which is what makes this about the end and not about the
-     * carrier. The bound that admits its value is at that value; the one that does not is at the
-     * value it leaves. Asked as one question, the second was read as a line the quantity does not
-     * reach, dropped, and its rule went unmeasured with nothing saying so (issue #1079).
+     * <p><b>Which is not a licence to step one here.</b> An end a carrier can step is stepped before
+     * it arrives — by {@code InvariantBound} for a type's own clause and by the solver for what a
+     * record leaves — so {@code value > 5} on an {@code Int} is an inclusive 6 by the time a border
+     * is built and never an exclusive 5. Answered by stepping to the 6, this would be a third place
+     * that normalizes ends, and the day either of the two above stopped doing it the border would
+     * still come out right with nothing saying the reading had been repaired on the way through.
+     *
+     * <p>What a {@code Decimal} does with the same shape is {@code
+     * ABoundOnACarrierWithNoStepIsStillALineTest}, over a model rather than a hand-made origin: the
+     * order names no value beside the line, so the point cannot be written down and says so.
      */
     @Test
-    void aBoundIsAtItsOwnEndWhereItKeepsItAndAtTheValueItLeavesWhereItDoesNot() {
-        assertEquals("= 5", pointAgainstTheLine(true),
+    void aBoundThatStopsShortOfItsLineWhereTheOrderStepsIsRefused() {
+        Border kept = borderOf(
+                new OriginRef.InvariantOrigin(invariant(), THE_ONLY_CONJUNCT, true));
+        assertEquals("= 5", kept.demand(PointRole.ON).criterion().asked(kept.cut().of()),
                 "a bound that admits its own end is at that end's ON point");
-        assertEquals("= 6", pointAgainstTheLine(false),
-                "and one that does not is at the first value it leaves");
-    }
 
-    /** What the {@code ON} point of a bound at 5 asks for, where the bound does or does not keep
-     *  the 5 itself. */
-    private static String pointAgainstTheLine(boolean keepsIt) {
-        Border border = borderOf(
-                new OriginRef.InvariantOrigin(invariant(), THE_ONLY_CONJUNCT, keepsIt));
-        return border.demand(PointRole.ON).criterion().asked(border.cut().of());
+        IllegalStateException refused = assertThrows(IllegalStateException.class,
+                () -> borderOf(new OriginRef.InvariantOrigin(invariant(), THE_ONLY_CONJUNCT, false)),
+                "an `Int` bounded strictly at 5 is an inclusive 6 long before it reaches a border");
+        assertTrue(refused.getMessage().startsWith(
+                        "a bound that stops short of its own line where the order names 6 beside it"),
+                refused.getMessage());
     }
 
     /** The border a bound draws at 5 on an `Int` whose rules leave 5 and up. */

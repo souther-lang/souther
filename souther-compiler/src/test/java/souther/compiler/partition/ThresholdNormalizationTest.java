@@ -314,7 +314,7 @@ class ThresholdNormalizationTest {
     /** The points against each of {@code axis}'s borders, as {@code role value}. */
     private static List<String> pointsAgainstTheLines(Axis axis, Symbols symbols,
                                                       NumericDomain.Bounds within) {
-        return Partitions.bordersOf(axis, symbols, within).stream()
+        return Partitions.bordersOf(axis, symbols, within, new LinesRead()).stream()
                 .flatMap(border -> java.util.stream.Stream.of(PointRole.ON, PointRole.OFF)
                         .filter(role -> border.demand(role).criterion() != null)
                         .map(role -> role + " "
