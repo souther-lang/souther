@@ -187,7 +187,7 @@ public record BorderObligationAssessment(BorderObligationId id, String axis,
         Demand asked = readings.get(0).border().demand(role);
         for (BorderAssessment reading : readings) {
             Demand also = reading.border().demand(role);
-            if (!asked.equals(also)) {
+            if (!asked.sameAs(also)) {
                 throw new IllegalStateException("two readings of one line disagree about what its "
                         + role + " point asks for, so they are not one line: " + id
                         + " asks " + asked + " at " + readings.get(0).border().cut().named()

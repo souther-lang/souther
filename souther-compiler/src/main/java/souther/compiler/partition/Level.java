@@ -19,7 +19,8 @@ import souther.compiler.numeric.Place;
  *
  * <p>Equality is the records' own, and is not the order. {@code 0} and {@code 0.00} are two values
  * here and one level, which is what {@link Place#key()} is for and what every comparison in the
- * algebra goes through instead.
+ * algebra goes through instead. A reader that has to put a level inside something compared as a
+ * value holds {@link #canonical()}.
  */
 public sealed interface Level {
 
@@ -91,6 +92,21 @@ public sealed interface Level {
         return switch (this) {
             case OnACarrier on -> on.at().key();
             case ACount count -> count.at().key();
+        };
+    }
+
+    /**
+     * This level with its place spelled the one way, for an identity to be built from.
+     *
+     * <p>{@link #key()} answers the same question and answers it about the place alone: a level of a
+     * carrier and a number the quantity counts to have the same key where the number is the same,
+     * and they are not one level. So a value that holds a level and is compared as a value holds
+     * this rather than that.
+     */
+    default Level canonical() {
+        return switch (this) {
+            case OnACarrier(Carrier of, Place at) -> new OnACarrier(of, at.canonical());
+            case ACount(Count at) -> new ACount(at.canonical());
         };
     }
 }

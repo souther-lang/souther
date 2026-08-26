@@ -69,7 +69,7 @@ import java.util.List;
  *                 from the other end
  */
 public record Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> classes,
-                   List<Cut> cuts, List<Seam> parted, ReadingResidue residue,
+                   List<Cut> cuts, List<Parting> parted, ReadingResidue residue,
                    StructuralInspection.Continuation pending, LeftAtThePosition leftWith) {
 
     public Axis {
@@ -116,7 +116,7 @@ public record Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> 
     }
 
     /** The same position, with what a body's rules divided it into and the lines they drew. */
-    public Axis carrying(List<PartitionClass> classes, List<Cut> cuts, List<Seam> parted) {
+    public Axis carrying(List<PartitionClass> classes, List<Cut> cuts, List<Parting> parted) {
         return new Axis(id, term, type, classes, cuts, parted, residue, pending, leftWith);
     }
 

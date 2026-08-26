@@ -142,6 +142,18 @@ public record UndividedPosition(TermPath at, Why why) {
          */
         COMPETING_COORDINATES,
         /**
+         * The line reaches positions under the cases each side of it, and which of them go together
+         * is not worked out.
+         *
+         * <p>Not about how many sums are on the way. A name each side of the line stands at more
+         * than one position, and whether those positions pair off one for one or every one against
+         * every other is a fact about the model — two names narrowed by one value are narrowed
+         * together, and two names under separate choices are not. Said as a shape this compiler does
+         * not read, an author would go looking for another way to write a comparison it reads
+         * perfectly well.
+         */
+        UNRESOLVED_CASE_PAIRING,
+        /**
          * The comparison relates two positions rather than dividing one.
          *
          * <p>`+x < y+` says where one position stands against another, and a class here is a set of

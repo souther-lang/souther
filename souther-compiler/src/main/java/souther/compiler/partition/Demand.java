@@ -29,6 +29,22 @@ public sealed interface Demand {
     }
 
     /**
+     * Whether two readings ask a row for the same thing here.
+     *
+     * <p>Asked rather than left to {@link #equals}, because a criterion holds levels and a level
+     * keeps the spelling the rule was written in ({@link Criterion#sameAs}). Two readings of one
+     * line that differ only in how a number was written have not disagreed, and a check that read
+     * them as disagreeing would name the identity as wrong over a spelling.
+     */
+    default boolean sameAs(Demand other) {
+        return switch (this) {
+            case NotOwed not -> other instanceof NotOwed also && not.reason() == also.reason();
+            case Owed owed -> other instanceof Owed also
+                    && owed.criterion().sameAs(also.criterion());
+        };
+    }
+
+    /**
      * Whether the model itself discharged this point, as against this language having no way to name
      * it or the side holding nothing.
      *

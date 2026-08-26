@@ -160,6 +160,35 @@ public sealed interface Criterion {
         return region().contains(value);
     }
 
+    /**
+     * The same demand on a row, with every level written the one way.
+     *
+     * <p>What an identity built out of a criterion is built from, and what two of them are compared
+     * through. A level keeps the spelling the rule was written in, because that is what a report
+     * writes back ({@link Level#canonical()}), so two readings of one line can arrive here holding
+     * {@code 0} and {@code 0.00} — which is one demand and was two values.
+     */
+    default Criterion canonical() {
+        return switch (this) {
+            case AtTheLevel(Level at) -> new AtTheLevel(at.canonical());
+            case Within(Band band, Level except, Towards away) -> new Within(band.canonical(),
+                    except == null ? null : except.canonical(), away);
+            case AnythingBut(Level excluded) -> new AnythingBut(excluded.canonical());
+        };
+    }
+
+    /**
+     * Whether two criteria ask a row for the same thing.
+     *
+     * <p>The same shape asking for the same values, and not the same region: a rule that names a
+     * value and a run over everything else are two ways of writing one set of rows, and which of
+     * them a border owes is what says where a search starts and what a report prints. So this asks
+     * whether the two are one demand, which is narrower than whether one row answers both.
+     */
+    default boolean sameAs(Criterion other) {
+        return other != null && canonical().equals(other.canonical());
+    }
+
     /** How this relates a row's quantity to what it is against. */
     String operator();
 
@@ -207,7 +236,8 @@ public sealed interface Criterion {
         // And the line itself where the run has no value at that end. A search starts there and
         // walks away from it — which is why this is not what the run holds: two decimals a rule
         // holds apart have every distance past the line and no first one.
-        Seam edge = in.away() == Towards.ABOVE ? in.band().under() : in.band().over();
+        Seam edge = in.away() == Towards.ABOVE
+                ? in.band().lower().seam() : in.band().upper().seam();
         return edge == null ? null : edge.at().asALevelOfTheQuantity();
     }
 

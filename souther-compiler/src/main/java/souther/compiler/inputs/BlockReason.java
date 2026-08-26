@@ -110,12 +110,12 @@ public sealed interface BlockReason {
                 case PARTITION -> switch (this) {
                     case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
                          UnreadValueRule _, ValueRuleRelatingTwoPositions _,
-                         CompetingCoordinates _ -> true;
+                         CompetingCoordinates _, CasePairingNotDetermined _ -> true;
                 };
                 case BOUNDARY -> switch (this) {
                     case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
                          UnreadValueRule _, ValueRuleRelatingTwoPositions _,
-                         CompetingCoordinates _ -> true;
+                         CompetingCoordinates _, CasePairingNotDetermined _ -> true;
                 };
             };
         }
@@ -147,6 +147,7 @@ public sealed interface BlockReason {
             return false;
         }
     }
+
 
     /**
      * The reading did not get to the rules of the position, so there is no rule to name.
@@ -320,6 +321,21 @@ public sealed interface BlockReason {
      * first would go looking for a syntax this compiler handles perfectly well.
      */
     record CompetingCoordinates() implements RuleReadingStopped {}
+
+    /**
+     * The rule was read, it draws a line, and where each of the names it is between stands is known
+     * — and which of those positions go together is not.
+     *
+     * <p>This compiler getting partway and no further, which is what puts it here rather than beside
+     * a rule read to the end that divides nothing. The comparison was taken apart, a line came out
+     * of it, and every name it is between reached positions; what was not reached is the pairing.
+     *
+     * <p><b>Not about how many sums are on the way.</b> Two names narrowed by one value are narrowed
+     * together and two names under separate choices are not, and which of the two this is is a fact
+     * about the model. Said as a shape this compiler does not read, an author would go looking for
+     * another way to write a comparison it reads perfectly well.
+     */
+    record CasePairingNotDetermined() implements RuleReadingStopped {}
 
     /**
      * The comparison was read to the end and cuts no quantity at all.

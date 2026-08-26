@@ -71,9 +71,11 @@ final class Intervals {
          * out is a class that reads as holding the values past the next line along.
          */
         String label(Carrier carrier) {
-            String low = lo == null ? ruleEnd(of == null ? null : of.under(), Towards.ABOVE)
+            String low = lo == null
+                    ? ruleEnd(of == null ? null : of.lower().seam(), Towards.ABOVE)
                     : carrier.written(lo) + (loInclusive ? " <= x" : " < x");
-            String high = hi == null ? ruleEnd(of == null ? null : of.over(), Towards.BELOW)
+            String high = hi == null
+                    ? ruleEnd(of == null ? null : of.upper().seam(), Towards.BELOW)
                     : (hiInclusive ? "x <= " : "x < ") + carrier.written(hi);
             if (low == null && high == null) {
                 return "any";
@@ -138,12 +140,12 @@ final class Intervals {
         // Which subsumes the reason this was keyed by the number rather than by the count's own
         // equality: `0.00` and `0` are one number and part the values in one place.
         LevelSpace space = LevelSpace.onACarrier(carrier);
-        List<Seam> parted = new ArrayList<>();
+        List<Parting> parted = new ArrayList<>();
         for (Threshold each : thresholds) {
             // The division the rule made, taken as it was read rather than rebuilt from a number.
             // A rule that wrote a multiple of the position parts its values where the position may
             // hold none, and rebuilding the seam from a value of the position lost exactly those.
-            parted.add(each.parts());
+            parted.add(Parting.by(each.parts(), each.origin().authoredLine()));
         }
         // The one arrangement, which the points of every border on this position are read off as
         // well. Where the values part, in what order and with what left between them are questions

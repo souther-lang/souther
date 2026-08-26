@@ -178,6 +178,29 @@ public sealed interface NumericTerm permits NumericTerm.ValueOf, NumericTerm.Tak
     TermPath path();
 
     /**
+     * The same number, of what stands at {@code other} — or null where this operation and what
+     * stands there do not go together.
+     *
+     * <p>For a name that stands at more than one position. A field every case of a sum spreads is
+     * one field written once, so a line drawn on a number of it is one line, and it falls on that
+     * number under each case; what moves is where the number is taken, and the operation is what it
+     * was.
+     *
+     * <p>Put to the same predicate the term was built under and not moved on the caller's word.
+     * Nothing about the two positions being one field is checked here, so what would otherwise
+     * arrive is a term whose account of what it takes was written for a shape the new location does
+     * not have.
+     *
+     * @param at what stands at {@code other}, as the signature wrote it
+     */
+    default NumericTerm movedTo(TermPath other, Type at, Symbols symbols) {
+        return switch (this) {
+            case ValueOf _ -> new ValueOf(other);
+            case TakenOf taken -> TakenOf.of(taken.operation(), other, at, symbols);
+        };
+    }
+
+    /**
      * The order the number this term names is measured on, or null where it has none.
      *
      * <p>What a rule about the length of a string is counted as is an {@code Int} at a position no
