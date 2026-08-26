@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.numeric.NumericDomain.LinearForm;
@@ -79,7 +80,7 @@ class WhereAReadingStoppedComesBackWithWhatItWasReadInTest {
 
             @Override
             public Symbols symbols() {
-                return Symbols.none(souther.compiler.DefaultStdlib.get());
+                return Symbols.none(DefaultStdlib.get());
             }
 
             @Override

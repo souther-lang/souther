@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.core.Kernel;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.diag.CompileException;
 import souther.compiler.types.Denotation;
@@ -57,13 +58,13 @@ public final class Symbols implements NameSense {
     }
 
     /**
-     * The one distinctness the library publishes, which an invariant written over it is a
-     * constraint rather than a call.
+     * The one operation the library publishes that states elements are distinct, which an invariant
+     * written over is a constraint rather than a call.
      *
      * <p>Handed on for the reason {@link #theWalk} is.
      */
-    public ValueName.Stdlib.Operation theDistinctness() {
-        return stdlib.theDistinctness();
+    public ValueName.Stdlib.Operation theDistinctnessPredicate() {
+        return stdlib.theDistinctnessPredicate();
     }
 
     /**
@@ -75,7 +76,7 @@ public final class Symbols implements NameSense {
      * {@link #library()} so that a reader holding these symbols has it — a {@code Kernel} is
      * {@code core}'s, so an output asking this is not naming the library.
      */
-    public souther.compiler.core.Kernel kernelOf(ValueName.Stdlib operation) {
+    public Kernel kernelOf(ValueName.Stdlib operation) {
         Stdlib.Intrinsic intrinsic = stdlib.intrinsicOf(operation);
         return intrinsic == null ? null : intrinsic.kernel();
     }

@@ -41,18 +41,10 @@ class NobodyOutsideTheLibrarySpellsWhatItPublishesTest {
 
     private static final Path COMPILED = Path.of("target", "classes", "souther", "compiler");
 
-    /**
-     * Where a published name may be written.
-     *
-     * <p>The library itself, which is what publishes them. The documentation reader, which quotes
-     * the library's surface to a person. The semantic facts, which are statements about named
-     * operations and are the library's own vocabulary written down beside it — this one is worth
-     * moving and is not what this rule was written for.
-     */
+    /** Where a published name may be written: the library itself, which is what publishes them.
+     *  Nothing else does, so nothing else is named here. */
     private static final Set<String> MAY_SPELL_THEM = Set.of(
-            "souther.compiler.stdlib.",
-            "souther.compiler.doc.",
-            "souther.compiler.semantics.OperationFacts");
+            "souther.compiler.stdlib.");
 
     @Test
     void nothingOutsideTheLibraryWritesAPublishedNameOut() {

@@ -210,7 +210,7 @@ public final class InvariantConstraints {
         // no two are equal, by the same value equality (spec §collections, ADR-0009). A projection that
         // is not the identity says it of something else — the elements' products, their ids — and Raoh
         // has no constraint for that, so the clause keeps its own check.
-        if (base instanceof Type.ListOf && appliesTheDistinctness(call)
+        if (base instanceof Type.ListOf && statesDistinctness(call)
                 && call.args().size() == 2 && isValue(call.args().get(1))
                 && isIdentity(call.args().get(0))) {
             return Optional.of(new Unique());
@@ -310,11 +310,11 @@ public final class InvariantConstraints {
                 && symbols.kernelOf(operation) == kernel;
     }
 
-    /** Whether {@code call} applies the distinctness the library publishes, which has a Souther
-     *  body rather than a kernel and so is a value the library hands over
-     *  ({@link Symbols#theDistinctness}). */
-    private boolean appliesTheDistinctness(Hir.Apply call) {
-        return symbols.theDistinctness().equals(applied(call));
+    /** Whether {@code call} states that the elements are distinct — the library's own predicate for
+     *  it, which has a Souther body rather than a kernel and so is a value the library hands over
+     *  ({@link Symbols#theDistinctnessPredicate}). */
+    private boolean statesDistinctness(Hir.Apply call) {
+        return symbols.theDistinctnessPredicate().equals(applied(call));
     }
 
     /** What {@code call} applies, or null where it applies a name nothing declares. */

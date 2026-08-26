@@ -9,7 +9,6 @@ import souther.compiler.check.FixtureEvidence;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.core.Kernel;
-import souther.compiler.stdlib.Stdlib;
 import souther.compiler.observe.Limits;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.BindingId;
@@ -1640,10 +1639,8 @@ public final class FixtureReader {
                 || !(c.answered().denotes() instanceof ValueName.Stdlib operation)) {
             return false;
         }
-        Stdlib.Intrinsic intrinsic = symbols.library().intrinsicOf(operation);
-        return intrinsic != null
-                && (intrinsic.kernel() == Kernel.SET_FROM_LIST
-                        || intrinsic.kernel() == Kernel.MAP_FROM_LIST);
+        Kernel kernel = symbols.kernelOf(operation);
+        return kernel == Kernel.SET_FROM_LIST || kernel == Kernel.MAP_FROM_LIST;
     }
 
     private Object newtypeInner(Hir.Apply c, Position at, Admission admission) {
