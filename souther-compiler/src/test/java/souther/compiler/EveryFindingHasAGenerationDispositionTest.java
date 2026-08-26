@@ -234,7 +234,7 @@ class EveryFindingHasAGenerationDispositionTest {
      */
     private static List<DeclarationResolution> drawnBy(DeclaredRows rows, String declaredOn) {
         return rows.resolved().entrySet().stream()
-                .filter(each -> each.getKey().line().origin().owedToTheDeclaration()
+                .filter(each -> each.getKey().line().owedToTheDeclaration()
                         .map(on -> on.name().equals(declaredOn)).orElse(false))
                 .map(each -> each.getValue().resolution()).toList();
     }
@@ -411,7 +411,7 @@ class EveryFindingHasAGenerationDispositionTest {
         resolved(compiled(EITHER_END), "example.ends", new GenerationScope.Module()).resolved()
                 .forEach((at, answer) -> {
                     if (answer.resolution() instanceof DeclarationResolution.Generated(var by, var _)
-                            && at.line().origin().owedToTheDeclaration()
+                            && at.line().owedToTheDeclaration()
                                     .map(on -> on.name().equals("Code")).orElse(false)) {
                         composers.put(at.line().at(), by);
                     }

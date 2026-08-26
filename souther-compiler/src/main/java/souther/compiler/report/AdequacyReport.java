@@ -394,7 +394,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 if (f.about() instanceof About.APointOfADeclaredBorder(var debt, var role)) {
                     out.append(String.format("      %s no row is at the %s point %s = %s (%s)%n",
                             mark(f), role, debt.axis(), debt.against(role),
-                            debt.origin().describe(names, module.declaredIn())));
+                            debt.id().named()));
                 }
             }
         });

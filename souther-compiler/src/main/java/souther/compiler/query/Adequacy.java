@@ -3654,7 +3654,7 @@ public final class Adequacy {
             List<DeclaredDebt> out = new ArrayList<>();
             for (BorderObligationAssessment debt : BorderObligationAssessment.across(readings,
                     id -> axisOf(id, declarations, symbols, policy))) {
-                TypeSymbol declaredOn = debt.origin().owedToTheDeclaration().orElseThrow();
+                TypeSymbol declaredOn = debt.id().owedToTheDeclaration().orElseThrow();
                 out.add(new DeclaredDebt(debt, declaredOn,
                         read(declarations, declaredOn, symbols, policy).at()));
             }
@@ -3671,16 +3671,16 @@ public final class Adequacy {
         private static String axisOf(souther.compiler.partition.BorderObligationId id,
                                      Map<TypeSymbol, souther.compiler.check.DeclaredBorders> read,
                                      Symbols symbols, souther.compiler.check.ReadingPolicy policy) {
-            TypeSymbol declaredOn = id.origin().owedToTheDeclaration().orElseThrow();
+            TypeSymbol declaredOn = id.owedToTheDeclaration().orElseThrow();
             souther.compiler.check.FieldDomains.Coordinate at =
                     read(read, declaredOn, symbols, policy)
                             // Which line of the declaration this is, asked of the rule. Taken apart
                             // here, a reader would be deciding which rules have a clause and a
                             // conjunct, which is the rule's own answer.
-                            .at(id.origin().declaredLine().orElseThrow());
+                            .at(id.declaredLine().orElseThrow());
             // A clause whose end this could not read from the declaration has no form to print, and
             // the rule's own name is the whole of what there is to call the line.
-            return at == null ? id.origin().named() : written(at);
+            return at == null ? id.named() : written(at);
         }
 
         /** The declaration's own reading of its own rules, kept: it draws as many lines as its
@@ -4110,11 +4110,11 @@ public final class Adequacy {
                                 role.againstTheLine()
                                         ? new ExampleMessage.NoRowIsAtThePointOfTheBorderARuleDrew(
                                                 role.name(), debt.axis(), debt.against(role),
-                                                debt.origin().named())
+                                                debt.id().named())
                                         : new ExampleMessage
                                                 .NoRowIsAtThePointAwayFromTheBorderARuleDrew(
                                                 role.name(), debt.axis(), debt.against(role),
-                                                debt.origin().named());
+                                                debt.id().named());
                         case About.APointOfABorder(var point) ->
                                 point.role().againstTheLine()
                                         ? point.border().origin().isWrittenRatherThanNamed()

@@ -285,11 +285,6 @@ public record BorderObligationAssessment(BorderObligationId id, String axis,
         return met.keySet().stream().map(Reading::behavior).distinct().toList();
     }
 
-    /** The rule that drew the line, as the readings met it. */
-    public souther.compiler.partition.OriginRef origin() {
-        return id.origin();
-    }
-
     /**
      * What one point of the line asks of a row, as a report writes it.
      *

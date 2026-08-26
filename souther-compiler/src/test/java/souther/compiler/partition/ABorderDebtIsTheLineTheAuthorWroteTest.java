@@ -141,6 +141,101 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
                 "and the number the clause was written about does");
     }
 
+    /**
+     * Two readings of one comparison are one debt.
+     *
+     * <p>A non-recursive helper is spliced into every body that calls it, so one guard the author
+     * wrote is read once per call: the readings carry different comparison sites, each is measured
+     * on its own, and the author owes one row for the line. Keyed on the reading they are two debts
+     * that only the merge collecting what each reading saw brings back to one, and which of the two
+     * call sites the surviving debt names then comes down to the order a walk took.
+     *
+     * <p>Built here rather than compiled, because what is being told apart is two readings of one
+     * line at one position: through a model they are merged into one assessment before anything can
+     * be asked of the pair, and the question is what the pair answers.
+     */
+    @Test
+    void twoReadingsOfOneComparisonAreOneDebt() {
+        BoundaryTarget line = aLineAt(100);
+        Border first = Border.at(line, readAt(1), ANYWHERE);
+        Border second = Border.at(line, readAt(5), ANYWHERE);
+
+        assertNotEquals(first.origin(), second.origin(),
+                "two occurrences of the guard, each a reading measured on its own");
+        assertEquals(first.obligation(), second.obligation(),
+                "and one line the author wrote, which is one row to write");
+        assertEquals(BoundaryLine.of(first), BoundaryLine.of(second),
+                "so the two readings fold into one line, and the fold is inside the one debt");
+    }
+
+    /**
+     * A comparison and a bound at one value are two debts.
+     *
+     * <p>The pair that keeps the case above from being satisfied by a debt keyed on the value and
+     * the behavior. Both lines stand at 100 on one carrier and are read at one position; an
+     * {@code invariant} drew one and a comparison in a body drew the other, and either could be
+     * changed without the other.
+     */
+    @Test
+    void aComparisonAndABoundAtOneValueAreTwoDebts() {
+        Border guard = Border.at(aLineAt(100), readAt(1), ANYWHERE);
+        Border bound = Border.at(aLineAt(100),
+                new OriginRef.InvariantOrigin(aClause(), 0, true),
+                new souther.compiler.numeric.NumericDomain.Bounds(
+                        souther.compiler.numeric.Endpoint.inclusive(
+                                souther.compiler.numeric.Count.of(100)), null));
+
+        assertEquals(guard.cut(), bound.cut(), "one value of one quantity, read at one position");
+        assertNotEquals(guard.obligation(), bound.obligation(),
+                "and two rules the author wrote, each owed a row of its own");
+    }
+
+    /** What the rules leave the quantity, where they leave it everything. */
+    private static final souther.compiler.numeric.NumericDomain.Bounds ANYWHERE =
+            new souther.compiler.numeric.NumericDomain.Bounds(null, null);
+
+    /** One position's line at {@code at}, on the carrier a count of whole numbers runs on. */
+    private static BoundaryTarget aLineAt(int at) {
+        souther.compiler.check.Carrier carrier = new souther.compiler.check.Carrier.Whole();
+        AxisId axis = new AxisId("twice", "a.value");
+        return BoundaryTarget.at(
+                new BorderQuantity.OfACoordinate(axis,
+                        new souther.compiler.inputs.NumericTerm.ValueOf(
+                                souther.compiler.inputs.TermPath.of(axis.term())),
+                        souther.compiler.inputs.TermOrders.itself(carrier)),
+                new Level.OnACarrier(carrier, souther.compiler.numeric.Count.of(at)));
+    }
+
+    /**
+     * One reading of one comparison: the same rule and the same place it is written, at the
+     * occurrence the call it was spliced into was numbered.
+     */
+    private static OriginRef readAt(int occurrence) {
+        souther.compiler.check.RuleRef.Comparison rule =
+                new souther.compiler.check.RuleRef.Comparison("twice",
+                        new souther.compiler.types.CoverageOrigin("example.banding", 2, 0,
+                                souther.compiler.types.CoverageConstruct.BINARY));
+        return new OriginRef.ComparisonOrigin(rule,
+                new OriginRef.ComparisonOrigin.Read(
+                        new souther.compiler.coverage.ComparisonOccurrence(occurrence),
+                        new souther.compiler.check.RuleCitation.WrittenAt(
+                                souther.compiler.diag.Citation.of(
+                                        new souther.compiler.diag.SourcePos(15, 16)))),
+                true, true);
+    }
+
+    /** The clause the bound in these tests names, which is only an identity here. */
+    private static souther.compiler.check.RuleRef.Invariant aClause() {
+        return new souther.compiler.check.RuleRef.Invariant(
+                new souther.compiler.check.Clause.Ref(
+                        new souther.compiler.check.Clause.Id(
+                                souther.compiler.types.TypeSymbols.declared(
+                                        new souther.compiler.types.TypeKey("example.banding",
+                                                "Amount")), 0),
+                        java.util.Optional.of(
+                                new souther.compiler.check.ClauseName("cap"))));
+    }
+
     /** One clause bounding two numbers of the declaration it is written on. */
     private static final String TWO_NUMBERS = """
             module example.numbers

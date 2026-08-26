@@ -74,7 +74,7 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
      * asked for once per position of every behavior carrying the type (issue #1062).
      */
     public BorderObligationId obligation() {
-        return new BorderObligationId(origin, cut.at());
+        return new BorderObligationId(origin.authoredLine(), cut.at());
     }
 
     /** Where the line is, as a report names it. Not what any one of its points asks for: that is
@@ -617,10 +617,14 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
      */
     private static boolean ordersAroundTheCut(OriginRef origin) {
         return switch (origin) {
-            case OriginRef.ComparisonOrigin g -> !g.singles();
-            case OriginRef.EnsuresOrigin e -> !e.singles();
-            case OriginRef.NarrowedOrigin n -> ordersAroundTheCut(n.bound());
+            // Nothing outside a bound can be constructed, so a bound has no far side to order
+            // against however its own values run. Which is not what `singles` says of it, and
+            // reading the two as one question is why this is asked here and not answered by the
+            // rule.
             case OriginRef.InvariantOrigin _ -> false;
+            case OriginRef.NarrowedOrigin n -> ordersAroundTheCut(n.bound());
+            case OriginRef.ComparisonOrigin _, OriginRef.EnsuresOrigin _ ->
+                    !origin.lineFacts().singles();
         };
     }
 
@@ -640,21 +644,11 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
 
     /** Whether the threshold's own value satisfies the rule that drew the line. */
     private static boolean holdsAtTheValue(OriginRef origin) {
-        return switch (origin) {
-            case OriginRef.ComparisonOrigin g -> g.holdsAtTheValue();
-            case OriginRef.EnsuresOrigin e -> e.holdsAtTheValue();
-            case OriginRef.InvariantOrigin i -> i.holdsAtTheValue();
-            case OriginRef.NarrowedOrigin n -> holdsAtTheValue(n.bound());
-        };
+        return origin.lineFacts().holdsAtTheValue();
     }
 
     /** Which side of the line the threshold's own value belongs to. */
     private static boolean valueBelongsBelow(OriginRef origin) {
-        return switch (origin) {
-            case OriginRef.ComparisonOrigin g -> g.valueBelongsBelow();
-            case OriginRef.EnsuresOrigin e -> e.valueBelongsBelow();
-            case OriginRef.InvariantOrigin _ -> false;
-            case OriginRef.NarrowedOrigin n -> valueBelongsBelow(n.bound());
-        };
+        return origin.lineFacts().valueBelongsBelow();
     }
 }
