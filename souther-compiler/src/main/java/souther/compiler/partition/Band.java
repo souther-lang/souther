@@ -36,13 +36,12 @@ public record Band(BandEnd lower, BandEnd upper) {
      *
      * @param inward which way the run lies from this end
      */
-    public static BandEnd endAt(Parting parted, Bound leaves, Towards inward) {
+    public static BandEnd endAt(Seam parted, Bound leaves, Towards inward) {
         if (parted == null) {
             return leaves == null ? new BandEnd.AtOrderEnd(inward.opposite())
                     : new BandEnd.AtDomain(leaves);
         }
-        return new BandEnd.AtParting(parted,
-                tighter(atTheLine(parted.geometry(), inward), leaves, inward));
+        return new BandEnd.AtParting(parted, tighter(atTheLine(parted, inward), leaves, inward));
     }
 
     /**
@@ -84,7 +83,7 @@ public record Band(BandEnd lower, BandEnd upper) {
 
     private static BandEnd canonical(BandEnd end) {
         return switch (end) {
-            case BandEnd.AtParting(Parting parted, Bound reaches) ->
+            case BandEnd.AtParting(Seam parted, Bound reaches) ->
                     new BandEnd.AtParting(parted.canonical(), reaches.canonical());
             case BandEnd.AtDomain(Bound reaches) -> new BandEnd.AtDomain(reaches.canonical());
             case BandEnd.AtOrderEnd order -> order;
@@ -120,7 +119,7 @@ public record Band(BandEnd lower, BandEnd upper) {
     private static souther.compiler.numeric.Endpoint lineAt(
             BandEnd end, Towards inward, souther.compiler.numeric.Endpoint leaves) {
         return switch (end) {
-            case BandEnd.AtParting parted -> asAnEnd(parted.parting().geometry(), inward);
+            case BandEnd.AtParting parted -> asAnEnd(parted.seam(), inward);
             case BandEnd.AtDomain domain -> new souther.compiler.numeric.Endpoint(
                     placeOf(valueOrRefuse(domain.reaches())), domain.reaches().inclusive());
             case BandEnd.AtOrderEnd _ -> leaves;
@@ -374,8 +373,8 @@ public record Band(BandEnd lower, BandEnd upper) {
     private static BandEnd mappedBy(BandEnd end, Towards inward,
                                     java.util.function.UnaryOperator<Level> onto) {
         return switch (end) {
-            case BandEnd.AtParting(Parting parted, Bound reaches) -> {
-                Seam moved = parted.geometry().mappedBy(onto);
+            case BandEnd.AtParting(Seam parted, Bound reaches) -> {
+                Seam moved = parted.mappedBy(onto);
                 if (moved == null) {
                     yield null;
                 }
@@ -387,10 +386,9 @@ public record Band(BandEnd lower, BandEnd upper) {
                 // reach is the one built from the line, and not whether the two are one place. A
                 // reach that came off the rules' end is at the same place under another spelling as
                 // often as not, and either answer takes the same branch.
-                yield new BandEnd.AtParting(new Parting(moved, parted.alternatives()),
-                        reaches.equals(atTheLine(parted.geometry(), inward))
-                                ? atTheLine(moved, inward)
-                                : tighter(atTheLine(moved, inward), mapped(reaches, onto), inward));
+                yield new BandEnd.AtParting(moved, reaches.equals(atTheLine(parted, inward))
+                        ? atTheLine(moved, inward)
+                        : tighter(atTheLine(moved, inward), mapped(reaches, onto), inward));
             }
             case BandEnd.AtDomain(Bound reaches) -> new BandEnd.AtDomain(mapped(reaches, onto));
             case BandEnd.AtOrderEnd order -> order;

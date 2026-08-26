@@ -9,6 +9,9 @@ import souther.compiler.numeric.Towards;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The runs of values several rules leave one quantity.
@@ -52,6 +55,21 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
                         low == null ? null : Bound.at(at(low), true),
                         high == null ? null : Bound.at(at(high), true))
                 .bands().stream().map(Band::key).toList();
+    }
+
+    /**
+     * A run parted at one end reaches somewhere on that side, and is refused without it.
+     *
+     * <p>A line gives the run beside it an end whether or not the quantity has a value there, so
+     * there is no run parted here that reaches nowhere. Left open, such an end would answer where
+     * the run reaches with the same nothing an end of the order does, and everything that reads a
+     * run as a set of values would take it for one that runs on.
+     */
+    @Test
+    void aRunPartedAtOneEndReachesSomewhereOnThatSide() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new BandEnd.AtParting(upTo("10"), null),
+                "a parted end without a reach is not a state a run can be in");
     }
 
     /** Each place with a line of its own against it, these being tests about where the values part
@@ -184,6 +202,35 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
                 "and each of the two lines is against that place");
         assertEquals(List.of("|10", "11|"), arranged.bands().stream().map(Band::key).toList(),
                 "so there are two runs and not three");
+    }
+
+    /**
+     * A second line at one place leaves what a row is asked for exactly as it was.
+     *
+     * <p>Which is the whole of why the lines against a place are the arrangement's answer and not
+     * the run's. A body comparing against a number a declaration already stops the quantity at adds
+     * a line and moves nothing: the values part where they parted, and the run beside it reaches
+     * where it reached. Carried into the run, that redundant rule would be inside every value
+     * saying what is asked of a row — and two readings asking one thing would come out asking two,
+     * which is exactly what the check for two readings of one line disagreeing is about.
+     */
+    @Test
+    void aSecondLineAtOnePlaceDoesNotChangeWhatARowIsAskedFor() {
+        QuantityArrangement one = QuantityArrangement.of(NUMBERS,
+                List.of(Parting.by(upTo("10"), aLine(0))));
+        QuantityArrangement also = QuantityArrangement.of(NUMBERS,
+                List.of(Parting.by(upTo("10"), aLine(0)), Parting.by(upTo("10"), aLine(1))));
+
+        assertNotEquals(one.partings(), also.partings(),
+                "the two arrangements do differ, and this is what they differ in");
+        assertEquals(one.bands(), also.bands(), "and the runs they leave are the same runs");
+        assertTrue(run(one).sameAs(run(also)),
+                "so one row answers both, and the second line has not made a second demand");
+    }
+
+    /** The run above the line, as a border's point away from it asks for it. */
+    private static Criterion run(QuantityArrangement arranged) {
+        return new Criterion.Within(arranged.bands().get(1), null, Towards.ABOVE);
     }
 
     /** And a rule read twice is one rule, which is what says how many runs a row answers for. */

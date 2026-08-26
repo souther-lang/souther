@@ -27,16 +27,24 @@ public sealed interface BandEnd {
     /**
      * A rule parts the values here.
      *
-     * @param parting where they part and which lines the model wrote there, which is what the run
-     *                is named after and what a row inside it is owed to
+     * <p><b>Where they part, and not which rules put a line there.</b> A run is what a border's
+     * point away from the line asks a row for, and what a row has to do is the same whether one rule
+     * wrote the line beside it or three did. Which rules did is the arrangement's
+     * ({@link Parting#alternatives}), where a reader asking who owes a row inside the run finds it —
+     * held here as well, it would be inside every value that says what is asked of a row, and two
+     * readings asking one thing would come out asking two.
+     *
+     * @param seam    where the values part, which is what the run is named after
      * @param reaches how far the run gets on this side, which is the line or what the rules leave,
      *                whichever is the tighter
      */
-    record AtParting(Parting parting, Bound reaches) implements BandEnd {
+    record AtParting(Seam seam, Bound reaches) implements BandEnd {
 
         public AtParting {
-            if (parting == null) {
-                throw new IllegalArgumentException("a run parted here is parted by something");
+            if (seam == null || reaches == null) {
+                throw new IllegalArgumentException(
+                        "a run parted here is parted somewhere and reaches somewhere: "
+                                + seam + " " + reaches);
             }
         }
     }
@@ -83,9 +91,8 @@ public sealed interface BandEnd {
     }
 
     /** Where the values part here, or null where nothing parts them and the run stops for another
-     *  reason. The quantity's own answer: which lines the model wrote there is the shape's
-     *  ({@link AtParting#parting}), and nothing asks it until a run is owed to one of them. */
+     *  reason. */
     default Seam seam() {
-        return this instanceof AtParting parted ? parted.parting().geometry() : null;
+        return this instanceof AtParting parted ? parted.seam() : null;
     }
 }

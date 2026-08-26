@@ -90,8 +90,12 @@ public record QuantityArrangement(List<Parting> partings, List<Band> bands) {
     /** The run between two of the places the values part, held to what the rules leave either
      *  side. */
     private static Band runBetween(Parting under, Parting over, Bound from, Bound to) {
-        return new Band(Band.endAt(under, from, Towards.ABOVE),
-                Band.endAt(over, to, Towards.BELOW));
+        // The places and not the lines against them. What a run asks a row for is the same however
+        // many rules wrote a line where it stops, and which of them did is this arrangement's answer
+        // to a different question ({@link Parting#alternatives}) — carried into the run, it would be
+        // inside every value that says what is asked of a row.
+        return new Band(Band.endAt(under == null ? null : under.geometry(), from, Towards.ABOVE),
+                Band.endAt(over == null ? null : over.geometry(), to, Towards.BELOW));
     }
 
     /**

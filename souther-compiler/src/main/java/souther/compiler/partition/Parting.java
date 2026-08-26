@@ -69,9 +69,4 @@ public record Parting(Seam geometry, List<AuthoredLine> alternatives) {
     public String key() {
         return geometry.key();
     }
-
-    /** The same place with every level written the one way, for an identity to be built from. */
-    public Parting canonical() {
-        return new Parting(geometry.canonical(), alternatives);
-    }
 }
