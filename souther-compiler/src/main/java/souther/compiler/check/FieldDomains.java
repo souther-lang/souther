@@ -1091,8 +1091,13 @@ public final class FieldDomains {
      */
     public NarrowedBounds at(String path) {
         NumericDomain.Bounds here = byField.get(path);
+        // The ends now and the names when they are asked for. Answering who holds an end reads this
+        // declaration again once per candidate that wrote a relation about the coordinate, and the
+        // callers standing a fixture in a field's range ask a field at a time and read only the
+        // ends.
         return here == null ? NarrowedBounds.NOTHING
-                : new NarrowedBounds(here, narrowedBy(path, true), narrowedBy(path, false));
+                : NarrowedBounds.deferred(here,
+                        () -> narrowedBy(path, true), () -> narrowedBy(path, false));
     }
 
     /**

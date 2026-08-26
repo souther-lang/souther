@@ -6,6 +6,8 @@ import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
+import java.util.function.Supplier;
 
 /**
  * Where the rules of one value leave a coordinate, and which declarations are holding each end.
@@ -22,31 +24,65 @@ import java.util.List;
  * no reading here to say whether that end is the one they are about. Taking them out of this to
  * carry across to a reading of another range is a decision, and it is made where that reading is.
  *
- * @param bounds where the coordinate stops either way, or null where nothing stops it at all
- * @param minBy  the declarations holding {@code bounds.min()}, empty where there is no such end
- * @param maxBy  the same at {@code bounds.max()}
+ * <p><b>The names are worked out when they are asked for.</b> Reading a declaration again without
+ * one declaration's clauses is what answers who holds an end, and it is done once per candidate and
+ * per side — while where the coordinate stops is a lookup. The two are not the same price, and a
+ * caller standing a fixture in a coordinate's range wants only the cheap half. Nor is this a saving
+ * made against the meaning: an end that loses a meet has nobody worth naming, and working the names
+ * out before the ends are met is doing the arithmetic in the order that throws the answer away.
  */
-public record NarrowedBounds(NumericDomain.Bounds bounds,
-                             List<TypeSymbol.AtModule> minBy,
-                             List<TypeSymbol.AtModule> maxBy) {
+public final class NarrowedBounds {
 
     /** A coordinate the rules leave everything, which nobody is holding either way. */
-    public static final NarrowedBounds NOTHING = new NarrowedBounds(null, List.of(), List.of());
+    public static final NarrowedBounds NOTHING = new NarrowedBounds(null, Held.NONE, Held.NONE);
 
-    public NarrowedBounds {
-        minBy = canonical(minBy);
-        maxBy = canonical(maxBy);
-        // An absent end is not one a declaration moved. The rules leaving a coordinate everything on
-        // one side is not a state any clause brought about, and a name held against it would be a
-        // reader's licence to report an infinity as narrowed by somebody.
-        if (endOf(bounds, true) == null && !minBy.isEmpty()) {
-            throw new IllegalArgumentException(
-                    "no lower end to hold, and " + minBy + " named as holding it");
-        }
-        if (endOf(bounds, false) == null && !maxBy.isEmpty()) {
-            throw new IllegalArgumentException(
-                    "no upper end to hold, and " + maxBy + " named as holding it");
-        }
+    private final NumericDomain.Bounds bounds;
+    private final Held minBy;
+    private final Held maxBy;
+
+    private NarrowedBounds(NumericDomain.Bounds bounds, Held minBy, Held maxBy) {
+        this.bounds = bounds;
+        this.minBy = minBy;
+        this.maxBy = maxBy;
+    }
+
+    /** These ends, held by these declarations. */
+    public NarrowedBounds(NumericDomain.Bounds bounds, List<TypeSymbol.AtModule> minBy,
+                          List<TypeSymbol.AtModule> maxBy) {
+        this(bounds, held(bounds, true, minBy), held(bounds, false, maxBy));
+    }
+
+    /**
+     * The same, with the names left to be worked out.
+     *
+     * <p>Not offered outside this reading. A caller that could hand over work to be done later is a
+     * caller deciding when a declaration is read, which is this package's answer to give.
+     *
+     * <p>A side with no end holds nobody whatever the work would have said, so that side is settled
+     * here and the work is never asked for. Which is what keeps "an absent end is nobody's" a
+     * statement about this value rather than a hope about what a supplier will return.
+     */
+    static NarrowedBounds deferred(NumericDomain.Bounds bounds,
+                                   Supplier<List<TypeSymbol.AtModule>> minBy,
+                                   Supplier<List<TypeSymbol.AtModule>> maxBy) {
+        return new NarrowedBounds(bounds,
+                endOf(bounds, true) == null ? Held.NONE : new Held(minBy),
+                endOf(bounds, false) == null ? Held.NONE : new Held(maxBy));
+    }
+
+    /** Where the coordinate stops either way, or null where nothing stops it at all. */
+    public NumericDomain.Bounds bounds() {
+        return bounds;
+    }
+
+    /** The declarations holding {@code bounds().min()}, empty where there is no such end. */
+    public List<TypeSymbol.AtModule> minBy() {
+        return minBy.names();
+    }
+
+    /** The same at {@code bounds().max()}. */
+    public List<TypeSymbol.AtModule> maxBy() {
+        return maxBy.names();
     }
 
     /**
@@ -67,6 +103,9 @@ public record NarrowedBounds(NumericDomain.Bounds bounds,
      * written twice. Asked with a derived equality, the first pair comes back as one — and the
      * second as two, so which reading is holding the end would turn on which of them spelled the
      * number the way the meet happened to keep.
+     *
+     * <p>Which end survives is settled here; who is holding it is not. The reading that lost is
+     * never asked on that side, and knowing which one lost is what the ends had to be met for.
      */
     public NarrowedBounds meet(NarrowedBounds other) {
         if (other == null) {
@@ -78,22 +117,30 @@ public record NarrowedBounds(NumericDomain.Bounds bounds,
     }
 
     /** Which of the two readings' names survive at the end {@code met} leaves on this side. */
-    private List<TypeSymbol.AtModule> holding(NumericDomain.Bounds met, NarrowedBounds other,
-                                              boolean lower) {
+    private Held holding(NumericDomain.Bounds met, NarrowedBounds other, boolean lower) {
         Endpoint end = endOf(met, lower);
         if (end == null) {
-            // Asked before either reading is compared, so that two readings with no end on this side
-            // are not read as agreeing about one. There is no end here for anybody to be holding.
-            return List.of();
+            // Settled before either reading is compared, so that two readings with no end on this
+            // side are not read as agreeing about one. There is no end here for anybody to hold.
+            return Held.NONE;
         }
-        List<TypeSymbol.AtModule> out = new ArrayList<>();
-        if (end.sameAs(endOf(bounds, lower))) {
-            out.addAll(lower ? minBy : maxBy);
+        boolean mine = end.sameAs(endOf(bounds, lower));
+        boolean theirs = end.sameAs(endOf(other.bounds, lower));
+        if (!mine) {
+            return theirs ? other.side(lower) : Held.NONE;
         }
-        if (end.sameAs(endOf(other.bounds, lower))) {
-            out.addAll(lower ? other.minBy : other.maxBy);
+        if (!theirs) {
+            return side(lower);
         }
-        return out;
+        return new Held(() -> {
+            List<TypeSymbol.AtModule> out = new ArrayList<>(side(lower).names());
+            out.addAll(other.side(lower).names());
+            return out;
+        });
+    }
+
+    private Held side(boolean lower) {
+        return lower ? minBy : maxBy;
     }
 
     /** Where these ends stop on one side, or null where nothing does. */
@@ -101,14 +148,86 @@ public record NarrowedBounds(NumericDomain.Bounds bounds,
         return bounds == null ? null : lower ? bounds.min() : bounds.max();
     }
 
+    /** Names written against an end, refused where there is no end to hold. */
+    private static Held held(NumericDomain.Bounds bounds, boolean lower,
+                             List<TypeSymbol.AtModule> names) {
+        if (endOf(bounds, lower) != null) {
+            return new Held(names);
+        }
+        // An absent end is not one a declaration moved. The rules leaving a coordinate everything on
+        // one side is not a state any clause brought about, and a name held against it would be a
+        // reader's licence to report an infinity as narrowed by somebody.
+        if (!names.isEmpty()) {
+            throw new IllegalArgumentException("no " + (lower ? "lower" : "upper")
+                    + " end to hold, and " + names + " named as holding it");
+        }
+        return Held.NONE;
+    }
+
     /**
-     * The declarations in one order and each of them once.
+     * Two of these are one where the same declarations hold the same ends.
      *
-     * <p>Several of these are one answer, and an order read off the walk that collected them would
-     * make two readings of one edge into two answers. The same order {@link FieldDomains} settles a
-     * single reading's names in, because these are the same names met.
+     * <p>Which asks for the names, so comparing two of these does the work they were left to do
+     * later. A caller comparing what a coordinate came to has already decided to read all of it.
      */
-    private static List<TypeSymbol.AtModule> canonical(List<TypeSymbol.AtModule> found) {
-        return found.stream().distinct().sorted().toList();
+    @Override
+    public boolean equals(Object other) {
+        return other instanceof NarrowedBounds it && Objects.equals(bounds, it.bounds)
+                && minBy().equals(it.minBy()) && maxBy().equals(it.maxBy());
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(bounds, minBy(), maxBy());
+    }
+
+    @Override
+    public String toString() {
+        return "NarrowedBounds[bounds=" + bounds + ", minBy=" + minBy() + ", maxBy=" + maxBy() + "]";
+    }
+
+    /**
+     * The declarations holding one end, worked out at most once.
+     *
+     * <p>Kept rather than worked out where the value is made, because working them out reads the
+     * declaration again once per candidate and most readers of a coordinate's range never ask. What
+     * is kept afterwards is the answer and not the work, so one of these answers the same thing
+     * however often it is asked and whoever asks first pays.
+     */
+    private static final class Held {
+
+        /** An end nobody is holding, which is what a side with no end has and what a reading that
+         *  relates nothing arrives at. */
+        static final Held NONE = new Held(List.of());
+
+        private Supplier<List<TypeSymbol.AtModule>> work;
+        private List<TypeSymbol.AtModule> found;
+
+        Held(List<TypeSymbol.AtModule> found) {
+            this.found = canonical(found);
+        }
+
+        Held(Supplier<List<TypeSymbol.AtModule>> work) {
+            this.work = work;
+        }
+
+        synchronized List<TypeSymbol.AtModule> names() {
+            if (found == null) {
+                found = canonical(work.get());
+                work = null;
+            }
+            return found;
+        }
+
+        /**
+         * The declarations in one order and each of them once.
+         *
+         * <p>Several of these are one answer, and an order read off the walk that collected them
+         * would make two readings of one edge into two answers. The same order {@link FieldDomains}
+         * settles a single reading's names in, because these are the same names met.
+         */
+        private static List<TypeSymbol.AtModule> canonical(List<TypeSymbol.AtModule> found) {
+            return found.stream().distinct().sorted().toList();
+        }
     }
 }
