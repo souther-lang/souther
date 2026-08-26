@@ -316,6 +316,14 @@ public final class InputDomain {
      */
     public PlacementFiling file(PlacementSeed seed) {
         Followed followed = follow(seed.address().root(), seed.address().key());
+        // A rule wrote this name, and a rule names a location only where the language reads one —
+        // so a place this reading has no such name under is this reading disagreeing with the
+        // language. Not a limitation to tell an author about, and not something to hand on as one.
+        if (!followed.unnamed().isEmpty()) {
+            throw new IllegalStateException(
+                    "`" + seed.by() + "` names " + seed.address() + ", and this reading puts no "
+                            + "such name where it looked: " + followed.unnamed());
+        }
         List<PlacementOutcome> outcomes = new ArrayList<>();
         followed.reached().forEach(each -> outcomes.add(
                 new PlacementOutcome.Filed(new PositionId(each))));
@@ -337,8 +345,18 @@ public final class InputDomain {
 
     private static final Following FOLLOWED = new Following();
 
-    /** Where following a name got to, and what became of it everywhere it did not get to. */
-    private record Followed(List<TermPath> reached, List<PlacementOutcome> otherwise) {}
+    /**
+     * Where following a name got to, what became of it everywhere it did not, and the places it
+     * reached that this reading has no such name under.
+     *
+     * <p>The third is said and not judged. A name nobody wrote that names nothing is a question with
+     * the answer "nowhere"; the same name written by a rule is this reading disagreeing with the
+     * language about what may be written, since a rule names a location only where the language
+     * reads one. Which of the two it is turns on who asked, so the walk says what it saw and the
+     * caller that knows decides.
+     */
+    private record Followed(List<TermPath> reached, List<PlacementOutcome> otherwise,
+                            List<String> unnamed) {}
 
     /**
      * Follow a name from the value it was written in, a step at a time.
@@ -350,6 +368,7 @@ public final class InputDomain {
      */
     private Followed follow(TermPath root, String named) {
         List<PlacementOutcome> otherwise = new ArrayList<>();
+        List<String> unnamed = new ArrayList<>();
         List<TermPath> frontier = List.of(root);
         // The value's own name is at no step of its own, and a name of no steps is not a step
         // called nothing.
@@ -379,22 +398,38 @@ public final class InputDomain {
                 TermPath under = at.then(step);
                 if (byPath.containsKey(under)) {
                     next.add(under);
+                    continue;
+                }
+                PlacementOutcome.Reason why = whyNothingAt(at, step);
+                if (why != null) {
+                    otherwise.add(new PlacementOutcome.Unresolved(why));
                 } else {
-                    otherwise.add(new PlacementOutcome.Unresolved(whyNothingAt(at, step)));
+                    // Nothing of that name, and the reading did not stop here. Whether that is a
+                    // question or a contradiction turns on whether a rule wrote the name, which
+                    // this does not know — so it is said and the caller that knows decides.
+                    unnamed.add(at + " has no `" + step + "` under it: " + (byPath.get(at) == null
+                            ? "no position there" : byPath.get(at).structure()));
                 }
             }
             frontier = next;
         }
-        return new Followed(List.copyOf(frontier), List.copyOf(otherwise));
+        return new Followed(List.copyOf(frontier), List.copyOf(otherwise), List.copyOf(unnamed));
     }
 
     /**
-     * What the reading was left with where a name stopped.
+     * What the reading was left with where a name stopped, which is only ever that it stopped.
      *
      * <p>The position's own answer and not a second opinion about it. A reading that stopped says so
      * where it stopped ({@link StructuralInspection.Continuation.Blocked}), and that is what an
-     * author is owed; where it did not stop, what is left is that nothing of the name is there, which
-     * says that and nothing more.
+     * author is owed.
+     *
+     * <p><b>There is no other answer.</b> A rule names a location only where the language reads one
+     * there, and wherever the language reads one this reading has a position or a crossing for it: a
+     * record's fields are its positions, a name a sum's cases share crosses into them, and a field of
+     * what a sequence, an option or a map holds is not readable without opening it. So a name that
+     * gets here having reached a position this reading did not stop at is this reading disagreeing
+     * with the language about what may be written — which is not a limitation an author can be told
+     * about, and not something to hand on as one.
      */
     private PlacementOutcome.Reason whyNothingAt(TermPath at, String step) {
         Position position = byPath.get(at);
@@ -405,7 +440,7 @@ public final class InputDomain {
             return new PlacementOutcome.Reason.TheReadingStoppedThere(
                     new PositionId(at), blocked.why());
         }
-        return new PlacementOutcome.Reason.NothingOfThatNameThere(new PositionId(at), step);
+        return null;
     }
 
     /**

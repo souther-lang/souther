@@ -99,8 +99,6 @@ class NoRuleIsPlacedWhereNothingAccountsForItTest {
         return switch (why) {
             case PlacementOutcome.Reason.TheReadingStoppedThere it ->
                     "the reading stopped there: " + it.why().getClass().getSimpleName();
-            case PlacementOutcome.Reason.NothingOfThatNameThere it ->
-                    "nothing of that name there: " + it.named();
         };
     }
 

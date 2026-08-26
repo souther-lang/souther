@@ -64,7 +64,15 @@ public sealed interface PlacementOutcome {
         }
     }
 
-    /** Why a name reached no position. */
+    /**
+     * Why a name reached no position.
+     *
+     * <p>One, and one is the whole of it. A rule names a location only where the language reads one
+     * there, and wherever the language reads one this reading has a position or a crossing — so the
+     * only way a name reaches nowhere is that the reading stopped before it got there. A name the
+     * reading has no position for and did not stop at is this compiler disagreeing with itself, and
+     * it is refused where it arises rather than carried as a second answer for a reader to weigh.
+     */
     sealed interface Reason {
 
         /**
@@ -87,25 +95,6 @@ public sealed interface PlacementOutcome {
             }
         }
 
-        /**
-         * The reading reached the position the name was followed from, went on down, and put nothing
-         * of that name anywhere.
-         *
-         * <p>What is left when nothing else answered, and it says that and only that. A name a rule
-         * wrote that no position answers to is a rule this compiler cannot hold against any row, and
-         * an author is owed the name rather than a guess about why it is not there.
-         *
-         * @param at    the last position the name was followed to
-         * @param named the step of the name that reached nothing
-         */
-        record NothingOfThatNameThere(PositionId at, String named) implements Reason {
-
-            public NothingOfThatNameThere {
-                if (at == null || named == null) {
-                    throw new IllegalArgumentException("a name that is nowhere is still a name");
-                }
-            }
-        }
 
     }
 }
