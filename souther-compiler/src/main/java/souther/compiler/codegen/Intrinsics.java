@@ -200,8 +200,13 @@ final class Intrinsics {
     }
 
     /** The JVM type a value takes at a runtime-method boundary: primitives unboxed, containers as
-     * their raw interface, everything else (references, type variables, tuples) as {@code Object}. */
-    private static ClassDesc boundaryDesc(Type t) {
+     * their raw interface, a function as an {@code Fn}, everything else (references, type variables,
+     * tuples) as {@code Object}.
+     *
+     * <p>The one reading of a declared type this backend has. Read by the test that holds the ABI
+     * this derives against the runtime's own methods, which asks the question with the same reading
+     * the emitters use — a second one written there would be a second answer to agree with. */
+    static ClassDesc boundaryDesc(Type t) {
         if (t instanceof Type.Prim p) {
             return switch (p) {
                 case INT -> ConstantDescs.CD_long;
