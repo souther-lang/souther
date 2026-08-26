@@ -149,16 +149,6 @@ public record QuantityArrangement(List<Seam> seams, List<Band> bands) {
         if (first != null && last != null && space.compare(first, last) > 0) {
             return;
         }
-        // And a run between two ends at one place that at least one of them stops short of. Asked
-        // of the values alone, such a run has none to compare — an end with no first value names
-        // nothing — and it was kept as a run holding whatever lies strictly between a place and
-        // itself, which is a class an author would be told to write a row for and could not.
-        if (band.under() == null && band.over() == null
-                && band.from() != null && band.to() != null
-                && band.from().at().compareTo(band.to().at()) == 0
-                && !(band.from().inclusive() && band.to().inclusive())) {
-            return;
-        }
         bands.add(band);
     }
 

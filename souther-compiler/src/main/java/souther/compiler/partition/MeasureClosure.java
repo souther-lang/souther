@@ -146,6 +146,9 @@ public final class MeasureClosure {
      * is the second bookkeeping this type exists to prevent.
      *
      * @param axes    every position the reading kept, measured or not
+     * @param lines   the borders it drew, by the position they are on. Here so that a conclusion
+     *                about the reading is drawn from what it produced beside what it found, and not
+     *                from the gaps alone — see {@link #everyLineWasDrawn}
      * @param refused the rules of the model this reading set aside, each from the reader that did.
      *                Asked which measures it leaves short rather than counted: a comparison relating
      *                two positions is set aside by what it says and not by anything missing here,

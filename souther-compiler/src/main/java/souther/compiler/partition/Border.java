@@ -109,12 +109,16 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
     /**
      * The border a rule drew.
      *
-     * <p>Total. Whether the quantity reaches the line at all is {@link #reaches}, asked before this
-     * by whoever holds the rule, and a caller here has already had that answer — so there is no
-     * second reading of it and no way for one to come back empty. It used to be answered twice, and
-     * the answer here was a null the two callers dropped without a word: a rule of the model went
-     * unmeasured, nothing recorded that it had, and the measure came back saying the behavior's
-     * rules draw no line anywhere (issue #1079).
+     * <p>Total, and never null. Whether the quantity reaches the line is settled before this and by
+     * two different things: a comparison is asked through {@link #reaches} where its rule is read,
+     * and comes here only where the answer was yes ({@code ComparisonAssessment.OutsideTheDomain});
+     * a bound is not asked at all, because its line is an end of what it leaves and so is never
+     * outside it. The check below holds the second of those, which is an invariant of this compiler
+     * rather than anything a model states.
+     *
+     * <p>It used to be a third reading of the same question, answered with a null the two callers
+     * dropped without a word: a rule of the model went unmeasured, nothing recorded that it had, and
+     * the measure came back saying the behavior's rules draw no line anywhere (issue #1079).
      *
      * <p><b>Where the rule stops is not where a row is written.</b> The two are one value on a
      * carrier that steps, because a strict end is moved onto the value it leaves before it ever gets

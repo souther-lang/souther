@@ -221,10 +221,7 @@ public record Band(Seam under, Seam over, Bound from, Bound to) {
         if (end == null) {
             return "";
         }
-        Level at = end.at().asALevelOfTheQuantity();
-        if (at == null) {
-            return "";
-        }
+        Level at = valueOrRefuse(end);
         return side == Towards.ABOVE
                 ? of.writtenAt(at) + (end.inclusive() ? " <= " : " < ")
                 : (end.inclusive() ? " <= " : " < ") + of.writtenAt(at);
@@ -294,11 +291,25 @@ public record Band(Seam under, Seam over, Bound from, Bound to) {
     /** An end the rules leave, read on another order. Whether the run keeps the place it stops at
      *  is the end's own and does not move with it. */
     private static Bound mapped(Bound end, java.util.function.UnaryOperator<Level> onto) {
-        if (end == null) {
-            return null;
-        }
+        return end == null ? null : Bound.at(onto.apply(valueOrRefuse(end)), end.inclusive());
+    }
+
+    /**
+     * Where an end the rules leave stands, as a value of the quantity.
+     *
+     * <p>Always one. Such an end comes off a bound the rules wrote about the quantity itself, so it
+     * is at a level of it — unlike a line, which a rule may draw at a place the quantity stands at
+     * no value of ({@code 3 * d <= 1} cuts at a third). A place with no value has an answer where a
+     * line has one, and it has none here: there is no seam to name it by. So it is refused rather
+     * than written as no end at all, which would leave the run reaching past what the rules leave.
+     */
+    private static Level valueOrRefuse(Bound end) {
         Level at = end.at().asALevelOfTheQuantity();
-        return at == null ? null : Bound.at(onto.apply(at), end.inclusive());
+        if (at == null) {
+            throw new IllegalStateException(
+                    "an end the rules leave, at no value of the quantity: " + end);
+        }
+        return at;
     }
 
     /**
