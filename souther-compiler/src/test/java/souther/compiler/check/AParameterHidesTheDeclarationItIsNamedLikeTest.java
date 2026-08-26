@@ -5,6 +5,8 @@ import souther.compiler.Compiler;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.frontend.CstFrontend;
+import souther.compiler.types.ReachName;
+import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
 
@@ -51,25 +53,34 @@ class AParameterHidesTheDeclarationItIsNamedLikeTest {
         return HelperTable.of(resolved, Map.of(), InliningPolicy.FULL, DefaultStdlib.get());
     }
 
+    /** How {@code demo} reaches a helper of its own, which is bare. */
+    private static ReachName own(String name) {
+        return new ReachName.Bare(new ValueName.Helper("demo", name));
+    }
+
+    /** And how it reaches the library's fold, which is under the alias the library publishes. */
+    private static final ReachName FOLD_FROM =
+            new ReachName.OfLibrary(ValueName.Stdlib.operation("List", "foldFrom"));
+
     @Test
     void aHiddenNameReachesNothingAndTheOthersAreUntouched() {
         HelperTable table = tableOf(DECLARES_STEP);
 
-        assertNotNull(table.reached("step"), "the module declares it");
-        assertNotNull(table.reached("List.foldFrom"), "and the library declares this");
+        assertNotNull(table.reached(own("step")), "the module declares it");
+        assertNotNull(table.reached(FOLD_FROM), "and the library declares this");
 
-        HelperTable inside = table.hiding(List.of("step"));
+        HelperTable inside = table.hiding(List.of(own("step")));
 
-        assertNull(inside.reached("step"), "a parameter named like it hides it");
-        assertNotNull(inside.reached("List.foldFrom"), "and hides nothing else");
-        assertNotNull(table.reached("step"), "the table it was taken from is unchanged");
+        assertNull(inside.reached(own("step")), "a parameter named like it hides it");
+        assertNotNull(inside.reached(FOLD_FROM), "and hides nothing else");
+        assertNotNull(table.reached(own("step")), "the table it was taken from is unchanged");
     }
 
     @Test
     void hidingANameNothingReachesChangesNothing() {
         HelperTable table = tableOf(DECLARES_STEP);
 
-        assertTrue(table.hiding(List.of("nobodyWroteThis")) == table,
+        assertTrue(table.hiding(List.of(own("nobodyWroteThis"))) == table,
                 "a table narrowed by nothing is the table it was");
     }
 

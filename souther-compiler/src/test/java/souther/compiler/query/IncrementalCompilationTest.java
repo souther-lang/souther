@@ -229,15 +229,15 @@ class IncrementalCompilationTest {
     @Test
     void editingOneBodyExpandsThatBodyAndNotTheOnesBesideIt() {
         Compilation c = orders(ORDERS);
-        Answer<?> twice = c.db().ask(new Bodies.LoweredBody("shop.orders", "twice"));
-        Answer<?> thrice = c.db().ask(new Bodies.LoweredBody("shop.orders", "thrice"));
+        Answer<?> twice = c.db().ask(new Bodies.LoweredBody("shop.orders", new souther.compiler.ast.DefinitionName("twice")));
+        Answer<?> thrice = c.db().ask(new Bodies.LoweredBody("shop.orders", new souther.compiler.ast.DefinitionName("thrice")));
 
         c.update(thriceTimes("30"), Set.of());
         c.answerEverything();
 
-        assertNotSame(thrice, c.db().ask(new Bodies.LoweredBody("shop.orders", "thrice")),
+        assertNotSame(thrice, c.db().ask(new Bodies.LoweredBody("shop.orders", new souther.compiler.ast.DefinitionName("thrice"))),
                 "the edit is `thrice`'s, so it is expanded again");
-        assertSame(twice, c.db().ask(new Bodies.LoweredBody("shop.orders", "twice")),
+        assertSame(twice, c.db().ask(new Bodies.LoweredBody("shop.orders", new souther.compiler.ast.DefinitionName("twice"))),
                 "`twice` says what it said, and `thrice` is not part of it");
     }
 
@@ -289,13 +289,13 @@ class IncrementalCompilationTest {
     @Test
     void editingAHelperReachesTheBodiesItIsExpandedInto() {
         Compilation c = orders(ORDERS);
-        Answer<?> twice = c.db().ask(new Bodies.LoweredBody("shop.orders", "twice"));
+        Answer<?> twice = c.db().ask(new Bodies.LoweredBody("shop.orders", new souther.compiler.ast.DefinitionName("twice")));
 
         c.update(Map.of("orders.sou", ORDERS.replace("let doubled (n) = n * 2",
                 "let doubled (n) = n * 2 + 0")), Set.of());
         c.answerEverything();
 
-        assertNotSame(twice, c.db().ask(new Bodies.LoweredBody("shop.orders", "twice")),
+        assertNotSame(twice, c.db().ask(new Bodies.LoweredBody("shop.orders", new souther.compiler.ast.DefinitionName("twice"))),
                 "`twice` calls `doubled`, and `doubled` is part of what `twice` becomes");
     }
 

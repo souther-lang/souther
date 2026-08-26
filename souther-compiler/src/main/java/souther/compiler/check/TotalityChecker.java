@@ -51,11 +51,20 @@ final class TotalityChecker {
     /** Checks every non-{@code partial}, module-own recursive helper (or group) for size-change
      * termination. */
     static void check(HelperInliner inliner) {
-        Map<String, Hir.FnDef> own = inliner.held();
-        Map<String, Set<String>> ownEdges = ownCallGraph(own);
+        // What this module holds, at the addresses it holds them, and which reference reaches each.
+        // The two are read off one entry, so a call is matched to a definition by what it reaches
+        // and the group bookkeeping below goes on naming what the author wrote.
+        Map<String, Hir.FnDef> own = new java.util.LinkedHashMap<>();
+        Map<souther.compiler.types.ReachName, String> heldAt = new java.util.LinkedHashMap<>();
+        inliner.held().values().forEach(entry -> {
+            own.put(entry.address().text(), entry.definition());
+            heldAt.put(entry.reachedAs(), entry.address().text());
+        });
+        Map<String, Set<String>> ownEdges = ownCallGraph(own, heldAt);
         Set<String> handled = new HashSet<>();
-        for (String name : inliner.recursiveHelpers()) {
-            Hir.FnDef h = own.get(name);
+        for (souther.compiler.types.ReachName reference : inliner.recursiveHelpers()) {
+            String name = heldAt.get(reference);
+            Hir.FnDef h = name == null ? null : own.get(name);
             // Only what this module declared is checked. A recursive helper it took on to emit — a
             // prelude `List.foldFrom`, one another module published — carries its declaring module's
             // guarantee (ADR-0098), and its own module proved it. Asked of the declaration: the name
@@ -417,22 +426,37 @@ final class TotalityChecker {
 
     // --- call graph over module-own helpers (for grouping mutual recursion) ---
 
-    private static Map<String, Set<String>> ownCallGraph(Map<String, Hir.FnDef> own) {
+    private static Map<String, Set<String>> ownCallGraph(
+            Map<String, Hir.FnDef> own,
+            Map<souther.compiler.types.ReachName, String> heldAt) {
         Map<String, Set<String>> edges = new HashMap<>();
-        for (Hir.FnDef h : own.values()) {
+        for (Map.Entry<String, Hir.FnDef> h : own.entrySet()) {
             Set<String> called = new HashSet<>();
-            collectOwnCalls(h.writtenBody(), own.keySet(), called);
-            edges.put(h.name(), called);
+            collectOwnCalls(h.getValue().writtenBody(), heldAt, called);
+            edges.put(h.getKey(), called);
         }
         return edges;
     }
 
-    private static void collectOwnCalls(Hir.Expr e, Set<String> own, Set<String> out) {
-        if (e instanceof Hir.Apply call && call.answered() != null
-                && own.contains(call.answered().reaches())) {
-            out.add(call.written());
+    /**
+     * Every call in {@code e} that reaches something this module holds, as the address it holds it
+     * at.
+     *
+     * <p>Matched on what the call reaches and recorded as where that is held. Matched on the
+     * spelling and recorded as the spelling — which is what this did — a module's own helper
+     * written through its own module reaches {@code f} and is recorded as {@code app.own.f}, so the
+     * edge goes to a name the graph has no node for and the cycle it is on is not found.
+     */
+    private static void collectOwnCalls(Hir.Expr e,
+                                        Map<souther.compiler.types.ReachName, String> heldAt,
+                                        Set<String> out) {
+        if (e instanceof Hir.Apply call && call.answered() != null) {
+            String held = heldAt.get(call.answered().reachedAs());
+            if (held != null) {
+                out.add(held);
+            }
         }
-        forEachChild(e, c -> collectOwnCalls(c, own, out));
+        forEachChild(e, c -> collectOwnCalls(c, heldAt, out));
     }
 
     /** The helpers on {@code name}'s recursive cycle: those reachable from {@code name} that also reach

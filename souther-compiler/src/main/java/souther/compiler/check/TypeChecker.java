@@ -144,10 +144,11 @@ public final class TypeChecker {
 
     /** The signatures every recursive helper a representation can reach would be called under —
      *  what typing a call left standing needs, whether or not this module turned out to reach it. */
-    public static Map<String, Type> recursiveCallSigs(HelperTable table,
-                                                      java.util.Collection<String> names,
-                                                      Symbols symbols) {
-        return HelperTyping.recursiveCallSigs(table, names, symbols);
+    public static Map<String, Type> recursiveCallSigs(
+            HelperTable table,
+            java.util.Collection<souther.compiler.types.ReachName> references,
+            Symbols symbols) {
+        return HelperTyping.recursiveCallSigs(table, references, symbols);
     }
 
     /** What each recursive helper constructs, transitively. A recursive helper is not inlined, so its
@@ -498,9 +499,9 @@ public final class TypeChecker {
         // per declaration, so a module needing the word in several places says so in one build. Which
         // declarations each rule is about is the rule's own to say (see PartialHelperUse): the fns here
         // hold what this module took on to emit as well as what it wrote.
-        for (Hir.FnDef helper : inliner.held().values()) {
+        for (HelperEntry entry : inliner.held().values()) {
             collect(errors, abandoned,
-                    () -> PartialHelperUse.rejectReachingPartial(helper, module.name(), reachability));
+                    () -> PartialHelperUse.rejectReachingPartial(entry, module.name(), reachability));
         }
         // Every fn and not only the helpers: a behavior's `let` may call a `partial` helper and may not
         // hand it over either.

@@ -36,10 +36,10 @@ class AHelperIsReachedOneWayFromOneModuleTest {
      */
     @Test
     void whatIsWrittenDoesNotDecideHowAHelperIsReached() {
-        assertEquals(Set.of(new ReachName.OfModule("lib", "flatten")),
+        assertEquals(Set.of(new ReachName.OfModule(THEIRS)),
                 reachedFrom("app", THEIRS, "flatten", "lib.flatten"),
                 "another module's helper is reached under the module that declares it");
-        assertEquals(Set.of(new ReachName.Bare("flatten")),
+        assertEquals(Set.of(new ReachName.Bare(OURS)),
                 reachedFrom("app", OURS, "flatten", "app.flatten"),
                 "and the module's own is reached bare");
     }
@@ -62,9 +62,8 @@ class AHelperIsReachedOneWayFromOneModuleTest {
      */
     @Test
     void whichModuleIsReadingDecidesIt() {
-        assertEquals(new ReachName.Bare("flatten"), ReachName.of(THEIRS, "flatten", "lib"));
-        assertEquals(new ReachName.OfModule("lib", "flatten"),
-                ReachName.of(THEIRS, "flatten", "app"));
+        assertEquals(new ReachName.Bare(THEIRS), ReachName.of(THEIRS, "flatten", "lib"));
+        assertEquals(new ReachName.OfModule(THEIRS), ReachName.of(THEIRS, "flatten", "app"));
     }
 
     /** How {@code declaration} is reached from {@code self}, over every spelling a body could

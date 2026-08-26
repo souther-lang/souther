@@ -91,8 +91,15 @@ public record DecisionSources(Map<CoverageOrigin, DecisionSource> byFork, boolea
      * second reads the forks with those summaries in hand, and projects them onto the parameters
      * that carry a rule.
      */
-    public static DecisionSources of(Map<String, Hir.FnDef> reachable, Hir.FnDef... own) {
-        Map<String, Hir.FnDef> declarations = new LinkedHashMap<>(reachable);
+    public static DecisionSources of(
+            Map<souther.compiler.types.ReachName, souther.compiler.check.HelperEntry> reachable,
+            Hir.FnDef... own) {
+        // Keyed the way a call reaches them, which is what the forks below are looked up by. The
+        // reference renders that way and the entry says which reference each is, so nothing here
+        // spells a name out of a declaration.
+        Map<String, Hir.FnDef> declarations = new LinkedHashMap<>();
+        reachable.forEach((reference, entry) ->
+                declarations.put(reference.rendered(), entry.definition()));
         for (Hir.FnDef each : own) {
             if (each != null) {
                 declarations.put(each.name(), each);

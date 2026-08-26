@@ -444,7 +444,7 @@ public final class Elaborator {
     private static Hir.Expr fromList(String collection, Hir.Expr written, Hir.RowCollection row) {
         souther.compiler.types.ValueName.Stdlib fromList =
                 new souther.compiler.types.ValueName.Stdlib(collection, "fromList");
-        return new Hir.Apply(collection + ".fromList", fromList,
+        return new Hir.Apply(collection + ".fromList",
                 new souther.compiler.types.ReachName.OfLibrary(fromList), List.of(written),
                 souther.compiler.types.ConstructionOrigin.own(), row.pos(), row.region());
     }
@@ -454,7 +454,7 @@ public final class Elaborator {
     private static Hir.Expr empty(String collection, Hir.RowCollection row) {
         souther.compiler.types.ValueName.Stdlib empty =
                 new souther.compiler.types.ValueName.Stdlib(collection, "empty");
-        return Hir.Var.respelled(collection + ".empty", empty,
+        return Hir.Var.respelled(collection + ".empty",
                 new souther.compiler.types.ReachName.OfLibrary(empty), row.pos(), row.region());
     }
 

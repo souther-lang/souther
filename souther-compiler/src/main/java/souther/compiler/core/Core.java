@@ -148,15 +148,13 @@ public sealed interface Core {
     }
 
     /**
-     * A callee some module named: the name that module reaches it by, and what that name was
-     * resolved to.
+     * A callee some module named: the reference resolution settled for it.
      *
-     * <p>Both, because they answer different questions and neither is derived from the other. The
-     * backend emits the method the reach name spells; a reader asking what kind of thing was called —
-     * a module's own helper, one of the language's operations, a behavior whose implementation comes
-     * from outside — asks what the name denotes. Working the second out of the first would be
-     * resolving a name this compiler resolved already, and a bare spelling reaches a helper and an
-     * injected behavior alike.
+     * <p>One value, because a reference is one. The backend emits the method the reach name spells;
+     * a reader asking what kind of thing was called — a module's own helper, one of the language's
+     * operations, a behavior whose implementation comes from outside — asks what that reference
+     * denotes, and {@link ReachName} carries both. Held as a route and a denotation side by side,
+     * the two could be paired from different references and nothing would say so.
      *
      * <p>A kernel call is one of these and not something beside them. {@code List.sort} is reached
      * by a name and resolves to a library operation, and its declaration being a kernel is what that
@@ -168,21 +166,45 @@ public sealed interface Core {
      */
     sealed interface Reached extends CallTarget {
 
-        /** The name the module being emitted reaches the callee by. */
+        /** The reference the module being emitted reaches the callee by. */
         ReachName name();
 
-        /** What that name was resolved to. */
-        ValueName denotes();
+        /** What that reference reaches. Read off the reference rather than held beside it: a
+         *  declaration kept next to the route it was reached by is the same fact twice, and the two
+         *  agree only until a pass replaces one of them. */
+        default ValueName denotes() {
+            return name().denotes();
+        }
 
         @Override
         default String rendered() {
             return name().rendered();
         }
 
-        /** A callee whose declaration this compilation carries: a module's own helper, another
-         *  module's, an injected behavior, a library operation written in Souther. What is emitted
-         *  for it is a call. */
-        record OfDeclaration(ReachName name, ValueName denotes) implements Reached {
+        /**
+         * A callee whose declaration this compilation carries: a helper the emitting module holds
+         * as a method of its own, or a behavior. What is emitted for it is a call.
+         *
+         * <p>Those two and nothing else, said here rather than found out downstream. A binding is
+         * applied where it stands and a type used as a value is a construction, so neither is a
+         * call to a declaration; a library operation the language implements is a kernel and is
+         * {@link OfKernel}. An emitter reading one of these divides it into a helper and a behavior
+         * and has no third arm to write, and that is true because this refuses to build a fourth
+         * rather than because the emitters have all been counted.
+         */
+        record OfDeclaration(ReachName name) implements Reached {
+
+            public OfDeclaration {
+                switch (name == null ? null : name.denotes()) {
+                    case ValueName.Helper _, ValueName.Stdlib _, ValueName.Behavior _ -> { }
+                    case null -> throw new IllegalArgumentException(
+                            "a call applies something this compilation resolved");
+                    // Not a report. A name that reaches none of the three is one no source could
+                    // write as a callee, so a call holding it is this compiler having built one.
+                    default -> throw new IllegalStateException("`" + name
+                            + "` reaches no declaration a call can be emitted for");
+                }
+            }
 
             @Override
             public String toString() {
@@ -199,12 +221,22 @@ public sealed interface Core {
          * compiler keeps for itself — and a spelling it guessed from would be resolving, by the
          * alias and the name, what was resolved already.
          *
-         * <p>Still carries both the reach name and what it denotes, and neither is the kernel. The
-         * name says how this module got here, the denotation says which declaration was chosen, and
-         * the kernel says what that declaration is. Two declarations naming one kernel is a thing
-         * the library is refused for while it is built, not a thing this collapses.
+         * <p>The kernel is beside the reference and is not part of it. The reference says how this
+         * module got here and which declaration it chose; the kernel says what that declaration
+         * turned out to be, which the library answered and this holds rather than asks again. Two
+         * declarations naming one kernel is a thing the library is refused for while it is built,
+         * not a thing this collapses.
          */
-        record OfKernel(ReachName name, ValueName denotes, Kernel kernel) implements Reached {
+        record OfKernel(ReachName name, Kernel kernel) implements Reached {
+
+            public OfKernel {
+                // Only the library declares a kernel, so only a library reference reaches one.
+                if (name == null || !(name.denotes() instanceof ValueName.Stdlib)) {
+                    throw new IllegalStateException(
+                            "a kernel is declared by the standard library and reached as one: "
+                                    + name);
+                }
+            }
 
             @Override
             public String toString() {

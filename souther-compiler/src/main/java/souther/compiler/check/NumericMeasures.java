@@ -78,7 +78,7 @@ public final class NumericMeasures {
         ValueName operation = switch (e) {
             case Core.Call call when call.fn() instanceof Core.Reached reached
                     && reached.name() instanceof ReachName.OfLibrary library ->
-                    library.target();
+                    library.denotes();
             case Core.PreservedCall preserved -> preserved.operation();
             case null, default -> null;
         };

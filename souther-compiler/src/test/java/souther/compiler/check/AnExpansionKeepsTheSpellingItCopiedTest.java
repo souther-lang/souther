@@ -89,7 +89,8 @@ class AnExpansionKeepsTheSpellingItCopiedTest {
         Ast.Module parsed = CstFrontend.parse(source);
         HelperInliner inliner = HelperInliner.forModule(Resolve.module(parsed, SyntaxSymbols.of(parsed, DefaultStdlib.get())), DefaultStdlib.get());
         Hir.Expr expanded =
-                inliner.inline(inliner.held().get(helper).writtenBody(), inliner.bodyOf(helper));
+                inliner.inline(inliner.held().get(new souther.compiler.ast.DefinitionName(helper))
+                        .definition().writtenBody(), inliner.bodyOf(helper));
 
         List<String> wrong = new ArrayList<>();
         names(expanded, name -> {

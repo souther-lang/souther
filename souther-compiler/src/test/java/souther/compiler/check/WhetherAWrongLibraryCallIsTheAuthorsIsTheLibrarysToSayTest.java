@@ -50,7 +50,7 @@ class WhetherAWrongLibraryCallIsTheAuthorsIsTheLibrarysToSayTest {
         for (int i = 0; i < args; i++) {
             given.add(new Hir.IntLit(i, POS, null));
         }
-        return new Hir.Apply(name.qualified(), name, new ReachName.OfLibrary(name), given,
+        return new Hir.Apply(name.qualified(), new ReachName.OfLibrary(name), given,
                 ConstructionOrigin.own(), POS, null);
     }
 

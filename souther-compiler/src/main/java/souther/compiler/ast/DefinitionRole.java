@@ -5,10 +5,11 @@ package souther.compiler.ast;
  *
  * <p>A module's fns do not all come from a {@code let}. A pass mints one to carry the value a row
  * writes at a position, so that the row runs its own operand the way the module runs its own body;
- * and a module emits a definition another module wrote, under the name it reaches it by, because
- * the artifact has to carry a method for it. Those two are unlike in every way a rule cares about,
- * and both arrive without a spelling — {@link Hir.FnDef#reachedAs} mints a name for the second
- * precisely because a reach name is not the declaration's name.
+ * and a module emits a definition another module wrote, under the reference it reaches it by,
+ * because the artifact has to carry a method for it. Those two are unlike in every way a rule cares
+ * about, and both arrive without a spelling — {@link Hir.FnDef#reachedAs} mints a name for the
+ * second precisely because a reach name is not the declaration's name, and keeps the reference so
+ * that the declaration is not left to be read back out of that name.
  *
  * <p>So {@link WrittenName#authored} cannot tell them apart, and a rule that asked it was asking
  * about the name when what it meant was the definition. What is asked here instead is what the
@@ -34,8 +35,7 @@ public sealed interface DefinitionRole {
      */
     boolean isTheModels();
 
-    /** A definition read as a definition: a {@code let} its module wrote in its own source, and one
-     *  another module wrote that this one emits. */
+    /** A definition read as a definition: a {@code let} its module wrote in its own source. */
     record Ordinary() implements DefinitionRole {
 
         /** The one of these there is. A role holds nothing here, so a second instance would be a
@@ -92,6 +92,34 @@ public sealed interface DefinitionRole {
         @Override
         public boolean isTheModels() {
             return false;
+        }
+    }
+
+    /**
+     * A definition another module declares, which this module emits as a method of its own because
+     * a call to it was left standing.
+     *
+     * <p>{@code reachedAs} is the reference that call reaches it by, carried here rather than left
+     * as the name the definition was renamed to. Which declaration this is a copy of is that
+     * reference's to say and cannot be read back out of the renaming: {@code souther.list} declares
+     * {@code foldFrom} and a module emits it under {@code List.foldFrom}, so a reader holding the
+     * spelling has an alias and a name joined by a dot and no way to tell which part is which.
+     *
+     * <p>The model's, and declared elsewhere. Which module wrote it is {@link Hir.FnDef#declaredIn},
+     * as it is for any definition; what is here is how this module got to it.
+     */
+    record TakenOn(souther.compiler.types.ReachName reachedAs) implements DefinitionRole {
+
+        public TakenOn {
+            if (reachedAs == null) {
+                throw new IllegalArgumentException(
+                        "a definition emitted for a call is emitted for the reference that reached it");
+            }
+        }
+
+        @Override
+        public boolean isTheModels() {
+            return true;
         }
     }
 }

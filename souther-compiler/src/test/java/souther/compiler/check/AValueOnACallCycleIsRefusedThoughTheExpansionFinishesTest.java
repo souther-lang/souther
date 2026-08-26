@@ -92,7 +92,8 @@ class AValueOnACallCycleIsRefusedThoughTheExpansionFinishesTest {
         HelperInliner inliner = HelperInliner.forModule(Resolve.module(parsed, SyntaxSymbols.of(parsed, DefaultStdlib.get())), DefaultStdlib.get());
 
         Hir.Expr expanded = assertDoesNotThrow(() -> inliner.inline(
-                inliner.held().get("depth").writtenBody(), inliner.bodyOf("depth")));
+                inliner.held().get(new souther.compiler.ast.DefinitionName("depth"))
+                        .definition().writtenBody(), inliner.bodyOf("depth")));
 
         assertTrue(expanded != null, "a body the expansion finished with");
     }

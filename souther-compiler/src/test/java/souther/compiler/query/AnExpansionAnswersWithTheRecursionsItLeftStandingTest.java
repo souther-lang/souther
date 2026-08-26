@@ -78,7 +78,9 @@ class AnExpansionAnswersWithTheRecursionsItLeftStandingTest {
 
         HelperInliner inliner = HelperInliner.over(table, HelperGraph.of(table));
         inliner.inline(def.writtenBody(), new BindingOwner.OfValue(module, fn));
-        return inliner.leftStanding();
+        Set<String> rendered = new java.util.LinkedHashSet<>();
+        inliner.leftStanding().forEach(reference -> rendered.add(reference.rendered()));
+        return rendered;
     }
 
     @Test

@@ -107,13 +107,20 @@ class WhichRuleAppliesIsReadFromWhatADefinitionWasMadeAsTest {
      * which is settled after this module's trees have been expanded and not before.
      */
     @Test
-    void aDefinitionAnotherModuleWroteIsOrdinaryHoweverThisOneNamesIt() {
+    void aDefinitionAnotherModuleWroteSaysWhichReferenceThisOneReachesItBy() {
         Answer<Hir.FnDef> answer =
                 db().ask(new souther.compiler.query.Bodies.SettledFn("app", "rules.depth"));
         assertTrue(answer.present(), "`rules.depth` is a definition `app` emits");
         Hir.FnDef taken = answer.value();
 
-        assertInstanceOf(DefinitionRole.Ordinary.class, taken.role());
+        // The model's, and declared elsewhere — which is the reading every rule here asks for. It
+        // is not the module's own {@code let}, and what it is a copy of is on the role rather than
+        // read back out of the name it is held under.
+        assertInstanceOf(DefinitionRole.TakenOn.class, taken.role());
+        assertTrue(taken.role().isTheModels(), "a definition another module wrote is the model's");
+        assertEquals(new souther.compiler.types.ReachName.OfModule(
+                        new souther.compiler.types.ValueName.Helper("rules", "depth")),
+                taken.takenOnAs(), "reached under the module that declares it");
         assertFalse(taken.written().authored(),
                 "and its name is unauthored, which is the reading this replaces");
     }

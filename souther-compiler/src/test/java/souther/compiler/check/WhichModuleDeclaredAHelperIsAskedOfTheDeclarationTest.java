@@ -5,6 +5,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.CompileException;
 import souther.compiler.frontend.CstFrontend;
+import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
@@ -89,8 +90,11 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
         assertEquals("maths.spin", closed.name());
         assertEquals("maths", closed.declaredIn());
 
+        // Held as what it is: a definition `maths` reaches under the module that declares it, which
+        // is `maths` itself. The rename put it at a qualified address and the reference it carries
+        // is what the self-call in its body reaches, so the two meet and the recursion is seen.
         CompileException refused = assertThrows(CompileException.class,
-                () -> check("maths", Map.of(closed.name(), closed), Map.of()));
+                () -> check("maths", Map.of(), Map.of(closed.name(), closed)));
         assertEquals("E2001", refused.code());
     }
 
@@ -109,7 +113,11 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
         assertEquals("spin", foreign.name());
         assertEquals("maths", foreign.declaredIn());
 
-        assertDoesNotThrow(() -> check("order", Map.of(), Map.of(foreign.name(), foreign)));
+        // Reached here as it stands, which is what "a bare name" is. What it says about the
+        // declaring module is the declaration's, and it is `maths` either way.
+        Hir.FnDef here = foreign.reachedAs(
+                new ReachName.Bare(new ValueName.Helper("maths", "spin")));
+        assertDoesNotThrow(() -> check("order", Map.of(), Map.of(here.name(), here)));
     }
 
     /**
@@ -153,12 +161,19 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
                 PartialReachability.of(HelperInliner.over(table, HelperGraph.of(table)));
 
         // `wrapped` is unmarked, and what it reaches is the module that declared it to answer for.
-        assertEquals(Optional.empty(), reachability.fromHelper("maths.wrapped"));
-        assertEquals(Optional.empty(), reachability.fromHelper("throughWrapped"));
+        assertEquals(Optional.empty(),
+                reachability.fromHelper(new ReachName.OfModule(
+                        new ValueName.Helper("maths", "wrapped"))));
+        assertEquals(Optional.empty(),
+                reachability.fromHelper(new ReachName.Bare(
+                        new ValueName.Helper("order", "throughWrapped"))));
         // The rule stops at the boundary rather than everywhere: a `partial` helper of another
         // module is still one, and what this module wrote is still walked to find it.
-        assertEquals(Optional.of(List.of("straightToSpin", "maths.spin")),
-                reachability.fromHelper("straightToSpin"));
+        assertEquals(Optional.of(List.of(
+                        new ReachName.Bare(new ValueName.Helper("order", "straightToSpin")),
+                        new ReachName.OfModule(new ValueName.Helper("maths", "spin")))),
+                reachability.fromHelper(new ReachName.Bare(
+                        new ValueName.Helper("order", "straightToSpin"))));
     }
 
     /**
@@ -191,7 +206,9 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
         Hir.FnDef written = declared.get("hands");
         // Taken on by `order` under the name it reaches it by, and its body read against `order`'s
         // names: a body a reader holds names what the reader reaches, whoever declared it.
-        Hir.FnDef hands = written.reachedAs("maths.hands").withBody(new Hir.FnBody.Written(
+        Hir.FnDef hands = written
+                .reachedAs(new ReachName.OfModule(new ValueName.Helper("maths", "hands")))
+                .withBody(new Hir.FnBody.Written(
                 HelperNames.qualifyHelpersOf(written.writtenBody(), "maths")));
 
         Hir.Module order = resolved("""
@@ -229,6 +246,7 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
 
         assertEquals("souther.list", foldFrom.declaredIn());
         assertTrue(foldFrom.declaredIn().startsWith("souther."));
-        assertEquals("souther.list", foldFrom.reachedAs("List.foldFrom").declaredIn());
+        assertEquals("souther.list", foldFrom.reachedAs(new ReachName.OfLibrary(
+                ValueName.Stdlib.operation("List", "foldFrom"))).declaredIn());
     }
 }

@@ -39,7 +39,8 @@ class CallElaboratorNoCalleeTest {
 
     private static RuntimeException answerFor(ValueName denotes) {
         return CallElaborator.noCallee(
-                new Hir.Apply("f", denotes, new ReachName.Bare("f"), List.of(new Hir.IntLit(1, AT, null)),
+                new Hir.Apply("f", new ReachName.Bare(denotes),
+                        List.of(new Hir.IntLit(1, AT, null)),
                         ConstructionOrigin.own(), AT, null));
     }
 

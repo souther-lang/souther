@@ -123,8 +123,9 @@ class ACallReachesTheHelperItsProgramCarriesTest {
         ReachName inLib = reachOf(program.module("lib"), "flatten");
         ReachName inApp = reachOf(program.module("app"), "flatten");
 
-        assertEquals(new ReachName.Bare("flatten"), inLib, "lib reaches its own bare");
-        assertEquals(new ReachName.OfModule("lib", "flatten"), inApp,
+        ValueName.Helper declared = new ValueName.Helper("lib", "flatten");
+        assertEquals(new ReachName.Bare(declared), inLib, "lib reaches its own bare");
+        assertEquals(new ReachName.OfModule(declared), inApp,
                 "app reaches it under the module that declares it");
         assertEquals(theOneCallReaching(program.module("lib"), "flatten"),
                 theOneCallReaching(program.module("app"), "flatten"),

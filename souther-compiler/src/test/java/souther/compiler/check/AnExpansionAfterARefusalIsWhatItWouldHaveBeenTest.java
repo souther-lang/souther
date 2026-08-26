@@ -61,7 +61,8 @@ class AnExpansionAfterARefusalIsWhatItWouldHaveBeenTest {
     }
 
     private static Hir.Expr expand(HelperInliner inliner, String helper) {
-        return inliner.inline(inliner.held().get(helper).writtenBody(), inliner.bodyOf(helper));
+        return inliner.inline(inliner.held().get(new souther.compiler.ast.DefinitionName(helper))
+                .definition().writtenBody(), inliner.bodyOf(helper));
     }
 
     @Test
@@ -90,7 +91,8 @@ class AnExpansionAfterARefusalIsWhatItWouldHaveBeenTest {
     void twoWritingsIntoOneBodyDoNotWriteTheSameBinding() {
         HelperInliner inliner = inliner();
         BindingOwner body = new BindingOwner.OfData(TypeSymbols.declared(new TypeKey("demo", "X")));
-        Hir.Expr clause = inliner.held().get("right").writtenBody();
+        Hir.Expr clause = inliner.held().get(new souther.compiler.ast.DefinitionName("right"))
+                .definition().writtenBody();
 
         Set<BindingId> first = bindingsOf(inliner.inline(clause, body));
         Set<BindingId> second = bindingsOf(inliner.inline(clause, body));

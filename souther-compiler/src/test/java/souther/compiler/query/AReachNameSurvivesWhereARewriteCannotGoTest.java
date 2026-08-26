@@ -3,6 +3,7 @@ package souther.compiler.query;
 import souther.compiler.ast.Hir;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.types.ReachName;
+import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
 
@@ -59,7 +60,8 @@ class AReachNameSurvivesWhereARewriteCannotGoTest {
         byId.put("app.sou", APP);
         Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
         Hir.FnDef def =
-                c.db().ask(new Bodies.LoweredBody("app", "lib.flatten")).value().value();
+                c.db().ask(new Bodies.LoweredBody("app",
+                        new souther.compiler.ast.DefinitionName("lib.flatten"))).value().value();
         return ((Hir.FnBody.Written) def.body()).expr();
     }
 
@@ -110,7 +112,7 @@ class AReachNameSurvivesWhereARewriteCannotGoTest {
      * settles that name goes through a walk which never arrives there. */
     @Test
     void andItIsReachedByTheNameTheReaderReachesItBy() {
-        assertEquals(List.of(new ReachName.OfModule("lib", "flatten")),
+        assertEquals(List.of(new ReachName.OfModule(new ValueName.Helper("lib", "flatten"))),
                 calls(inWhatWasHandedOver(taken())).stream()
                         .map(call -> call.answered().reachedAs()).toList(),
                 "reached under the module that declares it, which is how `app` keys the method");

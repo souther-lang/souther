@@ -49,7 +49,7 @@ import java.util.Map;
 public final class InvariantSettled {
 
     private final Hir.Module module;
-    private final java.util.SequencedSet<String> standing;
+    private final java.util.SequencedSet<souther.compiler.types.ReachName> standing;
 
     private InvariantSettled(Expansion<Hir.Module> expanded) {
         this.module = expanded.value();
@@ -80,7 +80,7 @@ public final class InvariantSettled {
      * table, so what it reaches is known only to the expansion that read it — which is here, and is
      * why this travels with the settled module rather than being looked for again afterwards.
      */
-    public java.util.SequencedSet<String> standingRecursiveCalls() {
+    public java.util.SequencedSet<souther.compiler.types.ReachName> standingRecursiveCalls() {
         return standing;
     }
 

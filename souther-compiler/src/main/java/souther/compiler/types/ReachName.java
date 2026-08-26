@@ -1,27 +1,45 @@
 package souther.compiler.types;
 
 /**
- * The name a module reaches a definition by, from the place that named it.
+ * A resolved reference: the route a module reaches a definition by, and what it reaches.
  *
- * <p>Not the definition's identity. Which module declares something is a fact about the declaration
- * and is written there ({@code Hir.FnDef#declaredIn}); this is a fact about the reference, and the two
- * cannot be derived from each other. {@code souther.list} declares {@code foldFrom} and a reader
- * reaches it as {@code List.foldFrom}: the alias belongs to the reference, and the declaring module is
- * nowhere in it.
+ * <p>Held together, and not as a spelling. A caller with only the rendering has the half that
+ * cannot be looked anything up with, and a caller with only the declaration has the half that
+ * cannot say how this module got to it; a pass that carried one of them alone recovers the other by
+ * resolving a spelling, which is the rediscovery this exists to stop. {@link TypeReachName} is the
+ * same value for the type namespace and says the same thing.
  *
- * <p>Settled where a name is resolved, which is the one place that has both what the name denotes and
- * the module doing the reading. Every pass after that carries it, and none works it out again from a
- * spelling: a reader that took the spelling would answer one thing before the pass that writes
- * imported names qualified and another after — silently, because a miss is what a table does with a
- * key it has not got.
+ * <p>The route is not the declaration's identity. Which module declares something is a fact about
+ * the declaration and is {@link ValueName}'s to say; which arm this is, is a fact about the
+ * reference. {@code souther.list} declares {@code foldFrom} and a reader reaches it as
+ * {@code List.foldFrom}: the alias belongs to the reference and the declaring module is nowhere in
+ * it. So the two are one value with two questions, and neither is recovered from a string.
+ *
+ * <p>What it renders as follows from both, and is answered here rather than stored. A rendering
+ * kept beside the declaration is a second statement of the same thing, and the day one of them is
+ * written from a different reading they disagree with nothing to say so.
+ *
+ * <p>Settled where a name is resolved, which is the one place that has both what the name denotes
+ * and the module doing the reading. Every pass after that carries it, and none works it out again
+ * from a spelling: a reader that took the spelling would answer one thing before the pass that
+ * writes imported names qualified and another after — silently, because a miss is what a table does
+ * with a key it has not got.
+ *
+ * <p>Two references are the same reference when they take the same route to the same declaration.
+ * Rendering alike is not being the same: two bindings of one spelling render alike and denote
+ * different bindings, and a reference is not made one by how it looks.
  *
  * <p>The interface is sealed and the switches over it carry no {@code default}, so a shape added here
  * is a compile error at every place that reads one rather than something quietly taken for another.
  */
 public sealed interface ReachName {
 
-    /** The spelling this reach name is written as — what a table keyed by names is looked up with,
-     * and what a report quotes where it has nothing better. */
+    /** What this reference reaches. */
+    ValueName denotes();
+
+    /** The spelling this route reaches it by — what a report quotes, and what a name built for a
+     * machine is built from. Never what a source wrote: the source may write a module's own
+     * behavior through its own module, and this is what the module reaches it by. */
     String rendered();
 
     /**
@@ -29,33 +47,60 @@ public sealed interface ReachName {
      * can call, a type used as a value.
      *
      * <p>What these have in common is that no qualifier gets between the reference and what it
-     * reaches, so the name is the whole of it.
+     * reaches, so the declaration's own name is the whole of it.
      */
-    record Bare(String name) implements ReachName {
+    record Bare(ValueName denotes) implements ReachName {
+
+        public Bare {
+            if (denotes == null) {
+                throw new IllegalArgumentException("a reference reaches something");
+            }
+        }
 
         @Override
         public String rendered() {
-            return name;
+            return denotes.name();
         }
 
         @Override
         public String toString() {
-            return name;
+            return rendered();
         }
     }
 
     /**
      * A definition another module declares, reached under that module's name.
      *
-     * <p>Here the reach name and the declaration's identity do coincide, and they coincide by
-     * accident of how a user module is reached rather than by rule — {@link OfLibrary} is the same
-     * relation with a different answer, and is what shows the two are separate values.
+     * <p>Here the route's rendering is built out of the declaration's own module and name, and that
+     * is a property of this route rather than of declarations — {@link OfLibrary} reads the same
+     * declaration and renders it under an alias the declaration knows nothing about.
      */
-    record OfModule(String module, String name) implements ReachName {
+    record OfModule(ValueName denotes) implements ReachName {
+
+        public OfModule {
+            // Only a module declares one of these, and only these are reached under a module. A
+            // library operation reaches `OfLibrary` and a binding is reached where it is bound, so
+            // one arriving here is a caller that decided the route without asking the declaration.
+            switch (denotes) {
+                case ValueName.Helper _, ValueName.Behavior _ -> { }
+                case null -> throw new IllegalArgumentException("a reference reaches something");
+                default -> throw new IllegalArgumentException(
+                        "`" + denotes + "` is not declared by a module and is not reached under one");
+            }
+        }
+
+        /** The module that declares what this reaches, which is what it is reached under. */
+        public String module() {
+            return switch (denotes) {
+                case ValueName.Helper helper -> helper.module();
+                case ValueName.Behavior behavior -> behavior.module();
+                default -> throw new IllegalStateException("refused at construction: " + denotes);
+            };
+        }
 
         @Override
         public String rendered() {
-            return module + "." + name;
+            return module() + "." + denotes.name();
         }
 
         @Override
@@ -67,16 +112,21 @@ public sealed interface ReachName {
     /**
      * A standard-library name, reached under the alias the library publishes it under.
      *
-     * <p>It holds the denotation rather than an alias and a name of its own: the library already says
-     * which of its two shapes this is — an operation of a module it publishes, or the module applied
-     * as a constructor ({@code Date("2026-09-30")}) — and copying that distinction into a second
-     * optional field here would be the same fact written twice.
+     * <p>The denotation says which of the library's two shapes this is — an operation of a module it
+     * publishes, or the module applied as a constructor ({@code Date("2026-09-30")}) — so the route
+     * needs nothing beside it.
      */
-    record OfLibrary(ValueName.Stdlib target) implements ReachName {
+    record OfLibrary(ValueName.Stdlib denotes) implements ReachName {
+
+        public OfLibrary {
+            if (denotes == null) {
+                throw new IllegalArgumentException("a reference reaches something");
+            }
+        }
 
         @Override
         public String rendered() {
-            return target.qualified();
+            return denotes.qualified();
         }
 
         @Override
@@ -92,6 +142,11 @@ public sealed interface ReachName {
      * is what decides the answer for a helper: the module's own is reached bare and another's under
      * the module that declares it, and neither the declaration nor the spelling says which case this
      * is on its own.
+     *
+     * <p>{@code written} decides nothing and is here to be quoted where this is refused. A module's
+     * own behavior written through its own module is reached bare, and an import lets another
+     * module's be written bare and it is reached under the module that declares it — so a route read
+     * off the spelling is a route that changes when an author qualifies a name.
      *
      * <p>Asked only of a name that denotes something. One nothing declares is
      * {@link souther.compiler.ast.Hir.Var.Unanswered}, which reaches nothing and is not asked; it
@@ -109,19 +164,19 @@ public sealed interface ReachName {
         }
         return switch (denotes) {
             case ValueName.Helper helper -> helper.module().equals(self)
-                    ? new Bare(helper.name()) : new OfModule(helper.module(), helper.name());
+                    ? new Bare(helper) : new OfModule(helper);
             // A behavior is declared by a module, so it is reached the two ways a helper is, and
             // the answer is read off the declaration rather than off the spelling. Written it can
             // be either — a module's own behavior may be written through its own module, and
             // another's may be written bare where an import brought it in — and neither spelling
             // says which module declares what it reaches.
             case ValueName.Behavior behavior -> behavior.module().equals(self)
-                    ? new Bare(behavior.name())
-                    : new OfModule(behavior.module(), behavior.name());
+                    ? new Bare(behavior) : new OfModule(behavior);
             case ValueName.Stdlib library -> new OfLibrary(library);
-            // Each of these is reached by the name it is written with: a binding is named where it
-            // is bound, and a type used as a value by what this module calls it.
-            case ValueName.Local _, ValueName.OfType _, ValueName.Builtin _ -> new Bare(written);
+            // Each of these is reached by the name it is bound or written under, which is the name
+            // the denotation carries: a binding is named where it is bound, and a type used as a
+            // value by what this module calls it.
+            case ValueName.Local _, ValueName.OfType _, ValueName.Builtin _ -> new Bare(denotes);
         };
     }
 

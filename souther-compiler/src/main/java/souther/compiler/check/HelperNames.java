@@ -182,7 +182,6 @@ public final class HelperNames {
                     && foreign(call.answered().denotes(), which) ->
                     new Hir.Apply(
                             Hir.Var.respelled(qualifiedName(call.answered().denotes()),
-                                    call.answered().denotes(),
                                     ofModule(call.answered().denotes()), call.function().pos(),
                                     call.function().region()),
                             call.args(), call.origin(), call.pos(), call.region());
@@ -191,12 +190,29 @@ public final class HelperNames {
         };
     }
 
+    /**
+     * The reference that reaches {@code marked}, for a pass that restated where a construction came
+     * from.
+     *
+     * <p>A whole reference and not the old one with a new denotation in it: what a name means is
+     * changed by replacing the reference it was answered with, so that a route and a declaration
+     * from two different references can never be paired.
+     *
+     * <p>Bare, because a type used as a value is reached by what this module calls it however the
+     * construction is marked — {@link ReachName#of} answers the same for every {@code OfType}, and
+     * the mark is not part of how the name is reached. So this is that answer and not a route
+     * carried over from what stood here.
+     */
+    private static ReachName reachingTheSameTypeAs(ValueName.OfType marked) {
+        return new ReachName.Bare(marked);
+    }
+
     /** {@code name} written qualified where it denotes a helper {@code which} accepts. */
     private static Hir.Var qualified(Hir.Var name, Predicate<ValueName.Helper> which) {
         return name.answered() instanceof Hir.Var.Denoting named
                 && foreign(named.denotes(), which)
-                ? Hir.Var.respelled(qualifiedName(named.denotes()), named.denotes(),
-                        ofModule(named.denotes()), name.pos(), name.region())
+                ? Hir.Var.respelled(qualifiedName(named.denotes()), ofModule(named.denotes()),
+                        name.pos(), name.region())
                 : name;
     }
 
@@ -254,7 +270,7 @@ public final class HelperNames {
             // from — there is no construction node to say it on. A name resolution answered with
             // nothing was reported where it is written; there is no construction to mark on it.
             case Hir.Var.Denoting v when v.denotes() instanceof ValueName.OfType named ->
-                    v.denoting(named.publishedBy(module));
+                    v.withReachedAs(reachingTheSameTypeAs(named.publishedBy(module)));
             default -> rebuilt;
         };
     }
@@ -288,7 +304,7 @@ public final class HelperNames {
         return switch (rebuilt) {
             case Hir.NewData nd -> nd.carriedByValue();
             case Hir.Var.Denoting v when v.denotes() instanceof ValueName.OfType named ->
-                    v.denoting(named.carriedByValue());
+                    v.withReachedAs(reachingTheSameTypeAs(named.carriedByValue()));
             case Hir.Apply call -> call.carriedByValue();
             default -> rebuilt;
         };
@@ -328,8 +344,7 @@ public final class HelperNames {
     /** How a helper written qualified is reached: under the module that declares it, which is what
      * writing it qualified says. Read off what the name denotes, like the spelling beside it. */
     private static ReachName ofModule(ValueName denotes) {
-        ValueName.Helper helper = (ValueName.Helper) denotes;
-        return new ReachName.OfModule(helper.module(), helper.name());
+        return new ReachName.OfModule((ValueName.Helper) denotes);
     }
 
     /** The name a helper is reached by outside the module that declares it. Read off what the name

@@ -647,22 +647,29 @@ public interface Hir {
         }
 
         /**
-         * The same declaration under the name a module reaches it by.
+         * The same declaration as a module that reaches it by {@code reference} holds it.
          *
          * <p>The one way a declaration is renamed. A module emits a recursive helper it reaches as
-         * one of its own methods, under the name it reaches it by ({@code List.foldFrom},
-         * {@code maths.spin}), and that name is not where the declaration came from:
-         * {@code List.foldFrom} is reached under the library's alias and declared in
-         * {@code souther.list}, so the module it came from cannot be read back out of it. Renaming
-         * here carries {@link #declaredIn} across rather than restating it, so no caller is in a
-         * position to pair a name with an origin that is not its own.
+         * one of its own methods, and the address it holds it under is what the reference renders
+         * as ({@code List.foldFrom}, {@code maths.spin}). That address is not where the declaration
+         * came from — {@code List.foldFrom} is reached under the library's alias and declared in
+         * {@code souther.list} — so the reference is carried on the role rather than left to be
+         * read back out of the rendering. Renaming carries {@link #declaredIn} across as well, so
+         * no caller is in a position to pair an address with an origin that is not its own.
          *
-         * <p>And it carries {@link #role} across, which is what says renaming is not a way to make
-         * something into a row's value: what comes back is what went in, reached under another name.
+         * <p>What comes back is a definition this module took on, and it says so. A row's value is
+         * its module's own and is never reached from anywhere, so nothing renamed here was one.
          */
-        public FnDef reachedAs(String name) {
-            return new FnDef(WrittenName.synthetic(name, pos), declaredIn, params, declaredReturn,
-                    body, modifiers, role, pos);
+        public FnDef reachedAs(ReachName reference) {
+            return new FnDef(WrittenName.synthetic(reference.rendered(), pos), declaredIn, params,
+                    declaredReturn, body, modifiers, new DefinitionRole.TakenOn(reference), pos);
+        }
+
+        /** The reference this module reaches what it took on by, or null where the definition is
+         *  its module's own. Which declaration a taken-on definition is a copy of is this and not
+         *  {@link #address}, which is only where the module holds it. */
+        public ReachName takenOnAs() {
+            return role instanceof DefinitionRole.TakenOn(ReachName reference) ? reference : null;
         }
 
         /** The same declaration with {@code replacement} in place of its body. */
@@ -682,9 +689,24 @@ public interface Hir {
             return role instanceof DefinitionRole.RowValue(RowPosition at) ? at : null;
         }
 
-        /** What the fn is called. */
+        /** What the fn is called — the text of {@link #address}, for a report to quote and for a
+         *  method name to be built from. Never a key: what a definition is filed under is
+         *  {@link #address}, and what it is a definition of is {@link #declaredIn} and its role. */
         public String name() {
             return written.canonical();
+        }
+
+        /**
+         * Where this definition sits among the ones its module holds: the address its body is asked
+         * for by, and the name a method is emitted under.
+         *
+         * <p>Not what it is a definition of. A module holds another module's declaration under the
+         * name it reaches it by, so the address and the declaration come apart exactly where a
+         * reader joining a call to a body goes wrong — what it is a copy of is
+         * {@link DefinitionRole.TakenOn#reachedAs}.
+         */
+        public DefinitionName address() {
+            return DefinitionName.of(this);
         }
 
         /** Whether {@code module} is the module that declared this. Asked of the declaration, so a
@@ -1646,15 +1668,14 @@ public interface Hir {
          * module's body it is writing into, and neither is something this factory can see. Worked
          * out from the spelling it would be the very derivation the carried value exists to remove.
          */
-        static Var denoting(String spelling, ValueName denotes, ReachName reachedAs,
-                            SourcePos pos) {
-            return denoting(WrittenName.of(spelling, pos), denotes, reachedAs);
+        static Var denoting(String spelling, ReachName reachedAs, SourcePos pos) {
+            return denoting(WrittenName.of(spelling, pos), reachedAs);
         }
 
         /** The same, off an occurrence already read: a name standing as an expression over exactly
          * the characters that spell it — every one but a name the author parenthesized. */
-        static Var denoting(WrittenName written, ValueName denotes, ReachName reachedAs) {
-            return new Denoting(written, denotes, reachedAs, written.region());
+        static Var denoting(WrittenName written, ReachName reachedAs) {
+            return new Denoting(written, reachedAs, written.region());
         }
 
         /**
@@ -1666,9 +1687,8 @@ public interface Hir {
          * is written nowhere and only the expression has a place: the region is the one the name it
          * replaced was read over.
          */
-        static Var respelled(String spelling, ValueName denotes, ReachName reachedAs,
-                             SourcePos pos, Region region) {
-            return new Denoting(WrittenName.synthetic(spelling, pos), denotes, reachedAs, region);
+        static Var respelled(String spelling, ReachName reachedAs, SourcePos pos, Region region) {
+            return new Denoting(WrittenName.synthetic(spelling, pos), reachedAs, region);
         }
 
         /**
@@ -1681,8 +1701,7 @@ public interface Hir {
         static Var local(Binder binder, SourcePos pos) {
             ValueName.Local local = new ValueName.Local(binder.name(), binder.id());
             WrittenName written = WrittenName.synthetic(binder.name(), pos);
-            return new Denoting(written, local, new ReachName.Bare(binder.name()),
-                    written.region());
+            return new Denoting(written, new ReachName.Bare(local), written.region());
         }
 
         /** The bare name this reaches its declaration by, whatever the source spelled. */
@@ -1720,22 +1739,22 @@ public interface Hir {
         }
 
         /**
-         * The same name, denoting {@code resolved} and reached as {@code reachedAs}.
+         * The same name, as {@code reachedAs} reaches it.
          *
-         * <p>The two answers together, because resolution gives them together and they are the two
-         * halves of one question: which declaration this reaches, and under what name it reaches it
-         * from here. Handed over separately, a caller could pair one name's denotation with
-         * another's reach name, and nothing would say so. There is no state between: a name has both
-         * or is one of the two that has neither.
+         * <p>One answer and not two. Which declaration this reaches and under what name it reaches
+         * it from here are the two halves of one question, and resolution answers them together;
+         * handed over separately, a caller could pair one name's denotation with another's route
+         * and nothing would say so. There is no state between: a name is answered or it is
+         * {@link Unanswered}.
          */
-        default Var denoting(ValueName resolved, ReachName reachedAs) {
-            return new Denoting(written(), resolved, reachedAs, region());
+        default Var denoting(ReachName reachedAs) {
+            return new Denoting(written(), reachedAs, region());
         }
 
         /** The same name, over {@code region} — whichever of the two it is. */
         default Var over(Region region) {
             return switch (this) {
-                case Denoting d -> new Denoting(d.written(), d.denotes(), d.reachedAs(), region);
+                case Denoting d -> new Denoting(d.written(), d.reachedAs(), region);
                 case Unanswered u -> new Unanswered(u.written(), region);
             };
         }
@@ -1745,18 +1764,30 @@ public interface Hir {
             return new Unanswered(written(), region());
         }
 
-        /** A name resolution answered, with the declaration it names and how this module reaches
-         * it. */
-        record Denoting(WrittenName written, ValueName denotes, ReachName reachedAs, Region region)
-                implements Var {
+        /**
+         * A name resolution answered: what the source wrote, and the reference resolution settled
+         * for it.
+         *
+         * <p>Which declaration it names is {@code reachedAs.denotes()} and is not held beside it.
+         * Held as two, a pass could put one name's denotation next to another's route and nothing
+         * would say so — and three passes did, replacing what a name meant and leaving the route it
+         * was reached by. A denotation is changed by replacing the reference, which is
+         * {@link #withReachedAs}.
+         */
+        record Denoting(WrittenName written, ReachName reachedAs, Region region) implements Var {
 
             public Denoting {
-                if (denotes == null || reachedAs == null) {
-                    throw new IllegalArgumentException("`" + written.canonical() + "` denotes "
-                            + denotes + " and is reached as " + reachedAs
-                            + "; a name that is answered is answered on both counts");
+                if (reachedAs == null) {
+                    throw new IllegalArgumentException("`" + written.canonical()
+                            + "` is answered by what it reaches and how it reaches it;"
+                            + " nothing here says either");
                 }
                 heldBy(written, region);
+            }
+
+            /** The declaration this names, which the reference carries. */
+            public ValueName denotes() {
+                return reachedAs.denotes();
             }
 
             /**
@@ -1773,11 +1804,16 @@ public interface Hir {
                 return reachedAs().rendered();
             }
 
-            /** The same name denoting {@code resolved}, reached as it already was — for a pass that
-             * changes what a name says about where its construction came from and not which
-             * declaration it reaches. */
-            public Var denoting(ValueName resolved) {
-                return new Denoting(written(), resolved, reachedAs(), region());
+            /**
+             * The same name, standing where it stood, as {@code reference} reaches it.
+             *
+             * <p>The one way what a name means is changed. A pass with a different declaration in
+             * hand — a construction's origin restated, a binding copied into an expansion — works
+             * out how this module reaches that declaration and replaces the whole reference, so
+             * there is no operation here that puts a new denotation beside the old route.
+             */
+            public Var withReachedAs(ReachName reference) {
+                return new Denoting(written(), reference, region());
             }
 
             @Override
@@ -1907,18 +1943,16 @@ public interface Hir {
          * they are, so a report about what is applied would otherwise underline them too. A caller
          * that has the callee's extent builds the {@link Var} itself and passes it.
          */
-        public Apply(String fn, ValueName denotes, ReachName reachedAs, List<Expr> args,
+        public Apply(String fn, ReachName reachedAs, List<Expr> args,
                      ConstructionOrigin origin, SourcePos pos, Region region) {
-            this(Var.respelled(fn, Objects.requireNonNull(denotes, unanswered(fn, "denotes")),
-                            Objects.requireNonNull(reachedAs, unanswered(fn, "is reached as")),
-                            pos, null),
+            this(Var.respelled(fn, Objects.requireNonNull(reachedAs, unanswered(fn)), pos, null),
                     args, origin, pos, region);
         }
 
         /** Why a pass may not apply a name it has not answered for. */
-        private static String unanswered(String fn, String half) {
-            return "a pass applying `" + fn + "` says what it means: nothing here " + half
-                    + " it, and the spelling would be resolved again wherever this is read";
+        private static String unanswered(String fn) {
+            return "a pass applying `" + fn + "` says what it means: nothing here says what it"
+                    + " reaches, and the spelling would be resolved again wherever this is read";
         }
 
         /** Whether what this applies is a name. A reader that wants the name itself matches on

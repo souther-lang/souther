@@ -139,8 +139,9 @@ class ACopiedBodyIsReadAgainstAFileThisCompileHasTest {
         var parsed = CstFrontend.parseWithSlices(source, null, new SourceId("demo.sou"));
         Hir.Module module = Resolve.module(parsed.module(), SyntaxSymbols.of(parsed.module(), DefaultStdlib.get()));
         HelperInliner inliner = HelperInliner.forModule(module, DefaultStdlib.get());
-        Hir.FnDef body = inliner.held().get(fn);
-        assertNotNull(body, "the fn under test is one of the module's own");
+        HelperEntry held = inliner.held().get(new souther.compiler.ast.DefinitionName(fn));
+        assertNotNull(held, "the fn under test is one of the module's own");
+        Hir.FnDef body = held.definition();
         return inliner.inline(body.writtenBody(), inliner.bodyOf(fn));
     }
 

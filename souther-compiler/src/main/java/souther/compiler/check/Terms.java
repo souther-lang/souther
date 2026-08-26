@@ -392,7 +392,7 @@ final class Terms {
         return switch (e) {
             case Core.Call call when call.fn() instanceof Core.Reached reached
                     && reached.name() instanceof souther.compiler.types.ReachName.OfLibrary library ->
-                    library.target();
+                    library.denotes();
             case Core.PreservedCall preserved -> preserved.operation();
             case null, default -> null;
         };
@@ -2567,9 +2567,8 @@ final class Terms {
             case Core.PreservedCall call -> {
                 List<Hir.Expr> args = written(call.args());
                 yield args == null ? null
-                        : new Hir.Apply(call.operation().name(), call.operation(),
-                                reachOf(call.operation()), args, ConstructionOrigin.own(),
-                                call.pos(), null);
+                        : new Hir.Apply(call.operation().name(), reachOf(call.operation()), args,
+                                ConstructionOrigin.own(), call.pos(), null);
             }
             // A temporal is written as a literal with its text spelled out (spec
             // §a-temporal-value-is-written-as-a-literal). Rendered here for the same reason every
@@ -2583,15 +2582,17 @@ final class Terms {
             // nothing here decides it.
             case Core.Temporal t -> {
                 ValueName.Stdlib namespace = ValueName.Stdlib.namespace(t.kind().shown());
-                yield new Hir.Apply(namespace.qualified(), namespace, reachOf(namespace),
+                yield new Hir.Apply(namespace.qualified(), reachOf(namespace),
                         List.of(new Hir.StringLit(t.text(), t.pos(), null)),
                         ConstructionOrigin.own(), t.pos(), null);
             }
             // A case of an enumeration is written by naming it, so the value is the name.
-            case Core.UnitValue unit -> Hir.Var.respelled(unit.data().name(),
-                    new ValueName.OfType(unit.data().name(), unit.data(),
-                            ConstructionOrigin.own()),
-                    new ReachName.Bare(unit.data().name()), unit.pos(), null);
+            case Core.UnitValue unit -> {
+                ValueName.OfType named = new ValueName.OfType(unit.data().name(), unit.data(),
+                        ConstructionOrigin.own());
+                yield Hir.Var.respelled(unit.data().name(), new ReachName.Bare(named),
+                        unit.pos(), null);
+            }
             case null, default -> null;
         };
     }

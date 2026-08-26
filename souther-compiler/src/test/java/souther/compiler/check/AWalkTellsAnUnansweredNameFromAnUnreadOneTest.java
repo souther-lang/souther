@@ -43,8 +43,9 @@ class AWalkTellsAnUnansweredNameFromAnUnreadOneTest {
 
     /** A name resolution answered with the binding {@code BOUND}. */
     private static Hir.Var bound() {
-        return new Hir.Var.Denoting(WrittenName.of("n", POS), new ValueName.Local("n", BOUND),
-                new ReachName.Bare("n"), WrittenName.of("n", POS).region());
+        ValueName.Local n = new ValueName.Local("n", BOUND);
+        return new Hir.Var.Denoting(WrittenName.of("n", POS),
+                new ReachName.Bare(n), WrittenName.of("n", POS).region());
     }
 
     /** A name resolution read and found nothing for. */
@@ -79,7 +80,8 @@ class AWalkTellsAnUnansweredNameFromAnUnreadOneTest {
     @Test
     void aNameNothingDeclaresIsNoEdge() {
         Set<String> read = new LinkedHashSet<>();
-        ValueCycles.valuesRead(unanswered("nosuch"), new LinkedHashMap<>(), read);
+        ValueCycles.valuesRead(unanswered("nosuch"), new LinkedHashMap<>(),
+                new LinkedHashMap<>(), read);
 
         assertEquals(Set.of(), read);
     }

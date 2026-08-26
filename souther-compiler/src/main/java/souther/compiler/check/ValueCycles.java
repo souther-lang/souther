@@ -5,6 +5,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.NameMessage;
+import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -54,15 +55,30 @@ public final class ValueCycles {
         // What the module declared, which is what a value cycle is about: a value written in terms of
         // itself is a defect in what the author wrote, and a helper the module only took on to emit
         // was written by somebody else and answered for there.
-        Map<String, Hir.FnDef> declared = table.declarations();
-        Map<String, Set<String>> callsOf = new LinkedHashMap<>();
-        for (Map.Entry<String, Hir.FnDef> e : declared.entrySet()) {
-            Set<String> called = new LinkedHashSet<>();
-            HelperInliner.helperCallsIn(table.library(), e.getValue().writtenBody(),
-                    table.reachable(), called);
-            callsOf.put(e.getKey(), called);
+        // What the module holds each declaration at, and which reference reaches it. Both come off
+        // one entry, so an edge found by what a call reaches is recorded at the address the report
+        // names, and neither is worked out from the other.
+        Map<String, Hir.FnDef> declared = new LinkedHashMap<>();
+        Map<ReachName, String> heldAt = new LinkedHashMap<>();
+        for (HelperEntry entry : table.declarations().values()) {
+            declared.put(entry.address().text(), entry.definition());
+            heldAt.put(entry.reachedAs(), entry.address().text());
         }
-        reject(declared, callsOf);
+        Map<String, Set<String>> callsOf = new LinkedHashMap<>();
+        for (HelperEntry entry : table.declarations().values()) {
+            Set<ReachName> called = new LinkedHashSet<>();
+            HelperInliner.helperCallsIn(table.library(), entry.definition().writtenBody(),
+                    table.reachable(), called);
+            Set<String> here = new LinkedHashSet<>();
+            called.forEach(reference -> {
+                String at = heldAt.get(reference);
+                if (at != null) {
+                    here.add(at);
+                }
+            });
+            callsOf.put(entry.address().text(), here);
+        }
+        reject(declared, callsOf, heldAt);
     }
 
     /**
@@ -72,11 +88,12 @@ public final class ValueCycles {
      * helper that names the value, so the two kinds of edge are followed together — which is why both
      * are keyed by the name a reference reaches its target by, and neither by a spelling.
      */
-    static void reject(Map<String, Hir.FnDef> own, Map<String, Set<String>> callsOf) {
+    static void reject(Map<String, Hir.FnDef> own, Map<String, Set<String>> callsOf,
+                       Map<ReachName, String> heldAt) {
         Map<String, Set<String>> edges = new LinkedHashMap<>();
         for (Map.Entry<String, Hir.FnDef> e : own.entrySet()) {
             Set<String> out = new LinkedHashSet<>(callsOf.getOrDefault(e.getKey(), Set.of()));
-            valuesRead(e.getValue().writtenBody(), own, out);
+            valuesRead(e.getValue().writtenBody(), own, heldAt, out);
             edges.put(e.getKey(), out);
         }
         // Which names lie on a cycle, worked out once over the whole graph. What is asked of each
@@ -126,17 +143,22 @@ public final class ValueCycles {
      * an import may let a name go without its qualifier: it agreed with the key only where a pass had
      * already written the spelling out qualified.
      */
-    static void valuesRead(Hir.Expr e, Map<String, Hir.FnDef> reachable, Set<String> out) {
+    static void valuesRead(Hir.Expr e, Map<String, Hir.FnDef> reachable,
+                           Map<ReachName, String> heldAt, Set<String> out) {
         if (e == null) {
             return;
         }
         if (e instanceof Hir.Var.Denoting v && v.denotes() instanceof ValueName.Helper) {
-            Hir.FnDef d = reachable.get(v.reaches());
+            // Which name this reads is what the reference reaches, and where that is held is what
+            // the graph is keyed by. Read off the spelling, a value named through its own module
+            // would be an edge to a node this graph has not got.
+            String at = heldAt.get(v.reachedAs());
+            Hir.FnDef d = at == null ? null : reachable.get(at);
             if (d != null && d.params().isEmpty()) {
-                out.add(v.reaches());
+                out.add(at);
             }
         }
-        Hir.forEachChild(e, c -> valuesRead(c, reachable, out));
+        Hir.forEachChild(e, c -> valuesRead(c, reachable, heldAt, out));
     }
 
     /**

@@ -11,6 +11,9 @@ import souther.compiler.types.ValueName;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import souther.compiler.types.ReachName;
+
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -51,14 +54,28 @@ class TheCallGraphReadsASugarFromTheLibraryThatDeclaresItTest {
         for (int i = 0; i < args; i++) {
             given.add(new Hir.IntLit(i, POS, null));
         }
-        return new Hir.Apply(qualified, name, new ReachName.OfLibrary(name), given,
+        return new Hir.Apply(qualified, new ReachName.OfLibrary(name), given,
                 ConstructionOrigin.own(), POS, null);
     }
 
+    /** The library's helpers as a table is keyed: under the alias the library publishes each by,
+     *  which the library says rather than this splitting its qualified name. */
+    private static Map<ReachName, HelperEntry> libraryHelpers() {
+        Map<ReachName, HelperEntry> reachable = new LinkedHashMap<>();
+        DefaultStdlib.get().helpers().forEach((qualified, def) -> {
+            ReachName reference =
+                    new ReachName.OfLibrary(DefaultStdlib.get().operation(qualified));
+            reachable.put(reference, HelperEntry.reached(reference, def));
+        });
+        return reachable;
+    }
+
     private static Set<String> callsIn(Hir.Expr e) {
-        Set<String> out = new LinkedHashSet<>();
-        HelperInliner.helperCallsIn(DefaultStdlib.get(), e, DefaultStdlib.get().helpers(), out);
-        return out;
+        Set<ReachName> out = new LinkedHashSet<>();
+        HelperInliner.helperCallsIn(DefaultStdlib.get(), e, libraryHelpers(), out);
+        Set<String> rendered = new LinkedHashSet<>();
+        out.forEach(reference -> rendered.add(reference.rendered()));
+        return rendered;
     }
 
     @Test
@@ -108,7 +125,7 @@ class TheCallGraphReadsASugarFromTheLibraryThatDeclaresItTest {
 
         assertNotNull(fold, "`List.fold` is sugar for the fold the combinators are derived from");
         assertEquals("List.foldFrom", fold.target().qualified());
-        assertTrue(graph.recurses("List.foldFrom"),
+        assertTrue(graph.recurses(new ReachName.OfLibrary(fold.target())),
                 "a module emits it as a method only because it recurses");
     }
 }

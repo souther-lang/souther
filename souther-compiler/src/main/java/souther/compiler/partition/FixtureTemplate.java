@@ -124,25 +124,27 @@ public record FixtureTemplate(String text, Hir.Expr value) {
     private static FixtureTemplate temporal(String type, String iso) {
         ValueName.Stdlib namespace = ValueName.Stdlib.namespace(type);
         return new FixtureTemplate(type + "(\"" + iso + "\")",
-                new Hir.Apply(type, namespace, new ReachName.OfLibrary(namespace),
+                new Hir.Apply(type, new ReachName.OfLibrary(namespace),
                         List.of(new Hir.StringLit(iso, NOWHERE, NO_SOURCE)),
                         ConstructionOrigin.own(), NOWHERE, NO_SOURCE));
     }
 
     /** The absent optional, which the language names rather than any module. */
     public static FixtureTemplate none() {
+        ValueName.Builtin none = new ValueName.Builtin("None");
         return new FixtureTemplate("None",
                 Hir.Var.denoting(WrittenName.synthetic("None", NOWHERE),
-                        new ValueName.Builtin("None"), new ReachName.Bare("None")));
+                        new ReachName.Bare(none)));
     }
 
     /** A case that carries nothing: naming it is constructing it. */
     public static FixtureTemplate unitCase(TypeReachName.Written type) {
         String written = type.rendered();
+        ValueName.OfType named =
+                new ValueName.OfType(written, type.denotes(), ConstructionOrigin.own());
         return new FixtureTemplate(written,
                 Hir.Var.denoting(WrittenName.synthetic(written, NOWHERE),
-                        new ValueName.OfType(written, type.denotes(), ConstructionOrigin.own()),
-                        new ReachName.Bare(written)));
+                        new ReachName.Bare(named)));
     }
 
     /**
@@ -202,9 +204,9 @@ public record FixtureTemplate(String text, Hir.Expr value) {
      */
     public static FixtureTemplate newtype(TypeReachName.Written type, FixtureTemplate inner) {
         String written = type.rendered();
+        ValueName.OfType named = new ValueName.OfType(written, type.denotes(), null);
         return new FixtureTemplate(written + "(" + inner.text() + ")",
-                new Hir.Apply(written, new ValueName.OfType(written, type.denotes(), null),
-                        new ReachName.Bare(written), List.of(inner.value()),
+                new Hir.Apply(written, new ReachName.Bare(named), List.of(inner.value()),
                         ConstructionOrigin.own(), NOWHERE, NO_SOURCE));
     }
 
@@ -249,9 +251,10 @@ public record FixtureTemplate(String text, Hir.Expr value) {
      * @param name   the name as this module writes it
      */
     public static FixtureTemplate named(String module, String name) {
+        ValueName.Helper helper = new ValueName.Helper(module, name);
         return new FixtureTemplate(name,
                 Hir.Var.denoting(WrittenName.synthetic(name, NOWHERE),
-                        new ValueName.Helper(module, name), new ReachName.Bare(name)));
+                        new ReachName.Bare(helper)));
     }
 
     /**

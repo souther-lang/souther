@@ -37,12 +37,12 @@ class ANameUsedAsAValueHasTwoAnswersTest {
 
     private static final SourcePos POS = new SourcePos(1, 1);
 
-    private static final ValueName DECLARED = new ValueName.Helper("demo", "spin");
+    private static final ValueName.Helper DECLARED = new ValueName.Helper("demo", "spin");
 
-    private static final ReachName REACHED = new ReachName.OfModule("demo", "spin");
+    private static final ReachName REACHED = new ReachName.OfModule(DECLARED);
 
     private static Hir.Var.Denoting denoting(WrittenName name) {
-        return new Hir.Var.Denoting(name, DECLARED, REACHED, name.region());
+        return new Hir.Var.Denoting(name, REACHED, name.region());
     }
 
     private static Hir.Var unanswered(WrittenName name) {
@@ -107,9 +107,7 @@ class ANameUsedAsAValueHasTwoAnswersTest {
         assertFalse(answered.unresolved());
 
         assertThrows(IllegalArgumentException.class,
-                () -> new Hir.Var.Denoting(WrittenName.of("spin", POS), DECLARED, null, null));
-        assertThrows(IllegalArgumentException.class,
-                () -> new Hir.Var.Denoting(WrittenName.of("spin", POS), null, REACHED, null));
+                () -> new Hir.Var.Denoting(WrittenName.of("spin", POS), null, null));
     }
 
     /**

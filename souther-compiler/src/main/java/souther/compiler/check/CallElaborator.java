@@ -119,7 +119,7 @@ public final class CallElaborator {
         Type declared = entry.signature().result();
         Map<String, Type> bindings = new HashMap<>();
         BottomInfer.pinResultTypeVars(declared, expected, bindings, ctx.symbols());
-        return new Core.Call(reached(new ReachName.OfLibrary(lib), lib, ctx),
+        return new Core.Call(reached(new ReachName.OfLibrary(lib), ctx),
                 List.of(), TypeOps.toBottom(TypeOps.substitute(declared, bindings)), v.pos());
     }
 
@@ -138,14 +138,14 @@ public final class CallElaborator {
      * kernel is a property of the declaration the resolver picked, and the two are one string apart
      * only for as long as they happen to be.
      */
-    private static Core.Reached reached(ReachName name, ValueName denotes, CheckContext ctx) {
-        if (denotes instanceof ValueName.Stdlib operation) {
+    private static Core.Reached reached(ReachName name, CheckContext ctx) {
+        if (name.denotes() instanceof ValueName.Stdlib operation) {
             Stdlib.Intrinsic kernel = ctx.symbols().library().intrinsicOf(operation);
             if (kernel != null) {
-                return new Core.Reached.OfKernel(name, denotes, kernel.kernel());
+                return new Core.Reached.OfKernel(name, kernel.kernel());
             }
         }
-        return new Core.Reached.OfDeclaration(name, denotes);
+        return new Core.Reached.OfDeclaration(name);
     }
 
     static Core elaborateCall(Hir.Apply call, Scope env, CheckContext ctx,
@@ -191,13 +191,18 @@ public final class CallElaborator {
         //
         // A trailing parameter an implementation takes its `depends on` as is written as a binding
         // and reaches the behavior the clause named: the call is to that behavior, and everything
-        // below asks what a call reaches rather than which parameter carried it here. The reach
-        // name stays what this module writes, which is the parameter's spelling.
-        ValueName denotes = callee.denotes() instanceof ValueName.Local local
-                && ctx.dependencyOf(local.id()) != null
-                ? ctx.dependencyOf(local.id()) : callee.denotes();
-        return new Core.Call(reached(callee.reachedAs(), denotes, ctx), ca.cores(), result,
-                call.pos());
+        // below asks what a call reaches rather than which parameter carried it here.
+        //
+        // Which makes it a different reference, and it is worked out as one. The parameter's is a
+        // reference to a binding, so keeping it beside the behavior would be a route to one thing
+        // paired with a denotation of another — the pairing `ReachName` holds both halves to
+        // prevent. What this module reaches the behavior by is asked of the behavior.
+        ValueName dependency = callee.denotes() instanceof ValueName.Local local
+                ? ctx.dependencyOf(local.id()) : null;
+        ReachName reaches = dependency == null
+                ? callee.reachedAs()
+                : ReachName.of(dependency, callee.name(), ctx.symbols().module());
+        return new Core.Call(reached(reaches, ctx), ca.cores(), result, call.pos());
     }
 
     /**

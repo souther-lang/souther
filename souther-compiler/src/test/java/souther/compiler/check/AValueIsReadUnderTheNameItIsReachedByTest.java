@@ -4,6 +4,7 @@ import souther.compiler.DefaultStdlib;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.frontend.CstFrontend;
+import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
@@ -58,12 +59,18 @@ class AValueIsReadUnderTheNameItIsReachedByTest {
 
                 let standard = 100
                 """, Map.of());
-        return HelperInliner.helpersOf(up).get("standard").reachedAs("up.standard");
+        return HelperInliner.helpersOf(up).get("standard")
+                .reachedAs(new ReachName.OfModule(new ValueName.Helper("up", "standard")));
     }
 
     private static Set<String> read(Hir.Module m, String fn, Map<String, Hir.FnDef> table) {
+        // Which reference reaches each of them: what a module took on says so itself, and what it
+        // declared it reaches bare.
+        Map<ReachName, String> heldAt = new LinkedHashMap<>();
+        table.forEach((at, def) -> heldAt.put(def.takenOnAs() != null ? def.takenOnAs()
+                : new ReachName.Bare(new ValueName.Helper(m.name(), def.name())), at));
         Set<String> out = new LinkedHashSet<>();
-        ValueCycles.valuesRead(HelperInliner.helpersOf(m).get(fn).writtenBody(), table, out);
+        ValueCycles.valuesRead(HelperInliner.helpersOf(m).get(fn).writtenBody(), table, heldAt, out);
         return out;
     }
 
