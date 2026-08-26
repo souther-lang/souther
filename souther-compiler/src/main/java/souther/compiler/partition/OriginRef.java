@@ -215,9 +215,11 @@ public sealed interface OriginRef {
      *               record inside it, or on a name wrapped round either, and only the one that wrote
      *               it has anything to answer for. Several where taking any one of them away leaves
      *               the end where it is, since each is then as much the answer as the others and
-     *               choosing would invent the one that is not known
+     *               choosing would invent the one that is not known. Several written in two modules
+     *               where an inner record's clause and an outer record's reach one coordinate at one
+     *               value, so this is not a set with a module of its own
      */
-    record NarrowedOrigin(OriginRef bound, List<TypeSymbol> within) implements OriginRef {
+    record NarrowedOrigin(OriginRef bound, List<TypeSymbol.AtModule> within) implements OriginRef {
 
         public NarrowedOrigin {
             within = List.copyOf(within);

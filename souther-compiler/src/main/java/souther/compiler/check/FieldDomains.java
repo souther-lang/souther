@@ -89,7 +89,7 @@ public final class FieldDomains {
     private volatile Map<RuleRef, RuleAccounting> accounting;
     /** Which declarations relate each coordinate to something else, and so could have moved where it
      * stops — see {@link #narrowedBy}. */
-    private final Map<String, List<TypeSymbol>> narrowers;
+    private final Map<String, List<TypeSymbol.AtModule>> narrowers;
     /** What each field has to hold, kept apart from what each field is. Same numbers, different
      * question — see {@link Held}. */
     private final Map<String, NumericDomain.Bounds> heldByField;
@@ -151,7 +151,7 @@ public final class FieldDomains {
                          List<InvariantChecker.Direct> directs, List<NoLine> noLines,
                          Map<RuleRef, Required> raised,
                          Map<RuleRef, Map<Core, Required>> raisedByPart, ReadingEvidence took,
-                         Map<String, List<TypeSymbol>> narrowers,
+                         Map<String, List<TypeSymbol.AtModule>> narrowers,
                          Set<String> notGathered, Set<String> handedOn,
                          SequencedMap<FactSubject, String> positions,
                          ConstraintState<FactSubject> constraints, TypeSymbol.AtModule named,
@@ -467,8 +467,8 @@ public final class FieldDomains {
      * differences and clauses can reach an end only together — and where it cannot, the set is what
      * is known and is handed over as it is.
      */
-    public List<TypeSymbol> narrowedBy(String path, boolean lower) {
-        List<TypeSymbol> candidates = narrowers.get(path);
+    public List<TypeSymbol.AtModule> narrowedBy(String path, boolean lower) {
+        List<TypeSymbol.AtModule> candidates = narrowers.get(path);
         if (candidates == null || candidates.isEmpty()) {
             return List.of();
         }
@@ -482,8 +482,8 @@ public final class FieldDomains {
         // where it stops: a second relation reaching a value the first has already passed changes
         // nothing, and naming it would make an edge's identity turn on a clause that moved it
         // nowhere.
-        List<TypeSymbol> held = new ArrayList<>();
-        for (TypeSymbol each : candidates) {
+        List<TypeSymbol.AtModule> held = new ArrayList<>();
+        for (TypeSymbol.AtModule each : candidates) {
             if (!ends(end, without(each::equals), path, lower)) {
                 held.add(each);
             }
@@ -497,8 +497,8 @@ public final class FieldDomains {
         // moves this end nowhere when it is the only one left moved it nowhere here, and it is out
         // whatever the rest of them are doing.
         Endpoint bare = endOf(without(candidates::contains), path, lower);
-        List<TypeSymbol> saying = new ArrayList<>();
-        for (TypeSymbol each : candidates) {
+        List<TypeSymbol.AtModule> saying = new ArrayList<>();
+        for (TypeSymbol.AtModule each : candidates) {
             if (!ends(bare, without(name -> candidates.contains(name) && !name.equals(each)),
                     path, lower)) {
                 saying.add(each);
@@ -509,9 +509,14 @@ public final class FieldDomains {
 
     /** In one order, whoever found them. Several of these are one answer and the answer is what a
      * line is told apart by, so an order read off the walk that collected them would make two
-     * readings of one edge into two lines. */
-    private static List<TypeSymbol> byName(List<TypeSymbol> found) {
-        return found.stream().sorted(java.util.Comparator.comparing(TypeSymbol::name)).toList();
+     * readings of one edge into two lines.
+     *
+     * <p>The declaration's own order and not its name alone. Two declarations holding one end can be
+     * written in two modules — an inner record's clause and an outer record's reaching the same
+     * coordinate at the same value — and two modules may each declare a {@code Span}, so a name is
+     * not what tells those two apart. */
+    private static List<TypeSymbol.AtModule> byName(List<TypeSymbol.AtModule> found) {
+        return found.stream().sorted().toList();
     }
 
     private Endpoint endOf(FieldDomains read, String path, boolean lower) {

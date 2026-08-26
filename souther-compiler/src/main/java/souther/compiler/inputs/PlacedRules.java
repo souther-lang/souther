@@ -219,7 +219,7 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules) {
     }
 
     /** Which declarations' clauses are holding the end at {@code path}, on the side asked for. */
-    List<TypeSymbol> narrowedBy(TermPath path, boolean lower) {
+    List<TypeSymbol.AtModule> narrowedBy(TermPath path, boolean lower) {
         String where = keyOf(path);
         return where == null || where.isEmpty() ? List.of() : bounds().narrowedBy(where, lower);
     }

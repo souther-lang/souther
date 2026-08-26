@@ -1149,7 +1149,10 @@ public final class InvariantChecker {
      * wrapped round either, and only the one that wrote it has anything to answer for.
      *
      * @param narrowers the declarations whose clauses compare each coordinate to something without
-     *                  placing an end on it, outermost first
+     *                  placing an end on it, outermost first. A declaration a module wrote, because
+     *                  a clause is written on one: what reaches here is the {@code declaredOn} of
+     *                  the clause's own reference, and a reader asking which module took an edge in
+     *                  has the answer without a cast that could come back empty
      * @param raised    what each clause reaching this value raises, keyed on the rule it is.
      *                  Beside the ends rather than derived from them: a clause that placed no end
      *                  may have raised a question all the same, and a clause that placed one raised
@@ -1160,7 +1163,7 @@ public final class InvariantChecker {
      *                  name the positions of the conjunct written beside it as well
      */
     record Reading(List<Direct> directs, List<FieldDomains.NoLine> noLines,
-                   Map<String, List<TypeSymbol>> narrowers,
+                   Map<String, List<TypeSymbol.AtModule>> narrowers,
                    Map<RuleRef, Required> raised,
                    Map<RuleRef, Map<Core, Required>> raisedByPart) {}
 
@@ -1187,7 +1190,7 @@ public final class InvariantChecker {
                         Carrier.WHOLE)));
         List<Direct> out = new ArrayList<>();
         List<FieldDomains.NoLine> noLines = new ArrayList<>();
-        Map<String, List<TypeSymbol>> narrowers = new LinkedHashMap<>();
+        Map<String, List<TypeSymbol.AtModule>> narrowers = new LinkedHashMap<>();
         Map<RuleRef, Required> raised = new LinkedHashMap<>();
         Map<RuleRef, Map<Core, Required>> raisedByPart = new LinkedHashMap<>();
         stated.forEach(each ->
@@ -1292,7 +1295,7 @@ public final class InvariantChecker {
     private void direct(Core clause, RuleRef.Invariant from, int[] conjunct, Denotations at,
                         Map<FactSubject, Coordinate> byName, List<Direct> out,
                         List<FieldDomains.NoLine> noLines,
-                        Map<String, List<TypeSymbol>> narrowers,
+                        Map<String, List<TypeSymbol.AtModule>> narrowers,
                         Map<RuleRef, Required> raised, ReadingEvidence took,
                         Map<String, Type> typeAt,
                         PartsRead parts,
@@ -1692,13 +1695,14 @@ public final class InvariantChecker {
      * along the differences, so a clause reading {@code a} is a way {@code a}'s edge can have been
      * moved even where the number came from somewhere further off.
      */
-    private void relating(Core clause, TypeSymbol from, Denotations at,
+    private void relating(Core clause, TypeSymbol.AtModule from, Denotations at,
                           Map<FactSubject, Coordinate> byName,
-                          Map<String, List<TypeSymbol>> narrowers) {
+                          Map<String, List<TypeSymbol.AtModule>> narrowers) {
         FactSubject named = nameOf(clause, at);
         Coordinate found = named == null ? null : byName.get(named);
         if (found != null) {
-            List<TypeSymbol> had = narrowers.computeIfAbsent(found.path(), _ -> new ArrayList<>());
+            List<TypeSymbol.AtModule> had =
+                    narrowers.computeIfAbsent(found.path(), _ -> new ArrayList<>());
             if (!had.contains(from)) {
                 had.add(from);
             }
