@@ -86,7 +86,7 @@ public final class ResolvedCase {
      * <p>A value and not an identity. It is kept in what a behavior's declaration comes to, and two
      * compiles of one source have to answer alike — a reader comparing what was stated before an
      * edit with what is stated after would otherwise see every rule change because the objects are
-     * new ({@code EquivalentDatabasesAnswerTheSameTest}).
+     * new ({@code EverythingAnAnswerHoldsMeansSomethingTest}).
      *
      * <p>The atoms are compared as well as the selector. They follow from the selector and the
      * declarations, so within one compile the two never disagree; comparing both says that plainly
