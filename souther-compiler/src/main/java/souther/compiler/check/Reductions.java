@@ -45,7 +45,7 @@ final class Reductions {
      * are it over containers with no order, which changes nothing this states — what is licensed says
      * nothing about the order elements arrive in.
      */
-    private static final Set<ValueName> REDUCES = Set.of(
+    private static final Set<ValueName.Stdlib.Operation> REDUCES = Set.of(
             op("List", "foldFrom"),
             op("List", "foldRight"),
             op("Set", "fold"),
@@ -80,7 +80,10 @@ final class Reductions {
     /** The reduction {@code operation} is, or null where it reduces nothing — including where it
      * applies no closure at all, and where the name applied is not a library operation. */
     static Reduction of(ValueName operation) {
-        return operation == null ? null : Derived.RULES.get(operation);
+        // A name that is no library operation reduces nothing, and is answered by the type rather
+        // than by a lookup that finds nothing.
+        return operation instanceof ValueName.Stdlib.Operation library
+                ? Derived.RULES.get(library) : null;
     }
 
     /**
@@ -104,13 +107,13 @@ final class Reductions {
 
     /** The operations there is a rule about, for the check that a rule answers a question its
      * operation is asked. */
-    static Set<ValueName> answered() {
+    static Set<ValueName.Stdlib.Operation> answered() {
         return Derived.RULES.keySet();
     }
 
     /** Read once. The library is the same library for every module compiled. */
     private static final class Derived {
-        private static final Map<ValueName, Reduction> RULES =
+        private static final Map<ValueName.Stdlib.Operation, Reduction> RULES =
                 read(DefaultStdlib.get());
     }
 
@@ -123,10 +126,10 @@ final class Reductions {
     /* A pure function of the library, so the holder above is the only thing here that reaches for
      * the process's own — {@link souther.compiler.DefaultStdlib} says who may and why the loader
      * may not. */
-    private static Map<ValueName, Reduction> read(Stdlib stdlib) {
-        Map<ValueName, Reduction> rules = new LinkedHashMap<>();
-        for (ValueName operation : REDUCES) {
-            Stdlib.Entry entry = stdlib.entry(operation.toString());
+    private static Map<ValueName.Stdlib.Operation, Reduction> read(Stdlib stdlib) {
+        Map<ValueName.Stdlib.Operation, Reduction> rules = new LinkedHashMap<>();
+        for (ValueName.Stdlib.Operation operation : REDUCES) {
+            Stdlib.Entry entry = stdlib.entry(operation);
             if (entry == null) {
                 throw new IllegalStateException(operation + " is named a reduction and the library"
                         + " declares no such operation");
@@ -143,7 +146,7 @@ final class Reductions {
                         + ", whose seed is not among the arguments the rewrite keeps in place —"
                         + " what it reduces from cannot be said of the sugar");
             }
-            rules.put(stdlib.operation(sugar), target);
+            rules.put(sugar, target);
         });
         return Map.copyOf(rules);
     }
@@ -206,7 +209,7 @@ final class Reductions {
     /** The operation {@code name} of the library module published as {@code alias}, written as the
      * two values a library name is made of — the spelling {@link DischargeRules} states its own rows
      * in. */
-    private static ValueName op(String alias, String name) {
+    private static ValueName.Stdlib.Operation op(String alias, String name) {
         return ValueName.Stdlib.operation(alias, name);
     }
 

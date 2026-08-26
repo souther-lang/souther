@@ -275,7 +275,7 @@ public final class ConstEval {
         // three below fold because of what they compute, which is what a kernel names; the alias
         // they are published under is the library's own, and a fold selected by one would be right
         // for exactly as long as the two agreed.
-        if (!(call.answered().denotes() instanceof souther.compiler.types.ValueName.Stdlib
+        if (!(call.answered().denotes() instanceof souther.compiler.types.ValueName.Stdlib.Operation
                 operation)) {
             return Optional.empty();
         }

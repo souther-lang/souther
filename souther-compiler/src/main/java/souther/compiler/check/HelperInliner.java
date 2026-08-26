@@ -591,10 +591,10 @@ public final class HelperInliner {
         // Whether a name is sugar is the library's answer about one of its own operations, so it is
         // asked with the operation rather than with the reference rendered. Anything else reaches
         // no library name and has no sugar to write out.
-        if (!(call.answered().denotes() instanceof ValueName.Stdlib operation)) {
+        if (!(call.answered().denotes() instanceof ValueName.Stdlib.Operation operation)) {
             return null;
         }
-        Stdlib.Rewrite rewrite = stdlib.rewriteOf(operation.qualified());
+        Stdlib.Rewrite rewrite = stdlib.rewriteOf(operation);
         return rewrite != null && call.args().size() == rewrite.keptArgs() ? rewrite : null;
     }
 
@@ -1550,11 +1550,13 @@ public final class HelperInliner {
             return OptionalInt.empty();   // it stands for no declaration to take anything
         }
         int arity = switch (v.denotes()) {
-            case ValueName.Stdlib lib -> {
-                Stdlib.Entry entry = table.library().entry(lib.qualified());
+            case ValueName.Stdlib.Operation lib -> {
+                Stdlib.Entry entry = table.library().entry(lib);
                 Hir.FnDef declared = entry == null ? null : entry.declaration();
                 yield declared == null ? 0 : declared.params().size();
             }
+            // A namespace is not applied to anything, so it takes no arguments.
+            case ValueName.Stdlib.Namespace _ -> 0;
             case ValueName.Helper _ -> {
                 ReachName.Declaration reaches = v.reachesADeclaration();
                 Hir.FnDef declared = reaches == null ? null : table.reached(reaches);

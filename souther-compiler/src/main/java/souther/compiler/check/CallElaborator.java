@@ -114,7 +114,7 @@ public final class CallElaborator {
         if (!(v.denotes() instanceof ValueName.Stdlib.Operation lib)) {
             return null;
         }
-        Stdlib.Entry entry = ctx.symbols().library().entry(lib.qualified());
+        Stdlib.Entry entry = ctx.symbols().library().entry(lib);
         if (entry == null || !entry.declaration().params().isEmpty()) {
             return null;
         }
@@ -570,8 +570,8 @@ public final class CallElaborator {
         // Asked with the name the library keys itself by, which the denotation carries. Asked with
         // the reference rendered, this would be the library looked up by a spelling — the same
         // string today, and the library's to change.
-        Stdlib.Entry entry = callee.denotes() instanceof ValueName.Stdlib operation
-                ? ctx.symbols().library().entry(operation.qualified()) : null;
+        Stdlib.Entry entry = callee.denotes() instanceof ValueName.Stdlib.Operation operation
+                ? ctx.symbols().library().entry(operation) : null;
         // A declaration written with no parameter list is a value ([#fn-declaration]), and an empty
         // `()` would be a second spelling of it. The library was the last place that spelling was
         // still accepted.
@@ -584,7 +584,8 @@ public final class CallElaborator {
         // and yield its result type; the backend emits the primitive the call says it reaches. A
         // Souther-bodied library call — a recursive helper such as `List.foldFrom` — is not one of
         // these and takes the paths below, as any helper does.
-        Stdlib.Intrinsic declaredKernel = callee.denotes() instanceof ValueName.Stdlib operation
+        Stdlib.Intrinsic declaredKernel = callee.denotes() instanceof ValueName.Stdlib.Operation
+                operation
                 ? ctx.symbols().library().intrinsicOf(operation) : null;
         if (declaredKernel != null) {
             Kernel kernel = declaredKernel.kernel();

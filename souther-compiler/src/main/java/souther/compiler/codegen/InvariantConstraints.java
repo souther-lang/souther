@@ -306,7 +306,7 @@ public final class InvariantConstraints {
      * already has.
      */
     private boolean applies(Hir.Apply call, Kernel kernel) {
-        return applied(call) instanceof ValueName.Stdlib operation
+        return applied(call) instanceof ValueName.Stdlib.Operation operation
                 && symbols.kernelOf(operation) == kernel;
     }
 

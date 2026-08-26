@@ -1397,7 +1397,8 @@ public final class FixtureReader {
             case ValueName.OfType of -> new Stated.Name(of.type());
             case ValueName.Builtin b when b.name().equals("None") -> ABSENCE;
             // `Map.empty` / `Set.empty`: the empty collection, under no name.
-            case ValueName.Stdlib lib when symbols.library().isEmptyCollectionValue(lib.qualified()) ->
+            case ValueName.Stdlib.Operation lib
+                    when symbols.library().isEmptyCollectionValue(lib) ->
                     STATES_NO_NAME;
             // A binding and a value open a frame at this same position; anything else is not a value
             // a fixture can name, which the reading says of it.
@@ -1501,7 +1502,8 @@ public final class FixtureReader {
             // run and its value is known from the name alone. It is the empty collection, which a row
             // writes `[]` — admitted for the reason `fromList` is (see `collectionOrNewtype`), so a
             // body and a row spell an empty map the one way.
-            case ValueName.Stdlib lib when symbols.library().isEmptyCollectionValue(lib.qualified()) ->
+            case ValueName.Stdlib.Operation lib
+                    when symbols.library().isEmptyCollectionValue(lib) ->
                     new ArrayList<>();
             case null, default ->
                     throw new FixtureException("`" + v.name() + "` is not a value a fixture can name");
@@ -1636,7 +1638,7 @@ public final class FixtureReader {
      *  agreed. */
     private boolean isFromList(Hir.Apply c) {
         if (c.answered() == null
-                || !(c.answered().denotes() instanceof ValueName.Stdlib operation)) {
+                || !(c.answered().denotes() instanceof ValueName.Stdlib.Operation operation)) {
             return false;
         }
         Kernel kernel = symbols.kernelOf(operation);

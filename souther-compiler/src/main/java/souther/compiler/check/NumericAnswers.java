@@ -43,10 +43,12 @@ public final class NumericAnswers {
      * they have somewhere to put.
      */
     public static Type typeOf(ValueName operation, Stdlib library) {
-        if (!(operation instanceof ValueName.Stdlib named) || named.isNamespace()) {
+        // A namespace is not an operation and has no entry, which the arm says rather than a
+        // question asked of a wider one.
+        if (!(operation instanceof ValueName.Stdlib.Operation named)) {
             return null;
         }
-        Stdlib.Entry entry = library.entry(named.qualified());
+        Stdlib.Entry entry = library.entry(named);
         if (entry == null || entry.signature() == null) {
             return null;
         }

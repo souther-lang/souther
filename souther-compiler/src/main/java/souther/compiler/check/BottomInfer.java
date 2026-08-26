@@ -78,8 +78,9 @@ public final class BottomInfer {
         if (e instanceof Hir.RowCollection row) {
             return row.elements().isEmpty();
         }
-        return e instanceof Hir.Var.Denoting v && v.denotes() instanceof ValueName.Stdlib lib
-                && stdlib.isEmptyCollectionValue(lib.qualified());
+        return e instanceof Hir.Var.Denoting v
+                && v.denotes() instanceof ValueName.Stdlib.Operation lib
+                && stdlib.isEmptyCollectionValue(lib);
     }
 
     /** Best-effort: bind the type variables of {@code result} from an {@code expected} type the context

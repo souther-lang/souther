@@ -126,11 +126,17 @@ final class Combinators {
         return Derived.RULES.keySet();
     }
 
-    /** The operations there is a rule for, for the tests that hold them to firing. */
-    static Set<String> names() {
-        Set<String> names = new LinkedHashSet<>();
-        Derived.RULES.keySet().forEach(operation -> names.add(operation.toString()));
-        return names;
+    /** The operations there is a rule for, for the tests that hold them to firing. Handed over as
+     *  the operations, so a reader holding one asks the library with it rather than with a spelling
+     *  this rendered on the way out. */
+    static Set<ValueName.Stdlib.Operation> named() {
+        Set<ValueName.Stdlib.Operation> named = new LinkedHashSet<>();
+        Derived.RULES.keySet().forEach(operation -> {
+            if (operation instanceof ValueName.Stdlib.Operation library) {
+                named.add(library);
+            }
+        });
+        return named;
     }
 
     /** Read off the library on the first ask. The library is the same library for every module
@@ -145,10 +151,10 @@ final class Combinators {
      * may not. */
     private static Map<ValueName, Combinator> read(Stdlib stdlib) {
         Map<ValueName, Combinator> rules = new LinkedHashMap<>();
-        stdlib.entries().forEach((qualified, entry) -> {
-            Combinator rule = ruleFor(qualified, entry.signature().params());
+        stdlib.entries().forEach((operation, entry) -> {
+            Combinator rule = ruleFor(operation, entry.signature().params());
             if (rule != null) {
-                rules.put(stdlib.operation(qualified), rule);
+                rules.put(operation, rule);
             }
         });
         stdlib.rewrites().forEach((sugar, rewrite) -> {
@@ -161,7 +167,7 @@ final class Combinators {
                         + ", whose closure or container is not among the arguments the rewrite keeps"
                         + " in place — what it hands its closure cannot be said of the sugar");
             }
-            rules.put(stdlib.operation(sugar), target);
+            rules.put(sugar, target);
         });
         return Collections.unmodifiableMap(rules);
     }
@@ -174,7 +180,7 @@ final class Combinators {
      * "hands its closure the contents of" means, said in types. An operation whose signature admits
      * more than one reading of either is one this cannot answer for.
      */
-    private static Combinator ruleFor(String qualified, List<Type> params) {
+    private static Combinator ruleFor(ValueName.Stdlib.Operation qualified, List<Type> params) {
         int closureArg = -1;
         for (int i = 0; i < params.size(); i++) {
             if (params.get(i) instanceof Type.FnOf) {

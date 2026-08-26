@@ -2,6 +2,7 @@ package souther.compiler;
 
 import souther.compiler.check.StdlibLoader;
 import souther.compiler.diag.CompileException;
+import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
 
@@ -268,7 +269,8 @@ class AStandardLibraryNameIsReachedQualifiedOrImportedTest {
         // The sugar is declared in the compiler rather than in a source, so it is named here. A
         // sugar added without a line here fails this test, which is the point: it is part of the
         // surface a caller writes against.
-        assertEquals(Set.of("List.fold"), DefaultStdlib.get().rewrites().keySet(),
+        assertEquals(Set.of(ValueName.Stdlib.operation("List", "fold")),
+                DefaultStdlib.get().rewrites().keySet(),
                 "the sugared names this test knows about");
         byBareName.computeIfAbsent("fold", bare -> new ArrayList<>()).add("List.fold");
         byBareName.get("fold").sort((a, b) -> moduleOrder(a) - moduleOrder(b));

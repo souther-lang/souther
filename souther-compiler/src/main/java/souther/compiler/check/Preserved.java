@@ -115,8 +115,7 @@ public record Preserved(Map<ValueName, CompleteSignature> operations, SettledVal
      * may not. */
     private static Preserved readTheLibrary(Stdlib stdlib) {
         Map<ValueName, CompleteSignature> operations = new LinkedHashMap<>();
-        stdlib.entries().forEach((qualified, entry) -> {
-            ValueName.Stdlib operation = stdlib.operation(qualified);
+        stdlib.entries().forEach((operation, entry) -> {
             operations.put(operation, CompleteSignature.of(
                     operation, entry.signature().params(), entry.signature().result()));
         });

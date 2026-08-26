@@ -67,10 +67,10 @@ final class Accumulations {
      * list of strings joined from the empty string. The library states the second as
      * {@code join("", xs)} itself.
      */
-    private static final Map<ValueName, Accumulation> ACCUMULATES = accumulates();
+    private static final Map<ValueName.Stdlib.Operation, Accumulation> ACCUMULATES = accumulates();
 
-    private static Map<ValueName, Accumulation> accumulates() {
-        Map<ValueName, Accumulation> stated = new LinkedHashMap<>();
+    private static Map<ValueName.Stdlib.Operation, Accumulation> accumulates() {
+        Map<ValueName.Stdlib.Operation, Accumulation> stated = new LinkedHashMap<>();
         stated.put(op("List", "sum"), new Accumulation(Identity.ZERO, Combine.ADD));
         stated.put(op("List", "product"), new Accumulation(Identity.ONE, Combine.MULTIPLY));
         stated.put(op("List", "concat"), new Accumulation(Identity.EMPTY, Combine.APPEND));
@@ -92,7 +92,10 @@ final class Accumulations {
     /** What {@code operation} accumulates, or null where it accumulates nothing — including where
      * the name is not a library operation. */
     static Accumulation of(ValueName operation) {
-        return operation == null ? null : Derived.RULES.get(operation);
+        // A name that is no library operation accumulates nothing, and is answered by the type
+        // rather than by a lookup that finds nothing.
+        return operation instanceof ValueName.Stdlib.Operation library
+                ? Derived.RULES.get(library) : null;
     }
 
     /**
@@ -105,24 +108,27 @@ final class Accumulations {
      * refused where the rules are read rather than answered by half.
      */
     static Accumulating accumulating(Core.PreservedCall call) {
-        Accumulation what = of(call.operation());
-        Integer container = Derived.CONTAINERS.get(call.operation());
+        if (!(call.operation() instanceof ValueName.Stdlib.Operation operation)) {
+            return null;
+        }
+        Accumulation what = of(operation);
+        Integer container = Derived.CONTAINERS.get(operation);
         return what == null || container == null || container >= call.args().size() ? null
                 : new Accumulating(what, call.args().get(container));
     }
 
     /** The operations there is a rule about, for the check that a rule answers a question its
      * operation is asked. */
-    static Set<ValueName> answered() {
+    static Set<ValueName.Stdlib.Operation> answered() {
         return Derived.RULES.keySet();
     }
 
     /** Read once, and held to the library while it is read. The library is the same library for
      * every module compiled. */
     private static final class Derived {
-        private static final Map<ValueName, Accumulation> RULES =
+        private static final Map<ValueName.Stdlib.Operation, Accumulation> RULES =
                 read(DefaultStdlib.get());
-        private static final Map<ValueName, Integer> CONTAINERS =
+        private static final Map<ValueName.Stdlib.Operation, Integer> CONTAINERS =
                 containers(DefaultStdlib.get());
     }
 
@@ -136,10 +142,10 @@ final class Accumulations {
     /* A pure function of the library, so the holder above is the only thing here that reaches for
      * the process's own — {@link souther.compiler.DefaultStdlib} says who may and why the loader
      * may not. */
-    private static Map<ValueName, Accumulation> read(Stdlib stdlib) {
-        Map<ValueName, Accumulation> rules = new LinkedHashMap<>();
+    private static Map<ValueName.Stdlib.Operation, Accumulation> read(Stdlib stdlib) {
+        Map<ValueName.Stdlib.Operation, Accumulation> rules = new LinkedHashMap<>();
         ACCUMULATES.forEach((operation, accumulation) -> {
-            if (stdlib.entry(operation.toString()) == null) {
+            if (stdlib.entry(operation) == null) {
                 throw new IllegalStateException(operation + " is named an accumulation and the"
                         + " library declares no such operation");
             }
@@ -157,10 +163,10 @@ final class Accumulations {
      * construction; two of them would be a declaration that does not say which it walks, and is
      * refused rather than guessed at.
      */
-    private static Map<ValueName, Integer> containers(Stdlib stdlib) {
-        Map<ValueName, Integer> where = new LinkedHashMap<>();
+    private static Map<ValueName.Stdlib.Operation, Integer> containers(Stdlib stdlib) {
+        Map<ValueName.Stdlib.Operation, Integer> where = new LinkedHashMap<>();
         Derived.RULES.keySet().forEach(operation -> {
-            Stdlib.Signature signature = stdlib.entry(operation.toString()).signature();
+            Stdlib.Signature signature = stdlib.entry(operation).signature();
             int found = -1;
             for (int i = 0; i < signature.params().size(); i++) {
                 Type element = Type.elementOfAContainer(signature.params().get(i));
@@ -186,7 +192,7 @@ final class Accumulations {
     /** The operation {@code name} of the library module published as {@code alias}, written as the
      * two values a library name is made of — the spelling {@link Reductions} states its own rows
      * in. */
-    private static ValueName op(String alias, String name) {
+    private static ValueName.Stdlib.Operation op(String alias, String name) {
         return ValueName.Stdlib.operation(alias, name);
     }
 

@@ -76,7 +76,7 @@ public final class Symbols implements NameSense {
      * {@link #library()} so that a reader holding these symbols has it — a {@code Kernel} is
      * {@code core}'s, so an output asking this is not naming the library.
      */
-    public Kernel kernelOf(ValueName.Stdlib operation) {
+    public Kernel kernelOf(ValueName.Stdlib.Operation operation) {
         Stdlib.Intrinsic intrinsic = stdlib.intrinsicOf(operation);
         return intrinsic == null ? null : intrinsic.kernel();
     }

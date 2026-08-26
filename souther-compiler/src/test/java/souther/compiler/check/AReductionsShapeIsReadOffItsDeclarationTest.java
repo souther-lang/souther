@@ -77,7 +77,7 @@ class AReductionsShapeIsReadOffItsDeclarationTest {
     @Test
     void everyWalkWrittenDownIsOneTheQuestionIsAskedOf() {
         for (ValueName operation : Reductions.answered()) {
-            assertTrue(Question.REDUCTION.asksOfOperation(DefaultStdlib.get(), operation.toString()),
+            assertTrue(Question.REDUCTION.asksOfOperation(DefaultStdlib.get(), operation),
                     operation + " has a rule and is not asked whether it is a walk");
         }
     }

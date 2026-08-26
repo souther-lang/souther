@@ -94,10 +94,14 @@ public final class Stdlib {
     public record Intrinsic(Kernel kernel, KernelSignature signature) {
     }
 
-    private final Map<String, Entry> entries;
-    private final Set<String> privateNames;
-    private final Map<String, ValueName.Stdlib> operations;
-    private final Map<String, Rewrite> sugars;
+    private final Map<ValueName.Stdlib.Operation, Entry> entries;
+    private final Set<ValueName.Stdlib.Operation> privateNames;
+    /** Which operation each spelling reaches — the one table here a written name is the key of, and
+     *  the only way into the rest. What the library publishes an operation as is the library's, so
+     *  a reader holding a spelling asks here for the operation and asks everything else with that;
+     *  a reader holding an operation never comes through. */
+    private final Map<String, ValueName.Stdlib.Operation> operations;
+    private final Map<ValueName.Stdlib.Operation, Rewrite> sugars;
     private final Map<TypeKey, Hir.Def> language;
     /** And the same declarations by the library module that writes them, worked out once with
      *  everything else rather than gathered on each ask. */
@@ -109,7 +113,7 @@ public final class Stdlib {
     private final KernelSignatures kernels;
     /** And which kernel each operation that is one reaches, so a reader holding a name asks the
      *  library rather than the declaration it would have to open to find out. */
-    private final Map<String, Intrinsic> kernelOperations;
+    private final Map<ValueName.Stdlib.Operation, Intrinsic> kernelOperations;
     private final Map<ValueName.Stdlib.Operation, Hir.FnDef> helpers;
     private final Set<String> published;
     private final Map<String, List<String>> candidates;
@@ -117,10 +121,12 @@ public final class Stdlib {
      *  ask would be the same answer allocated again for every module of every compilation. */
     private final LibraryNames names;
 
-    private Stdlib(Map<String, Entry> entries, Set<String> privateNames,
-                   Map<String, ValueName.Stdlib> operations, Map<String, Rewrite> sugars,
+    private Stdlib(Map<ValueName.Stdlib.Operation, Entry> entries,
+                   Set<ValueName.Stdlib.Operation> privateNames,
+                   Map<String, ValueName.Stdlib.Operation> operations,
+                   Map<ValueName.Stdlib.Operation, Rewrite> sugars,
                    Map<TypeKey, Hir.Def> language, Map<Kernel, Intrinsic> intrinsics,
-                   Map<String, Intrinsic> kernelOperations,
+                   Map<ValueName.Stdlib.Operation, Intrinsic> kernelOperations,
                    Map<ValueName.Stdlib.Operation, Hir.FnDef> helpers, Set<String> published,
                    Map<String, List<String>> candidates) {
         this.entries = entries;
@@ -145,21 +151,26 @@ public final class Stdlib {
         this.helpers = helpers;
         this.published = published;
         this.candidates = candidates;
-        Set<String> named = new LinkedHashSet<>(entries.keySet());
-        named.addAll(sugars.keySet());
-        this.names = new LibraryNames(identities, privateNames, named, candidates);
+        // Rendered here and not held rendered: resolution is given spellings and answers with
+        // them, which is the one place a written name is what is being asked about.
+        Set<String> named = new LinkedHashSet<>();
+        entries.keySet().forEach(operation -> named.add(operation.qualified()));
+        sugars.keySet().forEach(operation -> named.add(operation.qualified()));
+        Set<String> reserved = new LinkedHashSet<>();
+        privateNames.forEach(operation -> reserved.add(operation.qualified()));
+        this.names = new LibraryNames(identities, reserved, named, candidates);
     }
 
-    /** The library's entry for {@code qualifiedName}, or null where the library declares no such
-     *  name — including for {@linkplain #sugared(String) sugar}, which is a rewrite, not a
+    /** The library's entry for {@code operation}, or null where the library declares no such
+     *  operation — including for {@linkplain #sugared sugar}, which is a rewrite, not a
      *  declaration. */
-    public Entry entry(String qualifiedName) {
-        return entries.get(qualifiedName);
+    public Entry entry(ValueName.Stdlib.Operation operation) {
+        return entries.get(operation);
     }
 
-    /** Every entry, keyed by qualified name, in declaration order — private ones included, because
-     *  a checker and a backend still have to type and emit what they are behind. */
-    public Map<String, Entry> entries() {
+    /** Every entry, by the operation it declares, in declaration order — private ones included,
+     *  because a checker and a backend still have to type and emit what they are behind. */
+    public Map<ValueName.Stdlib.Operation, Entry> entries() {
         return entries;
     }
 
@@ -170,47 +181,51 @@ public final class Stdlib {
      * spelling gets them back rather than splitting it. The library is the only thing that knows
      * which part is which: {@code souther.list} declares {@code foldFrom} and publishes it under
      * {@code List}, and the spelling says nothing about either.
+     *
+     * <p>The one question here a written name is the subject of, and so the way in for a reader
+     * that has one: everything else is asked with the operation this answers with. A reader already
+     * holding an operation has its answer and does not come through here.
      */
-    public ValueName.Stdlib operation(String qualifiedName) {
+    public ValueName.Stdlib.Operation operation(String qualifiedName) {
         return operations.get(qualifiedName);
     }
 
-    /** Whether {@code qualifiedName} names a declaration the library keeps to itself. Such a name
-     *  may be written inside the reserved namespace and nowhere else, so everything outside it is
-     *  told the library has no such member. */
-    public boolean isPrivateMember(String qualifiedName) {
-        return privateNames.contains(qualifiedName);
+    /** Whether {@code operation} is a declaration the library keeps to itself. Such a name may be
+     *  written inside the reserved namespace and nowhere else, so everything outside it is told the
+     *  library has no such member. */
+    public boolean isPrivateMember(ValueName.Stdlib.Operation operation) {
+        return privateNames.contains(operation);
     }
 
-    /** Whether {@code qualifiedName} (e.g. {@code "List.map"}) is a standard-library function — a
-     *  declared one, or a sugar for one. Sugar has no declaration of its own, so this is wider than
-     *  {@link #entry(String)} answering: {@code List.fold} is a library function and has no entry. */
-    public boolean isLibraryFunction(String qualifiedName) {
-        return entries.containsKey(qualifiedName) || sugars.containsKey(qualifiedName);
+    /** Whether {@code operation} is a standard-library function — a declared one, or a sugar for
+     *  one. Sugar has no declaration of its own, so this is wider than {@link #entry} answering:
+     *  {@code List.fold} is a library function and has no entry. */
+    public boolean isLibraryFunction(ValueName.Stdlib.Operation operation) {
+        return entries.containsKey(operation) || sugars.containsKey(operation);
     }
 
-    /** Whether {@code qualifiedName} is sugar for another library call — a name no tree holds after
-     *  the rewrite. */
-    public boolean sugared(String qualifiedName) {
-        return sugars.containsKey(qualifiedName);
+    /** Whether {@code operation} is sugar for another library call — one no tree holds after the
+     *  rewrite. */
+    public boolean sugared(ValueName.Stdlib.Operation operation) {
+        return sugars.containsKey(operation);
     }
 
-    /** What {@code qualifiedName} rewrites to, or null where it is not sugar. */
-    public Rewrite rewriteOf(String qualifiedName) {
-        return sugars.get(qualifiedName);
+    /** What {@code operation} rewrites to, or null where it is not sugar. */
+    public Rewrite rewriteOf(ValueName.Stdlib.Operation operation) {
+        return sugars.get(operation);
     }
 
-    /** Every sugared name, by what it rewrites to. */
-    public Map<String, Rewrite> rewrites() {
+    /** Every sugared operation, by what it rewrites to. */
+    public Map<ValueName.Stdlib.Operation, Rewrite> rewrites() {
         return sugars;
     }
 
-    /** Whether {@code qualifiedName} is a library <em>value</em> standing for an empty collection —
+    /** Whether {@code operation} is a library <em>value</em> standing for an empty collection —
      *  {@code Map.empty}, {@code Set.empty}. Written with no parameter list, so it has no argument to
      *  learn its element type from and takes it from the position it is written in, as {@code []}
-     *  does. Asked rather than spelled out: which names those are is the library's own to say. */
-    public boolean isEmptyCollectionValue(String qualifiedName) {
-        Entry entry = entries.get(qualifiedName);
+     *  does. Asked rather than spelled out: which those are is the library's own to say. */
+    public boolean isEmptyCollectionValue(ValueName.Stdlib.Operation operation) {
+        Entry entry = entries.get(operation);
         return entry != null && entry.declaration().params().isEmpty();
     }
 
@@ -285,13 +300,13 @@ public final class Stdlib {
      * library is written to learn what it means, and would go on holding the declaration — which is
      * {@code Hir}, and is this compiler's own.
      *
-     * <p>Asked with the operation and not with a spelling of it. A qualified name is how this is
-     * stored and a reach name renders as one today, which is a thing that is true rather than a
+     * <p>Asked with the operation and not with a spelling of it, and filed under the operation too.
+     * A reach name renders as a qualified one today, which is a thing that is true rather than a
      * thing that is held: a reader handing over a rendered name would be asking the library to
      * resolve a spelling, and would go on doing it correctly for exactly as long as the two agreed.
      */
-    public Intrinsic intrinsicOf(ValueName.Stdlib operation) {
-        return kernelOperations.get(operation.qualified());
+    public Intrinsic intrinsicOf(ValueName.Stdlib.Operation operation) {
+        return kernelOperations.get(operation);
     }
 
     /**
@@ -389,9 +404,9 @@ public final class Stdlib {
      */
     public static final class Builder {
 
-        private final Map<String, Entry> entries = new LinkedHashMap<>();
-        private final Set<String> privateNames = new LinkedHashSet<>();
-        private final Map<String, ValueName.Stdlib> operations = new LinkedHashMap<>();
+        private final Map<ValueName.Stdlib.Operation, Entry> entries = new LinkedHashMap<>();
+        private final Set<ValueName.Stdlib.Operation> privateNames = new LinkedHashSet<>();
+        private final Map<String, ValueName.Stdlib.Operation> operations = new LinkedHashMap<>();
         private final Map<TypeKey, Hir.Def> language = new LinkedHashMap<>();
         private final Map<String, TypeKey> declaredBare = new LinkedHashMap<>();
 
@@ -406,16 +421,20 @@ public final class Stdlib {
          *     a value position could do the choosing. Put into a map, a second one would replace the
          *     first in silence, so it is refused where it arrives.
          */
-        public Builder declares(ValueName.Stdlib operation, Entry entry, boolean isPrivate) {
-            String qualified = operation.qualified();
-            if (entries.containsKey(qualified)) {
+        public Builder declares(ValueName.Stdlib.Operation operation, Entry entry,
+                                boolean isPrivate) {
+            if (entries.containsKey(operation)) {
                 throw new IllegalStateException(
-                        "the standard library declares `" + qualified + "` twice");
+                        "the standard library declares `" + operation.qualified() + "` twice");
             }
-            entries.put(qualified, entry);
-            operations.put(qualified, operation);
+            // Under the operation, which is what arrives. Rendering it to file it would make the
+            // spelling the key of everything derived from this, and every reader holding an
+            // operation would have to render it back to ask — the library resolving a name it
+            // itself had just been handed.
+            entries.put(operation, entry);
+            operations.put(operation.qualified(), operation);
             if (isPrivate) {
-                privateNames.add(qualified);
+                privateNames.add(operation);
             }
             return this;
         }
@@ -443,12 +462,13 @@ public final class Stdlib {
 
         /** The finished library. */
         public Stdlib freeze() {
-            Map<String, Rewrite> sugars = sugars();
+            Map<ValueName.Stdlib.Operation, Rewrite> sugars = sugars();
             Map<String, Kernel> byKey = kernelsByKey();
             Map<Kernel, Intrinsic> intrinsics = new EnumMap<>(Kernel.class);
-            Map<String, Intrinsic> kernelOperations = new LinkedHashMap<>();
+            Map<ValueName.Stdlib.Operation, Intrinsic> kernelOperations = new LinkedHashMap<>();
             Map<ValueName.Stdlib.Operation, Hir.FnDef> helpers = new LinkedHashMap<>();
-            for (Map.Entry<String, Entry> e : entries.entrySet()) {
+            for (Map.Entry<ValueName.Stdlib.Operation, Entry> e : entries.entrySet()) {
+                ValueName.Stdlib.Operation operation = e.getKey();
                 Hir.FnBody body = e.getValue().declaration().body();
                 if (body instanceof Hir.FnBody.Intrinsic written) {
                     // The one place a written key becomes the operation it names. Everything after
@@ -460,8 +480,8 @@ public final class Stdlib {
                         throw new IllegalStateException("the standard library declares `intrinsic \""
                                 + written.key() + "\"`, which this compiler has no kernel for");
                     }
-                    Intrinsic intrinsic =
-                            new Intrinsic(named, declaredAs(e.getKey(), e.getValue().signature()));
+                    Intrinsic intrinsic = new Intrinsic(named,
+                            declaredAs(operation.qualified(), e.getValue().signature()));
                     // And one kernel is declared once. A backend builds its boundary form out of
                     // the signature this holds, so two declarations of one kernel would be two
                     // answers to a question that has one — and put into a map, the second would
@@ -470,26 +490,17 @@ public final class Stdlib {
                         throw new IllegalStateException("two standard-library declarations name the"
                                 + " kernel `" + intrinsic.kernel().key() + "`");
                     }
-                    kernelOperations.put(e.getKey(), intrinsic);
+                    kernelOperations.put(operation, intrinsic);
                 }
                 if (body instanceof Hir.FnBody.Written) {
-                    // Under the operation, which this already holds. Filed under the key it was
-                    // written with, a reader wanting the operation would have to ask for it back —
-                    // and the library is the only thing that can say which part of that key is the
-                    // alias, which is why nobody else may take it apart.
-                    if (!(operations.get(e.getKey()) instanceof ValueName.Stdlib.Operation
-                            operation)) {
-                        throw new IllegalStateException("the standard library declares a body for `"
-                                + e.getKey() + "` and publishes no operation under that name");
-                    }
                     helpers.put(operation, e.getValue().declaration());
                 }
             }
             // A sugar has no declaration, so nothing above put it among the operations; it is a
             // name a reader may write, so it belongs there.
-            Map<String, ValueName.Stdlib> named = new LinkedHashMap<>(operations);
+            Map<String, ValueName.Stdlib.Operation> named = new LinkedHashMap<>(operations);
             SUGARED.forEach(sugar -> named.put(sugar.written().qualified(), sugar.written()));
-            Set<String> published = published(sugars.keySet(), named);
+            Set<String> published = published(sugars.keySet());
             for (ValueName.Stdlib.Operation ascribed
                     : List.of(THE_WALK, THE_DISTINCTNESS_PREDICATE)) {
                 if (!helpers.containsKey(ascribed)) {
@@ -547,16 +558,16 @@ public final class Stdlib {
         /** Each sugar with what it keeps in place: the target's own parameter count, less what the
          *  rewrite supplies. A sugar naming a target the library does not declare is refused —
          *  nothing downstream would report it, because everything downstream reads this. */
-        private Map<String, Rewrite> sugars() {
-            Map<String, Rewrite> sugars = new LinkedHashMap<>();
+        private Map<ValueName.Stdlib.Operation, Rewrite> sugars() {
+            Map<ValueName.Stdlib.Operation, Rewrite> sugars = new LinkedHashMap<>();
             for (Sugar sugar : SUGARED) {
-                Entry declared = entries.get(sugar.target().qualified());
+                Entry declared = entries.get(sugar.target());
                 if (declared == null) {
                     throw new IllegalStateException("`" + sugar.written().qualified()
                             + "` is sugar for `" + sugar.target().qualified()
                             + "`, which the standard library does not declare");
                 }
-                sugars.put(sugar.written().qualified(),
+                sugars.put(sugar.written(),
                         new Rewrite(sugar.target(), sugar.supplied(),
                                 declared.signature().params().size() - sugar.supplied().size()));
             }
@@ -567,23 +578,26 @@ public final class Stdlib {
          *  be ordered by, so it is placed among the module it belongs to — a reader of this list is
          *  reading one module's vocabulary at a time, and a name that reads as {@code List}'s belongs
          *  among them. */
-        private Set<String> published(Set<String> sugared, Map<String, ValueName.Stdlib> named) {
-            Set<String> names = new LinkedHashSet<>();
-            for (String qualified : entries.keySet()) {
-                if (!privateNames.contains(qualified)) {
-                    names.add(qualified);
+        private Set<String> published(Set<ValueName.Stdlib.Operation> sugared) {
+            Set<ValueName.Stdlib.Operation> named = new LinkedHashSet<>();
+            for (ValueName.Stdlib.Operation operation : entries.keySet()) {
+                if (!privateNames.contains(operation)) {
+                    named.add(operation);
                 }
             }
-            names.addAll(sugared);
+            named.addAll(sugared);
+            // Which module a name belongs to is the operation's alias, which it holds. Read off a
+            // spelling, this had to be given the operations back to look each one up again.
             Set<String> byModule = new LinkedHashSet<>();
             for (String qualifier : Reserved.QUALIFIERS) {
-                for (String name : names) {
-                    if (named.get(name).alias().equals(qualifier)) {
-                        byModule.add(name);
+                for (ValueName.Stdlib.Operation operation : named) {
+                    if (operation.alias().equals(qualifier)) {
+                        byModule.add(operation.qualified());
                     }
                 }
             }
-            byModule.addAll(names);   // anything under a qualifier not in the load order
+            // anything under a qualifier not in the load order
+            named.forEach(operation -> byModule.add(operation.qualified()));
             return Collections.unmodifiableSet(byModule);
         }
 

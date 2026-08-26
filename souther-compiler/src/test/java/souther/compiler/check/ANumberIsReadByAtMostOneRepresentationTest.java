@@ -44,8 +44,9 @@ class ANumberIsReadByAtMostOneRepresentationTest {
     @Test
     void noOperationsNumberIsReadByTwoRepresentations() {
         List<String> twice = new ArrayList<>();
-        for (Map.Entry<String, Stdlib.Entry> e : DefaultStdlib.get().entries().entrySet()) {
-            ValueName operation = DefaultStdlib.get().operation(e.getKey());
+        for (Map.Entry<ValueName.Stdlib.Operation, Stdlib.Entry> e
+                : DefaultStdlib.get().entries().entrySet()) {
+            ValueName operation = e.getKey();
             NumericReadings.Resolution read = NumericReadings.resolve(
                     DefaultStdlib.get(), OperationFacts.declarations(), operation);
             if (read instanceof NumericReadings.Resolution.Multiple) {

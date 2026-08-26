@@ -29,9 +29,10 @@ class AnAccumulationIsWrittenForWhatItMeansAndNotForWhatCanReadItTest {
     @Test
     void everyOperationAnsweringWhatItsContainerHoldsIsAsked() {
         List<String> inRange = new ArrayList<>();
-        for (Map.Entry<String, Stdlib.Entry> e : DefaultStdlib.get().entries().entrySet()) {
+        for (Map.Entry<ValueName.Stdlib.Operation, Stdlib.Entry> e
+                : DefaultStdlib.get().entries().entrySet()) {
             if (Question.askedOf(DefaultStdlib.get(), e.getValue().signature()).contains(Question.ACCUMULATION)) {
-                inRange.add(e.getKey());
+                inRange.add(e.getKey().qualified());
             }
         }
         assertEquals(List.of("List.concat", "List.product", "List.sum", "String.concat",

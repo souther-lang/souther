@@ -166,8 +166,10 @@ class AConformanceCorpusReachesEveryConstructTheLanguageDeclaresTest {
         Set<String> missing = new TreeSet<>();
         for (Reserved.StdlibModule module : Reserved.MODULES) {
             String qualifier = module.qualifier();
+            // Which module an operation belongs to is the alias it holds, rather than the first
+            // part of a spelling read up to a dot.
             boolean declaresOperations = DefaultStdlib.get().entries().keySet().stream()
-                    .anyMatch(qualified -> qualified.startsWith(qualifier + "."));
+                    .anyMatch(operation -> operation.alias().equals(qualifier));
             if (declaresOperations ? !called.contains(qualifier) : !named.contains(qualifier)) {
                 missing.add(qualifier + " (" + module.moduleName()
                         + (declaresOperations ? ", never called into" : ", type never named") + ")");
