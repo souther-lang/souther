@@ -43,22 +43,48 @@ class AnEndIsWhereItsRuleStopsTest {
             let take (h) = Ok
             """;
 
-    /** A boundary is at a value some rule wrote. Nothing here writes a one. */
+    /**
+     * A boundary is at the value the rule wrote, and both of these rules get one.
+     *
+     * <p>Said as where the lines are rather than as a value the report must not print. Written the
+     * second way — and it was — the expectation held over a report that named no line at all, which
+     * is exactly what this model got for as long as a cut on a carrier with no step went no further
+     * than being built (issue #1079).
+     */
     @Test
-    void anEdgeIsNotAtAValueNoRuleNamed() throws Exception {
+    void eachRuleDrawsItsLineWhereItStops() throws Exception {
         String report = reportOn(MODEL);
 
+        assertTrue(report.contains("h.p = 0"),
+                () -> "`value > 0m` stops the position at zero:\n" + report);
+        assertTrue(report.contains("h.a = 5"),
+                () -> "`value > 5.0m` stops it at five:\n" + report);
+        assertTrue(report.contains("border      borders 2"),
+                () -> "two rules, two lines:\n" + report);
+        // And not at the whole number a positive integer starts at, which is the reading these
+        // lines were once taken from and a value no decimal rule here mentions.
         assertFalse(report.contains("point value = 1"),
                 () -> "`value > 0m` says nothing about one:\n" + report);
     }
 
-    /** And a line five is drawn at is a line, though the runtime has no word for it. */
+    /**
+     * And the point against each line is one the order cannot name, said rather than left out.
+     *
+     * <p>What a strict bound on a carrier with no step costs is the value beside its line and
+     * nothing else — there is no least decimal above zero — and that is a limit of the language
+     * rather than a row anybody is short of. The line, the class it bounds and the row inside it are
+     * not costs, and all four were being lost with it.
+     */
     @Test
-    void aStrictBoundAwayFromZeroIsALineTheModelDraws() throws Exception {
+    void thePointAgainstSuchALineSaysWhyItCannotBeWritten() throws Exception {
         String report = reportOn(MODEL);
 
-        assertFalse(report.contains("not derivable: h.a"),
-                () -> "`value > 5.0m` divides the position at five:\n" + report);
+        assertTrue(report.contains(
+                        "no ON point is owed at h.p = 0 (invariant Positive (positive)):"
+                                + " this order names no value there, so the point cannot be written"),
+                () -> report);
+        assertTrue(report.contains("adequacy: undetermined"),
+                () -> "and the row inside each line is owed and unwritten:\n" + report);
     }
 
     /**
