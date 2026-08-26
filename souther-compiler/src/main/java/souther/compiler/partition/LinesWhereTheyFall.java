@@ -14,12 +14,14 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The lines a model draws, each at the positions the name it was drawn on reaches.
+ * What a model measures, at the positions the name it is written at was filed — and where it was
+ * written, where it was filed nowhere.
  *
  * <p>A rule names a location in the words of the value it was written in, and a row writes a value
- * at a position. Where the two are the same place, nothing happens here. Where they are not — a
- * field every case of a sum spreads is readable on the sum and a row writes it under one case — one
- * line comes out as one line per case, on the same number and from the same rule.
+ * at a position. Where the location is already the position, nothing happens here. Where it is not —
+ * a field every case of a sum spreads is readable on the sum and a row writes it under one case —
+ * one line comes out as one line per case, on the same number and from the same rule, wherever this
+ * reading got as far as those positions.
  *
  * <p><b>What comes out.</b> Every name a rule is written at is either left where the model wrote it
  * or filed at one or more positions. An end put on a number and a value singled out are about one
@@ -42,7 +44,8 @@ import java.util.List;
 public final class LinesWhereTheyFall {
 
     /**
-     * The lines, at the positions their names reach, and the ones this had nowhere to put.
+     * The measurements, each where the name it is written at was filed or left as written, and the
+     * lines this had nowhere to put.
      *
      * <p>A line that could not be placed is not among the first: passed on at the name it was
      * written at, it reaches the generator, which answers that it could not build a value there — a
@@ -60,7 +63,7 @@ public final class LinesWhereTheyFall {
         }
     }
 
-    /** Every line at the positions its name reaches, and the ones this had nowhere to put. */
+    /** Every measurement where its name was filed, and the lines this had nowhere to put. */
     public static Filed of(InputDomain inputs, List<Threshold> thresholds,
                            List<GuardThresholds.Guards.Singled> singled, List<LineDrawn> between,
                            souther.compiler.inputs.Quantities quantities, Symbols symbols) {
