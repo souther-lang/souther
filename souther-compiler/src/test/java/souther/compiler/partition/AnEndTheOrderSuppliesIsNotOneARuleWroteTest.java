@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
@@ -61,8 +62,11 @@ class AnEndTheOrderSuppliesIsNotOneARuleWroteTest {
 
         assertEquals("take/String.length(n) in 0 <= String.length(n) < 9",
                 said(line, PointRole.IN), "the run has both ends and the model wrote one of them");
-        assertNotNull(inside.band().from(), "the low end is there");
-        assertNotNull(inside.band().to(), "and so is the high one");
+        assertInstanceOf(BandEnd.AtDomain.class, inside.band().lower(),
+                "the low end is one the rules leave");
+        assertInstanceOf(BandEnd.AtDomain.class, inside.band().upper(),
+                "and so is the high one, which is the same shape though one was written and one"
+                        + " was not");
     }
 
     /**
@@ -79,10 +83,10 @@ class AnEndTheOrderSuppliesIsNotOneARuleWroteTest {
         NumericDomain.Bounds order = termOf(line).intrinsicBounds();
 
         assertNotNull(order.min(), "a length is never less than nothing, and nothing wrote that");
-        assertEquals(0, inside.band().from().at().compare(order.min().at()),
+        assertEquals(0, inside.band().lower().reaches().at().compare(order.min().at()),
                 "which is where the run stops below");
         assertNull(order.max(), "the order says nothing about how long a string gets");
-        assertNotNull(inside.band().to(),
+        assertNotNull(inside.band().upper().reaches(),
                 "and the run stops above all the same, where the clause put it");
     }
 

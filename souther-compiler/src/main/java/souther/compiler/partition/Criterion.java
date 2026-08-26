@@ -236,7 +236,8 @@ public sealed interface Criterion {
         // And the line itself where the run has no value at that end. A search starts there and
         // walks away from it — which is why this is not what the run holds: two decimals a rule
         // holds apart have every distance past the line and no first one.
-        Seam edge = in.away() == Towards.ABOVE ? in.band().under() : in.band().over();
+        Seam edge = in.away() == Towards.ABOVE
+                ? in.band().lower().parting() : in.band().upper().parting();
         return edge == null ? null : edge.at().asALevelOfTheQuantity();
     }
 

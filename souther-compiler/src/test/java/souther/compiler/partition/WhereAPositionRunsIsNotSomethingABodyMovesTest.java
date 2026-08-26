@@ -10,8 +10,8 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
  * A rule written in a body draws a line and does not move where the position runs.
@@ -72,10 +72,10 @@ class WhereAPositionRunsIsNotSomethingABodyMovesTest {
     void aComparisonInABodyPartsThePositionAndLeavesItsEndsAlone() {
         Criterion.Within inside = runAt(GUARDED, "example.projection", "a = 10", PointRole.IN);
 
-        assertNotNull(inside.band().over(), "the line it is named for parts the values there");
-        assertNull(inside.band().from(),
-                "and the rules leave the position no end below, the comparison included");
-        assertNull(inside.band().to(), "nor above");
+        assertInstanceOf(BandEnd.AtParting.class, inside.band().upper(),
+                "the line it is named for parts the values there");
+        assertInstanceOf(BandEnd.AtOrderEnd.class, inside.band().lower(),
+                "and nothing stops the run below, the comparison included");
         assertEquals("guarded/a in a < 10", saidAt(GUARDED, "example.projection", "a = 10",
                 PointRole.IN), "so the run is written from its line and runs on");
     }
@@ -91,10 +91,9 @@ class WhereAPositionRunsIsNotSomethingABodyMovesTest {
     void anEnsuresClauseDrawsALineTheSameWay() {
         Criterion.Within inside = runAt(STATED, "example.stated", "r.a = 5", PointRole.IN);
 
-        assertNotNull(inside.band().under(), "its own line below");
-        assertNotNull(inside.band().over(), "the comparison's line above");
-        assertNull(inside.band().from(), "and no end the rules leave, below");
-        assertNull(inside.band().to(), "or above");
+        assertInstanceOf(BandEnd.AtParting.class, inside.band().lower(), "its own line below");
+        assertInstanceOf(BandEnd.AtParting.class, inside.band().upper(),
+                "and the comparison's line above, so neither end is one the rules leave");
     }
 
     /** The run one point of one border asks a row to land in. */

@@ -9,19 +9,56 @@ import souther.compiler.numeric.Towards;
  * The two used to be derived apart, and only the first of them knew about the lines further along —
  * so a row well past the next line answered for a point that was supposed to be inside this run.
  *
- * @param under the seam this run starts above, or null where nothing parts it there
- * @param over  the seam it stops below, or null on the same reading
- * @param from  what the rules leave the quantity at the low end, which is where a run with no seam
- *              under it starts. Null where they leave it everything that way.
- *              <p>Where it stops and whether it keeps the place it stops at, and not the first value
- *              in it. The two are one thing on a carrier that steps, because a strict end is moved
- *              onto the value it leaves before it is ever read — and on one with no step there is no
- *              such value: {@code value > 0.00m} leaves every decimal above zero and no least one.
- *              Held as the value, such a run either ran to the end of the order or held the very
- *              value its bound refuses, and the class it is came out spelled {@code 0 <= rate}
- * @param to    the same at the high end
+ * <p>Both ends are always there, and each says what stops the run ({@link BandEnd}). They used to be
+ * a line that might be null beside an end the rules leave that might be null, and what a run stops
+ * at was read back out of which of the four combinations had turned up.
+ *
+ * @param lower what stops the run at the low end
+ * @param upper the same at the high end
  */
-public record Band(Seam under, Seam over, Bound from, Bound to) {
+public record Band(BandEnd lower, BandEnd upper) {
+
+    public Band {
+        if (lower == null || upper == null) {
+            throw new IllegalArgumentException(
+                    "a run stops somewhere at both ends, or runs to the end of the order: "
+                            + lower + " " + upper);
+        }
+    }
+
+    /**
+     * One end of a run, from the line that parts the values there and the end the rules leave.
+     *
+     * <p>Both are consulted, because a run is on this side of the line and inside what the rules
+     * leave at once: a run parted by a line the rules stop short of reaches the rules' end. Which of
+     * the two named the run is a different question and is the shape's ({@link BandEnd.AtParting}
+     * names the line whether or not the run reaches it).
+     *
+     * @param inward which way the run lies from this end
+     */
+    public static BandEnd endAt(Seam parted, Bound leaves, Towards inward) {
+        if (parted == null) {
+            return leaves == null ? new BandEnd.AtOrderEnd(inward.opposite())
+                    : new BandEnd.AtDomain(leaves);
+        }
+        return new BandEnd.AtParting(parted, tighter(atTheLine(parted, inward), leaves, inward));
+    }
+
+    /**
+     * Where a line lets the run beside it start.
+     *
+     * <p>The value beside the line where the quantity has one, and the line itself where it has
+     * none. Written as the line, the run above a seam that keeps its own value would hold that
+     * value; written as the value, a run over an order whose values fill would have no end at all.
+     */
+    private static Bound atTheLine(Seam parted, Towards inward) {
+        Level edge = inward == Towards.ABOVE ? parted.above() : parted.below();
+        return edge != null ? Bound.at(edge, true) : new Bound(parted.at(), false);
+    }
+
+    private static Bound tighter(Bound line, Bound leaves, Towards inward) {
+        return inward == Towards.ABOVE ? Bound.lower(line, leaves) : Bound.upper(line, leaves);
+    }
 
     /**
      * How this run reads: the first value in it and the last.
@@ -34,43 +71,43 @@ public record Band(Seam under, Seam over, Bound from, Bound to) {
         return where(first()) + "|" + where(last());
     }
 
-    /**
-     * The same run with every level written the one way, for an identity to be built from.
+    /** The same run with every level written the one way, for an identity to be built from.
      *
      * <p>Not {@link #key()}, which reads the run off the values at its ends and so says nothing
      * about where a run with no first value starts: {@code 0 < x} and {@code 5 < x} over the
      * decimals have the same first value, which is none. What holds a run and is compared as a value
-     * holds this.
-     */
+     * holds this. */
     public Band canonical() {
-        return new Band(under == null ? null : under.canonical(),
-                over == null ? null : over.canonical(),
-                from == null ? null : from.canonical(),
-                to == null ? null : to.canonical());
+        return new Band(canonical(lower), canonical(upper));
+    }
+
+    private static BandEnd canonical(BandEnd end) {
+        return switch (end) {
+            case BandEnd.AtParting(Seam seam, Bound reaches) ->
+                    new BandEnd.AtParting(seam.canonical(), reaches.canonical());
+            case BandEnd.AtDomain(Bound reaches) -> new BandEnd.AtDomain(reaches.canonical());
+            case BandEnd.AtOrderEnd order -> order;
+        };
     }
 
     /**
      * The line below this run, as an end of the position's counts, or the end the rules leave where
      * nothing parts it there.
      *
-     * <p>Apart from {@link #low}, and both are this run's own answer about where it starts. One
-     * names the first value in it and the other names the line it starts from — on a carrier that
+     * <p>Apart from the first value in it, and both are this run's own answer about where it starts.
+     * One names the first value and the other names the line it starts from — on a carrier that
      * steps the two describe one boundary and only the first exists on every carrier, while a class
      * is named after the line an author wrote and not after the value beside it.
      */
     public souther.compiler.numeric.Endpoint lineBelow(souther.compiler.numeric.Endpoint leaves) {
-        if (under == null) {
-            return leaves;
-        }
-        return asAnEnd(under, Towards.ABOVE);
+        Seam parted = lower.parting();
+        return parted == null ? leaves : asAnEnd(parted, Towards.ABOVE);
     }
 
     /** The line above it, on the same reading. */
     public souther.compiler.numeric.Endpoint lineAbove(souther.compiler.numeric.Endpoint leaves) {
-        if (over == null) {
-            return leaves;
-        }
-        return asAnEnd(over, Towards.BELOW);
+        Seam parted = upper.parting();
+        return parted == null ? leaves : asAnEnd(parted, Towards.BELOW);
     }
 
     /**
@@ -110,12 +147,20 @@ public record Band(Seam under, Seam over, Bound from, Bound to) {
 
     /** The first value in this run, or null where the order names none there. */
     public Level first() {
-        return under == null ? valueAt(from) : under.above();
+        Seam parted = lower.parting();
+        return parted == null ? valueAt(left(lower)) : parted.above();
     }
 
     /** The last, on the same reading. */
     public Level last() {
-        return over == null ? valueAt(to) : over.below();
+        Seam parted = upper.parting();
+        return parted == null ? valueAt(left(upper)) : parted.below();
+    }
+
+    /** What the rules leave the quantity at this end, where that is what stops the run and there is
+     *  an end at all. */
+    private static Bound left(BandEnd end) {
+        return end instanceof BandEnd.AtDomain domain ? domain.reaches() : null;
     }
 
     /**
@@ -152,12 +197,16 @@ public record Band(Seam under, Seam over, Bound from, Bound to) {
      * hundred is the one value that will not do.
      */
     public String written(BorderQuantity of, Level except) {
+        Seam under = lower.parting();
+        Seam over = upper.parting();
         String low = except != null && same(except, first())
                 ? of.writtenAt(except) + " < "
-                : under != null ? said(of, under, Towards.ABOVE) : leaves(of, from, Towards.ABOVE);
+                : under != null ? said(of, under, Towards.ABOVE)
+                        : leaves(of, left(lower), Towards.ABOVE);
         String high = except != null && same(except, last())
                 ? " < " + of.writtenAt(except)
-                : over != null ? said(of, over, Towards.BELOW) : leaves(of, to, Towards.BELOW);
+                : over != null ? said(of, over, Towards.BELOW)
+                        : leaves(of, left(upper), Towards.BELOW);
         // An end only the rule that drew it can name relates a row to the quantity rather than to
         // the position, so it is a condition of its own beside the rest. Dropped, the run read as
         // reaching past the very line that ends it.
@@ -258,6 +307,8 @@ public record Band(Seam under, Seam over, Bound from, Bound to) {
      * on the position and a line on a multiple of it relates a row to both.
      */
     public java.math.BigDecimal sharedMultiple() {
+        Seam under = lower.parting();
+        Seam over = upper.parting();
         if (under == null || over == null
                 || under.attainedLine() != null || over.attainedLine() != null
                 || under.below() != null || under.above() != null
@@ -292,15 +343,35 @@ public record Band(Seam under, Seam over, Bound from, Bound to) {
      * run of distances until the other end of it is known.
      */
     Band mappedBy(java.util.function.UnaryOperator<Level> onto) {
-        Seam below = under == null ? null : under.mappedBy(onto);
-        Seam above = over == null ? null : over.mappedBy(onto);
+        BandEnd low = mappedBy(lower, Towards.ABOVE, onto);
+        BandEnd high = mappedBy(upper, Towards.BELOW, onto);
         // A line with no place on the other order leaves the run nothing to be read as: which side
         // of it this run lies is the whole of what the run says. An end the carrier does not reach
         // is a different answer and is kept as no end.
-        if (under != null && below == null || over != null && above == null) {
+        if (low == null || high == null) {
             return null;
         }
-        return new Band(below, above, mapped(from, onto), mapped(to, onto));
+        return new Band(low, high);
+    }
+
+    private static BandEnd mappedBy(BandEnd end, Towards inward,
+                                    java.util.function.UnaryOperator<Level> onto) {
+        return switch (end) {
+            case BandEnd.AtParting(Seam seam, Bound reaches) -> {
+                Seam moved = seam.mappedBy(onto);
+                if (moved == null) {
+                    yield null;
+                }
+                // Where the run reaches is worked out again from what moved, because the two things
+                // it is the tighter of move by different rules: a line goes through the seam, and an
+                // end the rules leave is at a value of the quantity and goes through that.
+                yield new BandEnd.AtParting(moved, reaches.equals(atTheLine(seam, inward))
+                        ? atTheLine(moved, inward)
+                        : tighter(atTheLine(moved, inward), mapped(reaches, onto), inward));
+            }
+            case BandEnd.AtDomain(Bound reaches) -> new BandEnd.AtDomain(mapped(reaches, onto));
+            case BandEnd.AtOrderEnd order -> order;
+        };
     }
 
     /** An end the rules leave, read on another order. Whether the run keeps the place it stops at
@@ -340,33 +411,9 @@ public record Band(Seam under, Seam over, Bound from, Bound to) {
      * last value below is in the run below. Where a seam names no value on the side facing this run
      * — a carrier whose values fill has no first value above a line it keeps — the run is open at
      * the line itself, which is where the seam's own position says the values part.
-     *
-     * <p>And the ends the rules leave narrow it further wherever they are the tighter, since a run
-     * is what every one of them leaves.
      */
     public LevelRegion region() {
-        return LevelRegion.of(new LevelInterval(
-                endOf(under, from, Towards.ABOVE), endOf(over, to, Towards.BELOW)));
-    }
-
-    /**
-     * One end of this run, from the line that parts it there and the end the rules leave.
-     *
-     * <p>Whichever of the two is the tighter, because a run is on this side of the line and inside
-     * what the rules leave at once. Read as one or the other, a run bounded by a rule and parted by
-     * a line reached past whichever of them was not consulted.
-     */
-    private static Bound endOf(Seam parted, Bound left, Towards side) {
-        if (parted == null) {
-            return left;
-        }
-        Level edge = side == Towards.ABOVE ? parted.above() : parted.below();
-        // The value beside the line where the quantity has one, and the line itself where it has
-        // none. Written as the line, the run above a seam that keeps its own value would hold that
-        // value; written as the value, a run over an order whose values fill would have no end at
-        // all.
-        Bound atTheLine = edge != null ? Bound.at(edge, true) : new Bound(parted.at(), false);
-        return side == Towards.ABOVE ? Bound.lower(atTheLine, left) : Bound.upper(atTheLine, left);
+        return LevelRegion.of(new LevelInterval(lower.reaches(), upper.reaches()));
     }
 
     /** Whether a value of the quantity lies in this run. */

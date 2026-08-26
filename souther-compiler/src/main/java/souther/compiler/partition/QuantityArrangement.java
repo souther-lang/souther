@@ -77,11 +77,18 @@ public record QuantityArrangement(List<Seam> seams, List<Band> bands) {
         List<Band> bands = new ArrayList<>();
         Seam under = null;
         for (Seam seam : ordered) {
-            keep(space, bands, new Band(under, seam, from, to));
+            keep(space, bands, runBetween(under, seam, from, to));
             under = seam;
         }
-        keep(space, bands, new Band(under, null, from, to));
+        keep(space, bands, runBetween(under, null, from, to));
         return new QuantityArrangement(ordered, bands);
+    }
+
+    /** The run between two of the places the values part, held to what the rules leave either
+     *  side. */
+    private static Band runBetween(Seam under, Seam over, Bound from, Bound to) {
+        return new Band(Band.endAt(under, from, Towards.ABOVE),
+                Band.endAt(over, to, Towards.BELOW));
     }
 
     /**
@@ -110,12 +117,14 @@ public record QuantityArrangement(List<Seam> seams, List<Band> bands) {
      * to.
      */
     public Band above(Seam seam) {
-        return bands.stream().filter(each -> is(each.under(), seam)).findFirst().orElse(null);
+        return bands.stream().filter(each -> is(each.lower().parting(), seam)).findFirst()
+                .orElse(null);
     }
 
     /** The run just below it, on the same reading. */
     public Band below(Seam seam) {
-        return bands.stream().filter(each -> is(each.over(), seam)).findFirst().orElse(null);
+        return bands.stream().filter(each -> is(each.upper().parting(), seam)).findFirst()
+                .orElse(null);
     }
 
     /** The run one value of the quantity is in, or null where the rules leave it in none. */
@@ -134,7 +143,8 @@ public record QuantityArrangement(List<Seam> seams, List<Band> bands) {
      */
     public Band endmost(Towards inward) {
         return bands.stream()
-                .filter(each -> inward == Towards.ABOVE ? each.under() == null : each.over() == null)
+                .filter(each -> (inward == Towards.ABOVE ? each.lower() : each.upper())
+                        .parting() == null)
                 .findFirst().orElse(null);
     }
 

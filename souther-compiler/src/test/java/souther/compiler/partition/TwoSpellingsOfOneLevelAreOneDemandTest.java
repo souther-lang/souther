@@ -131,8 +131,8 @@ class TwoSpellingsOfOneLevelAreOneDemandTest {
     }
 
     private static Band band(String from, String to) {
-        return new Band(null, null, new Bound(CutPosition.at(at(from)), false),
-                new Bound(CutPosition.at(at(to)), false));
+        return new Band(new BandEnd.AtDomain(new Bound(CutPosition.at(at(from)), false)),
+                new BandEnd.AtDomain(new Bound(CutPosition.at(at(to)), false)));
     }
 
     /** One clause of one declaration, which is only an identity here. */
