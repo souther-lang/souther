@@ -171,6 +171,7 @@ class AClosedReadingIsOneThatDrewEveryLineItFoundTest {
     private static OriginRef bound(String clause) {
         return new OriginRef.InvariantOrigin(new RuleRef.Invariant(new Clause.Ref(
                 new Clause.Id(TypeSymbols.declared(new TypeKey("example.rate", "Amount")), 0),
-                java.util.Optional.of(new ClauseName(clause)))), 0, true);
+                java.util.Optional.of(new ClauseName(clause)))), 0,
+                souther.compiler.numeric.Towards.ABOVE, true);
     }
 }

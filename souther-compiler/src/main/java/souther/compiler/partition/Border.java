@@ -424,17 +424,12 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
         Criterion rest = new Criterion.AnythingBut(cut);
         switch (noSideOf(origin)) {
             case THE_RULES_REFUSE_IT -> {
-                // Which way the bound keeps its values, taken from the end of what the rules leave
-                // that this line is: a bound orders nothing around itself, so there is no side to
-                // read off the rule, and its line is where what it leaves stops.
-                Towards kept = keptBy(within, cut);
-                if (kept == null) {
-                    // The reader of where a bound stops and the reader of what the position is left
-                    // with disagreeing about one rule. A bound's line is an end of what it leaves,
-                    // and a line inside that is not one this rule drew.
-                    throw new IllegalStateException(
-                            "a bound whose line is not an end of what it leaves: " + origin.named());
-                }
+                // Which way the bound keeps its values, from what the reading that placed the end
+                // recorded: a bound orders nothing around itself, so there is no side to read off
+                // the line, and which of the two ends it is is what says which way it runs. Held
+                // against the range below, which the same reading settled.
+                Towards kept = satisfyingSide(origin);
+                requireItIsTheEndItKeeps(within, cut, kept, origin);
                 Demand on = againstABound(space, cut, kept, holdsHere, within, origin);
                 demands.put(PointRole.ON, on);
                 demands.put(PointRole.OFF, new Demand.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT));
@@ -513,25 +508,25 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
     }
 
     /**
-     * Which way a bound keeps its values, from the end of what the rules leave that its line is.
+     * That a bound's line stands where what the rules leave stops on the side the bound keeps.
      *
-     * <p>Asked of what the rules leave rather than of the rule. A bound records where it stops and
-     * not which side of that it keeps ({@link OriginRef.InvariantOrigin}), and it does not have to:
-     * a bound's line is an end of what it leaves, so which end it is says which way the values run.
+     * <p>Two readings of one rule held against each other. Which way the bound runs comes from the
+     * reading that placed the end and the range comes from the reading of everything the position
+     * is left with, and a bound's line is by construction the end of that range on the side it
+     * keeps. Where the two disagree, one of them is about a rule the other did not read — which is
+     * not a state a model can put them in, and a line inside the range is not one this rule drew.
      *
-     * <p>Null where the line is neither end, which is nothing a model can write. Where both ends are
-     * the line — a rule leaving one value — either answer names the same point, and the low end is
-     * taken.
+     * <p>The side and not either end. A rule leaving one value puts both ends at the line, and each
+     * of its two bounds answers for the end it placed rather than for whichever end matches.
      */
-    private static Towards keptBy(NumericDomain.Bounds within, Level cut) {
-        if (within == null) {
-            return null;
+    private static void requireItIsTheEndItKeeps(NumericDomain.Bounds within, Level cut,
+                                                 Towards kept, OriginRef origin) {
+        Endpoint end = within == null ? null
+                : kept == Towards.ABOVE ? within.min() : within.max();
+        if (end == null || !end.at().sameAs(placeOf(cut))) {
+            throw new IllegalStateException(
+                    "a bound whose line is not where what it leaves stops: " + origin.named());
         }
-        Place at = placeOf(cut);
-        if (within.min() != null && within.min().at().sameAs(at)) {
-            return Towards.ABOVE;
-        }
-        return within.max() != null && within.max().at().sameAs(at) ? Towards.BELOW : null;
     }
 
     /** A side of the border, or the reason the rules leave nothing there for a row to be at. */

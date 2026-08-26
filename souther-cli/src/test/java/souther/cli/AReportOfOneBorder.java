@@ -62,7 +62,8 @@ final class AReportOfOneBorder {
     static Border aBoundedBorder() {
         OriginRef origin = new OriginRef.InvariantOrigin(new RuleRef.Invariant(new Clause.Ref(
                 new Clause.Id(TypeSymbols.declared(new TypeKey("example.rate", "Amount")), 0),
-                java.util.Optional.of(new ClauseName("cap")))), 0, true);
+                java.util.Optional.of(new ClauseName("cap")))), 0,
+                souther.compiler.numeric.Towards.ABOVE, true);
         return Border.at(
                 BoundaryTarget.at(
                         new BorderQuantity.OfACoordinate(new AxisId("weigh", "w.a"),
@@ -79,7 +80,8 @@ final class AReportOfOneBorder {
     static Border aBorderAtTheEdgeOfItsDomain() {
         OriginRef origin = new OriginRef.InvariantOrigin(new RuleRef.Invariant(new Clause.Ref(
                 new Clause.Id(TypeSymbols.declared(new TypeKey("example.rate", "Amount")), 0),
-                java.util.Optional.of(new ClauseName("cap")))), 0, true);
+                java.util.Optional.of(new ClauseName("cap")))), 0,
+                souther.compiler.numeric.Towards.ABOVE, true);
         return Border.at(
                 BoundaryTarget.at(
                         new BorderQuantity.OfACoordinate(new AxisId("weigh", "w.a"),

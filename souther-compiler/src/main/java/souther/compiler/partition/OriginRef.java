@@ -34,10 +34,10 @@ public sealed interface OriginRef {
     /**
      * A clause of a {@code data}'s invariant, as the clause it is.
      *
-     * <p>The clause and not the end it placed. This used to be the declaration together with the
-     * word {@code min} or {@code max}, which says what the clause did: two clauses of one
-     * declaration bounding a position at one value came out as one origin, and the cut kept one
-     * rule where ADR-0090 says it keeps every rule that drew it.
+     * <p>The clause that placed the end, and not the declaration it is written on together with the
+     * word {@code min} or {@code max}. Two clauses of one declaration bounding a position at one
+     * value are two rules, and a cut keeps every rule that drew it; named by the declaration and the
+     * word, they are one.
      *
      * @param conjunct        which conjunct of the clause drew this end. What tells one line of a
      *                        clause from another where the clause drew several: {@code
@@ -46,6 +46,14 @@ public sealed interface OriginRef {
      *                        other. The clause's own text and not the number it was written about,
      *                        which is spelled differently by every reading that reaches it
      *                        ({@link souther.compiler.check.DeclaredBounds.Drawn})
+     * @param keeps           which way along the order the bound keeps its values, which is the end
+     *                        it placed: a minimum keeps what is above it and a maximum what is
+     *                        below. Read where the end is read, and carried for the same reason the
+     *                        inclusivity beside it is — a bound orders nothing across its line, so
+     *                        there is no side to read off the rule further down, and what is left to
+     *                        work it back out of is the range the rules leave. That derivation has a
+     *                        case with no answer, and it answers a rule leaving one value the same
+     *                        way for both of its ends
      * @param holdsAtTheValue whether the cut value is one the bound admits, which is the end's own
      *                        inclusivity and is what says whether a row at the cut is the border's
      *                        {@code ON} point or its {@code OFF} point. Carried for the same reason
@@ -59,12 +67,17 @@ public sealed interface OriginRef {
      *                        derivation gets and not one about the end, and reading the end is what
      *                        keeps the two from being confused if it ever does get further
      */
-    record InvariantOrigin(RuleRef.Invariant rule, int conjunct, boolean holdsAtTheValue)
+    record InvariantOrigin(RuleRef.Invariant rule, int conjunct,
+                           souther.compiler.numeric.Towards keeps, boolean holdsAtTheValue)
             implements OriginRef {
 
         public InvariantOrigin {
             if (rule == null) {
                 throw new IllegalArgumentException("a bound drawn by no clause");
+            }
+            if (keeps == null) {
+                throw new IllegalArgumentException(
+                        "a bound keeps its values one way or the other: " + rule.named());
             }
             if (conjunct < 0) {
                 throw new IllegalArgumentException(
@@ -261,10 +274,14 @@ public sealed interface OriginRef {
                     new LineFacts(g.valueBelongsBelow(), g.holdsAtTheValue(), g.singles());
             case EnsuresOrigin e ->
                     new LineFacts(e.valueBelongsBelow(), e.holdsAtTheValue(), e.singles());
-            // Which way a bound keeps its values is not recorded on the bound, so this is the one
-            // slot here that is filled in rather than read: a border works the side out from what
-            // the rules leave.
-            case InvariantOrigin i -> new LineFacts(false, i.holdsAtTheValue(), false);
+            // Which side the value a bound stops at is on, from the end it placed and whether it
+            // admits that value: a minimum keeps what is above, so its value is below the line
+            // exactly when the bound does not admit it. A bound singles nothing out — it keeps a run
+            // of the order — and that the far side holds no value at all is a different answer,
+            // given where a border reads what a line has sides.
+            case InvariantOrigin i -> new LineFacts(
+                    (i.keeps() == souther.compiler.numeric.Towards.BELOW) == i.holdsAtTheValue(),
+                    i.holdsAtTheValue(), false);
             case NarrowedOrigin n -> n.bound().lineFacts();
         };
     }
