@@ -261,18 +261,30 @@ public final class LinesWhereTheyFall {
          * got there. They are unlike facts about the input and they are the same fact about the
          * line, which is the only question asked here.
          */
-        record AsWritten(NumericTerm term) implements WhereTheNameStands {}
+        record AsWritten(NumericTerm term) implements WhereTheNameStands {
+
+            public AsWritten {
+                if (term == null) {
+                    throw new IllegalArgumentException("a name left alone is left at a term");
+                }
+            }
+        }
 
         /**
          * The name was filed, at these positions.
          *
          * <p>Held as one and the others so that being filed somewhere is what having one of these
-         * means, rather than something a caller checks after building it. There is no way to write
-         * a filing at no position.
+         * means, rather than something a caller checks after building it. The one place that could
+         * still be nothing is the first, which is why it is refused here: a shape that admits an
+         * empty filing and a check nobody runs come to the same thing.
          */
         record FiledAt(NumericTerm first, List<NumericTerm> rest) implements WhereTheNameStands {
 
             public FiledAt {
+                if (first == null) {
+                    throw new IllegalArgumentException(
+                            "a filing is at a position, and this one is at none");
+                }
                 rest = List.copyOf(rest);
             }
         }

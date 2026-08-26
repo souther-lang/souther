@@ -14,11 +14,12 @@ import java.util.List;
  * that is an outcome and is written down as one. So a reader counting what a build took in never has
  * to read an absence, and a reader reporting a cause never has to invent one.
  *
- * <p><b>No accessor hands out the filings alone.</b> A caller reading the positions and nothing else
- * is left holding a list, and what a list answers is how long it is — which is not what any of these
- * outcomes says. Told apart by a length, a name filed at one position and a name that was never
- * followed are the same answer. So a caller says what it does about each of the three, and the
- * meaning it needs is the one it writes down rather than one it recovers from a count.
+ * <p><b>No accessor hands out the filings alone.</b> The filings say where a rule went and nothing
+ * about why the rest of it did not, so a caller handed them by themselves has been handed the one
+ * part of this that carries no reason. What it does about a case the reading refused and about a
+ * name it never reached is then something it may leave unsaid, which is what these three arms exist
+ * to stop. So a caller reads them, says what each one does about the thing it is placing, and is
+ * told by javac when a fourth arrives.
  */
 public final class PlacementFiling {
 
