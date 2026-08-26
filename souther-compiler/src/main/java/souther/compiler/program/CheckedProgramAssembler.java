@@ -4,6 +4,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.AtomSpace;
 import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.check.CoreBinders;
+import souther.compiler.check.Derived;
 import souther.compiler.check.Lower;
 import souther.compiler.check.Sig;
 import souther.compiler.check.SpecImplementation;
@@ -19,8 +20,10 @@ import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Compositions;
 import souther.compiler.query.Db;
+import souther.compiler.query.Front;
 import souther.compiler.query.Names;
 import souther.compiler.query.Shapes;
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
@@ -59,7 +62,85 @@ final class CheckedProgramAssembler {
         for (String module : compilation.modules()) {
             modules.add(moduleOf(db, module));
         }
-        return new CheckedProgram(modules);
+        return new CheckedProgram(modules, languageDataOf(db), declaredOnThePath(db));
+    }
+
+    /**
+     * What the language itself declares, as a value of one is laid out.
+     *
+     * <p>Read off the library this compilation was checked against, and not off a library fetched
+     * here: what a name in a checked body denotes was settled against that one, and a second copy
+     * could be a different version of the language.
+     *
+     * <p>Read against a world with no module in it. Which cases a sum descends to is answered by
+     * {@link AtomSpace}, which asks the declarations it is given — and the language's own resolve
+     * against the library alone, so reading them beside any one module's declarations would be
+     * reading them somewhere they could have come out differently.
+     */
+    private static List<CheckedData> languageDataOf(Db db) {
+        Stdlib stdlib = db.ask(new Front.Library()).value();
+        if (stdlib == null) {
+            throw new IllegalStateException("this compilation was checked against no library");
+        }
+        Symbols language = Symbols.none(stdlib);
+        List<CheckedData> declared = new ArrayList<>();
+        for (Hir.Def def : stdlib.languageDeclarations().values()) {
+            if (def instanceof Hir.Data product) {
+                // The language declares sums and the units under them, and a product of its own
+                // would be one nothing here has the fields and clauses of: what a value of a
+                // declaration is made of is derived over a compilation's modules, and derivation
+                // does not run over the library. Said as what it is, rather than reached as an
+                // absent shape — which is also what an assembler that forgot to read the shapes
+                // would look like.
+                throw new IllegalStateException("the language declares `" + product.declares()
+                        + "` as a product, and what a value of one is made of is not derived here");
+            }
+            declared.add(declaredAs(def, language, Map.of()));
+        }
+        return declared;
+    }
+
+    /**
+     * What every module this compile read off the path declares, as a value of one is laid out.
+     *
+     * <p>Read here and not left to the compile that built the dependency. This one read those
+     * declarations already — it had to, to check a module that constructs one of them or reads a
+     * field off one — so what is handed over is the reading the checker itself used, and an output
+     * laying such a value out places its fields exactly where the check placed them.
+     *
+     * <p>Which modules those are is {@link Front.FromPath}'s answer: the ones this compilation may
+     * read declarations from, which is not every module on the path and never one it refused. What
+     * each of them declares comes from the derivation this compile ran over it, in the same three
+     * forms a module of its own is read in.
+     *
+     * <p>The whole of what each declares, and not the part something here happens to name. Which
+     * declarations a body reaches is a walk, and a snapshot carrying only what one walk found would
+     * be right about the names that walk thought to visit.
+     */
+    private static List<CheckedData> declaredOnThePath(Db db) {
+        Front.FromPath.Of read = db.ask(new Front.FromPath()).value();
+        List<CheckedData> declared = new ArrayList<>();
+        if (read == null) {
+            return declared;
+        }
+        for (String module : read.modules().keySet()) {
+            Map<String, Derived.Def> defs = db.ask(new Shapes.DerivedDeclarations(module)).value();
+            Map<TypeSymbol.AtModule, ValueShape> shapes =
+                    db.ask(new Shapes.ValueShapes(module)).value();
+            Symbols symbols = Names.derivedSymbols(db, module).value();
+            if (defs == null || shapes == null || symbols == null) {
+                // This compile read the module and checked a module against it, so what it declares
+                // is something this compile already worked out. Letting it through would hand an
+                // output a program whose identities it cannot all lay out, which is the thing this
+                // is here to end.
+                throw new IllegalStateException("`" + module + "` was read off the path and this"
+                        + " compile has nothing to say about what it declares");
+            }
+            for (Derived.Def def : defs.values()) {
+                declared.add(declaredAs(def.read(), symbols, shapes));
+            }
+        }
+        return declared;
     }
 
     private static CheckedModule moduleOf(Db db, String module) {
@@ -136,14 +217,26 @@ final class CheckedProgramAssembler {
                                            Map<TypeSymbol.AtModule, ValueShape> shapes) {
         List<CheckedData> declared = new ArrayList<>();
         for (Hir.Def def : declarations.defs()) {
-            declared.add(switch (def) {
-                case Hir.Data product -> productOf(product, shapes);
-                case Hir.SumData sum -> new CheckedData.Sum(sum.declares(),
-                        AtomSpace.subjectAtoms(Type.ref(sum.declares()), symbols));
-                case Hir.UnitData unit -> new CheckedData.Unit(unit.declares());
-            });
+            declared.add(declaredAs(def, symbols, shapes));
         }
         return declared;
+    }
+
+    /**
+     * One declaration, in whichever of the three forms it was written.
+     *
+     * <p>One reading for both worlds. A module's declaration and the language's are the same kind
+     * of thing — they resolve and type alike and a value of either lays out alike — and this is
+     * where that stops being something two readings agree about.
+     */
+    private static CheckedData declaredAs(Hir.Def def, Symbols symbols,
+                                          Map<TypeSymbol.AtModule, ValueShape> shapes) {
+        return switch (def) {
+            case Hir.Data product -> productOf(product, shapes);
+            case Hir.SumData sum -> new CheckedData.Sum(sum.declares(),
+                    AtomSpace.subjectAtoms(Type.ref(sum.declares()), symbols));
+            case Hir.UnitData unit -> new CheckedData.Unit(unit.declares());
+        };
     }
 
     /**

@@ -8,6 +8,8 @@ import souther.compiler.program.CheckedHelper;
 import souther.compiler.program.CheckedImplementation;
 import souther.compiler.program.CheckedModule;
 import souther.compiler.program.CheckedProgram;
+import souther.compiler.program.Declared;
+import souther.compiler.program.DeclaredBy;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
@@ -92,11 +94,26 @@ class AnOutputReadsWhatAModulesDataAreMadeOfTest {
             let widen (n) = Wide { extra = n, id = n, tag = "t" }
             """;
 
+    private static CheckedProgram demoProgram() {
+        return CheckedProgram.of(List.of(MODULE));
+    }
+
     private static CheckedModule demo() {
-        CheckedProgram program = CheckedProgram.of(List.of(MODULE));
-        CheckedModule module = program.module("demo");
+        CheckedModule module = demoProgram().module("demo");
         assertNotNull(module, "the compile checked this module");
         return module;
+    }
+
+    /**
+     * What a value of {@code name} is made of, as an output laying one out asks for it.
+     *
+     * <p>Of the program and with the identity, which is the whole of what a reader has to do: the
+     * module that declares it is on the name, and the reader neither picks it nor is told to.
+     */
+    private static CheckedData layout(CheckedProgram program, TypeSymbol.AtModule name) {
+        Declared declared = program.declaration(name);
+        assertEquals(DeclaredBy.A_MODULE, declared.declaredBy(), name::toString);
+        return declared.data();
     }
 
     private static CheckedData declared(CheckedModule module, String name) {
@@ -262,7 +279,9 @@ class AnOutputReadsWhatAModulesDataAreMadeOfTest {
      */
     @Test
     void everyConstructionFillsTheDeclaredFieldsInTheOrderTheyAreLaidOut() {
-        CheckedModule module = demo();
+        CheckedProgram program = demoProgram();
+        CheckedModule module = program.module("demo");
+        assertNotNull(module, "the compile checked this module");
         List<Core.Construct> constructions = new ArrayList<>();
         for (Core body : bodiesOf(module)) {
             collect(body, Core.Construct.class, constructions);
@@ -272,7 +291,7 @@ class AnOutputReadsWhatAModulesDataAreMadeOfTest {
                 + constructions.stream().map(each -> each.typeName().name()).toList());
         for (Core.Construct construction : constructions) {
             CheckedData.Product built = assertInstanceOf(CheckedData.Product.class,
-                    module.data(construction.typeName()), construction.typeName()::toString);
+                    layout(program, construction.typeName()), construction.typeName()::toString);
             assertEquals(fieldNames(built),
                     construction.values().stream().map(Core.FieldValue::field).toList(),
                     () -> "what `" + construction.typeName() + "` is built with");
@@ -289,7 +308,9 @@ class AnOutputReadsWhatAModulesDataAreMadeOfTest {
      */
     @Test
     void everyFieldReadNamesAFieldOfWhatItReadsFrom() {
-        CheckedModule module = demo();
+        CheckedProgram program = demoProgram();
+        CheckedModule module = program.module("demo");
+        assertNotNull(module, "the compile checked this module");
         List<Core.FieldAccess> reads = new ArrayList<>();
         for (Core body : bodiesOf(module)) {
             collect(body, Core.FieldAccess.class, reads);
@@ -305,7 +326,7 @@ class AnOutputReadsWhatAModulesDataAreMadeOfTest {
                 unaccounted.add(read);
                 continue;
             }
-            switch (module.data(named)) {
+            switch (layout(program, named)) {
                 // Answering at all is the assertion: a name that is no field of it is refused.
                 case CheckedData.Product product -> {
                     offProducts++;
@@ -318,14 +339,13 @@ class AnOutputReadsWhatAModulesDataAreMadeOfTest {
                             () -> "the cases " + named + " is read across");
                     for (TypeSymbol leaf : sum.cases()) {
                         CheckedData.Product carrying = assertInstanceOf(CheckedData.Product.class,
-                                module.data(assertInstanceOf(TypeSymbol.AtModule.class, leaf)),
+                                layout(program, assertInstanceOf(TypeSymbol.AtModule.class, leaf)),
                                 leaf::toString);
                         carrying.positionOf(read.field());
                     }
                 }
                 case CheckedData.Unit _ ->
                         throw new AssertionError("a unit has no field to read: " + named);
-                case null -> throw new AssertionError(named + " is declared by no module here");
             }
         }
         assertEquals(1, offSums, "the read off a sum is the one this module writes");
@@ -347,27 +367,23 @@ class AnOutputReadsWhatAModulesDataAreMadeOfTest {
             """;
 
     /**
-     * A module this compile did not check and a name a module does not declare are two answers.
+     * A declaration is reached by its identity, and not through whichever module the reader holds.
      *
-     * <p>Which module a name belongs to is asked before what the name is, and both questions can
-     * answer nothing. Asked as one they would answer nothing once, and a reader could not tell a
-     * program it was given too little of from a name that is not a declaration. Held with a name
-     * another module really declares, because a name no module declares cannot be made at all —
-     * which is the same reason the two questions can be kept apart.
+     * <p>Which module declares a name is on the name, so a reader asked to pick the owner first is
+     * being asked to restate what it is already holding — and where the declaration is the
+     * language's own there is no module of the compilation to pick. Enumerating is still a module's
+     * question, and a module this compile did not check is still nothing.
      */
     @Test
-    void aModuleThisCompileDidNotCheckAndANameItDoesNotDeclareAreTwoAnswers() {
+    void aDeclarationIsReachedByItsIdentityAndNotThroughAModule() {
         CheckedProgram program = CheckedProgram.of(List.of(MODULE, OTHER));
-        CheckedModule demo = program.module("demo");
         CheckedModule other = program.module("other");
-        assertNotNull(demo);
         assertNotNull(other);
         TypeSymbol.AtModule elsewhere = declared(other, "Elsewhere").name();
 
         assertNull(program.module("nowhere"), "this compile checked no module of that name");
-        assertNull(demo.data(elsewhere), "`demo` declares no `Elsewhere`");
-        assertSame(declared(other, "Elsewhere"), other.data(elsewhere),
-                "the module that declares it answers for it");
+        assertSame(declared(other, "Elsewhere"), layout(program, elsewhere),
+                "the program answers for it, whichever module the reader happened to be holding");
     }
 
     /** Every body this module holds: a behavior written here, and a helper it emits. */

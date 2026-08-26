@@ -267,6 +267,19 @@ public final class Stdlib {
         return names;
     }
 
+    /**
+     * Every declaration the language itself gives, by the address it is declared under, in the
+     * order the library declares them.
+     *
+     * <p>Which those are is the library's own answer. A reader that walked the reserved namespace's
+     * modules asking each what it declares would be building this again, and would be right about
+     * the modules it thought to walk — a declaration written in a module that reader did not name
+     * would be one the language gives and nothing knows about.
+     */
+    public Map<TypeKey, Hir.Def> languageDeclarations() {
+        return language;
+    }
+
     /** What the language declares in {@code moduleName}, keyed by the name written there. Empty
      *  where no module of the library is called that. */
     public Map<String, Hir.Def> languageDeclarationsIn(String moduleName) {
