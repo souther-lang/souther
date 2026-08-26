@@ -63,7 +63,7 @@ public record BorderAssessment(Border border, Map<PointRole, ItemAssessment> ite
             }
             case ItemAssessment.Owed owed -> {
                 if (!(demand instanceof Demand.Owed asked)
-                        || !asked.criterion().equals(owed.criterion())) {
+                        || !asked.criterion().sameAs(owed.criterion())) {
                     throw new IllegalArgumentException("the " + role + " point of " + border.label()
                             + " is assessed against " + owed.criterion()
                             + ", and its border asks " + demand);

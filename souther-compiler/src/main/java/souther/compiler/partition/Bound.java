@@ -35,6 +35,12 @@ public record Bound(CutPosition at, boolean inclusive) {
         return new Bound(CutPosition.at(level), inclusive);
     }
 
+    /** The same end with its place written the one way, for an identity to be built from
+     *  ({@link CutPosition#canonical()}). */
+    public Bound canonical() {
+        return new Bound(at.canonical(), inclusive);
+    }
+
     /** Whether {@code value} is on the upper side of this, read as the lower end of a region. */
     public boolean admitsFromBelow(Level value) {
         int order = at.compare(value);

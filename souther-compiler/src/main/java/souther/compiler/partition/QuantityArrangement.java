@@ -26,10 +26,10 @@ import java.util.Map;
  * @param seams where the values part, in the order the values are in
  * @param bands the runs between them, one more than there are seams
  */
-public record QuantityArrangement(List<Seam> seams, List<Band> bands) {
+public record QuantityArrangement(List<Parting> partings, List<Band> bands) {
 
     public QuantityArrangement {
-        seams = List.copyOf(seams);
+        partings = List.copyOf(partings);
         bands = List.copyOf(bands);
     }
 
@@ -40,7 +40,7 @@ public record QuantityArrangement(List<Seam> seams, List<Band> bands) {
      * than by which rule parted them: the rules that drew a place are a property of the place and
      * are kept beside it, while what the quantity is divided into is a property of the quantity.
      */
-    public static QuantityArrangement of(LevelSpace space, List<Seam> parted) {
+    public static QuantityArrangement of(LevelSpace space, List<Parting> parted) {
         return of(space, parted, null, null);
     }
 
@@ -59,29 +59,43 @@ public record QuantityArrangement(List<Seam> seams, List<Band> bands) {
      *             refuses
      * @param to   the same at the high end
      */
-    public static QuantityArrangement of(LevelSpace space, List<Seam> parted, Bound from,
+    public static QuantityArrangement of(LevelSpace space, List<Parting> parted, Bound from,
                                          Bound to) {
-        Map<String, Seam> distinct = new LinkedHashMap<>();
-        for (Seam each : parted) {
+        Map<String, Parting> distinct = new LinkedHashMap<>();
+        for (Parting each : parted) {
             // A place the rules leave nothing at divides nothing. The values it would tell apart are
             // values no row can be written at, so it is dropped rather than kept as a run holding
             // none — which is a class an author would be told to write a row for and could not.
-            if (outside(each, from, to)) {
+            if (outside(each.geometry(), from, to)) {
                 continue;
             }
-            distinct.putIfAbsent(each.key(), each);
+            // One place, and every line the model wrote there against it. Which is the whole of what
+            // this being the one canonicaliser buys: a producer that told two candidates apart for
+            // itself kept whichever it read first, and the other line went unsaid.
+            distinct.merge(each.key(), each, Parting::and);
         }
-        List<Seam> ordered = new ArrayList<>(distinct.values());
+        List<Parting> ordered = new ArrayList<>(distinct.values());
         ordered.sort(QuantityArrangement::inOrderOfTheValues);
 
         List<Band> bands = new ArrayList<>();
-        Seam under = null;
-        for (Seam seam : ordered) {
-            keep(space, bands, new Band(under, seam, from, to));
-            under = seam;
+        Parting under = null;
+        for (Parting parting : ordered) {
+            keep(space, bands, runBetween(under, parting, from, to));
+            under = parting;
         }
-        keep(space, bands, new Band(under, null, from, to));
+        keep(space, bands, runBetween(under, null, from, to));
         return new QuantityArrangement(ordered, bands);
+    }
+
+    /** The run between two of the places the values part, held to what the rules leave either
+     *  side. */
+    private static Band runBetween(Parting under, Parting over, Bound from, Bound to) {
+        // The places and not the lines against them. What a run asks a row for is the same however
+        // many rules wrote a line where it stops, and which of them did is this arrangement's answer
+        // to a different question ({@link Parting#alternatives}) — carried into the run, it would be
+        // inside every value that says what is asked of a row.
+        return new Band(Band.endAt(under == null ? null : under.geometry(), from, Towards.ABOVE),
+                Band.endAt(over == null ? null : over.geometry(), to, Towards.BELOW));
     }
 
     /**
@@ -96,10 +110,10 @@ public record QuantityArrangement(List<Seam> seams, List<Band> bands) {
      * <p>Asked of the line and not of the values beside it, because a line the quantity names no
      * value beside has none to be asked about.
      */
-    private static int inOrderOfTheValues(Seam one, Seam other) {
-        int where = one.at().compareTo(other.at());
-        return where != 0 ? where
-                : Boolean.compare(one.keepsItsOwnValueBelow(), other.keepsItsOwnValueBelow());
+    private static int inOrderOfTheValues(Parting one, Parting other) {
+        int where = one.geometry().at().compareTo(other.geometry().at());
+        return where != 0 ? where : Boolean.compare(one.geometry().keepsItsOwnValueBelow(),
+                other.geometry().keepsItsOwnValueBelow());
     }
 
     /**
@@ -109,13 +123,15 @@ public record QuantityArrangement(List<Seam> seams, List<Band> bands) {
      * leave nothing in, which is a point nobody is owed a row at rather than one nothing has got
      * to.
      */
-    public Band above(Seam seam) {
-        return bands.stream().filter(each -> is(each.under(), seam)).findFirst().orElse(null);
+    public Band above(Parting parting) {
+        return bands.stream().filter(each -> is(each.lower().seam(), parting)).findFirst()
+                .orElse(null);
     }
 
     /** The run just below it, on the same reading. */
-    public Band below(Seam seam) {
-        return bands.stream().filter(each -> is(each.over(), seam)).findFirst().orElse(null);
+    public Band below(Parting parting) {
+        return bands.stream().filter(each -> is(each.upper().seam(), parting)).findFirst()
+                .orElse(null);
     }
 
     /** The run one value of the quantity is in, or null where the rules leave it in none. */
@@ -134,11 +150,12 @@ public record QuantityArrangement(List<Seam> seams, List<Band> bands) {
      */
     public Band endmost(Towards inward) {
         return bands.stream()
-                .filter(each -> inward == Towards.ABOVE ? each.under() == null : each.over() == null)
+                .filter(each -> (inward == Towards.ABOVE ? each.lower() : each.upper())
+                        .seam() == null)
                 .findFirst().orElse(null);
     }
 
-    private static boolean is(Seam one, Seam other) {
+    private static boolean is(Seam one, Parting other) {
         return one != null && other != null && one.key().equals(other.key());
     }
 

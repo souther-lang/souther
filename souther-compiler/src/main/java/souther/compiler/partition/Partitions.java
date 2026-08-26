@@ -541,7 +541,9 @@ public final class Partitions {
                             within == null ? null : within.min(),
                             within == null ? null : within.max()),
                     merged(axis.cuts(), reachable, carrier),
-                    reachable.stream().map(Threshold::parts).toList()),
+                    reachable.stream()
+                            .map(each -> Parting.by(each.parts(), each.origin().authoredLine()))
+                            .toList()),
                     reachable.isEmpty() ? null : new BodyCutInspection.Evidence(), rules);
         }
         // Both producers into the one account. A line that divides a position leaves its border on
@@ -623,7 +625,7 @@ public final class Partitions {
      *                  working them out would be a reading whose answer is thrown away
      */
     private static Axis refine(Axis axis, java.util.function.Supplier<List<PartitionClass>> otherwise,
-                               List<Cut> cuts, List<Seam> parted) {
+                               List<Cut> cuts, List<Parting> parted) {
         return axis.carrying(axis.derivable() ? axis.classes() : otherwise.get(), cuts, parted);
     }
 
@@ -743,8 +745,8 @@ public final class Partitions {
      * position has a value at it. A line over a form of several positions divides none of them and
      * is on a quantity of its own, which no axis names — those arrive with the lines themselves.
      */
-    private static Map<String, List<Seam>> partedByQuantity(List<Axis> axes) {
-        Map<String, List<Seam>> out = new LinkedHashMap<>();
+    private static Map<String, List<Parting>> partedByQuantity(List<Axis> axes) {
+        Map<String, List<Parting>> out = new LinkedHashMap<>();
         for (Axis axis : axes) {
             if (axis.parted().isEmpty()) {
                 continue;
@@ -807,7 +809,7 @@ public final class Partitions {
         // Every place the rules part this position's values: the ones its cuts stand at, and the
         // ones no cut stands at because the position holds no value there. A border built from the
         // cuts alone read its two sides past exactly the lines that were left out.
-        List<Seam> parted = new ArrayList<>(axis.parted());
+        List<Parting> parted = new ArrayList<>(axis.parted());
         for (Cut cut : axis.cuts()) {
             BoundaryTarget where = BoundaryTarget.at(
                     new BorderQuantity.OfACoordinate(axis.id(), axis.term(),
@@ -815,9 +817,11 @@ public final class Partitions {
                                     axis.term().observedOn(axis.type(), symbols), cut.carrier())),
                     new Level.OnACarrier(cut.carrier(), cut.at()));
             for (OriginRef origin : cut.origins()) {
-                Seam parts = Border.parts(where, origin);
-                if (parts != null && parted.stream()
-                        .noneMatch(had -> had.key().equals(parts.key()))) {
+                // Every rule that drew a line here, as it was read. Which of them fall in one place
+                // is the arrangement's answer, and telling them apart here kept the first and lost
+                // the rest — so a run bounded by two rules knew about one of them.
+                Parting parts = Border.partedBy(where, origin);
+                if (parts != null) {
                     parted.add(parts);
                 }
             }

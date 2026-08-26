@@ -37,6 +37,19 @@ public sealed interface Place extends Comparable<Place> permits Count, Text {
         return other != null && compareTo(other) == 0;
     }
 
+    /**
+     * This place spelled the one way {@link #key()} names it.
+     *
+     * <p>For a caller that has to compare places it cannot ask {@link #sameAs} — a value used as a
+     * map key, or held inside a larger value that is. Two places of one line come back equal here,
+     * so the derived equality of whatever holds them answers the question the order would.
+     *
+     * <p>Beside the two above rather than replacing them: what a rule wrote is what a report writes
+     * back, and {@code 0.00m} is written as the author wrote it. This is the same place said the one
+     * way, and it is only ever what an identity is built from.
+     */
+    Place canonical();
+
     /** What a comparison across two carriers is, where one happens. Never reachable from a model:
      * the places the algebra compares are the places of one position. */
     static IllegalArgumentException notOneOrder(Place left, Place right) {
