@@ -20,6 +20,7 @@ import souther.compiler.partition.ReachingCuts;
 import souther.compiler.partition.Demand;
 import souther.compiler.partition.PointRole;
 import souther.compiler.partition.BorderQuantity;
+import souther.compiler.partition.StandingAtAPoint;
 import souther.compiler.partition.LevelRealizer;
 import souther.compiler.partition.Realization;
 import souther.compiler.inputs.InputDomain;
@@ -661,7 +662,7 @@ final class Coverages {
     private interface OneShapeOfBorder {
 
         /** Whether one of {@code rows} meets {@code criterion}, and whether that could be told. */
-        Met met(Criterion criterion, List<ObservedInputs> rows);
+        StandingAtAPoint.Met met(Criterion criterion, List<ObservedInputs> rows);
 
         /** What reading the rules this reading took in established about a row being writable at
          *  this border. Three answers rather than two: a shape whose rules were never put the
@@ -748,8 +749,8 @@ final class Coverages {
         return new OneShapeOfBorder() {
 
             @Override
-            public Met met(Criterion criterion, List<ObservedInputs> rows) {
-                return metOn(quantity, where, rows, criterion, site);
+            public StandingAtAPoint.Met met(Criterion criterion, List<ObservedInputs> rows) {
+                return StandingAtAPoint.met(quantity, where, rows, criterion, site);
             }
 
             @Override
@@ -813,200 +814,6 @@ final class Coverages {
                 };
             }
         };
-    }
-
-    /**
-     * One row's values under one reading of it: an element chosen at each step inside a sequence
-     * the line's positions take.
-     *
-     * <p>A row standing at a point is one of its readings standing there, and a reading has to be
-     * one: two positions under one person are that person's two values, and offering the first
-     * person's age beside the second person's status would have a row stand at a point neither
-     * element is at. So an element is chosen per step and every position takes the one chosen for
-     * the steps it shares — the same rule a pair of classes is read by, since it is the same
-     * question.
-     *
-     * <p>Which readings there are is not known before the quantity has asked, since which positions
-     * a line is over is its to say. So the choices are collected as it asks and the reading is run
-     * again under each, until one stands or they are used up.
-     */
-    private static final class OneReadingOfARow implements BorderQuantity.Observation {
-
-        private final BehaviorInputs where;
-        private final ObservedInputs row;
-        /** The element chosen at each step, for this reading. */
-        private final Map<souther.compiler.inputs.TermPath, Integer> chosen;
-        /** How many elements each step was found to have, over every reading so far. */
-        private final Map<souther.compiler.inputs.TermPath, Integer> held;
-        private boolean wroteNothing;
-        private boolean unreadable;
-
-        OneReadingOfARow(BehaviorInputs where, ObservedInputs row,
-                         Map<souther.compiler.inputs.TermPath, Integer> chosen,
-                         Map<souther.compiler.inputs.TermPath, Integer> held) {
-            this.where = where;
-            this.row = row;
-            this.chosen = chosen;
-            this.held = held;
-        }
-
-        @Override
-        public souther.compiler.observe.ObservedValue at(souther.compiler.inputs.TermPath path) {
-            List<BehaviorInputs.Occurrence> values = where.occurrencesAt(row.inputs(), path);
-            if (values == null) {
-                unreadable = true;
-                return null;   // the walk and the type disagree, which is the quantity's to report
-            }
-            if (values.isEmpty()) {
-                // The row wrote no element here, so nothing of it stands anywhere on this line.
-                // That is a row that was read and does not reach the point, and reporting it as a
-                // value nothing could read leaves the point undecided over a row that plainly
-                // settles it.
-                wroteNothing = true;
-                return null;
-            }
-            for (BehaviorInputs.Occurrence each : values) {
-                each.at().forEach((step, ordinal) ->
-                        held.merge(step, ordinal + 1, Math::max));
-            }
-            for (BehaviorInputs.Occurrence each : values) {
-                if (agrees(each)) {
-                    return each.value();
-                }
-            }
-            // No value here under this reading. Not a stop: the reading names an element this
-            // position does not have, and another reading is where its values are.
-            return null;
-        }
-
-        /** Whether {@code each} was reached through the elements this reading chose. */
-        private boolean agrees(BehaviorInputs.Occurrence each) {
-            for (Map.Entry<souther.compiler.inputs.TermPath, Integer> step : each.at().entrySet()) {
-                Integer picked = chosen.get(step.getKey());
-                if (picked != null && !picked.equals(step.getValue())) {
-                    return false;
-                }
-            }
-            return true;
-        }
-
-        /** Whether the row wrote nothing at some position this line is over. */
-        boolean wroteNothing() {
-            return wroteNothing;
-        }
-
-        /** Whether some position this line is over could not be read at all. */
-        boolean unreadable() {
-            return unreadable;
-        }
-    }
-
-    /**
-     * The readings of one row a point is tried against.
-     *
-     * <p>The first is run before the rest are known: which steps the line's positions take is the
-     * quantity's to say as it reads them, so it says so by being asked once. Every choice those
-     * steps allow follows it.
-     */
-    private static List<OneReadingOfARow> readings(BehaviorInputs where, ObservedInputs row,
-                                                   BorderQuantity quantity, Criterion criterion,
-                                                   OneReadingOfARow first,
-                                                   Map<souther.compiler.inputs.TermPath,
-                                                           Integer> held) {
-        quantity.standsAt(criterion, first);
-        List<OneReadingOfARow> out = new ArrayList<>();
-        for (Map<souther.compiler.inputs.TermPath, Integer> choice : readingsOver(held)) {
-            out.add(new OneReadingOfARow(where, row, choice, held));
-        }
-        return out;
-    }
-
-    /**
-     * Every reading of a row over the steps {@code held} says its positions take.
-     *
-     * <p>One choice per step, in every combination — which is a product and not a zip, because two
-     * steps a row's positions do not take together are two independent choices. Bounded, since a
-     * row holding several long lists has more readings than a measure is worth.
-     */
-    private static List<Map<souther.compiler.inputs.TermPath, Integer>> readingsOver(
-            Map<souther.compiler.inputs.TermPath, Integer> held) {
-        List<Map<souther.compiler.inputs.TermPath, Integer>> out = new ArrayList<>();
-        out.add(Map.of());
-        for (Map.Entry<souther.compiler.inputs.TermPath, Integer> step : held.entrySet()) {
-            List<Map<souther.compiler.inputs.TermPath, Integer>> wider = new ArrayList<>();
-            for (Map<souther.compiler.inputs.TermPath, Integer> each : out) {
-                for (int i = 0; i < step.getValue() && wider.size() < MOST_READINGS; i++) {
-                    Map<souther.compiler.inputs.TermPath, Integer> deeper =
-                            new LinkedHashMap<>(each);
-                    deeper.put(step.getKey(), i);
-                    wider.add(deeper);
-                }
-            }
-            out = wider;
-        }
-        return out;
-    }
-
-    /** How many readings of one row a point is tried against. */
-    private static final int MOST_READINGS = 256;
-
-    /**
-     * Whether any row stands at one item of a border.
-     *
-     * <p>One walk for every kind of line. What a row put at the item is the quantity's to read — it
-     * is the one thing that knows what it is a quantity of — and what this adds is the two facts that
-     * belong to the rows: that a row nothing could read leaves the item undecided rather than missed,
-     * and that a line a fork drew is met by getting the comparison to answer as well.
-     *
-     * @param site which comparison a row has to have got an answer out of, for a rule that meeting
-     *             takes more than standing at the level. Empty where standing there is the whole
-     *             of it
-     */
-    private static Met metOn(BorderQuantity quantity, BehaviorInputs where, List<ObservedInputs> rows,
-                             Criterion criterion,
-                             java.util.Optional<souther.compiler.coverage.ComparisonOccurrence>
-                                     site) {
-        boolean unreadable = false;
-        for (ObservedInputs row : rows) {
-            // A row has more than one value at a position inside a sequence, and standing at a point
-            // is one element standing there. Asked for one value, such a row answered with none and
-            // every point on such a line came back undecided — a measurement that could not look,
-            // said of a row that wrote the values plainly.
-            // The first reading both answers the point and says which steps the line's positions
-            // take; the rest are tried under each choice those steps allow.
-            Map<souther.compiler.inputs.TermPath, Integer> held = new LinkedHashMap<>();
-            OneReadingOfARow first = new OneReadingOfARow(where, row, Map.of(), held);
-            boolean stands = false;
-            boolean stopped = false;
-            for (OneReadingOfARow reading : readings(where, row, quantity, criterion, first, held)) {
-                switch (quantity.standsAt(criterion, reading)) {
-                    // A reading that could not look, unless what it could not find was an element
-                    // the row wrote none of — that is a row that was read and does not stand, and
-                    // said of the reading it happened in rather than of the row, since another
-                    // reading of the same row may reach the point.
-                    case UNREADABLE -> stopped = stopped || !reading.wroteNothing();
-                    case NO -> { }
-                    case YES -> stands = true;
-                }
-                if (stands) {
-                    break;
-                }
-            }
-            // A row nobody watched reached no comparison here. What that costs the measure is not
-            // said here — the reading of the rows carries it, and the verdict below weakens what it
-            // says by every row it could not read — so what this asks of such a row is what it
-            // asks of one that ran and got no answer out of the comparison.
-            souther.compiler.coverage.Observation seen = switch (row.watched()) {
-                case souther.compiler.partition.Generator.Watched.Ran(var account) -> account;
-                case souther.compiler.partition.Generator.Watched.NoAccount _ ->
-                        souther.compiler.coverage.Observation.NONE;
-            };
-            if (stands && site.stream().allMatch(seen::reached)) {
-                return Met.YES;
-            }
-            unreadable = unreadable || stopped;
-        }
-        return unreadable ? Met.UNREADABLE : Met.NO;
     }
 
     /**
@@ -1145,12 +952,20 @@ final class Coverages {
         return List.copyOf(out);
     }
 
-    /** What a reading of the rows comes to, once what could not be read is accounted for. */
+    /**
+     * What a reading of the rows comes to, once what could not be read is accounted for.
+     *
+     * <p>A row standing where the line is that nothing watched reach the comparison is counted here
+     * as a row that did not meet the point. It is a miss the measure can hide: what the rows went
+     * without is said below, and a run nobody watched is one of the things it says. So the
+     * distinction the walk makes is not carried further — a hit needs a row seen reaching the
+     * comparison, and everything else is answered by how whole the reading was.
+     */
     private static Measurement<ItemAssessment.Coverage> verdictOf(
-            Met met, boolean guard, souther.compiler.partition.Border border,
+            StandingAtAPoint.Met met, boolean guard, souther.compiler.partition.Border border,
             souther.compiler.query.Adequacy.RowReading observed) {
         List<RowOutcome> rows = observed.rowsSeen();
-        if (met == Met.YES) {
+        if (met == StandingAtAPoint.Met.YES) {
             // Found is found: a row settles this whatever else went unread, so nothing weakens it.
             return new Measurement.Complete<>(new ItemAssessment.Coverage.Hit());
         }
@@ -1159,7 +974,7 @@ final class Coverages {
         // nothing read at all, which may be the row that is at this value; and, for a line a fork
         // drew, a row that never finished and so never reached the comparison.
         Set<Weakening> by = new LinkedHashSet<>();
-        if (met == Met.UNREADABLE) {
+        if (met == StandingAtAPoint.Met.UNREADABLE) {
             by.add(new Weakening.BorderValueUnreadable(border));
         }
         for (Incompleteness gap : observed.gaps()) {
@@ -1243,15 +1058,6 @@ final class Coverages {
                 ? new Measurement.NotMeasured<>(ItemAssessment.Coverage.NotAsked.NO_ROWS) : null;
     }
 
-    /**
-     * Whether a row was at a boundary, and whether that could be told at all.
-     *
-     * <p>Three answers, because a value the observer could not read is not a value that missed. A row
-     * writing the very number the rule names, whose observation was cut short by a limit somewhere
-     * else in the same input, reads as "no row is at this boundary" — which is a sentence about the
-     * model that is not true.
-     */
-    private enum Met { YES, NO, UNREADABLE, UNDECIDED }
 
     private Coverages() {}
 
