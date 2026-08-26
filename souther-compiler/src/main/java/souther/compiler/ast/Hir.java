@@ -411,7 +411,7 @@ public interface Hir {
     record Fake(Var target, List<FakeRow> rows, SourcePos pos) implements Hir {
 
         /** Which behavior this stands in for, or null where the name denoted none. */
-        public ValueName.Behavior stoodInFor() {
+        public ValueName.Behavior standsInFor() {
             return behaviorOf(target);
         }
     }
@@ -426,7 +426,7 @@ public interface Hir {
     record With(Var dep, Expr value, SourcePos pos) implements Hir {
 
         /** Which behavior this stands in for, or null where the name denoted none. */
-        public ValueName.Behavior stoodInFor() {
+        public ValueName.Behavior standsInFor() {
             return behaviorOf(dep);
         }
     }

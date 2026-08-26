@@ -228,7 +228,7 @@ public final class ExampleVerifier {
             throw new IllegalStateException("`" + behavior + "` has no target to run its rows"
                     + " against, and a row of it should not have been enumerated");
         }
-        Sig sig = sigs.get(own(behavior));
+        Sig sig = sigs.get(module.targeted(behavior));
         if (sig == null) {
             throw new IllegalStateException("`" + behavior + "` is evaluable and has no signature");
         }
@@ -270,20 +270,16 @@ public final class ExampleVerifier {
      * row rather than a statement about the dependency.
      */
     List<StandinEntry> standinEntries(BoundExamples of, String behavior) {
-        Sig sig = sigs.get(own(behavior));
+        Sig sig = sigs.get(module.targeted(behavior));
         if (sig == null) {
             return List.of();
         }
-        Hir.Fake first = null;
-        for (souther.compiler.check.Prepared.FakeTable written : module.fakes()) {
-            if (own(behavior).equals(written.standsInFor())) {
-                first = written.read();
-                break;
-            }
-        }
-        if (first == null) {
+        souther.compiler.check.Prepared.FakeTable answering =
+                module.standingInFor(module.targeted(behavior));
+        if (answering == null) {
             return List.of();
         }
+        Hir.Fake first = answering.read();
         FixtureReader fixtures = newFixtureReader();
         ExampleStatements.BuiltTable built = ExampleStatements.standins(fixtures, first, sig.ins(),
                 sig.out(), new ArrayList<>());
@@ -406,7 +402,7 @@ public final class ExampleVerifier {
      * {@link ContractObservation.NothingStated} reports after a row has run, asked before one is.
      */
     boolean states(String behavior) {
-        return ensures.states(own(behavior));
+        return ensures.states(module.targeted(behavior));
     }
 
     /**
@@ -437,7 +433,7 @@ public final class ExampleVerifier {
     }
 
     private ContractObservation checkingContract(String behavior, Hir.ExampleRow row) {
-        Sig sig = sigs.get(own(behavior));
+        Sig sig = sigs.get(module.targeted(behavior));
         ExampleTarget target = targetOf(behavior);
         if (sig == null || target == null) {
             return new ContractObservation.Unobserved(
@@ -463,7 +459,7 @@ public final class ExampleVerifier {
         // a call to learn what the declaration already said — and asking this first would answer
         // "the model states nothing" for a binding nothing may be handed to, sending its author to
         // write a clause that would still not run.
-        if (!ensures.states(own(behavior))) {
+        if (!ensures.states(module.targeted(behavior))) {
             return new ContractObservation.NothingStated(behavior);
         }
         FixtureReader fixtures = newFixtureReader();
@@ -568,7 +564,7 @@ public final class ExampleVerifier {
     }
 
     private StandinObservation observing(String behavior, StandinEntry entry) {
-        Sig sig = sigs.get(own(behavior));
+        Sig sig = sigs.get(module.targeted(behavior));
         ExampleTarget target = targetOf(behavior);
         if (sig == null || target == null) {
             return new StandinObservation.Unobserved(
@@ -715,7 +711,7 @@ public final class ExampleVerifier {
                             Deadline deadline, EvaluationPolicy policy, Answerer answerer,
                             Supplier<PublishedClasses> declared,
                             Map<ValueName.Behavior, Contract> contracts) {
-        this.ensures = new EnsuresChecks(loader, contracts);
+        this.ensures = new EnsuresChecks(loader, contracts, sigs.keySet());
         this.module = module;
         this.symbols = symbols;
         this.sigs = sigs;
@@ -756,7 +752,7 @@ public final class ExampleVerifier {
                 && said.add(target.name())) {
             out.add(cannotBeHeldTo(ex.pos(), target.name(), target.agreement()));
         }
-        Sig sig = sigs.get(own(target.name()));
+        Sig sig = sigs.get(module.targeted(target.name()));
         if (sig == null) {
             throw new IllegalStateException("`" + target.name() + "` is evaluable but has no signature");
         }
@@ -1860,11 +1856,6 @@ public final class ExampleVerifier {
     /** How to write {@code dependency} here, for a hint that shows what to type. */
     private String spelling(ValueName.Behavior dependency) {
         return souther.compiler.check.Requirements.writtenIn(module.name(), dependency);
-    }
-
-    /** One of this module's own behaviors, as the declaration it is. */
-    private ValueName.Behavior own(String name) {
-        return new ValueName.Behavior(module.name(), name);
     }
 
     /**

@@ -326,12 +326,7 @@ public final class Prepared {
          * resolution answered and is never worked out again from the characters.
          */
         public ValueName.Behavior standsInFor() {
-            return table.stoodInFor();
-        }
-
-        /** What the author wrote for it, for a message that quotes the source. */
-        public String written() {
-            return table.target().written().quoted();
+            return table.standsInFor();
         }
 
         /** The table, for a reader that holds this state. */
@@ -416,6 +411,53 @@ public final class Prepared {
          * round. */
         public List<FakeTable> fakes() {
             return module.fakes;
+        }
+
+        /**
+         * The behavior an {@code example} of this module names.
+         *
+         * <p>A row targets a behavior of the module it is written in (spec §example-evaluable), so
+         * a target read off a row is a declaration of this one. Said here because every reader of a
+         * row needs it and each restating it would be that rule kept in several places — which is
+         * the shape a stand-in's target was in before it carried what it denotes.
+         */
+        public ValueName.Behavior targeted(String behavior) {
+            return new ValueName.Behavior(name(), behavior);
+        }
+
+        /**
+         * The table that stands in for {@code dependency}, or null where none does.
+         *
+         * <p>The first one written for it, which is the rule the whole module is read under: a
+         * second table for one dependency is never reached, so it stands in for nothing, is
+         * compared against nothing, and is not built (spec §example-fakes, §example-pending). A
+         * table whose target denotes no behavior stands in for nothing either, and is refused where
+         * its name is read.
+         *
+         * <p>One place, because a run picking a table, a reading comparing one against the recorded
+         * rows, and a build of the tables that answer would otherwise be three walks agreeing by
+         * hand — and the day they stopped agreeing, a row would run against a table nothing was
+         * holding to anything.
+         */
+        public FakeTable standingInFor(ValueName.Behavior dependency) {
+            for (FakeTable table : module.fakes) {
+                if (dependency.equals(table.standsInFor())) {
+                    return table;
+                }
+            }
+            return null;
+        }
+
+        /** Every dependency a table here stands in for, each under the table that answers for it,
+         *  in the order the tables are written. */
+        public LinkedHashMap<ValueName.Behavior, FakeTable> tablesThatAnswer() {
+            LinkedHashMap<ValueName.Behavior, FakeTable> answering = new LinkedHashMap<>();
+            for (FakeTable table : module.fakes) {
+                if (table.standsInFor() != null) {
+                    answering.putIfAbsent(table.standsInFor(), table);
+                }
+            }
+            return answering;
         }
 
         /** Which method each row operand runs as, whole-module like the fakes: the methods were

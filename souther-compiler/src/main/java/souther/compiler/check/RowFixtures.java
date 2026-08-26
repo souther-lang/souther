@@ -87,13 +87,13 @@ public final class RowFixtures {
                 for (Hir.With w : row.withs()) {
                     out.add(new Placed(w.value(),
                             new RowPosition.Supplies(answersWith(sigOf(signatures,
-                                    w.stoodInFor())))));
+                                    w.standsInFor())))));
                 }
                 out.add(new Placed(row.expected(), new RowPosition.Asserts(answersWith(sig))));
             }
         }
         for (Hir.Fake fake : module.fakes()) {
-            Sig sig = sigOf(signatures, fake.stoodInFor());
+            Sig sig = sigOf(signatures, fake.standsInFor());
             for (Hir.FakeRow row : fake.rows()) {
                 if (row.inputs() != null) {
                     for (int i = 0; i < row.inputs().size(); i++) {

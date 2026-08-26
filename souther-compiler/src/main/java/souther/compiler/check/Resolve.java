@@ -597,7 +597,7 @@ public final class Resolve {
             for (Ast.ExampleRow row : e.rows()) {
                 List<Hir.With> withs = new ArrayList<>();
                 for (Ast.With w : row.withs()) {
-                    withs.add(new Hir.With(r.stoodInFor(w.dep()), r.expr(w.value()), w.pos()));
+                    withs.add(new Hir.With(r.standsInFor(w.dep()), r.expr(w.value()), w.pos()));
                 }
                 rows.add(new Hir.ExampleRow(row.identity(), r.exprs(row.inputs()), withs,
                         r.expr(row.expected()), row.pos()));
@@ -609,7 +609,7 @@ public final class Resolve {
             // The spelling, because this names which definition the bindings under it belong to and
             // two tables written for two behaviors of one bare name are written differently.
             r.owner = r.ownerOfValue(f.target().name());
-            Hir.Var target = r.stoodInFor(f.target());
+            Hir.Var target = r.standsInFor(f.target());
             List<Hir.FakeRow> rows = new ArrayList<>();
             for (Ast.FakeRow row : f.rows()) {
                 rows.add(new Hir.FakeRow(row.inputs() == null ? null : r.exprs(row.inputs()),
@@ -748,7 +748,7 @@ public final class Resolve {
      * somewhere else, so the answer here is the behavior and not the spelling this module reached it
      * by — nothing below re-decides what the characters meant.
      */
-    private Hir.Var stoodInFor(Ast.Var ref) {
+    private Hir.Var standsInFor(Ast.Var ref) {
         return behaviorNamed(ref, (name, candidates) -> CompileException.of(Diagnostic
                 .at(name.written().reportedAt())
                 .suggestion(Suggest.candidate(name.name(), candidates))

@@ -48,16 +48,12 @@ public final class ExampleProvisioning {
     public static Standin standingIn(List<Hir.With> onTheRow, ValueName.Behavior dependency,
                                      Prepared.Examples module) {
         for (Hir.With written : onTheRow) {
-            if (dependency.equals(written.stoodInFor())) {
+            if (dependency.equals(written.standsInFor())) {
                 return new Standin.OnTheRow(written);
             }
         }
-        for (Prepared.FakeTable table : module.fakes()) {
-            if (dependency.equals(table.standsInFor())) {
-                return new Standin.InTheModule(table);
-            }
-        }
-        return new Standin.Nothing();
+        Prepared.FakeTable table = module.standingInFor(dependency);
+        return table == null ? new Standin.Nothing() : new Standin.InTheModule(table);
     }
 
     /** Of {@code required}, the ones nothing stands in for, in the order they were required. */

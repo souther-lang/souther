@@ -11,6 +11,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -45,8 +46,18 @@ import java.util.concurrent.ConcurrentHashMap;
 final class EnsuresChecks {
 
     /** Every behavior a row or a fake here may state something about — this module's and the ones it
-     *  borrows — under the declaration each is. */
+     *  borrows — under the declaration each is. Only the ones that state something are here. */
     private final Map<ValueName.Behavior, Contract> contracts;
+
+    /**
+     * Every behavior this reading was given, whether or not it declares anything.
+     *
+     * <p>Beside {@link #contracts} so that being absent from that one means "states nothing" and
+     * only that. Without it a behavior whose module was never read would answer the same as one
+     * with no {@code ensures}, and a reading that came up short would pass for a model that had
+     * nothing to say.
+     */
+    private final Set<ValueName.Behavior> reachable;
 
     private final ClassLoader loader;
 
@@ -67,9 +78,11 @@ final class EnsuresChecks {
      *  unique. */
     private final Map<ValueName.Behavior, Method> foundForCase = new ConcurrentHashMap<>();
 
-    EnsuresChecks(ClassLoader loader, Map<ValueName.Behavior, Contract> contracts) {
+    EnsuresChecks(ClassLoader loader, Map<ValueName.Behavior, Contract> contracts,
+                  Set<ValueName.Behavior> reachable) {
         this.loader = loader;
         this.contracts = contracts;
+        this.reachable = reachable;
     }
 
     /**
@@ -133,11 +146,18 @@ final class EnsuresChecks {
      * declares nothing.
      *
      * <p>Asked by the declaration, so a behavior another module declares is answered with that
-     * module's clause. A behavior nothing here can name is absent, which is the same answer as one
-     * that declares nothing — right here, because either way there is no clause for this value to be
-     * held to and no class to load one from.
+     * module's clause. Being asked about one this reading cannot name at all is refused rather than
+     * answered with "declares nothing": the two are told apart because {@code reachable} says which
+     * behaviors were read, and a caller handed silence for the second would take a reading that came
+     * up short for a model with nothing to say.
      */
     private Contract contractOf(ValueName.Behavior behavior, Object[] args) {
+        if (!reachable.contains(behavior)) {
+            throw new IllegalStateException("`" + behavior + "` is not among the behaviors this"
+                    + " reading was given, so what it declares cannot be answered here; a value is"
+                    + " held to a clause by the module that declares it and that module's contracts"
+                    + " were not read");
+        }
         Contract contract = contracts.get(behavior);
         if (contract == null) {
             return null;

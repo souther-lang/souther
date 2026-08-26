@@ -90,7 +90,7 @@ public final class ExampleStatements {
                               MemoryClassLoader loader, Map<String, Hir.FnDef> values,
                               Deadline deadline, EvaluationPolicy policy,
                               Map<ValueName.Behavior, Contract> contracts) {
-        this.ensures = new EnsuresChecks(loader, contracts);
+        this.ensures = new EnsuresChecks(loader, contracts, sigs.keySet());
         this.module = module;
         this.symbols = symbols;
         this.sigs = sigs;
@@ -99,23 +99,6 @@ public final class ExampleStatements {
         this.deadline = deadline;
         this.policy = policy;
         this.rendering = new FixtureReader(module, symbols, values, loader);
-    }
-
-    /**
-     * One of this module's own behaviors, as the declaration it is.
-     *
-     * <p>What an {@code example} names is a behavior of the module the rows are written in (spec
-     * §example-evaluable), so a target read off a row is lifted here rather than being compared with
-     * a stand-in's spelling. That comparison is what a fake for a borrowed dependency and a row for
-     * a namesake declared here used to pass.
-     */
-    private ValueName.Behavior own(String name) {
-        return own(module.name(), name);
-    }
-
-    /** The same, for a reader that has the module's name and not the reading. */
-    private static ValueName.Behavior own(String module, String name) {
-        return new ValueName.Behavior(module, name);
     }
 
     /**
@@ -132,17 +115,18 @@ public final class ExampleStatements {
      * dispatch never reaches states nothing the fake stands in with, and what is wrong with it is
      * that it answers nothing ({@link #cannotAnswer}). The {@code _} row is not here either: it
      * states no input, so there is no relation to hold its answer to.
+     *
+     * <p>{@code fk} is a table that answers for something — every caller reaches it through the one
+     * place that says which those are ({@code Prepared.Examples.tablesThatAnswer}) — so the behavior
+     * it stands in for is there to be asked about.
      */
     static List<Diagnostic> notKept(EnsuresChecks ensures, Hir.Fake fk, BuiltTable built) {
-        if (fk.stoodInFor() == null) {
-            return List.of();
-        }
         List<Diagnostic> said = new ArrayList<>();
         for (Standin standin : built.standins().explicit()) {
             // The behavior the table stands in for, which is what declares the clause its rows are
             // held to. Read off the resolved target: a dependency another module declares states
             // its own, and minting a name in this module would hold the row to nothing.
-            String why = ensures.notHeld(fk.stoodInFor(),
+            String why = ensures.notHeld(fk.standsInFor(),
                     standin.arguments(), standin.answer().value());
             if (why != null) {
                 said.add(Diagnostic.at(standin.row().pos())
@@ -248,22 +232,15 @@ public final class ExampleStatements {
             souther.compiler.check.Prepared.Examples module, Map<ValueName.Behavior, Sig> sigs,
             SourceId sourceId) {
         List<souther.compiler.check.Prepared.FakeTable> building = new ArrayList<>();
-        Set<ValueName.Behavior> answering = new LinkedHashSet<>();
-        for (souther.compiler.check.Prepared.FakeTable table : module.fakes()) {
-            Hir.Fake fk = table.read();
-            if (fk.stoodInFor() == null || !answering.add(fk.stoodInFor())) {
-                // A target that denotes no behavior is E1932 where the name is read, and a second
-                // table for one dependency answers nothing, here as anywhere.
-                continue;
+        module.tablesThatAnswer().forEach((dependency, table) -> {
+            if (!table.read().pos().isIn(sourceId)) {
+                return;   // written in another source, and built by that source's own reading
             }
-            if (!fk.pos().isIn(sourceId)) {
-                continue;   // written in another source, and built by that source's own reading
-            }
-            if (sigs.get(fk.stoodInFor()) == null) {
-                continue;   // nothing here can say what it answers, so there is no table to build
+            if (sigs.get(dependency) == null) {
+                return;   // nothing here can say what it answers, so there is no table to build
             }
             building.add(table);
-        }
+        });
         return building;
     }
 
@@ -308,7 +285,7 @@ public final class ExampleStatements {
         List<Diagnostic> said = new ArrayList<>();
         for (souther.compiler.check.Prepared.FakeTable table : building) {
             Hir.Fake fk = table.read();
-            Sig sig = sigs.get(fk.stoodInFor());
+            Sig sig = sigs.get(fk.standsInFor());
             // Within a budget of its own, for the reason a row and a reading each have one: a row of
             // the table applies helpers, and a `partial` one may not stop. Nothing before this change
             // built the table of a fake nothing reads, so this is the first thing that would run it.
@@ -490,6 +467,18 @@ public final class ExampleStatements {
     }
 
     /**
+     * What the dependency a {@code with} stands in for answers, or null where nothing here says.
+     *
+     * <p>Null covers both a name that denoted no behavior — refused where it is read, so nothing
+     * further is said about it — and one whose module this reading did not get. Asked in one place
+     * because a lookup under a key of the wrong kind, or under none, is the mistake this whole
+     * reading is keyed by declarations to avoid.
+     */
+    private static Sig shapeOf(Map<ValueName.Behavior, Sig> sigs, Hir.With supplied) {
+        return supplied.standsInFor() == null ? null : sigs.get(supplied.standsInFor());
+    }
+
+    /**
      * The behaviors this module both stands in for — the target of a {@code fake}, the dependency a
      * {@code with} that takes no input answers for ({@link #againstWiths}) — and records rows of.
      *
@@ -499,25 +488,21 @@ public final class ExampleStatements {
      */
     private static Set<ValueName.Behavior> contested(
             souther.compiler.check.Prepared.Examples module, Map<ValueName.Behavior, Sig> sigs) {
-        Set<ValueName.Behavior> stoodIn = new LinkedHashSet<>();
-        for (souther.compiler.check.Prepared.FakeTable table : module.fakes()) {
-            if (table.standsInFor() != null) {
-                stoodIn.add(table.standsInFor());
-            }
-        }
+        Set<ValueName.Behavior> stoodIn =
+                new LinkedHashSet<>(module.tablesThatAnswer().keySet());
         for (souther.compiler.check.Prepared.Rows block : module.rows()) {
             for (Hir.ExampleRow row : block.read().rows()) {
                 for (Hir.With w : row.withs()) {
-                    Sig depSig = w.stoodInFor() == null ? null : sigs.get(w.stoodInFor());
+                    Sig depSig = shapeOf(sigs, w);
                     if (depSig != null && depSig.inputTypes().isEmpty()) {
-                        stoodIn.add(w.stoodInFor());
+                        stoodIn.add(w.standsInFor());
                     }
                 }
             }
         }
         Set<ValueName.Behavior> both = new LinkedHashSet<>();
         for (souther.compiler.check.Prepared.Rows block : module.rows()) {
-            ValueName.Behavior recorded = own(module.name(), block.target());
+            ValueName.Behavior recorded = module.targeted(block.target());
             if (stoodIn.contains(recorded)) {
                 both.add(recorded);
             }
@@ -534,7 +519,7 @@ public final class ExampleStatements {
         Map<ValueName.Behavior, List<RecordedRow>> recorded = new LinkedHashMap<>();
         for (int i = 0; i < module.rows().size(); i++) {
             Hir.Example ex = module.rows().get(i).read();
-            if (contested.contains(own(ex.target()))) {
+            if (contested.contains(module.targeted(ex.target()))) {
                 readRecorded(ex, recorded);
             }
         }
@@ -547,13 +532,8 @@ public final class ExampleStatements {
         // against it; a second
         // one written for the same name never stands in for anything, so it states nothing to
         // disagree with. What that second table is, is its own question.
-        Set<ValueName.Behavior> answering = new LinkedHashSet<>();
-        for (int j = 0; j < module.fakes().size(); j++) {
-            Hir.Fake fk = module.fakes().get(j).read();
-            if (fk.stoodInFor() != null && answering.add(fk.stoodInFor())) {
-                againstFake(fk, recorded, found, timedOut);
-            }
-        }
+        module.tablesThatAnswer().forEach((dependency, table) ->
+                againstFake(table.read(), recorded, found, timedOut));
         for (int i = 0; i < module.rows().size(); i++) {
             againstWiths(module.rows().get(i).read(), recorded, found);
         }
@@ -571,7 +551,7 @@ public final class ExampleStatements {
      */
     private void readRecorded(Hir.Example ex,
                               Map<ValueName.Behavior, List<RecordedRow>> into) {
-        Sig sig = sigs.get(own(ex.target()));
+        Sig sig = sigs.get(module.targeted(ex.target()));
         if (sig == null) {
             return;
         }
@@ -597,15 +577,15 @@ public final class ExampleStatements {
             if (got == null) {
                 continue;
             }
-            into.computeIfAbsent(own(ex.target()), _ -> new ArrayList<>()).add(got);
+            into.computeIfAbsent(module.targeted(ex.target()), _ -> new ArrayList<>()).add(got);
         }
     }
 
     /** One fake against the rows recorded for the behavior it stands in for. */
     private void againstFake(Hir.Fake fk, Map<ValueName.Behavior, List<RecordedRow>> recorded,
                              List<Disagreement> found, List<UnreadFake> timedOut) {
-        List<RecordedRow> rows = recorded.get(fk.stoodInFor());
-        Sig sig = sigs.get(fk.stoodInFor());
+        List<RecordedRow> rows = recorded.get(fk.standsInFor());
+        Sig sig = sigs.get(fk.standsInFor());
         if (rows == null || sig == null) {
             return;
         }
@@ -715,9 +695,10 @@ public final class ExampleStatements {
                               List<Disagreement> found) {
         for (Hir.ExampleRow row : ex.rows()) {
             for (Hir.With w : row.withs()) {
-                List<RecordedRow> rows = recorded.get(w.stoodInFor());
-                Sig depSig = w.stoodInFor() == null ? null : sigs.get(w.stoodInFor());
-                if (rows == null || depSig == null || !depSig.inputTypes().isEmpty()) {
+                Sig depSig = shapeOf(sigs, w);
+                List<RecordedRow> rows =
+                        depSig == null ? null : recorded.get(w.standsInFor());
+                if (rows == null || !depSig.inputTypes().isEmpty()) {
                     continue;
                 }
                 // As with a recorded row: a `with` is written on a row, and that row is evaluated
