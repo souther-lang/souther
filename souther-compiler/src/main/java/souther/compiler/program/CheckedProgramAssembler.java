@@ -1,5 +1,6 @@
 package souther.compiler.program;
 
+import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.AtomSpace;
 import souther.compiler.check.BehaviorImplementation;
@@ -19,16 +20,21 @@ import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Compositions;
 import souther.compiler.query.Db;
+import souther.compiler.query.Front;
 import souther.compiler.query.Names;
 import souther.compiler.query.Shapes;
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Takes the snapshot: reads what the compiler decided and writes it down as a {@link
@@ -59,7 +65,73 @@ final class CheckedProgramAssembler {
         for (String module : compilation.modules()) {
             modules.add(moduleOf(db, module));
         }
-        return new CheckedProgram(modules);
+        return new CheckedProgram(modules, languageDataOf(db), declaredOnThePath(db));
+    }
+
+    /**
+     * What the language itself declares, as a value of one is laid out.
+     *
+     * <p>Read off the library this compilation was checked against, and not off a library fetched
+     * here: what a name in a checked body denotes was settled against that one, and a second copy
+     * could be a different version of the language.
+     *
+     * <p>Read against a world with no module in it. Which cases a sum descends to is answered by
+     * {@link AtomSpace}, which asks the declarations it is given — and the language's own resolve
+     * against the library alone, so reading them beside any one module's declarations would be
+     * reading them somewhere they could have come out differently.
+     */
+    private static List<CheckedData> languageDataOf(Db db) {
+        Stdlib stdlib = db.ask(new Front.Library()).value();
+        if (stdlib == null) {
+            throw new IllegalStateException("this compilation was checked against no library");
+        }
+        Symbols language = Symbols.none(stdlib);
+        List<CheckedData> declared = new ArrayList<>();
+        for (Hir.Def def : stdlib.languageDeclarations().values()) {
+            if (def instanceof Hir.Data product) {
+                // The language declares sums and the units under them, and a product of its own
+                // would be one nothing here has the fields and clauses of: what a value of a
+                // declaration is made of is derived over a compilation's modules, and derivation
+                // does not run over the library. Said as what it is, rather than reached as an
+                // absent shape — which is also what an assembler that forgot to read the shapes
+                // would look like.
+                throw new IllegalStateException("the language declares `" + product.declares()
+                        + "` as a product, and what a value of one is made of is not derived here");
+            }
+            declared.add(declaredAs(def, language, Map.of()));
+        }
+        return declared;
+    }
+
+    /**
+     * Every declaration this compile read off the path: the identities it resolved against a module
+     * it did not check.
+     *
+     * <p>Taken from what the front end read rather than from what is left over. A reader asking
+     * about one of these is asking about a declaration that was made when that module was compiled,
+     * so what is recorded here is that the compile found the name among what that module declares —
+     * and an identity nothing declares reaches none of this and is refused instead.
+     *
+     * <p>The identities and not the declarations. What one is made of belongs to the compile that
+     * made it, and reading it here would be this compiler deciding a second time what another one
+     * already settled.
+     *
+     * <p>Each identity comes off the declaration that says which one it is. Paired together out of
+     * the module a declaration was read under and the name it is indexed by, it would be this
+     * answering for a declaration whatever the two strings came from.
+     */
+    private static Set<TypeSymbol.AtModule> declaredOnThePath(Db db) {
+        Front.FromPath.Of read = db.ask(new Front.FromPath()).value();
+        Set<TypeSymbol.AtModule> declared = new LinkedHashSet<>();
+        if (read == null) {
+            return declared;
+        }
+        for (Front.FromPath.OnThePath onThePath : read.modules().values()) {
+            for (Ast.Def def : onThePath.declarations().values()) {
+                declared.add(TypeSymbols.declared(def.declaredKey()));
+            }
+        }
+        return declared;
     }
 
     private static CheckedModule moduleOf(Db db, String module) {
@@ -136,14 +208,26 @@ final class CheckedProgramAssembler {
                                            Map<TypeSymbol.AtModule, ValueShape> shapes) {
         List<CheckedData> declared = new ArrayList<>();
         for (Hir.Def def : declarations.defs()) {
-            declared.add(switch (def) {
-                case Hir.Data product -> productOf(product, shapes);
-                case Hir.SumData sum -> new CheckedData.Sum(sum.declares(),
-                        AtomSpace.subjectAtoms(Type.ref(sum.declares()), symbols));
-                case Hir.UnitData unit -> new CheckedData.Unit(unit.declares());
-            });
+            declared.add(declaredAs(def, symbols, shapes));
         }
         return declared;
+    }
+
+    /**
+     * One declaration, in whichever of the three forms it was written.
+     *
+     * <p>One reading for both worlds. A module's declaration and the language's are the same kind
+     * of thing — they resolve and type alike and a value of either lays out alike — and this is
+     * where that stops being something two readings agree about.
+     */
+    private static CheckedData declaredAs(Hir.Def def, Symbols symbols,
+                                          Map<TypeSymbol.AtModule, ValueShape> shapes) {
+        return switch (def) {
+            case Hir.Data product -> productOf(product, shapes);
+            case Hir.SumData sum -> new CheckedData.Sum(sum.declares(),
+                    AtomSpace.subjectAtoms(Type.ref(sum.declares()), symbols));
+            case Hir.UnitData unit -> new CheckedData.Unit(unit.declares());
+        };
     }
 
     /**

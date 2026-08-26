@@ -1,6 +1,5 @@
 package souther.compiler.program;
 
-import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.util.LinkedHashMap;
@@ -22,7 +21,6 @@ public final class CheckedModule {
     private final List<CheckedHelper> helpers;
     private final Map<ValueName.Helper, CheckedHelper> helperByName;
     private final List<CheckedData> data;
-    private final Map<TypeSymbol.AtModule, CheckedData> dataByName;
 
     CheckedModule(String name, List<CheckedBehavior> behaviors, List<CheckedHelper> helpers,
                   List<CheckedData> data) {
@@ -40,11 +38,6 @@ public final class CheckedModule {
             byHelper.put(helper.name(), helper);
         }
         this.helperByName = Map.copyOf(byHelper);
-        Map<TypeSymbol.AtModule, CheckedData> byData = new LinkedHashMap<>();
-        for (CheckedData declared : this.data) {
-            byData.put(declared.name(), declared);
-        }
-        this.dataByName = Map.copyOf(byData);
     }
 
     /** What the module is called: what its own declarations are under, and what an import names. */
@@ -73,27 +66,19 @@ public final class CheckedModule {
     }
 
     /**
-     * What it declares.
+     * What it declares: what an output emitting this module has to emit.
      *
-     * <p>No order is answered for. A declaration is reached by its name —
-     * {@link #data(TypeSymbol.AtModule)} — and where one stands among the others is a fact about
-     * how the module was read rather than one the language decided. The orders that are decided
-     * are inside a declaration: the fields a value lays out, and the cases it can be.
+     * <p>The enumeration and not a way of reaching one. What a given identity is a declaration of is
+     * {@link CheckedProgram#declaration}, which answers for the language's own declarations as well
+     * — and a module answering it about its own would be that same answer reachable a second way,
+     * by the route that has nothing to say about the rest.
+     *
+     * <p>No order is answered for. Where a declaration stands among the others is a fact about how
+     * the module was read rather than one the language decided. The orders that are decided are
+     * inside a declaration: the fields a value lays out, and the cases it can be.
      */
     public List<CheckedData> data() {
         return data;
-    }
-
-    /**
-     * The declaration {@code name} reaches, or null where it is not one of this module's.
-     *
-     * <p>Reached through the module that declares it, as a behavior and a helper are. A name
-     * carries the module it was declared by, so a reader holding one asks that module — and where
-     * this compile did not check it, {@link CheckedProgram#module} has already answered null and the
-     * two absences stay apart.
-     */
-    public CheckedData data(TypeSymbol.AtModule name) {
-        return dataByName.get(name);
     }
 
     @Override

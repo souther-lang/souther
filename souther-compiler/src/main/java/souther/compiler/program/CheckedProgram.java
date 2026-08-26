@@ -1,10 +1,13 @@
 package souther.compiler.program;
 
 import souther.compiler.meta.ModulePath;
+import souther.compiler.types.TypeSymbol;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * A Souther program the compiler checked, for an output that lives outside this compiler.
@@ -38,25 +41,75 @@ import java.util.Map;
  * read off the path declares — a behavior it calls, a data whose field it reads — and that module
  * is not among {@link #modules()}. What the body carries is the identity resolution gave it; what
  * the declaring module says about that identity is not part of this snapshot. A call carries no
- * signature and no body, and a name carries no fields and no cases.
+ * signature and no body.
  *
- * <p>Which module a name belongs to is therefore asked before what it is. {@link #module} answers
- * null for a module this compile did not check, and a module answers null for a name it does not
- * declare, so the two absences are separate answers and neither reads as the other. Nothing here
- * shortens that into one question: shortened, a single null would carry both.
+ * <p>A name does carry its fields and its cases, and it is asked with the identity rather than
+ * through whoever declared it. {@link #declaration} is the whole of that: it answers what a value
+ * of a data is made of, and whether the declaration is one this compile checked, one the language
+ * gives, or one a module off the path declares. A reader that chose the owner first would be
+ * deciding, of every identity it holds, which world to ask — and the reserved namespace is a world
+ * with no module of the compilation in it, so the reader that chose had nothing to choose.
+ *
+ * <p>{@link #modules()} enumerates and {@link #declaration} resolves, and those are two questions.
+ * What a module declares is what an output emitting that module has to emit; what an identity is a
+ * declaration of is what an output laying out a value has to know. A module answering the second
+ * about its own would be the same answer reachable two ways, and the way through the module is the
+ * one that has no answer for what the language declares.
  */
 public final class CheckedProgram {
 
     private final List<CheckedModule> modules;
     private final Map<String, CheckedModule> byName;
+    /** Every declaration this snapshot holds, by the identity that names it — the one index both
+     *  {@link #declaration} and {@link #languageDeclarations} are read out of. Two indexes, one per
+     *  world, would be two places for a declaration to be filed and one of them to be looked in. */
+    private final Map<TypeSymbol.AtModule, Declared.Available> declarations;
+    private final List<CheckedData> languageDeclarations;
+    private final Set<TypeSymbol.AtModule> onThePath;
 
-    CheckedProgram(List<CheckedModule> modules) {
+    CheckedProgram(List<CheckedModule> modules, List<CheckedData> languageDeclarations,
+                   Set<TypeSymbol.AtModule> onThePath) {
         this.modules = List.copyOf(modules);
         Map<String, CheckedModule> named = new LinkedHashMap<>();
         for (CheckedModule module : this.modules) {
             named.put(module.name(), module);
         }
         this.byName = Map.copyOf(named);
+        // Built here out of what the modules hold, rather than handed in beside them: an index
+        // assembled somewhere else is a second statement of what this program declares, and the two
+        // would agree until one of them was filled from a different reading.
+        Map<TypeSymbol.AtModule, Declared.Available> index = new LinkedHashMap<>();
+        for (CheckedModule module : this.modules) {
+            for (CheckedData declared : module.data()) {
+                index.put(declared.name(), new Declared.Available(declared, DeclaredBy.A_MODULE));
+            }
+        }
+        List<CheckedData> ofTheLanguage = new ArrayList<>();
+        for (CheckedData declared : languageDeclarations) {
+            Declared.Available already = index.put(declared.name(),
+                    new Declared.Available(declared, DeclaredBy.THE_LANGUAGE));
+            if (already != null) {
+                // A module of this compilation and the language both declaring one address is the
+                // reserved namespace having been taken, which is refused where a module is read.
+                // Reaching here means it was not, and the second answer would silently be the one
+                // every reader got.
+                throw new IllegalStateException(
+                        "`" + declared.name() + "` is declared by the language and by a module");
+            }
+            ofTheLanguage.add(declared);
+        }
+        this.declarations = Map.copyOf(index);
+        this.languageDeclarations = List.copyOf(ofTheLanguage);
+        this.onThePath = Set.copyOf(onThePath);
+        for (TypeSymbol.AtModule elsewhere : this.onThePath) {
+            if (this.declarations.containsKey(elsewhere)) {
+                // The two are answers to one question and an identity that is both would be
+                // answered by whichever was consulted first — which would make the order the
+                // lookup happens to try into a rule about what a declaration is.
+                throw new IllegalStateException("`" + elsewhere
+                        + "` is declared here and read off the path");
+            }
+        }
     }
 
     /**
@@ -90,5 +143,57 @@ public final class CheckedProgram {
     /** The module called {@code name}, or null where this compile did not check one. */
     public CheckedModule module(String name) {
         return byName.get(name);
+    }
+
+    /**
+     * What the declaration {@code name} identifies is made of, or that it is in a module off the
+     * path.
+     *
+     * <p>Asked with the identity a body carries, which is what a reader laying out a value holds.
+     * Whoever declared it — a module of this compile, or the language, in the reserved namespace
+     * where no compilation declares anything — is answered here rather than chosen by the reader,
+     * so a value of a data the language gives is read exactly as a value of a module's own is.
+     *
+     * <p>Never a null and never an absence to interpret. Every identity this compile resolved is
+     * one of the two arms, and the arms are told apart by what was decided rather than by what was
+     * left over: {@link Declared.OnThePath} is answered because this compile read that module off
+     * the path and found the name among what it declares, not because nothing else answered.
+     *
+     * <p>What this is total over is the identities this compile resolved, and not every value the
+     * Java type admits. An identity is minted where a declaration world says one is at an address,
+     * so an address nothing declares is a mistake at the reader — refused here, for the reason
+     * {@link CheckedData.Product#positionOf} refuses a name that is no field.
+     *
+     * @throws IllegalArgumentException where nothing this compile read declares {@code name}
+     */
+    public Declared declaration(TypeSymbol.AtModule name) {
+        if (name == null) {
+            throw new IllegalArgumentException("a declaration is asked for by its identity");
+        }
+        Declared.Available available = declarations.get(name);
+        if (available != null) {
+            return available;
+        }
+        if (onThePath.contains(name)) {
+            return new Declared.OnThePath();
+        }
+        throw new IllegalArgumentException(
+                "nothing this compile read declares `" + name + "`");
+    }
+
+    /**
+     * What the language itself declares, which no module of any compilation does.
+     *
+     * <p>Here so that an output that has to materialise them has the list rather than a walk of its
+     * own. Which declarations the language gives is a fact about the language this program was
+     * checked with; an output that collected them by walking the bodies it was given would be right
+     * about the ones its walk reached, and a declaration nothing in this program happens to name
+     * would be one it never emitted.
+     *
+     * <p>The same declarations {@link #declaration} answers with under {@link DeclaredBy#THE_LANGUAGE},
+     * read out of the one index rather than gathered again.
+     */
+    public List<CheckedData> languageDeclarations() {
+        return languageDeclarations;
     }
 }

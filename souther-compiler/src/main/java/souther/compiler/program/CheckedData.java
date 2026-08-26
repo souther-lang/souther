@@ -24,11 +24,15 @@ import java.util.NoSuchElementException;
  * a product with no fields is a declaration a reader cannot tell from one that happens to have
  * none — while {@link souther.compiler.core.Core.UnitValue} names exactly the first.
  *
- * <p>Only what a module declares. What the language gives — a primitive standing as a case,
- * {@code Option}'s cases — is declared by no module, which is why every arm is named by a
- * {@link TypeSymbol.AtModule} rather than by a {@link TypeSymbol}. A name that is not one, among
- * them what {@code Core.UnitValue} can carry, names something no module declared; it is not a
- * declaration this snapshot is missing.
+ * <p>What was declared, by a module of this compilation or by the language in the reserved
+ * namespace. The two are one kind of thing here, and which of them declared a given one is
+ * {@link DeclaredBy}, answered where a reader asks what an identity is a declaration of.
+ *
+ * <p>What is outside is what nothing declares. A primitive standing as a case and {@code Option}'s
+ * cases are given by the language directly, with no declaration behind them, which is why every arm
+ * is named by a {@link TypeSymbol.AtModule} rather than by a {@link TypeSymbol}. A name that is not
+ * one, among them what {@code Core.UnitValue} can carry, is answered for by the sealed identity
+ * itself; it is not a declaration this snapshot is missing.
  *
  * <p>{@link Product} is a class and answers no {@code equals}. What a value of a product is made
  * of is {@link ValueShape}, which the check answers and this hands over whole — the fields, the

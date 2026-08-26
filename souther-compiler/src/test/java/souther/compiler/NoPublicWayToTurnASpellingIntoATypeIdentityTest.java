@@ -213,6 +213,11 @@ class NoPublicWayToTurnASpellingIntoATypeIdentityTest {
                         // identity — what a source may write it as is a separate answer, and
                         // `LibraryNames` is where that one is.
                         "StdlibLoader.java: def.declaredKey()",
+                        // What a module read off the path declares, as the snapshot records which
+                        // identities were resolved against one. Each declaration says which one it
+                        // is; the module it was read under and the name it is indexed by are the
+                        // two strings that would answer for whatever they came from.
+                        "CheckedProgramAssembler.java: def.declaredKey()",
                         // The address a declaration world has just been asked about and answered for.
                         "Registry.java: address",
                         "Declarations.java: address",
