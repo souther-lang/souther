@@ -4,7 +4,6 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.query.Adequacy;
-import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
 
@@ -59,14 +58,14 @@ class EveryReasonAPositionGivesIsCarriedByAMeasureTest {
         Set<Object> out = new LinkedHashSet<>();
         partition.partitioned().weakening().observationCauses()
                 .forEach(gap -> out.add(gap.identity()));
-        partition.bounded().weakening().observationCauses()
+        partition.owes().weakening().observationCauses()
                 .forEach(gap -> out.add(gap.identity()));
         partition.pairs().counted().weakening().observationCauses()
                 .forEach(gap -> out.add(gap.identity()));
         for (PartitionEvidence.AxisCoverage axis : partition.axes()) {
             axis.reached().weakening().observationCauses().forEach(gap -> out.add(gap.identity()));
         }
-        for (BorderAssessment.Point point : BorderAssessment.pointsOf(partition.boundaries())) {
+        for (souther.compiler.query.OwedBoundaryPoint point : partition.owedPoints()) {
             point.item().weakeningSource().weakening().observationCauses()
                     .forEach(gap -> out.add(gap.identity()));
         }

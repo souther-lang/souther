@@ -98,16 +98,18 @@ class SemanticDiscoveryFinishesBeforeAnyBudgetTest {
      */
     @Test
     void positionsTheBodyDividesAreMeasuredBesideTheOnesTheDeclarationsDo() {
-        PartitionEvidence evidence = evidenceFor(DECLARED_AND_COMPARED);
+        Compilation compilation = measured(DECLARED_AND_COMPARED);
+        PartitionEvidence evidence = evidenceFor(compilation);
+        java.util.List<souther.compiler.query.BorderAssessment> lines = linesOf(compilation);
 
         assertEquals(17, evidence.axes().size(),
                 () -> "twelve declared and five compared, all of them divided: " + paths(evidence));
-        assertEquals(5, evidence.boundaries().size(),
-                () -> "and every compared one carries a line: " + borders(evidence));
+        assertEquals(5, lines.size(),
+                () -> "and every compared one carries a line: " + borders(lines));
         // Both measures answered everything they answer for. A reading that had left a position out
         // would say so here, and saying nothing is what makes the counts above a measurement.
         assertInstanceOf(Measurement.Complete.class, evidence.partitioned());
-        assertInstanceOf(Measurement.Complete.class, evidence.bounded());
+        assertInstanceOf(Measurement.Complete.class, readingOf(compilation));
     }
 
     /**
@@ -120,33 +122,52 @@ class SemanticDiscoveryFinishesBeforeAnyBudgetTest {
      */
     @Test
     void aPositionOnlyTheBodyDividesStillCarriesItsLine() {
-        PartitionEvidence evidence = evidenceFor(ONE_COMPARED);
+        Compilation compilation = measured(ONE_COMPARED);
+        java.util.List<souther.compiler.query.BorderAssessment> lines = linesOf(compilation);
 
-        assertEquals(1, evidence.boundaries().size(),
-                () -> "the compared position carries a line: " + borders(evidence));
+        assertEquals(1, lines.size(),
+                () -> "the compared position carries a line: " + borders(lines));
         // The axis the line is on, which the border answers for itself. Read off the assessment's
         // `toString` instead, the test would pass on any rendering that happened to contain the
         // field's name and fail on a rendering that changed nothing about the line.
-        assertEquals("calc/c.n1", evidence.boundaries().get(0).axis(),
-                () -> "and it is the position the body compared: " + borders(evidence));
-        assertInstanceOf(Measurement.Complete.class, evidence.bounded());
+        assertEquals("calc/c.n1", lines.get(0).axis(),
+                () -> "and it is the position the body compared: " + borders(lines));
+        assertInstanceOf(Measurement.Complete.class, readingOf(compilation));
     }
 
-    private static java.util.List<String> borders(PartitionEvidence evidence) {
-        return evidence.boundaries().stream()
-                .map(souther.compiler.query.BorderAssessment::axis).toList();
+    private static java.util.List<String> borders(
+            java.util.List<souther.compiler.query.BorderAssessment> lines) {
+        return lines.stream().map(souther.compiler.query.BorderAssessment::axis).toList();
     }
 
     private static java.util.List<String> paths(PartitionEvidence evidence) {
         return evidence.axes().stream().map(PartitionEvidence.AxisCoverage::path).toList();
     }
 
-    private static PartitionEvidence evidenceFor(String source) {
+    private static Compilation measured(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
+        return compilation;
+    }
+
+    private static PartitionEvidence evidenceFor(Compilation compilation) {
         Map<String, PartitionEvidence> partitions = compilation.db()
                 .ask(new Adequacy.Coverage(compilation.modules().get(0))).value();
         return partitions.get("calc");
+    }
+
+    /** The lines that behavior's positions met, whosever the row at each point is. */
+    private static java.util.List<souther.compiler.query.BorderAssessment> linesOf(
+            Compilation compilation) {
+        return Adequacy.readingsOf(compilation.db(), compilation.modules().get(0)).get("calc");
+    }
+
+    /** How far the reading that found those lines got. */
+    private static souther.compiler.query.Measure<
+            java.util.List<souther.compiler.query.BorderAssessment>> readingOf(
+            Compilation compilation) {
+        return compilation.db().ask(new Adequacy.BoundaryReadings(compilation.modules().get(0)))
+                .value().get("calc");
     }
 }

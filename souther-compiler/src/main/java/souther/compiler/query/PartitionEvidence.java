@@ -13,8 +13,17 @@ import java.util.Set;
  * everything downstream would recompute on every ask. What a report needs is the names and the
  * numbers; the functions are used on the way here and left behind.
  *
+ * <p><b>This behavior's account and not the lines it was read from.</b> Two of a border's four
+ * points can be owed to the declarations that drew the line rather than to any body carrying the
+ * type, and a row for one of those is written once for the module. So what is here is what this
+ * behavior is owed a row for, and the lines themselves — every point of them, whosever they are —
+ * are what a reader that describes them asks for ({@link BehaviorEvidence#boundaryReadings}).
+ * Handed the lines, every reader that measures a behavior, counts what it covers or raises a finding
+ * about it had to remember to leave the declarations' points out.
+ *
  * @param axes         one entry per position the model divides
- * @param boundaries   one entry per rule that drew a line, per side of it
+ * @param owes         one entry per thing this behavior is owed a row for at the lines its
+ *                     positions meet
  * @param notDerivable positions no class came back for, each saying whether the model divides them
  *                     no way at all or this could not read what it divides them by. Both used to be
  *                     one list of paths, and the sentence written from it claimed the first about
@@ -39,7 +48,7 @@ import java.util.Set;
  *                     everything else a module could not read happens where that list is built
  */
 public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
-                                Measure<List<BorderAssessment>> bounded,
+                                Measure<List<OwedBoundaryPoint>> owes,
                                 PairSpace pairs,
                                 List<souther.compiler.partition.UndividedPosition> notDerivable,
                                 List<souther.compiler.inputs.RuleWithoutALine> rulesWithoutALine,
@@ -58,7 +67,8 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
      * in it open for a measurement that was never anybody's to make.
      */
     public static final PartitionEvidence NONE = new PartitionEvidence(
-            PartitionDerivation.noSubject(), BoundaryDerivation.noSubject(),
+            PartitionDerivation.noSubject(),
+            OwedBoundaryPoint.accountOf(BoundaryDerivation.noSubject()),
             PairSpace.NONE, List.of(), List.of(), List.of(), List.of(),
             List.of(), List.of());
 
@@ -323,20 +333,27 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
      * What every measure of this behavior's positions went without, all of them.
      *
      * <p>Asked here rather than assembled by whoever wants it. There are six measures under this —
-     * the two derivations, each position, each point of each border, and the combinations — and a
-     * reader listing them is a reader who has to be told when a seventh arrives. The report listed
-     * them, so a measure added here would have been a measure the report left out of every whole
-     * above it, silently (issue #953).
+     * the two derivations, each position, each thing this behavior is owed a row for, and the
+     * combinations — and a reader listing them is a reader who has to be told when a seventh
+     * arrives. The report listed them, so a measure added here would have been a measure the report
+     * left out of every whole above it, silently.
+     *
+     * <p><b>This behavior's account and no more.</b> A row owed to the declarations that drew a line
+     * is answered once for the module and is short or not short there ({@link Adequacy.DeclaredBorders});
+     * counted here as well, a behavior would be reported as having gone without something no row
+     * written for it is owed. What the two share is the reading that found the lines: an account
+     * built from a reading that did not run out may be short of entries whosever they are, so that
+     * weakens both.
      */
     public WeakeningSet weakening() {
         WeakeningSet out = partitioned.weakening()
-                .union(bounded.weakening())
+                .union(owes.weakening())
                 .union(pairs.counted().weakening());
         for (AxisCoverage axis : axes()) {
             out = out.union(axis.reached().weakening());
         }
-        for (BorderAssessment.Point point : BorderAssessment.pointsOf(boundaries())) {
-            out = out.union(point.item().weakening());
+        for (OwedBoundaryPoint owed : owedPoints()) {
+            out = out.union(owed.item().weakening());
         }
         return out;
     }
@@ -347,9 +364,9 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
         return PartitionDerivation.at(partitioned);
     }
 
-    /** The lines, likewise. */
-    public List<BorderAssessment> boundaries() {
-        return BoundaryDerivation.at(bounded);
+    /** What this behavior is owed a row for, likewise. */
+    public List<OwedBoundaryPoint> owedPoints() {
+        return owes.made().orElseGet(List::of);
     }
 
     /**

@@ -124,7 +124,14 @@ class AMeasureIsIntroducedInOnePlaceTest {
             // be built from, and unknown where a composition takes what a stage nobody could work
             // out takes. Two states and one place that chooses between them — the cases at each
             // position are that position's own answer and never this one's.
-            Map.entry("souther.compiler.query.Adequacy$SignatureEvidence#at(Ljava/util/List;)Lsouther/compiler/query/Measure;", 1)));
+            Map.entry("souther.compiler.query.Adequacy$SignatureEvidence#at(Ljava/util/List;)Lsouther/compiler/query/Measure;", 1),
+            // And the one place a measure's answer is carried over to a value read off what it
+            // found. All five arms, because carrying them over is the whole of what it does: what a
+            // behavior is owed a row for is read off the lines its positions met, and the two are
+            // one measurement. This is the only entry here that decides nothing — a projection that
+            // chose between the arms could call a reading that did not run out complete over
+            // whatever it happened to produce, which is what every other entry exists to stop.
+            Map.entry("souther.compiler.query.Measure#readAs(Ljava/util/function/Function;)Lsouther/compiler/query/Measure;", 5)));
 
     @Test
     void nothingButTheIntroductionRuleMakesACaseOfAMeasure() throws Exception {

@@ -174,10 +174,10 @@ class WhichModuleKeepsTheAccountOfARunTest {
     }
 
     private static List<Adequacy.DeclaredDebt> debtsOf(Compilation compilation, String module) {
-        List<Adequacy.DeclaredDebt> debts =
+        Adequacy.DeclaredBoundaries account =
                 compilation.db().ask(new Adequacy.DeclaredBorders(module)).value();
-        assertNotNull(debts, "the model under test compiles");
-        return debts;
+        assertNotNull(account, "the model under test compiles");
+        return account.owed();
     }
 
     private static Compilation compiled(String... sources) {

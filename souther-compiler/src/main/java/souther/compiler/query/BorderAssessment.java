@@ -88,15 +88,10 @@ public record BorderAssessment(Border border, Map<PointRole, ItemAssessment> ite
         return at(role) instanceof ItemAssessment.Owed owed ? owed : null;
     }
 
-    /**
-     * The position this border is on, as a report names it.
-     *
-     * <p>Asked of the shape of the line rather than of a field every shape was assumed to have. A line
-     * between two positions is on neither of them, and answering with one of the two would name a
-     * border after half of itself.
-     */
+    /** The position this border is on, as a report names it. The line's own answer, so that a point
+     *  taken out of this and the block printed round it name it alike. */
     public String axis() {
-        return border.cut().named();
+        return border.axis();
     }
 
     /** Which shape this line has, which is what says how to read what each item asks for. */
@@ -106,7 +101,7 @@ public record BorderAssessment(Border border, Map<PointRole, ItemAssessment> ite
 
     /** The rule that drew the line, as a report about {@code sectionSource} writes it. */
     public String describe(SourceNameResolver names, SourceId sectionSource) {
-        return border.origin().describe(names, sectionSource);
+        return border.describe(names, sectionSource);
     }
 
     /**
@@ -136,18 +131,12 @@ public record BorderAssessment(Border border, Map<PointRole, ItemAssessment> ite
 
     /** How one point relates a row's value to what it is against, or null where none is owed. */
     public String operator(PointRole role) {
-        souther.compiler.partition.Criterion criterion = border.demand(role).criterion();
-        return criterion == null ? null : criterion.operator();
+        return border.operator(role);
     }
 
     /** What that point is against, or null where none is owed. */
     public String against(PointRole role) {
-        souther.compiler.partition.Criterion criterion = border.demand(role).criterion();
-        // Asked of the criterion, which is what knows whether it is written against a level or
-        // against a run of them. Two of the four points name a level and two name a run, and a
-        // reader that took a level from every shape wrote a value inside a run as though it were
-        // the run.
-        return criterion == null ? null : criterion.written(border.cut().of());
+        return border.against(role);
     }
 
     /** The left of the {@code left = right} a report names this line by. */
@@ -186,51 +175,11 @@ public record BorderAssessment(Border border, Map<PointRole, ItemAssessment> ite
             return border.against(role);
         }
 
-        /**
-         * The class a row here falls in, as one line of a class list is written.
-         *
-         * <p>One place, because more than one reader names it: the document a consumer joins a
-         * finding to its item by, and the class a generated row is offered against. Written twice,
-         * the two agreed for a point on the line and had nothing to say to each other away from it.
-         *
-         * <p>A point on the line is the value it is at. A point away from it carries the relation as
-         * well, because {@link #against()} alone names the border there rather than the side of it a
-         * row is owed in.
-         */
+        /** The class a row here falls in, as one line of a class list is written. The line's own
+         *  answer, so that a point taken out of this and one of a behavior's account say it
+         *  alike. */
         public String said() {
-            return role.againstTheLine() ? border.axis() + " = " + against()
-                    : border.axis() + " " + asked();
-        }
-
-        /**
-         * What the behavior this reading belongs to is owed a row for here.
-         *
-         * <p>A point can be owed to a declaration rather than to any body carrying the type: what a
-         * row standing at the line shows is a fact about the type, and one row anywhere settles it.
-         * A region beside the line is the same where nothing but declarations settled where it stops
-         * — and this reading's where a rule of this body did, since such a run exists in this body
-         * and nowhere else.
-         *
-         * <p>The points and not whether there are any, because one role can owe more than one: a
-         * place two rules drew a line at leaves a run owed to each of them, and each is its own
-         * obligation to be told about — a single row may well answer both, which is a question for
-         * whoever offers rows and not for this. Answered as a yes, everything downstream went on
-         * accounting in this reading's roles, which is the occurrence standing in for the debt one
-         * level down from where it was taken out.
-         *
-         * <p>Asked here and not at each reader. Everything that measures a behavior, counts what it
-         * covers or raises a finding about it has to leave the declaration's points out, and the
-         * rule written at each of them is a rule each of them can forget: a verdict that kept them
-         * weighed one behavior's row against another behavior having no rows, and a count that keeps
-         * them says a body is short of something no row written for it is owed.
-         *
-         * <p>A reader that only describes may show them all the same. What is not this behavior's to
-         * be measured for is still a line its values are held to, and the block that says so is
-         * telling an author about the type they wrote.
-         */
-        public java.util.List<souther.compiler.partition.OwedPoint> owedHere() {
-            return border.border().owes(role).stream()
-                    .filter(owed -> !owed.attribution().owedToDeclarations()).toList();
+            return border.border().said(role);
         }
 
         /** The measured half, or null where no row is owed here. */

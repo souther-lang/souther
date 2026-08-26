@@ -128,7 +128,7 @@ class ABehaviorWithNoBoundaryIsMeasuredAsOneNobodyCouldMeasureTest {
         assertEquals(BoundaryForMeasurement.NotDerived.BEHAVIOR_BOUNDARY_NOT_DERIVED,
                 partition.partitioned().why());
         assertEquals(BoundaryForMeasurement.NotDerived.BEHAVIOR_BOUNDARY_NOT_DERIVED,
-                partition.bounded().why());
+                partition.owes().why());
 
         // The arms are measured off the bodies and not off the boundary, so they say what happened
         // to them. Two measures short of two different things is two sentences, and a behavior

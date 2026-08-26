@@ -3,6 +3,7 @@ package souther.compiler;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
 
@@ -30,12 +31,29 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AnEquivalencePartitionIsWhatTheModelDistinguishesTest {
 
-    private static PartitionEvidence measured(String type, String guards) {
+    private static souther.compiler.query.PartitionEvidence measured(String type, String guards) {
         return measured(type, guards,
                 "    | \"one\" : (" + (type.equals("Decimal") ? "0.1m" : "1") + ") -> Yes { v = 1 }");
     }
 
+    /** The lines the behavior's positions met, whosever the row at each point is. */
+    private static List<BorderAssessment> lines(String type, String guards, String rows) {
+        Compilation compilation = compiled(type, guards, rows);
+        Map<String, List<BorderAssessment>> all =
+                Adequacy.readingsOf(compilation.db(), compilation.modules().get(0));
+        assertNotNull(all, "the model under test compiles");
+        return all.get("f");
+    }
+
     private static PartitionEvidence measured(String type, String guards, String rows) {
+        Compilation compilation = compiled(type, guards, rows);
+        Map<String, PartitionEvidence> all = compilation.db()
+                .ask(new Adequacy.Coverage(compilation.modules().get(0))).value();
+        assertNotNull(all, "the model under test compiles");
+        return all.get("f");
+    }
+
+    private static Compilation compiled(String type, String guards, String rows) {
         Compilation compilation = Compilation.ofSource("""
                 module example.exact
 
@@ -56,10 +74,7 @@ class AnEquivalencePartitionIsWhatTheModelDistinguishesTest {
                 """.formatted(type, guards, rows), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        Map<String, PartitionEvidence> all = compilation.db()
-                .ask(new Adequacy.Coverage(compilation.modules().get(0))).value();
-        assertNotNull(all, "the model under test compiles");
-        return all.get("f");
+        return compilation;
     }
 
     private static List<String> classesOf(String type, String guards) {
@@ -262,7 +277,10 @@ class AnEquivalencePartitionIsWhatTheModelDistinguishesTest {
 
         assertEquals("n/1 < 3 * x <= 2", middle);
         assertEquals("1 < 3 * n <= 2",
-                measured.boundaries().stream()
+                lines("Decimal", """
+                            guard 3m * n > 1m else No { why = 0 }
+                            guard 3m * n > 2m else No { why = 1 }""",
+                        "    | \"one\" : (0.1m) -> No { why = 0 }").stream()
                         .filter(each -> each.label().equals("3 * n = 1")).findFirst()
                         .orElseThrow().against(souther.compiler.partition.PointRole.IN),
                 "the run the border at a third bounds is the class between the two lines, said in"
@@ -286,7 +304,10 @@ class AnEquivalencePartitionIsWhatTheModelDistinguishesTest {
                 "    | \"one\" : (0.1m) -> No { why = 0 }");
 
         assertEquals("1 < 3 * n and 6 * n <= 5",
-                measured.boundaries().stream()
+                lines("Decimal", """
+                            guard 3m * n > 1m else No { why = 0 }
+                            guard 6m * n > 5m else No { why = 1 }""",
+                        "    | \"one\" : (0.1m) -> No { why = 0 }").stream()
                         .filter(each -> each.label().equals("3 * n = 1")).findFirst()
                         .orElseThrow().against(souther.compiler.partition.PointRole.IN),
                 "and not `2 * 3 * n`, which is the same rule said twice over");

@@ -154,7 +154,27 @@ class OneStatementDrawsOneBorderHoweverItIsSpelledTest {
                 "Date.daysBetween(a, b) <= 1"));
     }
 
+    /** The lines the behavior's positions met, whosever the row at each point is. */
+    private static List<BorderAssessment> linesOf(String parameters, String condition) {
+        Compilation compilation = compiled(parameters, condition);
+        Map<String, List<BorderAssessment>> read = Adequacy.readingsOf(compilation.db(), "demo");
+        assertNotNull(read, "the model under test compiles");
+        List<BorderAssessment> lines = read.get("f");
+        assertNotNull(lines, "f was measured");
+        return lines;
+    }
+
     private static PartitionEvidence measured(String parameters, String condition) {
+        Compilation compilation = compiled(parameters, condition);
+        Map<String, PartitionEvidence> coverage =
+                compilation.db().ask(new Adequacy.Coverage("demo")).value();
+        assertNotNull(coverage, "the model under test compiles");
+        PartitionEvidence measured = coverage.get("f");
+        assertNotNull(measured, "f was measured");
+        return measured;
+    }
+
+    private static Compilation compiled(String parameters, String condition) {
         String model = """
                 module demo
 
@@ -171,16 +191,11 @@ class OneStatementDrawsOneBorderHoweverItIsSpelledTest {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        Map<String, PartitionEvidence> coverage =
-                compilation.db().ask(new Adequacy.Coverage("demo")).value();
-        assertNotNull(coverage, () -> "the model under test compiles: " + model);
-        PartitionEvidence measured = coverage.get("f");
-        assertNotNull(measured, () -> "f was measured: " + model);
-        return measured;
+        return compilation;
     }
 
     private static List<String> bordersOf(String parameters, String condition) {
-        return measured(parameters, condition).boundaries().stream()
+        return linesOf(parameters, condition).stream()
                 .map(BorderAssessment::value).toList();
     }
 

@@ -104,7 +104,14 @@ class AdequacyLensTest {
         assertFalse(analyzer.measuring());
     }
 
-    /** Asked for, the numbers appear on the behavior's own line. */
+    /**
+     * Asked for, the numbers appear on the behavior's own line.
+     *
+     * <p>The boundary ratio is over what this behavior is owed a row for. The line
+     * {@code Amount}'s invariant draws is owed to that declaration and answered by a row written
+     * for any behavior carrying the type, so the point against it is not this author's work and is
+     * not in the ratio drawn over their behavior.
+     */
     @Test
     void theNumbersAreDrawnOnTheDeclarationTheyAreAbout() {
         List<CodeLens> lenses = measuring(Adequacy.Level.ALL)
@@ -112,7 +119,7 @@ class AdequacyLensTest {
 
         assertEquals(1, lenses.size());
         assertEquals(9, lenses.get(0).range().start().line(), "the `behavior` line, zero-based");
-        assertEquals("1 row · out 1/2 · boundary 2/6 · branch 1/2", lenses.get(0).title());
+        assertEquals("1 row · out 1/2 · boundary 2/5 · branch 1/2", lenses.get(0).title());
     }
 
     /**
@@ -135,7 +142,7 @@ class AdequacyLensTest {
         List<CodeLens> lenses = measuring(Adequacy.Level.ALL).codeLenses(MODULE, graphOf(workspace));
 
         assertEquals(1, lenses.size());
-        assertEquals("2 rows · out 2/2 · boundary 3/6 · branch 2/2", lenses.get(0).title());
+        assertEquals("2 rows · out 2/2 · boundary 3/5 · branch 2/2", lenses.get(0).title());
     }
 
     /** Nothing has been claimed about a behavior no row names, so there is nothing to draw over it. */

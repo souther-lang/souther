@@ -94,10 +94,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         UNDETERMINED
     }
 
+    /**
+     * @param owedByDeclarations what this module's declarations are owed and how far the reading it
+     *                           was made from got. An account and not a list of debts: a module
+     *                           whose lines nobody could read holds no debts anybody found, and read
+     *                           as a list that is the same answer as a module whose declarations owe
+     *                           nothing. Null where the compile did not get far enough to be asked
+     */
     public record ModuleReport(String module, SourceId declaredIn,
                                List<BehaviorReport> behaviors,
                                List<Adequacy.Finding> declarations,
-                               List<Adequacy.DeclaredDebt> debts) {
+                               Adequacy.DeclaredBoundaries owedByDeclarations) {
 
         /**
          * What the module is short of that is not any behavior's.
@@ -113,7 +120,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         public ModuleReport {
             behaviors = List.copyOf(behaviors);
             declarations = List.copyOf(declarations);
-            debts = List.copyOf(debts);
+        }
+
+        /** The debts themselves, for a reader walking them. Empty where nobody could be asked,
+         *  which {@link #declarationsWeakenedBy()} is what says. */
+        public List<Adequacy.DeclaredDebt> debts() {
+            return owedByDeclarations == null ? List.of() : owedByDeclarations.owed();
         }
 
         /**
@@ -139,7 +151,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         }
 
         /**
-         * What this module went without: the union of its behaviors, and nothing of its own.
+         * What this module went without: the union of its parts, and nothing of its own.
+         *
+         * <p>Its parts are its behaviors and what its declarations are owed. The second is a part
+         * because a row owed to a declaration is answered once for the module and is short there: no
+         * behavior carrying the type is short by it, so a module that read only its behaviors would
+         * call itself measured in full over a debt nobody could measure.
          *
          * <p>Derived and not held. What a module could not read reaches it through the measures that
          * lost by it — a source none of whose rows were seen counts against every behavior the
@@ -152,7 +169,25 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             for (BehaviorReport behavior : behaviors) {
                 out = out.union(behavior.weakenedBy());
             }
-            return out;
+            return out.union(declarationsWeakenedBy());
+        }
+
+        /**
+         * What the measurement of what this module's declarations are owed went without.
+         *
+         * <p>The other account of the same lines, and the module's own. A row owed to the
+         * declaration that drew a line is answered once here, from every reading of it — so a
+         * search that could not read a value at such a point leaves this short, and no behavior
+         * carrying the type is short of anything by it. Counted under a behavior instead, an author
+         * would be told their body was measured in part for a row nothing written for it is owed.
+         *
+         * <p>What found the lines is the behaviors' and is counted there: the two accounts rest on
+         * one reading, and a reading that did not run out may have left either of them short of
+         * entries.
+         */
+        public WeakeningSet declarationsWeakenedBy() {
+            return owedByDeclarations == null
+                    ? WeakeningSet.none() : owedByDeclarations.weakening();
         }
 
         /** How far this module's measurement got. Derived, for the reason
@@ -192,9 +227,28 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             return evidence.signature();
         }
 
-        /** What they establish about the classes and the lines its rules draw. */
+        /** What they establish about the classes, and what this behavior is owed a row for at the
+         *  lines its rules draw. */
         public PartitionEvidence partition() {
             return evidence.partition();
+        }
+
+        /** Every line its positions met, in every role — what a block that shows a border whole is
+         *  written from. */
+        public Measure<List<BorderAssessment>> boundaryReadings() {
+            return evidence.boundaryReadings();
+        }
+
+        /**
+         * The same as the lines alone, empty where the reading has none to show.
+         *
+         * <p>The one place the absence of the measure itself is read, which is the compile not
+         * having got far enough to be asked — the same absence the partition beside it answers with,
+         * since the two arrive together ({@link BehaviorEvidence}).
+         */
+        public List<BorderAssessment> lines() {
+            return boundaryReadings() == null ? List.of()
+                    : boundaryReadings().made().orElseGet(List::of);
         }
 
         /** What they establish about the arms of its body. */
@@ -291,6 +345,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 compilation.db().ask(new Adequacy.Witnesses(name)).value();
         Map<String, PartitionEvidence> partitions =
                 compilation.db().ask(new Adequacy.Coverage(name)).value();
+        Map<String, Measure<List<BorderAssessment>>> lines =
+                compilation.db().ask(new Adequacy.BoundaryReadings(name)).value();
         Map<String, Adequacy.BranchEvidence> branches =
                 compilation.db().ask(new Adequacy.BranchCoverage(name)).value();
         // What each body declared, read where it was judged. Beside the measures and never inside
@@ -322,22 +378,25 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // came back with nothing. Every measure that did run says why it has no number.
             Adequacy.BranchEvidence branch =
                     branches == null ? null : branches.get(behavior.name());
+            // The lines this behavior's positions met, held beside the account made from them: what
+            // a block shows of a border is its four points, and whose debt each of them is is a
+            // different question.
+            Measure<List<BorderAssessment>> read =
+                    lines == null ? null : lines.get(behavior.name());
             behaviors.add(new BehaviorReport(behavior.name(),
                     module.implementationOf(behavior),
-                    new BehaviorEvidence(reading, signature, partition, branch),
+                    new BehaviorEvidence(reading, signature, partition, read, branch),
                     claims == null ? ClaimAnnotations.NONE
                             : claims.getOrDefault(behavior.name(), ClaimAnnotations.NONE),
                     ofBehavior(findings, behavior.name())));
         }
-        List<Adequacy.DeclaredDebt> debts =
-                compilation.db().ask(new Adequacy.DeclaredBorders(name)).value();
         return new ModuleReport(name, compilation.sourceIdOf(name), behaviors,
                 findings == null ? List.of()
                         : findings.stream()
                                 .filter(each -> !(each.subject()
                                         instanceof souther.compiler.query.FindingSubject.OfABehavior))
                                 .toList(),
-                debts == null ? List.of() : debts);
+                compilation.db().ask(new Adequacy.DeclaredBorders(name)).value());
     }
 
     /**
@@ -427,11 +486,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // cannot see.
             java.util.Set<String> names = behaviors.stream().map(BehaviorReport::name)
                     .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
+            // And the account of what its declarations are owed, as a reader shown these behaviors
+            // is owed it. Which parts of it that is is the account's own answer: a debt none of them
+            // carries and a reading none of them made are both about what this reader cannot see,
+            // and deciding that here would be this view working out what an account means.
             ModuleReport one = new ModuleReport(m.module(), m.declaredIn(), behaviors,
                     carriedBy(m.declarations(), behaviors),
-                    m.debts().stream()
-                            .filter(owed -> names.stream().anyMatch(owed.debt()::carriedBy))
-                            .toList());
+                    m.owedByDeclarations() == null ? null
+                            : m.owedByDeclarations().keptFor(names));
             kept.add(one);
             overall = overall.union(one.weakenedBy());
         }
@@ -591,7 +653,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 // that was.
                 if (refusesAny(Adequacy.Kind.BOUNDARY_UNMET,
                         Adequacy.Kind.DOMAIN_POINT_UNCOVERED)) {
-                    add(measures, behavior.partition().bounded());
+                    add(measures, behavior.boundaryReadings());
                 }
                 // What the rows reach of each position, which finds a class no row is in — a gap
                 // the `classes` bar refuses over and no other does. A bar that asks nothing about
@@ -610,19 +672,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     add(measures, behavior.partition().partitioned());
                     behavior.partition().axes().forEach(axis -> add(measures, axis.reached()));
                 }
-                // And of a border's four points, the ones the bar asks for — of the lines this
-                // behavior is owed. A line a declaration is owed is answered once for the module
-                // below, from every reading of it: read here as well, a row standing at it in one
-                // behavior would be weighed against another behavior having no rows, and the
-                // verdict would hold open what the aggregation had settled (issue #1062).
-                // One measurement per thing the reading is owed a row for, since each of them is an
-                // obligation: a place two of this body's rules drew a line at leaves a run owed to
-                // each, and a verdict counting the role once would be short by the rest. How many
-                // rows answer them is a different count and is the generator's.
-                BorderAssessment.pointsOf(behavior.partition().boundaries()).stream()
-                        .filter(p -> held.requires(p.role()))
-                        .forEach(p -> p.owedHere()
-                                .forEach(_ -> add(measures, measurementOf(p.item()))));
+                // And of what this behavior is owed a row for, the points the bar asks for. A line
+                // the declarations are owed is answered once for the module below, from every
+                // reading of it, and is no part of this account: weighed here as well, a row
+                // standing at it in one behavior would be weighed against another behavior having
+                // no rows, and the verdict would hold open what the aggregation had settled.
+                // One measurement per thing the behavior is owed a row for, since each of them is
+                // an obligation: a place two of this body's rules drew a line at leaves a run owed
+                // to each, and a verdict counting the role once would be short by the rest. How
+                // many rows answer them is a different count and is the generator's.
+                behavior.partition().owedPoints().stream()
+                        .filter(owed -> held.requires(owed.role()))
+                        .forEach(owed -> add(measures, measurementOf(owed.item())));
                 // Which of the four those are is the bar's answer and not a second reading of it
                 // here: a build refusing over a missing IN row and calling a model satisfied while
                 // the IN point could not be measured would be held to one bar in one place and
@@ -1048,8 +1109,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // points, so a count of borders would say a border with one point met and three missed was
         // as covered as one with nothing to owe but that point — and how many items a border owes is
         // the rule's answer rather than a constant.
+        // The lines this behavior's positions met, whosever the row at each point is. What this
+        // block accounts for is a border and its four points; which of them this behavior is owed a
+        // row at is the account beside it, and the findings printed below are written from that.
+        ReportMeasurement<List<BorderAssessment>> bounded =
+                ReportMeasurement.of(behavior.boundaryReadings());
+        List<BorderAssessment> lines = behavior.lines();
         List<BorderAssessment.Point> points =
-                BorderAssessment.pointsOf(partition.boundaries()).stream()
+                BorderAssessment.pointsOf(lines).stream()
                         .filter(p -> p.item() instanceof ItemAssessment.Owed).toList();
         List<BorderAssessment.Point> measured = points.stream()
                 .filter(p -> owed(p).coverage().made().isPresent())
@@ -1066,10 +1133,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // The points the model's own rules discharged. Said rather than left out of the numbers: a
         // reader working to a coverage criterion counts four items per border, and a border showing
         // two of them with nothing beside it reads as this compiler being short of the other two.
-        long excluded = partition.boundaries().stream()
+        long excluded = lines.stream()
                 .mapToLong(b -> b.excluded().size()).sum();
-        ReportMeasurement<List<BorderAssessment>> bounded =
-                ReportMeasurement.of(partition.bounded());
         if (!bounded.counted()) {
             // `0/0` said the rows were at every line there was. What it meant was that nobody found
             // a line to be at, which a model whose bounds sit one type away from the position the
@@ -1078,7 +1143,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     whyNoBoundary(bounded.reason())));
         } else {
             out.append(String.format("    border      borders %d   coverage items %d/%d%s%s%s%s%n",
-                    partition.boundaries().size(), met, measured.size(),
+                    lines.size(), met, measured.size(),
                     excluded == 0 ? "" : "   excluded " + excluded,
                     notes(points,
                             p -> owed(p).coverage().made().isEmpty(),
@@ -1104,18 +1169,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // together, and printed in that order the two halves would be interleaved.
         for (boolean againstTheLine : List.of(true, false)) {
             for (Adequacy.Finding f : behavior.findings()) {
-                if (f.about() instanceof About.APointOfABorder(var point, var _)
+                if (f.about() instanceof About.APointOfABorder(var point)
                         && point.role().againstTheLine() == againstTheLine) {
                     // `the` for a point and `an` for a run. Two of the four are one value and the
                     // other two are met anywhere in a run of them, so a reader told there is no row
                     // at `the IN point` is being sent after a value that does not exist.
                     out.append(againstTheLine
                             ? String.format("      %s no row is at the %s point %s = %s (%s)%n",
-                                    mark(f), point.role(), point.border().axis(),
-                                    point.against(), point.border().describe(names, declaredIn))
+                                    mark(f), point.role(), point.axis(),
+                                    point.against(), point.describe(names, declaredIn))
                             : String.format("      %s no row is at an %s point of %s, %s (%s)%n",
-                                    mark(f), point.role(), point.border().axis(),
-                                    point.against(), point.border().describe(names, declaredIn)));
+                                    mark(f), point.role(), point.axis(),
+                                    point.against(), point.describe(names, declaredIn)));
                 }
             }
         }
@@ -1136,7 +1201,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // And what the model itself answered, which is not a row anybody is behind on. Named by the
         // reason rather than left blank: a point the rules refuse and a point this language cannot
         // write down are counted out for opposite reasons, and a reader acts on them differently.
-        for (BorderAssessment.Point p : BorderAssessment.pointsOf(partition.boundaries())) {
+        for (BorderAssessment.Point p : BorderAssessment.pointsOf(lines)) {
             if (p.item() instanceof ItemAssessment.NotOwed not) {
                 out.append(String.format("      · no %s point is owed at %s (%s): %s%n",
                         p.role(), p.border().label(), p.border().describe(names, declaredIn),
@@ -1885,7 +1950,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 b.put("status", wire(behavior.status()));
                 weakening(b, behavior.weakenedBy());
                 signature(b, behavior.signature());
-                partition(b, behavior.partition(), behavior.claimed(), sources);
+                partition(b, behavior.partition(), behavior.boundaryReadings(),
+                        behavior.claimed(), sources);
                 branch(b, behavior.branch(), sources);
                 findings(b, behavior, sources);
             }
@@ -2006,6 +2072,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     private void partition(ObjectNode behavior, PartitionEvidence partition,
+                                  Measure<List<BorderAssessment>> lines,
                                   ClaimAnnotations claimed, DocumentSources sources) {
         // The one decision, the same one the page reads. Written here as well, the two surfaces
         // answered a reader differently about which behaviors have a section at all.
@@ -2020,8 +2087,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // the same measure-level fact in the one place that had nowhere to put it.
         measured(out.putObject("axesMeasure"),
                 partition.partitioned());
-        measured(out.putObject("boundariesMeasure"),
-                partition.bounded());
+        measured(out.putObject("boundariesMeasure"), lines);
         ArrayNode axes = out.putArray("axes");
         for (PartitionEvidence.AxisCoverage axis : partition.axes()) {
             ObjectNode a = axes.addObject();
@@ -2104,7 +2170,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             }
         }
         ArrayNode boundaries = out.putArray("boundaries");
-        for (BorderAssessment boundary : partition.boundaries()) {
+        for (BorderAssessment boundary : lines.made().orElseGet(List::of)) {
             ObjectNode b = boundaries.addObject();
             b.put("axis", boundary.axis());
             // The identity, and never left out. This document says what it is about with the
@@ -2432,7 +2498,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     missing.name() + " (in #" + (input.at() + 1) + ")";
             // What the point asks of a row, which is what joins it to one of a border's `items`.
             // Asked of the point, which is where the two readers of that name meet.
-            case About.APointOfABorder(var point, var _) -> point.said();
+            case About.APointOfABorder(var point) -> point.said();
             // The same sentence, on what the declaration wrote. A line owed once over every reading
             // of it is named by the terms the author used and not by the position some behavior met
             // it at, which is what the debt is (issue #1062).

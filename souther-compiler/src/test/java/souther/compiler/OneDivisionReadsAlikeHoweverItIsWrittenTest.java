@@ -64,7 +64,8 @@ class OneDivisionReadsAlikeHoweverItIsWrittenTest {
         // spellings of one division name the same two classes differently. What has to agree is the
         // division: how many there are, and what each of the border's four points asks for.
         evidence.axes().forEach(axis -> read.add("classes " + axis.classes().size()));
-        for (BorderAssessment border : evidence.boundaries()) {
+        for (BorderAssessment border
+                : Adequacy.readingsOf(compilation.db(), compilation.modules().get(0)).get("f")) {
             for (PointRole role : PointRole.values()) {
                 read.add(role + " " + border.operator(role) + " " + border.against(role));
             }

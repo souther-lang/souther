@@ -519,7 +519,8 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
             // value one step over is what this table is about, and a border is one whether or not
             // its second point exists — counted as borders, every carrier answers alike.
             out.put(behavior, new Measured(evidence.axes().size(),
-                    (int) souther.compiler.query.BorderAssessment.pointsOf(evidence.boundaries())
+                    (int) souther.compiler.query.BorderAssessment.pointsOf(
+                            Adequacy.readingsOf(compilation.db(), "example.matrix").get(behavior))
                             .stream().filter(point -> point.role().againstTheLine())
                             .filter(point -> point.owed() != null).count(),
                     unread));

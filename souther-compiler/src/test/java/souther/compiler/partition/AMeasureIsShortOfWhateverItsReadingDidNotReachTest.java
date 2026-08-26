@@ -98,6 +98,8 @@ class AMeasureIsShortOfWhateverItsReadingDidNotReachTest {
     @Test
     void aPositionTheWalkDidNotReachIntoLeavesBothMeasuresShort() {
         PartitionEvidence evidence = evidenceFor(RULES_NOT_REACHED, "f");
+        souther.compiler.query.Measure<List<souther.compiler.query.BorderAssessment>> reading =
+                readingFor(RULES_NOT_REACHED, "f");
 
         // What the partition did measure, so that the two answers below are one model saying two
         // things rather than one measure with nothing in it. A fixture whose every position is out
@@ -109,8 +111,8 @@ class AMeasureIsShortOfWhateverItsReadingDidNotReachTest {
 
         assertEquals(MeasurementStatus.PARTIAL, AdequacyReport.statusOf(evidence.partitioned()),
                 () -> "partition: " + evidence.partitioned());
-        assertEquals(MeasurementStatus.NOT_MEASURED, AdequacyReport.statusOf(evidence.bounded()),
-                () -> "border: " + evidence.bounded());
+        assertEquals(MeasurementStatus.NOT_MEASURED, AdequacyReport.statusOf(reading),
+                () -> "border: " + reading);
     }
 
     /**
@@ -126,7 +128,8 @@ class AMeasureIsShortOfWhateverItsReadingDidNotReachTest {
         PartitionEvidence evidence = evidenceFor(SET_ASIDE_COSTING_NEITHER, "f");
 
         assertInstanceOf(Measurement.NotApplicable.class, evidence.partitioned());
-        assertInstanceOf(Measurement.NotApplicable.class, evidence.bounded());
+        assertInstanceOf(Measurement.NotApplicable.class,
+                readingFor(SET_ASIDE_COSTING_NEITHER, "f"));
         // And the rule is named beside them, so the two answers are about a model with a rule in it
         // and not about one with none.
         assertEquals(2, evidence.rulesWithoutALine().size(), () -> "unread: " + evidence.rulesWithoutALine());
@@ -139,5 +142,17 @@ class AMeasureIsShortOfWhateverItsReadingDidNotReachTest {
         Map<String, PartitionEvidence> partitions = compilation.db()
                 .ask(new Adequacy.Coverage(compilation.modules().get(0))).value();
         return partitions.get(behavior);
+    }
+
+    /** How far the reading that found the behavior's lines got. */
+    private static souther.compiler.query.Measure<
+            List<souther.compiler.query.BorderAssessment>> readingFor(
+            String source, String behavior) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        return compilation.db()
+                .ask(new Adequacy.BoundaryReadings(compilation.modules().get(0)))
+                .value().get(behavior);
     }
 }

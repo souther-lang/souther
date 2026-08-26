@@ -24,6 +24,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class WhatStoppedADerivationIsWhatIsReportedTest {
 
+    /** The lines that behavior's positions met, whosever the row at each point is. */
+    private static java.util.List<souther.compiler.query.BorderAssessment> lines(
+            String model, String behavior) {
+        Compilation compilation = Compilation.ofSource(model, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        java.util.List<souther.compiler.query.BorderAssessment> read =
+                Adequacy.readingsOf(compilation.db(), "demo").get(behavior);
+        assertNotNull(read, behavior + " was measured");
+        return read;
+    }
+
     private static PartitionEvidence measured(String model, String behavior) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
@@ -197,17 +209,18 @@ class WhatStoppedADerivationIsWhatIsReportedTest {
      */
     @Test
     void aRuleMeasuringTheCollectionItselfIsStillMeasured() {
-        PartitionEvidence evidence = measured("""
+        String model = """
                 module demo
                 data Ok
                 data Item = { charge: Int }
                 behavior run : (items: List<Item>) -> Ok
                 let run (items) = { guard List.length(items) < 3 else Ok
                     Ok }
-                """, "run");
+                """;
+        PartitionEvidence evidence = measured(model, "run");
 
         assertEquals(1, evidence.axes().size(), "the length is a line on the position itself");
-        assertTrue(evidence.boundaries().size() >= 1, "and it owes rows at its edges");
+        assertTrue(lines(model, "run").size() >= 1, "and it owes rows at its edges");
         assertEquals(List.of(), evidence.notDerivable().stream()
                         .filter(each -> each.at().toString().equals("items")).toList(),
                 "so nothing is left to report about the collection itself");

@@ -78,6 +78,15 @@ class APositionUnderANameIsReachedThroughItTest {
         return compilation;
     }
 
+    /** The lines that behavior's positions met, whosever the row at each point is. */
+    private static java.util.List<souther.compiler.query.BorderAssessment> lines(
+            Compilation compilation, String behavior) {
+        java.util.List<souther.compiler.query.BorderAssessment> found =
+                Adequacy.readingsOf(compilation.db(), "demo").get(behavior);
+        assertNotNull(found, behavior + " was measured");
+        return found;
+    }
+
     private static PartitionEvidence evidence(Compilation compilation, String behavior) {
         PartitionEvidence found = compilation.db()
                 .ask(new Adequacy.Coverage("demo")).value().get(behavior);
@@ -128,10 +137,10 @@ class APositionUnderANameIsReachedThroughItTest {
     void theRulesARecordWritesAboutItsFieldsReachThemUnderAName() {
         Compilation compilation = measured(PAIRS);
 
-        assertEquals(evidence(compilation, "bare").boundaries().size(),
-                evidence(compilation, "wrapped").boundaries().size(),
+        assertEquals(lines(compilation, "bare").size(),
+                lines(compilation, "wrapped").size(),
                 "the same record is bounded the same way under a name");
-        assertTrue(evidence(compilation, "wrapped").boundaries().size() >= 4);
+        assertTrue(lines(compilation, "wrapped").size() >= 4);
 
         String rows = GeneratedRows.of(compilation, "demo", "wrapped", true,
                 SourceNameResolver.identity()).text();

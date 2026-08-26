@@ -559,8 +559,8 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
         Compilation compilation = Compilation.ofSource(UNMEETABLE, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        compilation.db().ask(new Adequacy.Coverage("unmeetable")).value()
-                .forEach((behavior, evidence) -> evidence.boundaries()
+        Adequacy.readingsOf(compilation.db(), "unmeetable")
+                .forEach((behavior, read) -> read
                         .forEach(line -> lines.put(behavior + "/" + line.label(), line)));
 
         assertEquals(Set.of("onFlagsN/Set.size(v) = 2", "onNumbersN/Set.size(v) = 3",
@@ -811,8 +811,8 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, BorderAssessment> lines = new LinkedHashMap<>();
-        compilation.db().ask(new Adequacy.Coverage(module)).value()
-                .forEach((behavior, evidence) -> evidence.boundaries()
+        Adequacy.readingsOf(compilation.db(), module)
+                .forEach((behavior, read) -> read
                         .forEach(line -> lines.put(behavior + "/" + line.label(), line)));
         return lines;
     }
