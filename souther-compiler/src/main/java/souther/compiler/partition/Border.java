@@ -34,10 +34,10 @@ import java.util.Optional;
  * value instead of a side — all arrived as a shorter list. A role that goes missing now stops the
  * build where the border is made.
  *
- * <p>Which rule drew it is {@link #origin}'s, which reading of that rule this is is the origin's too,
- * and which of those readings are one line is {@link BoundaryLine}'s. This is not a fourth identity:
- * a border is a line together with what it owes, and two readings of one line owe the same four
- * things.
+ * <p>Which rule drew it and which line of that rule is {@link #origin}'s, which reading of that line
+ * this is is the origin's too, and which of those readings are one line is {@link BoundaryLine}'s.
+ * This is not another identity: a border is a line together with what it owes, and two readings of
+ * one line owe the same four things.
  *
  * @param cut     where the line is: what is cut, and where on it
  * @param origin  the rule that drew it, as this reading met it

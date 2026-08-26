@@ -1653,10 +1653,8 @@ public final class Adequacy {
 
         @Override
         public Answer<List<BorderAssessment>> compute(Db db) {
-            Answer<List<BorderAssessment>> readings = db.ask(new Readings(name, behavior));
-            return readings.present() && readings.value() != null
-                    ? Answer.of(Coverages.merged(readings.value()))
-                    : Answer.absent();
+            List<BorderAssessment> readings = db.ask(new Readings(name, behavior)).value();
+            return readings == null ? Answer.absent() : Answer.of(Coverages.merged(readings));
         }
     }
 

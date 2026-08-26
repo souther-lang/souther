@@ -59,15 +59,15 @@ class ARowIsLookedForWhereEachReadingOfTheLineIsTest {
     }
 
     /**
-     * Each reading is searched under the conditions it is reached by.
+     * A row is still offered at a line that was read twice.
      *
-     * <p>Read through the row that comes back: it stands at the line and it carries a {@code side},
-     * because getting to either call takes one. A search made after the readings are one has a
-     * region to compose against either way — what it does not have is a reason for the region it
-     * got.
+     * <p>What searching the readings apart may not cost. Two searches come back where one used to
+     * and the fold keeps one item per point, so a fold that kept the wrong one would leave the point
+     * with nothing to offer while a row for it had been composed. The row carries a {@code side},
+     * because getting to either call takes one.
      */
     @Test
-    void theRowOfferedIsComposedUnderTheConditionsOfAReading() {
+    void aRowIsStillOfferedAtALineReadTwice() {
         Compilation compilation = compiled();
         List<BorderAssessment> searched = compilation.db()
                 .ask(new Adequacy.BoundarySearch("example.banding", "twice")).value();

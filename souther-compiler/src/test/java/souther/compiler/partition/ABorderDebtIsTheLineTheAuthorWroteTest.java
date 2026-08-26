@@ -237,6 +237,45 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
                                 new souther.compiler.check.ClauseName("cap"))));
     }
 
+    /**
+     * One {@code ensures} clause naming two positions is two debts.
+     *
+     * <p>The same pair as the clause above, on the other rule that states something about values.
+     * {@code Found -> r.a >= 5 && r.b >= 5} is one clause and two lines, and a row whose {@code a}
+     * is 5 says nothing about {@code b}. Which of the clause's comparisons drew the line is what
+     * tells them apart: everything else about the two is the same, down to the value and the
+     * carrier.
+     */
+    @Test
+    void oneEnsuresClauseNamingTwoPositionsIsTwoDebts() {
+        Map<String, BorderAssessment> lines = bordersOf(TWO_STATED, "example.stated");
+        BorderAssessment first = at(lines, "r.a = 5");
+        BorderAssessment second = at(lines, "r.b = 5");
+
+        assertEquals(first.border().obligation().provenance(),
+                second.border().obligation().provenance(), "one clause states both");
+        assertEquals(first.border().cut().at(), second.border().cut().at(),
+                "at one value of one carrier, so neither the rule nor the level tells them apart");
+        assertNotEquals(first.border().obligation(), second.border().obligation(),
+                "and which comparison of the clause drew the line does");
+    }
+
+    /** One {@code ensures} clause stating something about two of a record's numbers. */
+    private static final String TWO_STATED = """
+            module example.stated
+
+            data R = { a: Int, b: Int }
+            data Found
+            data Missing
+
+            behavior f : (r: R) -> Found | Missing
+                ensures Found -> r.a >= 5 && r.b >= 5
+            let f (r) = if r.a >= 30 * 2 then Found else Missing
+
+            example f
+                | "one" : (R { a = 1, b = 1 }) -> Missing
+            """;
+
     /** One clause bounding two numbers of the declaration it is written on. */
     private static final String TWO_NUMBERS = """
             module example.numbers

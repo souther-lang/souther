@@ -168,6 +168,14 @@ public sealed interface OriginRef {
      * which shape the line has.
      *
      * @param rule              which clause of which behavior — the rule and the whole of it
+     * @param conjunct          which of the clause's comparisons drew this line, counted over every
+     *                          one the clause states in the order they are written. A clause states
+     *                          as many lines as it has comparisons in it, and they are not each
+     *                          other's: {@code r.a >= 5 && r.b >= 5} is one clause naming two
+     *                          positions, and a row whose {@code a} is 5 says nothing about
+     *                          {@code b}. Counted over all of them and not over the ones a line came
+     *                          out of, so that a reading which could make nothing of one still
+     *                          numbers the next the same as a reading that could
      * @param valueBelongsBelow which side of the line the cut value itself is on, which decides
      *                          which neighbour is the other class's edge
      * @param holdsAtTheValue   whether the comparison is true at the line's own value. Not derivable
@@ -180,8 +188,16 @@ public sealed interface OriginRef {
      * @param singles           whether the comparison singles the value out rather than ordering
      *                          the values either side of it
      */
-    record EnsuresOrigin(RuleRef.Ensures rule, boolean valueBelongsBelow,
-                         boolean holdsAtTheValue, boolean singles) implements OriginRef {}
+    record EnsuresOrigin(RuleRef.Ensures rule, int conjunct, boolean valueBelongsBelow,
+                         boolean holdsAtTheValue, boolean singles) implements OriginRef {
+
+        public EnsuresOrigin {
+            if (conjunct < 0) {
+                throw new IllegalArgumentException(
+                        "a conjunct of a clause is counted from zero: " + conjunct);
+            }
+        }
+    }
 
     /**
      * A bound one rule put there and another took in.
@@ -254,9 +270,9 @@ public sealed interface OriginRef {
             // and a line it drew are found the same way, and two spellings of one place read as two
             // places.
             case ComparisonOrigin g -> g.read().written().said(names, sectionSource);
-            case NarrowedOrigin n -> n.bound().describe(names, sectionSource) + " within "
-                    + n.within().stream().map(TypeSymbol::name)
-                            .collect(java.util.stream.Collectors.joining(" or "));
+            // The declarations that took the end in, said the way the line itself says them.
+            case NarrowedOrigin n ->
+                    n.authoredLine().said(n.bound().describe(names, sectionSource));
         };
     }
 
@@ -302,11 +318,12 @@ public sealed interface OriginRef {
         return switch (this) {
             case InvariantOrigin i ->
                     new AuthoredLine(i.rule(), i.conjunct(), lineFacts(), List.of());
-            // One line each, so the zeroth of the one. A comparison and an `ensures` clause are read
-            // as a rule apiece — a condition holding three comparisons is three rules — so there is
-            // no second line of either to tell this one from.
+            // One line, so the zeroth of the one. A comparison is a rule apiece — a condition
+            // holding three comparisons is three rules — so there is no second line of it to tell
+            // this one from.
             case ComparisonOrigin g -> new AuthoredLine(g.rule(), 0, lineFacts(), List.of());
-            case EnsuresOrigin e -> new AuthoredLine(e.rule(), 0, lineFacts(), List.of());
+            case EnsuresOrigin e ->
+                    new AuthoredLine(e.rule(), e.conjunct(), lineFacts(), List.of());
             // The bound's line, said to have been taken in. What the narrowing adds is about the
             // end and not about the rule, so the rule comes back the same and this is kept beside
             // it.

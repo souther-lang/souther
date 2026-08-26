@@ -1007,6 +1007,10 @@ final class Coverages {
      * that was found is the whole of what a point asks for; where neither reading found one, the
      * reading that composed a row to offer has something to say that a reading which composed
      * nothing does not, and the point is owed the same row either way.
+     *
+     * <p>Here because the search is made per reading. One search against one region has one outcome
+     * and nothing to choose between; two readings carry two, and keeping the first would drop a row
+     * an author could have been offered.
      */
     private static boolean keeps(ItemAssessment a, ItemAssessment b) {
         if (rank(a) != rank(b)) {

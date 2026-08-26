@@ -120,13 +120,18 @@ public final class EnsuresThresholds {
                 new ArrayList<>(), new ArrayList<>());
         for (StatedContract.StatedRule rule : stated.rules()) {
             String clause = labelOf(rule);
+            // Which line of the clause each one is, counted over every comparison the clause states
+            // in the order they are written. A clause states as many lines as it has comparisons,
+            // and a row at one of them says nothing about the next.
+            int line = 0;
             for (StatedContract.Conjunct conjunct : rule.conjuncts()) {
                 // A conjunct this compiler could not type is one it has not read. Nothing is
                 // concluded from it either way: it draws no line here, and that it drew none is not
-                // a statement that the model has none there.
-                if (conjunct.stated().orNull() != null) {
-                    stated(conjunct.stated().orNull(), rule, clause, reads, symbols, quantities, drawn);
-                }
+                // a statement that the model has none there. It is still counted, so that which
+                // line of the clause the next one is does not move with what this reading managed.
+                line = conjunct.stated().orNull() == null ? line + 1
+                        : stated(conjunct.stated().orNull(), rule, clause, line, reads, symbols,
+                                quantities, drawn);
             }
         }
         return new Clauses(drawn.thresholds(), drawn.singled(), drawn.between(), drawn.rulesWithoutALine());
@@ -145,13 +150,18 @@ public final class EnsuresThresholds {
      * <p>Nothing below anything else. A disjunct holds where the other one does not, a call's
      * argument is not what the call comes to, and neither states the comparison inside it — so a
      * line drawn from one would be a line the model does not draw.
+     *
+     * @param line which line of the clause this one is
+     * @return which line of the clause the next one is. Every statement the walk reaches takes one,
+     *         whether or not a line came out of it, so that a reading which could make nothing of
+     *         one numbers the rest the same as a reading that could
      */
-    private static void stated(Core e, StatedContract.StatedRule rule, String clause,
-                               InputReads reads, Symbols symbols, souther.compiler.inputs.Quantities quantities, Drawn out) {
+    private static int stated(Core e, StatedContract.StatedRule rule, String clause, int line,
+                              InputReads reads, Symbols symbols, souther.compiler.inputs.Quantities quantities, Drawn out) {
         if (e instanceof Core.Binary both && both.op() == BinOp.AND) {
-            stated(both.left(), rule, clause, reads, symbols, quantities, out);
-            stated(both.right(), rule, clause, reads, symbols, quantities, out);
-            return;
+            return stated(both.right(), rule, clause,
+                    stated(both.left(), rule, clause, line, reads, symbols, quantities, out),
+                    reads, symbols, quantities, out);
         }
         // Through what a `let` binds, which is not a choice: what the expression comes to is its
         // body, so the body states whatever the rule states. This is the shape a helper called from
@@ -159,15 +169,14 @@ public final class EnsuresThresholds {
         // parameter — and a walk that stopped here found the rule stating nothing while the model
         // plainly says something about the position.
         if (e instanceof Core.LetIn let) {
-            stated(let.body(), rule, clause, reads.and(let.binder(), let.value()), symbols,
-                    quantities, out);
-            return;
+            return stated(let.body(), rule, clause, line, reads.and(let.binder(), let.value()),
+                    symbols, quantities, out);
         }
         // A disjunction was read, and what it states is not what either side of it states. Said as
         // nothing rather than as a rule this could not read: reporting it would send an author after
         // a limit of this compiler that is not there.
         if (e instanceof Core.Binary or && or.op() == BinOp.OR) {
-            return;
+            return line + 1;
         }
         // Anything else is a form this walk does not read. Which positions it is about is still
         // said, because a position left out of every answer is reported as one the model draws no
@@ -181,7 +190,7 @@ public final class EnsuresThresholds {
                     GuardThresholds.mentionedIn(e, reads, symbols).stream()
                             .map(FilingCoordinate::at).toList(),
                     out.rulesWithoutALine());
-            return;
+            return line + 1;
         }
         // What the comparison comes to is read the same way wherever a comparison is written, which
         // is what {@link ComparisonAssessment} is for: a clause and a guard over one arithmetic form
@@ -201,7 +210,7 @@ public final class EnsuresThresholds {
             // reading of the comparison; taken off the level the rule was written with, a rule that
             // wrote a multiple of the position named a class at a number the position never holds.
             case ComparisonAssessment.AtAPosition at -> {
-                OriginRef.EnsuresOrigin origin = originOf(rule, clause, at.cutting());
+                OriginRef.EnsuresOrigin origin = originOf(rule, clause, line, at.cutting());
                 if (at.cutting().singles()) {
                     // The value the rule names, for the reason a body's rule gets: where its line
                     // falls and not the value beside it.
@@ -234,7 +243,7 @@ public final class EnsuresThresholds {
                 // border to owe a row away from.
                 if (over.drawsABorder()) {
                     out.between().add(new LineDrawn(over.cutting(),
-                            originOf(rule, clause, over.cutting())));
+                            originOf(rule, clause, line, over.cutting())));
                 }
             }
             // Nothing this reader draws at any of them. What each leaves the positions is said
@@ -243,13 +252,14 @@ public final class EnsuresThresholds {
                  ComparisonAssessment.OutsideTheDomain _,
                  ComparisonAssessment.AnswerDependent _, ComparisonAssessment.NoInput _ -> { }
         }
+        return line + 1;
     }
 
     /** How a row meets a line this clause drew, which is the clause's own answer and no other
      *  rule's. */
     private static OriginRef.EnsuresOrigin originOf(StatedContract.StatedRule rule, String clause,
-                                                    Cutting cutting) {
-        return new OriginRef.EnsuresOrigin(new RuleRef.Ensures(rule.id(), clause),
+                                                    int line, Cutting cutting) {
+        return new OriginRef.EnsuresOrigin(new RuleRef.Ensures(rule.id(), clause), line,
                 cutting.valueBelongsBelow(), cutting.holdsAtTheValue(), cutting.singles());
     }
 

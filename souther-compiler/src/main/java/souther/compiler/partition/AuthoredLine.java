@@ -67,7 +67,18 @@ public record AuthoredLine(RuleRef rule, int conjunct, LineFacts facts,
      * place is said by {@link OriginRef#describe}.
      */
     public String named() {
-        return rule.named() + (narrowedWithin.isEmpty() ? ""
+        return said(rule.named());
+    }
+
+    /**
+     * The same about a rule a reader is calling something else.
+     *
+     * <p>A comparison has no name, so a reading of one is said by where it is written
+     * ({@link OriginRef#describe}) — and what the narrowing adds is the same words either way. Said
+     * in both places, the two spellings of one narrowing read as two.
+     */
+    public String said(String rule) {
+        return rule + (narrowedWithin.isEmpty() ? ""
                 : " within " + narrowedWithin.stream().map(TypeSymbol::name)
                         .collect(java.util.stream.Collectors.joining(" or ")));
     }
