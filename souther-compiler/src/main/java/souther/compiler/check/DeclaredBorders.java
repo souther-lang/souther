@@ -27,8 +27,8 @@ import java.util.Map;
  * switch over the arms a citation has.
  *
  * <p>Nothing here is an identity. What tells one authored line from another is the clause and which
- * of its conjuncts drew the end ({@link souther.compiler.partition.BorderObligationId}), and that is
- * what this is keyed by; what it hands back is what to call the line. Held as part of the identity,
+ * of its conjuncts drew the end ({@link souther.compiler.partition.AuthoredLine}), and that is what
+ * this is keyed by; what it hands back is what to call the line. Held as part of the identity,
  * the frames above would make one line two.
  */
 public record DeclaredBorders(souther.compiler.diag.Citation at,

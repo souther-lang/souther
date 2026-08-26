@@ -34,10 +34,10 @@ import java.util.Optional;
  * value instead of a side — all arrived as a shorter list. A role that goes missing now stops the
  * build where the border is made.
  *
- * <p>Which rule drew it is {@link #origin}'s, which reading of that rule this is is the origin's too,
- * and which of those readings are one line is {@link BoundaryLine}'s. This is not a fourth identity:
- * a border is a line together with what it owes, and two readings of one line owe the same four
- * things.
+ * <p>Which rule drew it and which line of that rule is {@link #origin}'s, which reading of that line
+ * this is is the origin's too, and which of those readings are one line is {@link BoundaryLine}'s.
+ * This is not another identity: a border is a line together with what it owes, and two readings of
+ * one line owe the same four things.
  *
  * @param cut     where the line is: what is cut, and where on it
  * @param origin  the rule that drew it, as this reading met it
@@ -67,14 +67,17 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
     /**
      * What a row here is owed for, which several readings of this line share.
      *
-     * <p>The line the author wrote, without the position it was read at. Everything that folds
-     * readings together keys on this; everything that says where a row would go reads {@link #cut}.
-     * Both are here rather than one being worked out from the other by whoever needs it, because a
-     * caller deriving a key from the parts it happened to know is how one clause's row came to be
-     * asked for once per position of every behavior carrying the type (issue #1062).
+     * <p>The line the author wrote, without the position it was read at. What folds readings
+     * together keys on {@link BoundaryLine}, which is this line and where it was read; this is what
+     * such a fold may not cross, and {@code Coverages} holds itself to that where it merges.
+     * Everything that says where a row would go reads {@link #cut}.
+     *
+     * <p>Both are here rather than one being worked out from the other by whoever needs it: a caller
+     * deriving a key from the parts it happened to know asks for one clause's row once per position
+     * of every behavior carrying the type.
      */
     public BorderObligationId obligation() {
-        return new BorderObligationId(origin, cut.at());
+        return new BorderObligationId(origin.authoredLine(), cut.at());
     }
 
     /** Where the line is, as a report names it. Not what any one of its points asks for: that is
@@ -424,17 +427,12 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
         Criterion rest = new Criterion.AnythingBut(cut);
         switch (noSideOf(origin)) {
             case THE_RULES_REFUSE_IT -> {
-                // Which way the bound keeps its values, taken from the end of what the rules leave
-                // that this line is: a bound orders nothing around itself, so there is no side to
-                // read off the rule, and its line is where what it leaves stops.
-                Towards kept = keptBy(within, cut);
-                if (kept == null) {
-                    // The reader of where a bound stops and the reader of what the position is left
-                    // with disagreeing about one rule. A bound's line is an end of what it leaves,
-                    // and a line inside that is not one this rule drew.
-                    throw new IllegalStateException(
-                            "a bound whose line is not an end of what it leaves: " + origin.named());
-                }
+                // Which way the bound keeps its values, from what the reading that placed the end
+                // recorded: a bound orders nothing around itself, so there is no side to read off
+                // the line, and which of the two ends it is is what says which way it runs. Held
+                // against the range below, which the same reading settled.
+                Towards kept = satisfyingSide(origin);
+                requireItIsTheEndItKeeps(within, cut, kept, origin);
                 Demand on = againstABound(space, cut, kept, holdsHere, within, origin);
                 demands.put(PointRole.ON, on);
                 demands.put(PointRole.OFF, new Demand.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT));
@@ -513,25 +511,25 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
     }
 
     /**
-     * Which way a bound keeps its values, from the end of what the rules leave that its line is.
+     * That a bound's line stands where what the rules leave stops on the side the bound keeps.
      *
-     * <p>Asked of what the rules leave rather than of the rule. A bound records where it stops and
-     * not which side of that it keeps ({@link OriginRef.InvariantOrigin}), and it does not have to:
-     * a bound's line is an end of what it leaves, so which end it is says which way the values run.
+     * <p>Two readings of one rule held against each other. Which way the bound runs comes from the
+     * reading that placed the end and the range comes from the reading of everything the position
+     * is left with, and a bound's line is by construction the end of that range on the side it
+     * keeps. Where the two disagree, one of them is about a rule the other did not read — which is
+     * not a state a model can put them in, and a line inside the range is not one this rule drew.
      *
-     * <p>Null where the line is neither end, which is nothing a model can write. Where both ends are
-     * the line — a rule leaving one value — either answer names the same point, and the low end is
-     * taken.
+     * <p>The side and not either end. A rule leaving one value puts both ends at the line, and each
+     * of its two bounds answers for the end it placed rather than for whichever end matches.
      */
-    private static Towards keptBy(NumericDomain.Bounds within, Level cut) {
-        if (within == null) {
-            return null;
+    private static void requireItIsTheEndItKeeps(NumericDomain.Bounds within, Level cut,
+                                                 Towards kept, OriginRef origin) {
+        Endpoint end = within == null ? null
+                : kept == Towards.ABOVE ? within.min() : within.max();
+        if (end == null || !end.at().sameAs(placeOf(cut))) {
+            throw new IllegalStateException(
+                    "a bound whose line is not where what it leaves stops: " + origin.named());
         }
-        Place at = placeOf(cut);
-        if (within.min() != null && within.min().at().sameAs(at)) {
-            return Towards.ABOVE;
-        }
-        return within.max() != null && within.max().at().sameAs(at) ? Towards.BELOW : null;
     }
 
     /** A side of the border, or the reason the rules leave nothing there for a row to be at. */
@@ -617,10 +615,14 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
      */
     private static boolean ordersAroundTheCut(OriginRef origin) {
         return switch (origin) {
-            case OriginRef.ComparisonOrigin g -> !g.singles();
-            case OriginRef.EnsuresOrigin e -> !e.singles();
-            case OriginRef.NarrowedOrigin n -> ordersAroundTheCut(n.bound());
+            // Nothing outside a bound can be constructed, so a bound has no far side to order
+            // against however its own values run. Which is not what `singles` says of it, and
+            // reading the two as one question is why this is asked here and not answered by the
+            // rule.
             case OriginRef.InvariantOrigin _ -> false;
+            case OriginRef.NarrowedOrigin n -> ordersAroundTheCut(n.bound());
+            case OriginRef.ComparisonOrigin _, OriginRef.EnsuresOrigin _ ->
+                    !origin.lineFacts().singles();
         };
     }
 
@@ -640,21 +642,11 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
 
     /** Whether the threshold's own value satisfies the rule that drew the line. */
     private static boolean holdsAtTheValue(OriginRef origin) {
-        return switch (origin) {
-            case OriginRef.ComparisonOrigin g -> g.holdsAtTheValue();
-            case OriginRef.EnsuresOrigin e -> e.holdsAtTheValue();
-            case OriginRef.InvariantOrigin i -> i.holdsAtTheValue();
-            case OriginRef.NarrowedOrigin n -> holdsAtTheValue(n.bound());
-        };
+        return origin.lineFacts().holdsAtTheValue();
     }
 
     /** Which side of the line the threshold's own value belongs to. */
     private static boolean valueBelongsBelow(OriginRef origin) {
-        return switch (origin) {
-            case OriginRef.ComparisonOrigin g -> g.valueBelongsBelow();
-            case OriginRef.EnsuresOrigin e -> e.valueBelongsBelow();
-            case OriginRef.InvariantOrigin _ -> false;
-            case OriginRef.NarrowedOrigin n -> valueBelongsBelow(n.bound());
-        };
+        return origin.lineFacts().valueBelongsBelow();
     }
 }

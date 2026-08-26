@@ -18,10 +18,11 @@ import java.util.List;
  * line the cut value falls on, which declarations took an end in. None of those tell one rule from
  * another, and a question keyed on them is a question the reading raised rather than the model.
  *
- * <p>Three identities and not one, because they are three equivalences. {@link RuleRef} answers
- * whose rule it is; this answers which reading of that rule a boundary was drawn off; and
- * {@link BoundaryLine} answers which of them a partition folds into one line. A guard inside a
- * helper is read once per call: those are several of these, one {@code RuleRef}, and one line.
+ * <p>Four identities and not one, because they are four equivalences. {@link RuleRef} answers whose
+ * rule it is; {@link AuthoredLine} answers which of that rule's lines was drawn; this answers which
+ * reading of that line a boundary was drawn off; and {@link BoundaryLine} answers which of them a
+ * partition folds into one. A guard inside a helper is read once per call: those are several of
+ * these, one {@code RuleRef}, one authored line, and one line.
  *
  * <p>Kept per cut rather than per axis. Several rules can put a cut at the same value — a type's
  * invariant and a {@code guard} that repeats it, or two guards written in different behaviors — and
@@ -33,10 +34,10 @@ public sealed interface OriginRef {
     /**
      * A clause of a {@code data}'s invariant, as the clause it is.
      *
-     * <p>The clause and not the end it placed. This used to be the declaration together with the
-     * word {@code min} or {@code max}, which says what the clause did: two clauses of one
-     * declaration bounding a position at one value came out as one origin, and the cut kept one
-     * rule where ADR-0090 says it keeps every rule that drew it.
+     * <p>The clause that placed the end, and not the declaration it is written on together with the
+     * word {@code min} or {@code max}. Two clauses of one declaration bounding a position at one
+     * value are two rules, and a cut keeps every rule that drew it; named by the declaration and the
+     * word, they are one.
      *
      * @param conjunct        which conjunct of the clause drew this end. What tells one line of a
      *                        clause from another where the clause drew several: {@code
@@ -45,6 +46,14 @@ public sealed interface OriginRef {
      *                        other. The clause's own text and not the number it was written about,
      *                        which is spelled differently by every reading that reaches it
      *                        ({@link souther.compiler.check.DeclaredBounds.Drawn})
+     * @param keeps           which way along the order the bound keeps its values, which is the end
+     *                        it placed: a minimum keeps what is above it and a maximum what is
+     *                        below. Read where the end is read, and carried for the same reason the
+     *                        inclusivity beside it is — a bound orders nothing across its line, so
+     *                        there is no side to read off the rule further down, and what is left to
+     *                        work it back out of is the range the rules leave. That derivation has a
+     *                        case with no answer, and it answers a rule leaving one value the same
+     *                        way for both of its ends
      * @param holdsAtTheValue whether the cut value is one the bound admits, which is the end's own
      *                        inclusivity and is what says whether a row at the cut is the border's
      *                        {@code ON} point or its {@code OFF} point. Carried for the same reason
@@ -58,12 +67,17 @@ public sealed interface OriginRef {
      *                        derivation gets and not one about the end, and reading the end is what
      *                        keeps the two from being confused if it ever does get further
      */
-    record InvariantOrigin(RuleRef.Invariant rule, int conjunct, boolean holdsAtTheValue)
+    record InvariantOrigin(RuleRef.Invariant rule, int conjunct,
+                           souther.compiler.numeric.Towards keeps, boolean holdsAtTheValue)
             implements OriginRef {
 
         public InvariantOrigin {
             if (rule == null) {
                 throw new IllegalArgumentException("a bound drawn by no clause");
+            }
+            if (keeps == null) {
+                throw new IllegalArgumentException(
+                        "a bound keeps its values one way or the other: " + rule.named());
             }
             if (conjunct < 0) {
                 throw new IllegalArgumentException(
@@ -154,6 +168,14 @@ public sealed interface OriginRef {
      * which shape the line has.
      *
      * @param rule              which clause of which behavior — the rule and the whole of it
+     * @param conjunct          which of the clause's comparisons drew this line, counted over every
+     *                          one the clause states in the order they are written. A clause states
+     *                          as many lines as it has comparisons in it, and they are not each
+     *                          other's: {@code r.a >= 5 && r.b >= 5} is one clause naming two
+     *                          positions, and a row whose {@code a} is 5 says nothing about
+     *                          {@code b}. Counted over all of them and not over the ones a line came
+     *                          out of, so that a reading which could make nothing of one still
+     *                          numbers the next the same as a reading that could
      * @param valueBelongsBelow which side of the line the cut value itself is on, which decides
      *                          which neighbour is the other class's edge
      * @param holdsAtTheValue   whether the comparison is true at the line's own value. Not derivable
@@ -166,8 +188,16 @@ public sealed interface OriginRef {
      * @param singles           whether the comparison singles the value out rather than ordering
      *                          the values either side of it
      */
-    record EnsuresOrigin(RuleRef.Ensures rule, boolean valueBelongsBelow,
-                         boolean holdsAtTheValue, boolean singles) implements OriginRef {}
+    record EnsuresOrigin(RuleRef.Ensures rule, int conjunct, boolean valueBelongsBelow,
+                         boolean holdsAtTheValue, boolean singles) implements OriginRef {
+
+        public EnsuresOrigin {
+            if (conjunct < 0) {
+                throw new IllegalArgumentException(
+                        "a conjunct of a clause is counted from zero: " + conjunct);
+            }
+        }
+    }
 
     /**
      * A bound one rule put there and another took in.
@@ -240,9 +270,67 @@ public sealed interface OriginRef {
             // and a line it drew are found the same way, and two spellings of one place read as two
             // places.
             case ComparisonOrigin g -> g.read().written().said(names, sectionSource);
-            case NarrowedOrigin n -> n.bound().describe(names, sectionSource) + " within "
-                    + n.within().stream().map(TypeSymbol::name)
-                            .collect(java.util.stream.Collectors.joining(" or "));
+            // The declarations that took the end in, said the way the line itself says them.
+            case NarrowedOrigin n ->
+                    n.authoredLine().said(n.bound().describe(names, sectionSource));
+        };
+    }
+
+    /**
+     * What this reading recorded about the line it drew.
+     *
+     * <p>Asked of the reading and never assembled by whoever wants it. Written as a switch at each
+     * consumer, each of the three is a slot a consumer can fill in for a rule that leaves it empty,
+     * and two consumers filling one slot are free to fill it differently. One projection, one place
+     * a rule answers.
+     */
+    default LineFacts lineFacts() {
+        return switch (this) {
+            case ComparisonOrigin g ->
+                    new LineFacts(g.valueBelongsBelow(), g.holdsAtTheValue(), g.singles());
+            case EnsuresOrigin e ->
+                    new LineFacts(e.valueBelongsBelow(), e.holdsAtTheValue(), e.singles());
+            // Which side the value a bound stops at is on, from the end it placed and whether it
+            // admits that value: a minimum keeps what is above, so its value is below the line
+            // exactly when the bound does not admit it. A bound singles nothing out — it keeps a run
+            // of the order — and that the far side holds no value at all is a different answer,
+            // given where a border reads what a line has sides.
+            case InvariantOrigin i -> new LineFacts(
+                    (i.keeps() == souther.compiler.numeric.Towards.BELOW) == i.holdsAtTheValue(),
+                    i.holdsAtTheValue(), false);
+            case NarrowedOrigin n -> n.bound().lineFacts();
+        };
+    }
+
+    /**
+     * Which line of the model this reading drew.
+     *
+     * <p>This reading with everything only this reading knows taken out: no position, no behavior,
+     * no occurrence of a comparison a body reached. What is left is what several readings of one
+     * line share, and it is what a debt is ({@link BorderObligationId}) and what a partition folds
+     * readings under ({@link BoundaryLine}).
+     *
+     * <p>Not a fold made here. Which readings are one line is still a question about a partition,
+     * and it is asked where a line is: this only says which line of the model each reading is a
+     * reading of, which is the reading's own answer and nobody else's.
+     */
+    default AuthoredLine authoredLine() {
+        return switch (this) {
+            case InvariantOrigin i ->
+                    new AuthoredLine(i.rule(), i.conjunct(), lineFacts(), List.of());
+            // One line, so the zeroth of the one. A comparison is a rule apiece — a condition
+            // holding three comparisons is three rules — so there is no second line of it to tell
+            // this one from.
+            case ComparisonOrigin g -> new AuthoredLine(g.rule(), 0, lineFacts(), List.of());
+            case EnsuresOrigin e ->
+                    new AuthoredLine(e.rule(), e.conjunct(), lineFacts(), List.of());
+            // The bound's line, said to have been taken in. What the narrowing adds is about the
+            // end and not about the rule, so the rule comes back the same and this is kept beside
+            // it.
+            case NarrowedOrigin n -> {
+                AuthoredLine bound = n.bound().authoredLine();
+                yield new AuthoredLine(bound.rule(), bound.conjunct(), bound.facts(), n.within());
+            }
         };
     }
 
@@ -255,19 +343,7 @@ public sealed interface OriginRef {
      * is a guard, the place is pointed at instead, by {@link #citation}.
      */
     default String named() {
-        return switch (this) {
-            case InvariantOrigin i -> i.rule().named();
-            case EnsuresOrigin e -> e.rule().named();
-            // What the rule is, since it has no name: a comparison is written rather than called
-            // something. Never rendered to a reader either way — a rule with no name gets a
-            // sentence of its own, and the catalog holds those words in every language rather than
-            // this building one.
-            case ComparisonOrigin _ -> "the " + souther.compiler.check.RuleCitation.WHAT_IT_IS;
-            // A narrowing is not part of the rule, so it is said here and not by the rule.
-            case NarrowedOrigin n -> n.bound().named() + " within "
-                    + n.within().stream().map(TypeSymbol::name)
-                            .collect(java.util.stream.Collectors.joining(" or "));
-        };
+        return authoredLine().named();
     }
 
     /**
@@ -319,12 +395,7 @@ public sealed interface OriginRef {
      * the end is where the line came from.
      */
     default java.util.Optional<TypeSymbol> owedToTheDeclaration() {
-        return switch (this) {
-            case InvariantOrigin i ->
-                    java.util.Optional.of(i.rule().clause().id().declaredOn());
-            case ComparisonOrigin _, EnsuresOrigin _ -> java.util.Optional.empty();
-            case NarrowedOrigin n -> n.bound().owedToTheDeclaration();
-        };
+        return authoredLine().owedToTheDeclaration();
     }
 
     /**
@@ -340,13 +411,7 @@ public sealed interface OriginRef {
      * the rule's, so both are asked of it.
      */
     default java.util.Optional<souther.compiler.check.DeclaredBorders.Key> declaredLine() {
-        return switch (this) {
-            case InvariantOrigin i ->
-                    java.util.Optional.of(
-                            new souther.compiler.check.DeclaredBorders.Key(i.rule(), i.conjunct()));
-            case ComparisonOrigin _, EnsuresOrigin _ -> java.util.Optional.empty();
-            case NarrowedOrigin n -> n.bound().declaredLine();
-        };
+        return authoredLine().declaredLine();
     }
 
     /**

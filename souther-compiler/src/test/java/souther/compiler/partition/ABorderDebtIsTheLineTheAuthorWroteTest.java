@@ -18,15 +18,17 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * What a row is owed for is the line the author wrote, and neither the rule it came from nor the
  * position it was read at.
  *
- * <p>Three identities where there used to be one. Which rule drew the line is provenance and the
- * same value however many lines the rule drew; which line is owed a row is the debt; where that line
- * was read is an occurrence, one per position of every behavior carrying the type. A measure keyed
- * on the occurrence asks for one rule's row once per position — 126 times over {@code crm}'s
+ * <p>Four questions and not one. Which rule drew the line is provenance and the same value however
+ * many lines the rule drew; which line of that rule it is, and which value it is at, are the debt;
+ * where that line was read is an occurrence, one per position of every behavior carrying the type,
+ * and which of those readings are one line is what a partition folds under. A measure keyed on the
+ * occurrence asks for one rule's row once per position — 126 times over {@code crm}'s
  * {@code UserId} — and a measure keyed on the rule asks for one row where the author drew two lines.
  *
- * <p>Written before the debt exists, because the whole of what this change is worth is the answer to
- * "why are these the same debt". Left to be read off whatever the implementation keyed on, that
- * answer lives outside the types and the next reading takes it back.
+ * <p>How far a debt reaches is the rule's own answer: a clause of a {@code data} is the type's
+ * wherever the type is carried, and a comparison is written in a body and is that body's. Both
+ * directions are measured here, because a debt that dropped the behavior would pass the first and
+ * fail the second.
  */
 class ABorderDebtIsTheLineTheAuthorWroteTest {
 
@@ -140,6 +142,191 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
         assertNotEquals(name.border().obligation(), code.border().obligation(),
                 "and the number the clause was written about does");
     }
+
+    /**
+     * Two readings of one comparison are one debt.
+     *
+     * <p>A non-recursive helper is spliced into every body that calls it, so one guard the author
+     * wrote is read once per call: the readings carry different comparison sites, each is measured
+     * on its own, and the author owes one row for the line. Keyed on the reading they are two debts
+     * that only the merge collecting what each reading saw brings back to one, and which of the two
+     * call sites the surviving debt names then comes down to the order a walk took.
+     *
+     * <p>Built here rather than compiled, because what is being told apart is two readings of one
+     * line at one position: through a model they are merged into one assessment before anything can
+     * be asked of the pair, and the question is what the pair answers.
+     */
+    @Test
+    void twoReadingsOfOneComparisonAreOneDebt() {
+        BoundaryTarget line = aLineAt(100);
+        Border first = Border.at(line, readAt(1), ANYWHERE);
+        Border second = Border.at(line, readAt(5), ANYWHERE);
+
+        assertNotEquals(first.origin(), second.origin(),
+                "two occurrences of the guard, each a reading measured on its own");
+        assertEquals(first.obligation(), second.obligation(),
+                "and one line the author wrote, which is one row to write");
+        assertEquals(BoundaryLine.of(first), BoundaryLine.of(second),
+                "so the two readings fold into one line, and the fold is inside the one debt");
+    }
+
+    /**
+     * A comparison and a bound at one value are two debts.
+     *
+     * <p>The pair that keeps the case above from being satisfied by a debt keyed on the value and
+     * the behavior. Both lines stand at 100 on one carrier and are read at one position; an
+     * {@code invariant} drew one and a comparison in a body drew the other, and either could be
+     * changed without the other.
+     */
+    @Test
+    void aComparisonAndABoundAtOneValueAreTwoDebts() {
+        Border guard = Border.at(aLineAt(100), readAt(1), ANYWHERE);
+        Border bound = Border.at(aLineAt(100),
+                new OriginRef.InvariantOrigin(aClause(), 0,
+                        souther.compiler.numeric.Towards.ABOVE, true),
+                new souther.compiler.numeric.NumericDomain.Bounds(
+                        souther.compiler.numeric.Endpoint.inclusive(
+                                souther.compiler.numeric.Count.of(100)), null));
+
+        assertEquals(guard.cut(), bound.cut(), "one value of one quantity, read at one position");
+        assertNotEquals(guard.obligation(), bound.obligation(),
+                "and two rules the author wrote, each owed a row of its own");
+    }
+
+    /** What the rules leave the quantity, where they leave it everything. */
+    private static final souther.compiler.numeric.NumericDomain.Bounds ANYWHERE =
+            new souther.compiler.numeric.NumericDomain.Bounds(null, null);
+
+    /** One position's line at {@code at}, on the carrier a count of whole numbers runs on. */
+    private static BoundaryTarget aLineAt(int at) {
+        souther.compiler.check.Carrier carrier = new souther.compiler.check.Carrier.Whole();
+        AxisId axis = new AxisId("twice", "a.value");
+        return BoundaryTarget.at(
+                new BorderQuantity.OfACoordinate(axis,
+                        new souther.compiler.inputs.NumericTerm.ValueOf(
+                                souther.compiler.inputs.TermPath.of(axis.term())),
+                        souther.compiler.inputs.TermOrders.itself(carrier)),
+                new Level.OnACarrier(carrier, souther.compiler.numeric.Count.of(at)));
+    }
+
+    /**
+     * One reading of one comparison: the same rule and the same place it is written, at the
+     * occurrence the call it was spliced into was numbered.
+     */
+    private static OriginRef readAt(int occurrence) {
+        souther.compiler.check.RuleRef.Comparison rule =
+                new souther.compiler.check.RuleRef.Comparison("twice",
+                        new souther.compiler.types.CoverageOrigin("example.banding", 2, 0,
+                                souther.compiler.types.CoverageConstruct.BINARY));
+        return new OriginRef.ComparisonOrigin(rule,
+                new OriginRef.ComparisonOrigin.Read(
+                        new souther.compiler.coverage.ComparisonOccurrence(occurrence),
+                        new souther.compiler.check.RuleCitation.WrittenAt(
+                                souther.compiler.diag.Citation.of(
+                                        new souther.compiler.diag.SourcePos(15, 16)))),
+                true, true);
+    }
+
+    /** The clause the bound in these tests names, which is only an identity here. */
+    private static souther.compiler.check.RuleRef.Invariant aClause() {
+        return new souther.compiler.check.RuleRef.Invariant(
+                new souther.compiler.check.Clause.Ref(
+                        new souther.compiler.check.Clause.Id(
+                                souther.compiler.types.TypeSymbols.declared(
+                                        new souther.compiler.types.TypeKey("example.banding",
+                                                "Amount")), 0),
+                        java.util.Optional.of(
+                                new souther.compiler.check.ClauseName("cap"))));
+    }
+
+    /**
+     * One helper's comparison called from two behaviors is two debts.
+     *
+     * <p>The other side of the equivalence above, and the reason a debt does not simply drop the
+     * behavior it was read in. A clause of a {@code data} states something about the type wherever
+     * the type is carried; a comparison is written in a body and states something about that body,
+     * so {@code one} and {@code two} each owe a row at the line {@code band}'s comparison draws in
+     * them. What the rule is is where that is decided
+     * ({@link souther.compiler.check.RuleRef.Comparison}), and a debt says no more about it.
+     */
+    @Test
+    void oneHelpersComparisonCalledFromTwoBehaviorsIsTwoDebts() {
+        Map<String, List<BorderAssessment>> lines = boundariesOf(TWO_CALLERS, "example.callers");
+        BorderAssessment first = at(lines.get("one"), "a = 100");
+        BorderAssessment second = at(lines.get("two"), "a = 100");
+
+        assertNotEquals(first.border().obligation(), second.border().obligation(),
+                "a comparison is written in a body, so each body that holds it owes its own row");
+        assertEquals(at(lines.get("one"), "a = 0").border().obligation(),
+                at(lines.get("two"), "a = 0").border().obligation(),
+                "and the clause of the type they both carry is the one row it always was");
+    }
+
+    /** One helper holding a comparison, called from two behaviors. */
+    private static final String TWO_CALLERS = """
+            module example.callers
+
+            data Amount = Int
+                invariant value >= 0
+
+            data Small
+            data Large
+            data Size = Small | Large
+
+            let band (a: Amount): Size =
+                if a.value <= 100 then Small else Large
+
+            behavior one : (a: Amount) -> Size
+            let one (a) = band(a)
+
+            behavior two : (a: Amount) -> Size
+            let two (a) = band(a)
+
+            example one
+                | "x" : (Amount(1)) -> Small
+
+            example two
+                | "y" : (Amount(1)) -> Small
+            """;
+
+    /**
+     * One {@code ensures} clause naming two positions is two debts.
+     *
+     * <p>The same pair as the clause above, on the other rule that states something about values.
+     * {@code Found -> r.a >= 5 && r.b >= 5} is one clause and two lines, and a row whose {@code a}
+     * is 5 says nothing about {@code b}. Which of the clause's comparisons drew the line is what
+     * tells them apart: everything else about the two is the same, down to the value and the
+     * carrier.
+     */
+    @Test
+    void oneEnsuresClauseNamingTwoPositionsIsTwoDebts() {
+        Map<String, BorderAssessment> lines = bordersOf(TWO_STATED, "example.stated");
+        BorderAssessment first = at(lines, "r.a = 5");
+        BorderAssessment second = at(lines, "r.b = 5");
+
+        assertEquals(first.border().obligation().provenance(),
+                second.border().obligation().provenance(), "one clause states both");
+        assertEquals(first.border().cut().at(), second.border().cut().at(),
+                "at one value of one carrier, so neither the rule nor the level tells them apart");
+        assertNotEquals(first.border().obligation(), second.border().obligation(),
+                "and which comparison of the clause drew the line does");
+    }
+
+    /** One {@code ensures} clause stating something about two of a record's numbers. */
+    private static final String TWO_STATED = """
+            module example.stated
+
+            data R = { a: Int, b: Int }
+            data Found
+            data Missing
+
+            behavior f : (r: R) -> Found | Missing
+                ensures Found -> r.a >= 5 && r.b >= 5
+            let f (r) = if r.a >= 30 * 2 then Found else Missing
+
+            example f
+                | "one" : (R { a = 1, b = 1 }) -> Missing
+            """;
 
     /** One clause bounding two numbers of the declaration it is written on. */
     private static final String TWO_NUMBERS = """
@@ -332,6 +519,15 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
         BorderAssessment line = lines.get(label);
         assertNotNull(line, () -> label + " is not a line of this model: " + lines.keySet());
         return line;
+    }
+
+    /** The line one behavior draws at {@code label}, for a caller reading the behaviors apart. */
+    private static BorderAssessment at(List<BorderAssessment> lines, String label) {
+        return lines.stream().filter(each -> each.border().label().equals(label)).findFirst()
+                .orElseGet(() -> {
+                    throw new AssertionError(label + " is not a line of this behavior: "
+                            + lines.stream().map(each -> each.border().label()).toList());
+                });
     }
 
     /** Every border of {@code module}, as the measure holds them: per behavior, and one entry per

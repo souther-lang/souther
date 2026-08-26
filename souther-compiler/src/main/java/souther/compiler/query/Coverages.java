@@ -543,14 +543,37 @@ final class Coverages {
             souther.compiler.query.Adequacy.RowReading observed,
             souther.compiler.query.Adequacy.Level level,
             ItemAssessment.WritabilityProjection projection) {
-        // Keyed by the line rather than by the reading of it. A guard inside a non-recursive helper
-        // is read once per call of that helper, and the rows do not owe the same border twice for
-        // having been offered it twice; what each reading saw is merged below.
-        java.util.SequencedMap<BoundaryLine, BorderAssessment> out = new java.util.LinkedHashMap<>();
+        // One entry per reading and not per line. A guard inside a non-recursive helper is read once
+        // per call of that helper, and the rows do not owe the same border twice for having been
+        // offered it twice — but each reading is reached under its caller's own conditions, so what
+        // a row for it may be composed out of is the reading's and is settled while the readings are
+        // still apart. They are brought together by {@link #merged}, after that.
+        List<BorderAssessment> out = new ArrayList<>();
         for (Border each : lines) {
-            out.merge(BoundaryLine.of(each), assessed(each, reading(each, where, projection),
-                            observed, level),
-                    Coverages::whicheverSawMore);
+            out.add(assessed(each, reading(each, where, projection), observed, level));
+        }
+        return List.copyOf(out);
+    }
+
+    /**
+     * The readings of one behavior's lines, one entry per line.
+     *
+     * <p>What each reading saw, kept whole: a point one reading found a row at is found, and no
+     * other reading of the line takes that back.
+     *
+     * <p><b>After everything that is a reading's own.</b> Which conditions a row has to satisfy to
+     * reach the comparison is one of those, so a search is made per reading and merged here rather
+     * than made once against whichever reading this kept. Merged first, the region a row is composed
+     * in is one reading's, chosen by the order a walk took.
+     *
+     * <p><b>And never across two debts.</b> A line holds the authored line and where it was read;
+     * a debt holds the authored line and the value it is at — so two readings under one line are one
+     * debt by construction, and a pair that is not says the two identities have come apart.
+     */
+    static List<BorderAssessment> merged(LineReadings readings) {
+        java.util.SequencedMap<BoundaryLine, BorderAssessment> out = new java.util.LinkedHashMap<>();
+        for (BorderAssessment each : readings.each()) {
+            out.merge(BoundaryLine.of(each.border()), each, Coverages::whicheverSawMore);
         }
         return List.copyOf(out.values());
     }
@@ -567,12 +590,12 @@ final class Coverages {
      * evidence, and nothing a search finds is evidence against a point — so this can add a ground and
      * can never take one away, whenever it is run and however many points it is run over.
      */
-    static List<BorderAssessment> searched(List<BorderAssessment> measured, BehaviorInputs where,
-                                           Probe probe, souther.compiler.inputs.Quantities rules,
-                                           ReachingCuts reaching) {
+    static LineReadings searched(LineReadings measured, BehaviorInputs where,
+                                 Probe probe, souther.compiler.inputs.Quantities rules,
+                                 ReachingCuts reaching) {
         LevelRealizer realizer = new LevelRealizer();
         List<BorderAssessment> out = new ArrayList<>();
-        for (BorderAssessment border : measured) {
+        for (BorderAssessment border : measured.each()) {
             OneSearchOfABorder search = searching(border.border(), where, probe, realizer,
                     regionFor(border.border(), rules, reaching));
             java.util.EnumMap<PointRole, ItemAssessment> items =
@@ -586,7 +609,7 @@ final class Coverages {
             }
             out.add(new BorderAssessment(border.border(), items));
         }
-        return List.copyOf(out);
+        return new LineReadings(out);
     }
 
     /**
@@ -966,11 +989,40 @@ final class Coverages {
      * on the whole would throw away a point the other one had.
      */
     private static BorderAssessment whicheverSawMore(BorderAssessment a, BorderAssessment b) {
+        if (!a.border().obligation().equals(b.border().obligation())) {
+            throw new IllegalStateException("two readings of one line owing different rows: "
+                    + a.border().obligation() + " and " + b.border().obligation());
+        }
         java.util.EnumMap<PointRole, ItemAssessment> kept = new java.util.EnumMap<>(PointRole.class);
         for (PointRole role : PointRole.values()) {
-            kept.put(role, rank(b.at(role)) > rank(a.at(role)) ? b.at(role) : a.at(role));
+            kept.put(role, keeps(a.at(role), b.at(role)) ? a.at(role) : b.at(role));
         }
         return new BorderAssessment(a.border(), kept);
+    }
+
+    /**
+     * Whether what the first reading saw at a point stands, rather than what the second saw.
+     *
+     * <p>What was measured first, and what was composed only where the two measured alike. A row
+     * that was found is the whole of what a point asks for; where neither reading found one, the
+     * reading that composed a row to offer has something to say that a reading which composed
+     * nothing does not, and the point is owed the same row either way.
+     *
+     * <p>Here because the search is made per reading. One search against one region has one outcome
+     * and nothing to choose between; two readings carry two, and keeping the first would drop a row
+     * an author could have been offered.
+     */
+    private static boolean keeps(ItemAssessment a, ItemAssessment b) {
+        if (rank(a) != rank(b)) {
+            return rank(a) > rank(b);
+        }
+        return composed(a) >= composed(b);
+    }
+
+    /** Whether the search of this reading's own region built a row to offer. */
+    private static int composed(ItemAssessment item) {
+        return item instanceof ItemAssessment.Owed owed
+                && owed.attempt() instanceof ItemAssessment.Attempt.Built ? 1 : 0;
     }
 
     private static int rank(ItemAssessment item) {
@@ -1048,19 +1100,16 @@ final class Coverages {
             Partitions.Partitioning partitioning, BehaviorInputs where,
             souther.compiler.query.Adequacy.RowReading observed,
             souther.compiler.query.Adequacy.Level level) {
-        // Keyed by the line the author drew, the way a line at a place is. A guard inside a
-        // non-recursive helper is read once per call of that helper, and the rows do not owe the same
-        // line twice for having been offered it twice — nor may one reading of it take back what
-        // another established.
-        java.util.SequencedMap<BoundaryLine, BorderAssessment> out = new LinkedHashMap<>();
+        // One entry per reading, the way a line at a place is read: what several readings of one
+        // line come to is one answer, and it is put together where the last thing that is a
+        // reading's own has been asked ({@link #merged}).
+        List<BorderAssessment> out = new ArrayList<>();
         for (Border each : partitioning.between()) {
-            out.merge(BoundaryLine.of(each),
-                    assessed(each, reading(each, where,
-                                    ItemAssessment.WritabilityProjection.NOT_COMPUTED),
-                            observed, level),
-                    Coverages::whicheverSawMore);
+            out.add(assessed(each, reading(each, where,
+                            ItemAssessment.WritabilityProjection.NOT_COMPUTED),
+                    observed, level));
         }
-        return List.copyOf(out.values());
+        return List.copyOf(out);
     }
 
     /** What a reading of the rows comes to, once what could not be read is accounted for. */

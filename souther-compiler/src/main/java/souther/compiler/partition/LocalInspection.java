@@ -110,14 +110,24 @@ final class LocalInspection {
             return List.of();
         }
         Map<String, Cut> byValue = new LinkedHashMap<>();
-        cut(byValue, bounds.min(), own == null ? null : own.min(), bounds.carrier(), under);
-        cut(byValue, bounds.max(), own == null ? null : own.max(), bounds.carrier(), over);
+        cut(byValue, bounds.min(), own == null ? null : own.min(), bounds.carrier(),
+                souther.compiler.numeric.Towards.ABOVE, under);
+        cut(byValue, bounds.max(), own == null ? null : own.max(), bounds.carrier(),
+                souther.compiler.numeric.Towards.BELOW, over);
         return List.copyOf(byValue.values());
     }
 
-    /** One end as a cut, owed once to each rule that put it there. */
+    /**
+     * One end as a cut, owed once to each rule that put it there.
+     *
+     * @param keeps which way the bound runs from this end, which is which of the two ends it is.
+     *              Known here because the ends are read one at a time, and nowhere below: a bound
+     *              records where it stops, and everything past this holds the range the rules leave
+     *              rather than the end that made it
+     */
     private static void cut(Map<String, Cut> into, DeclaredBounds.End end, DeclaredBounds.End own,
-                            Carrier carrier, List<TypeSymbol> within) {
+                            Carrier carrier, souther.compiler.numeric.Towards keeps,
+                            List<TypeSymbol> within) {
         if (end == null) {
             return;
         }
@@ -131,7 +141,7 @@ final class LocalInspection {
         // these declarations — which is nothing the rule says about itself.
         for (DeclaredBounds.Drawn from : end.from()) {
             put(into, carrier, end.value(),
-                    new OriginRef.InvariantOrigin(from.rule(), from.conjunct(),
+                    new OriginRef.InvariantOrigin(from.rule(), from.conjunct(), keeps,
                             end.at().inclusive()),
                     moved ? within : List.<TypeSymbol>of());
         }

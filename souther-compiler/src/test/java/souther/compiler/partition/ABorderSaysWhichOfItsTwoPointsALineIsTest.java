@@ -208,12 +208,14 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
     @Test
     void aBoundThatStopsShortOfItsLineWhereTheOrderStepsIsRefused() {
         Border kept = borderOf(
-                new OriginRef.InvariantOrigin(invariant(), THE_ONLY_CONJUNCT, true));
+                new OriginRef.InvariantOrigin(invariant(), THE_ONLY_CONJUNCT,
+                        souther.compiler.numeric.Towards.ABOVE, true));
         assertEquals("= 5", kept.demand(PointRole.ON).criterion().asked(kept.cut().of()),
                 "a bound that admits its own end is at that end's ON point");
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
-                () -> borderOf(new OriginRef.InvariantOrigin(invariant(), THE_ONLY_CONJUNCT, false)),
+                () -> borderOf(new OriginRef.InvariantOrigin(invariant(), THE_ONLY_CONJUNCT,
+                        souther.compiler.numeric.Towards.ABOVE, false)),
                 "an `Int` bounded strictly at 5 is an inclusive 6 long before it reaches a border");
         assertTrue(refused.getMessage().startsWith(
                         "a bound that stops short of its own line where the order names 6 beside it"),
@@ -247,7 +249,7 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
         Carrier carrier = new Carrier.Whole();
         OriginRef closed = new OriginRef.EnsuresOrigin(
                 new RuleRef.Ensures(new BehaviorContract.RuleId(null, 0, 0, null), "cap"),
-                true, true, false);
+                THE_ONLY_CONJUNCT, true, true, false);
         Border border = Border.at(lineAt(new AxisId("cap", "n"), carrier, Count.of(100)), closed,
                 new NumericDomain.Bounds(null, null));
 
@@ -260,7 +262,8 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
                 border.demand(PointRole.OUT).criterion().asked(border.cut().of()));
 
         // A bound owes nothing outside itself, and says which of the three answers settled it.
-        Border bound = borderOf(new OriginRef.InvariantOrigin(invariant(), THE_ONLY_CONJUNCT, true));
+        Border bound = borderOf(new OriginRef.InvariantOrigin(invariant(), THE_ONLY_CONJUNCT,
+                        souther.compiler.numeric.Towards.ABOVE, true));
         assertEquals(new Demand.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT),
                 bound.demand(PointRole.OFF));
         assertEquals(new Demand.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT),
