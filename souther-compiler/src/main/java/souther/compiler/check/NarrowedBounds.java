@@ -30,6 +30,9 @@ import java.util.function.Supplier;
  * caller standing a fixture in a coordinate's range wants only the cheap half. Nor is this a saving
  * made against the meaning: an end that loses a meet has nobody worth naming, and working the names
  * out before the ends are met is doing the arithmetic in the order that throws the answer away.
+ *
+ * <p>Comparing, hashing or printing one of these asks for the names, which is the one way to reach
+ * that work without meaning to. It is worth knowing where one of these is used as a map key.
  */
 public final class NarrowedBounds {
 
@@ -165,10 +168,17 @@ public final class NarrowedBounds {
     }
 
     /**
-     * Two of these are one where the same declarations hold the same ends.
+     * Two of these are one where they hold the same ends as written and the same declarations.
      *
-     * <p>Which asks for the names, so comparing two of these does the work they were left to do
-     * later. A caller comparing what a coordinate came to has already decided to read all of it.
+     * <p>The ends as written, and not the ends. {@link Endpoint#sameAs} is what says two ends stop a
+     * coordinate in one spot, and this is not it: {@code 3} and {@code 3.00} come back different
+     * here, because what the ends hold is what a report writes back and a caller comparing two of
+     * these is comparing what was read. Which of the two questions a reader wants is the reader's,
+     * and the one about where the coordinate stops is asked of the ends themselves.
+     *
+     * <p>This asks for the names, so comparing, hashing or printing one of these does the work the
+     * names were left to do later — the one exception to their being worked out only when they are
+     * asked for. A caller that compares what a coordinate came to has decided to read all of it.
      */
     @Override
     public boolean equals(Object other) {
