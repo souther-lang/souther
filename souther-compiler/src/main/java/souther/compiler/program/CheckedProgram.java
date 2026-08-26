@@ -43,10 +43,11 @@ import java.util.Set;
  * the declaring module says about that identity is not part of this snapshot. A call carries no
  * signature and no body.
  *
- * <p>A name does carry its fields and its cases, and it is asked with the identity rather than
- * through whoever declared it. {@link #declaration} is the whole of that: it answers what a value
- * of a data is made of, and whether the declaration is one this compile checked, one the language
- * gives, or one a module off the path declares. A reader that chose the owner first would be
+ * <p>What a name is a declaration of is asked with the identity, rather than through whoever
+ * declared it. {@link #declaration} is the whole of that: it answers what a value of a data is made
+ * of where this snapshot holds the declaration, and says the declaration is a module off the path's
+ * where it does not — so a name whose fields and cases are not here is one that says so, and not
+ * one that reads as no declaration at all. A reader that chose the owner first would be
  * deciding, of every identity it holds, which world to ask — and the reserved namespace is a world
  * with no module of the compilation in it, so the reader that chose had nothing to choose.
  *

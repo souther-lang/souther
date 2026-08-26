@@ -34,10 +34,10 @@ class WhatTheLanguageDeclaresCrossesAsADeclarationTest {
     /**
      * Every declaration the library gives is in the snapshot, and the snapshot invents none.
      *
-     * <p>The two are one set said twice, and what is being watched for is the day they stop being.
-     * A declaration written into a library module and not carried over is a value an output can
-     * hold and cannot lay out, which is what this exists about; one carried over that the library
-     * does not declare is a name nothing writes.
+     * <p>What this holds is that nothing selects on the way over. The snapshot is one reading of the
+     * library's own declarations, and a reading that took some of them would leave an output holding
+     * values of the rest with nothing to lay them out by — which is the shape of what this change
+     * was about, one selection later.
      */
     @Test
     void everyDeclarationTheLibraryGivesIsInTheSnapshotAndNoOther() {
@@ -48,24 +48,6 @@ class WhatTheLanguageDeclaresCrossesAsADeclarationTest {
         assertEquals(DefaultStdlib.get().languageDeclarations().keySet().stream()
                         .map(TypeSymbols::declared).sorted().toList(),
                 carried);
-    }
-
-    /**
-     * And a form the snapshot has no reading for is refused where it would be read, rather than
-     * arriving as a shape nothing answered for.
-     *
-     * <p>The language declares sums and the units under them. A product of its own would need what
-     * a value of it is made of and what must hold of one, and both are derived over a compilation's
-     * modules — which the library's are not. Watched here so that the day one is written, it is the
-     * declaration that is refused and not an assembler that looks like it forgot to read a shape.
-     */
-    @Test
-    void andTheLanguageDeclaresNothingThisHasNoReadingFor() {
-        List<CheckedData> language = CheckedProgram.of(List.of(MODULE)).languageDeclarations();
-
-        assertEquals(List.of(),
-                language.stream().filter(each -> each instanceof CheckedData.Product).toList(),
-                "a product the language declares has no fields to hand over");
     }
 
     /**

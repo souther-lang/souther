@@ -131,11 +131,19 @@ class AnOutputReadsWhatTheLanguageDeclaresTest {
         // Both programs, because the two arms are what this is about: one reaches a declaration the
         // language gives and the other one a dependency made, and a walk over either alone would
         // hold while the other went unanswered.
-        for (CheckedProgram program : List.of(CheckedProgram.of(List.of(ROUNDS)),
-                CheckedProgram.of(List.of(IMPORTS), (ModulePath) classes::get))) {
-            Set<TypeSymbol.AtModule> reached = everyIdentityIn(program);
-            assertFalse(reached.isEmpty(), () -> "nothing reached from " + program.modules());
-            for (TypeSymbol.AtModule named : reached) {
+        CheckedProgram language = CheckedProgram.of(List.of(ROUNDS));
+        CheckedProgram dependency =
+                CheckedProgram.of(List.of(IMPORTS), (ModulePath) classes::get);
+
+        // What each of them reaches, said out loud. A walk that quietly reached nothing would hold
+        // here exactly as one that reached everything, and the second of these is a name this
+        // compile did not check.
+        assertEquals(List.of(HALF_UP), List.copyOf(everyIdentityIn(language)));
+        assertEquals(List.of("app.bills.Receipt", "lib.money.Amount"),
+                everyIdentityIn(dependency).stream().map(TypeSymbol.AtModule::toString).toList());
+
+        for (CheckedProgram program : List.of(language, dependency)) {
+            for (TypeSymbol.AtModule named : everyIdentityIn(program)) {
                 program.declaration(named);   // answering at all is the assertion
             }
         }
@@ -262,23 +270,49 @@ class AnOutputReadsWhatTheLanguageDeclaresTest {
     }
 
     /**
-     * Every identity this program reaches: what its declarations are made of, and what its bodies
-     * name.
+     * Every identity this program reaches: what its declarations are made of, what its behaviors
+     * take and answer, and the type of every node of every body.
+     *
+     * <p>Every node and not the nodes a value is laid out at. What is being held is that nothing a
+     * reader can arrive at is a name the program will not answer for, so a walk that visited the
+     * places the answer is already known to be needed would be holding for the reader it was
+     * written from.
      */
     private static Set<TypeSymbol.AtModule> everyIdentityIn(CheckedProgram program) {
         Set<TypeSymbol.AtModule> named = new LinkedHashSet<>(everyIdentityLaidOutIn(program));
         for (CheckedModule module : program.modules()) {
             for (CheckedData declared : module.data()) {
                 named.add(declared.name());
-                if (declared instanceof CheckedData.Product product) {
-                    for (ValueShape.Field field : product.fields()) {
-                        namesIn(field.type(), named);
+                switch (declared) {
+                    case CheckedData.Product product -> {
+                        for (ValueShape.Field field : product.fields()) {
+                            namesIn(field.type(), named);
+                        }
                     }
+                    case CheckedData.Sum sum -> {
+                        for (TypeSymbol each : sum.cases()) {
+                            namesIn(each, named);
+                        }
+                    }
+                    case CheckedData.Unit _ -> { }
                 }
-                if (declared instanceof CheckedData.Sum sum) {
-                    for (TypeSymbol each : sum.cases()) {
-                        namesIn(each, named);
-                    }
+            }
+            for (CheckedBehavior behavior : module.behaviors()) {
+                for (Type takes : behavior.signature().takes()) {
+                    namesIn(takes, named);
+                }
+                namesIn(behavior.signature().answers(), named);
+            }
+            for (CheckedHelper helper : module.helpers()) {
+                for (CheckedHelper.Parameter parameter : helper.parameters()) {
+                    namesIn(parameter.type(), named);
+                }
+            }
+            for (Core body : bodiesOf(module)) {
+                List<Core> nodes = new ArrayList<>();
+                collect(body, Core.class, nodes);
+                for (Core node : nodes) {
+                    namesIn(node.type(), named);
                 }
             }
         }
@@ -319,11 +353,27 @@ class AnOutputReadsWhatTheLanguageDeclaresTest {
         return named;
     }
 
-    /** The declaration {@code type} names, where it names one. */
+    /**
+     * Every declaration {@code type} names, the ones inside a compound included.
+     *
+     * <p>Exhaustive over the sealed type rather than over the arms this test's fixtures happen to
+     * produce: a walk written to the shapes at hand holds for those shapes, and a
+     * {@code List<RoundingMode>} is as much a reader holding an identity as a bare one is.
+     */
     private static void namesIn(Type type, Set<TypeSymbol.AtModule> named) {
-        if (type instanceof Type.Ref ref) {
-            namesIn(ref.name(), named);
+        switch (type) {
+            case Type.Ref ref -> namesIn(ref.name(), named);
+            case Type.Union union -> {
+                for (TypeSymbol member : union.members()) {
+                    namesIn(member, named);
+                }
+            }
+            // A compound names no declaration itself. What it holds is reached below, by the walk
+            // that says once which positions each kind of compound has.
+            case Type.Compound _ -> { }
+            case Type.Prim _, Type.Nothing _, Type.Never _, Type.Erroneous _, Type.Open _ -> { }
         }
+        Type.forEachChild(type, child -> namesIn(child, named));
     }
 
     /** The same, of a name: what the language gives directly is no declaration and is not one of
