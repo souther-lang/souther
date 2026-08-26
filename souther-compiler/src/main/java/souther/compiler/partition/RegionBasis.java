@@ -11,7 +11,7 @@ package souther.compiler.partition;
  * <p><b>Two shapes, because a rule leaves two kinds of region.</b> A rule that orders the values
  * around its line leaves a run beside it, and the run stops somewhere ({@link Beside}). A rule that
  * names one value instead leaves everything else, which is not a run and stops nowhere
- * ({@link #THE_REST}) — a bound's far side is refused outright and an equality's is the whole of the
+ * ({@link TheRest}) — a bound's far side is refused outright and an equality's is the whole of the
  * quantity but one value.
  *
  * <p>Made where the region is, and never read back off what it came to. Which of the two a border
@@ -44,7 +44,4 @@ public sealed interface RegionBasis {
     enum TheRest implements RegionBasis {
         INSTANCE
     }
-
-    /** The one of those there is. */
-    RegionBasis THE_REST = TheRest.INSTANCE;
 }

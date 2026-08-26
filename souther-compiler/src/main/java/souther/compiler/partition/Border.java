@@ -601,14 +601,15 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, PointA
      *
      * <p>What such a row is owed for is the line and no more. A rule that names a value leaves
      * everything else, which is not a run and stops nowhere — so there is no far side to tell one
-     * of these from another, and the basis says so ({@link RegionBasis#THE_REST}) rather than
+     * of these from another, and the basis says so ({@link RegionBasis.TheRest}) rather than
      * naming an end nobody wrote.
      */
     private static PointAnswer sideOf(Criterion side, LevelSpace space,
                                       NumericDomain.Bounds within) {
         return provablyHoldsNothing(side, space, within)
                 ? new PointAnswer.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT)
-                : new PointAnswer.InRegion(side, java.util.List.of(RegionBasis.THE_REST));
+                : new PointAnswer.InRegion(side,
+                        java.util.List.of(RegionBasis.TheRest.INSTANCE));
     }
 
     /**

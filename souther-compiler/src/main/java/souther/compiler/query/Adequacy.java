@@ -3735,9 +3735,6 @@ public final class Adequacy {
                     owners.add(new DeclaredDebt.Owner(owner,
                             read(declarations, owner, symbols, policy).at()));
                 }
-                if (owners.isEmpty()) {
-                    continue;
-                }
                 out.add(new DeclaredDebt(debt, owners));
             }
             return Answer.of(List.copyOf(out));

@@ -135,7 +135,7 @@ class WhatARowAwayFromALineIsOwedForTest {
      */
     @Test
     void whatARuleNamingAValueLeavesIsOwedForTheLineAlone() {
-        assertEquals(RegionBasis.THE_REST,
+        assertEquals(RegionBasis.TheRest.INSTANCE,
                 onlyBasis(SINGLED, "example.singled", "check", "c = 5", PointRole.OUT),
                 "everything but the value the rule names, and nothing beside it");
     }

@@ -61,7 +61,7 @@ public sealed interface PointAnswer {
             // The whole of the quantity but one value is not a run and stops nowhere, so nothing
             // stands beside it. Held together with a run's ends, a reader would be told the region
             // both is and is not bounded.
-            if (bases.contains(RegionBasis.THE_REST) && bases.size() != 1) {
+            if (bases.contains(RegionBasis.TheRest.INSTANCE) && bases.size() != 1) {
                 throw new IllegalArgumentException(
                         "what a rule leaves outside the value it names is not beside anything: "
                                 + bases);

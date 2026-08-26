@@ -35,7 +35,7 @@ import java.util.Map;
  * that mistake would come out as a report asking for a row at a point some other line owns.
  */
 public record BorderObligationPointAssessment(BorderObligationPoint point, String axis,
-                                              Demand demand, ItemAssessment item,
+                                              Demand demand, ItemAssessment.Owed item,
                                               java.util.SequencedMap<Reading, BorderAssessment>
                                                       met) {
 
@@ -194,8 +194,8 @@ public record BorderObligationPointAssessment(BorderObligationPoint point, Strin
      * to undo. What it is here for is that a value at the point was built, which is evidence the
      * point exists.
      */
-    private static ItemAssessment came(PointRole role, List<BorderAssessment> readings,
-                                       Demand asked) {
+    private static ItemAssessment.Owed came(PointRole role, List<BorderAssessment> readings,
+                                            Demand asked) {
         if (asked instanceof Demand.NotOwed not) {
             throw new IllegalStateException(
                     "a point nobody is owed a row at, assessed as one that is: " + not.reason());
@@ -230,7 +230,7 @@ public record BorderObligationPointAssessment(BorderObligationPoint point, Strin
 
     /** The measured half, which a point owed a row always has. */
     public ItemAssessment.Owed owed() {
-        return (ItemAssessment.Owed) item;
+        return item;
     }
 
     /**
