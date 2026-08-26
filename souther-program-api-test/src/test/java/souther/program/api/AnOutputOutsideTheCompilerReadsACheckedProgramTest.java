@@ -4,6 +4,7 @@ import souther.compiler.Compiler;
 import souther.compiler.core.Composition;
 import souther.compiler.diag.CompileException;
 import souther.compiler.core.Core;
+import souther.compiler.core.Kernel;
 import souther.compiler.program.CheckedBehavior;
 import souther.compiler.program.CheckedData;
 import souther.compiler.program.CheckedHelper;
@@ -100,6 +101,33 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
             let shipIt (p) = Shipped { total = p.total }
 
             behavior process = classify >-> priceIt >-> shipIt
+            """;
+
+    /**
+     * A body that reaches the standard library two ways: an operation applied to arguments, and one
+     * written on its own.
+     *
+     * <p>{@code Map.empty} is declared with no parameter list, so it is a value and reaches the
+     * checker by a route of its own rather than as an application. It is a kernel all the same, and
+     * a reader outside this compiler has no way to tell which route a call was built by.
+     *
+     * <p>{@code List.map} is not among them and is not missing. The derivable layer is ordinary
+     * Souther over the kernels and expands where it is called (ADR-0028), so what a backend meets is
+     * the walk it became.
+     */
+    private static final String CALLS_THE_LIBRARY = """
+            module demo
+
+            data Tidied = { label: String, items: Int }
+
+            behavior tidy : (label: String, items: List<Int>) -> Tidied constructs Tidied
+
+            let tidy (label, items) =
+                Tidied { label = String.trim(label), items = List.length(items) }
+
+            behavior counts : (label: String) -> Map<String, Int>
+
+            let counts (label) = Map.insert(label, String.length(label), Map.empty)
             """;
 
     private static CheckedModule demo() {
@@ -452,6 +480,69 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
         assertNotNull(depth.body().type(), "what it answers, as the checker typed it");
         assertTrue(helpersCalledIn(depth.body()).contains(new ValueName.Helper("demo", "depth")),
                 "and it calls itself, which is why it is a definition of its own");
+    }
+
+    /**
+     * And a call reaching a kernel of the standard library says which kernel.
+     *
+     * <p>The operation, not a spelling of it. What is on the other side of {@code String.trim} is a
+     * decision the language made, and an output that read the alias and the name back apart would be
+     * resolving, by spelling, a name this compiler had resolved already.
+     *
+     * <p>Reached all the same, which is the shape of it: the same node still says what name the
+     * module wrote and what that name denotes, so a reader with no business emitting the operation
+     * asks what it always asked.
+     */
+    @Test
+    void aCallReachingAKernelSaysWhichKernel() {
+        CheckedProgram program = CheckedProgram.of(List.of(CALLS_THE_LIBRARY));
+        Core body = ((CheckedImplementation.Body)
+                named(program.module("demo"), "tidy").implementation()).body();
+
+        Set<Kernel> reached = new LinkedHashSet<>();
+        Set<String> named = new LinkedHashSet<>();
+        for (Core node : everyNodeOf(body)) {
+            if (node instanceof Core.Call call
+                    && call.fn() instanceof Core.Reached.OfKernel kernel) {
+                reached.add(kernel.kernel());
+                named.add(kernel.rendered());
+                assertInstanceOf(ValueName.Stdlib.class, kernel.denotes(),
+                        "what " + kernel.rendered() + " denotes");
+            }
+        }
+
+        assertEquals(Set.of(Kernel.STRING_TRIM, Kernel.LIST_LENGTH), reached,
+                "the kernels this body reaches, as the operations they are");
+        assertEquals(Set.of("String.trim", "List.length"), named,
+                "and the same nodes still say what name the module wrote");
+    }
+
+    /**
+     * And so does one written where a value goes rather than applied.
+     *
+     * <p>{@code Map.empty} takes no arguments, so it is not written as an application and is not
+     * built as one. Two routes reach a call to a name, and a rule kept by each of them is a rule one
+     * of them will be missing: what a body holds is the same node either way, and an output reading
+     * it cannot tell — and must not have to tell — which route made it.
+     */
+    @Test
+    void andSoDoesAKernelWrittenWhereAValueGoes() {
+        CheckedProgram program = CheckedProgram.of(List.of(CALLS_THE_LIBRARY));
+        Core body = ((CheckedImplementation.Body)
+                named(program.module("demo"), "counts").implementation()).body();
+
+        Set<Kernel> reached = new LinkedHashSet<>();
+        for (Core node : everyNodeOf(body)) {
+            if (node instanceof Core.Call call
+                    && call.fn() instanceof Core.Reached.OfKernel kernel) {
+                reached.add(kernel.kernel());
+            }
+        }
+
+        assertTrue(reached.contains(Kernel.MAP_EMPTY),
+                () -> "the empty map is a kernel here too, and this body reaches " + reached);
+        assertEquals(Set.of(Kernel.MAP_INSERT, Kernel.STRING_LENGTH, Kernel.MAP_EMPTY), reached,
+                "every kernel this body reaches, however it was written");
     }
 
     /** Every helper a call in {@code body} reaches, walking every node of it. */

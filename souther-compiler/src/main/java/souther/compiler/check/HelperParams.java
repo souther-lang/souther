@@ -1077,11 +1077,16 @@ final class HelperParams {
             }
             // Only a kernel's signature: a Souther-bodied library callee here is a recursive
             // helper, and those are answered above with the types their call site instantiated.
-            Stdlib.Entry entry = symbols.library().entry(fn);
-            if (entry == null || !(entry.declaration().body() instanceof Hir.FnBody.Intrinsic)) {
+            // Whether the name is a kernel is a fact about the library, asked of it and asked with
+            // the operation this call was resolved to rather than with the name it renders as.
+            if (!(call.answered().denotes() instanceof ValueName.Stdlib operation)) {
                 return null;
             }
-            return new Type.FnOf(entry.signature().params(), entry.signature().result());
+            Stdlib.Intrinsic kernel = symbols.library().intrinsicOf(operation);
+            if (kernel == null) {
+                return null;
+            }
+            return new Type.FnOf(kernel.signature().params(), kernel.signature().result());
         }
 
         private boolean isParam(Hir.Expr e, BindingId target) {

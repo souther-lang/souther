@@ -12,11 +12,11 @@ import souther.compiler.check.CheckContext;
 import souther.compiler.check.DataChecker;
 import souther.compiler.check.ReqSig;
 import souther.compiler.types.BindingId;
-import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.check.Ordering;
 import souther.compiler.core.Core;
+import souther.compiler.core.Kernel;
 import souther.compiler.core.GrowingFold;
 
 import souther.compiler.core.EnsuresEnforcement;
@@ -31,6 +31,7 @@ import java.lang.constant.ConstantDescs;
 import java.lang.constant.MethodTypeDesc;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -1142,53 +1143,76 @@ final class BodyGen {
             emitFunctionValue(value, paramTypes);
         }
 
-        private void call(Core.Call call, Type expected) {
-            // An enumeration's order lives on its sum, so the ordered family takes it as a comparator
-            // rather than reading a Comparable off the value (issue #161). Everything else about
-            // these is what their declaration says, so only this prefix is written out here.
-            if (ORDERED_BY_COMPARATOR.contains(call.name())) {
-                TypeSymbol ordering = elementOrdering(call.args().get(0));
-                if (ordering != null) {
+        /**
+         * Emits a call to a kernel.
+         *
+         * <p>What is written here is what a table row cannot say, and it is of two kinds. An
+         * enumeration's order lives on its sum, so the ordered family is handed a comparator rather
+         * than reading a {@code Comparable} off the value (issue #161) — the arm puts the comparator
+         * on the stack and the row still says what is called with it. A partial Int division answers
+         * a case rather than a number when its divisor is zero, so it emits a branch, which the row
+         * shape of one call with one result has nowhere to put; those two are the whole of what this
+         * emits itself, and {@code WRITTEN_OUT} is where they are named. {@code Decimal.divide} was
+         * a third: it is an ordinary kernel now, and its zero divisor is answered by the runtime
+         * that owns the operation (ADR-0112).
+         *
+         * <p>An ordered arm falls through to the table where its own condition does not hold — an
+         * element the JVM already compares, a {@code sortBy} whose key answers something with no sum
+         * to take an ordering off. What no arm and no row answers is this backend being behind the
+         * library, which {@link Intrinsics#emit} says.
+         */
+        private void kernel(Kernel kernel, Core.Call call) {
+            switch (kernel) {
+                case LIST_SORT, LIST_MAX, LIST_MIN -> {
+                    TypeSymbol ordering = elementOrdering(call.args().get(0));
+                    if (ordering == null) {
+                        break;
+                    }
                     code.invokestatic(cd(ordering), ORDERING_METHOD, MTD_ordering, true);
-                    genExpr(call.args().get(0));
-                    String bare = operationOf(call);
-                    code.invokestatic(CD_Lists, bare, MethodTypeDesc.of(
-                            bare.equals("sort") ? CD_List : CD_Option, CD_Comparator, CD_List));
+                    Intrinsics.emitWithComparator(this, kernel,
+                            List.of(genExpr(call.args().get(0))));
                     return;
                 }
-            }
-            // `sortBy` orders by what its key answers, not by what the list holds, so its comparator
-            // is read off the key's result type.
-            if ("List.sortBy".equals(call.name())
-                    && call.args().get(0).type() instanceof Type.FnOf key
-                    && sumOrdering(key.result()) instanceof TypeSymbol ordering) {
-                code.invokestatic(cd(ordering), ORDERING_METHOD, MTD_ordering, true);
-                emitFunctionValue(call.args().get(0),
-                        List.of(((Type.ListOf) call.args().get(1).type()).element()));
-                genExpr(call.args().get(1));
-                code.invokestatic(CD_Lists, "sortBy",
-                        MethodTypeDesc.of(CD_List, CD_Comparator, CD_Fn, CD_List));
-                return;
-            }
-            // A partial Int division answers a case rather than a number when its divisor is zero,
-            // so it emits a branch. The table's row shape is one call with one result; these two are
-            // written out here, and their declarations still say what they take and answer.
-            // `Decimal.divide` was a third: it is an ordinary kernel now, and its zero divisor is
-            // answered by the runtime that owns the operation (ADR-0112).
-            switch (call.name()) {
-                case "Int.divide" -> {
+                // `sortBy` orders by what its key answers, not by what the list holds, so its
+                // comparator is read off the key's result type.
+                case LIST_SORT_BY -> {
+                    if (!(call.args().get(0).type() instanceof Type.FnOf key)
+                            || !(sumOrdering(key.result()) instanceof TypeSymbol ordering)) {
+                        break;
+                    }
+                    code.invokestatic(cd(ordering), ORDERING_METHOD, MTD_ordering, true);
+                    emitFunctionValue(call.args().get(0),
+                            List.of(((Type.ListOf) call.args().get(1).type()).element()));
+                    Intrinsics.emitWithComparator(this, kernel,
+                            List.of(key, genExpr(call.args().get(1))));
+                    return;
+                }
+                case INT_DIVIDE -> {
                     intDivide(call, true);
                     return;
                 }
-                case "Int.truncatingRemainder" -> {
+                case INT_TRUNCATING_REMAINDER -> {
                     intDivide(call, false);
                     return;
                 }
                 default -> { }
             }
-            Stdlib.Entry entry = ctx.library().entry(call.name());
-            if (entry != null && entry.declaration().body() instanceof Hir.FnBody.Intrinsic kernel) {
-                Intrinsics.emit(this, kernel.key(), call);
+            Intrinsics.emit(this, kernel, call);
+        }
+
+        /** The kernels this emits itself, which are the kernels {@link Intrinsics}' table has no row
+         *  for. Named rather than left to be read off the arms above, so the two sets can be held
+         *  apart: a kernel emitted here and held there too would be one operation with two answers,
+         *  and the one that ran would be whichever the arm above happened to reach first. */
+        static final Set<Kernel> WRITTEN_OUT =
+                EnumSet.of(Kernel.INT_DIVIDE, Kernel.INT_TRUNCATING_REMAINDER);
+
+        private void call(Core.Call call, Type expected) {
+            // Which kernel a call reaches is on the call, so what is emitted for one is asked of
+            // the operation. Matched against the rendered reach name instead, these arms would turn
+            // on the alias the library publishes the operation under.
+            if (call.fn() instanceof Core.Reached.OfKernel(_, _, Kernel kernel)) {
+                kernel(kernel, call);
                 return;
             }
             if (call.fn() == Core.Emitted.BUILD_LIST) {
@@ -1456,13 +1480,6 @@ final class BodyGen {
         /** The self-hosted walk of {@code souther.list}: a recursive helper everywhere else, and the
          *  loop every fold in a program is, which is why the emitter knows its name. */
         private static final String FOLD = "List.foldFrom";
-
-        /** The operation a library call names ({@code List.max} → {@code max}) — read off the
-         * name, which holds the library's alias and the operation as two values. */
-        private static String operationOf(Core.Call call) {
-            Core.Reached reached = (Core.Reached) call.fn();
-            return ((ReachName.OfLibrary) reached.name()).target().name();
-        }
 
         /**
          * {@code divide}/{@code remainder} on Int: a zero divisor takes the DivisionByZero case,

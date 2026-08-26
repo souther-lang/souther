@@ -112,6 +112,7 @@ class WhatANameIsAboutIsWhatItWasGivenIsAboutTest {
     }
 
     private static Core answer() {
-        return new Core.Call(ReachName.of(FIND, "findIt", "demo"), FIND, List.of(), Type.INT, POS);
+        return new Core.Call(new Core.Reached.OfDeclaration(
+                ReachName.of(FIND, "findIt", "demo"), FIND), List.of(), Type.INT, POS);
     }
 }

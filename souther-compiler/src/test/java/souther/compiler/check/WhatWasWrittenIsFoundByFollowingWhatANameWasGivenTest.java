@@ -99,7 +99,8 @@ class WhatWasWrittenIsFoundByFollowingWhatANameWasGivenTest {
     /** And an arm opening an answer opens nothing written, however the arm was entered. */
     @Test
     void anArmOpeningAnAnswerOpensNoText() {
-        Core answer = new Core.Call(ReachName.of(FIND, "findIt", "demo"), FIND, List.of(),
+        Core answer = new Core.Call(new Core.Reached.OfDeclaration(
+                ReachName.of(FIND, "findIt", "demo"), FIND), List.of(),
                 Type.ref(FOUND), POS);
         Core.Binder x = CoreBinders.of(binders.binder("x", POS));
 

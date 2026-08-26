@@ -1,6 +1,7 @@
 package souther.compiler.codegen;
 
 import souther.compiler.Compiler;
+import souther.compiler.core.Kernel;
 
 import org.junit.jupiter.api.Test;
 
@@ -136,14 +137,16 @@ class DecimalArithmeticIsTheRunTimesAndNotTheBackendsTest {
     void everyDecimalKernelIsOneEmitterOwnedByTheDecimalRunTime() {
         List<String> otherwise = new ArrayList<>();
         Set<String> seen = new LinkedHashSet<>();
-        for (Map.Entry<String, Intrinsics.Emit> row : Intrinsics.emitters().entrySet()) {
-            if (!row.getKey().startsWith("decimal.")) {
+        // By the module that declares them, which is what a kernel's key spells. The question here
+        // is about one module of the library, not about which operation a call reaches.
+        for (Map.Entry<Kernel, Intrinsics.Emit> row : Intrinsics.emitters().entrySet()) {
+            if (!row.getKey().key().startsWith("decimal.")) {
                 continue;
             }
-            seen.add(row.getKey());
+            seen.add(row.getKey().key());
             if (!(row.getValue() instanceof Intrinsics.DeclaredStatic kernel)
                     || !Descriptors.CD_DecimalMath.equals(kernel.owner())) {
-                otherwise.add(row.getKey() + " is emitted as " + row.getValue());
+                otherwise.add(row.getKey().key() + " is emitted as " + row.getValue());
             }
         }
 

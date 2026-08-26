@@ -1,6 +1,5 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Hir;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.semantics.ArgumentRef;
 import souther.compiler.semantics.NumericResult;
@@ -116,6 +115,7 @@ final class NumericReadings {
     private static List<NumericReading> readingsOf(Stdlib stdlib,
             List<OperationFacts.Declared> declared, ValueName operation) {
         Stdlib.Entry entry = DischargeRules.holdTheOperationToTheLibrary(stdlib, operation);
+        ValueName.Stdlib named = DischargeRules.theLibraryOperation(operation);
         if (NumericAnswers.in(entry.signature().result()) == null) {
             return List.of();
         }
@@ -164,7 +164,9 @@ final class NumericReadings {
         List<NumericReading> found = new ArrayList<>(terms);
         found.addAll(forms);
         found.addAll(arithmetic);
-        if (!(entry.declaration().body() instanceof Hir.FnBody.Intrinsic)) {
+        // Whether the operation is a kernel is a fact about the library and is asked of it, rather
+        // than read off the body of the declaration behind the name.
+        if (stdlib.intrinsicOf(named) == null) {
             found.add(new NumericReading.ByTheBodyTheLanguageWritesOut());
         }
         return List.copyOf(found);

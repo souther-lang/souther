@@ -49,7 +49,7 @@ class KernelDescriptorsComeFromDeclarationsTest {
                 }
                 Type param = declared.params().get(i);
                 if (!fixesItsOwnBoundaryForm(param)) {
-                    readOffTheCall.add(entry.getKey() + " parameter " + (i + 1)
+                    readOffTheCall.add(entry.getKey().key() + " parameter " + (i + 1)
                             + " is declared " + Type.show(param));
                 }
             }
