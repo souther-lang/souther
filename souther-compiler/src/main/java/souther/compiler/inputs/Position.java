@@ -1,6 +1,7 @@
 package souther.compiler.inputs;
 
 import souther.compiler.check.DeclaredBounds;
+import souther.compiler.check.NarrowedBounds;
 import souther.compiler.check.ProjectionEvidence;
 import souther.compiler.check.TypeView;
 import souther.compiler.numeric.NumericDomain;
@@ -51,8 +52,15 @@ public sealed interface Position permits ReadPosition {
     /** Where the position's own type says its values stop, with the declarations that said so. */
     DeclaredBounds.Bounds ownEnds();
 
-    /** What the value the position sits in projects onto it, or null where it projects nothing. */
-    NumericDomain.Bounds narrowedEnds();
+    /**
+     * What the value the position sits in projects onto it, and which declarations hold each end.
+     *
+     * <p>One answer. Which declarations hold an end is worked out against that end by taking their
+     * clauses away, so it is true of that number and of no other — and a position under a case is
+     * read by two values whose ends are met here. Answered apart, the names came back from a reading
+     * whose end lies further out than the one the position stops at.
+     */
+    NarrowedBounds narrowedEnds();
 
     /**
      * Where this position stops once every rule reaching the value it sits in has been taken in.
@@ -64,10 +72,6 @@ public sealed interface Position permits ReadPosition {
      * an end is not a clause that read the ones written beside it.
      */
     NumericDomain.Bounds rangeLeft();
-
-    /** Which declarations' clauses are holding the end on the side asked for. A declaration a module
-     *  wrote, because a clause is written on one. */
-    List<TypeSymbol.AtModule> narrowedBy(boolean lower);
 
     /** Whether the rules of the value this position sits in contradict, so that no value of it
      *  exists to have positions at all. */

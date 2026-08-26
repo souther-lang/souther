@@ -1,6 +1,7 @@
 package souther.compiler.inputs;
 
 import souther.compiler.check.DeclaredBounds;
+import souther.compiler.check.NarrowedBounds;
 import souther.compiler.check.ProjectionEvidence;
 import souther.compiler.check.TypeView;
 import souther.compiler.numeric.NumericDomain;
@@ -31,9 +32,8 @@ import java.util.Set;
  */
 record ReadPosition(TermPath path, TypeView view, NumericTerm term,
                     NumericDomain.Bounds numericDomain, DeclaredBounds.Bounds ownEnds,
-                    NumericDomain.Bounds narrowedEnds, NumericDomain.Bounds rangeLeft,
-                    List<TypeSymbol.AtModule> narrowedLower,
-                    List<TypeSymbol.AtModule> narrowedUpper, boolean nothingExists,
+                    NarrowedBounds narrowedEnds, NumericDomain.Bounds rangeLeft,
+                    boolean nothingExists,
                     ProjectionEvidence projection, List<Case> declared, ReadingResult reading,
                     ObligationDomain obligations, AdmissibleSet.Completeness completeness,
                     BlockReason.ReadingStopReason valuesUnread,
@@ -43,8 +43,6 @@ record ReadPosition(TermPath path, TypeView view, NumericTerm term,
                     StructuralInspection structure) implements Position {
 
     ReadPosition {
-        narrowedLower = List.copyOf(narrowedLower);
-        narrowedUpper = List.copyOf(narrowedUpper);
         declared = List.copyOf(declared);
         rulesWithoutALine = List.copyOf(rulesWithoutALine);
         unansweredQuestions = List.copyOf(unansweredQuestions);
@@ -56,11 +54,6 @@ record ReadPosition(TermPath path, TypeView view, NumericTerm term,
     @Override
     public Type type() {
         return view.declared();
-    }
-
-    @Override
-    public List<TypeSymbol.AtModule> narrowedBy(boolean lower) {
-        return lower ? narrowedLower : narrowedUpper;
     }
 
     /**

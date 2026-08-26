@@ -78,7 +78,7 @@ class WhichRuleHoldsAnEndIsAskedOfTheRuleAndNotOfWhereItIsReadTest {
      */
     @Test
     void aSpreadRuleIsHeldByTheDeclarationThatWroteIt() {
-        List<String> holding = reading().narrowedBy("hi", true).stream()
+        List<String> holding = reading().at("hi").minBy().stream()
                 .map(TypeSymbol::name)
                 .toList();
 

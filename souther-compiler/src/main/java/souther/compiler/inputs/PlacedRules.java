@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.check.FieldDomains;
+import souther.compiler.check.NarrowedBounds;
 import souther.compiler.check.Owed;
 import souther.compiler.check.RuleAccounting;
 import souther.compiler.check.ProjectionEvidence;
@@ -180,17 +181,19 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      * read here relate the fields of a record ({@link TermPath#fieldKey}), and neither of those is
      * one of them.
      */
-    NumericDomain.Bounds at(TermPath path) {
+    NarrowedBounds at(TermPath path) {
         String where = keyOf(path);
-        NumericDomain.Bounds here =
-                where == null || where.isEmpty() ? null : bounds().at(where);
+        NarrowedBounds here = where == null || where.isEmpty() ? NarrowedBounds.NOTHING
+                : bounds().at(where);
         TermPath above = alsoAt(path);
         if (above == null) {
             return here;
         }
-        // Both values state something about the one position, so what is left is what both leave.
-        NumericDomain.Bounds outer = alsoReaching.outer().at(above);
-        return here == null ? outer : outer == null ? here : here.meet(outer);
+        // Both values state something about the one position, so what is left is what both leave —
+        // and which declarations are holding it follows the end that survived, which is why the two
+        // meet as one value. Met apart, the reading whose end lies further out kept its names, and
+        // an author was sent to a clause that moved this end nowhere.
+        return here.meet(alsoReaching.outer().at(above));
     }
 
     /**
@@ -438,26 +441,6 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
         }
         List<FieldDomains.NoLine> out = new ArrayList<>(here);
         out.addAll(alsoReaching.outer().noLineAt(above));
-        return List.copyOf(out);
-    }
-
-    /** Which declarations' clauses are holding the end at {@code path}, on the side asked for. */
-    List<TypeSymbol.AtModule> narrowedBy(TermPath path, boolean lower) {
-        String where = keyOf(path);
-        List<TypeSymbol.AtModule> here =
-                where == null || where.isEmpty() ? List.of() : bounds().narrowedBy(where, lower);
-        TermPath above = alsoAt(path);
-        if (above == null) {
-            return here;
-        }
-        // The declaration that wrote the clause, whichever value the reading came through. Which is
-        // the whole point of asking both: an end held by a clause of the value above is held by that
-        // declaration, and naming the case instead would send an author to a declaration that says
-        // nothing about it.
-        List<TypeSymbol.AtModule> out = new ArrayList<>(here);
-        alsoReaching.outer().narrowedBy(above, lower).stream()
-                .filter(each -> !out.contains(each))
-                .forEach(out::add);
         return List.copyOf(out);
     }
 

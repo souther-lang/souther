@@ -41,7 +41,8 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
         return FieldDomains.of(named, data, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
     }
 
-    private static void assertBounds(NumericDomain.Bounds bounds, long min, long max) {
+    private static void assertBounds(NarrowedBounds narrowed, long min, long max) {
+        NumericDomain.Bounds bounds = narrowed.bounds();
         assertNotNull(bounds, "nothing bounds this field");
         assertEquals(0, BigDecimal.valueOf(min).compareTo(souther.compiler.numeric.Count.number(bounds.min().at()).at()),
                 "min was " + bounds.min());
@@ -137,10 +138,11 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
 
         assertBounds(domains.at("low"), 0, 1);
         assertBounds(domains.at("high"), 0, 1);
-        assertTrue(domains.at("low").min().inclusive(), "a low of 0 needs no room under it");
-        assertFalse(domains.at("low").max().inclusive(), "a low of 1 leaves no room above it");
-        assertFalse(domains.at("high").min().inclusive(), "nor a high of 0 below it");
-        assertTrue(domains.at("high").max().inclusive(), "and a high of 1 needs none");
+        assertTrue(domains.at("low").bounds().min().inclusive(), "a low of 0 needs no room under it");
+        assertFalse(domains.at("low").bounds().max().inclusive(),
+                "a low of 1 leaves no room above it");
+        assertFalse(domains.at("high").bounds().min().inclusive(), "nor a high of 0 below it");
+        assertTrue(domains.at("high").bounds().max().inclusive(), "and a high of 1 needs none");
         assertTrue(domains.projection().isCertified(), "and every rule of the record was taken into these");
     }
 
@@ -246,8 +248,9 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                     }
                 """, "Entry");
 
-        assertNull(domains.at("note"), "a string has no numbers to bound");
-        assertNull(domains.at("count"), "an Int the model draws no line through is unbounded");
+        assertNull(domains.at("note").bounds(), "a string has no numbers to bound");
+        assertNull(domains.at("count").bounds(),
+                "an Int the model draws no line through is unbounded");
     }
 
     /**
@@ -312,7 +315,9 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
 
         assertTrue(domains.projection().isCertified(),
                 "the rule is `value >= 0.0m` wherever it is declared");
-        assertEquals(0, BigDecimal.ZERO.compareTo(souther.compiler.numeric.Count.number(domains.at("total").min().at()).at()),
+        assertEquals(0, BigDecimal.ZERO.compareTo(
+                        souther.compiler.numeric.Count.number(
+                                domains.at("total").bounds().min().at()).at()),
                 "and it reaches the domain from there too");
     }
 
@@ -515,6 +520,6 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
     /** A newtype has no siblings, so there is nothing here to project. */
     @Test
     void aNewtypeHasNothingToProjectOnto() {
-        assertNull(domainsIn(TIMESHEET, "MinuteOfDay").at("value"));
+        assertNull(domainsIn(TIMESHEET, "MinuteOfDay").at("value").bounds());
     }
 }

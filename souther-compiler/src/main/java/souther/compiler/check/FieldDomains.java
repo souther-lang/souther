@@ -467,7 +467,7 @@ public final class FieldDomains {
      * differences and clauses can reach an end only together — and where it cannot, the set is what
      * is known and is handed over as it is.
      */
-    public List<TypeSymbol.AtModule> narrowedBy(String path, boolean lower) {
+    private List<TypeSymbol.AtModule> narrowedBy(String path, boolean lower) {
         List<TypeSymbol.AtModule> candidates = narrowers.get(path);
         if (candidates == null || candidates.isEmpty()) {
             return List.of();
@@ -524,9 +524,24 @@ public final class FieldDomains {
         return bounds == null ? null : lower ? bounds.min() : bounds.max();
     }
 
-    /** Whether {@code end} is where {@code other} leaves this coordinate on the side asked for. */
+    /**
+     * Whether {@code end} is where {@code other} leaves this coordinate on the side asked for.
+     *
+     * <p>Whether the end moved, which is a question about where the coordinate stops and not about
+     * what the two readings hold: {@link Endpoint#sameAs} and not a derived equality. The two are
+     * different questions here and not two spellings of one — a decimal's scale says which grid a
+     * quantity was rounded onto, so the layer these ends come from keeps representations apart where
+     * they carry something, and {@code 5} and {@code 5.00} are one place held two ways.
+     *
+     * <p>So this does not rest on every end arriving here already written the one way. Nothing
+     * states that, and the reading below is under no obligation to make it true.
+     *
+     * <p>An end neither reading has is the same absence, which is why a null on both sides is true
+     * here and is not {@link Endpoint#sameAs}'s answer: that one is asked of an end that is there.
+     */
     private boolean ends(Endpoint end, FieldDomains other, String path, boolean lower) {
-        return java.util.Objects.equals(end, endOf(other, path, lower));
+        Endpoint theirs = endOf(other, path, lower);
+        return end == null ? theirs == null : end.sameAs(theirs);
     }
 
     /** This value read again without the clauses of the declarations {@code skip} names. */
@@ -1066,15 +1081,27 @@ public final class FieldDomains {
     }
 
     /**
-     * What the position at {@code path} can hold, or {@code null} where nothing bounds it either way.
+     * What the position at {@code path} can hold, with the declarations holding each end.
      *
      * <p>{@code path} is read from the value these are of: {@code startsAt} for a field, and
      * {@code interval.startsAt} for a field of a field. A clause on the outer record relates
      * positions at any depth it can name, so what it leaves them is read at the depth it left it at
      * rather than at the record each of them happens to sit in.
+     *
+     * <p>The ends and the names together, because which declaration holds an end is worked out
+     * against that end and is true of no other ({@link NarrowedBounds}). Handed out apart, a caller
+     * meeting these with another reading's kept both sets of names and one of the two ends.
+     *
      */
-    public NumericDomain.Bounds at(String path) {
-        return byField.get(path);
+    public NarrowedBounds at(String path) {
+        NumericDomain.Bounds here = byField.get(path);
+        // The ends now and the names when they are asked for. Answering who holds an end reads this
+        // declaration again once per candidate that wrote a relation about the coordinate, and the
+        // callers standing a fixture in a field's range ask a field at a time and read only the
+        // ends.
+        return here == null ? NarrowedBounds.NOTHING
+                : NarrowedBounds.deferred(here,
+                        () -> narrowedBy(path, true), () -> narrowedBy(path, false));
     }
 
     /**

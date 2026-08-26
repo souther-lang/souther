@@ -123,7 +123,7 @@ class AFieldsFloorIsTheRecordsRuleAboutWhatItHoldsTest {
         assertNotNull(domains.at("n"), "a number is bounded as the value it is");
         assertNull(domains.heldAt("n"), "and nothing counts what a number holds");
         assertNotNull(domains.heldAt("xs"), "a list is bounded by how much of it there is");
-        assertNull(domains.at("xs"), "and a list is no number to bound");
+        assertNull(domains.at("xs").bounds(), "and a list is no number to bound");
     }
 
 }

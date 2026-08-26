@@ -901,7 +901,8 @@ public final class Partitions {
                 // (issue #1084).
                 out.add(new Axis(id, term, position.type(), divided.classes(),
                         divided.cuts().cuts(), List.of(),
-                        new NarrowedEnds(position.narrowedBy(true), position.narrowedBy(false)),
+                        new NarrowedEnds(position.narrowedEnds().minBy(),
+                                position.narrowedEnds().maxBy()),
                         ReadingResidue.of(position), null, null));
             }
             // Nothing local divides the position, which is what licenses asking what it is made of.
@@ -1130,7 +1131,7 @@ public final class Partitions {
         Map<String, FixtureTemplate> chosen = new LinkedHashMap<>();
         for (Map.Entry<String, Type> field : fields.entrySet()) {
             List<FixtureTemplate> stands = representativesHolding(field.getValue(), symbols,
-                    policy, left.at(field.getKey()), left.heldAt(field.getKey()), inside);
+                    policy, left.at(field.getKey()).bounds(), left.heldAt(field.getKey()), inside);
             if (stands.isEmpty()) {
                 return List.of();
             }

@@ -11,6 +11,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
 import souther.compiler.query.Scopes;
 import souther.compiler.query.Shapes;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
 import java.util.Map;
@@ -69,6 +70,94 @@ class AClauseAboveASumIsReadAtTheFieldItIsAboutTest {
                     String.valueOf(at.ownEnds()),
                     "the clause draws the end it draws, wherever the reading came through");
         }
+    }
+
+    /**
+     * The declaration whose relation is holding the end is named under each case.
+     *
+     * <p>A clause comparing two coordinates of the value above draws no end of its own; where it
+     * stops the shared field is what the coordinate it compares against stops at, carried across.
+     * So the declaration to send an author to is the one that wrote the relation, and the case the
+     * reading came through has no clause about the pair at all.
+     */
+    @Test
+    void theDeclarationHoldingAnEndAboveIsNamedUnderEachCase() {
+        String model = """
+                module g
+
+                data Paging = { limit: Int }
+                data A = { ...Paging, x: Int }
+                data B = { ...Paging, y: Int }
+                data Q = A | B
+
+                data Holder = { q: HELD, cap: Int }
+                    invariant capped = cap <= 10
+                    invariant fits = q.limit <= cap
+
+                data Ok
+
+                behavior read : (h: Holder) -> Ok
+                """;
+
+        List<String> underTheRecord = holdingTheCeiling(reading(model.replace("HELD", "A"))
+                .at(TermPath.of("h").then("q").then("limit")));
+        assertEquals(List.of("Holder"), underTheRecord,
+                "the relation `Holder` wrote is what stops the field, with no sum in the way");
+
+        InputDomain sum = reading(model.replace("HELD", "Q"));
+        for (String each : List.of("A", "B")) {
+            assertEquals(underTheRecord, holdingTheCeiling(sum.at(TermPath.of("h").then("q")
+                            .refine(caseNamed(sum, each)).then("limit"))),
+                    () -> "and the same declaration holds it under case " + each);
+        }
+    }
+
+    /**
+     * A case that stops the shared field short of where the value above does holds that end alone.
+     *
+     * <p>Two readings of one position, each asked over its own rules, and each answers about the end
+     * it arrived at. So the value above is holding an end this position does not stop at, and the
+     * case's own is what a report sends an author to. Kept as two answers and put back together
+     * afterwards, both were named — and `Holder`'s clause admits every value the field stops short
+     * of.
+     */
+    @Test
+    void aCaseThatStopsTheFieldShorterThanTheValueAboveHoldsThatEndAlone() {
+        InputDomain sum = reading("""
+                module g
+
+                data Paging = { limit: Int }
+                data A = { ...Paging, x: Int, own: Int }
+                    invariant tight = limit <= own
+                    invariant ownCap = own <= 3
+                data B = { ...Paging, y: Int }
+                data Q = A | B
+
+                data Holder = { q: Q, cap: Int }
+                    invariant capped = cap <= 10
+                    invariant fits = q.limit <= cap
+
+                data Ok
+
+                behavior read : (h: Holder) -> Ok
+                """);
+
+        Position underA = sum.at(TermPath.of("h").then("q")
+                .refine(caseNamed(sum, "A")).then("limit"));
+        assertEquals("3", String.valueOf(underA.narrowedEnds().bounds().max().at()),
+                "`A` stops the field at three and `Holder` at ten");
+        assertEquals(List.of("A"), holdingTheCeiling(underA),
+                "so `A` is holding it, and `Holder` moved this end nowhere");
+
+        Position underB = sum.at(TermPath.of("h").then("q")
+                .refine(caseNamed(sum, "B")).then("limit"));
+        assertEquals(List.of("Holder"), holdingTheCeiling(underB),
+                "and under the case that says nothing about it, the value above is holding it");
+    }
+
+    /** The declarations whose clauses are holding this position's ceiling, named. */
+    private static List<String> holdingTheCeiling(Position at) {
+        return at.narrowedEnds().maxBy().stream().map(TypeSymbol::name).toList();
     }
 
     /**

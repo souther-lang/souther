@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
 import souther.compiler.check.DeclaredBounds;
+import souther.compiler.check.NarrowedBounds;
 import souther.compiler.check.Symbols;
 import souther.compiler.inputs.Position;
 import souther.compiler.numeric.Endpoint;
@@ -41,8 +42,7 @@ final class LocalInspection {
         DeclaredBounds.Bounds axis = position.nothingExists() ? null
                 : axisBounds(position.ownEnds(), position.rangeLeft());
         List<Cut> cuts = position.nothingExists() ? List.of()
-                : cutsOf(axis, position.ownEnds(),
-                        position.narrowedBy(true), position.narrowedBy(false));
+                : cutsOf(axis, position.ownEnds(), position.narrowedEnds());
         if (classes.isEmpty() && cuts.isEmpty()) {
             // Nothing divides the position, and what may be concluded from that is what the reading
             // knows about itself. A set of values arrived at from part of the rules names no
@@ -94,16 +94,19 @@ final class LocalInspection {
     /**
      * The cuts of a position whose range is already settled.
      *
-     * @param bounds where the position stops, the record it sits in taken into account
-     * @param own    where its own type stops, so that an end the record moved can say so
-     * @param under  the declarations holding the lower end, and {@code over} those holding the
-     *               upper. Per end because they are separate answers: one declaration can be holding
-     *               a minimum while another holds the maximum, and one slot for both names the wrong
-     *               one for at least one of them
+     * @param bounds   where the position stops, the record it sits in taken into account
+     * @param own      where its own type stops, so that an end the record moved can say so
+     * @param narrowed what the value this sits in leaves the position, and who is holding each end
+     *                 of that. Read per end because they are separate answers: one declaration can
+     *                 be holding a minimum while another holds the maximum, and one slot for both
+     *                 names the wrong one for at least one of them. Not the ends {@code bounds}
+     *                 carries — those are what the position's own type stops at, taken in to where
+     *                 every rule reaching it leaves it, and these names were worked out against what
+     *                 the value it sits in projects. Whether a name may be carried from the one to
+     *                 the other is what {@code moved} below decides
      */
     private static List<Cut> cutsOf(DeclaredBounds.Bounds bounds, DeclaredBounds.Bounds own,
-                                    List<TypeSymbol.AtModule> under,
-                                    List<TypeSymbol.AtModule> over) {
+                                    NarrowedBounds narrowed) {
         // Nothing about the shape of the position's type. An end is here because some clause placed
         // it, and a clause naming a field of a record places one on a bare `Int` and on the length
         // of a bare `List<Int>` as readily as on a newtype over either.
@@ -112,9 +115,9 @@ final class LocalInspection {
         }
         Map<String, Cut> byValue = new LinkedHashMap<>();
         cut(byValue, bounds.min(), own == null ? null : own.min(), bounds.carrier(),
-                souther.compiler.numeric.Towards.ABOVE, under);
+                souther.compiler.numeric.Towards.ABOVE, narrowed.minBy());
         cut(byValue, bounds.max(), own == null ? null : own.max(), bounds.carrier(),
-                souther.compiler.numeric.Towards.BELOW, over);
+                souther.compiler.numeric.Towards.BELOW, narrowed.maxBy());
         return List.copyOf(byValue.values());
     }
 
@@ -134,8 +137,9 @@ final class LocalInspection {
         }
         // Taken in, which a record can do by moving the end or by taking away the value it stops
         // at. `low < high` under one `[0, 1]` leaves `low` the same 1 and no longer holding it, and
-        // that is the record's doing as much as a smaller number would have been.
-        boolean moved = own != null && !own.at().equals(end.at());
+        // that is the record's doing as much as a smaller number would have been — so this asks
+        // whether the two are the same end, which is where a range stops and not what an end holds.
+        boolean moved = own != null && !own.at().sameAs(end.at());
         // Wrapped here, and this is not a consumer settling what a rule is: which rule drew the end
         // was settled where the clause was read and arrives as it was. What is added is a
         // boundary's own answer about that rule — that a reading of it drew this cut, taken in by
