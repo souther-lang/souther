@@ -82,13 +82,9 @@ public sealed interface BandEnd {
         };
     }
 
-    /** Where the values part here and what wrote the lines, or null where nothing parts them and
-     *  the run stops for another reason. */
-    default Parting parting() {
-        return this instanceof AtParting parted ? parted.parting() : null;
-    }
-
-    /** The same place as the quantity's own answer about it, or null on the same reading. */
+    /** Where the values part here, or null where nothing parts them and the run stops for another
+     *  reason. The quantity's own answer: which lines the model wrote there is the shape's
+     *  ({@link AtParting#parting}), and nothing asks it until a run is owed to one of them. */
     default Seam seam() {
         return this instanceof AtParting parted ? parted.parting().geometry() : null;
     }

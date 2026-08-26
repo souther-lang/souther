@@ -101,14 +101,30 @@ public record Band(BandEnd lower, BandEnd upper) {
      * is named after the line an author wrote and not after the value beside it.
      */
     public souther.compiler.numeric.Endpoint lineBelow(souther.compiler.numeric.Endpoint leaves) {
-        Seam parted = lower.seam();
-        return parted == null ? leaves : asAnEnd(parted, Towards.ABOVE);
+        return lineAt(lower, Towards.ABOVE, leaves);
     }
 
     /** The line above it, on the same reading. */
     public souther.compiler.numeric.Endpoint lineAbove(souther.compiler.numeric.Endpoint leaves) {
-        Seam parted = upper.seam();
-        return parted == null ? leaves : asAnEnd(parted, Towards.BELOW);
+        return lineAt(upper, Towards.BELOW, leaves);
+    }
+
+    /**
+     * One end of the run as an end of the position's counts.
+     *
+     * <p>{@code leaves} is what the rules leave the quantity, for a run built without being told —
+     * an arrangement made of the lines alone has no end to give, and its outermost runs are open
+     * ({@link Intervals} builds one and holds it to the range afterwards). A run that was told keeps
+     * its own answer, so the two cannot say different things about one end.
+     */
+    private static souther.compiler.numeric.Endpoint lineAt(
+            BandEnd end, Towards inward, souther.compiler.numeric.Endpoint leaves) {
+        return switch (end) {
+            case BandEnd.AtParting parted -> asAnEnd(parted.parting().geometry(), inward);
+            case BandEnd.AtDomain domain -> new souther.compiler.numeric.Endpoint(
+                    placeOf(valueOrRefuse(domain.reaches())), domain.reaches().inclusive());
+            case BandEnd.AtOrderEnd _ -> leaves;
+        };
     }
 
     /**
@@ -366,6 +382,11 @@ public record Band(BandEnd lower, BandEnd upper) {
                 // Where the run reaches is worked out again from what moved, because the two things
                 // it is the tighter of move by different rules: a line goes through the seam, and an
                 // end the rules leave is at a value of the quantity and goes through that.
+                //
+                // Asked with the records' own equality, which is the question here: whether this
+                // reach is the one built from the line, and not whether the two are one place. A
+                // reach that came off the rules' end is at the same place under another spelling as
+                // often as not, and either answer takes the same branch.
                 yield new BandEnd.AtParting(new Parting(moved, parted.alternatives()),
                         reaches.equals(atTheLine(parted.geometry(), inward))
                                 ? atTheLine(moved, inward)

@@ -52,15 +52,18 @@ class TwoSpellingsOfOneLevelAreOneDemandTest {
     void aLevelKeepsTheSpellingItsRuleWasWrittenIn() {
         assertNotEquals(at("0"), at("0.00"),
                 "a level is written back as the author wrote it, so the two are two values");
-        assertTrue(at("0").sameAs(at("0.00")), "and they are one place on the order");
+        assertEquals(at("0").canonical(), at("0.00").canonical(),
+                "and they are one place on the order");
     }
 
     /** Two orders' levels are not one level, whatever the number is written as. */
     @Test
     void aLevelOfAnotherCarrierIsAnotherLevel() {
         Level onWhole = new Level.OnACarrier(new Carrier.Whole(), new Count(BigDecimal.ZERO));
-        assertFalse(at("0").sameAs(onWhole), "one number on two orders is two levels");
-        assertFalse(at("0").sameAs(new Level.ACount(new Count(BigDecimal.ZERO))),
+        assertNotEquals(at("0").canonical(), onWhole.canonical(),
+                "one number on two orders is two levels");
+        assertNotEquals(at("0").canonical(),
+                new Level.ACount(new Count(BigDecimal.ZERO)).canonical(),
                 "and a number the quantity counts to is on no carrier at all");
         assertEquals(at("0").key(), onWhole.key(),
                 "which the key does not tell apart, being about the place alone");

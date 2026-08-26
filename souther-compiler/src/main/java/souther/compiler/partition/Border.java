@@ -319,11 +319,7 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
         return parts == null ? null : Parting.by(parts, origin.authoredLine());
     }
 
-    /**
-     * The same as the quantity's own answer about it, for a caller that is asking where the values
-     * part and not who parted them.
-     */
-    public static Seam parts(BoundaryTarget target, OriginRef origin) {
+    private static Seam parts(BoundaryTarget target, OriginRef origin) {
         // Null for a rule that orders nothing around its line. A bound is where the quantity stops
         // and not a place its values part — nothing outside one can be constructed, so there is no
         // run on the far side (ADR-0090) — and a rule that singles a value out puts every other

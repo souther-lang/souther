@@ -19,8 +19,8 @@ import souther.compiler.numeric.Place;
  *
  * <p>Equality is the records' own, and is not the order. {@code 0} and {@code 0.00} are two values
  * here and one level, which is what {@link Place#key()} is for and what every comparison in the
- * algebra goes through instead. A reader that has to compare two of them asks {@link #sameAs}, and
- * one that has to put a level inside something compared as a value holds {@link #canonical()}.
+ * algebra goes through instead. A reader that has to put a level inside something compared as a
+ * value holds {@link #canonical()}.
  */
 public sealed interface Level {
 
@@ -108,16 +108,5 @@ public sealed interface Level {
             case OnACarrier(Carrier of, Place at) -> new OnACarrier(of, at.canonical());
             case ACount(Count at) -> new ACount(at.canonical());
         };
-    }
-
-    /**
-     * Whether these are one level: the same shape, on the same order, at the same place.
-     *
-     * <p>Total, where {@link Place#sameAs} is not: two carriers' places are never compared and say
-     * so, and two levels of different orders are simply not one level. What a reader asking this has
-     * is two levels from somewhere and a question about whether they are the same one.
-     */
-    default boolean sameAs(Level other) {
-        return other != null && canonical().equals(other.canonical());
     }
 }
