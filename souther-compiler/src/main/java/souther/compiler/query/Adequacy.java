@@ -20,7 +20,6 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.observe.Disposition;
 import souther.compiler.observe.Incompleteness;
-import souther.compiler.observe.Counting;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.Stage;
 import souther.compiler.partition.Axis;
@@ -29,6 +28,7 @@ import souther.compiler.inputs.InputDomain;
 import souther.compiler.partition.GenerationOutcome;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.InputClassifications;
+import souther.compiler.partition.ObservedInputs;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
@@ -4740,15 +4740,14 @@ public final class Adequacy {
     /**
      * What a row is known to have done.
      *
-     * <p>Read as a {@code switch} so that a counting this does not know about is a compile error
-     * here rather than a row silently counted as having done nothing. A row whose counting was never
-     * read is known to have done none of it, and that it was left undecided is said where the row is
-     * reported.
+     * <p>For the two readers here that a run reaching nothing and a run nobody watched are one
+     * answer for. A row whose counting was never read is known to have done none of it, and that it
+     * was left undecided is said where the row is reported.
      */
     private static souther.compiler.coverage.Observation seenBy(RowOutcome row) {
-        return switch (row.run().counting()) {
-            case Counting.Read read -> read.observation();
-            case Counting.Unread _ -> souther.compiler.coverage.Observation.NONE;
+        return switch (ObservedInputs.of(row).watched()) {
+            case Generator.Watched.Ran(var account) -> account;
+            case Generator.Watched.NoAccount _ -> souther.compiler.coverage.Observation.NONE;
         };
     }
 
@@ -4768,11 +4767,10 @@ public final class Adequacy {
             // row that reached nothing leaves and is a different thing to have found out.
             return new souther.compiler.partition.Generator.Watched.NoAccount();
         }
-        return switch (row.run().counting()) {
-            case Counting.Read read ->
-                    new souther.compiler.partition.Generator.Watched.Ran(read.observation());
-            case Counting.Unread _ -> new souther.compiler.partition.Generator.Watched.NoAccount();
-        };
+        // What the row's own run came to, which is one reading and is made where a tuple of values
+        // is read. Whether this build was recording is the question above and is this caller's: it
+        // follows from what was asked for rather than from the row.
+        return ObservedInputs.of(row).watched();
     }
 
 }

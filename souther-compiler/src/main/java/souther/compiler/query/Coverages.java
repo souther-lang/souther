@@ -10,8 +10,8 @@ import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.observe.Classification;
 import souther.compiler.observe.Incompleteness;
-import souther.compiler.observe.Counting;
 import souther.compiler.observe.RowOutcome;
+import souther.compiler.partition.ObservedInputs;
 import souther.compiler.partition.Axis;
 import souther.compiler.partition.AxisId;
 import souther.compiler.partition.Border;
@@ -661,7 +661,7 @@ final class Coverages {
     private interface OneShapeOfBorder {
 
         /** Whether one of {@code rows} meets {@code criterion}, and whether that could be told. */
-        Met met(Criterion criterion, List<RowOutcome> rows);
+        Met met(Criterion criterion, List<ObservedInputs> rows);
 
         /** What reading the rules this reading took in established about a row being writable at
          *  this border. Three answers rather than two: a shape whose rules were never put the
@@ -706,13 +706,18 @@ final class Coverages {
                 ? whyNoGuardLine(observed, level)
                 : whyNoInvariantLine(observed, level);
 
+        // The rows as the values they hold and what running them recorded, which is the whole of
+        // what a point is met by. Read once for the border: what a row is stays the same however
+        // many of the four points it is put to.
+        List<ObservedInputs> rows = observed.rowsSeen().stream().map(ObservedInputs::of).toList();
+
         java.util.EnumMap<PointRole, ItemAssessment> items = new java.util.EnumMap<>(PointRole.class);
         for (PointRole role : PointRole.values()) {
             items.put(role, switch (border.demand(role)) {
                 case Demand.NotOwed not -> new ItemAssessment.NotOwed(not.reason());
                 case Demand.Owed owed -> {
                     Measurement<ItemAssessment.Coverage> coverage = absent != null ? absent
-                            : verdictOf(shape.met(owed.criterion(), observed.rowsSeen()), guard,
+                            : verdictOf(shape.met(owed.criterion(), rows), guard,
                                     border, observed);
                     // No attempt. Nothing was searched for here, and that is said by there being no
                     // attempt rather than by an attempt saying nobody asked: whether a value was
@@ -743,7 +748,7 @@ final class Coverages {
         return new OneShapeOfBorder() {
 
             @Override
-            public Met met(Criterion criterion, List<RowOutcome> rows) {
+            public Met met(Criterion criterion, List<ObservedInputs> rows) {
                 return metOn(quantity, where, rows, criterion, site);
             }
 
@@ -828,7 +833,7 @@ final class Coverages {
     private static final class OneReadingOfARow implements BorderQuantity.Observation {
 
         private final BehaviorInputs where;
-        private final RowOutcome row;
+        private final ObservedInputs row;
         /** The element chosen at each step, for this reading. */
         private final Map<souther.compiler.inputs.TermPath, Integer> chosen;
         /** How many elements each step was found to have, over every reading so far. */
@@ -836,7 +841,7 @@ final class Coverages {
         private boolean wroteNothing;
         private boolean unreadable;
 
-        OneReadingOfARow(BehaviorInputs where, RowOutcome row,
+        OneReadingOfARow(BehaviorInputs where, ObservedInputs row,
                          Map<souther.compiler.inputs.TermPath, Integer> chosen,
                          Map<souther.compiler.inputs.TermPath, Integer> held) {
             this.where = where;
@@ -903,7 +908,7 @@ final class Coverages {
      * quantity's to say as it reads them, so it says so by being asked once. Every choice those
      * steps allow follows it.
      */
-    private static List<OneReadingOfARow> readings(BehaviorInputs where, RowOutcome row,
+    private static List<OneReadingOfARow> readings(BehaviorInputs where, ObservedInputs row,
                                                    BorderQuantity quantity, Criterion criterion,
                                                    OneReadingOfARow first,
                                                    Map<souther.compiler.inputs.TermPath,
@@ -957,12 +962,12 @@ final class Coverages {
      *             takes more than standing at the level. Empty where standing there is the whole
      *             of it
      */
-    private static Met metOn(BorderQuantity quantity, BehaviorInputs where, List<RowOutcome> rows,
+    private static Met metOn(BorderQuantity quantity, BehaviorInputs where, List<ObservedInputs> rows,
                              Criterion criterion,
                              java.util.Optional<souther.compiler.coverage.ComparisonOccurrence>
                                      site) {
         boolean unreadable = false;
-        for (RowOutcome row : rows) {
+        for (ObservedInputs row : rows) {
             // A row has more than one value at a position inside a sequence, and standing at a point
             // is one element standing there. Asked for one value, such a row answered with none and
             // every point on such a line came back undecided — a measurement that could not look,
@@ -987,7 +992,16 @@ final class Coverages {
                     break;
                 }
             }
-            if (stands && site.stream().allMatch(seenBy(row)::reached)) {
+            // A row nobody watched reached no comparison here. What that costs the measure is not
+            // said here — the reading of the rows carries it, and the verdict below weakens what it
+            // says by every row it could not read — so what this asks of such a row is what it
+            // asks of one that ran and got no answer out of the comparison.
+            souther.compiler.coverage.Observation seen = switch (row.watched()) {
+                case souther.compiler.partition.Generator.Watched.Ran(var account) -> account;
+                case souther.compiler.partition.Generator.Watched.NoAccount _ ->
+                        souther.compiler.coverage.Observation.NONE;
+            };
+            if (stands && site.stream().allMatch(seen::reached)) {
                 return Met.YES;
             }
             unreadable = unreadable || stopped;
@@ -1240,20 +1254,5 @@ final class Coverages {
     private enum Met { YES, NO, UNREADABLE, UNDECIDED }
 
     private Coverages() {}
-
-    /**
-     * What a row is known to have done.
-     *
-     * <p>Read as a {@code switch} so that a counting this does not know about is a compile error
-     * here rather than a row silently counted as having done nothing. A row whose counting was never
-     * read is known to have done none of it, and that it was left undecided is said where the row is
-     * reported.
-     */
-    private static souther.compiler.coverage.Observation seenBy(RowOutcome row) {
-        return switch (row.run().counting()) {
-            case Counting.Read read -> read.observation();
-            case Counting.Unread _ -> souther.compiler.coverage.Observation.NONE;
-        };
-    }
 
 }
