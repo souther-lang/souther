@@ -467,7 +467,7 @@ public final class FieldDomains {
      * differences and clauses can reach an end only together — and where it cannot, the set is what
      * is known and is handed over as it is.
      */
-    public List<TypeSymbol.AtModule> narrowedBy(String path, boolean lower) {
+    private List<TypeSymbol.AtModule> narrowedBy(String path, boolean lower) {
         List<TypeSymbol.AtModule> candidates = narrowers.get(path);
         if (candidates == null || candidates.isEmpty()) {
             return List.of();
@@ -1066,15 +1066,21 @@ public final class FieldDomains {
     }
 
     /**
-     * What the position at {@code path} can hold, or {@code null} where nothing bounds it either way.
+     * What the position at {@code path} can hold, with the declarations holding each end.
      *
      * <p>{@code path} is read from the value these are of: {@code startsAt} for a field, and
      * {@code interval.startsAt} for a field of a field. A clause on the outer record relates
      * positions at any depth it can name, so what it leaves them is read at the depth it left it at
      * rather than at the record each of them happens to sit in.
+     *
+     * <p>The ends and the names together, because which declaration holds an end is worked out
+     * against that end and is true of no other ({@link NarrowedBounds}). Handed out apart, a caller
+     * meeting these with another reading's kept both sets of names and one of the two ends.
      */
-    public NumericDomain.Bounds at(String path) {
-        return byField.get(path);
+    public NarrowedBounds at(String path) {
+        NumericDomain.Bounds here = byField.get(path);
+        return here == null ? NarrowedBounds.NOTHING
+                : new NarrowedBounds(here, narrowedBy(path, true), narrowedBy(path, false));
     }
 
     /**

@@ -4,6 +4,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.FieldDomains;
+import souther.compiler.check.NarrowedBounds;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.check.Shape;
@@ -690,8 +691,8 @@ public final class InputDomain {
                 new java.util.LinkedHashSet<>(read.rulesLeftUnread());
         left.add(new RulesLeftUnread.Handoff(why));
         return new ReadPosition(read.path(), read.view(), read.term(), read.numericDomain(),
-                read.ownEnds(), read.narrowedEnds(), read.rangeLeft(), read.narrowedLower(),
-                read.narrowedUpper(), read.nothingExists(), read.projection(),
+                read.ownEnds(), read.narrowedEnds(), read.rangeLeft(),
+                read.nothingExists(), read.projection(),
                 read.declared(), read.reading(), read.obligations(), read.completeness(),
                 read.valuesUnread(), read.rulesWithoutALine(), read.unansweredQuestions(),
                 left, read.structure());
@@ -1071,13 +1072,13 @@ public final class InputDomain {
         AdmissibleSet admitted = placed.admits(path);
         // A record's rule relates the numbers its fields hold, so it reaches the term that is one of
         // them and no other: a cap on a field says nothing about how long the string beside it is.
-        NumericDomain.Bounds projected =
-                term instanceof NumericTerm.ValueOf ? placed.at(path) : null;
+        NarrowedBounds projected = term instanceof NumericTerm.ValueOf ? placed.at(path)
+                : NarrowedBounds.NOTHING;
         // Two questions of one pair of readings, and they do not have one answer. What the term's
         // values can be is every rule about it intersected; where it is divided is only where its
         // own type draws a line, because a clause relating two fields is not a partition of one.
         NumericDomain.Bounds admissible = nothingExists ? null
-                : TypeBounds.admissible(own, projected, term);
+                : TypeBounds.admissible(own, projected.bounds(), term);
         List<RuleWithoutALine> withoutALine =
                 rulesWithoutALineAt(placed, path, type, symbols, competing);
 
@@ -1088,8 +1089,7 @@ public final class InputDomain {
                 // Where the position actually stops, which the ends as written do not say: a clause
                 // placing one at 0 beside a clause that takes the 0 away leaves a position whose
                 // first value is 1, and a line drawn at the 0 is drawn at no value of it.
-                placed.leftAt(path, bySize ? answeredBy(taken) : ITS_OWN_VALUE),
-                placed.narrowedBy(path, true), placed.narrowedBy(path, false), nothingExists,
+                placed.leftAt(path, bySize ? answeredBy(taken) : ITS_OWN_VALUE), nothingExists,
                 placed.projection(path), declared, reading,
                 ObligationDomain.of(reading, declared), admitted.completeness(),
                 admitted.whyPartial() == null ? null : Crossing.stopped(admitted.whyPartial()),

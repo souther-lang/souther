@@ -51,8 +51,11 @@ class EveryAnswerAboutAPositionSaysWhatItDoesAboutTheValueAboveTest {
 
     private static Map<String, Decided> theRegister() {
         Map<String, Decided> table = new LinkedHashMap<>();
-        table.put("at", new Decided(Above.ASKED, "what both leave, met",
-                "AClauseAboveASumIsReadAtTheFieldItIsAboutTest.theEndStandsUnderEachCase"));
+        table.put("at", new Decided(Above.ASKED,
+                "what both leave, met — and the declarations holding each end follow the end that "
+                        + "survived, which is why they are one answer",
+                "AClauseAboveASumIsReadAtTheFieldItIsAboutTest"
+                        + ".theDeclarationHoldingAnEndAboveIsNamedUnderEachCase"));
         table.put("leftAt", new Decided(Above.ASKED, "what both leave, met",
                 "AClauseAboveASumIsReadAtTheFieldItIsAboutTest.theEndStandsUnderEachCase"));
         table.put("admits", new Decided(Above.ASKED,
@@ -64,8 +67,6 @@ class EveryAnswerAboutAPositionSaysWhatItDoesAboutTheValueAboveTest {
         table.put("noLineAt", new Decided(Above.ASKED, "both",
                 "ALineDrawnOnASharedNameFallsUnderEachCaseTest"
                         + ".aClauseThatComesToNoLineNamesTheSharedFieldUnderEachCase"));
-        table.put("narrowedBy", new Decided(Above.ASKED,
-                "both, so an end the value above holds names that declaration", null));
         table.put("unanswered", new Decided(Above.ASKED, "both",
                 "AClauseAboveASumIsReadAtTheFieldItIsAboutTest.aQuestionRaisedAboveIsRaisedAtEachCase"));
         table.put("everyRuleReachedAt", new Decided(Above.ASKED, "both, and short if either is",
@@ -126,14 +127,11 @@ class EveryAnswerAboutAPositionSaysWhatItDoesAboutTheValueAboveTest {
             }
         });
 
-        assertEquals(Map.of("narrowedBy",
-                        "both, so an end the value above holds names that declaration"),
-                without,
+        assertEquals(Map.of(), without,
                 "answers that ask the value above and that nothing measures. What closes one is a "
-                        + "model reaching it through a sum — `narrowedBy` answers from the "
-                        + "relations a value writes between two of its own coordinates, and nothing "
-                        + "written here produces one that way. Until then this is the list, and it "
-                        + "is shorter or longer only on purpose");
+                        + "model reaching it through a sum, and an answer added here arrives with "
+                        + "no such model — so this is empty, and a name appearing in it is an "
+                        + "answer whose decision about the value above nothing holds it to");
     }
 
     /**
