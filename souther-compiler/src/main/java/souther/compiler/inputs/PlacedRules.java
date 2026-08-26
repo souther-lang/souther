@@ -340,7 +340,7 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      */
     private Proof proofAt(TermPath path) {
         ProjectionEvidence here = rules.projection();
-        int mine = rules instanceof Rules.NoneWritten ? 0 : 1;
+        int mine = rules.anythingWasWritten() ? 1 : 0;
         TermPath above = alsoAt(path);
         if (above == null) {
             return new Proof(here, mine);

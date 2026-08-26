@@ -314,6 +314,43 @@ class AClauseAboveASumIsReadAtTheFieldItIsAboutTest {
                         + "nothing to change it");
     }
 
+    /**
+     * A case that writes no clause of its own is not a second system either.
+     *
+     * <p>The one the pair above leaves out. A {@code data} is a declaration clauses may be written
+     * on whether or not any were, so a case with nothing written on it looks like a value that
+     * spoke to anything reading the kind of thing it is — and the field it shares with its siblings
+     * would give up a certificate the same field keeps with no sum in the way, over a second system
+     * that is empty.
+     */
+    @Test
+    void aCaseThatWroteNoClauseIsNotASecondSystemEither() {
+        String model = """
+                module g
+
+                data Paging = { limit: Int }
+                data A = { ...Paging, x: Int }
+                data B = { ...Paging, y: Int }
+                data Q = A | B
+
+                data Holder = { q: HELD }
+                    invariant capped = q.limit <= 10
+
+                data Ok
+
+                behavior read : (h: Holder) -> Ok
+                """;
+        InputDomain record = reading(model.replace("HELD", "A"));
+        InputDomain sum = reading(model.replace("HELD", "Q"));
+
+        for (String each : List.of("A", "B")) {
+            assertEquals(record.at(TermPath.of("h").then("q").then("limit")).projection(),
+                    sum.at(TermPath.of("h").then("q")
+                            .refine(caseNamed(sum, each)).then("limit")).projection(),
+                    () -> "the only value that wrote anything is `Holder`, under case " + each);
+        }
+    }
+
     /** The narrowing that names this case of the sum standing at {@code sum}. */
     private static Refinement caseNamedAt(InputDomain read, TermPath sum, String name) {
         for (Case each : read.at(sum).obligationCases()) {
