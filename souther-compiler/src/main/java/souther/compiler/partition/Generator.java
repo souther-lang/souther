@@ -3427,7 +3427,7 @@ public final class Generator {
                 subject.inputs().policy(), under(at, settled));
         String field = fieldUnder(position.at());
         return Partitions.displacedRepresentativesOf(position.type(), subject.symbols(),
-                subject.inputs().policy(), field == null ? null : left.at(field),
+                subject.inputs().policy(), field == null ? null : left.at(field).bounds(),
                 field == null ? null : left.heldAt(field));
     }
 
@@ -3499,7 +3499,8 @@ public final class Generator {
                 continue;   // an axis decides here
             }
             String field = fieldUnder(slot.at());
-            souther.compiler.numeric.NumericDomain.Bounds here = field == null ? null : left.at(field);
+            souther.compiler.numeric.NumericDomain.Bounds here =
+                    field == null ? null : left.at(field).bounds();
             List<FixtureTemplate> stands = Partitions.representativesHolding(slot.type(), symbols,
                     policy, here, field == null ? null : left.heldAt(field));
             if (stands.isEmpty()) {
