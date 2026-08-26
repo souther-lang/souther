@@ -217,7 +217,7 @@ class WhereARowStopsIsDecidedByWhichHalfOfTheSeamItReachedTest {
     /** A stand-in the answerer will not make. What it could not make is the whole of what it says. */
     private static final Answerer REFUSING = something(_ -> standins -> {
         assertEquals(1, standins.size(), "the row does state a stand-in");
-        throw new StandinNotBuilt(standins.get(0).dependency(),
+        throw new StandinNotBuilt(standins.get(0).dependency().name(),
                 "its base subclass could not be built: (said by the test)");
     });
 
@@ -304,7 +304,7 @@ class WhereARowStopsIsDecidedByWhichHalfOfTheSeamItReachedTest {
         return ExampleVerifier.check(
                 c.db().ask(new Shapes.Prepared(name)).value().forExamples(),
                 Scopes.derived(c.db(), name).value(),
-                c.db().ask(new Bodies.Signatures(name)).value(),
+                c.db().ask(new Bodies.Reachable(name)).value(),
                 artifact,
                 // The answerers here apply this compile's own classes, so there is no second set of
                 // declarations to hold theirs against and this is never asked for.
@@ -317,6 +317,7 @@ class WhereARowStopsIsDecidedByWhichHalfOfTheSeamItReachedTest {
                 Deadline.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis()),
                 EvaluationPolicy.DEFAULT,
                 (generated, compiled) -> answerer,
-                CheckedEnsures.executable(c.db().ask(new Bodies.Contracts(name)).value()));
+                CheckedEnsures.executableOf(
+                        c.db().ask(new Bodies.ReachableContracts(name)).value()));
     }
 }

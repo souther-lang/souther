@@ -825,7 +825,8 @@ public final class Formatter {
                 Place bind = binds.isEmpty()
                         ? places.under(ofTheWith, b.kind(), Opening.NONE, Written.of(b))
                         : memberPlace(ofTheWith, b);
-                binds.add(member(bind, b, TokenDoc.node(b.kind(), concat(ident(firstIdent(b)), GAP,
+                // The dependency, which is a name and may be written through its module.
+                binds.add(member(bind, b, TokenDoc.node(b.kind(), concat(dottedName(idents(b)), GAP,
                         ASSIGN, GAP,
                         childAt(bind, firstExprChildOpt(b).orElseThrow(), Opening.NONE)))));
             }
@@ -855,8 +856,11 @@ public final class Formatter {
     }
 
     private TokenDoc fakeDef(SyntaxNode n, Place at) {
-        List<SyntaxToken> ids = idents(n);   // ["fake", target]
-        String target = ids.size() >= 2 ? ids.get(1).text() : "";
+        // ["fake", target…]. The target is a name and may be written through the module that
+        // declares the behavior, so every identifier after the first belongs to it.
+        List<SyntaxToken> ids = idents(n);
+        TokenDoc target = ids.size() >= 2
+                ? dottedName(ids.subList(1, ids.size())) : TokenDoc.NIL;
         List<TokenDoc> rows = new ArrayList<>();
         for (SyntaxNode row : childNodes(n, SyntaxKind.FAKE_ROW)) {
             Place r = places.under(at, row.kind(),
@@ -865,7 +869,7 @@ public final class Formatter {
             rows.add(TokenDoc.at(r, concat(fakeRow(row, r), TokenDoc.endsTheLineOf(r))));
         }
         rows.add(TokenDoc.carries(at, Carrier.AT_END));
-        return TokenDoc.node(n.kind(), concat(ident("fake"), GAP, ident(target),
+        return TokenDoc.node(n.kind(), concat(ident("fake"), GAP, target,
                 ids.size() >= 2 ? headerLine(at, ids.get(ids.size() - 1)) : TokenDoc.NIL, nest(INDENT, concat(rows))));
     }
 

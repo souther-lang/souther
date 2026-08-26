@@ -175,19 +175,22 @@ public final class Requirements {
     }
 
     /**
-     * The names a {@code fake} writes for these dependencies, in the same order.
+     * How a stand-in written in {@code module} names {@code dependency}.
      *
-     * <p>A row names one identifier (spec {@code [#fake]}), so this is the spelling side of the
-     * question and not the identity: what a dependency is called is the declaring module's, and two
-     * modules may call one thing the same. Held apart from {@link #names} so a reader asking which
-     * declarations a construction wants cannot be handed spellings by mistake.
+     * <p>The spelling side of the question, and only that: which behavior is meant is
+     * {@link #names}, and this turns one of those into characters someone can type. Bare for a
+     * behavior this module declares, and qualified through the declaring module otherwise — a
+     * behavior is reachable through its module whether or not an import brought its bare spelling in
+     * (ADR-0058), so the qualified form is one that can always be written. An author holding an
+     * alias may write that instead; both name the same behavior, which is why what a fake means is
+     * settled by resolving it and not by matching what this returns.
+     *
+     * <p>One rule, because a hint that shows what to type and a skeleton that types it would
+     * otherwise be two answers to the same question.
      */
-    public static List<String> asWritten(List<BehaviorRequirement> requirements) {
-        List<String> written = new ArrayList<>();
-        for (BehaviorRequirement r : requirements) {
-            written.add(r.dependency().name());
-        }
-        return written;
+    public static String writtenIn(String module, ValueName.Behavior dependency) {
+        return dependency.module().equals(module)
+                ? dependency.name() : dependency.module() + "." + dependency.name();
     }
 
     /** The dependency names of {@code requirements}, in the order they are taken — the injecting

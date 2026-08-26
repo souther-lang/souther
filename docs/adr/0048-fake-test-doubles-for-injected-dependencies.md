@@ -42,8 +42,13 @@ A missing fake for a requirement is E1908. Best practice, kept from F#/smdd-book
 an outside-world value as an input (dependency rejection) and need no fake at all.
 
 Scope. Fakes are local to their module in this version; a shared injected behavior can already be
-imported, so only the fake is written per consumer. Cross-module fake sharing (a shared test-layer,
-as in ZIO) is deferred, and when added would use a test-scoped channel, not the domain `exposing`.
+imported, so only the fake is written per consumer. That second half went unimplemented until issue
+#1108: the fake carried the bare spelling an author wrote rather than the behavior it stands in for,
+so a consumer could import a requirement and never write a fake for it. What is local is the table —
+it adds nothing to the module that declares the behavior and no other module sees it — and the
+behavior it names may be that module's. Cross-module fake *sharing* (a shared test-layer, as in ZIO)
+is a different thing and stays deferred; when added it would use a test-scoped channel, not the
+domain `exposing`.
 A fake for a multi-argument dependency, and a computed (non-tabular) fake, are also out of scope; the
 latter is a sign the dependency should become an input.
 

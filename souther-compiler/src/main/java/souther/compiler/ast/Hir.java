@@ -402,16 +402,40 @@ public interface Hir {
      * evaluate an example of a behavior that {@code depends on} it. The rows form an input→output
      * table matched by value equality; a {@code _ -> out} row is the default when no input matches
      * (otherwise a miss is an error). A fake produces no run-time class (it is a proxy at evaluation).
+     *
+     * <p>The target is the behavior resolution answered, and every reader below asks it which
+     * behavior this stands in for rather than reading the spelling again. A dependency another
+     * module declares is one of the behaviors that can be named here, and the module it came from is
+     * carried rather than being worked out from where the fake happens to be written.
      */
-    record Fake(String target, List<FakeRow> rows, SourcePos pos) implements Hir {}
+    record Fake(Var target, List<FakeRow> rows, SourcePos pos) implements Hir {
+
+        /** Which behavior this stands in for, or null where the name denoted none. */
+        public ValueName.Behavior stoodInFor() {
+            return behaviorOf(target);
+        }
+    }
 
     /** One fake row: input argument expressions mapped to an output, or the default ({@code inputs}
      * null / {@code isDefault} true). */
     record FakeRow(List<Expr> inputs, Expr output, boolean isDefault, SourcePos pos) implements Hir {}
 
     /** {@code with <dep> = <value>} on an example row — a value fake for an injected dependency
-     * (a zero-argument behavior whose faked result is a constant). */
-    record With(String dep, Expr value, SourcePos pos) implements Hir {}
+     * (a zero-argument behavior whose faked result is a constant). The dependency is named as a
+     * {@link Fake}'s target is. */
+    record With(Var dep, Expr value, SourcePos pos) implements Hir {
+
+        /** Which behavior this stands in for, or null where the name denoted none. */
+        public ValueName.Behavior stoodInFor() {
+            return behaviorOf(dep);
+        }
+    }
+
+    /** The behavior a resolved name denotes, or null where it denoted something else or nothing. */
+    private static ValueName.Behavior behaviorOf(Var named) {
+        return named instanceof Var.Denoting denoting
+                && denoting.denotes() instanceof ValueName.Behavior behavior ? behavior : null;
+    }
 
     /**
      * {@code example <target> | row ...} — compile-time-checked examples for a behavior or a pure

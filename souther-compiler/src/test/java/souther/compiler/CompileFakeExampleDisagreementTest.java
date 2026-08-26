@@ -455,14 +455,15 @@ class CompileFakeExampleDisagreementTest {
         return ExampleStatements.disagreements(
                 prepared.forExamples(),
                 souther.compiler.query.Scopes.derived(c.db(), name).value(),
-                c.db().ask(new souther.compiler.query.Bodies.Signatures(name)).value(),
+                c.db().ask(new souther.compiler.query.Bodies.Reachable(name)).value(),
                 c.db().ask(new souther.compiler.query.Output.EvaluationLinked(
                         name, souther.compiler.observe.ArmObservation.OMIT)).value().classes(),
                 parent,
                 c.db().ask(new souther.compiler.query.Bodies.ModuleDefinitions(name)).value(),
                 Deadline.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis()),
                 EvaluationPolicy.DEFAULT,
-                CheckedEnsures.executable(c.db().ask(new souther.compiler.query.Bodies.Contracts(name)).value()));
+                CheckedEnsures.executableOf(c.db().ask(
+                        new souther.compiler.query.Bodies.ReachableContracts(name)).value()));
     }
 
     /** The warnings of a single-source compile that holds. */

@@ -778,7 +778,10 @@ public final class CstParser {
 
     private void withBinding() {
         start(SyntaxKind.WITH_BINDING);
-        expect(SyntaxKind.IDENT, Reading.AN_EXAMPLE);   // the injected dependency name
+        // The dependency, named as a behavior is named anywhere else: bare where the scope settles
+        // it, qualified through its module where the author says which one is meant.
+        expect(SyntaxKind.IDENT, Reading.AN_EXAMPLE);
+        dottedTail();
         expect(SyntaxKind.ASSIGN, Reading.AN_EXAMPLE);
         boolean saved = noLambda;
         noLambda = true;
@@ -788,11 +791,13 @@ public final class CstParser {
     }
 
     /** {@code fake <injected> | rows} — a function fake: a table of input→output rows for an injected
-     * dependency. {@code fake} is contextual; the target is the second identifier. */
+     * dependency. {@code fake} is contextual; the target is the name after it, written as a behavior
+     * is written anywhere else — bare, or qualified through the module that declares it. */
     private void fakeDef() {
         start(SyntaxKind.FAKE_DEF);
         bump();   // fake
         expect(SyntaxKind.IDENT, Reading.AN_EXAMPLE);   // target injected behavior
+        dottedTail();
         if (!at(SyntaxKind.PIPE)) {
             error(new ParseMessage.AFakeNeedsAtLeastOneRow());
         }

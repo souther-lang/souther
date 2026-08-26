@@ -4,6 +4,7 @@ import souther.compiler.source.SourceId;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.CompileException;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -103,7 +104,7 @@ public final class Prepared {
      */
     public static Prepared prepare(Desugared.Module desugared, Symbols scope,
                                    Map<String, Hir.FnDef> published,
-                                   Map<String, Sig> signatures) {
+                                   Map<ValueName.Behavior, Sig> signatures) {
         // An imported definition is written here bare and denotes the module that declares it.
         // Spelling it out, once, settles the name this module reaches it by, which is what the table
         // a call expands against is keyed by and what the method a recursive helper becomes is
@@ -317,9 +318,20 @@ public final class Prepared {
             this.table = table;
         }
 
-        /** The injected behavior this table stands in for. */
-        public String target() {
-            return table.target();
+        /**
+         * The injected behavior this table stands in for, or null where the name denoted none.
+         *
+         * <p>The behavior and not the spelling. A table is written where the rows are and the
+         * behavior may be declared in another module, so which one it stands in for is what
+         * resolution answered and is never worked out again from the characters.
+         */
+        public ValueName.Behavior standsInFor() {
+            return table.stoodInFor();
+        }
+
+        /** What the author wrote for it, for a message that quotes the source. */
+        public String written() {
+            return table.target().written().quoted();
         }
 
         /** The table, for a reader that holds this state. */

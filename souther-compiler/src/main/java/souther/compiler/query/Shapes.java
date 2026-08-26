@@ -349,8 +349,8 @@ public final class Shapes {
             // composition's shape is worked out there and nowhere else, and a dependency another
             // module declares is in it too. Where they could not be made, a row's positions
             // contribute nothing rather than being guessed at from the forms written here.
-            Answer<Map<String, souther.compiler.check.Sig>> signatures =
-                    db.ask(new Bodies.Signatures(name));
+            Answer<Map<souther.compiler.types.ValueName.Behavior, souther.compiler.check.Sig>>
+                    signatures = db.ask(new Bodies.Reachable(name));
             if (!desugared.present() || !scope.present()) {
                 return Answer.absent();
             }

@@ -9,6 +9,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.examples.Deadline;
 import souther.compiler.examples.EvaluationPolicy;
 import souther.compiler.source.SourceId;
+import souther.compiler.types.ValueName;
 
 import java.util.List;
 import java.util.Map;
@@ -41,17 +42,18 @@ public final class ExampleExecution {
 
     private final Prepared prepared;
     private final Symbols symbols;
-    private final Map<String, Sig> signatures;
+    private final Map<ValueName.Behavior, Sig> signatures;
     private final Map<String, List<BehaviorRequirement>> requirements;
     private final Map<String, Hir.FnDef> definitions;
-    private final Map<String, Contract> contracts;
+    private final Map<ValueName.Behavior, Contract> contracts;
     private final Deadline deadline;
     private final EvaluationPolicy policy;
 
-    public ExampleExecution(Prepared prepared, Symbols symbols, Map<String, Sig> signatures,
+    public ExampleExecution(Prepared prepared, Symbols symbols,
+                            Map<ValueName.Behavior, Sig> signatures,
                             Map<String, List<BehaviorRequirement>> requirements,
                             Map<String, Hir.FnDef> definitions,
-                            Map<String, Contract> contracts,
+                            Map<ValueName.Behavior, Contract> contracts,
                             Deadline deadline, EvaluationPolicy policy) {
         this.prepared = prepared;
         this.symbols = symbols;
@@ -87,8 +89,13 @@ public final class ExampleExecution {
         return symbols;
     }
 
-    /** The shape of each of the module's behaviors. */
-    public Map<String, Sig> signatures() {
+    /**
+     * The shape of every behavior the rows may name: this module's own, and the ones it borrows.
+     *
+     * <p>Keyed by the declaration and not by the spelling, because a stand-in may name a dependency
+     * another module declares and this module may declare one of that name too.
+     */
+    public Map<ValueName.Behavior, Sig> signatures() {
         return signatures;
     }
 
@@ -104,7 +111,7 @@ public final class ExampleExecution {
 
     /** What each behavior declares of what it answers, which is what holds a row's values to
      *  something. */
-    public Map<String, Contract> contracts() {
+    public Map<ValueName.Behavior, Contract> contracts() {
         return contracts;
     }
 

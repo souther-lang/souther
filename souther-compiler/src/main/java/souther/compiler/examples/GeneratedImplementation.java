@@ -203,8 +203,12 @@ final class GeneratedImplementation implements Answerer {
      * {@code apply} packs its arguments into an {@code Object[]} and delegates to what the stand-in
      * answers. */
     private Object standaloneInstance(DependencyStandin standin) {
-        GeneratedClass.BehaviorInterface baseClass =
-                new GeneratedClass.BehaviorInterface(generated.module(), standin.dependency());
+        // The module that declares the dependency, which is where its abstract base was generated
+        // (spec §java-base-class). The module being applied is not it: a behavior may depend on one
+        // another module declares, and reading the base out of this module's package would name a
+        // class nothing generated.
+        GeneratedClass.BehaviorInterface baseClass = new GeneratedClass.BehaviorInterface(
+                standin.dependency().module(), standin.dependency().name());
         try {
             Class<?> base = GeneratedClasses.load(loader, baseClass);
             java.lang.reflect.Method apply = null;
@@ -221,7 +225,7 @@ final class GeneratedImplementation implements Answerer {
             Class<?> fakeClass = loader.define(fakeName, () -> fakeSubclassBytes(fakeName, base, applyM));
             return fakeClass.getConstructor(Function.class).newInstance(standin.answers());
         } catch (ReflectiveOperationException e) {
-            throw new StandinNotBuilt(standin.dependency(),
+            throw new StandinNotBuilt(standin.dependency().name(),
                     "its base subclass could not be built: " + e);
         }
     }

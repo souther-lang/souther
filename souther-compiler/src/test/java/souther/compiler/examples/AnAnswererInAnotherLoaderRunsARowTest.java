@@ -228,7 +228,7 @@ class AnAnswererInAnotherLoaderRunsARowTest {
         return ExampleVerifier.check(
                 c.db().ask(new Shapes.Prepared(name)).value().forExamples(),
                 Scopes.derived(c.db(), name).value(),
-                c.db().ask(new Bodies.Signatures(name)).value(),
+                c.db().ask(new Bodies.Reachable(name)).value(),
                 artifact,
                 // The crossing here is between two loaders of one build, so what the answerer reads
                 // values by is this compile's declarations and nothing is held against them.
@@ -241,7 +241,8 @@ class AnAnswererInAnotherLoaderRunsARowTest {
                 Deadline.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis()),
                 EvaluationPolicy.DEFAULT,
                 answerer.asAnswering(classes, parent),
-                CheckedEnsures.executable(c.db().ask(new Bodies.Contracts(name)).value()));
+                CheckedEnsures.executableOf(
+                        c.db().ask(new Bodies.ReachableContracts(name)).value()));
     }
 
     private static Class<?> loaded(ClassLoader loader, String name) {

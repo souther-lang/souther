@@ -214,7 +214,7 @@ class ARunIsToldWhichModuleAnAnswersClassesAreShortOfTest {
         return ExampleVerifier.check(
                 c.db().ask(new Shapes.Prepared(name)).value().forExamples(),
                 Scopes.derived(c.db(), name).value(),
-                c.db().ask(new Bodies.Signatures(name)).value(),
+                c.db().ask(new Bodies.Reachable(name)).value(),
                 artifact,
                 () -> declarationsOf(List.of(SHARED, ROOT)),
                 c.db().ask(new Bodies.Requirements(name)).value(),
@@ -223,7 +223,8 @@ class ARunIsToldWhichModuleAnAnswersClassesAreShortOfTest {
                 Deadline.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis()),
                 EvaluationPolicy.DEFAULT,
                 answering,
-                CheckedEnsures.executable(c.db().ask(new Bodies.Contracts(name)).value()));
+                CheckedEnsures.executableOf(
+                        c.db().ask(new Bodies.ReachableContracts(name)).value()));
     }
 
     /** The classes one build of these sources emits, read for what they were stamped with. */

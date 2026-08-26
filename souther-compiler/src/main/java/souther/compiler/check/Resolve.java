@@ -597,7 +597,7 @@ public final class Resolve {
             for (Ast.ExampleRow row : e.rows()) {
                 List<Hir.With> withs = new ArrayList<>();
                 for (Ast.With w : row.withs()) {
-                    withs.add(new Hir.With(w.dep(), r.expr(w.value()), w.pos()));
+                    withs.add(new Hir.With(r.stoodInFor(w.dep()), r.expr(w.value()), w.pos()));
                 }
                 rows.add(new Hir.ExampleRow(row.identity(), r.exprs(row.inputs()), withs,
                         r.expr(row.expected()), row.pos()));
@@ -606,13 +606,16 @@ public final class Resolve {
         }
         List<Hir.Fake> fakes = new ArrayList<>();
         for (Ast.Fake f : m.fakes()) {
-            r.owner = r.ownerOfValue(f.target());
+            // The spelling, because this names which definition the bindings under it belong to and
+            // two tables written for two behaviors of one bare name are written differently.
+            r.owner = r.ownerOfValue(f.target().name());
+            Hir.Var target = r.stoodInFor(f.target());
             List<Hir.FakeRow> rows = new ArrayList<>();
             for (Ast.FakeRow row : f.rows()) {
                 rows.add(new Hir.FakeRow(row.inputs() == null ? null : r.exprs(row.inputs()),
                         r.expr(row.output()), row.isDefault(), row.pos()));
             }
-            fakes.add(new Hir.Fake(f.target(), rows, f.pos()));
+            fakes.add(new Hir.Fake(target, rows, f.pos()));
         }
         r.inARow = false;
         Map<String, Hir.RetType> exposedOutputs = new LinkedHashMap<>();
@@ -735,6 +738,22 @@ public final class Resolve {
                 .suggestion(Suggest.candidate(name.name(), candidates))
                 .hint(new DeclarationMessage.DeclareItHereOrImportIt(name.name()))
                 .say(new DeclarationMessage.DependsOnNamesNoSuchBehavior(by, name.name())).build()));
+    }
+
+    /**
+     * A name a {@code fake} or a {@code with} writes: the behavior it stands in for.
+     *
+     * <p>The same reading a {@code depends on} clause gets, which is what makes the two agree about
+     * one dependency. A stand-in is written where the row is and the dependency may be declared
+     * somewhere else, so the answer here is the behavior and not the spelling this module reached it
+     * by — nothing below re-decides what the characters meant.
+     */
+    private Hir.Var stoodInFor(Ast.Var ref) {
+        return behaviorNamed(ref, (name, candidates) -> CompileException.of(Diagnostic
+                .at(name.written().reportedAt())
+                .suggestion(Suggest.candidate(name.name(), candidates))
+                .hint(new DeclarationMessage.DeclareItHereOrImportIt(name.name()))
+                .say(new ExampleMessage.AFakeNamesNoBehavior(name.written().quoted())).build()));
     }
 
     /** A name that must denote a behavior, with what to say when none does. */

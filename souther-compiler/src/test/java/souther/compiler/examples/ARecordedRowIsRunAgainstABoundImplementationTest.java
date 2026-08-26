@@ -346,7 +346,7 @@ class ARecordedRowIsRunAgainstABoundImplementationTest {
         return ExampleVerifier.check(
                 c.db().ask(new Shapes.Prepared(name)).value().forExamples(),
                 Scopes.derived(c.db(), name).value(),
-                c.db().ask(new Bodies.Signatures(name)).value(),
+                c.db().ask(new Bodies.Reachable(name)).value(),
                 artifact,
                 declarationsOf(c),
                 c.db().ask(new Bodies.Requirements(name)).value(),
@@ -358,7 +358,8 @@ class ARecordedRowIsRunAgainstABoundImplementationTest {
                 // supplied for at all is `SoutherExamples.bind`'s rule; this is the seam below it.
                 Answering.bound(bound, java.util.Set.of("findTodo"),
                         c.db().ask(new Bodies.Signatures(name)).value()),
-                CheckedEnsures.executable(c.db().ask(new Bodies.Contracts(name)).value()));
+                CheckedEnsures.executableOf(
+                        c.db().ask(new Bodies.ReachableContracts(name)).value()));
     }
 
     /** What the module's rows are written for, as this compile emitted it. */

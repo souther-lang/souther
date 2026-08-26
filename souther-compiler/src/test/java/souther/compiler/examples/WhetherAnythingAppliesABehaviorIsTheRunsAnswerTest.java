@@ -217,7 +217,7 @@ class WhetherAnythingAppliesABehaviorIsTheRunsAnswerTest {
                 () -> ExampleVerifier.check(
                         mine.db().ask(new Shapes.Prepared(name)).value().forExamples(),
                         Scopes.derived(mine.db(), name).value(),
-                        mine.db().ask(new Bodies.Signatures(name)).value(),
+                        mine.db().ask(new Bodies.Reachable(name)).value(),
                         artifactOf(other, "example.elsewhere"),
                         () -> {
                             throw new AssertionError("the run was made before it was refused");
@@ -228,8 +228,8 @@ class WhetherAnythingAppliesABehaviorIsTheRunsAnswerTest {
                         Deadline.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis()),
                         EvaluationPolicy.DEFAULT,
                         Answering.generatedHere(),
-                        CheckedEnsures.executable(
-                                mine.db().ask(new Bodies.Contracts(name)).value())));
+                        CheckedEnsures.executableOf(
+                                mine.db().ask(new Bodies.ReachableContracts(name)).value())));
 
         assertTrue(refused.getMessage().contains("example.applying")
                         && refused.getMessage().contains("example.elsewhere"),
@@ -310,7 +310,7 @@ class WhetherAnythingAppliesABehaviorIsTheRunsAnswerTest {
         return ExampleVerifier.check(
                 c.db().ask(new Shapes.Prepared(name)).value().forExamples(),
                 Scopes.derived(c.db(), name).value(),
-                c.db().ask(new Bodies.Signatures(name)).value(),
+                c.db().ask(new Bodies.Reachable(name)).value(),
                 artifactOf(c, name),
                 // Every answer here applies this compile's own classes, so nothing is held against
                 // this module's declarations and they are never read.
@@ -323,7 +323,8 @@ class WhetherAnythingAppliesABehaviorIsTheRunsAnswerTest {
                 Deadline.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis()),
                 EvaluationPolicy.DEFAULT,
                 answering,
-                CheckedEnsures.executable(c.db().ask(new Bodies.Contracts(name)).value()));
+                CheckedEnsures.executableOf(
+                        c.db().ask(new Bodies.ReachableContracts(name)).value()));
     }
 
     private static Compilation compiled() {

@@ -92,6 +92,10 @@ public sealed interface ExampleMessage extends Message {
 
     // --- the fakes ---
 
+    /** A {@code fake} or a {@code with} names something that is no behavior in scope. */
+    @Code(DiagnosticCode.E1932)
+    record AFakeNamesNoBehavior(String named) implements ExampleMessage, Reported {}
+
     /** A dependency has no fake. */
     @Code(DiagnosticCode.E1908)
     record ADependencyHasNoFake(String behavior, String dependency) implements ExampleMessage, Reported {}

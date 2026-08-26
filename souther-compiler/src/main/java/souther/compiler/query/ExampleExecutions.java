@@ -8,6 +8,7 @@ import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Contract;
 import souther.compiler.execute.ExampleExecution;
+import souther.compiler.types.ValueName;
 
 import java.util.List;
 import java.util.Map;
@@ -45,7 +46,11 @@ public final class ExampleExecutions {
     public static ExampleExecution of(Db db, String module) {
         Answer<Prepared> prepared = db.ask(new Shapes.Prepared(module));
         Answer<Symbols> scope = Names.derivedSymbols(db, module);
-        Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(module));
+        // Every behavior the rows may name, keyed by the declaration it is. A row targets one of
+        // this module's own and a stand-in may name one another module declares, and both are asked
+        // of this one answer — the narrower question, this module's own signatures under their bare
+        // names, cannot tell a borrowed dependency from a namesake declared here.
+        Answer<Map<ValueName.Behavior, Sig>> sigs = db.ask(new Bodies.Reachable(module));
         if (!prepared.present() || !scope.present() || !sigs.present()) {
             return null;
         }
@@ -56,13 +61,17 @@ public final class ExampleExecutions {
         // whose requirements are not settled is not one to read statements off yet.
         Map<String, List<BehaviorRequirement>> requirements =
                 db.ask(new Bodies.Requirements(module)).value();
-        Map<String, CheckedEnsures> declared = db.ask(new Bodies.Contracts(module)).value();
+        // Every behavior a row or a stand-in here may state something about, its clause under the
+        // declaration it belongs to. A stand-in for a dependency another module declares is held to
+        // that module's clause, by the check that module emitted.
+        Map<ValueName.Behavior, CheckedEnsures> declared =
+                db.ask(new Bodies.ReachableContracts(module)).value();
         if (requirements == null || declared == null) {
             return null;
         }
         // The reading that runs. What decides a row is the emitted check (spec §example-ensures),
         // and this is what that check was emitted from.
-        Map<String, Contract> contracts = CheckedEnsures.executable(declared);
+        Map<ValueName.Behavior, Contract> contracts = CheckedEnsures.executableOf(declared);
         // The one part that may be empty rather than missing. A module defining no value of its own
         // reaches none by name, which is a module rather than an unanswered question.
         Map<String, Hir.FnDef> values = db.ask(new Bodies.ModuleDefinitions(module)).value();
