@@ -6,14 +6,10 @@ import souther.compiler.meta.ModulePath;
 import souther.compiler.report.GeneratedRows;
 import org.junit.jupiter.api.Test;
 
-import java.lang.reflect.Modifier;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
-import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -72,66 +68,11 @@ class EveryQuestionThisCompilerDeclaresIsReachedOrOutsideABatchRunTest {
             "souther.compiler.query.Names$ValueUsesOf",
             "souther.compiler.query.Shapes$InvariantCapabilities");
 
-    /**
-     * Every question the compiler declares, discovered from what it compiled to.
-     *
-     * <p>From the classes and not from a registry. A registry a key has to be added to is a second
-     * place to keep in step, and the failure it allows is the one this test exists to prevent: a key
-     * added and not registered would leave the arithmetic below adding up while the question went
-     * unreached.
-     *
-     * <p>The whole of what {@link Key} was compiled beside, and not a package under it. Any bound
-     * narrower than that makes the count's own perimeter the thing that decides it: a key declared
-     * outside would be in neither what is declared nor what is reached, and every equation below
-     * would go on balancing while the question went unwatched — which is what a package bound did,
-     * and what a package-tree bound would do one step further out. Where a key is allowed to sit is
-     * a claim of its own and is made by {@link #everyQuestionIsDeclaredWhereTheyBelong}.
-     */
-    static Covered<String> scan() throws Exception {
-        return scanOf(Path.of(
-                Key.class.getProtectionDomain().getCodeSource().getLocation().toURI()));
-    }
-
-    /**
-     * Every concrete key under {@code root}, and every class there this could not load.
-     *
-     * <p>Takes where to look, so that what happens when a class will not load is something a test
-     * can build rather than something nobody sees until it happens.
-     */
-    static Covered<String> scanOf(Path root) throws Exception {
-        Set<String> out = new TreeSet<>();
-        List<Gap> gaps = new java.util.ArrayList<>();
-        try (Stream<Path> files = Files.walk(root)) {
-            for (Path each : files.filter(p -> p.toString().endsWith(".class")).toList()) {
-                String name = root.relativize(each).toString()
-                        .replace(java.io.File.separatorChar, '.')
-                        .replaceFirst("\\.class$", "");
-                Class<?> type;
-                try {
-                    type = Class.forName(name, false, Key.class.getClassLoader());
-                } catch (Throwable notLoadable) {
-                    // A class the scan found and cannot hold. Said out loud: skipped, it leaves the
-                    // vocabulary smaller than it is and the arithmetic below adds up over whatever
-                    // is left.
-                    gaps.add(new Gap(Gap.Why.A_CLASS_THAT_WOULD_NOT_LOAD,
-                            name + " (" + notLoadable.getClass().getSimpleName() + ")"));
-                    continue;
-                }
-                if (Key.class.isAssignableFrom(type) && !type.isInterface()
-                        && !Modifier.isAbstract(type.getModifiers())) {
-                    out.add(type.getName());
-                }
-            }
-        }
-        return Covered.of(List.copyOf(out), gaps);
-    }
-
     /** What the scan counted, whether or not it read everything it found. */
     private static Set<String> declared() throws Exception {
-        return new TreeSet<>(switch (scan()) {
-            case Covered.Whole<String>(List<String> all) -> all;
-            case Covered.Partly<String>(List<String> all, List<Gap> _) -> all;
-        });
+        Set<String> out = new TreeSet<>();
+        DeclaredQuestions.found(DeclaredQuestions.scan()).forEach(each -> out.add(each.getName()));
+        return out;
     }
 
     /** Where the query vocabulary is kept. */
@@ -166,7 +107,8 @@ class EveryQuestionThisCompilerDeclaresIsReachedOrOutsideABatchRunTest {
     @Test
     void theScanReadEveryClassItFound() throws Exception {
         Set<String> fellShort = new TreeSet<>();
-        if (scan() instanceof Covered.Partly<String>(List<String> _, List<Gap> gaps)) {
+        if (DeclaredQuestions.scan()
+                instanceof Covered.Partly<Class<?>>(List<Class<?>> _, List<Gap> gaps)) {
             gaps.forEach(each -> fellShort.add(each.toString()));
         }
 
