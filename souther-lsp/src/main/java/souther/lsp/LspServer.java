@@ -11,6 +11,7 @@ import souther.lsp.protocol.CodeLens;
 import souther.lsp.protocol.CompletionItem;
 import souther.lsp.protocol.DocumentSymbol;
 import souther.lsp.protocol.Hover;
+import souther.lsp.protocol.InlayHint;
 import souther.lsp.protocol.Insertion;
 import souther.lsp.protocol.Location;
 import souther.lsp.protocol.LspDiagnostic;
@@ -176,6 +177,7 @@ public final class LspServer {
             case DEFINITION -> { respond(id, definition(params)); yield false; }
             case REFERENCES -> { respond(id, references(params)); yield false; }
             case COMPLETION -> { respond(id, completion(params)); yield false; }
+            case INLAY_HINT -> { respond(id, inlayHints(params)); yield false; }
             case CODE_ACTION -> { respond(id, codeActions(params)); yield false; }
             case CODE_ACTION_RESOLVE -> { respond(id, codeActionResolve(params)); yield false; }
             case CODE_LENS -> { respond(id, codeLenses(params)); yield false; }
@@ -471,10 +473,33 @@ public final class LspServer {
         return out;
     }
 
+    // --- inlay hints ---
+
+    private Object inlayHints(JsonNode params) {
+        Params.RangeParams p = InboundDecoders.decode(InboundDecoders.DOC_RANGE, params)
+                .orElse(null);
+        if (p == null || documents.get(p.uri()) == null) {
+            return List.of();
+        }
+        List<Object> out = new ArrayList<>();
+        ModuleGraph graph = workspace.snapshot(documents.openDocuments());
+        for (InlayHint hint : analyzer.inlayHints(p.uri(), p.range(), graph)) {
+            Map<String, Object> written = new LinkedHashMap<>();
+            written.put("position", positionJson(hint.position()));
+            written.put("label", hint.label());
+            written.put("paddingLeft", hint.paddingLeft());
+            if (hint.tooltip() != null) {
+                written.put("tooltip", hint.tooltip());
+            }
+            out.add(written);
+        }
+        return out;
+    }
+
     // --- code actions ---
 
     private Object codeActions(JsonNode params) {
-        Params.CodeActionParams p = InboundDecoders.decode(InboundDecoders.CODE_ACTION, params)
+        Params.RangeParams p = InboundDecoders.decode(InboundDecoders.DOC_RANGE, params)
                 .orElse(null);
         String text = p == null ? null : documents.get(p.uri());
         // Only the range's diagnostics can be fixed, so with none in context there is usually nothing

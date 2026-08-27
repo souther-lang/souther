@@ -14,10 +14,13 @@ import souther.compiler.query.Bodies;
 import souther.compiler.query.Db;
 import souther.compiler.query.Names;
 import souther.compiler.query.Sites;
+import souther.compiler.source.SourceId;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeSpelling;
 import souther.compiler.types.TypeSymbol;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -98,6 +101,72 @@ public final class SemanticSnapshot {
             case Hir.Var written -> namespaceOf(written.written());
             case null, default -> Optional.empty();
         };
+    }
+
+    /**
+     * How this module writes {@code type}, or empty where it has no name for it.
+     *
+     * <p>Asked of the module rather than taken off the type. What a declaration is and what a module
+     * calls it are two things: a type reached through an import is written the way the import
+     * brought it in, and one this module neither declares nor imports has no spelling here at all.
+     * Empty is that second answer, and a reader shown a name it cannot write would be shown
+     * something to type that does not compile.
+     */
+    public Optional<String> spellingOf(Type type) {
+        return TypeSpelling.of(type, symbols.scope()::reach)
+                instanceof TypeSpelling.Spelled(String rendered)
+                ? Optional.of(rendered) : Optional.empty();
+    }
+
+    /**
+     * Whether a value of {@code type} is held to a rule its declaration wrote.
+     *
+     * <p>A fact about the type and not about any value of it. What it is for is a reader looking at
+     * a name whose type is not written beside it: that the type has an invariant is the difference
+     * between a `Draft` and any other record of the same fields, and it is not in the signature the
+     * hint came from.
+     */
+    public boolean heldToARule(Type type) {
+        return type instanceof Type.Ref(TypeSymbol named)
+                && symbols.declarations().declaration(named) instanceof Hir.Data data
+                && !data.invariants().isEmpty();
+    }
+
+    /**
+     * What every parameter written in {@code source} is declared to arrive as.
+     *
+     * <p>A signature is written once, on the {@code behavior} line, and the {@code let} under it
+     * repeats none of it — so a reader working in the body has the names and not the types, and the
+     * line that says them may be far up the file or in another one. This is not inference shown to
+     * an author: it is the declaration they already wrote, carried to where they are working.
+     *
+     * <p>Answered whether or not the body compiles. What arrives is the signature's to say, and a
+     * body that will not check does not stop it saying so.
+     */
+    public List<DeclaredParameter> parametersIn(SourceId source) {
+        Answer<Hir.Module> resolved = db.ask(new Names.Resolved(module));
+        Answer<Map<String, Sig>> signatures = db.ask(new Bodies.Signatures(module));
+        if (!resolved.present() || !signatures.present()) {
+            return List.of();
+        }
+        List<DeclaredParameter> out = new ArrayList<>();
+        for (Hir.FnDef fn : resolved.value().fns()) {
+            Sig sig = signatures.value().get(fn.written().canonical());
+            if (sig == null || sig.inputTypes().size() != fn.params().size()) {
+                continue;
+            }
+            for (int at = 0; at < fn.params().size(); at++) {
+                Hir.Binder binder = fn.params().get(at).binder();
+                Type arrives = sig.inputTypes().get(at);
+                // A parameter written nowhere is one a pass introduced; there is no name in the
+                // source for a hint to stand after.
+                if (binder.written().authored() && binder.pos().isIn(source)) {
+                    out.add(new DeclaredParameter(binder.written().region(),
+                            new TypeFact(arrives, new Evidence.Declared()), heldToARule(arrives)));
+                }
+            }
+        }
+        return List.copyOf(out);
     }
 
     /**

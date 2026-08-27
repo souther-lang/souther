@@ -30,8 +30,15 @@ public final class Params {
     public record RenameParams(String uri, Position position, String newName) {
     }
 
-    /** {@code textDocument/codeAction}: the document and the selected range (the context's
-     * diagnostics are recomputed by the analyzer, so they are not decoded). */
-    public record CodeActionParams(String uri, Range range) {
+    /**
+     * A request that names a document and a stretch of it ({@code codeAction},
+     * {@code inlayHint}).
+     *
+     * <p>One record for both, because what is decoded is the same two things — a codeAction's
+     * context carries diagnostics, and the analyzer recomputes those rather than reading them, so
+     * nothing of it is decoded. A record per method would be the same shape written twice and free
+     * to drift.
+     */
+    public record RangeParams(String uri, Range range) {
     }
 }

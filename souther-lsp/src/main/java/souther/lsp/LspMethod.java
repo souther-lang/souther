@@ -39,8 +39,13 @@ public enum LspMethod {
     HOVER("textDocument/hover", new Advertisement.StaticCapability("hoverProvider", true)),
     DEFINITION("textDocument/definition", new Advertisement.StaticCapability("definitionProvider", true)),
     REFERENCES("textDocument/references", new Advertisement.StaticCapability("referencesProvider", true)),
-    // invoked completion; no trigger characters
-    COMPLETION("textDocument/completion", new Advertisement.StaticCapability("completionProvider", Map.of())),
+    // A `.` opens the list, because what may be written after one is a different set from what may
+    // be written anywhere else and an author who has to ask for it does not know that.
+    COMPLETION("textDocument/completion",
+            new Advertisement.StaticCapability("completionProvider",
+                    Map.of("triggerCharacters", List.of(".")))),
+    INLAY_HINT("textDocument/inlayHint",
+            new Advertisement.StaticCapability("inlayHintProvider", true)),
     CODE_ACTION("textDocument/codeAction",
             new Advertisement.StaticCapability("codeActionProvider",
                     Map.of("resolveProvider", true))),

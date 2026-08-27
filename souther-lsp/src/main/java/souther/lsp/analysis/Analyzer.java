@@ -49,6 +49,7 @@ import souther.compiler.diag.ReportContext;
 import souther.compiler.diag.SourceContext;
 import souther.compiler.diag.Shown;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.sites.DeclaredParameter;
 import souther.compiler.sites.MemberReceiver;
 import souther.compiler.sites.SemanticSnapshot;
 import souther.compiler.cst.SyntaxElement;
@@ -64,6 +65,7 @@ import souther.lsp.protocol.CodeLens;
 import souther.lsp.protocol.CompletionItem;
 import souther.lsp.protocol.DocumentSymbol;
 import souther.lsp.protocol.Hover;
+import souther.lsp.protocol.InlayHint;
 import souther.lsp.protocol.Location;
 import souther.lsp.protocol.LspDiagnostic;
 import souther.lsp.protocol.Position;
@@ -1484,6 +1486,54 @@ public final class Analyzer {
     }
 
     /**
+     * The types a {@code let}'s parameters arrive as, to be drawn where the names are written.
+     *
+     * <p>A signature is written once, on the {@code behavior} line, and the implementation repeats
+     * none of it. What is shown here is that declaration carried to where the author is working, and
+     * not inference shown to them — which is why it is answered from the signature and stands
+     * whether or not the body checks.
+     *
+     * <p>Only where the type can be written the way this module writes it. A hint naming a type the
+     * author has no name for would be showing them something they cannot type.
+     *
+     * <p>Read from the workspace's compile and not through a probe. A hint is drawn on a document
+     * that is being read rather than one mid-keystroke, and what is wanted is what the file says.
+     */
+    public List<InlayHint> inlayHints(String uri, Range within, ModuleGraph graph) {
+        Compilation compilation = compileOf(graph);
+        String module = moduleOf(compilation, graph, uri);
+        String text = graph.text(uri);
+        if (module == null || text == null) {
+            return List.of();
+        }
+        Optional<SemanticSnapshot> snapshot = SemanticSnapshot.of(compilation.db(), module);
+        if (snapshot.isEmpty()) {
+            return List.of();
+        }
+        List<InlayHint> hints = new ArrayList<>();
+        for (DeclaredParameter parameter : snapshot.get().parametersIn(new SourceId(uri))) {
+            Position after = editorPosition(parameter.writtenAt().end());
+            if (!within(within, after)) {
+                continue;
+            }
+            // The type in the label, and that it is held to a rule of its own in what a reader gets
+            // by asking. A label is what is taken in without looking, and a second thing written
+            // into one is read as part of the type's name.
+            snapshot.get().spellingOf(parameter.type().type()).ifPresent(spelling ->
+                    hints.add(new InlayHint(after, ": " + spelling,
+                            parameter.heldToARule() ? spelling + " has an invariant" : null,
+                            false)));
+        }
+        return List.copyOf(hints);
+    }
+
+    /** Whether {@code at} is in the range the client asked about, ends included — a hint drawn at
+     *  the very end of what is on screen is on screen. */
+    private static boolean within(Range range, Position at) {
+        return range == null || (!before(at, range.start()) && !before(range.end(), at));
+    }
+
+    /**
      * The fields of what the cursor is taking something off, or null where it is taking nothing off
      * anything.
      *
@@ -1533,20 +1583,19 @@ public final class Analyzer {
     }
 
     /**
-     * What a value's fields are, as an editor offers them.
+     * What a value's fields are, as an editor offers them: the name to write, and what it is.
      *
-     * <p>The name and nothing beside it. What a field is is known here, and writing it out is a
-     * question this does not answer yet: a type is spelled the way the module reading it writes its
-     * names, and a module may have no name for one at all ({@code TypeSpelling.Unnameable}). An
-     * offer carrying a spelling worked out some other way would be showing the author a name they
-     * cannot write.
+     * <p>The type only where this module has a name for it. A field may be declared as something the
+     * module reading it neither declares nor imports, and an offer carrying a spelling worked out
+     * some other way would show the author a name they cannot write. The field is still offered —
+     * it is there to be read, and what it is is the part that cannot be said.
      */
     private static List<CompletionItem> fields(SemanticSnapshot snapshot,
                                                MemberReceiver.Value held) {
         List<CompletionItem> out = new ArrayList<>();
-        for (String field : snapshot.fieldsOf(held.type()).keySet()) {
-            out.add(new CompletionItem(field, CompletionItem.FIELD, null));
-        }
+        snapshot.fieldsOf(held.type()).forEach((field, is) ->
+                out.add(new CompletionItem(field, CompletionItem.FIELD,
+                        snapshot.spellingOf(is).orElse(null))));
         return List.copyOf(out);
     }
 
