@@ -200,11 +200,15 @@ public final class OwedBoundaryPoint {
      * The points this run was asked for a row at, which is not everything that is owed one.
      *
      * <p><b>Its own type, because it is not the account either.</b> What is owed is what the lines
-     * ask of the rows; what a generation is asked for is that less what the measurement has already
-     * settled — a point a written row stands at, and a point nothing measured. Read as the account,
-     * a run counts work nobody is owed: a candidate that stands where a written row already stands
-     * is the only offer for a point in nobody's way, so nothing may drop it and it goes out beside
-     * the row that made it unnecessary.
+     * ask of the rows; what a generation is asked for is the part of that
+     * {@link ItemAssessment.Owed#worthSearching()} says a candidate would tell anybody anything at.
+     * Which of the two a caller means is not restated here — the measurement's answer is the
+     * authority, and a second reading of it would be free to disagree with the search, which is
+     * gated on the same one.
+     *
+     * <p>Read as the account, a run counts work nobody is owed: a candidate that stands where a
+     * written row already stands is the only offer for a point in nobody's way, so nothing may drop
+     * it and it goes out beside the row that made it unnecessary.
      *
      * @param at the points, in the account's own order
      */

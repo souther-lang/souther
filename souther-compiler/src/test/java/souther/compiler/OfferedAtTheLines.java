@@ -35,7 +35,7 @@ public final class OfferedAtTheLines {
                 ? Generator.GenerationResult.NONE : filling.boundaries();
         DeclaredRows declared = Adequacy.generatedForDeclarationsOf(compilation.db(), module,
                 new GenerationScope.Module());
-        List<Generator.GeneratedRow> rows = souther.compiler.query.Offering.atTheLines(
+        List<Generator.GeneratedRow> rows = souther.compiler.query.Composition.atTheLines(
                 own.rows(), declared.rowsByCarrier().get(behavior));
         List<Generator.UnresolvedCombination> unresolved = new ArrayList<>(own.unresolved());
         declared.unmet().forEach((_, unmet) -> {

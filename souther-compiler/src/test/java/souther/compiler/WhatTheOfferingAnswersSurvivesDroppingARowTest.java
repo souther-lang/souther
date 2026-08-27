@@ -5,7 +5,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.GenerationScope;
 import souther.compiler.query.OfferItem;
-import souther.compiler.query.Offering;
+import souther.compiler.query.Composition;
 import souther.compiler.query.OfferingRequest;
 import souther.compiler.query.RowKey;
 import souther.compiler.query.Settlements;
@@ -147,7 +147,7 @@ class WhatTheOfferingAnswersSurvivesDroppingARowTest {
         Map<String, Adequacy.Filling> generated =
                 Adequacy.generatedOf(compilation.db(), "example.shipping");
         assertNotNull(generated, "the model under test compiles: " + compilation.errors());
-        Offering composed = Offering.composed(
+        Composition composed = Composition.composed(
                 OfferingRequest.overTheModule("example.shipping", true), generated,
                 Adequacy.generatedForDeclarationsOf(compilation.db(), "example.shipping",
                         new GenerationScope.Module()));

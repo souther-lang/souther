@@ -6,7 +6,7 @@ import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.GenerationScope;
 import souther.compiler.query.OfferItem;
-import souther.compiler.query.Offering;
+import souther.compiler.query.Composition;
 import souther.compiler.query.OfferingRequest;
 import souther.compiler.query.OwedBoundaryPoint;
 import souther.compiler.query.RowKey;
@@ -125,11 +125,11 @@ class EveryThingOwedAtAPointIsAnItemOfItsOwnTest {
         return compilation;
     }
 
-    private static Offering composed(Compilation compilation) {
+    private static Composition composed(Compilation compilation) {
         Map<String, Adequacy.Filling> generated =
                 Adequacy.generatedOf(compilation.db(), "example.stops");
         assertNotNull(generated, "the model under test compiles: " + compilation.errors());
-        return Offering.composed(OfferingRequest.overTheModule("example.stops", true), generated,
+        return Composition.composed(OfferingRequest.overTheModule("example.stops", true), generated,
                 Adequacy.generatedForDeclarationsOf(compilation.db(), "example.stops",
                         new GenerationScope.Module()));
     }

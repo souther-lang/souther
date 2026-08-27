@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.OfferItem;
-import souther.compiler.query.Offering;
+import souther.compiler.query.Composition;
 import souther.compiler.query.OfferingRequest;
 import souther.compiler.query.RowKey;
 import souther.compiler.query.Settlement;
@@ -92,11 +92,11 @@ class ARowComposedForAnItemSettlesThatItemTest {
      * finally handed, a row answering something another row also answers is not there to be asked
      * about — so the two would agree by one of them being gone.
      */
-    private static Offering composed(Compilation compilation) {
+    private static Composition composed(Compilation compilation) {
         Map<String, Adequacy.Filling> generated =
                 Adequacy.generatedOf(compilation.db(), "example.declared");
         assertNotNull(generated, "the model under test compiles");
-        return Offering.composed(OfferingRequest.overTheModule("example.declared", true), generated,
+        return Composition.composed(OfferingRequest.overTheModule("example.declared", true), generated,
                 Adequacy.generatedForDeclarationsOf(compilation.db(), "example.declared",
                         new souther.compiler.query.GenerationScope.Module()));
     }

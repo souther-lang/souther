@@ -359,7 +359,7 @@ public final class GeneratedRows {
         offering.rows().forEach((behavior, rows) -> {
             Map<Integer, String> arms = armNames(offering.searched().get(behavior));
             List<Offered> here = new ArrayList<>();
-            for (Offering.OfferedRow row : rows) {
+            for (souther.compiler.query.OfferedRow row : rows) {
                 Offered offered = new Offered(row.key().inputs(), List.of());
                 for (String name : named(row.namedFor(), arms)) {
                     offered = offered.and(name);

@@ -3,7 +3,7 @@ package souther.compiler.conformance;
 import org.junit.jupiter.api.Test;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.OfferItem;
-import souther.compiler.query.Offering;
+import souther.compiler.query.Composition;
 import souther.compiler.query.OfferingRequest;
 import souther.compiler.query.RowKey;
 import souther.compiler.query.Settlement;
@@ -43,11 +43,18 @@ class WhatAnOfferedRowWouldSettleIsMeasuredOverTheCorpusTest {
         for (ConformanceCorpus corpus : ConformanceCorpus.all()) {
             ConformanceCorpus.Analysed analysed = corpus.analyse();
             for (String module : analysed.compilation().modules()) {
-                Offering offering = Adequacy.offeredFor(analysed.compilation().db(),
-                        OfferingRequest.overTheModule(module, true));
-                if (offering == null) {
+                java.util.Map<String, Adequacy.Filling> filled =
+                        Adequacy.generatedOf(analysed.compilation().db(), module);
+                if (filled == null) {
                     continue;
                 }
+                // The composition, because what a row was composed for is a fact about it: read
+                // off what a person is finally handed, a row another row answers for is not there
+                // to be asked about.
+                Composition offering = Composition.composed(
+                        OfferingRequest.overTheModule(module, true), filled,
+                        Adequacy.generatedForDeclarationsOf(analysed.compilation().db(), module,
+                                new souther.compiler.query.GenerationScope.Module()));
                 Settlements settlements =
                         Settlements.of(analysed.compilation().db(), offering);
                 rows += settlements.byRow().size();

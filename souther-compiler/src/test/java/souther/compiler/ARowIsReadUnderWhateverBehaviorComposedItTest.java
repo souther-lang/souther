@@ -7,6 +7,7 @@ import souther.compiler.query.DeclarationResolution;
 import souther.compiler.query.DeclaredRows;
 import souther.compiler.query.GenerationScope;
 import souther.compiler.query.OfferItem;
+import souther.compiler.query.Composition;
 import souther.compiler.query.Offering;
 import souther.compiler.query.OfferingRequest;
 import souther.compiler.query.RowKey;
@@ -63,7 +64,7 @@ class ARowIsReadUnderWhateverBehaviorComposedItTest {
 
         // The offering a run makes when nothing was asked of the carrier itself. Which is the state
         // `Offering.composed` is written for, and the one a reader off the searches cannot read.
-        Offering composed = Offering.composed(
+        Composition composed = Composition.composed(
                 OfferingRequest.overTheModule("example.carried", true), Map.of(), declared);
         assertFalse(composed.rows().isEmpty(), "the row is offered under its carrier: " + composed);
         for (String carrier : composed.rows().keySet()) {
@@ -91,7 +92,7 @@ class ARowIsReadUnderWhateverBehaviorComposedItTest {
         compilation.answerEverything();
         DeclaredRows declared = Adequacy.generatedForDeclarationsOf(compilation.db(),
                 "example.carried", new GenerationScope.Module());
-        Offering composed = Offering.composed(
+        Composition composed = Composition.composed(
                 OfferingRequest.overTheModule("example.carried", true), Map.of(), declared);
         Settlements table = Settlements.of(compilation.db(), composed);
 

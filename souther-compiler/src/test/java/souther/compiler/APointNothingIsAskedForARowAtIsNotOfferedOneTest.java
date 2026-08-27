@@ -7,7 +7,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.DeclarationResolution;
 import souther.compiler.query.GenerationScope;
 import souther.compiler.query.OfferItem;
-import souther.compiler.query.Offering;
+import souther.compiler.query.Composition;
 import souther.compiler.query.OfferingRequest;
 import souther.compiler.query.OwedBoundaryPoint;
 import souther.compiler.query.Settlements;
@@ -135,7 +135,7 @@ class APointNothingIsAskedForARowAtIsNotOfferedOneTest {
         assertNotNull(generated, "the model under test compiles: " + compilation.errors());
         var declared = Adequacy.generatedForDeclarationsOf(compilation.db(),
                 "example.declaredwritten", new GenerationScope.Module());
-        Offering composed = Offering.composed(
+        Composition composed = Composition.composed(
                 OfferingRequest.overTheModule("example.declaredwritten", true), generated, declared);
         Settlements table = Settlements.of(compilation.db(), composed);
 
@@ -166,11 +166,11 @@ class APointNothingIsAskedForARowAtIsNotOfferedOneTest {
         return compilation;
     }
 
-    private static Offering composed(Compilation compilation) {
+    private static Composition composed(Compilation compilation) {
         Map<String, Adequacy.Filling> generated =
                 Adequacy.generatedOf(compilation.db(), "example.written");
         assertNotNull(generated, "the model under test compiles: " + compilation.errors());
-        return Offering.composed(OfferingRequest.overTheModule("example.written", true), generated,
+        return Composition.composed(OfferingRequest.overTheModule("example.written", true), generated,
                 Adequacy.generatedForDeclarationsOf(compilation.db(), "example.written",
                         new GenerationScope.Module()));
     }

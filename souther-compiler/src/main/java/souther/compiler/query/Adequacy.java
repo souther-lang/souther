@@ -1594,7 +1594,7 @@ public final class Adequacy {
         // And what the module's own declarations are owed, which is no behavior's and so is in none
         // of the fillings above. Asked only where the request asked for the edges: a request that
         // asked for no boundary rows is not asking about these either.
-        Offering composed = Offering.composed(request, generated, request.boundaries()
+        Composition composed = Composition.composed(request, generated, request.boundaries()
                 ? generatedForDeclarationsOf(db, request.module(), request.scope()) : null);
         // And then only the rows whose going would cost the offering something. A candidate is
         // composed for one thing and the positions that thing does not name hold whatever the row

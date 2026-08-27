@@ -188,7 +188,7 @@ public record Settlements(List<OfferItem> requested,
      * questions a measurement puts to the rows in a file, put here to the rows a person is being
      * handed.
      */
-    public static Settlements of(Db db, Offering offering) {
+    public static Settlements of(Db db, Composition offering) {
         String module = offering.request().module();
         Map<String, Sig> sigs = db.ask(new Bodies.Signatures(module)).value();
         BoundaryValues building = Adequacy.constructing(db, module);
@@ -248,7 +248,7 @@ public record Settlements(List<OfferItem> requested,
         List<OfferItem> items = List.copyOf(new LinkedHashSet<>(requested));
         offering.rows().forEach((behavior, rows) -> {
             OneBehavior read = reading.get(behavior);
-            for (Offering.OfferedRow row : rows) {
+            for (OfferedRow row : rows) {
                 // Read once for the row and asked of every item. What a row is — where its values
                 // sit and what running it recorded — does not change between the questions put to
                 // it, and reading it per item would be the same row read as many times as this run

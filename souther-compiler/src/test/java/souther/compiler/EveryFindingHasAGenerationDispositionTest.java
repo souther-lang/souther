@@ -895,10 +895,10 @@ class EveryFindingHasAGenerationDispositionTest {
                                     souther.compiler.partition.GenerationReason alsoAtTheEdges) {
         // The composition and not what is offered: these fillings are built here rather than
         // searched for, so there is no store to ask what their rows would settle.
-        return GeneratedRows.of(souther.compiler.query.Offering.composed(
+        return GeneratedRows.of(souther.compiler.query.Composition.composed(
                         souther.compiler.query.OfferingRequest.overTheModule("example.kind", true),
                         Map.of("pick", new Adequacy.Filling(stopped(why),
-                                atTheEdges(alsoAtTheEdges), List.of())), null),
+                                atTheEdges(alsoAtTheEdges), List.of())), null).offeringEverything(),
                 Map.of(), SourceNameResolver.identity()).text();
     }
 

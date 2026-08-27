@@ -5,6 +5,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.GenerationScope;
 import souther.compiler.query.OfferItem;
+import souther.compiler.query.Composition;
 import souther.compiler.query.Offering;
 import souther.compiler.query.OfferingRequest;
 import souther.compiler.query.RowKey;
@@ -101,7 +102,7 @@ class ARowIsNotOfferedForWhatAnotherOfferedRowAnswersTest {
     @Test
     void aRowStandingWhereAnotherAlreadyStandsIsNotOfferedTwice() {
         Compilation compilation = compiled();
-        Offering composed = composed(compilation);
+        Composition composed = composed(compilation);
         Offering offered = Adequacy.offeredFor(compilation.db(),
                 OfferingRequest.overTheModule("example.shippingfee", true));
         assertNotNull(offered, "the model under test compiles");
@@ -200,11 +201,11 @@ class ARowIsNotOfferedForWhatAnotherOfferedRowAnswersTest {
     }
 
     /** What the searches composed, before anything asks what the rows settle. */
-    private static Offering composed(Compilation compilation) {
+    private static Composition composed(Compilation compilation) {
         Map<String, Adequacy.Filling> generated =
                 Adequacy.generatedOf(compilation.db(), "example.shippingfee");
         assertNotNull(generated, "the model under test compiles: " + compilation.errors());
-        Offering composed = Offering.composed(
+        Composition composed = Composition.composed(
                 OfferingRequest.overTheModule("example.shippingfee", true), generated,
                 Adequacy.generatedForDeclarationsOf(compilation.db(), "example.shippingfee",
                         new GenerationScope.Module()));
