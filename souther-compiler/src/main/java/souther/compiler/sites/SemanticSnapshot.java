@@ -16,6 +16,7 @@ import souther.compiler.query.Names;
 import souther.compiler.query.Sites;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -97,6 +98,35 @@ public final class SemanticSnapshot {
             case Hir.Var written -> namespaceOf(written.written());
             case null, default -> Optional.empty();
         };
+    }
+
+    /**
+     * The fields a value of {@code held} has, each with what it is declared to be.
+     *
+     * <p>In the order a declaration lays them out, spreads included, which is the order an author
+     * reads them in. Empty for anything that is not a declared data type: a list has no fields to
+     * write after a {@code .}, and neither has a type this module cannot see.
+     *
+     * <p>A newtype has one, and it is the {@code value} it wraps. That is the declaration speaking:
+     * a newtype declares one field and what it is is what it was made of.
+     */
+    public Map<String, Type> fieldsOf(TypeFact held) {
+        if (!(held.type() instanceof Type.Ref(TypeSymbol named))) {
+            return Map.of();
+        }
+        if (DeclaredTypeEvidence.isNewtype(named, symbols)) {
+            Type wrapped =
+                    DeclaredTypeEvidence.shapeOf(DeclaredTypeEvidence.newtypeBaseType(named, symbols));
+            return wrapped == null ? Map.of() : Map.of("value", wrapped);
+        }
+        Map<String, Type> fields = new LinkedHashMap<>();
+        DeclaredTypeEvidence.fieldTypes(named, symbols).forEach((field, written) -> {
+            Type is = DeclaredTypeEvidence.shapeOf(written);
+            if (is != null) {
+                fields.put(field, is);
+            }
+        });
+        return fields;
     }
 
     /**

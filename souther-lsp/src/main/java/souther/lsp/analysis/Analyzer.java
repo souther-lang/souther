@@ -49,6 +49,8 @@ import souther.compiler.diag.ReportContext;
 import souther.compiler.diag.SourceContext;
 import souther.compiler.diag.Shown;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.sites.MemberReceiver;
+import souther.compiler.sites.SemanticSnapshot;
 import souther.compiler.cst.SyntaxElement;
 import souther.compiler.cst.SyntaxKind;
 import souther.compiler.cst.SyntaxNode;
@@ -118,6 +120,15 @@ public final class Analyzer {
 
     /** What the last compile that could answer said each document owes a declaration for. */
     private final LastAnswered<List<CompletionItem>> behaviorsOwed = new LastAnswered<>();
+
+    /**
+     * The compile of the document being typed in, finished off where the author has not finished it.
+     *
+     * <p>Its own and not the workspace's, and nothing it answers is kept: what a field list is taken
+     * from is the buffer now. A receiver read from an earlier revision would be a wrong answer
+     * wearing the shape of a right one, which is why this is not {@link LastAnswered}.
+     */
+    private final SemanticProbe probe = new SemanticProbe();
 
     /**
      * How much of what the rows cover this editor was told to measure. Off by default.
@@ -348,19 +359,38 @@ public final class Analyzer {
      * every change.
      */
     private Compilation compileOf(ModuleGraph graph) {
-        Map<String, String> clean = new LinkedHashMap<>();
+        Sorted sorted = sorted(graph);
+        return compileOf(graph, pathCompiledAgainst(), sorted.joining(), sorted.broken());
+    }
+
+    /** The workspace as a compile takes it: what can join one, and the modules of what cannot. */
+    private record Sorted(Map<String, String> joining, Set<String> broken) {}
+
+    /**
+     * Which documents can join a compile, sorted once.
+     *
+     * <p>Once because a document is one of the two and not the other, and a second reading of that
+     * here would be a second answer free to differ from the one the compile was built from — the
+     * probe compiles the same workspace with one document standing in for itself, and the rest of it
+     * has to be the rest of it.
+     */
+    private Sorted sorted(ModuleGraph graph) {
+        Map<String, String> joining = new LinkedHashMap<>();
         Set<String> broken = new HashSet<>();
         for (String uri : graph.uris()) {
             String text = graph.text(uri);
             Reading reading = readingOf(uri, text);
             if (reading.parses()) {
-                clean.put(uri, text);
+                joining.put(uri, text);
             } else if (reading.declares() != null) {
                 broken.add(reading.declares());
             }
         }
-        return compileOf(graph, compiledAgainst == null ? souther.compiler.meta.ModulePath.EMPTY
-                : compiledAgainst, clean, broken);
+        return new Sorted(joining, broken);
+    }
+
+    private souther.compiler.meta.ModulePath pathCompiledAgainst() {
+        return compiledAgainst == null ? souther.compiler.meta.ModulePath.EMPTY : compiledAgainst;
     }
 
     /**
@@ -1413,6 +1443,10 @@ public final class Analyzer {
         if (text == null) {
             return List.of();
         }
+        List<CompletionItem> members = membersAt(uri, text, pos, graph);
+        if (members != null) {
+            return members;
+        }
         SyntaxNode root = CstParser.parse(text).root();
         Compilation compilation = compileOf(graph);
         String module = moduleOf(compilation, graph, uri);
@@ -1447,6 +1481,73 @@ public final class Analyzer {
             byLabel.putIfAbsent(keyword, new CompletionItem(keyword, CompletionItem.KEYWORD, null));
         }
         return new ArrayList<>(byLabel.values());
+    }
+
+    /**
+     * The fields of what the cursor is taking something off, or null where it is taking nothing off
+     * anything.
+     *
+     * <p>Null and not an empty list, because the two mean different things to the caller: nothing may
+     * be written after a {@code .} on a value with no fields, and every reachable name may be
+     * written where there is no {@code .} at all. A member list replaces the name list rather than
+     * joining it — what a field read admits is a field of that value and not whatever else is in
+     * scope.
+     *
+     * <p>Read from the source as it stands, through a probe: the line a field list is wanted on is
+     * one the parser cannot finish, so the document is out of the workspace's compile at exactly the
+     * moment this is asked. What the probe answers about is the buffer now, and what may be taken
+     * from it stops where the probe put anything in — which the receiver clears and the access
+     * around it does not.
+     */
+    private List<CompletionItem> membersAt(String uri, String text, Position pos, ModuleGraph graph) {
+        int cursor = new LineIndex(text).offsetOf(pos.line(), pos.character());
+        Sorted sorted = sorted(graph);
+        Map<String, String> rest = new LinkedHashMap<>(sorted.joining());
+        rest.remove(uri);
+        SemanticProbe.Reading reading =
+                probe.of(rest, sorted.broken(), pathCompiledAgainst(), uri, text, cursor);
+        if (reading == null) {
+            return null;
+        }
+        String module = moduleOf(reading.compilation(), graph, uri);
+        if (module == null) {
+            return null;
+        }
+        Optional<SemanticSnapshot> snapshot =
+                SemanticSnapshot.of(reading.compilation().db(), module);
+        if (snapshot.isEmpty()) {
+            return null;
+        }
+        SourcePos at = new LineIndex(text, new SourceId(uri)).posOf(cursor);
+        Optional<MemberReceiver> receiver = snapshot.get().memberReceiverAround(at);
+        if (receiver.isEmpty() || !reading.mayBeRead(receiver.get().writtenAt())) {
+            return null;
+        }
+        return switch (receiver.get()) {
+            case MemberReceiver.Value held -> fields(snapshot.get(), held);
+            // A value the declarations say nothing about, and a namespace, are both receivers this
+            // has nothing to offer for yet. Both are still receivers: a field read is what was
+            // written, and every name in scope is not what may be written after it.
+            case MemberReceiver.UntypedValue _, MemberReceiver.Namespace _ -> List.of();
+        };
+    }
+
+    /**
+     * What a value's fields are, as an editor offers them.
+     *
+     * <p>The name and nothing beside it. What a field is is known here, and writing it out is a
+     * question this does not answer yet: a type is spelled the way the module reading it writes its
+     * names, and a module may have no name for one at all ({@code TypeSpelling.Unnameable}). An
+     * offer carrying a spelling worked out some other way would be showing the author a name they
+     * cannot write.
+     */
+    private static List<CompletionItem> fields(SemanticSnapshot snapshot,
+                                               MemberReceiver.Value held) {
+        List<CompletionItem> out = new ArrayList<>();
+        for (String field : snapshot.fieldsOf(held.type()).keySet()) {
+            out.add(new CompletionItem(field, CompletionItem.FIELD, null));
+        }
+        return List.copyOf(out);
     }
 
     /**
