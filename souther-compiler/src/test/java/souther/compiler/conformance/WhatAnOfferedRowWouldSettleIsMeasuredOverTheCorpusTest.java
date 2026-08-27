@@ -28,8 +28,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>The numbers are printed rather than pinned. What the corpus happens to hold moves as the corpus
  * is written, and a checked-in count would be a snapshot of the models rather than of this walk.
- * What is asserted is the shape: the table is total, the items are what was asked for, and a row
- * composed for something settles the thing it was composed for.
+ * What is asserted is the shape: the table is total, the items are what was asked for, and no row
+ * composed for something is read as not settling it.
+ *
+ * <p><b>Of this corpus, and not of every model.</b> Over souther-examples that last one does not
+ * hold: twenty-four points there have a row composed at them that this walk reads as standing
+ * somewhere else, which is the search and this reading of one model coming to two answers. It costs
+ * no row — what a row was composed for keeps it whatever this walk can tell — but it is a
+ * disagreement, and it is written down here rather than left to be found by whoever strengthens the
+ * assertion next.
  */
 class WhatAnOfferedRowWouldSettleIsMeasuredOverTheCorpusTest {
 
@@ -78,7 +85,8 @@ class WhatAnOfferedRowWouldSettleIsMeasuredOverTheCorpusTest {
 
                 // What the searches composed a row for, against what the rows turn out to settle.
                 // A row composed for an item and read as not settling it is the generator and this
-                // walk reading one model two ways.
+                // walk reading one model two ways. Held of this corpus: over souther-examples there
+                // are points where the two disagree, which is said above.
                 settlements.composedFor().forEach((item, row) -> {
                     Map<OfferItem, Settlement> here = settlements.byRow().get(row);
                     if (here != null) {

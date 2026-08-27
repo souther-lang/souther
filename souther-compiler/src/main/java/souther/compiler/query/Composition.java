@@ -136,8 +136,14 @@ public record Composition(OfferingRequest request, SequencedMap<String, List<Off
      * <p>The rows and nothing else changes. What the searches came to is what they came to whatever
      * a person is handed afterwards — a row not offered was still composed, and the note beside a
      * search that came to nothing says what happened rather than what is in the block.
+     *
+     * <p><b>Reachable from this package and no further.</b> What may be passed here is what asking
+     * came to, and the asking is {@link Settlements}; a caller outside could hand in every row and
+     * an empty answer, which is the raw composition under the name of an offering. Closing the
+     * constructor and leaving the one call that reaches it open would have left the same door with
+     * a longer name on it.
      */
-    public Offering keeping(java.util.Set<RowKey> kept, java.util.Set<OfferItem> answered) {
+    Offering keeping(java.util.Set<RowKey> kept, java.util.Set<OfferItem> answered) {
         SequencedMap<String, List<OfferedRow>> out = new LinkedHashMap<>();
         rows.forEach((behavior, here) -> {
             List<OfferedRow> left = here.stream().filter(row -> kept.contains(row.key())).toList();
