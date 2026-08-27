@@ -59,9 +59,19 @@ final class AnswerShape {
      * equal when they hold equal things. Anything else a declaration may write — a class of this
      * compiler's own that implements a map, or one of the language's own that says it keeps none of
      * the contract — promises whatever that class promises, which is not this.
+     *
+     * <p><b>Each is here for what its own specification says about comparing two, and never for
+     * what it is under.</b> Holding things is not the contract: what the language says about
+     * comparing two collections is that it says nothing beyond comparing two objects, and something
+     * that implements no more than that may answer by which object it is and be within its rights.
+     * A list and a set are here because each says what comparing two of them compares; a map is;
+     * an absence is; and the ordered and sorted ones are the same contracts said again over an
+     * order. Adding one is reading what the language says about {@code equals} on it and writing
+     * that down here, which is what {@code AWalkOfWhatIsDeclaredStopsWhereNothingSettlesItTest}
+     * holds each of these to at the place a declaration writes it.
      */
     private static final Set<Class<?>> THE_CONTRACTS = Set.of(
-            java.util.Collection.class, java.util.List.class, java.util.Set.class,
+            java.util.List.class, java.util.Set.class,
             java.util.SequencedSet.class, java.util.SortedSet.class,
             java.util.Map.class, java.util.SortedMap.class, java.util.SequencedMap.class,
             java.util.Optional.class);
@@ -99,7 +109,8 @@ final class AnswerShape {
     static boolean keepsThatContract(Class<?> type) {
         return !WHICH_KEEP_NONE_OF_IT.contains(type)
                 && type.getModule() == Object.class.getModule()
-                && (java.util.Collection.class.isAssignableFrom(type)
+                && (java.util.List.class.isAssignableFrom(type)
+                        || java.util.Set.class.isAssignableFrom(type)
                         || java.util.Map.class.isAssignableFrom(type)
                         || type == java.util.Optional.class);
     }

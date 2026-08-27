@@ -98,6 +98,22 @@ class AWalkOfWhatIsDeclaredStopsWhereNothingSettlesItTest {
         }
     }
 
+    private record ACollectionIsAnswered() implements Key<java.util.Collection<String>> {
+
+        @Override
+        public Answer<java.util.Collection<String>> compute(Db db) {
+            return Answer.absent();
+        }
+    }
+
+    private record AListIsAnswered() implements Key<List<String>> {
+
+        @Override
+        public Answer<List<String>> compute(Db db) {
+            return Answer.absent();
+        }
+    }
+
     private record AnIdentityMapIsAnswered()
             implements Key<java.util.IdentityHashMap<String, String>> {
 
@@ -196,6 +212,31 @@ class AWalkOfWhatIsDeclaredStopsWhereNothingSettlesItTest {
     }
 
     /**
+     * Holding things is not the contract.
+     *
+     * <p>What the language says about comparing two collections is that it says nothing beyond
+     * comparing two objects: a thing that implements no more than a collection may answer by which
+     * object it is and be within its rights. So a declaration that writes one has settled that it
+     * holds strings and nothing about what comparing two of them compares — which is where the
+     * declarations stop, whatever is under it.
+     *
+     * <p>Beside the one below, which is the same declaration written one step down and is read for
+     * what it holds. Between them they say the rule is what each type's own specification says
+     * about comparing two, and not what a type is under.
+     */
+    @Test
+    void aCollectionIsNotAContractAboutComparingTwoOfThem() {
+        assertEquals(List.of("NOTHING_CLOSES_IT at  java.util.Collection"),
+                walking(ACollectionIsAnswered.class));
+    }
+
+    /** And a list, which says what comparing two of them compares, is read for what it holds. */
+    @Test
+    void aListIsReadForWhatItHolds() {
+        assertEquals(List.of(), walking(AListIsAnswered.class));
+    }
+
+    /**
      * What a declaration writes is the contract or it is a thing of its own.
      *
      * <p>Naming an implementation names what that implementation does. The language ships one whose
@@ -218,7 +259,10 @@ class AWalkOfWhatIsDeclaredStopsWhereNothingSettlesItTest {
      */
     @Test
     void aMapOfSomebodysOwnIsReadAsWhatItIs() {
-        assertEquals(List.of("SAYS_NOTHING_OF_ITSELF at .AMapOfItsOwn#beside java.util.ArrayDeque"),
+        assertEquals(List.of("SAYS_NOTHING_OF_ITSELF at .AMapOfItsOwn#beside java.util.ArrayDeque",
+                        // And what it keeps from the map it extends, which the language declares as
+                        // a collection and says nothing about comparing two of.
+                        "NOTHING_CLOSES_IT at .AbstractMap#values java.util.Collection"),
                 walking(AMapOfItsOwnIsAnswered.class));
     }
 
