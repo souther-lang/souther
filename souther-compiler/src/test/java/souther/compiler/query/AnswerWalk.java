@@ -2,7 +2,6 @@ package souther.compiler.query;
 
 import java.lang.reflect.Array;
 import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -74,14 +73,6 @@ final class AnswerWalk {
         return scan.walked();
     }
 
-    /** Whether {@code type} says what it is, rather than which object it is. */
-    private static boolean declaresEquals(Class<?> type) {
-        try {
-            return type.getMethod("equals", Object.class).getDeclaringClass() != Object.class;
-        } catch (NoSuchMethodException none) {
-            return false;
-        }
-    }
 
     /**
      * One walk of everything a store holds.
@@ -112,11 +103,7 @@ final class AnswerWalk {
             if (each == null) {
                 return true;
             }
-            // The leaves. A boxed number, a string, a case of an enumeration and a class are values
-            // by the language, and asking them again would be asking about the JDK.
-            if (each instanceof String || each instanceof Number || each instanceof Boolean
-                    || each instanceof Character || each instanceof Enum<?>
-                    || each instanceof Class<?>) {
+            if (AnswerShape.isLeaf(each.getClass())) {
                 return true;
             }
             List<Found> already = settled.get(each);
@@ -152,7 +139,7 @@ final class AnswerWalk {
 
         private boolean under(Object each, Locus where) {
             classes.add(each.getClass().getName());
-            if (!declaresEquals(each.getClass())) {
+            if (!AnswerShape.declaresEquals(each.getClass())) {
                 // A lambda's class name carries the JVM's own counter, which differs per run. What
                 // is left is what the type is called, which is what the other walk calls it too, so
                 // a register keyed by what was found holds one line for a thing whichever met it.
@@ -193,26 +180,21 @@ final class AnswerWalk {
 
         private boolean fieldsOf(Object each, Locus where) {
             boolean whole = true;
-            for (Class<?> at = each.getClass(); at != null && at != Object.class;
-                    at = at.getSuperclass()) {
-                for (Field field : at.getDeclaredFields()) {
-                    if (Modifier.isStatic(field.getModifiers()) || field.getType().isPrimitive()) {
-                        continue;
-                    }
-                    Object held;
-                    try {
-                        field.setAccessible(true);
-                        held = field.get(each);
-                    } catch (RuntimeException | ReflectiveOperationException opaque) {
-                        // A field this cannot open is a subtree it did not ask about. Said out loud,
-                        // because what is under it would otherwise be counted as looked at and clean.
-                        gaps.add(new Gap(Gap.Why.A_FIELD_THAT_WOULD_NOT_OPEN,
-                                question + where.thenMember(at, field.getName()).asText()));
-                        whole = false;
-                        continue;
-                    }
-                    whole &= at(held, where.thenMember(at, field.getName()));
+            for (Field field : AnswerShape.fieldsOf(each.getClass())) {
+                Class<?> at = field.getDeclaringClass();
+                Object held;
+                try {
+                    field.setAccessible(true);
+                    held = field.get(each);
+                } catch (RuntimeException | ReflectiveOperationException opaque) {
+                    // A field this cannot open is a subtree it did not ask about. Said out loud,
+                    // because what is under it would otherwise be counted as looked at and clean.
+                    gaps.add(new Gap(Gap.Why.A_FIELD_THAT_WOULD_NOT_OPEN,
+                            question + where.thenMember(at, field.getName()).asText()));
+                    whole = false;
+                    continue;
                 }
+                whole &= at(held, where.thenMember(at, field.getName()));
             }
             return whole;
         }

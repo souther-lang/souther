@@ -69,19 +69,53 @@ final class AnswerClosure {
         IDENTITY_SEMANTICS
     }
 
+    /**
+     * What a declaration leaves open, which is not a reading of a thing and does not pretend to be
+     * one.
+     *
+     * <p>{@link Meaning} is what something <em>is</em>, and reaching it takes a declaration that
+     * settles what may stand somewhere. Where the declaration settles nothing, saying the thing is a
+     * value would be claiming what the declaration does not give — the same slot admits a way of
+     * asking, and that everything standing there today happens to be a value is exactly the fact
+     * nothing is holding.
+     *
+     * <p>So it is a kind of failure of its own, and the remedy is a declaration rather than a
+     * method. Which is what keeps it from being the word for an unread thing: this is read, and what
+     * was read is that the type is open.
+     */
+    enum DeclarationProblem {
+        /** A member declared as something anything is, so nothing says what may stand there. */
+        OPEN_VALUE_SLOT
+    }
+
+    /** What is wrong at a place: what the thing there is, or what its declaration leaves open. */
+    private sealed interface Fault {
+
+        /** The thing was read and this is what it is. */
+        record OfTheThing(Meaning meaning) implements Fault {}
+
+        /** The declaration was read and it settles nothing here. */
+        record OfTheDeclaration(DeclarationProblem problem) implements Fault {}
+    }
+
     /** Something that says what it is and defines no equality over that. */
-    private static final Meaning MISSING_EQUALITY =
-            new Meaning.Value(ValueProblem.MISSING_EQUALITY);
+    private static final Fault MISSING_EQUALITY =
+            new Fault.OfTheThing(new Meaning.Value(ValueProblem.MISSING_EQUALITY));
 
     /** A way of asking something rather than an answer, so it is one object per store whatever it
      *  is compared with. */
-    private static final Meaning CAPABILITY = new Meaning.Capability();
+    private static final Fault CAPABILITY = new Fault.OfTheThing(new Meaning.Capability());
+
+    /** A place the declarations leave open, so no walk of them can say which of the two it is. */
+    private static final Fault AN_OPEN_SLOT =
+            new Fault.OfTheDeclaration(DeclarationProblem.OPEN_VALUE_SLOT);
 
     /** What one of these is, in the words a reader of a failure gets. */
-    private static String said(Meaning meaning) {
-        return switch (meaning) {
-            case Meaning.Value(ValueProblem problem) -> "VALUE/" + problem;
-            case Meaning.Capability _ -> "CAPABILITY";
+    private static String said(Fault fault) {
+        return switch (fault) {
+            case Fault.OfTheThing(Meaning.Value(ValueProblem problem)) -> "VALUE/" + problem;
+            case Fault.OfTheThing(Meaning.Capability _) -> "CAPABILITY";
+            case Fault.OfTheDeclaration(DeclarationProblem problem) -> problem.toString();
         };
     }
 
@@ -173,7 +207,7 @@ final class AnswerClosure {
      *
      * @param named what this problem is called where a failure is read
      */
-    private record Problem(String named, Meaning meaning, String reason) {}
+    private record Problem(String named, Fault fault, String reason) {}
 
     /** One place, what is wrong with what is there, and who met it. */
     private record Known(Locus.Place place, Problem problem, Set<Observation> seenBy) {}
@@ -204,12 +238,50 @@ final class AnswerClosure {
             "a module path resolves a module by running something, and a function never equals the "
                     + "same function computed again");
 
-    /** The store itself, reached through a scope that was taken apart before it was used. */
+    /**
+     * A way of asking the modules around this one, reached through a scope that was taken apart
+     * before it was used.
+     *
+     * <p>Met at two depths and it is one thing. What the declarations say stops at the way of
+     * asking, which nothing closes; a walk of what was built goes on through it to the store it
+     * holds. Neither is a defect the other does not have.
+     */
     private static final Problem A_STORE = new Problem("A_STORE", CAPABILITY,
             "Scoping.Scoped carries a way of asking the modules around this one a further question, "
                     + "and it holds this store to ask with. Where a scope has been taken apart "
                     + "already, that is the half of the assembly nobody has yet — it belongs inside "
                     + "the compute that asks");
+
+    /** How long a piece of work gets, and what a caller is handed when it does not finish. */
+    private static final Problem A_DEADLINE = new Problem("A_DEADLINE", CAPABILITY,
+            "a deadline decides by running a clock, or by reading which piece of work it is, and a "
+                    + "way of deciding never equals the same way of deciding built again. Handed in "
+                    + "rather than computed, so what is left of it is that the store hears a new "
+                    + "one as a change to the outside");
+
+    /** What a generation is asked for on behalf of, carrying what it takes to go on asking. */
+    private static final Problem GENERATION_READERS = new Problem("GENERATION_READERS", CAPABILITY,
+            "the subject a row would be written for carries the means to ask further questions — "
+                    + "the symbols a name is read against, and the reading a quantity over several "
+                    + "positions is asked of. Both are built where they are used and neither is "
+                    + "what a plan says, so what belongs in the subject is what the row is about");
+
+    /** What was raised where a name resolved to nothing. */
+    private static final Problem AN_EXCEPTION = new Problem("AN_EXCEPTION", MISSING_EQUALITY,
+            "a name nothing resolved is answered with what was raised where it was read. What it "
+                    + "says is where the name is and what is wrong with it, and two compiles that "
+                    + "found the same thing found the same thing — so that is what it wants an "
+                    + "equality over, and being one object per raise is not it");
+
+    /** What a term holds beside its parts, declared as anything at all. */
+    private static final Problem A_TERM_HOLDS_ANYTHING =
+            new Problem("A_TERM_HOLDS_ANYTHING", AN_OPEN_SLOT,
+                    "what a shape holds beside its parts is a location, a written value, an "
+                            + "operator, the name of an operation, or the type and fields of a "
+                            + "construction — six things, written as one that admits anything. Each "
+                            + "of them compares by its own equality and the term above them rests "
+                            + "on that, which is a sum nobody has written down: until it is, what "
+                            + "may stand here is settled by whatever happens to be put there");
 
     /** One end of what a reading leaves a position. */
     private static final Problem NARROWED_END = new Problem("NARROWED_END", MISSING_EQUALITY,
@@ -318,6 +390,123 @@ final class AnswerClosure {
                     Set.of(walked(Scenario.A_MODULE_SPOKEN_ABOUT),
                             compared(Scenario.A_MODULE_SPOKEN_ABOUT))));
 
+    /** One place a declaration puts something that cannot be compared as a value, and what is
+     *  wrong there. */
+    private record KnownDeclared(TypePath.Place place, Problem problem) {}
+
+    /** A place, written the way the walk of declarations writes one. */
+    private static TypePath.Place declared(String question, String offender,
+                                           TypePath.Step... steps) {
+        return new TypePath(List.of(steps)).of(question, offender);
+    }
+
+    /** A member step, by what the declaring type is called. */
+    private static TypePath.Step part(String owner, String name) {
+        return new TypePath.Step.Member(owner, name);
+    }
+
+    /** What a container the JDK declares was written to hold. */
+    private static final TypePath.Step HELD = new TypePath.Step.Argument("held");
+    private static final TypePath.Step MAP_VALUE = new TypePath.Step.Argument("value");
+
+    /** One arm of a sum, which a walk of types takes all of. */
+    private static TypePath.Step arm(String named) {
+        return new TypePath.Step.Arm(named);
+    }
+
+    /** The classes a module compiled to, held by the name each is emitted under. */
+    private static KnownDeclared classes(String question, TypePath.Step... steps) {
+        return new KnownDeclared(declared(question, "byte[]", steps), BYTES);
+    }
+
+    /** What a generation's subject carries to go on asking with, under the plan that holds it. */
+    private static KnownDeclared generationReader(String offender, TypePath.Step... under) {
+        List<TypePath.Step> steps = new java.util.ArrayList<>(List.of(
+                part(Q + "Adequacy$Filling", "composed"),
+                part("souther.compiler.partition.FillResult", "plan"),
+                part("souther.compiler.partition.GenerationPlan", "subject")));
+        steps.addAll(List.of(under));
+        return new KnownDeclared(
+                declared(Q + "Adequacy$Generated", offender, steps.toArray(new TypePath.Step[0])),
+                GENERATION_READERS);
+    }
+
+    /**
+     * Every place a question's own declaration puts something that cannot be compared as a value.
+     *
+     * <p>Read against what the declarations say and not against what a compile built, which is why
+     * some of these are met by nothing that walks a store: a question no corpus puts still declares
+     * what it answers with, and what a declaration allows is wider than what a run happened to
+     * build.
+     */
+    private static final List<KnownDeclared> DECLARED = List.of(
+            classes(Q + "Output$All", MAP_VALUE),
+            classes(Q + "Output$Classes", MAP_VALUE),
+            classes(Q + "Output$Linked", MAP_VALUE),
+            classes(Q + "Output$Evaluated",
+                    part("souther.compiler.generated.EvaluationArtifact", "classes"), MAP_VALUE),
+            classes(Q + "Output$EvaluationLinked",
+                    part("souther.compiler.generated.EvaluationArtifact", "classes"), MAP_VALUE),
+            new KnownDeclared(declared(Q + "Front$Library", "souther.compiler.stdlib.Stdlib"),
+                    STDLIB),
+            new KnownDeclared(declared(Q + "Bodies$Expanding", "souther.compiler.stdlib.Stdlib",
+                    part(Q + "Bodies$Expanding$Of", "table"),
+                    part("souther.compiler.check.HelperTable", "stdlib")), STDLIB),
+            new KnownDeclared(declared(Q + "Front$Path", "souther.compiler.meta.ModulePath"),
+                    MODULE_PATH),
+            new KnownDeclared(
+                    declared(Q + "Front$ExampleDeadline", "souther.compiler.examples.Deadline"),
+                    A_DEADLINE),
+            // The way of asking, which is where the declarations stop. What a walk of a store goes
+            // on to reach through it is the store itself, written down above.
+            new KnownDeclared(declared(Q + "Names$ModuleScope",
+                    "souther.compiler.check.Resolve$Elsewhere",
+                    part("souther.compiler.check.Scoping$Scoped", "values"),
+                    part("souther.compiler.check.Resolve$Values", "elsewhere")), A_STORE),
+            generationReader("souther.compiler.check.Symbols",
+                    part("souther.compiler.partition.Generator$Subject", "inputs"),
+                    part("souther.compiler.partition.BehaviorInputs", "symbols")),
+            generationReader("souther.compiler.inputs.ReadQuantities",
+                    part("souther.compiler.partition.Generator$Subject", "held"),
+                    part("souther.compiler.partition.HeldCounts", "counts"),
+                    arm("souther.compiler.inputs.ReadQuantities")),
+            new KnownDeclared(declared(Q + "Names$Resolution",
+                    "souther.compiler.diag.CompileException",
+                    part("souther.compiler.check.Resolve$Resolution", "unresolved"), HELD),
+                    AN_EXCEPTION),
+            // Under the question that declares reports of its own, which is where a walk of the
+            // declarations meets what every answer holds.
+            new KnownDeclared(declared(Q + "Names$Cycles", "souther.compiler.diag.Diagnostic",
+                    part(Q + "Names$Cycles$Of", "reported"), MAP_VALUE,
+                    part(Q + "Report", "diagnostic")), A_REPORT),
+            new KnownDeclared(declared(Q + "Adequacy$Inputs", "java.lang.Object",
+                    MAP_VALUE,
+                    part("souther.compiler.inputs.InputDomain", "positions"), HELD,
+                    arm("souther.compiler.inputs.ReadPosition"),
+                    part("souther.compiler.inputs.ReadPosition", "projection"),
+                    arm("souther.compiler.check.ProjectionEvidence$NotCertified"),
+                    part("souther.compiler.check.ProjectionEvidence$NotCertified", "causes"), HELD,
+                    arm("souther.compiler.check.ProjectionEvidence$Cause$Lossy"),
+                    part("souther.compiler.check.ProjectionEvidence$Cause$Lossy", "atom"),
+                    part("souther.compiler.check.FactSubject", "identity"),
+                    part("souther.compiler.check.Term", "of")), A_TERM_HOLDS_ANYTHING));
+
+    /** Every place a declaration is written down for. */
+    static Set<TypePath.Place> declaredPlaces() {
+        Set<TypePath.Place> out = new java.util.LinkedHashSet<>();
+        DECLARED.forEach(each -> out.add(each.place()));
+        return out;
+    }
+
+    /** What each of them is, for a reader of a failure. */
+    static Map<TypePath.Place, String> declaredReasons() {
+        Map<TypePath.Place, String> out = new LinkedHashMap<>();
+        DECLARED.forEach(each -> out.put(each.place(),
+                said(each.problem().fault()) + " " + whereItStands(each.place().question())
+                        + " [" + each.problem().named() + "] " + each.problem().reason()));
+        return out;
+    }
+
     /**
      * Where a walk cannot say whose denial a denial is, and why that is known.
      *
@@ -365,7 +554,7 @@ final class AnswerClosure {
     static Map<Locus.Place, String> reasons() {
         Map<Locus.Place, String> out = new LinkedHashMap<>();
         KNOWN.forEach(each -> out.put(each.place(),
-                said(each.problem().meaning()) + " " + whereItStands(each.place().question())
+                said(each.problem().fault()) + " " + whereItStands(each.place().question())
                         + " [" + each.problem().named() + "] " + each.problem().reason()));
         return out;
     }
