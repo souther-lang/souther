@@ -59,7 +59,10 @@ class AWalkOfWhatIsDeclaredStopsWhereNothingSettlesItTest {
         }
     }
 
-    private record TwoWaysToOneThing(ArrayDeque<String> one, ArrayDeque<String> two) {}
+    /** Something to find, one step under something that has to be walked into to find it. */
+    private record Holding(ArrayDeque<String> bad) {}
+
+    private record TwoWaysToOneThing(Holding one, Holding two) {}
 
     private record TwoWaysAreAnswered() implements Key<TwoWaysToOneThing> {
 
@@ -122,16 +125,22 @@ class AWalkOfWhatIsDeclaredStopsWhereNothingSettlesItTest {
     }
 
     /**
-     * One thing held two ways is two places the answer exposes it.
+     * What is found under a thing is said at every path that reaches the thing.
      *
      * <p>Written down once, a register would hold whichever way down the walk happened to take
      * first, and the other would be a place nobody had looked at.
+     *
+     * <p>Under something the walk has to go into, so that the second way down is answered from what
+     * was found under the first rather than found again from the top. Held directly, the two would
+     * be two things the walk stopped at and would say nothing about what it remembers.
      */
     @Test
     void whatIsFoundUnderAThingIsSaidAtEveryPathThatReachesIt() {
         assertEquals(List.of(
-                        "SAYS_NOTHING_OF_ITSELF at .TwoWaysToOneThing#one java.util.ArrayDeque",
-                        "SAYS_NOTHING_OF_ITSELF at .TwoWaysToOneThing#two java.util.ArrayDeque"),
+                        "SAYS_NOTHING_OF_ITSELF at .TwoWaysToOneThing#one.Holding#bad"
+                                + " java.util.ArrayDeque",
+                        "SAYS_NOTHING_OF_ITSELF at .TwoWaysToOneThing#two.Holding#bad"
+                                + " java.util.ArrayDeque"),
                 walking(TwoWaysAreAnswered.class));
     }
 

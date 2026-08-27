@@ -178,4 +178,29 @@ class AWalkOfOneAnswerNamesWhatMeansNothingTest {
                         "A_FIELD_THAT_WOULD_NOT_OPEN Q.Dated#at.LocalDateTime#time"),
                 gaps(walked), "and says which fields");
     }
+
+    /** And two ways down to one of those. */
+    private record BothWays(Dated one, Dated two) {}
+
+    /**
+     * A thing the walk got only part way into is not put away as looked at.
+     *
+     * <p>What is remembered per thing is what was found under it, and it may be remembered only
+     * where that is the whole of what is there. Remembered after a walk that could not open half of
+     * it, the next path to hold the same thing is told there was nothing to see — and the place
+     * where the walk fell short is a place the register never hears about, while the walk that met
+     * it says it covered everything.
+     */
+    @Test
+    void aThingTheWalkGotPartWayIntoIsNotRememberedAsWalked() {
+        Dated shared = new Dated(java.time.LocalDateTime.of(2026, 1, 1, 0, 0));
+
+        AnswerWalk.Walked walked = AnswerWalk.of("Q", new BothWays(shared, shared));
+
+        assertEquals(Set.of("A_FIELD_THAT_WOULD_NOT_OPEN Q.BothWays#one.Dated#at.LocalDateTime#date",
+                        "A_FIELD_THAT_WOULD_NOT_OPEN Q.BothWays#one.Dated#at.LocalDateTime#time",
+                        "A_FIELD_THAT_WOULD_NOT_OPEN Q.BothWays#two.Dated#at.LocalDateTime#date",
+                        "A_FIELD_THAT_WOULD_NOT_OPEN Q.BothWays#two.Dated#at.LocalDateTime#time"),
+                gaps(walked), "the walk fell short at both places that hold it");
+    }
 }
