@@ -7,6 +7,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -112,12 +113,33 @@ class ATermMayNameAPositionTheWalkStoppedShortOfTest {
      * goes into a field, into what a sequence holds, or nowhere while narrowing where it already is;
      * written for fields alone, the reading answered nothing for every path carrying one of the
      * other two, and this line — which the compiler drew before any of this — went away.
+     *
+     * <p><b>What this asks for moved, and why.</b> It used to be that the report named these points
+     * as ones nothing could build a representative for: the composer read a position's declared type
+     * off a walk of its own that stopped at the parameter, so a position three fields and a sequence
+     * down had none. It reads the declarations now, so the points have rows — which is the same
+     * claim about the line being measured, made by what the line came to rather than by the sentence
+     * saying it came to nothing.
      */
     @Test
     void andSoIsOneUnderWhatASequenceHolds() {
         String report = report(UNDER_WHAT_A_SEQUENCE_HOLDS);
+        assertTrue(report.contains("borders 1"), report);
+        assertFalse(report.contains("nothing here could build a representative"), report);
 
-        assertTrue(report.contains("f/cart.items[*].inner.a = cart.items[*].inner.b"), report);
+        assertTrue(offered(UNDER_WHAT_A_SEQUENCE_HOLDS)
+                        .contains("Cart { items = [Item { inner = Inner { a = -1, b = 0 } }] }"),
+                offered(UNDER_WHAT_A_SEQUENCE_HOLDS));
+    }
+
+    /** What {@code --generate --boundaries} offers for the model, which is where a point that is
+     *  writable says so. */
+    private static String offered(String model) {
+        Compilation compilation = Compilation.ofSource(model, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        return souther.compiler.report.GeneratedRows.of(compilation, "example.held", null, true,
+                SourceNameResolver.identity()).text();
     }
 
     private static String report(String model) {

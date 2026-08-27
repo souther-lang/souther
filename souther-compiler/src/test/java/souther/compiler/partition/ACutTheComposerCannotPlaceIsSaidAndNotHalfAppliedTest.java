@@ -68,7 +68,7 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
             """;
 
     /**
-     * A cut over a position this subject has no order for is on the answer's account.
+     * A cut over a position the declarations put nothing at is on the answer's account.
      *
      * <p>And the row is still composed. What the condition would have narrowed is a position the
      * row writes anyway, so leaving it out costs the row nothing here — what it costs is the
@@ -190,9 +190,13 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
     }
 
     private static Axis axisAt(String path) {
-        return Partitions.of(spec().name(), domain(), symbols(), ReadAs.THE_COMPILATION_DOES)
-                .axes().stream()
+        return axes().stream()
                 .filter(each -> each.path().toString().equals(path)).findFirst().orElseThrow();
+    }
+
+    private static List<Axis> axes() {
+        return Partitions.of(spec().name(), domain(), symbols(), ReadAs.THE_COMPILATION_DOES)
+                .axes();
     }
 
     private static Generator.Subject subject() {

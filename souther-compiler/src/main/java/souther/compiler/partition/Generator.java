@@ -2562,19 +2562,22 @@ public final class Generator {
     private record Standing(Map<NumericTerm, Place> at, List<OnTheWay.Declined> unrepresented) {}
 
     /**
-     * The order a position of this subject is read and written on, or null where this has none.
+     * The order a number taken at a position of this subject is measured on, or null where the
+     * declarations put nothing there.
      *
-     * <p>The axis's, which is where every other reader of a position's order asks. A position the
-     * model divides nowhere has no axis and no order here, and a value at it is written from the
-     * declared type the way it always was.
+     * <p><b>Asked of the declarations and never of the axes.</b> An axis is where the model divides
+     * a position, and an order is what a number there is counted on; a position nothing divides has
+     * the second and not the first. Read off the axes, a condition above a line over a field the
+     * model happens not to partition was one nothing could put a value under — the reachability was
+     * stated, and the composer answered that it had no order for it.
+     *
+     * <p>Which number is measured there is the term's own to say ({@link NumericTerm#answeredOn}):
+     * the content of a position is counted on the position's order, and what an operation answers of
+     * it is counted on the operation's.
      */
     private static Carrier carrierOf(Subject subject, NumericTerm term) {
-        for (Axis axis : subject.axes()) {
-            if (axis.term().equals(term)) {
-                return axis.term().answeredOn(axis.type(), subject.symbols());
-            }
-        }
-        return null;
+        Type declared = subject.inputs().declaredAt(term.path());
+        return declared == null ? null : term.answeredOn(declared, subject.symbols());
     }
 
     /**
@@ -2704,7 +2707,13 @@ public final class Generator {
         // Which something could now do, since building such a value is `TermRealizations`' answer
         // and it needs no axis to give it. Left refused so that moving the building out of here
         // changed nothing; removing it is its own answer to give, beside the limit above.
-        Type declared = term instanceof NumericTerm.TakenOf ? null : declaredAt(subject, term.path());
+        //
+        // The position itself is read wherever the declarations reach it and not only where it is a
+        // parameter. What a position is declared to be is the inputs' to say, and a walk of its own
+        // that stopped at the parameter left a condition above a line over a field as one nothing
+        // could put a value under.
+        Type declared = term instanceof NumericTerm.TakenOf ? null
+                : subject.inputs().declaredAt(term.path());
         if (declared == null) {
             return Edge.none(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
@@ -2712,16 +2721,6 @@ public final class Generator {
                 term.observedOn(declared, subject.symbols()), carrier);
         return edgeFrom(TermRealizations.at(term, declared, on, at, subject.symbols(),
                 subject.inputs().policy()), term, at, on);
-    }
-
-    /** The type declared at a position this subject has no axis for, which is a bare parameter and
-     *  nothing else: a field of one is reached through a type this cannot name here. */
-    private static Type declaredAt(Subject subject, TermPath path) {
-        if (!path.steps().isEmpty()) {
-            return null;
-        }
-        int at = subject.parameters().indexOf(path.head());
-        return at < 0 || at >= subject.types().size() ? null : subject.types().get(at);
     }
 
     /**
