@@ -63,6 +63,7 @@ import souther.compiler.frontend.CstFrontend;
 import souther.lsp.protocol.CodeAction;
 import souther.lsp.protocol.CodeLens;
 import souther.lsp.protocol.CompletionItem;
+import souther.lsp.protocol.DocumentHighlight;
 import souther.lsp.protocol.DocumentSymbol;
 import souther.lsp.protocol.Hover;
 import souther.lsp.protocol.InlayHint;
@@ -1483,6 +1484,90 @@ public final class Analyzer {
             byLabel.putIfAbsent(keyword, new CompletionItem(keyword, CompletionItem.KEYWORD, null));
         }
         return new ArrayList<>(byLabel.values());
+    }
+
+    /**
+     * Every place in this document that means what the cursor is on.
+     *
+     * <p>The references answer, kept to one document. It is asked the same way and answers about the
+     * same thing — what a name resolves to, and not what spells the same. Two locals of one spelling
+     * are two names and are highlighted apart, which is the whole of why this is not a search for
+     * the characters.
+     *
+     * <p>Which of them binds the name is the difference between asking for the declaration and not,
+     * so it is that difference: a place in both is where the name is bound, and a place only in the
+     * wider answer is where it is read.
+     */
+    public List<DocumentHighlight> documentHighlights(String uri, Position pos, ModuleGraph graph) {
+        List<Range> reads = here(uri, references(uri, pos, graph, false));
+        List<DocumentHighlight> out = new ArrayList<>();
+        for (Range at : here(uri, references(uri, pos, graph, true))) {
+            out.add(new DocumentHighlight(at,
+                    reads.contains(at) ? DocumentHighlight.READ : DocumentHighlight.WRITE));
+        }
+        return List.copyOf(out);
+    }
+
+    /** The ranges of {@code found} that are in {@code uri}. A reference in another file is a
+     *  reference and is not something this document paints. */
+    private static List<Range> here(String uri, List<Location> found) {
+        List<Range> out = new ArrayList<>();
+        for (Location each : found) {
+            if (uri.equals(each.uri())) {
+                out.add(each.range());
+            }
+        }
+        return out;
+    }
+
+    /**
+     * What a widening selection takes in, from what the cursor is on outwards.
+     *
+     * <p>Syntax and nothing else. What a reader means by widening a selection is the next thing they
+     * wrote around it — an arm of a {@code guard}, a {@code { }} block, the declaration around that
+     * — and the tree the parser built is exactly that nesting. Nothing here asks what a name means,
+     * and a document that does not compile widens the same way, because the question was never about
+     * meaning.
+     *
+     * <p>Innermost first, each containing the one before it, with a range repeated by a node that
+     * covers exactly what its child does left out — widening that takes in nothing is a keystroke
+     * that did nothing.
+     */
+    public List<Range> selectionRanges(String uri, Position pos, ModuleGraph graph) {
+        String text = graph.text(uri);
+        if (text == null) {
+            return List.of();
+        }
+        LineIndex lines = new LineIndex(text);
+        int at = lines.offsetOf(pos.line(), pos.character());
+        List<Range> widening = new ArrayList<>();
+        SyntaxToken on = tokenAt(CstParser.parse(text).root(), at);
+        if (on != null) {
+            widening.add(tokenRange(lines, on));
+        }
+        for (SyntaxNode node = on == null ? null : on.parent(); node != null;
+                node = node.parent()) {
+            Range around = nodeRange(lines, node);
+            if (widening.isEmpty() || !around.equals(widening.get(widening.size() - 1))) {
+                widening.add(around);
+            }
+        }
+        return List.copyOf(widening);
+    }
+
+    /** The token {@code at} falls in, taking the one that starts there over the one that ends there:
+     *  a cursor between two tokens is on the one it is about to type into. */
+    private SyntaxToken tokenAt(SyntaxNode root, int at) {
+        SyntaxToken previous = null;
+        for (SyntaxToken token : meaningfulTokens(root)) {
+            if (token.start() <= at && at < token.end()) {
+                return token;
+            }
+            if (token.end() == at) {
+                previous = token;
+            }
+        }
+        return previous;
     }
 
     /**

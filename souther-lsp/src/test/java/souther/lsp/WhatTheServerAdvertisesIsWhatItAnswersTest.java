@@ -229,6 +229,10 @@ class WhatTheServerAdvertisesIsWhatItAnswersTest {
             new Protocol(LspMethod.COMPLETION, "textDocument/completion",
                     new Told.Capability("completionProvider", OPTIONS, "an options object")),
             offered(LspMethod.INLAY_HINT, "textDocument/inlayHint", "inlayHintProvider"),
+            offered(LspMethod.DOCUMENT_HIGHLIGHT, "textDocument/documentHighlight",
+                    "documentHighlightProvider"),
+            offered(LspMethod.SELECTION_RANGE, "textDocument/selectionRange",
+                    "selectionRangeProvider"),
             new Protocol(LspMethod.CODE_ACTION, "textDocument/codeAction",
                     new Told.Capability("codeActionProvider", OPTIONS, "an options object")),
             // Announced by a flag inside the capability above rather than by one of its own: a

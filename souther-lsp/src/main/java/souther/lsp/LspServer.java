@@ -9,6 +9,7 @@ import souther.compiler.query.Adequacy;
 import souther.lsp.protocol.CodeAction;
 import souther.lsp.protocol.CodeLens;
 import souther.lsp.protocol.CompletionItem;
+import souther.lsp.protocol.DocumentHighlight;
 import souther.lsp.protocol.DocumentSymbol;
 import souther.lsp.protocol.Hover;
 import souther.lsp.protocol.InlayHint;
@@ -178,6 +179,8 @@ public final class LspServer {
             case REFERENCES -> { respond(id, references(params)); yield false; }
             case COMPLETION -> { respond(id, completion(params)); yield false; }
             case INLAY_HINT -> { respond(id, inlayHints(params)); yield false; }
+            case DOCUMENT_HIGHLIGHT -> { respond(id, documentHighlights(params)); yield false; }
+            case SELECTION_RANGE -> { respond(id, selectionRanges(params)); yield false; }
             case CODE_ACTION -> { respond(id, codeActions(params)); yield false; }
             case CODE_ACTION_RESOLVE -> { respond(id, codeActionResolve(params)); yield false; }
             case CODE_LENS -> { respond(id, codeLenses(params)); yield false; }
@@ -469,6 +472,55 @@ public final class LspServer {
         for (CodeLens lens : analyzer.codeLenses(uri, graph)) {
             out.add(Map.of("range", rangeJson(lens.range()),
                     "command", Map.of("title", lens.title(), "command", "")));
+        }
+        return out;
+    }
+
+    // --- what else here means this ---
+
+    private Object documentHighlights(JsonNode params) {
+        Params.PositionParams p = InboundDecoders.decode(InboundDecoders.POSITION_PARAMS, params)
+                .orElse(null);
+        if (p == null || documents.get(p.uri()) == null) {
+            return List.of();
+        }
+        ModuleGraph graph = workspace.snapshot(documents.openDocuments());
+        List<Object> out = new ArrayList<>();
+        for (DocumentHighlight highlight
+                : analyzer.documentHighlights(p.uri(), p.position(), graph)) {
+            out.add(Map.of("range", rangeJson(highlight.range()), "kind", highlight.kind()));
+        }
+        return out;
+    }
+
+    /**
+     * One answer per place asked about, each nested outwards.
+     *
+     * <p>The protocol takes the widening as a chain rather than a list, so what the analyzer answers
+     * innermost first is built up from the outside in — the widest is what has no parent.
+     */
+    private Object selectionRanges(JsonNode params) {
+        Params.PositionsParams p = InboundDecoders.decode(InboundDecoders.POSITIONS_PARAMS, params)
+                .orElse(null);
+        if (p == null || documents.get(p.uri()) == null) {
+            return List.of();
+        }
+        ModuleGraph graph = workspace.snapshot(documents.openDocuments());
+        List<Object> out = new ArrayList<>();
+        for (Position at : p.positions()) {
+            List<Range> widening = analyzer.selectionRanges(p.uri(), at, graph);
+            Map<String, Object> nested = null;
+            for (int i = widening.size() - 1; i >= 0; i--) {
+                Map<String, Object> here = new LinkedHashMap<>();
+                here.put("range", rangeJson(widening.get(i)));
+                if (nested != null) {
+                    here.put("parent", nested);
+                }
+                nested = here;
+            }
+            if (nested != null) {
+                out.add(nested);
+            }
         }
         return out;
     }

@@ -58,6 +58,12 @@ public final class InboundDecoders {
             combine(field("textDocument", field("uri", string()).asDecoder()), field("position", POSITION))
                     .map(Params.PositionParams::new);
 
+    /** {@code { textDocument: { uri }, positions: [ { line, character }, ... ] }} */
+    public static final Decoder<JsonNode, Params.PositionsParams> POSITIONS_PARAMS =
+            combine(field("textDocument", field("uri", string()).asDecoder()),
+                    field("positions", list(POSITION)))
+                    .map(Params.PositionsParams::new);
+
     /** {@code { textDocument: { uri }, position: { line, character }, newName }} */
     public static final Decoder<JsonNode, Params.RenameParams> RENAME =
             combine(flat(POSITION_PARAMS), field("newName", string()))

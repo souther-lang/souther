@@ -26,6 +26,16 @@ public final class Params {
     public record PositionParams(String uri, Position position) {
     }
 
+    /**
+     * {@code textDocument/selectionRange}: the document and every place a selection is to widen
+     * from.
+     *
+     * <p>Several, because an editor may hold several cursors, and each of them widens through its
+     * own nesting. One answer per place asked about, in the order they were asked.
+     */
+    public record PositionsParams(String uri, java.util.List<Position> positions) {
+    }
+
     /** {@code textDocument/rename}: the document, the cursor, and the new name to bind. */
     public record RenameParams(String uri, Position position, String newName) {
     }
