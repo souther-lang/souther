@@ -2485,8 +2485,8 @@ public final class Generator {
             }
         }
         for (OnTheWay.TakenIn cut : reaching.boundedOnTheWay()) {
-            Map<NumericTerm, Place> placing = new LinkedHashMap<>();
-            souther.compiler.inputs.SearchRegion after = here;
+            List<NumericTerm> owing = new ArrayList<>();
+            boolean shared = false;
             for (NumericTerm term : cut.cut().form().coefs().keySet()) {
                 // This very number already stands somewhere: the item asked for it, or an earlier
                 // cut did. Nothing to place, and the cut is answered at it either way.
@@ -2496,58 +2496,33 @@ public final class Generator {
                 // Another number taken at the same location. A row writes one value where a
                 // location is, and that one value would have to answer both — a string of a length
                 // and the string itself is the shape of it. Nothing here composes a value to two
-                // numbers at once, so the cut is one this could not put a value under, and it says
-                // so rather than going on without it.
+                // numbers at once, so the cut is one this could not put a value under.
                 if (taken.contains(term.path())) {
-                    after = null;
+                    shared = true;
                     break;
                 }
-                after = placing(subject, term, after, placing);
-                if (after == null) {
-                    break;
-                }
+                owing.add(term);
             }
-            if (after == null) {
+            // The whole cut at once, because a cut over two positions is one statement about the
+            // pair: which values one of them may take depends on what the other took, and a value
+            // chosen for the first without asking is right about its own run and wrong about the
+            // pair as often as not.
+            Map<NumericTerm, Place> standing = shared ? null
+                    : NumericWitness.of(here, owing, term -> carrierOf(subject, term));
+            if (standing == null) {
                 unrepresented.add(new OnTheWay.Declined(cut.at(),
                         new OnTheWay.Why.NoValueComposedForItsPositions()));
                 continue;
             }
-            here = after;
-            placing.forEach((term, at) -> {
-                taken.add(term.path());
-                out.put(term, at);
-            });
+            for (Map.Entry<NumericTerm, Place> each : standing.entrySet()) {
+                if (each.getValue() instanceof Count count) {
+                    here = here.given(each.getKey(), count);
+                }
+                taken.add(each.getKey().path());
+                out.put(each.getKey(), each.getValue());
+            }
         }
         return new Standing(out, unrepresented);
-    }
-
-    /**
-     * {@code term} put somewhere the region admits, and the region told so — or null where nothing
-     * here can put it anywhere.
-     *
-     * <p>Null and not the region unchanged. Which of the two it is, is the whole of what the caller
-     * has to know: a cut one of whose positions cannot be placed is a cut this composes against at
-     * none of them, and a region handed back unchanged would have it pin the others on the strength
-     * of a condition the row does not meet.
-     */
-    private static souther.compiler.inputs.SearchRegion placing(
-            Subject subject, NumericTerm term, souther.compiler.inputs.SearchRegion here,
-            Map<NumericTerm, Place> placing) {
-        Carrier carrier = carrierOf(subject, term);
-        souther.compiler.numeric.NumericDomain.Bounds runs = here.runsBetween(term);
-        if (carrier == null || runs == null) {
-            return null;
-        }
-        Place at = carrier.onTheGrid(carrier.somethingInside(runs.min(), runs.max()));
-        if (!(at instanceof Count count)) {
-            return null;
-        }
-        souther.compiler.inputs.SearchRegion next = here.given(term, count);
-        if (next.emptiness().isPresent()) {
-            return null;
-        }
-        placing.put(term, at);
-        return next;
     }
 
     /**
