@@ -1052,7 +1052,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     out.append(String.format("      %s %s `%s` at %s%n", mark(f),
                             f.weakenedBy().isEmpty()
                                     ? "no row is in" : "undecided whether a row is in",
-                            missing.name(), missing.axis().path()));
+                            missing.name(), missing.axis().name()));
                 }
             }
             // Not a finding: nothing is owed here, and what the line says is what the model already
@@ -1277,7 +1277,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         for (Adequacy.Finding f : behavior.findings()) {
             if (f.about() instanceof About.APositionWhoseRulesWereNotReached(var axis)) {
                 out.append(String.format("      %s rules not reached: %s%n",
-                        mark(f), axis.path()));
+                        mark(f), axis.name()));
             }
         }
         // The questions this measure answers: which values may stand where, which classes hold
@@ -2505,11 +2505,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case About.ACaseNoRowExpects(var missing) -> missing.name();
             case About.ACaseNothingWasSeenToProduce(var missing) -> missing.name();
             case About.AClassNoRowIsIn(var missing) ->
-                    missing.name() + " (at " + missing.axis().path() + ")";
+                    missing.name() + " (at " + missing.axis().name() + ")";
             case About.APositionNoLineDivides(var position) -> position.at().toString();
             case About.APositionThisCouldNotRead(var it) -> it.at();
             case About.ARuleWithoutALine(var it) -> it.at();
-            case About.APositionWhoseRulesWereNotReached(var axis) -> axis.path();
+            case About.APositionWhoseRulesWereNotReached(var axis) -> axis.name();
             // The position, as the two above write it. What is said of it is the kind's; there is
             // no rule to name and no class this is about, so the position is the whole subject.
             case About.APositionReadWiderThanItsRules(var it) -> it.at().toString();

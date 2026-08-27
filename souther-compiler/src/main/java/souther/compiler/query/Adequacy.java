@@ -4669,7 +4669,7 @@ public final class Adequacy {
                         // words — which are the words the report writes for the same finding.
                         case About.AClassNoRowIsIn(var missing) ->
                                 new ExampleMessage.NoRowIsInThatClass(missing.name(),
-                                        missing.axis().path(), finding.named());
+                                        missing.axis().name(), finding.named());
                         // Kinds no build is told about under any code. Listed rather than
                         // defaulted, so that one added later has to be answered here rather than
                         // arriving as a warning with no sentence.
