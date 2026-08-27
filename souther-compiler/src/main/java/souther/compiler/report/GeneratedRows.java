@@ -681,8 +681,8 @@ public final class GeneratedRows {
                     "the decisions that settle it have more combinations together than this offers"
                             + " a row for, so none of them was looked in";
             case NO_CERTIFIED_WITNESS ->
-                    "no row composed for it was seen reaching it, which does not make the"
-                            + " combination unreachable";
+                    "no row composed for it was seen reaching it, which does not make it"
+                            + " unreachable";
             case THE_WAY_IN_PLACES_AT_NO_CLASS ->
                     "the way to it holds a decision that no class of any position stands for, so"
                             + " nothing here can steer a row along it";

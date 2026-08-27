@@ -806,14 +806,16 @@ final class Coverages {
                     return new ItemAssessment.Attempt.Unavailable(
                             ItemAssessment.Attempt.Reason.NO_CLASSES);
                 }
-                // A way one position would have to take two of its cases to reach. No row goes
-                // there, which is the model's answer and not a search that came up short.
+                // A way one position would have to take two of its cases to reach, which no value
+                // is. Said in that word and not in the one for a walk that tried what the rules
+                // leave and reached nothing: nothing was walked here, and what settles it is that
+                // the two cases are not in one value.
                 if (!(reaching instanceof souther.compiler.partition.Reachability.Reaching able)) {
                     return new ItemAssessment.Attempt.Unresolved(
                             new souther.compiler.partition.Generator.UnresolvedCombination(
                                     java.util.List.of(label),
                                     souther.compiler.partition.Generator.UnresolvedCombination
-                                            .Reason.THE_RULES_LEAVE_NOTHING_THERE), within);
+                                            .Reason.ONE_POSITION_CANNOT_BE_BOTH), within);
                 }
                 // Where a row would have to stand is asked of the quantity, and finding one there of
                 // the realizer. What it composes is a candidate and no part of the item: another row
@@ -949,11 +951,15 @@ final class Coverages {
         }
         return switch (StandingAtAPoint.met(quantity, where, List.of(read), criterion, site)) {
             case YES, NOT_WATCHED, UNREADABLE -> made;
+            // Carrying what the composer could not compose against. This is the outcome that most
+            // needs it: a row was built and was not seen reaching the point, and whether some
+            // condition above the line went unused is the first thing that would explain it.
             case NO -> new souther.compiler.partition.Generator.BoundaryAttempt.Unresolved(
                     new souther.compiler.partition.Generator.UnresolvedCombination(
                             List.of(label),
                             souther.compiler.partition.Generator.UnresolvedCombination.Reason
-                                    .NO_CERTIFIED_WITNESS));
+                                    .NO_CERTIFIED_WITNESS),
+                    built.unrepresented());
         };
     }
 
@@ -991,10 +997,33 @@ final class Coverages {
                             souther.compiler.partition.Generator.UnresolvedCombination.Reason
                                     .LINKAGE_FAILED), within);
             case souther.compiler.partition.Generator.BoundaryAttempt.Built built ->
-                    new ItemAssessment.Attempt.Built(built.row(), within);
+                    new ItemAssessment.Attempt.Built(built.row(),
+                            alsoUnused(within, built.unrepresented()));
             case souther.compiler.partition.Generator.BoundaryAttempt.Unresolved left ->
-                    new ItemAssessment.Attempt.Unresolved(left.why(), within);
+                    new ItemAssessment.Attempt.Unresolved(left.why(),
+                            alsoUnused(within, left.unrepresented()));
         };
+    }
+
+    /**
+     * The way, with what the composer could not compose against written onto it.
+     *
+     * <p>Both stages on one account, because an author asking what is not represented wants the
+     * same thing from either: a condition the walk could not state, and one it stated that nothing
+     * could put a value under, leave the same gap between what a row was built to be and what
+     * reaches the border. Written here, where the outcome of a search is turned into what a reader
+     * of the point holds, and nowhere else.
+     */
+    private static souther.compiler.partition.WayToTheBorder alsoUnused(
+            souther.compiler.partition.WayToTheBorder within,
+            List<souther.compiler.partition.OnTheWay.Declined> unrepresented) {
+        if (unrepresented.isEmpty()) {
+            return within;
+        }
+        List<souther.compiler.partition.OnTheWay> whole =
+                new ArrayList<>(within.onTheWay());
+        whole.addAll(unrepresented);
+        return new souther.compiler.partition.WayToTheBorder(whole);
     }
 
     /**

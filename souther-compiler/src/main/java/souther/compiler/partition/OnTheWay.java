@@ -66,12 +66,17 @@ public sealed interface OnTheWay {
     record Declined(Citation at, Why why) implements OnTheWay {}
 
     /**
-     * What stopped a condition from becoming a cut.
+     * What stopped a condition on the way from bearing on where a row was looked for.
      *
-     * <p>Three shapes, and each says what this reading did rather than what the model says. A
-     * condition an author wrote plainly is here wherever the arithmetic has no way of carrying it,
-     * so nothing read off one of these says a row cannot be written, and a word going away is a
-     * capability gained rather than a model changed.
+     * <p>Two stages and one list, because an author reading it wants the same thing from both: a
+     * condition the walk could not state, and a condition it stated that nothing could compose a
+     * value under, leave the same gap between what a row was built to be and what reaches the
+     * border. Kept apart, one of them would be the half that is never printed.
+     *
+     * <p>Each says what this compiler did rather than what the model says. A condition an author
+     * wrote plainly is here wherever nothing here has a way of carrying it, so nothing read off one
+     * of these says a row cannot be written, and a word going away is a capability gained rather
+     * than a model changed.
      *
      * <p><b>Not the reason the same comparison gets for drawing no line.</b>
      * {@link UnreadComparison} answers why a comparison did not become a boundary, which is a
@@ -116,5 +121,16 @@ public sealed interface OnTheWay {
          * the input reach this arm, so they arrive here as one word.
          */
         record ForkArmNotReadAsANarrowing() implements Why {}
+
+        /**
+         * A cut the walk took in that nothing could put a value under.
+         *
+         * <p>Said of the whole cut, because a cut over two positions is one statement about the
+         * pair. One of them put where the cut admits and the other left to its own declared range
+         * is not half of the condition holding — it is the condition not holding, with a position
+         * pinned on the strength of it. So a cut this cannot place every position of is placed at
+         * none of them, and the fact that it was handed one it could not act on is here.
+         */
+        record NoValueComposedForItsPositions() implements Why {}
     }
 }

@@ -434,17 +434,22 @@ public final class Generator {
              * apart from the one above it because they were there, which is not what that says. */
             LINKAGE_FAILED,
             /**
-             * No row composed for the combination was seen reaching it.
+             * No row composed for it was seen reaching it.
              *
              * <p>Said that way round because it is what the search establishes. Some of the
              * assignments tried may have composed nothing at all, so a word about what every row
              * did would be a word about rows there were none of; what holds of all of them is that
              * none was a witness.
              *
-             * <p>Not a proof that the combination is unreachable, and nothing reads it as one. It
-             * is a fact about the candidates — and, where the reading that named the combination is
-             * wrong, about that reading. Either way the combination stays untried rather than being
-             * counted as offered (ADR-0091).
+             * <p><b>Of a combination and of a point of a line alike.</b> Both are things a row is
+             * composed for and both are answered by watching what the row turned out to do — a
+             * combination by the arms the run took, a point by the walk that reads a row at one. A
+             * second word for the second of them would be the same sentence said twice.
+             *
+             * <p>Not a proof that either is unreachable, and nothing reads it as one. It is a fact
+             * about the candidates — and, where the reading that named the thing is wrong, about
+             * that reading. Either way it stays untried rather than being counted as offered
+             * (ADR-0091).
              */
             NO_CERTIFIED_WITNESS,
             /**
@@ -2270,11 +2275,36 @@ public final class Generator {
      */
     public sealed interface BoundaryAttempt {
 
+        /**
+         * What the way to the point asked that this could not compose against.
+         *
+         * <p>Carried out with the answer because it is what the answer was arrived at without. A
+         * row composed while a condition above the line was left out may not arrive there, and a
+         * search that came back empty may have come back empty over that — so a reader of either
+         * gets the same account, and neither is read as though the whole way had been used.
+         *
+         * <p>Empty is the ordinary case and says so: every condition the walk stated was one this
+         * put a value under.
+         */
+        List<OnTheWay.Declined> unrepresented();
+
         /** A value with the edge in it, built and accepted. */
-        record Built(GeneratedRow row) implements BoundaryAttempt {}
+        record Built(GeneratedRow row, List<OnTheWay.Declined> unrepresented)
+                implements BoundaryAttempt {
+
+            public Built {
+                unrepresented = List.copyOf(unrepresented);
+            }
+        }
 
         /** No row came of it, and why. Never a statement that none exists. */
-        record Unresolved(UnresolvedCombination why) implements BoundaryAttempt {}
+        record Unresolved(UnresolvedCombination why, List<OnTheWay.Declined> unrepresented)
+                implements BoundaryAttempt {
+
+            public Unresolved {
+                unrepresented = List.copyOf(unrepresented);
+            }
+        }
     }
 
     /**
@@ -2324,7 +2354,8 @@ public final class Generator {
         // One map, because a row is one row — walked as two, the second was chosen from what the
         // declarations leave and the first from what reaches the border, and only one of them was
         // about the row being written.
-        Map<NumericTerm, Place> standing = alsoOnTheWay(subject, fixing, reaching);
+        Standing where = alsoOnTheWay(subject, fixing, reaching);
+        Map<NumericTerm, Place> standing = where.at();
         for (Map.Entry<NumericTerm, Place> each : standing.entrySet()) {
             // The order this position is written back on, which is the position's own. Handed one
             // order for the whole fixing, a form over positions written back differently wrote each
@@ -2346,7 +2377,8 @@ public final class Generator {
             Edge edge = edgeAt(subject, carrier, each.getKey(), each.getValue(), fixing.size() > 1);
             if (edge.values().isEmpty()) {
                 return new BoundaryAttempt.Unresolved(
-                        new UnresolvedCombination(List.of(label), edge.reason()));
+                        new UnresolvedCombination(List.of(label), edge.reason()),
+                        where.unrepresented());
             }
             TermPath at = each.getKey().path();
             // Two terms at one path is one location asked for two things at once — a string of a
@@ -2355,7 +2387,8 @@ public final class Generator {
             // rather than writing whichever came last and offering half the point as the whole.
             if (decided.containsKey(at)) {
                 return new BoundaryAttempt.Unresolved(new UnresolvedCombination(List.of(label),
-                        UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE));
+                        UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE),
+                        where.unrepresented());
             }
             decided.put(at, edge.values());
             // The orders the value was built against, kept so that reading it back asks the
@@ -2403,12 +2436,13 @@ public final class Generator {
                     why = heldBack.getOrDefault(here.keySet().iterator().next(), why);
                 }
                 return new BoundaryAttempt.Unresolved(
-                        new UnresolvedCombination(List.of(label), why, tried.detail()));
+                        new UnresolvedCombination(List.of(label), why, tried.detail()),
+                        where.unrepresented());
             }
             inputs.add(tried.value());
         }
         return new BoundaryAttempt.Built(
-                new GeneratedRow(new Purpose.ForAPoint(label), inputs));
+                new GeneratedRow(new Purpose.ForAPoint(label), inputs), where.unrepresented());
     }
 
     /**
@@ -2430,10 +2464,10 @@ public final class Generator {
      * those is a row that cannot be written, and each is a row this composes the way it did before
      * the way was carried here at all.
      */
-    private static Map<NumericTerm, Place> alsoOnTheWay(Subject subject,
-                                                        Map<NumericTerm, Place> fixing,
-                                                        Reachability.Reaching reaching) {
+    private static Standing alsoOnTheWay(Subject subject, Map<NumericTerm, Place> fixing,
+                                         Reachability.Reaching reaching) {
         Map<NumericTerm, Place> out = new LinkedHashMap<>(fixing);
+        List<OnTheWay.Declined> unrepresented = new ArrayList<>();
         java.util.Set<TermPath> taken = new java.util.LinkedHashSet<>();
         fixing.keySet().forEach(term -> taken.add(term.path()));
         souther.compiler.inputs.SearchRegion here = reaching.region();
@@ -2442,32 +2476,74 @@ public final class Generator {
                 here = here.given(each.getKey(), count);
             }
         }
-        for (NumericTerm term : reaching.boundedOnTheWay()) {
-            // A position the item already fixes, or one at a location the item writes. What a row
-            // writes at a location is one value, and the second thing asked of it is not this one's
-            // to decide over the item's.
-            if (taken.contains(term.path())) {
+        for (OnTheWay.TakenIn cut : reaching.boundedOnTheWay()) {
+            Map<NumericTerm, Place> placing = new LinkedHashMap<>();
+            souther.compiler.inputs.SearchRegion after = here;
+            for (NumericTerm term : cut.cut().form().coefs().keySet()) {
+                // A position the item already fixes, or one an earlier cut settled, or one at a
+                // location the item writes. What a row writes at a location is one value, and the
+                // second thing asked of it is not this one's to decide over the item's.
+                if (taken.contains(term.path())) {
+                    continue;
+                }
+                after = placing(subject, term, after, placing);
+                if (after == null) {
+                    break;
+                }
+            }
+            if (after == null) {
+                unrepresented.add(new OnTheWay.Declined(cut.at(),
+                        new OnTheWay.Why.NoValueComposedForItsPositions()));
                 continue;
             }
-            Carrier carrier = carrierOf(subject, term);
-            souther.compiler.numeric.NumericDomain.Bounds runs = here.runsBetween(term);
-            if (carrier == null || runs == null) {
-                continue;
-            }
-            Place at = carrier.onTheGrid(carrier.somethingInside(runs.min(), runs.max()));
-            if (at == null || !(at instanceof Count count)) {
-                continue;
-            }
-            souther.compiler.inputs.SearchRegion next = here.given(term, count);
-            if (next.emptiness().isPresent()) {
-                continue;
-            }
-            here = next;
-            taken.add(term.path());
-            out.put(term, at);
+            here = after;
+            placing.forEach((term, at) -> {
+                taken.add(term.path());
+                out.put(term, at);
+            });
         }
-        return out;
+        return new Standing(out, unrepresented);
     }
+
+    /**
+     * {@code term} put somewhere the region admits, and the region told so — or null where nothing
+     * here can put it anywhere.
+     *
+     * <p>Null and not the region unchanged. Which of the two it is, is the whole of what the caller
+     * has to know: a cut one of whose positions cannot be placed is a cut this composes against at
+     * none of them, and a region handed back unchanged would have it pin the others on the strength
+     * of a condition the row does not meet.
+     */
+    private static souther.compiler.inputs.SearchRegion placing(
+            Subject subject, NumericTerm term, souther.compiler.inputs.SearchRegion here,
+            Map<NumericTerm, Place> placing) {
+        Carrier carrier = carrierOf(subject, term);
+        souther.compiler.numeric.NumericDomain.Bounds runs = here.runsBetween(term);
+        if (carrier == null || runs == null) {
+            return null;
+        }
+        Place at = carrier.onTheGrid(carrier.somethingInside(runs.min(), runs.max()));
+        if (!(at instanceof Count count)) {
+            return null;
+        }
+        souther.compiler.inputs.SearchRegion next = here.given(term, count);
+        if (next.emptiness().isPresent()) {
+            return null;
+        }
+        placing.put(term, at);
+        return next;
+    }
+
+    /**
+     * Where the positions of one row stand, and what the way asked that nothing could put a value
+     * under.
+     *
+     * <p>The second is carried out with the first because it is what the row was composed without.
+     * A search that could not act on a condition above the line has composed a row that may not
+     * arrive there, and an account of the attempt that did not say so would have an author reading
+     * "no row was seen reaching it" beside a way that says everything on it was taken in.
+     */
+    private record Standing(Map<NumericTerm, Place> at, List<OnTheWay.Declined> unrepresented) {}
 
     /**
      * The order a position of this subject is read and written on, or null where this has none.

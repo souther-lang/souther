@@ -1627,6 +1627,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     "an outcome that states one of two things";
             case souther.compiler.partition.OnTheWay.Why.ForkArmNotReadAsANarrowing _ ->
                     "an arm of a fork this reading could not read as a narrowing of a position";
+            case souther.compiler.partition.OnTheWay.Why.NoValueComposedForItsPositions _ ->
+                    "a condition on positions nothing here could compose a value at";
         };
     }
 
@@ -1661,9 +1663,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case NO_VALUES_WERE_ASKED_FOR ->
                     "this build composed no values, so no row was written for " + at;
             case LINKAGE_FAILED -> "the generated classes would not link";
+            // "it" and not "the combination": a point of a line gets this word too, and a row
+            // composed for one is not composed for a combination of classes.
             case NO_CERTIFIED_WITNESS ->
-                    "no row composed for " + at + " was seen reaching it, which does not make the"
-                            + " combination unreachable";
+                    "no row composed for " + at + " was seen reaching it, which does not make it"
+                            + " unreachable";
             case THE_POSITION_WAS_WITHHELD ->
                     "a row's value at that position could not be read, so no class of it was"
                             + " looked for";
