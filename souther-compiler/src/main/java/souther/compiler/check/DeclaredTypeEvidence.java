@@ -159,6 +159,25 @@ public record DeclaredTypeEvidence(Symbols symbols, Map<String, Hir.FnDef> value
     /** What a newtype's one field is called (ADR-0032). */
     private static final String NEWTYPE_FIELD = "value";
 
+    /**
+     * Whether a value of {@code type} is held to a rule its declarations wrote.
+     *
+     * <p>Every rule that applies to it, and not the ones written on it. A spread flattens the fields
+     * of what it brings in and inherits its invariants with them (ADR-0030), so a data that writes
+     * no clause of its own is held to whatever it spread in — and a reading that looked at the
+     * declaration's own clauses would say a value of it is held to nothing while the compiler
+     * refuses one that breaks a rule.
+     *
+     * <p>Asked of the walk that settles which clauses apply. Following the spreads here would be
+     * that walk written again, and the one that forgot a step would disagree with the checker about
+     * what a value has to hold.
+     */
+    public boolean heldToARule(Type type) {
+        return type instanceof Type.Ref(TypeSymbol named)
+                && symbols.declarations().declaration(named) instanceof Hir.Data data
+                && !TypeOps.effectiveInvariants(data, symbols).isEmpty();
+    }
+
     /** The body a name stands for, where it names a value of this reading's own. */
     public Hir.Expr valueBody(String name) {
         Hir.FnDef value = values.get(name);

@@ -131,9 +131,11 @@ public final class Analyzer {
     /**
      * The compile of the document being typed in, finished off where the author has not finished it.
      *
-     * <p>Its own and not the workspace's, and nothing it answers is kept: what a field list is taken
-     * from is the buffer now. A receiver read from an earlier revision would be a wrong answer
-     * wearing the shape of a right one, which is why this is not {@link LastAnswered}.
+     * <p>Its own store and not the workspace's, and what it keeps is answers about the source it was
+     * last given rather than answers to fall back on. Every question is put to the buffer as it
+     * stands; an answer from an earlier revision is never handed over because this one could not be
+     * reached, which is what {@link LastAnswered} is for and what a receiver must not be read
+     * through — the fields of the type that used to be there wear the shape of a right answer.
      */
     private final SemanticProbe probe = new SemanticProbe();
 

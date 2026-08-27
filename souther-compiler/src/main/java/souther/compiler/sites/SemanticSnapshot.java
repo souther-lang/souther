@@ -19,7 +19,6 @@ import souther.compiler.types.BindingId;
 import souther.compiler.types.ValueName;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSpelling;
-import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -132,9 +131,25 @@ public final class SemanticSnapshot {
      * hint came from.
      */
     public boolean heldToARule(Type type) {
-        return type instanceof Type.Ref(TypeSymbol named)
-                && symbols.declarations().declaration(named) instanceof Hir.Data data
-                && !data.invariants().isEmpty();
+        return declarations().heldToARule(type);
+    }
+
+    /**
+     * What the declarations say about a type, asked of the one reading of them.
+     *
+     * <p>Every question of that shape goes through here: what fields a value has, what rules it is
+     * held to, what a name it was given comes to. Working one out from the declaration instead —
+     * reading a data's own clauses, naming a newtype's one field — is that reading written a second
+     * time, and the copy is right until the language adds a step to the original. It has twice been
+     * exactly that: a spread brings in fields and the rules that came with them, and both were being
+     * missed by a reading that looked at what the declaration wrote rather than at what applies.
+     *
+     * <p>What this reading is not asked is the shape of the module itself — what it declares, what
+     * it exposes, what its behaviors are called. Nothing else answers those, and they are read off
+     * the resolved module here.
+     */
+    private DeclaredTypeEvidence declarations() {
+        return new DeclaredTypeEvidence(symbols, Map.of());
     }
 
     /**
@@ -237,8 +252,9 @@ public final class SemanticSnapshot {
      * module's own {@code exposing} line is that answer, made by the module rather than worked out
      * here from what it happens to declare.
      *
-     * <p>Empty for a namespace the language reserves. What is inside one is the standard library's
-     * to say, and this reading has not asked it.
+     * <p>A namespace the language reserves offers its published surface, which is the same answer
+     * asked of the library rather than of a module: the set of qualified names a module outside the
+     * reserved namespace may write.
      */
     public List<Published> namesIn(MemberReceiver.Namespace namespace) {
         // Every namespace there is, and no arm reached by not being the others. A kind narrowed by
@@ -332,7 +348,7 @@ public final class SemanticSnapshot {
      * is not a declared type at all — none of that is decided here.
      */
     public Map<String, Type> fieldsOf(TypeFact held) {
-        return new DeclaredTypeEvidence(symbols, Map.of()).fieldsOf(held.type());
+        return declarations().fieldsOf(held.type());
     }
 
     /**

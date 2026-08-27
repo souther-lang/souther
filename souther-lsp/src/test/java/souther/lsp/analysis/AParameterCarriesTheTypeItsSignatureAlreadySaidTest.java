@@ -65,6 +65,33 @@ class AParameterCarriesTheTypeItsSignatureAlreadySaidTest {
     }
 
     /**
+     * And a rule reaches a type through a spread.
+     *
+     * <p>A spread flattens the fields of what it brings in and inherits its invariants with them, so
+     * a data that writes no clause of its own is held to whatever it spread in. A reading that
+     * looked at the clauses written on the declaration would say a value of it is held to nothing
+     * while the compiler refuses one that breaks the rule.
+     */
+    @Test
+    void aRuleInheritedThroughASpreadIsOneTheTypeIsHeldTo() {
+        List<InlayHint> hints = hints("""
+                module m
+
+                data Positive = { value: Int }
+                    invariant positive = value > 0
+
+                data Amount = { ...Positive }
+
+                behavior use : (amount: Amount) -> Int
+                let use (amount) = amount.value
+                """);
+
+        assertEquals(List.of(": Amount"), labelsOf(hints));
+        assertNotNull(hints.getFirst().tooltip(),
+                "`Amount` writes no clause of its own and is held to `Positive`'s");
+    }
+
+    /**
      * And the hints stand while the body does not.
      *
      * <p>What arrives is the signature's to say. A body that will not check is a body, and a reader
