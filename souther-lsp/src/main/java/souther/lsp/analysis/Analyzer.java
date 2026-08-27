@@ -1402,11 +1402,11 @@ public final class Analyzer {
      * {@link NamesFromElsewhere}) — a document that does not parse is held out of the compile, and
      * that is the document being typed in.
      *
-     * <p>This is name completion, not context-sensitive member completion — a {@code .} field list is
-     * ADR-deferred, so every reachable name is offered regardless of the position's expected type.
-     * One item per label follows from that: which namespace a position is in is not being read, so
-     * two entities of one spelling cannot be told apart by anything but the label, and the nearest is
-     * offered. That is a limit of this list, not a property of the language.
+     * <p>This is name completion. Every reachable name is offered wherever the cursor is, because
+     * nothing here reads what the position denotes or what type is expected at it. One item per label
+     * follows from that: which namespace a position is in is not being read, so two entities of one
+     * spelling cannot be told apart by anything but the label, and the nearest is offered. That is a
+     * limit of this list, not a property of the language.
      */
     public List<CompletionItem> completions(String uri, Position pos, ModuleGraph graph) {
         String text = graph.text(uri);
