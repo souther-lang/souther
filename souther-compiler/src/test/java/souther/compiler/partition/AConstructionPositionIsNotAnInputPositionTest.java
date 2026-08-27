@@ -40,13 +40,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Where a value has to be built and where a behavior's input has a position are different questions.
  *
  * <p>They are spelled with the same {@link TermPath} and they are about different things, which is
- * the defect this exists over: two walks derived the positions of one parameter, at two depths, and a
- * question the reading of an input was asked about a position the generator was working at came back
+ * the defect this exists over: two walks derived the positions of one parameter, each going as far as
+ * its own question took it, and a question the reading of an input was asked about a position the
+ * generator was working at came back
  * refused because the reading had no such position. Read as one set, the refusal looks like the model
  * having nothing there.
  *
- * <p>How the sets part is depth. The reading stops where a report stops being about one input; the
- * search goes on until there is a value to build.
+ * <p>How the sets part is what each of them is asked. The reading enumerates the positions a type
+ * can have and stops where a path returns to a declaration already open on it, because that question
+ * has no other end; the search goes on until there is a value to build.
  *
  * <p>How a position is <em>named</em> is the one thing they do not part over. A class that narrows a
  * sum to one of its cases puts positions under that narrowing, and both write the narrowing into the
@@ -100,16 +102,15 @@ class AConstructionPositionIsNotAnInputPositionTest {
             module g
 
             data Zip = { code: String }
-            data Address = { zip: Zip }
-            data Person = { home: Address }
-            data Order = { who: Person }
+            data Address = { zip: Zip, forwarded: Option<Address> }
+            data Order = { who: Address }
             data Ack = { at: String }
 
             behavior place : (o: Order) -> Ack
             """;
 
     /**
-     * The reading stops where a report stops, and every position it does have answers for itself.
+     * The reading stops where the path returns, and every position it does have answers for itself.
      *
      * <p>The first half of the rule. A path this reading holds is one it can be asked about, which
      * is what makes the other half a statement about something and not about a lookup that never
@@ -118,7 +119,8 @@ class AConstructionPositionIsNotAnInputPositionTest {
     @Test
     void everyPositionTheReadingHasIsOneItAnswersFor() {
         InputDomain reading = reading(of(NESTED, "place"));
-        assertEquals(List.of("o", "o.who", "o.who.home"),
+        assertEquals(List.of("o", "o.who", "o.who.zip", "o.who.zip.code", "o.who.forwarded",
+                        "o.who.forwarded@Some"),
                 reading.positions().stream().map(each -> each.path().toString()).toList());
         for (Position each : reading.positions()) {
             assertNotNull(reading.at(each.path()), () -> "no position at " + each.path());
@@ -126,21 +128,28 @@ class AConstructionPositionIsNotAnInputPositionTest {
     }
 
     /**
-     * And a position the search builds at below that is not one of them.
+     * And a path below where the reading stopped is not one it answers about.
      *
-     * <p>Not a lookup that failed. The report is about {@code o.who.home} and the row still has to
-     * carry a {@code Zip} with a {@code code} in it, so the search reaches two levels the reading
-     * declines to describe. Asking this reading about {@code o.who.home.zip.code} and taking the
-     * answer for the model's is what the two walks were doing to each other.
+     * <p>Not a lookup that failed. The reading stops where the input returns to {@code Address},
+     * because listing what a forwarding address can hold has no other end; the row still carries a
+     * forwarded address with a {@code Zip} in it. Asking this reading about
+     * {@code o.who.forwarded@Some.zip.code} and taking the answer for the model's is what the two
+     * walks were doing to each other.
+     *
+     * <p>That the other set has positions this one does not is
+     * {@link #aRecipePutsPositionsWhereTheDeclarationHasNone}'s to say, where a class chooses a
+     * constructor and the recipe builds under it.
      */
     @Test
-    void theSearchBuildsAtPositionsTheReadingDoesNotDescribe() {
+    void aPathBelowWhereTheReadingStoppedIsNotOneItAnswersAbout() {
         Read read = of(NESTED, "place");
-        assertEquals(List.of("o.who.home.zip.code"), slots(plan(read, Requirements.NONE)));
-        assertNull(reading(read).at(TermPath.of("o").then("who").then("home").then("zip")),
-                "the reading stops at the second level and does not answer below it");
-        assertNull(reading(read).at(
-                        TermPath.of("o").then("who").then("home").then("zip").then("code")),
+        TermPath forwarded = reading(read).positions().stream().map(Position::path)
+                .filter(each -> each.toString().equals("o.who.forwarded@Some"))
+                .findFirst().orElseThrow();
+
+        assertNull(reading(read).at(forwarded.then("zip")),
+                "the reading stops at the return and does not enumerate below it");
+        assertNull(reading(read).at(forwarded.then("zip").then("code")),
                 "a position a value is built at is not a position of the input");
     }
 

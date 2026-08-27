@@ -106,7 +106,7 @@ final class Coverages {
         // written under a case, so one line there is one line per case — on the same number and from
         // the same rule.
         souther.compiler.partition.LinesWhereTheyFall.Filed filed =
-                souther.compiler.partition.LinesWhereTheyFall.of(inputs,
+                souther.compiler.partition.LinesWhereTheyFall.of(behavior.name(), inputs,
                         both(clauses.thresholds(), guards.thresholds()),
                         both(clauses.singled(), guards.singled()),
                         both(clauses.between(), guards.between()), quantities, symbols);
@@ -121,7 +121,10 @@ final class Coverages {
                 // What a row had to satisfy to arrive at each comparison, from the walk that
                 // assumed it. A clause of a declaration is not written at a place in a body and has
                 // nothing on the way to it, so only the guards have any of this.
-                guards.reaching()), quantities);
+                guards.reaching(),
+                // And the positions those rules named that the walk over the declarations never
+                // enumerated, which are measured beside the rest.
+                filed.claimed()), quantities);
     }
 
     /** The two producers' lines, in one list. */

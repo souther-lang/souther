@@ -216,13 +216,34 @@ public sealed interface BlockReason {
 
     /**
      * The type at the position could not be interpreted: a name denoting no declaration, or a
-     * declaration reachable from itself. Such a model compiles, so this is a position a report is
-     * asked about and cannot be answered for.
+     * newtype whose {@code value} the walk over the names could not reach. Such a model compiles, so
+     * this is a position a report is asked about and cannot be answered for.
      */
     record TypeUnresolved() implements AboutThePosition {}
 
-    /** The walk stopped before reaching what is under the position. */
-    record DepthLimit() implements AboutThePosition {}
+    /**
+     * Reading on would open a declaration this path has already opened, so what is under the
+     * position is not unfolded again.
+     *
+     * <p><b>Not that the declaration is recursive.</b> A type that names itself is an ordinary
+     * thing to declare and an ordinary thing to hold a value of; what this says is that one
+     * derivation does not unfold one declaration twice on one path, which is a bound this reading
+     * puts on itself. Named the other way, an author would read a report of their model where there
+     * is a report of this compiler.
+     *
+     * @param declaration what the input returned to
+     * @param openedAt    where the path opened it the first time, which is the far end of the cycle
+     */
+    record RecursiveExpansion(souther.compiler.types.TypeSymbol declaration, TermPath openedAt)
+            implements AboutThePosition {
+
+        public RecursiveExpansion {
+            if (declaration == null || openedAt == null) {
+                throw new IllegalArgumentException(
+                        "a return to nowhere is not one: " + declaration + " at " + openedAt);
+            }
+        }
+    }
 
     /**
      * The shape at the position holds values this cannot reach into, and which reaching is missing

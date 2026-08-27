@@ -53,18 +53,20 @@ public final class LinesWhereTheyFall {
      * rule, and a reader is told what actually happened to it.
      */
     public record Filed(List<Threshold> thresholds, List<GuardThresholds.Guards.Singled> singled,
-                        List<LineDrawn> between, List<RuleWithoutALine> notPlaced) {
+                        List<LineDrawn> between, List<RuleWithoutALine> notPlaced,
+                        List<Axis> claimed) {
 
         public Filed {
             thresholds = List.copyOf(thresholds);
             singled = List.copyOf(singled);
             between = List.copyOf(between);
             notPlaced = List.copyOf(notPlaced);
+            claimed = List.copyOf(claimed);
         }
     }
 
     /** Every measurement where its name was filed, and the lines this had nowhere to put. */
-    public static Filed of(InputDomain inputs, List<Threshold> thresholds,
+    public static Filed of(String behavior, InputDomain inputs, List<Threshold> thresholds,
                            List<GuardThresholds.Guards.Singled> singled, List<LineDrawn> between,
                            souther.compiler.inputs.Quantities quantities, Symbols symbols) {
         List<Threshold> outThresholds = new ArrayList<>();
@@ -94,7 +96,61 @@ public final class LinesWhereTheyFall {
         for (LineDrawn each : between) {
             place(inputs, each, quantities, symbols, outBetween, notPlaced);
         }
-        return new Filed(outThresholds, outSingled, outBetween, notPlaced);
+        return new Filed(outThresholds, outSingled, outBetween, notPlaced,
+                claimed(behavior, inputs, outThresholds, outSingled, symbols));
+    }
+
+    /**
+     * The positions a rule named exactly that the walk over the declarations never enumerated.
+     *
+     * <p><b>Two ways to arrive at a position, and this is the second.</b> The walk asks what
+     * positions a type can have and stops where a path returns to a declaration it has already
+     * opened ({@link souther.compiler.inputs.ExpansionTrace}), because the question it answers has
+     * no other end. A rule asks nothing: it names one path, the path is as long as the author wrote
+     * it, and following it to the end terminates because the path does. So a model that says
+     * {@code c@Cons.tail@Cons.head >= 10} is measured there however many times that path goes
+     * through {@code Chain} — which is not the walk unfolding a declaration twice, and is not a
+     * number of unfoldings anybody chose.
+     *
+     * <p>Only where nothing already answers. A term the axes carry is measured on the axis that
+     * carries it, and a term whose position has an axis about some other number of it is re-pointed
+     * where the two are matched. An axis made here beside either would be one position measured
+     * twice, with the count of what a report is over reading them as two.
+     *
+     * <p>A path with no type at its end is refused rather than reported. A term is made by reading
+     * what stands at the path it names, so one that got this far has a type there; answering that it
+     * has none would be the two readings disagreeing about what a path reaches, which is not a
+     * limitation to tell an author about.
+     */
+    private static List<Axis> claimed(String behavior, InputDomain inputs,
+                                      List<Threshold> thresholds,
+                                      List<GuardThresholds.Guards.Singled> singled,
+                                      Symbols symbols) {
+        List<Axis> made = new ArrayList<>();
+        java.util.Set<NumericTerm> already = new java.util.LinkedHashSet<>();
+        for (NumericTerm term : measured(thresholds, singled)) {
+            if (!already.add(term) || inputs.at(term.path()) != null) {
+                continue;
+            }
+            souther.compiler.types.Type type = inputs.typeAt(term.path(), symbols);
+            if (type == null) {
+                throw new IllegalStateException(
+                        "`" + term + "` is measured at " + term.path() + " and this reading puts "
+                                + "nothing there, though the term was made of what stands at it");
+            }
+            made.add(Axis.pendingAt(new AxisId(behavior, term.toString()), term, type,
+                    ReadingResidue.NOTHING, null, null));
+        }
+        return made;
+    }
+
+    /** Every number a rule is measured at, whichever kind of rule named it. */
+    private static List<NumericTerm> measured(List<Threshold> thresholds,
+                                              List<GuardThresholds.Guards.Singled> singled) {
+        List<NumericTerm> out = new ArrayList<>();
+        thresholds.forEach(each -> out.add(each.term()));
+        singled.forEach(each -> out.add(each.term()));
+        return out;
     }
 
     /** The same threshold, measured at {@code at}. */
@@ -213,8 +269,9 @@ public final class LinesWhereTheyFall {
                 // nothing is left over.
                 case souther.compiler.inputs.PlacementOutcome.Refused _ -> { }
                 // The reading stopped before it got there, and the position it stopped at says so.
-                // The walk's depth is where a report stops being about one input rather than a
-                // claim about the model, so the line is measured where the model wrote it.
+                // Where the walk stopped is an answer about the walk and not about the model, so
+                // the line is measured where the model wrote it — at the path the rule named,
+                // which is followed to its end by `claimed` above.
                 case souther.compiler.inputs.PlacementOutcome.Unresolved _ -> { }
             }
         }

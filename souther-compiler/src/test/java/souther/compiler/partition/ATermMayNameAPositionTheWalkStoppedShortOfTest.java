@@ -10,14 +10,14 @@ import souther.compiler.report.AdequacyReport;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A rule may name a position deeper than the reading of an input walks to, and that is not an error.
+ * A rule may name a position the reading of an input has none for, and that is not an error.
  *
- * <p>The walk stops at two levels, where a report stops being about anything an author would call
- * one input. Nothing stops a rule from naming what is under that: the reader that turns an
- * expression into a path follows as many fields as are written. So a term at a path the reading has
- * no position for is an ordinary thing to be handed, and the reading already has a word for it —
- * {@code the walk stopped before reaching what is under it} — which is what a report says of the
- * position above it.
+ * <p>The walk enumerates what positions a type can have and stops where a path returns to a
+ * declaration already open on it, because that question has no other end. Nothing stops a rule from
+ * naming what is under that: the reader that turns an expression into a path follows as many steps
+ * as are written, and a written path is as long as the author made it. So a term at a path the
+ * reading has no position for is an ordinary thing to be handed, and the line drawn on it is
+ * measured where the model wrote it.
  *
  * <p>Told apart from a term of some other behavior's input, which is a caller's mistake and is
  * refused as one. Both are "no position of this input is at that path", and only one of them is
@@ -26,41 +26,71 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ATermMayNameAPositionTheWalkStoppedShortOfTest {
 
-    /** Two fields three levels down, compared against each other. The line is between two positions
-     *  the walk never reached. */
-    private static final String DEEPER_THAN_THE_WALK = """
+    /** Two fields of the link below the one the walk stopped at, compared against each other. The
+     *  line is between two positions the reading never enumerated. */
+    private static final String BELOW_WHERE_THE_READING_STOPS = """
             module example.deep
 
-            data Inner = { a: Int, b: Int }
-            data Mid   = { inner: Inner }
-            data Outer = { mid: Mid }
+            data Nil
+            data Cons = { a: Int, b: Int, tail: Chain }
+            data Chain = Nil | Cons
 
             data No = { why: Int }
             data Yes = { v: Int }
             data Result = No | Yes
 
-            behavior f : (o: Outer) -> Result
+            behavior f : (c: Chain) -> Result
                 constructs Yes, No
-            let f (o) = {
-                guard o.mid.inner.a < o.mid.inner.b else No { why = 0 }
-                Yes { v = 1 }
-            }
+            let f (c) =
+                match c with
+                    | Nil -> No { why = 0 }
+                    | Cons as k -> match k.tail with
+                        | Nil -> No { why = 1 }
+                        | Cons as m -> {
+                            guard m.a < m.b else No { why = 2 }
+                            Yes { v = 1 }
+                          }
 
             example f
-                | "under" : (Outer { mid = Mid { inner = Inner { a = 1, b = 2 } } }) -> Yes { v = 1 }
+                | "under" : (Cons { a = 0, b = 0, tail = Cons { a = 1, b = 2, tail = Nil } })
+                    -> Yes { v = 1 }
             """;
 
+    /**
+     * The line is drawn where the model named it, under the position the reading stopped at.
+     *
+     * <p>Where the reading stopped is
+     * {@code TheWalkStopsWhereTheInputReturnsToADeclarationTest}'s to say; what is asked here is
+     * that the line is measured all the same.
+     */
     @Test
-    void aLineBetweenTwoPositionsBelowTheWalkIsStillMeasured() {
-        String report = report(DEEPER_THAN_THE_WALK);
+    void aLineBetweenTwoPositionsBelowWhereTheReadingStopsIsStillMeasured() {
+        String report = report(BELOW_WHERE_THE_READING_STOPS);
 
-        assertTrue(report.contains("the walk stopped before reaching what is under it"), report);
-        assertTrue(report.contains("f/o.mid.inner.a = o.mid.inner.b"), report);
+        assertTrue(report.contains("borders 1"), report);
+        assertTrue(report.contains("f/c@Cons.tail@Cons.a = c@Cons.tail@Cons.b"), report);
+    }
+
+    /**
+     * And a point on it that nothing could build is said as that, not as a line nobody drew.
+     *
+     * <p>Being able to measure a rule and being able to write a row for it are two capabilities, and
+     * a report that had them as one would answer "no line" wherever the search came back
+     * empty-handed — which is the model looking silent about a rule its author wrote. What an author
+     * is owed here is the line, and that nothing composed a row at it.
+     */
+    @Test
+    void aPointNothingCouldBuildIsSaidAsThatAndNotAsNoLine() {
+        String report = report(BELOW_WHERE_THE_READING_STOPS);
+
+        assertTrue(report.contains("not known to be writable: the OFF point"
+                        + " f/c@Cons.tail@Cons.a = c@Cons.tail@Cons.b"),
+                report);
     }
 
     /** The same two fields, held one apart, which is a rule no operand of the comparison names. */
-    private static final String REWRITTEN_BY_THE_ARITHMETIC = DEEPER_THAN_THE_WALK
-            .replace("o.mid.inner.a < o.mid.inner.b", "o.mid.inner.a + 1 < o.mid.inner.b");
+    private static final String REWRITTEN_BY_THE_ARITHMETIC = BELOW_WHERE_THE_READING_STOPS
+            .replace("m.a < m.b", "m.a + 1 < m.b");
 
     /**
      * And so is one the arithmetic had to rewrite to find the two positions in.
@@ -70,10 +100,9 @@ class ATermMayNameAPositionTheWalkStoppedShortOfTest {
      * be had from what the checker gave that operand; {@code a + 1 < b} names neither, so the order
      * each position is counted on is the reading of the declarations' to say or nobody's.
      *
-     * <p>That reading stops at {@link souther.compiler.inputs.InputDomain#MAX_DEPTH} and the
-     * declarations do not, so it follows the type the rest of the way down. Made to stop where the
-     * positions stop — a null for a path with no position, which reads like tidying up — this line
-     * is not drawn at all.
+     * <p>That reading stops where the path returns to a declaration and the declarations do not, so
+     * it follows the type the rest of the way down. Made to stop where the positions stop — a null
+     * for a path with no position, which reads like tidying up — this line is not drawn at all.
      */
     @Test
     void soIsALineTheArithmeticHadToRewriteToFind() {
@@ -81,7 +110,7 @@ class ATermMayNameAPositionTheWalkStoppedShortOfTest {
 
         // The line is where `a` is one below `b`, so the point on it is the pair two apart: the
         // rule is written `<` and the last pair satisfying it is the one before they are one apart.
-        assertTrue(report.contains("f/o.mid.inner.a = o.mid.inner.b - 2"), report);
+        assertTrue(report.contains("f/c@Cons.tail@Cons.a = c@Cons.tail@Cons.b - 2"), report);
     }
 
     /** Two fields of what a list holds, compared inside a closure. The path reaches them through
@@ -106,7 +135,7 @@ class ATermMayNameAPositionTheWalkStoppedShortOfTest {
             """;
 
     /**
-     * And so is one under what a sequence holds, which the walk does not reach either.
+     * And so is one under what a sequence holds, which is a step of its own.
      *
      * <p>A second kind of step and the reason the reading of a path is exhaustive over them. A path
      * goes into a field, into what a sequence holds, or nowhere while narrowing where it already is;
@@ -117,7 +146,9 @@ class ATermMayNameAPositionTheWalkStoppedShortOfTest {
     void andSoIsOneUnderWhatASequenceHolds() {
         String report = report(UNDER_WHAT_A_SEQUENCE_HOLDS);
 
-        assertTrue(report.contains("f/cart.items[*].inner.a = cart.items[*].inner.b"), report);
+        assertTrue(report.contains("cart.items[*].inner.a"), report);
+        assertTrue(report.contains("cart.items[*].inner.b"), report);
+        assertTrue(report.contains("borders 1"), report);
     }
 
     private static String report(String model) {

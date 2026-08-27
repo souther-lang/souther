@@ -62,9 +62,10 @@ final class ConstructionPlan {
     /** How deep a record is built. Past this a value stops being anything an author recognises as
      *  one input, and a type that refers to itself would not stop at all.
      *
-     *  <p>This search's bound and nobody else's. What a report is about stops at two levels
-     *  ({@link souther.compiler.inputs.InputDomain#MAX_DEPTH}), which answers a different question:
-     *  a record four levels down still has to be constructed. */
+     *  <p>This search's bound and nobody else's. How far the reading of an input goes is settled by
+     *  the declarations it opens ({@link souther.compiler.inputs.ExpansionTrace}), which answers a
+     *  different question: a value has to be built at a position whether or not a report divides
+     *  it. */
     private static final int MAX_DEPTH = 8;
 
     /**

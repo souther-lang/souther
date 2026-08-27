@@ -113,7 +113,16 @@ public record InputReads(InputDomain read, Map<BindingId, TermPath> roots,
         // Only where the reading of the input has such a position. A narrowing of something that is
         // not a sum of the input's, or of a case the rules refuse, is a place no row is read at and
         // no class is drawn at — and a line drawn there would be owed by nothing.
-        if (read.at(narrowed) == null) {
+        //
+        // Or where the model has named it and the reading declined to enumerate it. The walk stops
+        // where the input returns to a declaration already open on the path, because listing what a
+        // recursive type can hold has no other end; an arm is not a listing — it names one case at
+        // one place, and the path it makes is as long as the body is. Refused alike, a rule written
+        // one link down a chain named no position and drew no line, and a report said the model
+        // states nothing there.
+        if (read.at(narrowed) == null
+                && !(read.underAReturnToADeclaration(narrowed)
+                        && read.typeAt(narrowed, symbols) != null)) {
             return this;
         }
         Map<BindingId, TermPath> wider = new LinkedHashMap<>(roots);
