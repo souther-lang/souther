@@ -51,12 +51,11 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
             let inAConjunction (r) =
                 if r.cost >= 0 && r.cost <= 100000 then Auto else Manual
 
-            data Deep = { note: String }
-            data Middle = { deep: Deep }
-            data Outer = { middle: Middle }
+            data Deep = { note: String, more: Option<Deep> }
+            data Outer = { deep: Deep }
 
-            behavior tooDeep : (o: Outer) -> Auto | Manual
-            let tooDeep (o) = if o.middle.deep.note == "x" then Auto else Manual
+            behavior returnsToItself : (o: Outer) -> Auto | Manual
+            let returnsToItself (o) = if o.deep.note == "x" then Auto else Manual
 
             behavior byEquality : (r: Request) -> Auto | Manual
             let byEquality (r) = if r.cost == 3 then Auto else Manual
@@ -140,18 +139,20 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
     }
 
     /**
-     * A position the walk stopped short of, which is not one it looked at and found undivided.
+     * A position the walk stopped at, which is not one it looked at and found undivided.
      *
-     * <p>{@code Partitions.MAX_DEPTH} is two and the generator composes to eight, so a field three
-     * records down is a value a row can carry and a position nothing measured. Reported as the limit
-     * it is, so that lifting the limit is work somebody can see is owed.
+     * <p>Where the input returns to a declaration already open on the path, what is under the
+     * position is what is under the one above and is not read again. A row still carries a value
+     * there, so this is a position nothing measured rather than a position the model divides no way
+     * — and the two sentences send a reader to different work.
      */
     @Test
-    void aPositionTheWalkStoppedShortOfSaysSo() {
-        String block = blockOf("tooDeep");
+    void aPositionTheWalkStoppedAtSaysSo() {
+        String block = blockOf("returnsToItself");
 
-        assertFalse(block.contains("not derivable: o.middle.deep"), block);
-        assertTrue(block.contains("the walk stopped before reaching what is under it"), block);
+        assertFalse(block.contains("not derivable: o.deep.more@Some"), block);
+        assertTrue(block.contains("the input returns here to a declaration already read above it"),
+                block);
     }
 
     /** An equality divides the position, so it is not one nothing was established about. */

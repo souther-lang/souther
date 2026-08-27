@@ -213,8 +213,9 @@ public final class LinesWhereTheyFall {
                 // nothing is left over.
                 case souther.compiler.inputs.PlacementOutcome.Refused _ -> { }
                 // The reading stopped before it got there, and the position it stopped at says so.
-                // The walk's depth is where a report stops being about one input rather than a
-                // claim about the model, so the line is measured where the model wrote it.
+                // Where the walk stopped is an answer about the walk and not about the model, so
+                // the line is measured where the model wrote it — which is a position the reading
+                // has, because a path the measurement names is one the reading was built over.
                 case souther.compiler.inputs.PlacementOutcome.Unresolved _ -> { }
             }
         }

@@ -26,8 +26,8 @@ import java.util.Map;
  * somewhere: what is at the end of one is inside what is at the start of it. A
  * {@link Step.Refine} goes nowhere — it narrows which values may stand at the position it is taken
  * at, and the value at the end of it is the value at the start of it. So a refinement takes no
- * level of the structure ({@link InputDomain#MAX_DEPTH}), reaches no field of a record it is under,
- * and states a requirement about the value rather than a place in it ({@link #requirements}).
+ * level of the structure, reaches no field of a record it is under, and states a requirement about
+ * the value rather than a place in it ({@link #requirements}).
  *
  * <p><b>A location, and nothing about how many values stand at one.</b> A {@link Step.Element}
  * says the position is inside the sequence above it; it does not say some element, or every element,

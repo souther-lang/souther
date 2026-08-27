@@ -57,9 +57,15 @@ public sealed interface Shape permits Shape.ReadablePositionShape, Shape.Cases, 
      * those two disagree (an {@code Option} may be a field and may not be a parameter) and neither
      * is this question.
      *
-     * <p>{@link Unresolved} is a member. It is a shape a position legitimately has — a declaration
-     * reachable from itself compiles — and what a reader does with it is answer that it could not
-     * be interpreted. Leaving it out would put a compiling model through a path that throws.
+     * <p>{@link Unresolved} is a member. It is a shape a position legitimately has — a newtype whose
+     * base the walk over the names could not reach compiles — and what a reader does with it is
+     * answer that it could not be interpreted. Leaving it out would put a compiling model through a
+     * path that throws.
+     *
+     * <p><b>A record that names itself is not one of them.</b> It is a {@link Product} like any
+     * other, and its fields are read like any other's; what its own name at a field of it means for
+     * a walk is the walk's to answer. A reader taking this case for the one that ends a cycle would
+     * have no terminator at all.
      */
     sealed interface ReadablePositionShape extends Shape
             permits Scalar, Product, Sum, Sequence, Unit, Mapping, Optional, Unresolved {}
@@ -201,7 +207,8 @@ public sealed interface Shape permits Shape.ReadablePositionShape, Shape.Cases, 
 
     /**
      * A name that denotes no declaration this can read, or a newtype whose {@code value} it could
-     * not reach — a declaration reachable from itself ends the walk with the name still on.
+     * not reach — a newtype spine that comes back to itself ends the walk over the names with the
+     * name still on.
      *
      * <p>Its own case because the provenance differs from {@link Undecided}: this one was looked up.
      * The interpretation was attempted and did not reach a terminal shape, which is a different

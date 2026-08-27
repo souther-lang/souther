@@ -59,7 +59,10 @@ class OneProjectionWritesTheWordADocumentReadsTest {
     void everyInternalReasonHasAWordToBeSaidIn() {
         List<BlockReason> all = List.of(
                 new BlockReason.TypeUnresolved(),
-                new BlockReason.DepthLimit(),
+                new BlockReason.RecursiveExpansion(
+                        souther.compiler.types.TypeSymbols.declared(
+                                new souther.compiler.types.TypeKey("g", "Chain")),
+                        souther.compiler.inputs.TermPath.of("c")),
                 new BlockReason.UnsupportedTraversal(BlockReason.Traversal.MAPPING_CONTENT),
                 new BlockReason.UnreadComparisonForm(),
                 new BlockReason.UnreadComparisonDomain(),

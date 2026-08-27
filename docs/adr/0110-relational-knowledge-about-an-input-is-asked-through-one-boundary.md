@@ -79,14 +79,14 @@ mechanism has no room for. Add at the finest unit that carries the relation, and
 rather than meeting projections.
 
 A term is queryable where what it sits under is something the behavior takes. **Owned is not the
-same as known about.** The walk that reads an input's positions stops two levels down, where a report
-stops being about anything an author would call one input, and nothing stops a rule from naming what
-is under that — the reader that turns an expression into a path follows as many fields as are
-written. Such a term is this input's and is answered for, with whatever it guarantees of itself and
-nothing the declarations relate it to, because the reading has no position there for a relation to be
-about. The reading already has a word for that position: *the walk stopped before reaching what is
-under it*. Ownership settled by which positions the walk found instead, an ordinary rule naming a
-field of a field of a field stopped a measurement rather than being measured.
+same as known about.** The walk that reads an input's positions stops where a path returns to a
+declaration already open on it, and nothing stops a rule from naming what is under that — the reader
+that turns an expression into a path follows as many steps as are written. Such a term is this
+input's and is answered for, with whatever it guarantees of itself and nothing the declarations
+relate it to, because the reading has no position there for a relation to be about. The reading
+already has a word for the position it stopped at: *the input returns here to a declaration already
+read above it*. Ownership settled by which positions the walk found instead, an ordinary rule naming
+a field one link down a chain stopped a measurement rather than being measured.
 
 What is refused is a term under something the behavior does not take, which no reading of this input
 could ever answer for — as an emptiness it would be a bug wearing the words of a contradiction in the

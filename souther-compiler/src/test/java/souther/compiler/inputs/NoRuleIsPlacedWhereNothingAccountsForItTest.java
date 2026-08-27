@@ -43,18 +43,21 @@ class NoRuleIsPlacedWhereNothingAccountsForItTest {
     /**
      * Where a placement ends with nowhere to go, over every model this repository carries.
      *
-     * <p>One entry, and it is the reading's own limit. How far a report is about one input is this
-     * reading's answer and it says so at the position it stopped at ({@code BlockedDescent}), so a
-     * rule about something deeper is a rule an author is already told about — this is the same fact
-     * counted per rule rather than per position.
+     * <p>Empty, and that is the measurement. Every path these models write opens each declaration
+     * at most once, so every one of them is followed to its end and every rule written along it is
+     * placed at a position — a rule is not left unread because of how deeply an author nested the
+     * value it is about.
+     *
+     * <p>A model whose input returns to a declaration it has already opened would put an entry here,
+     * and it is a failure until somebody decides what a reader should be told about it. So a model
+     * of that shape is not something this can absorb quietly.
      *
      * <p>Nothing else, and there is nothing else it could be. A name a rule wrote that reaches a
      * position this reading did not stop at and puts no such name under is this reading disagreeing
      * with the language about what may be written, and it is refused where it arises rather than
      * carried here.
      */
-    private static final Map<String, Integer> ALLOWED = Map.of(
-            "the reading stopped there: DepthLimit", 136);
+    private static final Map<String, Integer> ALLOWED = Map.of();
 
     /**
      * What a value's rules raised and what this build takes as placed are the same, one for one.

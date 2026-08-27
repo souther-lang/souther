@@ -75,7 +75,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
     private static Map<String, String> theStopsAtAPosition() {
         Map<String, String> table = new LinkedHashMap<>();
         table.put("TypeUnresolved", "TYPE_UNRESOLVED");
-        table.put("DepthLimit", "DEPTH_LIMIT");
+        table.put("RecursiveExpansion", "RETURNS_TO_A_DECLARATION_ALREADY_READ");
         table.put("UnsupportedTraversal", "UNSUPPORTED_TRAVERSAL");
         table.put("ValueRulesNotReached", "RULES_NOT_READ_AT_ALL");
         return table;
@@ -185,7 +185,10 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
     private static List<BlockReason.AboutThePosition> everyStopAtAPosition() {
         return List.of(
                 new BlockReason.TypeUnresolved(),
-                new BlockReason.DepthLimit(),
+                new BlockReason.RecursiveExpansion(
+                        souther.compiler.types.TypeSymbols.declared(
+                                new souther.compiler.types.TypeKey("g", "Chain")),
+                        TermPath.of("c")),
                 new BlockReason.UnsupportedTraversal(BlockReason.Traversal.MAPPING_CONTENT),
                 new BlockReason.ValueRulesNotReached());
     }

@@ -38,8 +38,16 @@ class WhyADerivationStoppedIsNotWhatAReportPromisesTest {
     void theOthersAreTheirOwnWord() {
         assertEquals(UndividedPosition.Reason.TYPE_UNRESOLVED,
                 ReportedReason.of(new BlockReason.TypeUnresolved()));
-        assertEquals(UndividedPosition.Reason.DEPTH_LIMIT,
-                ReportedReason.of(new BlockReason.DepthLimit()));
+        assertEquals(UndividedPosition.Reason.RETURNS_TO_A_DECLARATION_ALREADY_READ,
+                ReportedReason.of(aReturn()));
+    }
+
+    /** A path that came back to a declaration it had opened, as a reason on its own. */
+    private static BlockReason.RecursiveExpansion aReturn() {
+        return new BlockReason.RecursiveExpansion(
+                souther.compiler.types.TypeSymbols.declared(
+                        new souther.compiler.types.TypeKey("g", "Chain")),
+                souther.compiler.inputs.TermPath.of("c"));
     }
 
     /**
@@ -61,7 +69,7 @@ class WhyADerivationStoppedIsNotWhatAReportPromisesTest {
     void everyReasonHasAWord() {
         for (BlockReason reason : new BlockReason[] {
                 new BlockReason.TypeUnresolved(),
-                new BlockReason.DepthLimit(),
+                aReturn(),
                 new BlockReason.UnsupportedTraversal(BlockReason.Traversal.MAPPING_CONTENT)}) {
             assertNotNull(ReportedReason.of(reason), reason + " is reported as something");
         }

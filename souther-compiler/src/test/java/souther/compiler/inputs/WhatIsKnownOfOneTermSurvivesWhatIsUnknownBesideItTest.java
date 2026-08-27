@@ -115,8 +115,8 @@ class WhatIsKnownOfOneTermSurvivesWhatIsUnknownBesideItTest {
                 "each of them is at least none, so their sum is");
     }
 
-    /** A collection under more steps than the walk that reads an input goes down. */
-    private static final String DEEPER_THAN_THE_WALK = """
+    /** A collection under a position where the input returns to a declaration already open. */
+    private static final String BELOW_WHERE_THE_WALK_STOPS = """
             module example.deep
 
             data N = Int
@@ -124,7 +124,7 @@ class WhatIsKnownOfOneTermSurvivesWhatIsUnknownBesideItTest {
                 invariant atMostFive  = value <= 5
 
             data Inner = { xs: List<Int> }
-            data Mid = { inner: Inner }
+            data Mid = { inner: Inner, more: List<Mid> }
 
             data P = { m: Mid, n: N, ys: List<Int> }
 
@@ -134,12 +134,12 @@ class WhatIsKnownOfOneTermSurvivesWhatIsUnknownBesideItTest {
             """;
 
     /**
-     * A count under more steps than the walk goes down is still never negative.
+     * A count under a position the walk stopped at is still never negative.
      *
      * <p>Owned is not the same as known about. The walk that reads an input's positions stops where
-     * a report stops being about anything an author would call one input, and nothing stops a rule
-     * from naming what is under that — so a term down there is answered for with what it guarantees
-     * of itself and nothing else.
+     * a path returns to a declaration it has already opened, and nothing stops a rule from naming
+     * what is under that — so a term down there is answered for with what it guarantees of itself
+     * and nothing else.
      *
      * <p>What it guarantees is the term's to say and not the position's. A count is a whole number
      * whatever it is a count of, and a reading that asked the position how its values are spaced
@@ -147,10 +147,10 @@ class WhatIsKnownOfOneTermSurvivesWhatIsUnknownBesideItTest {
      * each at least none with no floor at all.
      */
     @Test
-    void aCountUnderMoreStepsThanTheWalkGoesDownKeepsItsFloor() {
-        Read read = read(DEEPER_THAN_THE_WALK);
-        TermPath deep = TermPath.of("p").then("m").then("inner").then("xs");
-        assertNull(read.inputs().at(deep), "the walk does not reach this far");
+    void aCountUnderAPositionTheWalkStoppedAtKeepsItsFloor() {
+        Read read = read(BELOW_WHERE_THE_WALK_STOPS);
+        TermPath deep = TermPath.of("p").then("m").then("more").element().then("inner").then("xs");
+        assertNull(read.inputs().at(deep), "the walk stopped at the return above this");
         souther.compiler.types.Type there =
                 read.inputs().at(TermPath.of("p").then("ys")).type();
         NumericTerm buried = NumericTerm.TakenOf.of(

@@ -42,10 +42,12 @@ import java.util.Optional;
  * for.
  *
  * <p><b>Whose positions, and owned is not the same as known about.</b> A term is queryable where
- * what it sits under is something this behavior takes. The walk that reads an input's positions
- * stops where a report stops being about anything an author would call one input, and nothing stops
- * a rule from naming what is under that — such a term is answered for, with what it guarantees of
- * itself and nothing the declarations relate it to. Which numbers a path is measured at is not
+ * what it sits under is something this behavior takes. What the reading holds is what the
+ * enumeration found and what the measurement named ({@link InputDemand}), and a term at one of those
+ * is answered for like any other — the declarations reaching it relate it to everything they relate
+ * any position to, which is how a clause of a type bounds an occurrence several links into a
+ * recursive value. A term at a path the reading holds no position for is answered for as well, with
+ * what it guarantees of itself and nothing the declarations relate it to. Which numbers a path is measured at is not
  * settled by that reading either: a bare list nothing bounds becomes an axis about its length where
  * a body measures it. What is refused is a term under something this behavior does not take, which
  * no reading of this input could ever answer for — read as an emptiness it would be a bug wearing

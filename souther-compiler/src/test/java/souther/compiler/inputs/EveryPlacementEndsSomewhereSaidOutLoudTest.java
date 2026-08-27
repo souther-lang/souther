@@ -48,21 +48,17 @@ class EveryPlacementEndsSomewhereSaidOutLoudTest {
             behavior atTheSum : (q: Q) -> Ok
             """;
 
-    /** A shared sum as deep as this reading goes, so its cases put no field anywhere. */
-    private static final String TOO_DEEP = """
+    /** A chain: the reading of a link returns to the declaration the link stands at. */
+    private static final String RETURNS = """
             module g
 
-            data Paging = { limit: Int }
-            data A = { ...Paging, x: Int }
-            data B = { ...Paging, y: Int }
-            data Q = A | B
-
-            data Held = { q: Q }
-            data Outer = { held: Held }
+            data Nil
+            data Cons = { head: Int, tail: Chain }
+            data Chain = Nil | Cons
 
             data Ok
 
-            behavior read : (o: Outer) -> Ok
+            behavior read : (c: Chain) -> Ok
             """;
 
     /**
@@ -111,23 +107,36 @@ class EveryPlacementEndsSomewhereSaidOutLoudTest {
      */
     @Test
     void aNameThatReachesNoPositionComesBackSayingSo() {
-        InputDomain read = reading(TOO_DEEP, "read");
+        InputDomain read = reading(RETURNS, "read");
+        // A clause of `Cons` naming a field of the link below it. The link is where the input
+        // returns to `Chain`, so the name gets that far and no further.
         PlacementFiling filing = read.file(new PlacementSeed(
-                new RuleAddress(TermPath.of("o"), "held.q.limit"),
+                new RuleAddress(pathOf(read, "c@Cons"), "tail.head"),
                 new PlacementSeed.Placed.TheValuesThere(), aRule(read), someCitation(aRule(read))));
 
         assertEquals(List.of(), filedAt(filing));
         assertTrue(filing.anythingUnresolved(), "and nothing else stands in its place");
-        assertEquals(2, filing.outcomes().size(),
-                "one per case, because the name would have stood under each of them");
+        assertEquals(1, filing.outcomes().size(),
+                "the sum was not entered at all, so there is one stop and it is the sum's");
         PlacementOutcome.Unresolved first =
                 assertInstanceOf(PlacementOutcome.Unresolved.class, filing.outcomes().getFirst());
         PlacementOutcome.Reason.TheReadingStoppedThere stopped = assertInstanceOf(
                 PlacementOutcome.Reason.TheReadingStoppedThere.class, first.why(),
-                "the reading of the case stopped, and it is the case that says so — the sum is read "
-                        + "whatever the depth and has nothing to say about it");
-        assertEquals("o.held.q@A", stopped.at().toString());
-        assertInstanceOf(BlockReason.DepthLimit.class, stopped.why());
+                "the reading stopped, and it is the position it stopped at that says so");
+        assertEquals("c@Cons.tail", stopped.at().toString());
+        BlockReason.RecursiveExpansion why =
+                assertInstanceOf(BlockReason.RecursiveExpansion.class, stopped.why());
+        assertEquals("c", why.openedAt().toString(),
+                "and it says where the path had already opened `Chain`");
+    }
+
+    /** The position this reading made at {@code spelled}, which is where a case's rules are rooted. */
+    private static TermPath pathOf(InputDomain read, String spelled) {
+        return read.positions().stream().map(Position::path)
+                .filter(each -> each.toString().equals(spelled))
+                .findFirst().orElseThrow(() -> new AssertionError(
+                        "no position at " + spelled + " among " + read.positions().stream()
+                                .map(Position::path).toList()));
     }
 
     /**
@@ -139,7 +148,7 @@ class EveryPlacementEndsSomewhereSaidOutLoudTest {
      */
     @Test
     void everyPlacementOfEveryRuleComesBackWithAnAnswer() {
-        for (String source : List.of(SHARED, TOO_DEEP, MIXED)) {
+        for (String source : List.of(SHARED, RETURNS, MIXED)) {
             for (String behavior : behaviorsOf(source)) {
                 InputDomain read = reading(source, behavior);
                 for (PlacementFiling filing : read.placements()) {
@@ -174,7 +183,7 @@ class EveryPlacementEndsSomewhereSaidOutLoudTest {
         assertEquals(List.of(), shared.reach().branchesNotEntered(),
                 "and the reading went down both of them");
 
-        for (String source : List.of(SHARED, TOO_DEEP, MIXED)) {
+        for (String source : List.of(SHARED, RETURNS, MIXED)) {
             for (String behavior : behaviorsOf(source)) {
                 InputDomain read = reading(source, behavior);
                 for (NameReach.Crossing crossing : read.reach().crossings()) {

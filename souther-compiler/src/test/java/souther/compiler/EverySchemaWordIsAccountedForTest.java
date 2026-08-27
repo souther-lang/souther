@@ -251,8 +251,13 @@ class EverySchemaWordIsAccountedForTest {
             // Written once and referred to twice: a position's reading and a rule left unread are
             // the same question asked of two things, and two copies of the words would be two
             // places for one of them to gain a word the other does not have.
+            // `depth_limit` is beside them and is retired. The reading stopped after a count of
+            // steps and said so, and documents of this version carry the word — so it stays here,
+            // where what stops the reading is now the path returning to a declaration it had
+            // already opened.
             new Vocabulary("notReadReason",
                     List.of("$defs", "notReadReason"),
+                    Set.of("depth_limit"),
                     souther.compiler.partition.UndividedPosition.Reason.class),
             // And `no_lines_derived` likewise.
             Vocabulary.of("partition.boundariesMeasure.reason",

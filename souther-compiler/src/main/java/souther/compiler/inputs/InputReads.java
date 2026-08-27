@@ -45,7 +45,8 @@ import java.util.Map;
  */
 public record InputReads(InputDomain read, Map<BindingId, TermPath> roots,
                          Map<BindingId, Core> bound,
-                         souther.compiler.check.ElementBindings elements, boolean callsStand) {
+                         souther.compiler.check.ElementBindings elements, boolean callsStand)
+        implements InputPaths {
 
     public InputReads {
         roots = Map.copyOf(roots);
@@ -55,6 +56,39 @@ public record InputReads(InputDomain read, Map<BindingId, TermPath> roots,
     /** At the top of a body, where nothing has been bound yet and no element has been handed out. */
     public static InputReads of(InputDomain read) {
         return of(read, souther.compiler.check.ElementBindings.NONE);
+    }
+
+    /**
+     * At the top of a body, before there is a reading of the input to hold beside it.
+     *
+     * <p><b>What the paths a body names are worked out from, and it is not the reading.</b> Which
+     * location a name stands for is settled by the parameters, the bindings on the way and the case
+     * an arm selects — all of them facts about the tree. Whether a row is ever written at the
+     * location is the reading's answer and is asked of the reading, about the path this produced.
+     *
+     * <p>Held apart because they cannot both be asked at once: the reading is built over the paths a
+     * behavior's measurement names, so a path environment that consulted the reading could not be
+     * used to find them. One built this way answers about names and refuses to answer about the
+     * model, which is what keeps the two questions from being run together again.
+     */
+    public static InputReads ofParameters(Map<BindingId, String> parameters,
+                                          souther.compiler.check.ElementBindings elements) {
+        return new InputReads(null, rooted(parameters), Map.of(), elements, false);
+    }
+
+    /**
+     * The reading of the input this was built beside.
+     *
+     * <p>Absent where this was built to find the paths a body names ({@link #ofParameters}), and
+     * asking for it there is a caller reaching for an answer that does not exist yet rather than one
+     * that happens to be missing.
+     */
+    public InputDomain read() {
+        if (read == null) {
+            throw new IllegalStateException(
+                    "a path environment built before the reading was asked for the reading");
+        }
+        return read;
     }
 
     /**
@@ -87,6 +121,12 @@ public record InputReads(InputDomain read, Map<BindingId, TermPath> roots,
                 souther.compiler.check.ElementBindings.NONE, true);
     }
 
+    /** The same, before there is a reading to hold beside it ({@link #ofParameters}). */
+    public static InputReads ofWhatIsDeclared(Map<BindingId, String> roots) {
+        return new InputReads(null, rooted(roots), Map.of(),
+                souther.compiler.check.ElementBindings.NONE, true);
+    }
+
     /**
      * The same, inside one arm of a {@code match}.
      *
@@ -100,6 +140,7 @@ public record InputReads(InputDomain read, Map<BindingId, TermPath> roots,
      * in particular, and a name that stands for no position is what a reader is given for it —
      * which is what it was given before there was anything to say.
      */
+    @Override
     public InputReads insideArm(Core.Match match, Core.Case arm, Symbols symbols) {
         if (arm.binder() == null || arm.binder().binding() == null
                 || arm.caseTypes().size() != 1) {
@@ -110,18 +151,23 @@ public record InputReads(InputDomain read, Map<BindingId, TermPath> roots,
             return this;
         }
         TermPath narrowed = scrutinee.refine(Refinement.sumCase(arm.caseTypes().get(0)));
-        // Only where the reading of the input has such a position. A narrowing of something that is
-        // not a sum of the input's, or of a case the rules refuse, is a place no row is read at and
-        // no class is drawn at — and a line drawn there would be owed by nothing.
-        if (read.at(narrowed) == null) {
-            return this;
-        }
+        // And nothing is asked of the reading. What this answers is which location the arm's name
+        // stands for, which the arm and the scrutinee's path settle between them: the value that was
+        // matched, read as the case the arm selects. Whether a row is ever written there — whether
+        // the position exists, whether the rules leave the case anything — is a question about the
+        // model, and it is {@link InputDomain}'s to answer about the path this produced.
+        //
+        // Held together, the two could not both be answered: the reading has to be built before it
+        // can be asked, and it cannot be built without knowing which paths the body names. Asking
+        // only the first here is what breaks that circle, and the cost of asking it alone is a name
+        // that stands for a place no row reaches — which the reading refuses when it is asked.
         Map<BindingId, TermPath> wider = new LinkedHashMap<>(roots);
         wider.put(arm.binder().binding(), narrowed);
         return new InputReads(read, wider, bound, elements, callsStand);
     }
 
     /** The same, inside what {@code binder} binds. */
+    @Override
     public InputReads and(Core.Binder binder, Core value) {
         if (binder == null || binder.binding() == null || value == null) {
             return this;
@@ -133,6 +179,7 @@ public record InputReads(InputDomain read, Map<BindingId, TermPath> roots,
     }
 
     /** The position {@code e} names here, or null where it names none. */
+    @Override
     public TermPath pathOf(Core e, Symbols symbols) {
         return InputPath.of(e, roots, bound, elements, symbols, callsStand);
     }

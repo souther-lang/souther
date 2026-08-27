@@ -1319,7 +1319,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // settled by the authority a reason belongs to
             // ({@link souther.compiler.inputs.BlockReason}), so no reason is written both ways.
             case RULES_NOT_READ_AT_ALL -> "the rules written about it were not reached at all";
-            case DEPTH_LIMIT -> "the walk stopped before reaching what is under it";
+            case RETURNS_TO_A_DECLARATION_ALREADY_READ ->
+                    "the input returns here to a declaration already read above it, and what is"
+                            + " under it is not read again";
             case TYPE_UNRESOLVED -> "its type could not be worked out here";
             case UNSUPPORTED_TRAVERSAL ->
                     "its values are held inside something this does not reach into";
