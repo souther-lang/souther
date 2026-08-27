@@ -227,14 +227,57 @@ public sealed interface OriginRef {
      *               where an inner record's clause and an outer record's reach one coordinate at one
      *               value, so this is not a set with a module of its own
      */
-    record NarrowedOrigin(InvariantOrigin bound, List<TypeSymbol.AtModule> within)
-            implements OriginRef {
+    final class NarrowedOrigin implements OriginRef {
 
-        public NarrowedOrigin {
-            within = List.copyOf(within);
-            if (within.isEmpty()) {
+        private final InvariantOrigin bound;
+        private final List<TypeSymbol.AtModule> within;
+
+        private NarrowedOrigin(InvariantOrigin bound, List<TypeSymbol.AtModule> within) {
+            this.bound = bound;
+            this.within = List.copyOf(within);
+            if (this.within.isEmpty()) {
                 throw new IllegalArgumentException("a bound narrowed by nothing is not narrowed");
             }
+        }
+
+        /**
+         * The bound {@code took} is about, said to have been taken in by what {@code took} names.
+         *
+         * <p>The one way one of these is made, and it takes the reading's answer about an end rather
+         * than the names it came to. A caller with a list of declarations in its hand cannot say
+         * which end they were worked out against, and neither can anything downstream — the value
+         * would read as a narrowing of this bound whatever the names are really about.
+         */
+        public static OriginRef of(InvariantOrigin bound,
+                                   souther.compiler.check.MatchedEndAttribution took) {
+            return took == null || took.names().isEmpty() ? bound
+                    : new NarrowedOrigin(bound, took.names());
+        }
+
+        /** The rule that put an edge here. */
+        public InvariantOrigin bound() {
+            return bound;
+        }
+
+        /** The declarations whose own clauses decided where it stopped. Never empty. */
+        public List<TypeSymbol.AtModule> within() {
+            return within;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof NarrowedOrigin it && bound.equals(it.bound)
+                    && within.equals(it.within);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(bound, within);
+        }
+
+        @Override
+        public String toString() {
+            return "NarrowedOrigin[bound=" + bound + ", within=" + within + "]";
         }
     }
 

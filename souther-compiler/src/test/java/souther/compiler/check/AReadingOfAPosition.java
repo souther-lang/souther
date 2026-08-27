@@ -30,6 +30,12 @@ public final class AReadingOfAPosition {
         return NarrowedBounds.of(new NumericDomain.Bounds(at, null), List.of(by), List.of());
     }
 
+    /** A position stopping at one place both ways, with each end held by its own declarations. */
+    public static NarrowedBounds withBothEndsAt(Endpoint at, List<TypeSymbol.AtModule> below,
+                                                List<TypeSymbol.AtModule> above) {
+        return NarrowedBounds.of(new NumericDomain.Bounds(at, at), below, above);
+    }
+
     /**
      * Who is holding the end {@code narrowed} leaves on one side.
      *

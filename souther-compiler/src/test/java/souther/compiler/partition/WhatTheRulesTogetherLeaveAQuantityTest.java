@@ -66,8 +66,7 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
      * end's attribution beside the other's, and there is no attribution here to put anywhere.
      */
     private static DomainEnds between(Bound low, Bound high) {
-        return DomainEnds.of(side ->
-                DomainEnd.at(side, side == EndSide.LOWER ? low : high, null));
+        return DomainEnds.of(side -> DomainEnd.at(side, side == EndSide.LOWER ? low : high));
     }
 
     /**

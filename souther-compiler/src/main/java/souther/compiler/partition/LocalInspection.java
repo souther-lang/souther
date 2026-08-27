@@ -10,7 +10,6 @@ import souther.compiler.numeric.EndSide;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
-import souther.compiler.types.TypeSymbol;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -161,12 +160,11 @@ final class LocalInspection {
         // ({@link AuthoredLine#obligationOwners}), so writing it down does not add a name beside the
         // type's: it moves the row to somebody who cannot move the line.
         boolean moved = own != null && !own.at().sameAs(end.at());
-        // Read only where both hold. Being about this end is what says a name may be written here at
-        // all; whether it should be is this reader's own question, and asking the names for it
-        // before that is answered does the work an end nobody is told about never needed.
-        List<TypeSymbol.AtModule> within = moved
-                ? held.map(MatchedEndAttribution::names).orElseGet(List::of)
-                : List.<TypeSymbol.AtModule>of();
+        // Carried on where both hold. Being about this end is what says a name may be written here
+        // at all; whether it should be is this reader's own question, and the answer travels as what
+        // the reading gave rather than as the names it came to, so that nothing between here and the
+        // origin can put it beside another end.
+        MatchedEndAttribution took = moved ? held.orElse(null) : null;
         // Wrapped here, and this is not a consumer settling what a rule is: which rule drew the end
         // was settled where the clause was read and arrives as it was. What is added is a
         // boundary's own answer about that rule — that a reading of it drew this cut, taken in by
@@ -175,18 +173,16 @@ final class LocalInspection {
             put(into, carrier, end.value(),
                     new OriginRef.InvariantOrigin(from.rule(), from.conjunct(), side,
                             end.at().inclusive()),
-                    within);
+                    took);
         }
     }
 
     private static void put(Map<String, Cut> into, Carrier carrier, Place at,
-                            OriginRef.InvariantOrigin drawnBy,
-                            List<TypeSymbol.AtModule> narrowedBy) {
+                            OriginRef.InvariantOrigin drawnBy, MatchedEndAttribution took) {
         // The rule as the end already names it. Narrowing is the one thing said here, and it is
         // said about the rule rather than in place of it: which declarations took the end in is a
         // fact about this reading of the position, and what drew the end is not.
-        OriginRef origin = narrowedBy.isEmpty() ? drawnBy
-                : new OriginRef.NarrowedOrigin(drawnBy, narrowedBy);
+        OriginRef origin = OriginRef.NarrowedOrigin.of(drawnBy, took);
         Cut cut = Cut.at(carrier, at, origin);
         into.merge(cut.key(), cut, (had, _) -> had.and(origin));
     }

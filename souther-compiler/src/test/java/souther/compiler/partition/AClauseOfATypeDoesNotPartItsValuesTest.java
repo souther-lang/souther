@@ -2,19 +2,21 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.AReadingOfAPosition;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.Clause;
 import souther.compiler.check.ClauseName;
+import souther.compiler.check.MatchedEndAttribution;
 import souther.compiler.check.RuleRef;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.EndSide;
+import souther.compiler.numeric.Endpoint;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 
-import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -51,9 +53,17 @@ class AClauseOfATypeDoesNotPartItsValuesTest {
     /** And a bound another declaration took in is still a bound. */
     @Test
     void aBoundADeclarationTookInPartsNothingEither() {
-        assertNull(Border.partedBy(aLineAt(100), new OriginRef.NarrowedOrigin(aBound(),
-                        List.of(TypeSymbols.declared(new TypeKey("example.weigh", "Held"))))),
+        assertNull(Border.partedBy(aLineAt(100),
+                        OriginRef.NarrowedOrigin.of(aBound(), aDeclarationHoldingTheEnd())),
                 "taking an end in moves where the position stops, which is not dividing it");
+    }
+
+    /** A reading answering that one declaration holds the end it was asked about. */
+    private static MatchedEndAttribution aDeclarationHoldingTheEnd() {
+        Endpoint at = Endpoint.inclusive(Count.of(100));
+        return AReadingOfAPosition
+                .withAnUpperEndAt(at, TypeSymbols.declared(new TypeKey("example.weigh", "Held")))
+                .matching(EndSide.UPPER, at).orElseThrow();
     }
 
     /** While a comparison in a body does part them, which is why a run can stop at a line at all. */
