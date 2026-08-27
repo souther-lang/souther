@@ -12,11 +12,11 @@ import java.util.List;
 /**
  * The values of a run tried in order, from one of them outward.
  *
- * <p>Both searches over a line need this and neither of them needs a proof out of it. Where the
- * candidates come from is each one's own question — the places two positions both admit, or the
- * values of one position that leave the rest a residue their coefficients land on — and once there
- * is a value to start from and a distance between the next ones, what is left is the order they are
- * tried in.
+ * <p>The searches that sample a run need this and none of them needs a proof out of it. Where the
+ * candidates come from is each one's own question — the places two positions both admit, the values
+ * of one position that leave the rest a residue their coefficients land on, the values a region
+ * still leaves it — and once there is a value to start from and a distance between the next ones,
+ * what is left is the order they are tried in.
  *
  * <p><b>Outward and not upward.</b> A run this is asked about has at least one end missing or it
  * would be walked rather than sampled, and which end that is says nothing about where the answer
@@ -25,8 +25,7 @@ import java.util.List;
  *
  * <p><b>How many is the caller's and not this one's.</b> What stepping past a value buys, and
  * therefore how many steps are worth taking, depends on what takes values out of the middle of a
- * run — and the two callers do not have the same answer to that. Nothing here is a proof at any
- * length.
+ * run — and its callers do not have one answer to that. Nothing here is a proof at any length.
  */
 final class Outwards {
 

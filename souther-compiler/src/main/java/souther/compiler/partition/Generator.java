@@ -434,17 +434,22 @@ public final class Generator {
              * apart from the one above it because they were there, which is not what that says. */
             LINKAGE_FAILED,
             /**
-             * No row composed for the combination was seen reaching it.
+             * No row composed for it was seen reaching it.
              *
              * <p>Said that way round because it is what the search establishes. Some of the
              * assignments tried may have composed nothing at all, so a word about what every row
              * did would be a word about rows there were none of; what holds of all of them is that
              * none was a witness.
              *
-             * <p>Not a proof that the combination is unreachable, and nothing reads it as one. It
-             * is a fact about the candidates — and, where the reading that named the combination is
-             * wrong, about that reading. Either way the combination stays untried rather than being
-             * counted as offered (ADR-0091).
+             * <p><b>Of a combination and of a point of a line alike.</b> Both are things a row is
+             * composed for and both are answered by watching what the row turned out to do — a
+             * combination by the arms the run took, a point by the walk that reads a row at one. A
+             * second word for the second of them would be the same sentence said twice.
+             *
+             * <p>Not a proof that either is unreachable, and nothing reads it as one. It is a fact
+             * about the candidates — and, where the reading that named the thing is wrong, about
+             * that reading. Either way it stays untried rather than being counted as offered
+             * (ADR-0091).
              */
             NO_CERTIFIED_WITNESS,
             /**
@@ -2270,11 +2275,36 @@ public final class Generator {
      */
     public sealed interface BoundaryAttempt {
 
+        /**
+         * What the way to the point asked that this could not compose against.
+         *
+         * <p>Carried out with the answer because it is what the answer was arrived at without. A
+         * row composed while a condition above the line was left out may not arrive there, and a
+         * search that came back empty may have come back empty over that — so a reader of either
+         * gets the same account, and neither is read as though the whole way had been used.
+         *
+         * <p>Empty is the ordinary case and says so: every condition the walk stated was one this
+         * put a value under.
+         */
+        List<ReachabilityGap.Uncomposed> unrepresented();
+
         /** A value with the edge in it, built and accepted. */
-        record Built(GeneratedRow row) implements BoundaryAttempt {}
+        record Built(GeneratedRow row, List<ReachabilityGap.Uncomposed> unrepresented)
+                implements BoundaryAttempt {
+
+            public Built {
+                unrepresented = List.copyOf(unrepresented);
+            }
+        }
 
         /** No row came of it, and why. Never a statement that none exists. */
-        record Unresolved(UnresolvedCombination why) implements BoundaryAttempt {}
+        record Unresolved(UnresolvedCombination why, List<ReachabilityGap.Uncomposed> unrepresented)
+                implements BoundaryAttempt {
+
+            public Unresolved {
+                unrepresented = List.copyOf(unrepresented);
+            }
+        }
     }
 
     /**
@@ -2291,6 +2321,14 @@ public final class Generator {
      * item. A search that settled one and left the others to their own ranges would produce a row
      * beside the line as readily as one at it.
      *
+     * <p><b>And the item is not the whole of what a row has to be.</b> A line inside a guard or an
+     * arm is reached by rows that got past what stands above it, and what stands above it is about
+     * positions the item never names. So {@code reaching} is the other half and is conjoined with
+     * {@code fixing} rather than filled in around it: what it asks in cases is what the rest of the
+     * row is built under, and what it asks in numbers puts the positions it bounds somewhere it
+     * admits. Left out, a row carried the value the line is drawn at and turned back above it — and
+     * the walk that reads a row at a point then said, correctly, that it does not stand there.
+     *
      * <p>One row per boundary rather than one row covering several, because a row is a question put to
      * a person and a row sitting on three edges at once is three answers they have to separate.
      *
@@ -2300,7 +2338,8 @@ public final class Generator {
      */
     public static BoundaryAttempt probeFixing(Subject subject, String label,
                                               java.util.function.Function<NumericTerm, Carrier> on,
-                                              Map<NumericTerm, Place> fixing, CandidateCheck check) {
+                                              Map<NumericTerm, Place> fixing,
+                                              Reachability.Reaching reaching, CandidateCheck check) {
         Map<TermPath, List<FixtureTemplate>> decided = new LinkedHashMap<>();
         // What the rest of the row has to sit beside. A field of a record is not chosen from its own
         // type once another field of that record is fixed: the rule relating them says what is left,
@@ -2311,19 +2350,35 @@ public final class Generator {
         // Per term, because a fixing names one order pair per position and a row is certified
         // against the one its own value was built on.
         Map<NumericTerm, souther.compiler.inputs.TermOrders> builtOn = new LinkedHashMap<>();
-        for (Map.Entry<NumericTerm, Place> each : fixing.entrySet()) {
+        // Where every position of this row stands: the item's, and the ones the way to it bounds.
+        // One map, because a row is one row — walked as two, the second was chosen from what the
+        // declarations leave and the first from what reaches the border, and only one of them was
+        // about the row being written.
+        Standing where = alsoOnTheWay(subject, fixing, reaching);
+        Map<NumericTerm, Place> standing = where.at();
+        for (Map.Entry<NumericTerm, Place> each : standing.entrySet()) {
             // The order this position is written back on, which is the position's own. Handed one
             // order for the whole fixing, a form over positions written back differently wrote each
             // of them as a value of whichever order the quantity happened to answer with.
-            Carrier carrier = on.apply(each.getKey());
+            //
+            // The item's positions are the quantity's to answer for and the way's are not: a
+            // condition above the line is over positions the quantity is not taken of, and each of
+            // those is read and written on its own order like any other.
+            Carrier carrier = fixing.containsKey(each.getKey())
+                    ? on.apply(each.getKey()) : carrierOf(subject, each.getKey());
             if (carrier == null) {
                 throw new IllegalStateException("a row is owed at " + each.getKey()
                         + " and the quantity it is owed for is over no such position");
             }
+            // Beside another where the item fixes more than one position. The way's are not counted
+            // in: what that limit is about is a number met by several values being asked to stand
+            // beside a second position of the same item, and a position bounded on the way is one
+            // this could leave to its own range without the row stopping being a row at the item.
             Edge edge = edgeAt(subject, carrier, each.getKey(), each.getValue(), fixing.size() > 1);
             if (edge.values().isEmpty()) {
                 return new BoundaryAttempt.Unresolved(
-                        new UnresolvedCombination(List.of(label), edge.reason()));
+                        new UnresolvedCombination(List.of(label), edge.reason()),
+                        where.unrepresented());
             }
             TermPath at = each.getKey().path();
             // Two terms at one path is one location asked for two things at once — a string of a
@@ -2332,7 +2387,8 @@ public final class Generator {
             // rather than writing whichever came last and offering half the point as the whole.
             if (decided.containsKey(at)) {
                 return new BoundaryAttempt.Unresolved(new UnresolvedCombination(List.of(label),
-                        UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE));
+                        UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE),
+                        where.unrepresented());
             }
             decided.put(at, edge.values());
             // The orders the value was built against, kept so that reading it back asks the
@@ -2352,14 +2408,22 @@ public final class Generator {
             // candidate turned away under one parameter would name the reason another failed for.
             boolean[] uncertified = {false};
             CandidateCheck certified =
-                    certifying(check, subject, p, fixing, builtOn, uncertified);
+                    certifying(check, subject, p, standing, builtOn, uncertified);
             Map<TermPath, List<FixtureTemplate>> here = new LinkedHashMap<>();
-            for (NumericTerm term : fixing.keySet()) {
-                if (term.path().head().equals(head)) {
+            for (NumericTerm term : standing.keySet()) {
+                // A position the way also narrows is not fixed at a value here. What has to hold of
+                // it is one thing said two ways — a place the item asks for, and a case the way
+                // says the value turned out to be — and one location is decided once: the narrowing
+                // says how the value is built and the place says which of the values built that way
+                // is accepted ({@link #certifying}). Handed over as both, it is a position with two
+                // accounts, which is what {@link ConstructionPlan} refuses and what it is right to
+                // refuse.
+                if (term.path().head().equals(head)
+                        && reaching.requirements().at(term.path()) == null) {
                     here.put(term.path(), decided.get(term.path()));
                 }
             }
-            Outcome tried = valueAt(subject, p, here, settled, Requirements.NONE, certified);
+            Outcome tried = valueAt(subject, p, here, settled, reaching.requirements(), certified);
             if (tried.value() == null) {
                 // Where the refusal is of the values one edge offered, what that edge held back
                 // outranks it: values that were never built were not among the ones refused. Only
@@ -2380,12 +2444,116 @@ public final class Generator {
                     why = heldBack.getOrDefault(here.keySet().iterator().next(), why);
                 }
                 return new BoundaryAttempt.Unresolved(
-                        new UnresolvedCombination(List.of(label), why, tried.detail()));
+                        new UnresolvedCombination(List.of(label), why, tried.detail()),
+                        where.unrepresented());
             }
             inputs.add(tried.value());
         }
         return new BoundaryAttempt.Built(
-                new GeneratedRow(new Purpose.ForAPoint(label), inputs));
+                new GeneratedRow(new Purpose.ForAPoint(label), inputs), where.unrepresented());
+    }
+
+    /**
+     * The item's positions, and a place inside the region for each position the way to it bounds.
+     *
+     * <p><b>Chosen and not left to the range.</b> What the conditions above a line leave a position
+     * is a run, and every value of that run reaches the line as well as any other — so one of them
+     * is taken and the row is written there. Left as a run for the composer to fill from the
+     * declarations, the value it took was the bottom of the declared type, which is outside the run
+     * wherever a condition above the line moved it: the row then carried the line's value and turned
+     * back before reaching the comparison.
+     *
+     * <p>One at a time, with the region told what was chosen before the next is asked. A condition
+     * relating two positions leaves neither of them a run the other's choice does not move, so two
+     * places taken from two independent runs meet the rules only where they happen to.
+     *
+     * <p>A position this cannot place is left out rather than refused. There is no order to read it
+     * on, the region says nothing about it, or nothing of the carrier lies in what is left — none of
+     * those is a row that cannot be written, and each is a row this composes the way it did before
+     * the way was carried here at all.
+     */
+    private static Standing alsoOnTheWay(Subject subject, Map<NumericTerm, Place> fixing,
+                                         Reachability.Reaching reaching) {
+        Map<NumericTerm, Place> out = new LinkedHashMap<>(fixing);
+        List<ReachabilityGap.Uncomposed> unrepresented = new ArrayList<>();
+        java.util.Set<TermPath> taken = new java.util.LinkedHashSet<>();
+        fixing.keySet().forEach(term -> taken.add(term.path()));
+        souther.compiler.inputs.SearchRegion here = reaching.region();
+        for (Map.Entry<NumericTerm, Place> each : fixing.entrySet()) {
+            if (each.getValue() instanceof Count count) {
+                here = here.given(each.getKey(), count);
+            }
+        }
+        for (OnTheWay.TakenIn cut : reaching.boundedOnTheWay()) {
+            List<NumericTerm> owing = new ArrayList<>();
+            boolean shared = false;
+            for (NumericTerm term : cut.cut().form().coefs().keySet()) {
+                // This very number already stands somewhere: the item asked for it, or an earlier
+                // cut did. Nothing to place, and the cut is answered at it either way.
+                if (out.containsKey(term)) {
+                    continue;
+                }
+                // Another number taken at the same location. A row writes one value where a
+                // location is, and that one value would have to answer both — a string of a length
+                // and the string itself is the shape of it. Nothing here composes a value to two
+                // numbers at once, so the cut is one this could not put a value under.
+                if (taken.contains(term.path())) {
+                    shared = true;
+                    break;
+                }
+                owing.add(term);
+            }
+            // The whole cut at once, because a cut over two positions is one statement about the
+            // pair: which values one of them may take depends on what the other took, and a value
+            // chosen for the first without asking is right about its own run and wrong about the
+            // pair as often as not.
+            Map<NumericTerm, Place> standing = shared ? null
+                    : NumericWitness.of(here, owing, term -> carrierOf(subject, term));
+            if (standing == null) {
+                unrepresented.add(new ReachabilityGap.Uncomposed(cut, shared
+                        ? new ReachabilityGap.Why.TwoNumbersAtOneLocation()
+                        : new ReachabilityGap.Why.NoValueComposedForItsPositions()));
+                continue;
+            }
+            for (Map.Entry<NumericTerm, Place> each : standing.entrySet()) {
+                if (each.getValue() instanceof Count count) {
+                    here = here.given(each.getKey(), count);
+                }
+                taken.add(each.getKey().path());
+                out.put(each.getKey(), each.getValue());
+            }
+        }
+        return new Standing(out, unrepresented);
+    }
+
+    /**
+     * Where the positions of one row stand, and what the way asked that nothing could put a value
+     * under.
+     *
+     * <p>The second is carried out with the first because it is what the row was composed without.
+     * A search that could not act on a condition above the line has composed a row that may not
+     * arrive there, and an account of the attempt that did not say so would have an author reading
+     * "no row was seen reaching it" beside a way that says everything on it was taken in.
+     */
+    private record Standing(Map<NumericTerm, Place> at, List<ReachabilityGap.Uncomposed> unrepresented) {}
+
+    /**
+     * The order a number taken at a position of this subject is measured on, or null where the
+     * declarations put nothing there.
+     *
+     * <p><b>Asked of the declarations and never of the axes.</b> An axis is where the model divides
+     * a position, and an order is what a number there is counted on; a position nothing divides has
+     * the second and not the first. Read off the axes, a condition above a line over a field the
+     * model happens not to partition was one nothing could put a value under — the reachability was
+     * stated, and the composer answered that it had no order for it.
+     *
+     * <p>Which number is measured there is the term's own to say ({@link NumericTerm#answeredOn}):
+     * the content of a position is counted on the position's order, and what an operation answers of
+     * it is counted on the operation's.
+     */
+    private static Carrier carrierOf(Subject subject, NumericTerm term) {
+        Type declared = subject.inputs().declaredAt(term.path());
+        return declared == null ? null : term.answeredOn(declared, subject.symbols());
     }
 
     /**
@@ -2401,6 +2569,13 @@ public final class Generator {
      * there reads back as the number it was built for, and the way that would break is "a row
      * offered at an edge it does not stand on". Asked through the reading a row's own values are
      * read by, so nothing here is a second account of where a value stands.
+     *
+     * <p><b>A prune and not the acceptance of the row.</b> What a candidate can be held to here is
+     * one parameter's value against one place, which is cheap and is less than the question. Whether
+     * a row stands at a point takes the whole row and what running it recorded, and it is
+     * {@code StandingAtAPoint}'s — asked of every row that is offered, after it is composed. So a
+     * candidate this lets through is one worth going on with, and never one this has declared to be
+     * a row at the point.
      *
      * @param refused set where a candidate was turned away for this and nothing else, which is what
      *                tells a search that ran out of candidates from one that certified none
@@ -2508,7 +2683,13 @@ public final class Generator {
         // Which something could now do, since building such a value is `TermRealizations`' answer
         // and it needs no axis to give it. Left refused so that moving the building out of here
         // changed nothing; removing it is its own answer to give, beside the limit above.
-        Type declared = term instanceof NumericTerm.TakenOf ? null : declaredAt(subject, term.path());
+        //
+        // The position itself is read wherever the declarations reach it and not only where it is a
+        // parameter. What a position is declared to be is the inputs' to say, and a walk of its own
+        // that stopped at the parameter left a condition above a line over a field as one nothing
+        // could put a value under.
+        Type declared = term instanceof NumericTerm.TakenOf ? null
+                : subject.inputs().declaredAt(term.path());
         if (declared == null) {
             return Edge.none(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
@@ -2516,16 +2697,6 @@ public final class Generator {
                 term.observedOn(declared, subject.symbols()), carrier);
         return edgeFrom(TermRealizations.at(term, declared, on, at, subject.symbols(),
                 subject.inputs().policy()), term, at, on);
-    }
-
-    /** The type declared at a position this subject has no axis for, which is a bare parameter and
-     *  nothing else: a field of one is reached through a type this cannot name here. */
-    private static Type declaredAt(Subject subject, TermPath path) {
-        if (!path.steps().isEmpty()) {
-            return null;
-        }
-        int at = subject.parameters().indexOf(path.head());
-        return at < 0 || at >= subject.types().size() ? null : subject.types().get(at);
     }
 
     /**
