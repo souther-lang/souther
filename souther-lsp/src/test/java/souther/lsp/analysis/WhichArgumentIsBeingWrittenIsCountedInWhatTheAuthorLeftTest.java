@@ -89,6 +89,22 @@ class WhichArgumentIsBeingWrittenIsCountedInWhatTheAuthorLeftTest {
                 "the innermost is the one being written, and two brackets are missing");
     }
 
+    /**
+     * An argument the declaration has no parameter for is answered with nothing.
+     *
+     * <p>There is no value here that says "none of them": the protocol reads an active parameter
+     * outside the list as none given and marks the first, so a third argument to a behavior taking
+     * two would point at the first — the one furthest from what is being written. Nothing true can
+     * be said, so nothing is.
+     */
+    @Test
+    void anArgumentTheDeclarationHasNoParameterForIsToldNothing() {
+        assertEquals(1, helpFor(model("submit(d,\n")).orElseThrow().active(),
+                "the second of two is the last there is");
+        assertTrue(helpFor(model("submit(d, s,\n")).isEmpty(),
+                "and a third is one `submit` does not take");
+    }
+
     @Test
     void aCursorInNoCallIsToldNothing() {
         assertTrue(helpFor(model("request.plannedCost\n")).isEmpty());

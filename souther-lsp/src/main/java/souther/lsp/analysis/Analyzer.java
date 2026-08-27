@@ -1502,6 +1502,14 @@ public final class Analyzer {
      * the callee's name, which is written before the brackets and so before anything a probe put in.
      * Which argument is being written is counted in the source the author left, so a bracket
      * supplied to make the line parse is not one of the commas.
+     *
+     * <p>Empty where the author is writing an argument the declaration has no parameter for. There
+     * is no way to say "none of them" here: the protocol reads an active parameter outside the list
+     * as none given and marks the first, so a fourth argument to a behavior taking three would be
+     * answered by pointing at the first — which is not what a reader is writing, and is a worse
+     * answer than not writing the signature out. Saying it with an absent active parameter is a
+     * client capability, and asking for one is a change to what this negotiates rather than to what
+     * it answers.
      */
     public Optional<SignatureHelp> signatureHelp(String uri, Position pos, ModuleGraph graph) {
         String text = graph.text(uri);
@@ -1530,10 +1538,11 @@ public final class Analyzer {
         }
         LineIndex lines = new LineIndex(parsed, new SourceId(uri));
         Optional<SemanticSnapshot> snapshot = SemanticSnapshot.of(compilation.db(), module);
+        int argument = argumentAt(call, cursor);
         return snapshot.flatMap(reads -> reads.calledAt(lines.posOf(callee.start())))
                 .filter(called -> reading == null || reading.mayBeRead(called.writtenAt()))
-                .map(called -> shown(called, snapshot.orElseThrow(),
-                        argumentAt(call, cursor)));
+                .filter(called -> argument < called.takes().size())
+                .map(called -> shown(called, snapshot.orElseThrow(), argument));
     }
 
     /**

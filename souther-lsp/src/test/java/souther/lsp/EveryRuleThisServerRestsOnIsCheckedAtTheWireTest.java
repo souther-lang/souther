@@ -18,11 +18,20 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * {@code selectionRange} pairs an answer with a place by where it sits in the list, so a place with
- * nothing written on it is answered rather than left out. Left out, every place after it is given
- * another place's widening — a wrong answer, where dropping the one is merely no answer.
+ * What the protocol makes of an answer, held to over the wire.
+ *
+ * <p>An answer's meaning is not this server's to decide. What a value in a reply comes to is the
+ * protocol's, and reasoning about what it ought to mean instead of reading what it does mean has
+ * been wrong twice here: a place with no answer was dropped from a list the protocol pairs by index,
+ * and an active parameter was pointed past the end of the parameters as a way of saying "none of
+ * them". Both were sound as reasoning and neither was the rule.
+ *
+ * <p>So a rule this server rests on is written down here, in the wire's own terms, and checked
+ * against what the server actually sends. {@code WhatTheServerAdvertisesIsWhatItAnswersTest} is the
+ * same thing for the handshake — what a client is told a method is — and this is it for what a
+ * method answers with.
  */
-class AnAnswerPerPlaceAskedAboutTest {
+class EveryRuleThisServerRestsOnIsCheckedAtTheWireTest {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
@@ -52,6 +61,57 @@ class AnAnswerPerPlaceAskedAboutTest {
 
         assertEquals(answer.get("range").get("start"), answer.get("range").get("end"),
                 "a range over no characters, which is what is written there");
+    }
+
+    /**
+     * An active parameter names one of the parameters sent with it.
+     *
+     * <p>The protocol reads one outside the list as none given and marks the first, so a mark past
+     * the end does not say "none of these" — it says the first, which is the one furthest from what
+     * is being written. Where an author has written more arguments than the declaration takes there
+     * is nothing true to say, and what goes over the wire is no help rather than a wrong mark.
+     */
+    @Test
+    void anActiveParameterNamesOneOfTheParametersSentWithIt() {
+        // the cursor at the end of the line the call is written on
+        JsonNode within = signatureHelp("submit(d,\n", position(6, "let run (d) = submit(d,".length()));
+        assertEquals(2, within.get("signatures").get(0).get("parameters").size());
+        assertTrue(within.get("activeParameter").asInt()
+                        < within.get("signatures").get(0).get("parameters").size(),
+                "the mark is on a parameter that was sent");
+
+        assertTrue(signatureHelp("submit(d, s,\n",
+                        position(6, "let run (d) = submit(d, s,".length())).isNull(),
+                "and where none of them is being written, nothing is answered");
+    }
+
+    /** The server's reply to a signature help asked at {@code at}, on a document ending in
+     *  {@code body}. */
+    private static JsonNode signatureHelp(String body, Map<String, Object> at) {
+        String text = """
+                module m
+
+                data D = { v: Int }
+
+                behavior submit : (a: D, b: D) -> Int
+                behavior run : (d: D) -> Int
+                let run (d) = \
+                """ + body;
+        byte[] input = frames(
+                message(1, "initialize", Map.of()),
+                message(null, "initialized", Map.of()),
+                message(null, "textDocument/didOpen", Map.of(
+                        "textDocument", Map.of("uri", URI, "text", text))),
+                message(2, "textDocument/signatureHelp", Map.of(
+                        "textDocument", Map.of("uri", URI), "position", at)));
+
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        new LspServer(new MessageConnection(new ByteArrayInputStream(input), out)).run();
+
+        return readFrames(out.toByteArray()).stream()
+                .filter(m -> m.has("id") && m.get("id").isNumber() && m.get("id").asInt() == 2)
+                .findFirst().orElseThrow(() -> new AssertionError("no answer to the request"))
+                .get("result");
     }
 
     private static Map<String, Object> position(int line, int character) {
