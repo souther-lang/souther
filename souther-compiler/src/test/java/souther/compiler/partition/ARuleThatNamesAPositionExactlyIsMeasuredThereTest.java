@@ -100,23 +100,21 @@ class ARuleThatNamesAPositionExactlyIsMeasuredThereTest {
     }
 
     /**
-     * And naming one position does not enumerate the rest.
+     * And the reading holds what the body names, not what a recursive type could hold.
      *
-     * <p>The control. What makes this safe is that a rule resolves one path rather than asking what
-     * a recursive type can hold, so the positions the report divides stay the ones the walk found:
-     * the classes are at the first link and nowhere below it.
+     * <p>The control, and the reason this is safe. A demand is the locations the body reads: five
+     * links are read here because the body matched five of them, and the branch measure asks for a
+     * row through each of those arms already. What no expression names is not there — the sixth link
+     * is as reachable in the type as the fifth and no reading of this behavior mentions it, which is
+     * the difference between following a path and listing what a declaration can hold.
      */
     @Test
-    void namingOneLinkDoesNotEnumerateTheOthers() {
+    void theReadingHoldsWhatTheBodyNamesAndNoMore() {
         String report = report(FIVE_LINKS);
 
-        assertTrue(report.contains("no row is in `Nil` at c@Cons.tail"), report);
-        // The second link, which no rule names. Matched to the end of the line so that the position
-        // the threshold does name — five links down and spelled through this one — is not read as
-        // this one having been enumerated.
-        assertFalse(report.lines().anyMatch(each -> each.endsWith("at c@Cons.tail@Cons.tail")),
-                () -> "the walk stopped at the first return, and only the named line goes past it:\n"
-                        + report);
+        assertTrue(report.contains("at c@Cons.tail@Cons.tail@Cons.tail@Cons.tail"), report);
+        assertFalse(report.contains("c@Cons.tail@Cons.tail@Cons.tail@Cons.tail@Cons.tail"),
+                () -> "the body names five links and the sixth is nobody's:\n" + report);
     }
 
     private static String report(String model) {

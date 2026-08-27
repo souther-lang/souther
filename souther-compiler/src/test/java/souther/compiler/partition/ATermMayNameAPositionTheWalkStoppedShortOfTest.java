@@ -72,18 +72,17 @@ class ATermMayNameAPositionTheWalkStoppedShortOfTest {
     }
 
     /**
-     * And a point on it that nothing could build is said as that, not as a line nobody drew.
+     * And a row is asked for at it, because the position is one the reading has.
      *
-     * <p>Being able to measure a rule and being able to write a row for it are two capabilities, and
-     * a report that had them as one would answer "no line" wherever the search came back
-     * empty-handed — which is the model looking silent about a rule its author wrote. What an author
-     * is owed here is the line, and that nothing composed a row at it.
+     * <p>Which is what following the path is worth. A line drawn at a place the reading knows
+     * nothing about is a line no search can compose a row for, and an author reading such a report
+     * is told a point exists and never told what to write. Here the point is owed like any other.
      */
     @Test
-    void aPointNothingCouldBuildIsSaidAsThatAndNotAsNoLine() {
+    void aRowIsAskedForAtThePointTheLineDraws() {
         String report = report(BELOW_WHERE_THE_READING_STOPS);
 
-        assertTrue(report.contains("not known to be writable: the OFF point"
+        assertTrue(report.contains("no row is at the OFF point"
                         + " f/c@Cons.tail@Cons.a = c@Cons.tail@Cons.b"),
                 report);
     }

@@ -240,17 +240,6 @@ public record TermPath(String head, List<Step> steps) {
     }
 
     /**
-     * The position one step out from this one, or null where this is a parameter's own.
-     *
-     * <p>One step of whatever kind it was, a narrowing included: what a reader going outwards wants
-     * is where it was before the last thing it did, and a narrowing is one of the things it did.
-     */
-    public TermPath above() {
-        return steps.isEmpty() ? null
-                : new TermPath(head, steps.subList(0, steps.size() - 1));
-    }
-
-    /**
      * The sequence this position is inside, or this path where it is inside none.
      *
      * <p>Up to the first element step, which is the container a clause of the value can name — what

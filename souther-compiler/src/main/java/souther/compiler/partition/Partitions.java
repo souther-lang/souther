@@ -448,34 +448,6 @@ public final class Partitions {
                                               souther.compiler.check.PathReachability.Answers
                                                       arrives,
                                               ReachingCuts reaching) {
-        return withThresholds(base, reading, thresholds, symbols, policy, rulesWithoutALine,
-                singled, between, arrives, reaching, List.of());
-    }
-
-    /**
-     * The same, with the positions a rule named that the walk over the declarations never
-     * enumerated.
-     *
-     * <p>Measured here beside the rest and not somewhere of their own. A position is a position
-     * however it was arrived at, and what a report counts, what a row is asked for and what a border
-     * is drawn on read one list — held apart, a claimed position would be measured by whichever
-     * readers had been told about the second list.
-     *
-     * <p>Which positions those are is settled where a line is filed
-     * ({@link LinesWhereTheyFall}), because that is the reader that has both the rule's path and
-     * the reading to follow it against.
-     */
-    public static Partitioning withThresholds(Partitioning base,
-                                              souther.compiler.inputs.Quantities reading,
-                                              List<Threshold> thresholds,
-                                              Symbols symbols, ReadingPolicy policy,
-                                              List<RuleWithoutALine> rulesWithoutALine,
-                                              List<GuardThresholds.Guards.Singled> singled,
-                                              List<LineDrawn> between,
-                                              souther.compiler.check.PathReachability.Answers
-                                                      arrives,
-                                              ReachingCuts reaching,
-                                              List<Axis> claimed) {
         // Both producers of one kind of evidence. What a body compared and what a type's own rules
         // bound are read by different readers and answer the same question, so a position either of
         // them wrote about and neither could turn into a line is named once, whichever wrote it.
@@ -485,11 +457,9 @@ public final class Partitions {
                 rules.add(each);
             }
         }
-        List<Axis> from = new ArrayList<>(base.axes());
-        from.addAll(claimed);
         List<Axis> out = new ArrayList<>();
         List<Measured> measured = new ArrayList<>();
-        for (Axis axis : from) {
+        for (Axis axis : base.axes()) {
             NumericTerm declared = axis.term();
             NumericTerm term = declared;
             List<Threshold> here = thresholds.stream()

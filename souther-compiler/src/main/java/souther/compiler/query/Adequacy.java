@@ -673,11 +673,51 @@ public final class Adequacy {
                     // all the same.
                     Answer<Hir.FnDef> fn = db.ask(new Bodies.SettledFn(name, spec.name()));
                     out.put(spec.name(), InputDomain.of(spec, fn.present() ? fn.value() : null,
-                            sig, scope.value(), db.ask(new Front.Reading()).value()));
+                            sig, scope.value(), db.ask(new Front.Reading()).value(),
+                            // What this behavior's body reads, so the reading is closed over the
+                            // paths its measurement names as well as the ones the enumeration
+                            // finds. Asked as the reading is made and never after it: one that
+                            // grew a position when somebody looked one up would answer a question
+                            // differently depending on what had been asked before it.
+                            demandOf(db, name, spec, fn.present() ? fn.value() : null,
+                                    scope.value())));
                 }
             }
             return Answer.of(Ordered.map(out));
         }
+    }
+
+    /**
+     * The finite input paths one behavior's measurement is going to name.
+     *
+     * <p>Read off the body with a path environment and nothing else — no reading of the input, which
+     * is what is being built. Which location a name stands for is settled by the parameters, the
+     * bindings on the way and the case an arm selects; whether a row is ever written there is the
+     * reading's answer, asked of the reading afterwards about the path this produced.
+     *
+     * <p>Empty where nothing implements the behavior or its body did not check. A declaration's own
+     * clauses name their locations in the words of the value they are written in and reach positions
+     * by being filed at them, which is a different road and does not come through here.
+     */
+    private static souther.compiler.inputs.InputDemand demandOf(
+            Db db, String module, Hir.SpecBehavior spec, Hir.FnDef fn, Symbols symbols) {
+        if (fn == null) {
+            return souther.compiler.inputs.InputDemand.NONE;
+        }
+        Bodies.CheckedBody checked = db.ask(new Bodies.CheckedBehavior(module, spec.name())).value();
+        if (checked == null) {
+            return souther.compiler.inputs.InputDemand.NONE;
+        }
+        Map<souther.compiler.types.BindingId, String> parameters = new LinkedHashMap<>();
+        for (int i = 0; i < fn.params().size() && i < spec.params().size(); i++) {
+            souther.compiler.types.BindingId binding = fn.params().get(i).binder().binding();
+            if (binding != null) {
+                parameters.put(binding, spec.params().get(i).name());
+            }
+        }
+        return souther.compiler.inputs.InputDemand.of(checked.body(),
+                souther.compiler.inputs.InputReads.ofParameters(parameters, checked.elements()),
+                symbols);
     }
 
     /**

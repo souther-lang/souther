@@ -313,14 +313,14 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
             """;
 
     /**
-     * And so is one about a position the reading stopped short of.
+     * And so is one written several links into a recursive value.
      *
-     * <p>The walk stops where the input returns to a declaration already open on the path. A claim
-     * below that is about a position nothing was read about, which is what the verdict says — and
-     * saying it is the whole difference from a claim quietly acted on.
+     * <p>The position is there — the body names it, so the reading was built over it — and what the
+     * claim is not is proven: the arm stands inside another, and what reaches it is not read here.
+     * Which is the verdict, and saying it is the whole difference from a claim quietly acted on.
      */
     @Test
-    void aClaimBelowWhereTheReadingStopsIsSaid() {
+    void aClaimSeveralLinksIntoARecursiveValueIsSaid() {
         String deep = """
                 module example.probe
 
@@ -350,12 +350,12 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
 
         String report = reportOn(deep);
 
-        assertTrue(partitionOf(deep).axes().stream().noneMatch(
+        assertTrue(partitionOf(deep).axes().stream().anyMatch(
                         each -> each.path().toString().equals("c@Cons.tail@Cons.flag")),
-                "nothing was read this far into the value");
-        assertTrue(report.contains("`Off` at `c@Cons.tail@Cons.flag` is declared unreachable: "
-                        + "the probe never passes Off, and nothing here proves it: "
-                        + "nothing was read about this case"),
+                "the body names this position, so the reading has it");
+        assertTrue(report.contains("`Off` is declared unreachable: the probe never passes Off, "
+                        + "and nothing here proves it: this arm is inside another, and what "
+                        + "reaches it is not read here"),
                 () -> "said where no axis carries it:\n" + report);
     }
 
@@ -416,11 +416,11 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
     void aClaimOffTheAxesIsNotCountedInTheLineThatCountsThem() {
         String report = reportOn(OFF_THE_AXES);
 
-        assertTrue(partitionLineOf(report).startsWith("partition   axes 4   equivalence partitions"),
+        assertTrue(partitionLineOf(report).startsWith("partition   axes 5   equivalence partitions"),
                 () -> "the counts are over the positions it has axes for:\n" + report);
         assertFalse(partitionLineOf(report).contains("excluded"),
                 () -> "and nothing left the denominator this line counts:\n" + report);
-        assertTrue(report.contains("`Off` at `c@Cons.tail@Cons.flag` is declared unreachable"),
+        assertTrue(report.contains("`Off` is declared unreachable"),
                 () -> "and the claim is said under its own name:\n" + report);
     }
 
