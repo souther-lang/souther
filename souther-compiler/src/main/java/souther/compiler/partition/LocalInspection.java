@@ -105,8 +105,9 @@ final class LocalInspection {
      *                 names the wrong one for at least one of them. Not the ends {@code bounds}
      *                 carries — those are what the position's own type stops at, taken in to where
      *                 every rule reaching it leaves it, and these names were worked out against what
-     *                 the value it sits in projects. Whether a name may be carried from the one to
-     *                 the other is what {@code moved} below decides
+     *                 the value it sits in projects. Whether a name is about the end a cut stands
+     *                 at is asked of this; whether a cut owes anything to a name that is, is what
+     *                 {@code moved} below decides
      */
     private static List<Cut> cutsOf(DeclaredBounds.Bounds bounds, DeclaredBounds.Bounds own,
                                     NarrowedBounds narrowed) {
@@ -149,6 +150,16 @@ final class LocalInspection {
         // at. `low < high` under one `[0, 1]` leaves `low` the same 1 and no longer holding it, and
         // that is the record's doing as much as a smaller number would have been — so this asks
         // whether the two are the same end, which is where a range stops and not what an end holds.
+        //
+        // Which declarations can move this cut, and not which are holding the end they were read
+        // at. The two are different questions and this is the first. Where the type's own end is
+        // the tighter, `axisBounds` answers with it and nothing the record leaves reaches the cut:
+        // taking a declaration's clauses away only widens what the record leaves, and the tighter of
+        // the two is still the type's. So a declaration named here would be one an author can
+        // rewrite while the line stays where it is — and a line a declaration took in is that
+        // declaration's to answer for rather than the type's
+        // ({@link AuthoredLine#obligationOwners}), so writing it down does not add a name beside the
+        // type's: it moves the row to somebody who cannot move the line.
         boolean moved = own != null && !own.at().sameAs(end.at());
         // Read only where both hold. Being about this end is what says a name may be written here at
         // all; whether it should be is this reader's own question, and asking the names for it
