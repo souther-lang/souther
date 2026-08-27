@@ -29,6 +29,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * writes first. What is left uncovered is a class at two of the regions, four arms, two points of
  * the comparison a guard draws and two of a declaration's own line — and the rows composed at the
  * declaration's line stand inside the comparison's regions, which is what takes two rows out.
+ *
+ * <p>What says five is enough is not the arithmetic above but the findings: every gap the report
+ * raises is something this run is asked about, and one of the rows that are offered stands at it.
+ * The issue counted six by hand, one of which was the only thing offering for a point a written row
+ * already stands at — which is nobody's work.
  */
 class ARowIsNotOfferedForWhatAnotherOfferedRowAnswersTest {
 
@@ -101,12 +106,54 @@ class ARowIsNotOfferedForWhatAnotherOfferedRowAnswersTest {
                 OfferingRequest.overTheModule("example.shippingfee", true));
         assertNotNull(offered, "the model under test compiles");
 
-        // Six, of the eight the searches composed. The two that go are the rows at the ends of the
-        // comparison's regions: a row at the bottom of the declaration's line sits inside the one,
-        // and a row at its top inside the other.
-        assertEquals(6, offered.count(),
+        // Five, of the eight the searches composed. Two of them stand at the ends of the
+        // comparison's regions, where the rows composed at the declaration's line already stand.
+        // The third is the only thing offering for a point nobody is asked about — a row is written
+        // at it already — and what it stands at besides, another offered row stands at too.
+        assertEquals(5, offered.count(),
                 "a row answering what another answers is not offered: " + composed.count()
                         + " composed, " + offered.count() + " offered");
+    }
+
+    @Test
+    void everyGapTheReportRaisesIsAnsweredByAnOfferedRow() {
+        Compilation compilation = compiled();
+        Settlements table = Settlements.of(compilation.db(), composed(compilation));
+        Set<RowKey> kept = table.keeping();
+
+        // Read off the findings and not off the items: what a person is short of is the report's
+        // answer, and a reduction that shrank its own universe would otherwise be marking its own
+        // homework.
+        java.util.List<Adequacy.Finding> findings = compilation.db()
+                .ask(new Adequacy.Findings("example.shippingfee")).value();
+        assertNotNull(findings, "the model under test is measured");
+        int asked = 0;
+        for (Adequacy.Finding finding : findings) {
+            OfferItem item = switch (finding.about()) {
+                case souther.compiler.query.About.APointOfABorder(var point) ->
+                        new OfferItem.APointOfALine(point.owed());
+                case souther.compiler.query.About.APointOfADeclaredBorder(var debt) ->
+                        new OfferItem.APointOfALine(debt.point());
+                case souther.compiler.query.About.AnArmNoRowGoesThrough(var arm) ->
+                        new OfferItem.AnArm(
+                                new souther.compiler.partition.Generator.ArmOwed(arm.index()));
+                case souther.compiler.query.About.AClassNoRowIsIn(var missing) ->
+                        new OfferItem.AClass(new souther.compiler.partition.Generator.ClassOwed(
+                                missing.axis().at(), missing.name()));
+                default -> null;
+            };
+            if (item == null) {
+                continue;
+            }
+            // In the universe, and not skipped where it is not. A gap whose item this run left out
+            // is the reduction shrinking what it is judged against, which is the thing to catch.
+            assertTrue(table.requested().contains(item),
+                    "a gap the report raises is something this run is asked about: " + item);
+            asked++;
+            assertTrue(table.offers(kept, item),
+                    "a gap the report raises is answered by a row that is offered: " + item);
+        }
+        assertTrue(asked > 0, "the model under test has gaps of the kinds a row is offered for");
     }
 
     @Test

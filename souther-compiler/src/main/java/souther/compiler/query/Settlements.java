@@ -217,10 +217,18 @@ public record Settlements(List<OfferItem> requested,
         if (offering.declared() != null) {
             offering.declared().resolved().forEach((point, answer) -> {
                 OfferItem item = new OfferItem.APointOfALine(point);
-                requested.add(item);
-                if (answer.resolution() instanceof DeclarationResolution.Generated(var by,
-                        var row)) {
-                    composedFor.put(item, RowKey.of(by, row));
+                switch (answer.resolution()) {
+                    case DeclarationResolution.Generated(var by, var row) -> {
+                        requested.add(item);
+                        composedFor.put(item, RowKey.of(by, row));
+                    }
+                    // Asked for and nothing came of it, which is still a thing this run is short of
+                    // — and something else may stand there, which is what makes it worth asking.
+                    case DeclarationResolution.Unresolved _ -> requested.add(item);
+                    // Not asked for at all: a row already stands there, or nothing measured it. A
+                    // point in nobody's way is not work this run offers, and holding it here would
+                    // let a candidate be the only offer for it.
+                    case DeclarationResolution.NoSearch _ -> { }
                 }
             });
         }
@@ -295,13 +303,14 @@ public record Settlements(List<OfferItem> requested,
                 List<BorderAssessment> edges =
                         db.ask(new Adequacy.BoundarySearch(module, behavior)).value();
                 if (edges != null) {
-                    // The account, and not the places a row is composed at. Those drop what tells
-                    // two obligations at one point apart — a region stopped by two different things
-                    // is two of them — and this is asking what the run is owed rather than how many
-                    // values it has to compose. Dropped here, the second obligation would be in no
-                    // item universe: nothing would count a row as settling it, and a note saying
-                    // nothing offers a row for it would print over the row that stands there.
-                    for (OwedBoundaryPoint point : OwedBoundaryPoint.across(edges)) {
+                    // What this run was asked for a row at. Neither of the readings beside it will
+                    // do: the places a row is composed at drop what tells two obligations at one
+                    // point apart, and the account holds points the measurement has already
+                    // settled — a point a written row stands at is owed and is nobody's work, and
+                    // counted here a candidate standing there would be its only offer and could
+                    // never be dropped.
+                    for (OwedBoundaryPoint point
+                            : OwedBoundaryPoint.askedForARow(OwedBoundaryPoint.across(edges)).at()) {
                         OfferItem.APointOfALine item =
                                 new OfferItem.APointOfALine(point.owed());
                         owedHere.put(item, point);

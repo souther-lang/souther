@@ -197,6 +197,43 @@ public final class OwedBoundaryPoint {
     }
 
     /**
+     * The points this run was asked for a row at, which is not everything that is owed one.
+     *
+     * <p><b>Its own type, because it is not the account either.</b> What is owed is what the lines
+     * ask of the rows; what a generation is asked for is that less what the measurement has already
+     * settled — a point a written row stands at, and a point nothing measured. Read as the account,
+     * a run counts work nobody is owed: a candidate that stands where a written row already stands
+     * is the only offer for a point in nobody's way, so nothing may drop it and it goes out beside
+     * the row that made it unnecessary.
+     *
+     * @param at the points, in the account's own order
+     */
+    public record WhereARowWasAskedFor(List<OwedBoundaryPoint> at) {
+
+        public WhereARowWasAskedFor {
+            at = List.copyOf(at);
+        }
+    }
+
+    /**
+     * The account read as what this run has to offer a row for.
+     *
+     * <p>Asked of {@link ItemAssessment.Owed#worthSearching()} and of nothing else. Whether a
+     * candidate here would tell anybody anything is the measurement's answer — it is what the search
+     * itself is gated on — and a second reading of it would be a second answer to one question,
+     * free to disagree the day either moved.
+     */
+    public static WhereARowWasAskedFor askedForARow(List<OwedBoundaryPoint> account) {
+        List<OwedBoundaryPoint> at = new ArrayList<>();
+        for (OwedBoundaryPoint each : account) {
+            if (each.item().worthSearching()) {
+                at.add(each);
+            }
+        }
+        return new WhereARowWasAskedFor(at);
+    }
+
+    /**
      * The account read as the places a row is composed at.
      *
      * <p>A row stands at a point of a line, and what a row there shows answers everything a row
