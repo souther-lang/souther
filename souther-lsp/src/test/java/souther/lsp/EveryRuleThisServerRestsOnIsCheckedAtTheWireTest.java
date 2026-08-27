@@ -64,36 +64,46 @@ class EveryRuleThisServerRestsOnIsCheckedAtTheWireTest {
     }
 
     /**
-     * An active parameter names one of the parameters sent with it.
+     * A signature marks one of the parameters sent with it, and one that sends none marks nothing.
      *
-     * <p>The protocol reads one outside the list as none given and marks the first, so a mark past
-     * the end does not say "none of these" — it says the first, which is the one furthest from what
-     * is being written. Where an author has written more arguments than the declaration takes there
-     * is nothing true to say, and what goes over the wire is no help rather than a wrong mark.
+     * <p>Both halves, because they are one rule and the first half alone is false. The protocol
+     * reads a mark outside the list as none given and marks the first, so a mark past the end does
+     * not say "none of these" — it says the one furthest from what is being written; and where a
+     * signature has no parameters it asks for no mark at all, so a number written there is about
+     * something that was not sent.
+     *
+     * <p>The half was written here on its own once, taken from the case being fixed rather than from
+     * the protocol, and it made a behavior that takes nothing unanswerable. A rule kept here is only
+     * worth keeping if it came from the protocol.
      */
     @Test
-    void anActiveParameterNamesOneOfTheParametersSentWithIt() {
-        // the cursor at the end of the line the call is written on
-        JsonNode within = signatureHelp("submit(d,\n", position(6, "let run (d) = submit(d,".length()));
+    void aSignatureMarksOneOfTheParametersSentWithItAndNoneWhereThereAreNone() {
+        JsonNode within = signatureHelp("submit(d,\n");
         assertEquals(2, within.get("signatures").get(0).get("parameters").size());
         assertTrue(within.get("activeParameter").asInt()
                         < within.get("signatures").get(0).get("parameters").size(),
                 "the mark is on a parameter that was sent");
 
-        assertTrue(signatureHelp("submit(d, s,\n",
-                        position(6, "let run (d) = submit(d, s,".length())).isNull(),
+        assertTrue(signatureHelp("submit(d, s,\n").isNull(),
                 "and where none of them is being written, nothing is answered");
+
+        JsonNode takesNothing = signatureHelp("ping(\n");
+        assertEquals("ping()", takesNothing.get("signatures").get(0).get("label").asString());
+        assertEquals(0, takesNothing.get("signatures").get(0).get("parameters").size());
+        assertFalse(takesNothing.has("activeParameter"),
+                "a signature that takes nothing has nothing to mark");
     }
 
-    /** The server's reply to a signature help asked at {@code at}, on a document ending in
-     *  {@code body}. */
-    private static JsonNode signatureHelp(String body, Map<String, Object> at) {
+    /** The server's reply to a signature help asked with the cursor at the end of {@code body},
+     *  which is where an author's is while they are writing it. */
+    private static JsonNode signatureHelp(String body) {
         String text = """
                 module m
 
                 data D = { v: Int }
 
                 behavior submit : (a: D, b: D) -> Int
+                behavior ping : () -> Int
                 behavior run : (d: D) -> Int
                 let run (d) = \
                 """ + body;
@@ -103,7 +113,8 @@ class EveryRuleThisServerRestsOnIsCheckedAtTheWireTest {
                 message(null, "textDocument/didOpen", Map.of(
                         "textDocument", Map.of("uri", URI, "text", text))),
                 message(2, "textDocument/signatureHelp", Map.of(
-                        "textDocument", Map.of("uri", URI), "position", at)));
+                        "textDocument", Map.of("uri", URI),
+                        "position", endOfTheLastWrittenLine(text))));
 
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         new LspServer(new MessageConnection(new ByteArrayInputStream(input), out)).run();
@@ -112,6 +123,13 @@ class EveryRuleThisServerRestsOnIsCheckedAtTheWireTest {
                 .filter(m -> m.has("id") && m.get("id").isNumber() && m.get("id").asInt() == 2)
                 .findFirst().orElseThrow(() -> new AssertionError("no answer to the request"))
                 .get("result");
+    }
+
+    /** Where the cursor is, worked out from the source rather than counted into it — a line added to
+     *  a fixture would otherwise move every place this asks about. */
+    private static Map<String, Object> endOfTheLastWrittenLine(String text) {
+        List<String> lines = text.lines().toList();
+        return position(lines.size() - 1, lines.getLast().length());
     }
 
     private static Map<String, Object> position(int line, int character) {

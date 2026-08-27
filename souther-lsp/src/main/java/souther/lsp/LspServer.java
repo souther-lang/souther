@@ -493,9 +493,15 @@ public final class LspServer {
             for (String each : help.parameters()) {
                 parameters.add(Map.of("label", each));
             }
-            return Map.of("signatures",
-                    List.of(Map.of("label", help.label(), "parameters", parameters)),
-                    "activeSignature", 0, "activeParameter", help.active());
+            Map<String, Object> written = new LinkedHashMap<>();
+            written.put("signatures",
+                    List.of(Map.of("label", help.label(), "parameters", parameters)));
+            written.put("activeSignature", 0);
+            // Left out where the signature takes nothing. A mark is about one of the parameters, and
+            // where there are none the protocol asks for none — writing a number there would be
+            // writing about something that was not sent.
+            help.active().ifPresent(at -> written.put("activeParameter", at));
+            return written;
         }).orElse(null);
     }
 

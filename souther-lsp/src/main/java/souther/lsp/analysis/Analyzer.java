@@ -1504,12 +1504,14 @@ public final class Analyzer {
      * supplied to make the line parse is not one of the commas.
      *
      * <p>Empty where the author is writing an argument the declaration has no parameter for. There
-     * is no way to say "none of them" here: the protocol reads an active parameter outside the list
-     * as none given and marks the first, so a fourth argument to a behavior taking three would be
-     * answered by pointing at the first — which is not what a reader is writing, and is a worse
-     * answer than not writing the signature out. Saying it with an absent active parameter is a
-     * client capability, and asking for one is a change to what this negotiates rather than to what
-     * it answers.
+     * is no way to say "none of them" among parameters that exist: the protocol reads an active
+     * parameter outside the list as none given and marks the first, so a fourth argument to a
+     * behavior taking three would be answered by pointing at the first — which is not what a reader
+     * is writing, and is a worse answer than not writing the signature out.
+     *
+     * <p>A behavior that takes nothing is not that case. It has nothing to mark and the protocol
+     * asks for no mark, so its signature is written out like any other — and seeing that it takes
+     * nothing is most of what a reader who has just opened its brackets wants.
      */
     public Optional<SignatureHelp> signatureHelp(String uri, Position pos, ModuleGraph graph) {
         String text = graph.text(uri);
@@ -1541,7 +1543,7 @@ public final class Analyzer {
         int argument = argumentAt(call, cursor);
         return snapshot.flatMap(reads -> reads.calledAt(lines.posOf(callee.start())))
                 .filter(called -> reading == null || reading.mayBeRead(called.writtenAt()))
-                .filter(called -> argument < called.takes().size())
+                .filter(called -> called.takes().isEmpty() || argument < called.takes().size())
                 .map(called -> shown(called, snapshot.orElseThrow(), argument));
     }
 
@@ -1561,7 +1563,9 @@ public final class Analyzer {
                     .orElse(takes.name()));
         }
         return new SignatureHelp(called.name() + "(" + String.join(", ", parameters) + ")",
-                List.copyOf(parameters), argument);
+                parameters,
+                parameters.isEmpty() ? java.util.OptionalInt.empty()
+                        : java.util.OptionalInt.of(argument));
     }
 
     /**

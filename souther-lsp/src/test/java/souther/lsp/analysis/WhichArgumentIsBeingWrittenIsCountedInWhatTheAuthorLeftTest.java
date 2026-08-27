@@ -8,6 +8,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalInt;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -32,6 +33,8 @@ class WhichArgumentIsBeingWrittenIsCountedInWhatTheAuthorLeftTest {
                 behavior submit : (request: Draft, submittedAt: Stamp) -> Int
                 let submit (request, submittedAt) = request.plannedCost
 
+                behavior ping : () -> Int
+
                 behavior run : (d: Draft, s: Stamp) -> Int
                 let run (d, s) = \
                 """ + body;
@@ -43,12 +46,13 @@ class WhichArgumentIsBeingWrittenIsCountedInWhatTheAuthorLeftTest {
 
         assertEquals("submit(request: Draft, submittedAt: Stamp)", help.label());
         assertEquals(List.of("request: Draft", "submittedAt: Stamp"), help.parameters());
-        assertEquals(0, help.active(), "nothing is written yet, so it is the first");
+        assertEquals(OptionalInt.of(0), help.active(),
+                "nothing is written yet, so it is the first");
     }
 
     @Test
     void aCommaMovesToTheNextParameter() {
-        assertEquals(1, helpFor(model("submit(d,\n")).orElseThrow().active());
+        assertEquals(OptionalInt.of(1), helpFor(model("submit(d,\n")).orElseThrow().active());
     }
 
     /**
@@ -59,7 +63,7 @@ class WhichArgumentIsBeingWrittenIsCountedInWhatTheAuthorLeftTest {
      */
     @Test
     void aCommaInsideSomethingElseIsNotOneOfThese() {
-        assertEquals(0, helpFor(model("submit(run(d, s)\n")).orElseThrow().active(),
+        assertEquals(OptionalInt.of(0), helpFor(model("submit(run(d, s)\n")).orElseThrow().active(),
                 "the comma is `run`'s, and the cursor is still writing `submit`'s first argument");
     }
 
@@ -99,10 +103,26 @@ class WhichArgumentIsBeingWrittenIsCountedInWhatTheAuthorLeftTest {
      */
     @Test
     void anArgumentTheDeclarationHasNoParameterForIsToldNothing() {
-        assertEquals(1, helpFor(model("submit(d,\n")).orElseThrow().active(),
+        assertEquals(OptionalInt.of(1), helpFor(model("submit(d,\n")).orElseThrow().active(),
                 "the second of two is the last there is");
         assertTrue(helpFor(model("submit(d, s,\n")).isEmpty(),
                 "and a third is one `submit` does not take");
+    }
+
+    /**
+     * A behavior that takes nothing is answered, and marks nothing.
+     *
+     * <p>Not the case above: there is no parameter being written past, because there are no
+     * parameters. The signature is written out like any other, and seeing that it takes nothing is
+     * most of what a reader who has just opened its brackets wants.
+     */
+    @Test
+    void aBehaviorThatTakesNothingIsStillWrittenOut() {
+        SignatureHelp help = helpFor(model("ping(\n")).orElseThrow();
+
+        assertEquals("ping()", help.label());
+        assertEquals(List.of(), help.parameters());
+        assertEquals(OptionalInt.empty(), help.active(), "there is nothing here to mark");
     }
 
     @Test
