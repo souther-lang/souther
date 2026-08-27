@@ -5,6 +5,7 @@ import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.Location;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
+import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.ReadMeaning;
@@ -149,7 +150,7 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
 
             @Override
             public LinearForm<NumericTerm> leafOf(Core node, InputReads at) {
-                NumericTerm term = GuardThresholds.termOf(node, at, symbols);
+                NumericTerm term = InputNumber.of(node, at, symbols);
                 return term == null ? null : LinearForm.atom(term);
             }
 
