@@ -506,19 +506,26 @@ final class Coverages {
 
         /**
          * What building a row for {@code label} came to, with each position of the item fixed
-         * where {@code fixing} puts it, or null where the attempt could not be made at all — which
-         * leaves the point unknown rather than refused.
+         * where {@code fixing} puts it and the rest of the row built to reach the border, or null
+         * where the attempt could not be made at all — which leaves the point unknown rather than
+         * refused.
          *
          * <p>One method, whatever the border was drawn on. What the row is for is the coverage item
          * and what is fixed to build it is a placement that stands for it; a side of a border is met
          * by a row anywhere in it, so a row labelled by the places a search happened to compose
          * would name a witness as though it were the item.
+         *
+         * @param reaching what the row has to be to arrive at the border at all. Handed in beside
+         *                 the placement rather than left out: the placement is about the positions
+         *                 the item names and a condition above the line is about the others, and a
+         *                 row is one row
          */
         souther.compiler.partition.Generator.BoundaryAttempt attempt(
                 String label,
                 java.util.function.Function<souther.compiler.inputs.NumericTerm,
                         souther.compiler.check.Carrier> on,
-                Map<souther.compiler.inputs.NumericTerm, Place> fixing);
+                Map<souther.compiler.inputs.NumericTerm, Place> fixing,
+                souther.compiler.partition.Reachability.Reaching reaching);
     }
 
     /**
@@ -772,10 +779,11 @@ final class Coverages {
                                                 souther.compiler.partition.WayToTheBorder within,
                                                 souther.compiler.inputs.Quantities rules) {
         BorderQuantity quantity = border.cut().of();
-        // Built here and gone when the search is. A region is a way of asking about values rather
-        // than something that says what it is, so it is what the walk runs against and never what
-        // the answer keeps; the account it was built from is what travels.
-        souther.compiler.inputs.SearchRegion region = within.narrowing(rules.region());
+        // Built here and gone when the search is. What a row has to be to arrive is a way of asking
+        // about values rather than something that says what it is, so it is what the walk runs
+        // against and never what the answer keeps; the account it was built from is what travels.
+        souther.compiler.partition.Reachability reaching =
+                souther.compiler.partition.Reachability.of(within, rules.region());
         return new OneSearchOfABorder() {
 
             @Override
@@ -786,13 +794,22 @@ final class Coverages {
                     return new ItemAssessment.Attempt.Unavailable(
                             ItemAssessment.Attempt.Reason.NO_CLASSES);
                 }
+                // A way one position would have to take two of its cases to reach. No row goes
+                // there, which is the model's answer and not a search that came up short.
+                if (!(reaching instanceof souther.compiler.partition.Reachability.Reaching able)) {
+                    return new ItemAssessment.Attempt.Unresolved(
+                            new souther.compiler.partition.Generator.UnresolvedCombination(
+                                    java.util.List.of(label),
+                                    souther.compiler.partition.Generator.UnresolvedCombination
+                                            .Reason.THE_RULES_LEAVE_NOTHING_THERE), within);
+                }
                 // Where a row would have to stand is asked of the quantity, and finding one there of
                 // the realizer. What it composes is a candidate and no part of the item: another row
                 // in the same side is at the point as much as this one would be, so what the row is
                 // offered for goes in beside it rather than being read back off it.
-                return switch (realizer.realize(quantity.standingAt(criterion), region)) {
+                return switch (realizer.realize(quantity.standingAt(criterion), able.region())) {
                     case Realization.Found found -> whatCameOfIt(
-                            probe.attempt(label, quantity::carrierOf, found.fixing()),
+                            probe.attempt(label, quantity::carrierOf, found.fixing(), able),
                             label, within);
                     // And the two ways of finding nothing are not one answer. A walk of the whole
                     // of what the rules leave that reaches no value settles the point; a search

@@ -2291,6 +2291,14 @@ public final class Generator {
      * item. A search that settled one and left the others to their own ranges would produce a row
      * beside the line as readily as one at it.
      *
+     * <p><b>And the item is not the whole of what a row has to be.</b> A line inside a guard or an
+     * arm is reached by rows that got past what stands above it, and what stands above it is about
+     * positions the item never names. So {@code reaching} is the other half and is conjoined with
+     * {@code fixing} rather than filled in around it: what it asks in cases is what the rest of the
+     * row is built under, and what it asks in numbers puts the positions it bounds somewhere it
+     * admits. Left out, a row carried the value the line is drawn at and turned back above it — and
+     * the walk that reads a row at a point then said, correctly, that it does not stand there.
+     *
      * <p>One row per boundary rather than one row covering several, because a row is a question put to
      * a person and a row sitting on three edges at once is three answers they have to separate.
      *
@@ -2300,7 +2308,8 @@ public final class Generator {
      */
     public static BoundaryAttempt probeFixing(Subject subject, String label,
                                               java.util.function.Function<NumericTerm, Carrier> on,
-                                              Map<NumericTerm, Place> fixing, CandidateCheck check) {
+                                              Map<NumericTerm, Place> fixing,
+                                              Reachability.Reaching reaching, CandidateCheck check) {
         Map<TermPath, List<FixtureTemplate>> decided = new LinkedHashMap<>();
         // What the rest of the row has to sit beside. A field of a record is not chosen from its own
         // type once another field of that record is fixed: the rule relating them says what is left,
@@ -2311,15 +2320,29 @@ public final class Generator {
         // Per term, because a fixing names one order pair per position and a row is certified
         // against the one its own value was built on.
         Map<NumericTerm, souther.compiler.inputs.TermOrders> builtOn = new LinkedHashMap<>();
-        for (Map.Entry<NumericTerm, Place> each : fixing.entrySet()) {
+        // Where every position of this row stands: the item's, and the ones the way to it bounds.
+        // One map, because a row is one row — walked as two, the second was chosen from what the
+        // declarations leave and the first from what reaches the border, and only one of them was
+        // about the row being written.
+        Map<NumericTerm, Place> standing = alsoOnTheWay(subject, fixing, reaching);
+        for (Map.Entry<NumericTerm, Place> each : standing.entrySet()) {
             // The order this position is written back on, which is the position's own. Handed one
             // order for the whole fixing, a form over positions written back differently wrote each
             // of them as a value of whichever order the quantity happened to answer with.
-            Carrier carrier = on.apply(each.getKey());
+            //
+            // The item's positions are the quantity's to answer for and the way's are not: a
+            // condition above the line is over positions the quantity is not taken of, and each of
+            // those is read and written on its own order like any other.
+            Carrier carrier = fixing.containsKey(each.getKey())
+                    ? on.apply(each.getKey()) : carrierOf(subject, each.getKey());
             if (carrier == null) {
                 throw new IllegalStateException("a row is owed at " + each.getKey()
                         + " and the quantity it is owed for is over no such position");
             }
+            // Beside another where the item fixes more than one position. The way's are not counted
+            // in: what that limit is about is a number met by several values being asked to stand
+            // beside a second position of the same item, and a position bounded on the way is one
+            // this could leave to its own range without the row stopping being a row at the item.
             Edge edge = edgeAt(subject, carrier, each.getKey(), each.getValue(), fixing.size() > 1);
             if (edge.values().isEmpty()) {
                 return new BoundaryAttempt.Unresolved(
@@ -2352,14 +2375,14 @@ public final class Generator {
             // candidate turned away under one parameter would name the reason another failed for.
             boolean[] uncertified = {false};
             CandidateCheck certified =
-                    certifying(check, subject, p, fixing, builtOn, uncertified);
+                    certifying(check, subject, p, standing, builtOn, uncertified);
             Map<TermPath, List<FixtureTemplate>> here = new LinkedHashMap<>();
-            for (NumericTerm term : fixing.keySet()) {
+            for (NumericTerm term : standing.keySet()) {
                 if (term.path().head().equals(head)) {
                     here.put(term.path(), decided.get(term.path()));
                 }
             }
-            Outcome tried = valueAt(subject, p, here, settled, Requirements.NONE, certified);
+            Outcome tried = valueAt(subject, p, here, settled, reaching.requirements(), certified);
             if (tried.value() == null) {
                 // Where the refusal is of the values one edge offered, what that edge held back
                 // outranks it: values that were never built were not among the ones refused. Only
@@ -2386,6 +2409,80 @@ public final class Generator {
         }
         return new BoundaryAttempt.Built(
                 new GeneratedRow(new Purpose.ForAPoint(label), inputs));
+    }
+
+    /**
+     * The item's positions, and a place inside the region for each position the way to it bounds.
+     *
+     * <p><b>Chosen and not left to the range.</b> What the conditions above a line leave a position
+     * is a run, and every value of that run reaches the line as well as any other — so one of them
+     * is taken and the row is written there. Left as a run for the composer to fill from the
+     * declarations, the value it took was the bottom of the declared type, which is outside the run
+     * wherever a condition above the line moved it: the row then carried the line's value and turned
+     * back before reaching the comparison.
+     *
+     * <p>One at a time, with the region told what was chosen before the next is asked. A condition
+     * relating two positions leaves neither of them a run the other's choice does not move, so two
+     * places taken from two independent runs meet the rules only where they happen to.
+     *
+     * <p>A position this cannot place is left out rather than refused. There is no order to read it
+     * on, the region says nothing about it, or nothing of the carrier lies in what is left — none of
+     * those is a row that cannot be written, and each is a row this composes the way it did before
+     * the way was carried here at all.
+     */
+    private static Map<NumericTerm, Place> alsoOnTheWay(Subject subject,
+                                                        Map<NumericTerm, Place> fixing,
+                                                        Reachability.Reaching reaching) {
+        Map<NumericTerm, Place> out = new LinkedHashMap<>(fixing);
+        java.util.Set<TermPath> taken = new java.util.LinkedHashSet<>();
+        fixing.keySet().forEach(term -> taken.add(term.path()));
+        souther.compiler.inputs.SearchRegion here = reaching.region();
+        for (Map.Entry<NumericTerm, Place> each : fixing.entrySet()) {
+            if (each.getValue() instanceof Count count) {
+                here = here.given(each.getKey(), count);
+            }
+        }
+        for (NumericTerm term : reaching.boundedOnTheWay()) {
+            // A position the item already fixes, or one at a location the item writes. What a row
+            // writes at a location is one value, and the second thing asked of it is not this one's
+            // to decide over the item's.
+            if (taken.contains(term.path())) {
+                continue;
+            }
+            Carrier carrier = carrierOf(subject, term);
+            souther.compiler.numeric.NumericDomain.Bounds runs = here.runsBetween(term);
+            if (carrier == null || runs == null) {
+                continue;
+            }
+            Place at = carrier.onTheGrid(carrier.somethingInside(runs.min(), runs.max()));
+            if (at == null || !(at instanceof Count count)) {
+                continue;
+            }
+            souther.compiler.inputs.SearchRegion next = here.given(term, count);
+            if (next.emptiness().isPresent()) {
+                continue;
+            }
+            here = next;
+            taken.add(term.path());
+            out.put(term, at);
+        }
+        return out;
+    }
+
+    /**
+     * The order a position of this subject is read and written on, or null where this has none.
+     *
+     * <p>The axis's, which is where every other reader of a position's order asks. A position the
+     * model divides nowhere has no axis and no order here, and a value at it is written from the
+     * declared type the way it always was.
+     */
+    private static Carrier carrierOf(Subject subject, NumericTerm term) {
+        for (Axis axis : subject.axes()) {
+            if (axis.term().equals(term)) {
+                return axis.term().answeredOn(axis.type(), subject.symbols());
+            }
+        }
+        return null;
     }
 
     /**

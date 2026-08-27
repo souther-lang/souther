@@ -1378,9 +1378,10 @@ public final class Adequacy {
                         java.util.function.Function<souther.compiler.inputs.NumericTerm,
                                 souther.compiler.check.Carrier> carrier,
                         java.util.Map<souther.compiler.inputs.NumericTerm,
-                                souther.compiler.numeric.Place> fixing) {
+                                souther.compiler.numeric.Place> fixing,
+                        souther.compiler.partition.Reachability.Reaching reaching) {
                     return built(() ->
-                            Generator.probeFixing(subject, label, carrier, fixing, check));
+                            Generator.probeFixing(subject, label, carrier, fixing, reaching, check));
                 }
 
                 private Generator.BoundaryAttempt built(

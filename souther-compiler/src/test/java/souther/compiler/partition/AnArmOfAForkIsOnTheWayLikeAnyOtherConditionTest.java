@@ -109,7 +109,13 @@ class AnArmOfAForkIsOnTheWayLikeAnyOtherConditionTest {
         }
     }
 
-    /** The narrowed positions on the way to every comparison of {@code behavior}, in order. */
+    /**
+     * The narrowed positions on the way to every comparison of {@code behavior}, sorted.
+     *
+     * <p>Named rather than in the order they were filed. Which comparison a walk reaches first is
+     * the walk's, and holding this against it would be holding it against the order a map came back
+     * in.
+     */
     private static List<String> narrowingsIn(String behavior) {
         List<String> out = new ArrayList<>();
         for (OnTheWay each : wayOf(behavior)) {
@@ -117,7 +123,7 @@ class AnArmOfAForkIsOnTheWayLikeAnyOtherConditionTest {
                 out.add(narrowed.position().toString());
             }
         }
-        return out;
+        return out.stream().sorted().toList();
     }
 
     /** Everything on the way to any comparison of {@code behavior}, the comparisons in the order the
