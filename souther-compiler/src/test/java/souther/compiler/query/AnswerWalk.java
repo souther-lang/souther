@@ -37,9 +37,14 @@ final class AnswerWalk {
         }
     }
 
-    /** What the walk found and how much of the store it covered, beside how much of it there was
-     *  — which is what says a walk reached the answers a caller is asking about at all. */
-    record Walked(int visited, Set<String> classes, Covered<Found> covered) {}
+    /**
+     * What the walk found and how much of the store it went into, beside what it met on the way —
+     * which is what says a walk reached the answers a caller is asking about at all.
+     *
+     * @param opened how many things it went into what they hold, which counts neither a leaf nor
+     *               something it stopped at
+     */
+    record Walked(int opened, Set<String> classes, Covered<Found> covered) {}
 
     private AnswerWalk() {
     }

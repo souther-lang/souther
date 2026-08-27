@@ -10,8 +10,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * What every question declares it answers with could be compared as a value, and what could not is
- * written down.
+ * What every question declares it answers with is settled, and what is not settled is written down.
+ *
+ * <p>Settled and not "is a value", because the two quantities want different things of it. What a
+ * question this compiler computes answers with has to be comparable as a value; what a compilation
+ * is handed is whatever was handed in, and a way of running something is a legitimate thing to hand
+ * in. Both are settled where somebody has read what stands there and said which it is, and the
+ * places below are where the declarations leave that open.
  *
  * <p><b>Quantified over what the compiler declares, not over what a run reached.</b> A store holds
  * whatever a corpus made it hold, so a question no operation of this project puts is outside every
@@ -28,7 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * that says nothing by {@code equals} is unreachable through an equality that never holds, and
  * naming it too would be naming the consequences of what has already been named.
  */
-class EveryAnswerThisCompilerDeclaresCouldBeAValueTest {
+class EveryAnswerThisCompilerDeclaresIsSettledTest {
 
     /**
      * Every question this compiler declares, and nothing about how far the scan got.
@@ -75,7 +80,7 @@ class EveryAnswerThisCompilerDeclaresCouldBeAValueTest {
      * reads as though it had not.
      */
     @Test
-    void theOnlyDeclarationsThatCouldNotBeAValueAreTheOnesWrittenDown() throws Exception {
+    void theOnlyDeclarationsThatSettleNothingAreTheOnesWrittenDown() throws Exception {
         Map<TypePath.Place, Traversal.Why> found = new LinkedHashMap<>();
         DeclaredAnswerWalk.of(questions()).found()
                 .forEach(each -> found.put(each.place(), each.why()));
@@ -83,7 +88,7 @@ class EveryAnswerThisCompilerDeclaresCouldBeAValueTest {
 
         assertEquals(new java.util.HashMap<>(AnswerClosure.declaredPlaces()),
                 new java.util.HashMap<>(found),
-                () -> "a place a question declares that cannot be compared as a value. What each "
+                () -> "a place a question declares where what stands is not settled. What each "
                         + "written-down place is: " + reasons);
     }
 }

@@ -110,7 +110,7 @@ class EverythingAnAnswerHoldsMeansSomethingTest {
      *                  the ground the rest of this stands on rather than something it reports on
      */
     private record Met(Map<Locus.Place, Set<String>> byPlace, Set<String> fellShort,
-                       Map<Locus.Place, Set<String>> differentThings, int visited) {}
+                       Map<Locus.Place, Set<String>> differentThings, int opened) {}
 
     private static Met met() {
         // Not a map that sorts. A place is told from a place by what it holds and not by how it
@@ -119,11 +119,11 @@ class EverythingAnAnswerHoldsMeansSomethingTest {
         Map<Locus.Place, Set<String>> byPlace = new LinkedHashMap<>();
         Map<Locus.Place, Set<String>> differentThings = new LinkedHashMap<>();
         Set<String> fellShort = new TreeSet<>();
-        int visited = 0;
+        int opened = 0;
         for (AnswerClosure.Scenario scenario : AnswerClosure.Scenario.values()) {
             for (Db one : storesOf(scenario)) {
                 AnswerWalk.Walked walked = AnswerWalk.of(one);
-                visited += walked.visited();
+                opened += walked.opened();
                 List<AnswerWalk.Found> found = switch (walked.covered()) {
                     case Covered.Whole<AnswerWalk.Found>(List<AnswerWalk.Found> all) -> all;
                     case Covered.Partly<AnswerWalk.Found>(List<AnswerWalk.Found> all,
@@ -162,7 +162,7 @@ class EverythingAnAnswerHoldsMeansSomethingTest {
                 }
             }
         }
-        return new Met(byPlace, fellShort, differentThings, visited);
+        return new Met(byPlace, fellShort, differentThings, opened);
     }
 
     /**
@@ -195,19 +195,19 @@ class EverythingAnAnswerHoldsMeansSomethingTest {
      */
     @Test
     void theWalkReachesTheAnswersThisIsAbout() {
-        int visited = 0;
+        int opened = 0;
         Set<String> classes = new TreeSet<>();
         for (AnswerClosure.Scenario scenario : AnswerClosure.Scenario.values()) {
             for (Db one : storesOf(scenario)) {
                 AnswerWalk.Walked walked = AnswerWalk.of(one);
-                visited += walked.visited();
+                opened += walked.opened();
                 classes.addAll(walked.classes());
             }
         }
 
-        int reached = visited;
-        org.junit.jupiter.api.Assertions.assertTrue(visited > 1000,
-                () -> "a walk that reached " + reached + " objects is not reaching the answers"
+        int reached = opened;
+        org.junit.jupiter.api.Assertions.assertTrue(opened > 1000,
+                () -> "a walk that went into " + reached + " things is not reaching the answers"
                         + " this is about");
         org.junit.jupiter.api.Assertions.assertTrue(
                 classes.contains(Measurement.NotApplicable.class.getName()),

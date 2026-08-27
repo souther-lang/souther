@@ -220,10 +220,17 @@ final class AnswerClosure {
         return new Observation(Detector.TWO_ANSWERS_COMPARED, scenario);
     }
 
-    /** The classes a module compiled to, kept as the arrays they came out as. */
+    /**
+     * The classes a module compiled to, kept as the arrays they came out as.
+     *
+     * <p>What it wants is a way of holding bytes that is settled all the way down: something that
+     * says what it is by what the bytes say, holding them where nothing reading it meets an array
+     * again. Written as a value with an array inside, the array is what a walk arrives at one step
+     * further along, which is this place moved rather than struck off.
+     */
     private static final Problem BYTES = new Problem("BYTES", MISSING_EQUALITY,
-            "what a class is is its bytes, so a wrapper comparing them is what lets a module whose "
-                    + "classes came out the same leave its readers alone");
+            "what a class is is its bytes, so what lets a module whose classes came out the same "
+                    + "leave its readers alone is holding them as something that says so");
 
     /** The library this compiler ships, reached wherever a compilation holds it. */
     private static final Problem STDLIB = new Problem("STDLIB", MISSING_EQUALITY,
@@ -266,7 +273,15 @@ final class AnswerClosure {
                     + "positions is asked of. Both are built where they are used and neither is "
                     + "what a plan says, so what belongs in the subject is what the row is about");
 
-    /** What was raised where a name resolved to nothing. */
+    /**
+     * What was raised where a name resolved to nothing.
+     *
+     * <p><b>Two things are wrong here and the walk meets them one at a time.</b> It says nothing
+     * about itself, and anything may extend what is thrown — and the second is behind the first,
+     * because a walk that has been told nothing by a thing has no reason to ask what else could
+     * stand there. So writing the equality moves this place from one word to the other rather than
+     * striking it off, and the day it moves is the day the register says so.
+     */
     private static final Problem AN_EXCEPTION = new Problem("AN_EXCEPTION", MISSING_EQUALITY,
             "a name nothing resolved is answered with what was raised where it was read. What it "
                     + "says is where the name is and what is wrong with it, and two compiles that "

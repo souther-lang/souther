@@ -12,19 +12,30 @@ import java.util.List;
  * free — and a key holds only what identifies the question, never a compilation, a registry or a
  * position, because anything held here would be part of the question's identity.
  *
- * <p>The answer is a value too, and for a reason of the same kind. An edit is absorbed by an answer
- * coming out equal to the one it replaces, so what {@code equals} says here is the whole of what
- * stops work: an answer that never equals its predecessor makes everything that read it run again
- * for as long as the compilation lives, and no test of what the compiler says can see it. So an
- * answer says what it is, not where it came from — two of them are equal when they mean the same
- * thing, and a value that compares by identity or by which store built it is not one of these.
+ * <p>What a question this compiler computes answers with is a value too, and for a reason of the
+ * same kind. An edit is absorbed by an answer coming out equal to the one it replaces, so what
+ * {@code equals} says there is the whole of what stops work: an answer that never equals its
+ * predecessor makes everything that read it run again for as long as the compilation lives, and no
+ * test of what the compiler says can see it. So such an answer says what it is, not where it came
+ * from — two of them are equal when they mean the same thing, and a value that compares by identity
+ * or by which store built it is not one of these.
  *
  * <p>Which rules out a kind of thing rather than a missing method. An object that reads {@link Db}
  * when it is asked — a registry, a scope over one, a loader — has no such equality to give: two of
  * them are the same when the store is, which says where they came from. These are what a
- * {@code compute} builds and uses while it runs, never what one answers with, and building one
- * inside the compute that reads it is also what makes its reads land on the question being answered
- * rather than on nothing. {@link Names#derivedSymbols} is one, handed out and not kept.
+ * {@code compute} builds and uses while it runs, never what one <em>computes</em> an answer with,
+ * and building one inside the compute that reads it is also what makes its reads land on the
+ * question being answered rather than on nothing. {@link Names#derivedSymbols} is one, handed out
+ * and not kept.
+ *
+ * <p><b>What is handed in is a different contract.</b> An {@link Input} is not computed: its answer
+ * is what whoever built the compilation supplied, and its equality is how this store hears that the
+ * outside changed rather than whether a compile came to the same thing. So a way of running
+ * something may be supplied — how a module is found, how long a piece of work gets — and there is
+ * no compute to build it inside. What it costs is that supplying a new one reads as a change to the
+ * outside, which is conservative about a question about the outside rather than wrong about a
+ * question about a compile. Which of the two a question is is said by what it implements, and
+ * nothing else has to be written down beside it.
  *
  * <p>A question asked per definition depends on what it reaches and not on the index its module
  * gathered, which {@link Db} states. Those two rules meet at a projection: a broad answer read
