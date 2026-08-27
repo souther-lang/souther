@@ -111,11 +111,18 @@ final class EvidenceAccount {
      *  terms. */
     private static boolean carries(Axis axis, LineEvidence evidence) {
         OriginRef by = evidence.by();
-        if (evidence instanceof LineEvidence.Divides(Threshold line) && line.value() == null) {
-            return axis.parted().stream()
-                    .anyMatch(each -> each.alternatives().contains(by.authoredLine()));
-        }
-        return axis.cuts().stream().anyMatch(each -> each.origins().contains(by));
+        return switch (evidence) {
+            // A line the position has no value beside is not a cut of it. It parts the values all
+            // the same, and where it parts them is what carries the rule — as the authored line,
+            // which is the key that side keeps.
+            case LineEvidence.Divides(Threshold line) when line.value() == null ->
+                    axis.parted().stream()
+                            .anyMatch(each -> each.alternatives().contains(by.authoredLine()));
+            // And one it has a value beside is a cut, as is a value singled out: a rule that
+            // singles nothing out is not one of those, so there is always a value here.
+            case LineEvidence.Divides _, LineEvidence.Singles _ ->
+                    axis.cuts().stream().anyMatch(each -> each.origins().contains(by));
+        };
     }
 
     /** That this stage said what became of everything it was handed. */

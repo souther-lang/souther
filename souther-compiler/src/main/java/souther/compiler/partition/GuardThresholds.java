@@ -80,16 +80,12 @@ public final class GuardThresholds {
         /** The lines, read off what the walk said. Not a list of their own: the walk met these and
          *  the values it singled out in one order, and holding two lists loses it. */
         public List<Threshold> thresholds() {
-            return evidence.stream()
-                    .filter(LineEvidence.Divides.class::isInstance)
-                    .map(each -> ((LineEvidence.Divides) each).line()).toList();
+            return LineEvidence.linesIn(evidence);
         }
 
         /** The values singled out, likewise. */
         public List<Singled> singled() {
-            return evidence.stream()
-                    .filter(LineEvidence.Singles.class::isInstance)
-                    .map(each -> ((LineEvidence.Singles) each).point()).toList();
+            return LineEvidence.pointsIn(evidence);
         }
 
         /**

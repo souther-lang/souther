@@ -59,32 +59,17 @@ public final class LinesWhereTheyFall {
             evidence = List.copyOf(evidence);
             between = List.copyOf(between);
             notPlaced = List.copyOf(notPlaced);
-            // What the next stage owes an answer at, each told from the others. One rule filed at
-            // three cases of a sum is three of these, and a second at one of them would close the
-            // account over both while one went unmeasured — which is the reason the identity is the
-            // rule and the number together and not the rule alone.
-            java.util.Set<LineEvidence.FiledOccurrence> seen = new java.util.LinkedHashSet<>();
-            for (LineEvidence each : evidence) {
-                if (!seen.add(each.occurrence())) {
-                    throw new IllegalStateException(
-                            "one rule filed twice at one number: " + each.occurrence());
-                }
-            }
         }
 
         /** The lines, for a reader that wants only those. Read off the one list and not kept
          *  beside it. */
         public List<Threshold> thresholds() {
-            return evidence.stream()
-                    .filter(LineEvidence.Divides.class::isInstance)
-                    .map(each -> ((LineEvidence.Divides) each).line()).toList();
+            return LineEvidence.linesIn(evidence);
         }
 
         /** The values singled out, likewise. */
         public List<GuardThresholds.Guards.Singled> singled() {
-            return evidence.stream()
-                    .filter(LineEvidence.Singles.class::isInstance)
-                    .map(each -> ((LineEvidence.Singles) each).point()).toList();
+            return LineEvidence.pointsIn(evidence);
         }
     }
 

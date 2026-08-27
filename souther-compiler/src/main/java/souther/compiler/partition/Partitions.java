@@ -309,24 +309,23 @@ public final class Partitions {
     private static List<NumericTerm> numbersMeasuring(Axis axis, List<LineEvidence> evidence,
                                                       EvidenceAccount account) {
         NumericTerm declared = axis.term();
-        if (evidence.stream().anyMatch(each -> each.at().equals(declared))) {
-            return List.of(declared);
-        }
         List<LineEvidence> here = evidence.stream()
                 .filter(each -> each.at().path().equals(axis.path())).toList();
-        // A position the declarations already divide. What a body says about another number of it is
-        // not taken up as a second measure, and this is where that is said: an account with no entry
-        // could not tell a policy from a loss.
-        if (axis.measurable()) {
-            here.forEach(each -> account.disposedOf(each,
-                    new EvidenceAccount.Disposition.ThePositionIsAlreadyMeasured(axis.id())));
-            return List.of();
-        }
         List<NumericTerm> numbers = new ArrayList<>();
         for (LineEvidence each : here) {
             if (!numbers.contains(each.at())) {
                 numbers.add(each.at());
             }
+        }
+        // A position the declarations already divide keeps the measure they gave it. What a body
+        // says about another number of such a position is not taken up as a second measure, and
+        // this is where that is said: an account with no entry could not tell a policy from a loss.
+        if (axis.measurable()) {
+            here.stream().filter(each -> !each.at().equals(declared))
+                    .forEach(each -> account.disposedOf(each,
+                            new EvidenceAccount.Disposition.ThePositionIsAlreadyMeasured(
+                                    axis.id())));
+            return numbers.contains(declared) ? List.of(declared) : List.of();
         }
         return numbers;
     }
@@ -346,12 +345,8 @@ public final class Partitions {
                                   List<RuleWithoutALine> rules, EvidenceAccount account) {
         List<LineEvidence> mine = evidence.stream()
                 .filter(each -> each.at().equals(term)).toList();
-        List<Threshold> here = mine.stream()
-                .filter(LineEvidence.Divides.class::isInstance)
-                .map(each -> ((LineEvidence.Divides) each).line()).toList();
-        List<GuardThresholds.Guards.Singled> points = mine.stream()
-                .filter(LineEvidence.Singles.class::isInstance)
-                .map(each -> ((LineEvidence.Singles) each).point()).toList();
+        List<Threshold> here = LineEvidence.linesIn(mine);
+        List<GuardThresholds.Guards.Singled> points = LineEvidence.pointsIn(mine);
         // What this term's values can be, which is the type's bound already narrowed by whatever
         // the record it sits in says about it. Reading the type again here would put a threshold
         // back inside a range the record has no values in.
@@ -451,26 +446,36 @@ public final class Partitions {
      * {@link BodyCutInspection#outranking}'s to fold.
      */
     private static List<UndividedPosition> undividedIn(List<Measured> measured) {
-        Map<TermPath, Measured> byPosition = new LinkedHashMap<>();
-        for (Measured each : measured) {
-            // The measure that answers for the location, and what this phase came to about it.
-            // A measurable one wins the axis, because whether the position is still waiting on
-            // anything is asked of the position and any measure of it settles that ({@link
-            // PendingPosition#of}). Read off whichever measure came first, a location divided at one
-            // of its numbers and not at another asked the undivided one and was told the position
-            // has no evidence, beside a fold saying it has.
-            byPosition.merge(each.axis().path(), each, (had, also) -> new Measured(
-                    had.axis().measurable() ? had.axis() : also.axis(),
-                    BodyCutInspection.outranking(had.body(), also.body())));
-        }
         List<UndividedPosition> out = new ArrayList<>();
-        for (Measured each : byPosition.values()) {
-            PendingPosition pending = PendingPosition.of(each.axis());
+        for (AtOnePosition each : byPosition(measured)) {
+            PendingPosition pending = PendingPosition.of(each.at(), each.measured());
             if (pending != null) {
                 out.add(pending.complete(each.body()));
             }
         }
         return List.copyOf(out);
+    }
+
+    /** One position, whether anything measures it, and what this phase came to about it. */
+    private record AtOnePosition(PositionAccount at, boolean measured, BodyCutInspection body) {}
+
+    /**
+     * The measures gathered back into the positions they are of.
+     *
+     * <p>A location is measured at as many numbers as the rules name of it, and what a report says
+     * about the location is one sentence. Whether anything measures it is any of them measuring it;
+     * what this phase came to about it is {@link BodyCutInspection#outranking}'s to fold.
+     */
+    private static List<AtOnePosition> byPosition(List<Measured> measured) {
+        Map<TermPath, AtOnePosition> out = new LinkedHashMap<>();
+        for (Measured each : measured) {
+            out.merge(each.axis().path(),
+                    new AtOnePosition(each.axis().at(), each.axis().measurable(), each.body()),
+                    (had, also) -> new AtOnePosition(had.at(),
+                            had.measured() || also.measured(),
+                            BodyCutInspection.outranking(had.body(), also.body())));
+        }
+        return List.copyOf(out.values());
     }
 
     /**
@@ -486,8 +491,8 @@ public final class Partitions {
     private static List<souther.compiler.inputs.PositionReadingBlocked> blockedIn(
             List<Measured> measured) {
         List<souther.compiler.inputs.PositionReadingBlocked> out = new ArrayList<>();
-        for (Measured each : measured) {
-            PendingPosition pending = PendingPosition.of(each.axis());
+        for (AtOnePosition each : byPosition(measured)) {
+            PendingPosition pending = PendingPosition.of(each.at(), each.measured());
             souther.compiler.inputs.PositionReadingBlocked stopped =
                     pending == null ? null : pending.reportable();
             if (stopped != null && !out.contains(stopped)) {
@@ -636,12 +641,6 @@ public final class Partitions {
                                             souther.compiler.check.PathReachability.Answers
                                                     arrives,
                                             ReachingCuts reaching) {
-        List<Threshold> thresholds = evidence.stream()
-                .filter(LineEvidence.Divides.class::isInstance)
-                .map(each -> ((LineEvidence.Divides) each).line()).toList();
-        List<GuardThresholds.Guards.Singled> singled = evidence.stream()
-                .filter(LineEvidence.Singles.class::isInstance)
-                .map(each -> ((LineEvidence.Singles) each).point()).toList();
         // Both producers of one kind of evidence. What a body compared and what a type's own rules
         // bound are read by different readers and answer the same question, so a position either of
         // them wrote about and neither could turn into a line is named once, whichever wrote it.

@@ -31,6 +31,7 @@ class APositionIsMeasuredAtEveryNumberTheRulesNameOfItTest {
             data When = Early | Late
 
             data Slot = { at: Time }
+            data Box = { s: String }
 
             behavior oneNumber : (slot: Slot) -> When
             let oneNumber (slot) =
@@ -51,6 +52,10 @@ class APositionIsMeasuredAtEveryNumberTheRulesNameOfItTest {
             behavior orderedAndSingledOnOneNumber : (slot: Slot) -> When
             let orderedAndSingledOnOneNumber (slot) =
                 if Time.hour(slot.at) >= 9 && Time.hour(slot.at) == 12 then Late else Early
+
+            behavior itsOwnValueAndANumberTakenOfIt : (box: Box) -> When
+            let itsOwnValueAndANumberTakenOfIt (box) =
+                if box.s == "x" && String.length(box.s) > 3 then Late else Early
             """;
 
     private static String blockOf(String behavior) {
@@ -102,6 +107,18 @@ class APositionIsMeasuredAtEveryNumberTheRulesNameOfItTest {
     @Test
     void aSingledNumberAndAnOrderedOneAreBothMeasured() {
         String block = blockOf("oneSingledOneOrdered");
+        assertTrue(block.contains("partition   axes 2"), block);
+        assertTrue(block.contains("border      borders 2"), block);
+    }
+
+    /**
+     * What a location holds is one of the numbers the rules name of it, not the alternative to
+     * them. Answered as the alternative, a body naming both measured only the location's own value
+     * and the other went unsaid.
+     */
+    @Test
+    void aLocationsOwnValueIsOneOfItsNumbers() {
+        String block = blockOf("itsOwnValueAndANumberTakenOfIt");
         assertTrue(block.contains("partition   axes 2"), block);
         assertTrue(block.contains("border      borders 2"), block);
     }

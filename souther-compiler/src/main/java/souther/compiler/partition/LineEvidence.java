@@ -74,4 +74,22 @@ public sealed interface LineEvidence {
 
     /** One filed piece of evidence, told from every other. */
     record FiledOccurrence(OriginRef by, NumericTerm at) {}
+
+    /**
+     * The lines among {@code evidence}, for a reader that wants only those.
+     *
+     * <p>Here and not at each holder of a list. Four of them wanted the same two projections and
+     * each wrote its own, which is four places to answer the day a third variant is written.
+     */
+    static java.util.List<Threshold> linesIn(java.util.List<LineEvidence> evidence) {
+        return evidence.stream().filter(Divides.class::isInstance)
+                .map(each -> ((Divides) each).line()).toList();
+    }
+
+    /** The values singled out among {@code evidence}, likewise. */
+    static java.util.List<GuardThresholds.Guards.Singled> pointsIn(
+            java.util.List<LineEvidence> evidence) {
+        return evidence.stream().filter(Singles.class::isInstance)
+                .map(each -> ((Singles) each).point()).toList();
+    }
 }

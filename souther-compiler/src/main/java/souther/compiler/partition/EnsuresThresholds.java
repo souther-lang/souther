@@ -86,16 +86,12 @@ public final class EnsuresThresholds {
         /** The lines, read off what the walk said. Not a list of their own, for the reason
          *  {@link GuardThresholds.Guards#thresholds} is not one. */
         public List<Threshold> thresholds() {
-            return evidence.stream()
-                    .filter(LineEvidence.Divides.class::isInstance)
-                    .map(each -> ((LineEvidence.Divides) each).line()).toList();
+            return LineEvidence.linesIn(evidence);
         }
 
         /** The values singled out, likewise. */
         public List<GuardThresholds.Guards.Singled> singled() {
-            return evidence.stream()
-                    .filter(LineEvidence.Singles.class::isInstance)
-                    .map(each -> ((LineEvidence.Singles) each).point()).toList();
+            return LineEvidence.pointsIn(evidence);
         }
     }
 

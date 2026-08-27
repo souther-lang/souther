@@ -62,24 +62,30 @@ sealed interface PendingPosition {
             implements PendingPosition {}
 
     /**
-     * What is still to be answered for at {@code axis}, or null where the axis has evidence.
+     * What is still to be answered for at {@code at}, or null where something measures it.
      *
-     * <p>Null and not a case, because a position with evidence is not pending anything: it is
-     * measured, and the question this type is about does not arise for it. Which is also why
-     * {@link #complete} refuses a body that says it drew a line — two readings would then disagree
-     * about whether this position has evidence.
+     * <p>Null and not a case, because a position something measures is not pending anything: the
+     * question this type is about does not arise for it. Which is also why {@link #complete}
+     * refuses a body that says it drew a line — two readings would then disagree about whether this
+     * position has evidence.
+     *
+     * <p><b>Asked of the position and of whether anything measures it, and not through a measure.</b>
+     * A location is measured at as many numbers as the rules name of it, so a caller with a measure
+     * in hand has one of several and the question is not about any of them. Asked through one, a
+     * location divided at one of its numbers and not at another was answered by whichever measure
+     * the caller happened to hold.
      */
-    static PendingPosition of(Axis axis) {
-        if (axis.measurable()) {
+    static PendingPosition of(PositionAccount at, boolean measured) {
+        if (measured) {
             return null;
         }
-        return switch (axis.pending()) {
+        return switch (at.pending()) {
             // The structural stop outranks a rule the local reading could not take in, for the
             // reason it outranks the body's: where the walk could not reach into what the position
             // holds, a rule about what is inside is a second description of that same stop and the
             // first is the cause (issue #626).
             case StructuralInspection.Continuation.Blocked blocked ->
-                    new Blocked(axis.path(), blocked.why());
+                    new Blocked(at.path(), blocked.why());
             // And a rule about this position's own values that went unread is said ahead of what a
             // body's comparison came to, where both have something to say. Both are true of such a
             // position and one line is written: the rule on the declaration is the one whose being
@@ -89,7 +95,7 @@ sealed interface PendingPosition {
             //
             // It outranks nothing else. This is not a division, so the position is still pending
             // whatever a body says; it is a rule the model states, so an absence may not follow.
-            case StructuralInspection.Continuation.None _ -> pending(axis);
+            case StructuralInspection.Continuation.None _ -> pending(at);
             // A sequence, whose elements were reached and are a position of their own. Nothing
             // stopped here, so this is the same state a leaf is in: what the list itself divides
             // into is what its own rules say about how many it holds, and an absence may follow
@@ -99,12 +105,12 @@ sealed interface PendingPosition {
             // And a sum, whose cases were reached and stand under it. Nothing stopped here either:
             // a sum with no evidence is one whose own cases the rules left it none of, which is a
             // reading that ran to the end.
-                 StructuralInspection.Continuation.Branches _ -> pending(axis);
+                 StructuralInspection.Continuation.Branches _ -> pending(at);
             // A position with no evidence that was never read. Nothing about a model follows from
             // it — an answer here would be this compiler's state written down as what the model
             // divides, which is the sentence the whole protocol is against.
             case null -> throw new IllegalStateException(
-                    "nothing was read at " + axis.path() + " and it has no evidence");
+                    "nothing was read at " + at.path() + " and it has no evidence");
         };
     }
 
@@ -115,12 +121,12 @@ sealed interface PendingPosition {
      * the slot was filled at all, a rule read from end to end put the position in the state that
      * says this compiler could not read it.
      */
-    private static PendingPosition pending(Axis axis) {
-        return switch (axis.leftWith()) {
-            case null -> new Leaf(axis.path());
-            case LeftAtThePosition.AReadingStopped(var why) -> new Blocked(axis.path(), why);
+    private static PendingPosition pending(PositionAccount at) {
+        return switch (at.leftWith()) {
+            case null -> new Leaf(at.path());
+            case LeftAtThePosition.AReadingStopped(var why) -> new Blocked(at.path(), why);
             case LeftAtThePosition.ARuleWithNoLine(var why) ->
-                    new ARuleWithNoLine(axis.path(), why);
+                    new ARuleWithNoLine(at.path(), why);
         };
     }
 

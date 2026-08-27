@@ -2176,6 +2176,7 @@ public final class Generator {
             return null;
         }
         Map<String, FixtureTemplate> fields = new LinkedHashMap<>();
+        LocationWrites writing = new LocationWrites();
         for (int i : moved) {
             Axis axis = axes.get(i);
             if (axis.path().steps().size() != 1
@@ -2199,10 +2200,12 @@ public final class Generator {
             // for the other and this walk writes fields, so it writes neither and says the
             // parameter cannot be written — which is what every other thing it cannot do here
             // answers with.
-            FixtureTemplate already = fields.put(field.name(), values.written().get(0));
-            if (already != null && !already.equals(values.written().get(0))) {
+            FixtureTemplate written = values.written().get(0);
+            if (writing.write(axis.path(), List.of(written))
+                    == LocationWrites.Written.CONFLICTING) {
                 return null;
             }
+            fields.put(field.name(), written);
         }
         if (fields.isEmpty()) {
             return null;

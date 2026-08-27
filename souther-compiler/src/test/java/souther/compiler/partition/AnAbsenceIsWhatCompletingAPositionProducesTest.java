@@ -55,6 +55,12 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
                 List.of());
     }
 
+    /** What is still to be answered for at the position this axis is of. The fixtures here are
+     *  axis-shaped, and the question is the position's. */
+    private static PendingPosition of(Axis axis) {
+        return PendingPosition.of(axis.at(), axis.measurable());
+    }
+
     private static Axis pending(StructuralInspection.Continuation found) {
         return pending(found, null);
     }
@@ -79,13 +85,13 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
     void aLeafCarryingAnUnreadRuleCompletesAsThatRule() {
         BlockReason unread = new BlockReason.UnreadValueRule();
 
-        UndividedPosition said = PendingPosition.of(pending(new StructuralInspection.Continuation.None(), unread))
+        UndividedPosition said = of(pending(new StructuralInspection.Continuation.None(), unread))
                 .complete(new BodyCutInspection.Exhausted());
 
         assertFalse(said.isAbsent(), said.toString());
         // And the verdict says only that: what stopped it is the rule's, said by the reader that
         // read the rule and naming which rule it was.
-        assertNull(PendingPosition.of(pending(new StructuralInspection.Continuation.None(), unread))
+        assertNull(of(pending(new StructuralInspection.Continuation.None(), unread))
                         .reportable(),
                 "a rule this read and could not use is not a position nothing was reached at");
     }
@@ -102,7 +108,7 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
     void aLeafCarryingARuleReadToTheEndSaysNeitherOfThose() {
         BlockReason read = new BlockReason.ComparisonBetweenPositions();
 
-        UndividedPosition said = PendingPosition.of(
+        UndividedPosition said = of(
                         pending(new StructuralInspection.Continuation.None(), read))
                 .complete(new BodyCutInspection.Exhausted());
 
@@ -122,7 +128,7 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
      */
     @Test
     void twoRulesLeaveThePositionWithNoAccountOfItsOwn() {
-        PendingPosition pending = PendingPosition.of(pending(new StructuralInspection.Continuation.None(),
+        PendingPosition pending = of(pending(new StructuralInspection.Continuation.None(),
                 new BlockReason.UnreadValueRule()));
 
         assertFalse(pending.complete(new BodyCutInspection.NoLine(new LeftAtThePosition.AReadingStopped(
@@ -136,23 +142,23 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
      *  to an absence from it. */
     @Test
     void aPositionWithEvidenceIsNotPending() {
-        assertNull(PendingPosition.of(measured()));
+        assertNull(of(measured()));
     }
 
     /** And a position with no evidence that nothing read is not answered for at all: what would be
      *  said of it is this compiler's state, written down as what the model divides. */
     @Test
     void aPositionNothingReadIsNotAnsweredFor() {
-        assertThrows(IllegalStateException.class, () -> PendingPosition.of(
+        assertThrows(IllegalStateException.class, () -> of(
                 new Axis(ID, new NumericTerm.ValueOf(AT), Type.BOOL, List.of(), List.of())));
     }
 
     @Test
     void aPositionWithoutEvidenceIsPendingWhatItsStructureFound() {
         assertEquals(new PendingPosition.Leaf(AT),
-                PendingPosition.of(pending(new StructuralInspection.Continuation.None())));
+                of(pending(new StructuralInspection.Continuation.None())));
         assertEquals(new PendingPosition.Blocked(AT, new BlockReason.TypeUnresolved()),
-                PendingPosition.of(pending(
+                of(pending(
                         new StructuralInspection.Continuation.Blocked(new BlockReason.TypeUnresolved()))));
     }
 
