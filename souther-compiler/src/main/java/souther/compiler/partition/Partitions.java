@@ -318,7 +318,7 @@ public final class Partitions {
         // not taken up as a second measure, and this is where that is said: an account with no entry
         // could not tell a policy from a loss.
         if (axis.measurable()) {
-            here.forEach(each -> account.disposedOf(each.occurrence(),
+            here.forEach(each -> account.disposedOf(each,
                     new EvidenceAccount.Disposition.ThePositionIsAlreadyMeasured(axis.id())));
             return List.of();
         }
@@ -386,9 +386,13 @@ public final class Partitions {
             // Asked of the place the line falls at, which the position need not hold a
             // value at. Read off the value, a line between two of the position's values was
             // dropped as one the rules leave nothing at.
+            // No disposition, and that is the point: this is not a way evidence may leave this
+            // stage. The reader that produced it already refuses a line falling outside what the
+            // quantity it cuts ever holds, naming the rule — measured twice, once against a type's
+            // own range and once against the range the record it sits in leaves, and both times the
+            // line came back named rather than reaching here. So what gets past that reader and is
+            // dropped here is a line lost with nothing said, and the account below says so.
             if (domain != null && !admits(domain, line.parts())) {
-                account.disposedOf(each.occurrence(),
-                        new EvidenceAccount.Disposition.OutsideThePosition());
                 continue;
             }
             // And what the guards above it left. Only a proof drops a line: a comparison
@@ -399,8 +403,7 @@ public final class Partitions {
             // clause has no comparison a path can arrive at: it is checked whenever the
             // behavior answers, so nothing about which branch a body took drops its line.
             if (line.origin().comparisonAt().stream().anyMatch(arrives::dividesNothing)) {
-                account.disposedOf(each.occurrence(),
-                        new EvidenceAccount.Disposition.NothingArrivesAtIt());
+                account.disposedOf(each, new EvidenceAccount.Disposition.NothingArrivesAtIt());
                 continue;
             }
             account.measured(each, axis.id());
@@ -439,10 +442,29 @@ public final class Partitions {
      * <p>The structural reason outranks the rules': where the walk could not reach into what the
      * position holds, a rule naming something inside it is a second description of that same stop
      * and the first is the cause (issue #626).
+     *
+     * <p><b>Once per position and not once per measure.</b> That a position is divided no way is a
+     * sentence about the location, and a location is measured at as many numbers as the rules name
+     * of it. Written per measure, a report would say it as many times as the position has numbers —
+     * and say it at all where one of the numbers is divided and another is not, which is a position
+     * the model does divide. What this phase came to about the location is
+     * {@link BodyCutInspection#outranking}'s to fold.
      */
     private static List<UndividedPosition> undividedIn(List<Measured> measured) {
-        List<UndividedPosition> out = new ArrayList<>();
+        Map<TermPath, Measured> byPosition = new LinkedHashMap<>();
         for (Measured each : measured) {
+            // The measure that answers for the location, and what this phase came to about it.
+            // A measurable one wins the axis, because whether the position is still waiting on
+            // anything is asked of the position and any measure of it settles that ({@link
+            // PendingPosition#of}). Read off whichever measure came first, a location divided at one
+            // of its numbers and not at another asked the undivided one and was told the position
+            // has no evidence, beside a fold saying it has.
+            byPosition.merge(each.axis().path(), each, (had, also) -> new Measured(
+                    had.axis().measurable() ? had.axis() : also.axis(),
+                    BodyCutInspection.outranking(had.body(), also.body())));
+        }
+        List<UndividedPosition> out = new ArrayList<>();
+        for (Measured each : byPosition.values()) {
             PendingPosition pending = PendingPosition.of(each.axis());
             if (pending != null) {
                 out.add(pending.complete(each.body()));

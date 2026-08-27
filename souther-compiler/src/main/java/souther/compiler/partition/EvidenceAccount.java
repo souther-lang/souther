@@ -36,12 +36,6 @@ final class EvidenceAccount {
         /** It divides an axis, which carries its cut. */
         record Measured(AxisId at) implements Disposition {}
 
-        /**
-         * It falls where the position holds no value, so it divides nothing there. Not a rule that
-         * went unread: what it says was understood, and where it says it is outside the position.
-         */
-        record OutsideThePosition() implements Disposition {}
-
         /** Nothing reaches the comparison it was read from, so what it divides is nothing that
          *  gets there. */
         record NothingArrivesAtIt() implements Disposition {}
@@ -57,47 +51,71 @@ final class EvidenceAccount {
         record ThePositionIsAlreadyMeasured(AxisId by) implements Disposition {}
     }
 
+    /** One piece of evidence and what became of it, held together so that holding the stage to a
+     *  {@link Disposition.Measured} can ask the evidence what it should have left behind. */
+    private record Answered(LineEvidence what, Disposition how) {}
+
     private final Set<LineEvidence.FiledOccurrence> owed = new LinkedHashSet<>();
-    private final Map<LineEvidence.FiledOccurrence, Disposition> answered = new LinkedHashMap<>();
+    private final Map<LineEvidence.FiledOccurrence, Answered> answered = new LinkedHashMap<>();
 
     EvidenceAccount(List<LineEvidence> evidence) {
         evidence.forEach(each -> owed.add(each.occurrence()));
     }
 
-    void disposedOf(LineEvidence.FiledOccurrence what, Disposition how) {
-        Disposition already = answered.put(what, how);
-        if (already != null && !already.equals(how)) {
-            throw new IllegalStateException("what became of " + what + " was said twice, as "
-                    + already + " and as " + how);
+    void disposedOf(LineEvidence what, Disposition how) {
+        Answered already = answered.put(what.occurrence(), new Answered(what, how));
+        if (already != null && !already.how().equals(how)) {
+            throw new IllegalStateException("what became of " + what.occurrence()
+                    + " was said twice, as " + already.how() + " and as " + how);
         }
     }
 
     void measured(LineEvidence what, AxisId at) {
-        disposedOf(what.occurrence(), new Disposition.Measured(at));
+        disposedOf(what, new Disposition.Measured(at));
     }
 
     /**
-     * That this stage said what became of everything it was handed, and that an axis it says
-     * something was measured at is one it kept.
+     * That this stage said what became of everything it was handed, and that what it says it
+     * measured is on the axis it names.
      *
-     * <p><b>What this does not hold.</b> That the axis carries a cut of the rule. A line the
-     * position has no value beside divides it and has no cut to be at — {@code 3 * d <= 1} cuts at
-     * a third — so requiring one would call a measured line lost. What holds a border to the line it
-     * was made of is {@link LinesRead}, downstream of here, and the two are anchored a stage apart
-     * on purpose.
+     * <p><b>Held to what the axis carries, and not to the word.</b> Saying a piece of evidence was
+     * measured is a claim about an axis, and a claim nothing checks is what this account exists to
+     * refuse one stage earlier. Each kind of evidence is looked for by its own key: a line the
+     * position has a value beside leaves a cut carrying the rule, one it has no value beside leaves
+     * the place the values part with the authored line against it, and a value singled out leaves a
+     * cut like the first. Looked for by one key, the second would be reported lost.
      */
     void everyPieceWasDisposedOf(List<Axis> kept) {
-        Set<AxisId> there = new LinkedHashSet<>();
-        kept.forEach(each -> there.add(each.id()));
-        List<LineEvidence.FiledOccurrence> nowhere = answered.entrySet().stream()
-                .filter(each -> each.getValue() instanceof Disposition.Measured(AxisId at)
-                        && !there.contains(at))
-                .map(Map.Entry::getKey).toList();
-        if (!nowhere.isEmpty()) {
-            throw new IllegalStateException(
-                    "this stage says it measured evidence at an axis it did not keep: " + nowhere);
+        Map<AxisId, Axis> there = new LinkedHashMap<>();
+        kept.forEach(each -> there.put(each.id(), each));
+        for (Answered each : answered.values()) {
+            if (!(each.how() instanceof Disposition.Measured(AxisId at))) {
+                continue;
+            }
+            Axis axis = there.get(at);
+            if (axis == null) {
+                throw new IllegalStateException(
+                        "this stage says it measured evidence at an axis it did not keep: "
+                                + each.what().occurrence());
+            }
+            if (!carries(axis, each.what())) {
+                throw new IllegalStateException(
+                        "this stage says it measured " + each.what().occurrence() + " at " + at
+                                + ", which carries nothing that rule drew");
+            }
         }
         everyPieceWasDisposedOf();
+    }
+
+    /** Whether {@code axis} carries what {@code evidence} draws, asked in that evidence's own
+     *  terms. */
+    private static boolean carries(Axis axis, LineEvidence evidence) {
+        OriginRef by = evidence.by();
+        if (evidence instanceof LineEvidence.Divides(Threshold line) && line.value() == null) {
+            return axis.parted().stream()
+                    .anyMatch(each -> each.alternatives().contains(by.authoredLine()));
+        }
+        return axis.cuts().stream().anyMatch(each -> each.origins().contains(by));
     }
 
     /** That this stage said what became of everything it was handed. */

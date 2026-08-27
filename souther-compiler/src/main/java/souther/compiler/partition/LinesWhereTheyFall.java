@@ -110,7 +110,38 @@ public final class LinesWhereTheyFall {
         for (LineDrawn each : between) {
             place(inputs, each, quantities, symbols, outBetween, notPlaced);
         }
+        everyRuleWasPlacedSomewhere(evidence, out);
         return new Filed(out, outBetween, notPlaced);
+    }
+
+    /**
+     * That every rule handed to this stage came out of it somewhere.
+     *
+     * <p>Its own conservation, and the reason the stage after this one keeps a separate account of
+     * its own. This is where a rule becomes one filed at each of the positions the name it is
+     * written at reaches, so what it holds is not one in and one out: a rule comes out at one
+     * position or at several, and coming out at none is a rule that went missing between the reader
+     * that found it and the measure that would have been made of it.
+     *
+     * <p>The rule and not the number, because the number is what this stage changes. Two rules about
+     * one number are two entries here, and a rule filed at three positions is one.
+     *
+     * <p>What made this worth writing is that it holds today by the shape of the walk above and not
+     * by anything saying so. A {@code continue} added to that walk would take a rule out of the
+     * model with nothing failing, which is the shape of issue #1140 one stage up.
+     */
+    private static void everyRuleWasPlacedSomewhere(List<LineEvidence> given,
+                                                    List<LineEvidence> filed) {
+        java.util.Set<OriginRef> placed = new java.util.LinkedHashSet<>();
+        filed.forEach(each -> placed.add(each.by()));
+        List<OriginRef> lost = given.stream().map(LineEvidence::by)
+                .filter(each -> !placed.contains(each)).distinct().toList();
+        if (!lost.isEmpty()) {
+            throw new IllegalStateException(
+                    "a rule this stage was given came out of it nowhere: " + lost
+                            + " — filing a rule at the positions its name reaches may put it at"
+                            + " several and never at none");
+        }
     }
 
     /** The same piece of evidence, measured at {@code at}. */
