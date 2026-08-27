@@ -9,13 +9,16 @@ import souther.compiler.query.Adequacy;
 import souther.lsp.protocol.CodeAction;
 import souther.lsp.protocol.CodeLens;
 import souther.lsp.protocol.CompletionItem;
+import souther.lsp.protocol.DocumentHighlight;
 import souther.lsp.protocol.DocumentSymbol;
 import souther.lsp.protocol.Hover;
+import souther.lsp.protocol.InlayHint;
 import souther.lsp.protocol.Insertion;
 import souther.lsp.protocol.Location;
 import souther.lsp.protocol.LspDiagnostic;
 import souther.lsp.protocol.Position;
 import souther.lsp.protocol.Range;
+import souther.lsp.protocol.WorkspaceSymbol;
 import souther.lsp.rpc.InboundDecoders;
 import souther.lsp.rpc.Params;
 import souther.lsp.transport.MessageConnection;
@@ -176,6 +179,11 @@ public final class LspServer {
             case DEFINITION -> { respond(id, definition(params)); yield false; }
             case REFERENCES -> { respond(id, references(params)); yield false; }
             case COMPLETION -> { respond(id, completion(params)); yield false; }
+            case INLAY_HINT -> { respond(id, inlayHints(params)); yield false; }
+            case DOCUMENT_HIGHLIGHT -> { respond(id, documentHighlights(params)); yield false; }
+            case SELECTION_RANGE -> { respond(id, selectionRanges(params)); yield false; }
+            case WORKSPACE_SYMBOL -> { respond(id, workspaceSymbols(params)); yield false; }
+            case SIGNATURE_HELP -> { respond(id, signatureHelp(params)); yield false; }
             case CODE_ACTION -> { respond(id, codeActions(params)); yield false; }
             case CODE_ACTION_RESOLVE -> { respond(id, codeActionResolve(params)); yield false; }
             case CODE_LENS -> { respond(id, codeLenses(params)); yield false; }
@@ -471,10 +479,130 @@ public final class LspServer {
         return out;
     }
 
+    /** Null where the cursor is in no call the server can say anything about, which the protocol
+     *  reads as no help rather than as help with nothing in it. */
+    private Object signatureHelp(JsonNode params) {
+        Params.PositionParams p = InboundDecoders.decode(InboundDecoders.POSITION_PARAMS, params)
+                .orElse(null);
+        if (p == null || documents.get(p.uri()) == null) {
+            return null;
+        }
+        ModuleGraph graph = workspace.snapshot(documents.openDocuments());
+        return analyzer.signatureHelp(p.uri(), p.position(), graph).<Object>map(help -> {
+            List<Object> parameters = new ArrayList<>();
+            for (String each : help.parameters()) {
+                parameters.add(Map.of("label", each));
+            }
+            Map<String, Object> written = new LinkedHashMap<>();
+            written.put("signatures",
+                    List.of(Map.of("label", help.label(), "parameters", parameters)));
+            written.put("activeSignature", 0);
+            // Left out where the signature takes nothing. A mark is about one of the parameters, and
+            // where there are none the protocol asks for none — writing a number there would be
+            // writing about something that was not sent.
+            help.active().ifPresent(at -> written.put("activeParameter", at));
+            return written;
+        }).orElse(null);
+    }
+
+    private Object workspaceSymbols(JsonNode params) {
+        Params.Query p = InboundDecoders.decode(InboundDecoders.QUERY, params).orElse(null);
+        if (p == null) {
+            return List.of();
+        }
+        ModuleGraph graph = workspace.snapshot(documents.openDocuments());
+        List<Object> out = new ArrayList<>();
+        for (WorkspaceSymbol symbol : analyzer.workspaceSymbols(p.query(), graph)) {
+            out.add(Map.of("name", symbol.name(), "kind", symbol.kind(),
+                    "location", Map.of("uri", symbol.location().uri(),
+                            "range", rangeJson(symbol.location().range()))));
+        }
+        return out;
+    }
+
+    // --- what else here means this ---
+
+    private Object documentHighlights(JsonNode params) {
+        Params.PositionParams p = InboundDecoders.decode(InboundDecoders.POSITION_PARAMS, params)
+                .orElse(null);
+        if (p == null || documents.get(p.uri()) == null) {
+            return List.of();
+        }
+        ModuleGraph graph = workspace.snapshot(documents.openDocuments());
+        List<Object> out = new ArrayList<>();
+        for (DocumentHighlight highlight
+                : analyzer.documentHighlights(p.uri(), p.position(), graph)) {
+            out.add(Map.of("range", rangeJson(highlight.range()), "kind", highlight.kind()));
+        }
+        return out;
+    }
+
+    /**
+     * One answer per place asked about, in the order they were asked, each nested outwards.
+     *
+     * <p>The protocol pairs a result with a position by where it sits in the list, so a place with
+     * nothing written on it — a blank line, the space between two tokens — is answered rather than
+     * left out. Left out, every place after it would be given another place's widening, which is a
+     * wrong answer where dropping the one is merely no answer. What such a place is answered with is
+     * itself: a range covering nothing, at the position, which widens to nothing because nothing is
+     * there.
+     *
+     * <p>The widening is a chain rather than a list, so what the analyzer answers innermost first is
+     * built up from the outside in — the widest is what has no parent.
+     */
+    private Object selectionRanges(JsonNode params) {
+        Params.PositionsParams p = InboundDecoders.decode(InboundDecoders.POSITIONS_PARAMS, params)
+                .orElse(null);
+        if (p == null || documents.get(p.uri()) == null) {
+            return List.of();
+        }
+        ModuleGraph graph = workspace.snapshot(documents.openDocuments());
+        List<Object> out = new ArrayList<>();
+        for (Position at : p.positions()) {
+            List<Range> widening = analyzer.selectionRanges(p.uri(), at, graph);
+            Map<String, Object> nested = null;
+            for (int i = widening.size() - 1; i >= 0; i--) {
+                Map<String, Object> here = new LinkedHashMap<>();
+                here.put("range", rangeJson(widening.get(i)));
+                if (nested != null) {
+                    here.put("parent", nested);
+                }
+                nested = here;
+            }
+            out.add(nested == null
+                    ? Map.of("range", rangeJson(new Range(at, at)))
+                    : nested);
+        }
+        return out;
+    }
+
+    // --- inlay hints ---
+
+    private Object inlayHints(JsonNode params) {
+        Params.RangeParams p = InboundDecoders.decode(InboundDecoders.DOC_RANGE, params)
+                .orElse(null);
+        if (p == null || documents.get(p.uri()) == null) {
+            return List.of();
+        }
+        List<Object> out = new ArrayList<>();
+        ModuleGraph graph = workspace.snapshot(documents.openDocuments());
+        for (InlayHint hint : analyzer.inlayHints(p.uri(), p.range(), graph)) {
+            Map<String, Object> written = new LinkedHashMap<>();
+            written.put("position", positionJson(hint.position()));
+            written.put("label", hint.label());
+            written.put("paddingLeft", hint.paddingLeft());
+            if (hint.tooltip() != null) {
+                written.put("tooltip", hint.tooltip());
+            }
+            out.add(written);
+        }
+        return out;
+    }
+
     // --- code actions ---
 
     private Object codeActions(JsonNode params) {
-        Params.CodeActionParams p = InboundDecoders.decode(InboundDecoders.CODE_ACTION, params)
+        Params.RangeParams p = InboundDecoders.decode(InboundDecoders.DOC_RANGE, params)
                 .orElse(null);
         String text = p == null ? null : documents.get(p.uri());
         // Only the range's diagnostics can be fixed, so with none in context there is usually nothing

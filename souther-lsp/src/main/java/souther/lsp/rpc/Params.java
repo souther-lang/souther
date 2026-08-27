@@ -26,12 +26,34 @@ public final class Params {
     public record PositionParams(String uri, Position position) {
     }
 
+    /**
+     * {@code textDocument/selectionRange}: the document and every place a selection is to widen
+     * from.
+     *
+     * <p>Several, because an editor may hold several cursors, and each of them widens through its
+     * own nesting. One answer per place asked about, in the order they were asked.
+     */
+    public record PositionsParams(String uri, java.util.List<Position> positions) {
+    }
+
+    /** {@code workspace/symbol}: what is being looked for. Empty asks for everything, which is what
+     *  the protocol says an empty query means. */
+    public record Query(String query) {
+    }
+
     /** {@code textDocument/rename}: the document, the cursor, and the new name to bind. */
     public record RenameParams(String uri, Position position, String newName) {
     }
 
-    /** {@code textDocument/codeAction}: the document and the selected range (the context's
-     * diagnostics are recomputed by the analyzer, so they are not decoded). */
-    public record CodeActionParams(String uri, Range range) {
+    /**
+     * A request that names a document and a stretch of it ({@code codeAction},
+     * {@code inlayHint}).
+     *
+     * <p>One record for both, because what is decoded is the same two things — a codeAction's
+     * context carries diagnostics, and the analyzer recomputes those rather than reading them, so
+     * nothing of it is decoded. A record per method would be the same shape written twice and free
+     * to drift.
+     */
+    public record RangeParams(String uri, Range range) {
     }
 }

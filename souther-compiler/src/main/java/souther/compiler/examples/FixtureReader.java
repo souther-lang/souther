@@ -5,7 +5,7 @@ import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.AtomSpace;
 import souther.compiler.check.CallElaborator;
-import souther.compiler.check.FixtureEvidence;
+import souther.compiler.check.DeclaredTypeEvidence;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.core.Kernel;
@@ -1362,8 +1362,8 @@ public final class FixtureReader {
     /** What declarations say about what this row wrote, with what a {@code let} has in force here.
      *  The pass that emits the methods a row's calls need reads the same walk, so what settles a
      *  call there is what settles it here. */
-    private FixtureEvidence evidence() {
-        return new FixtureEvidence(symbols, values, bindings);
+    private DeclaredTypeEvidence evidence() {
+        return new DeclaredTypeEvidence(symbols, values, DeclaredTypeEvidence.boundTo(bindings));
     }
 
     /**
@@ -1379,7 +1379,8 @@ public final class FixtureReader {
         // `let` the walk enters has to be in force for the name it binds, and so does one the
         // reading entered before it got here. Two walks over one expression that disagree about
         // what is in scope disagree about what is admitted.
-        return evidence().declaredTypeOf(e, seen, new HashMap<>(bindings));
+        return evidence().declaredTypeOf(e, seen,
+                new HashMap<>(DeclaredTypeEvidence.boundTo(bindings)));
     }
 
     /** A name resolved to a case, or a value under no name where this module has no such case — the

@@ -3461,8 +3461,8 @@ public final class Adequacy {
             // What a value is declared to be, asked of the one walk that answers it. A second
             // reading of a definition's type here would be a second answer about what a row may
             // name, differing from the reading that builds the row at whatever either forgot.
-            souther.compiler.check.FixtureEvidence evidence =
-                    new souther.compiler.check.FixtureEvidence(symbols, values);
+            souther.compiler.check.DeclaredTypeEvidence evidence =
+                    new souther.compiler.check.DeclaredTypeEvidence(symbols, values);
             Map<TypeSymbol, List<String>> stated = new LinkedHashMap<>();
             for (Map.Entry<String, Hir.FnDef> each : values.entrySet()) {
                 if (!each.getValue().params().isEmpty()
