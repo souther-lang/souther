@@ -1603,7 +1603,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * What stopped one condition on the way from narrowing the search, in the words a reader acts
      * on.
      *
-     * <p>One phrase per shape rather than one for all three. What an author does about a condition
+     * <p>One phrase per shape rather than one for all of them. What an author does about a condition
      * this reading has no words for is not what they do about a comparison it could not turn into a
      * cut, and neither is what they do about an arm that states one of two things — a single "was
      * not read" for all of them is the vocabulary being kept apart in the compiler and put back
@@ -1625,6 +1625,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     "a comparison this reading could not turn into a cut";
             case souther.compiler.partition.OnTheWay.Why.OneOfTwoThings _ ->
                     "an outcome that states one of two things";
+            case souther.compiler.partition.OnTheWay.Why.ForkArmNotReadAsANarrowing _ ->
+                    "an arm of a fork this reading could not read as a narrowing of a position";
         };
     }
 

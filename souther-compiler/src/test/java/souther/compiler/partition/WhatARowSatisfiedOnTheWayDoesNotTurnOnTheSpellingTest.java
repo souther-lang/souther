@@ -91,14 +91,18 @@ class WhatARowSatisfiedOnTheWayDoesNotTurnOnTheSpellingTest {
     /**
      * What one comparison stands under, with the places left out.
      *
-     * <p>The cuts and the reasons nothing could be cut from, which is the whole of what two
-     * spellings of one model have to agree about. A place is not: the same condition written two
-     * ways is at two positions, and holding this against the position would be holding it against
-     * the spelling.
+     * <p>Everything the walk came to and nothing about where it met it. A place is not part of it:
+     * the same condition written two ways is at two positions, and holding this against the position
+     * would be holding it against the spelling.
+     *
+     * <p>Narrowings are here as well as cuts because both are things a comparison stands under. The
+     * behaviors below fork on comparisons rather than on cases, so none of them states one — an arm
+     * of a fork on a sum does, and what it says is a position read as one of its cases.
      */
     private static String said(List<OnTheWay> assumed) {
         return assumed.stream().map(each -> switch (each) {
             case OnTheWay.TakenIn taken -> taken.cut().toString();
+            case OnTheWay.Narrowed narrowed -> narrowed.position().toString();
             case OnTheWay.Declined left -> left.why().toString();
         }).toList().toString();
     }

@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.SearchRegion;
 
 import java.util.ArrayList;
@@ -9,12 +10,18 @@ import java.util.List;
  * How a row for one border came to be looked for where it is: every condition on the way, in the
  * order the walk met them.
  *
- * <p>An account and not a place. Where a row is looked for is {@link #narrowing(SearchRegion)} of
- * what the declarations leave, and that is worked out from this whenever somebody needs it — so the
- * two cannot come to say different things, because there is only one of them. A pair of the two kept
- * side by side would be two values that have to agree and nothing able to check that they do:
- * {@link SearchRegion} answers questions about values and does not say which conditions it was built
- * from, on purpose.
+ * <p>An account and not a place. Where a row is looked for is {@link #narrowing(SearchRegion)} and
+ * {@link #requirements()} of what the declarations leave, and those are worked out from this
+ * whenever somebody needs them — so they cannot come to say different things, because there is only
+ * one of them. A pair kept side by side would be values that have to agree and nothing able to check
+ * that they do: {@link SearchRegion} answers questions about values and does not say which
+ * conditions it was built from, on purpose.
+ *
+ * <p><b>Two vocabularies, because a condition lands in one of them or in neither.</b> What a
+ * comparison states is an inequality over numbers and what a fork states is which case a value
+ * turned out to be, and neither says the other: a region has no word for a case, and a narrowing
+ * orders nothing. So a search composing a row against this reads both, and what it still does not
+ * represent is {@link #declined()}.
  *
  * <p><b>This is what an answer keeps.</b> A region is a way of asking rather than something that
  * says what it is, and one kept in an answer carries the whole reading of a module's rules — down to
@@ -61,6 +68,32 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
         return region;
     }
 
+    /**
+     * What has to be true of the parameters for a row to reach the border, off the narrowings the
+     * way took in.
+     *
+     * <p>The other half of what a region is. A region says which numbers a position may hold and has
+     * no word for which case a value turned out to be, so a fork on the way lands here — and a
+     * composer holding both is holding the whole of what this reading could state.
+     *
+     * <p>Or nothing, where two narrowings on the way cannot hold together. That is a way no row
+     * takes, which is a fact about the model and not something to compose against: read as an
+     * absence of requirements, a row would be composed for a border down a path nothing reaches.
+     */
+    public Requirements.Merge requirements() {
+        Requirements out = Requirements.NONE;
+        for (OnTheWay each : onTheWay) {
+            if (each instanceof OnTheWay.Narrowed narrowed) {
+                Requirements.Merge both = out.merge(narrowed.position().requirements());
+                if (!(both instanceof Requirements.Merge.Merged merged)) {
+                    return both;
+                }
+                out = merged.requirements();
+            }
+        }
+        return new Requirements.Merge.Merged(out);
+    }
+
     /** The ones that narrow a region built from this. */
     public List<OnTheWay.TakenIn> takenIn() {
         List<OnTheWay.TakenIn> out = new ArrayList<>();
@@ -72,7 +105,8 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
         return List.copyOf(out);
     }
 
-    /** The ones that do not, which is what such a region does not represent. */
+    /** The ones this reading could state in neither vocabulary, which is what a search composing
+     *  against both of them still does not represent. */
     public List<OnTheWay.Declined> declined() {
         List<OnTheWay.Declined> out = new ArrayList<>();
         for (OnTheWay each : onTheWay) {
