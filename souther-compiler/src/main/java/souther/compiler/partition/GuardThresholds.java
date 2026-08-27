@@ -63,13 +63,34 @@ public final class GuardThresholds {
      * {@code c} on the low side and are two different rules about it — so it is read where the
      * operator is still in hand, and which values arrive is asked of the reading of the whole body.
      */
-    public record Guards(List<Threshold> thresholds,
-                         List<RuleWithoutALine> rulesWithoutALine, List<Singled> singled,
+    public record Guards(List<LineEvidence> evidence,
+                         List<RuleWithoutALine> rulesWithoutALine,
                          List<LineDrawn> between,
                          ReachingCuts reaching) {
 
         public static final Guards NONE =
-                new Guards(List.of(), List.of(), List.of(), List.of(), ReachingCuts.NONE);
+                new Guards(List.of(), List.of(), List.of(), ReachingCuts.NONE);
+
+        public Guards {
+            evidence = List.copyOf(evidence);
+            rulesWithoutALine = List.copyOf(rulesWithoutALine);
+            between = List.copyOf(between);
+        }
+
+        /** The lines, read off what the walk said. Not a list of their own: the walk met these and
+         *  the values it singled out in one order, and holding two lists loses it. */
+        public List<Threshold> thresholds() {
+            return evidence.stream()
+                    .filter(LineEvidence.Divides.class::isInstance)
+                    .map(each -> ((LineEvidence.Divides) each).line()).toList();
+        }
+
+        /** The values singled out, likewise. */
+        public List<Singled> singled() {
+            return evidence.stream()
+                    .filter(LineEvidence.Singles.class::isInstance)
+                    .map(each -> ((LineEvidence.Singles) each).point()).toList();
+        }
 
         /**
          * A value a body singles out rather than orders.
@@ -95,12 +116,6 @@ public final class GuardThresholds {
             }
         }
 
-        public Guards {
-            thresholds = List.copyOf(thresholds);
-            rulesWithoutALine = List.copyOf(rulesWithoutALine);
-            singled = List.copyOf(singled);
-            between = List.copyOf(between);
-        }
     }
 
 
@@ -124,9 +139,8 @@ public final class GuardThresholds {
                             InputDomain inputs, souther.compiler.inputs.Quantities quantities,
                             Symbols symbols,
                             souther.compiler.check.ElementBindings elements) {
-        List<Threshold> found = new ArrayList<>();
+        List<LineEvidence> found = new ArrayList<>();
         List<RuleWithoutALine> withoutALine = new ArrayList<>();
-        List<Guards.Singled> singled = new ArrayList<>();
         List<LineDrawn> between = new ArrayList<>();
         // The comparisons this reader assessed, and not the positions they were about. A position
         // carries more than one statement and reading one of them settles nothing about the others.
@@ -144,11 +158,11 @@ public final class GuardThresholds {
         ComparisonReadings read = ComparisonReadings.of(body, plan, InputReads.of(inputs, elements), symbols);
         for (ComparisonReadings.Reading each : read.drawn()) {
             lineAt(behavior, each.comparison(), plan, each.reads(), symbols, quantities, found,
-                    singled, between, assessed, withoutALine);
+                    between, assessed, withoutALine);
         }
         // And every comparison the model states something by that this reader never saw.
         noticed(behavior, read, assessed, plan, symbols, withoutALine);
-        return new Guards(found, withoutALine, singled, between, read.reaching(plan));
+        return new Guards(found, withoutALine, between, read.reaching(plan));
     }
 
     /**
@@ -518,7 +532,7 @@ public final class GuardThresholds {
     private static void lineAt(String behavior, Core.Binary each, CoverageSites.Plan plan,
                                InputReads reads, Symbols symbols,
                                souther.compiler.inputs.Quantities quantities,
-                               List<Threshold> out, List<Guards.Singled> singled,
+                               List<LineEvidence> out,
                                List<LineDrawn> between,
                                List<Core> assessed, List<RuleWithoutALine> withoutALine) {
         // The plan numbered every comparison of an instrumented condition before anything read a
@@ -546,11 +560,12 @@ public final class GuardThresholds {
                     // beside it. A rule that names no value of the position singles nothing out
                     // here — the position is divided all the same, and what divides it is the line.
                     if (at.value() != null) {
-                        singled.add(new Guards.Singled(at.position(), at.value(), origin));
+                        out.add(new LineEvidence.Singles(
+                                new Guards.Singled(at.position(), at.value(), origin)));
                     }
                 } else {
-                    out.add(new Threshold(at.position(), at.cutting().seam(),
-                            at.cutting().valueBelongsBelow(), origin));
+                    out.add(new LineEvidence.Divides(new Threshold(at.position(),
+                            at.cutting().seam(), at.cutting().valueBelongsBelow(), origin)));
                 }
                 // And the line itself, where the position has no value beside it for a row to be
                 // owed at. It divides the position — the classes either side are what the model

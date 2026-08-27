@@ -107,16 +107,14 @@ final class Coverages {
         // the same rule.
         souther.compiler.partition.LinesWhereTheyFall.Filed filed =
                 souther.compiler.partition.LinesWhereTheyFall.of(inputs,
-                        both(clauses.thresholds(), guards.thresholds()),
-                        both(clauses.singled(), guards.singled()),
+                        both(clauses.evidence(), guards.evidence()),
                         both(clauses.between(), guards.between()), quantities, symbols);
-        return new Partitioned(Partitions.withThresholds(partitioning, quantities,
-                filed.thresholds(), symbols, policy,
+        return new Partitioned(Partitions.withEvidence(partitioning, quantities,
+                filed.evidence(), symbols, policy,
                 // And the lines this had nowhere to put, which are findings of the same kind: a rule
                 // of the model that came to no line at a position it is about.
                 both(both(clauses.rulesWithoutALine(), guards.rulesWithoutALine()),
                         filed.notPlaced()),
-                filed.singled(),
                 filed.between(), arrives,
                 // What a row had to satisfy to arrive at each comparison, from the walk that
                 // assumed it. A clause of a declaration is not written at a place in a body and has

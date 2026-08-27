@@ -289,6 +289,146 @@ public final class Partitions {
     }
 
     /**
+     * The numbers this position is measured at, which is not always the one the declarations named.
+     *
+     * <p>A position no rule of its own divides, whose body measures numbers of it: a bare
+     * {@code List<String>} nothing bounds, under a {@code guard List.length(t.names) > 0}. The line
+     * is on that number, so an axis about it is what there is to make — there was nothing else here
+     * for one to be about, and dropping the evidence would lose a line the body draws.
+     *
+     * <p><b>As many as the rules name.</b> {@code Time.hour(slot.at) >= 9 && Time.minute(slot.at)
+     * >= 30} draws two lines on two numbers of one location. Answered with the one number a body
+     * measures a position by, this said there were none — a model that draws two lines reported as
+     * one that draws none, which is the sentence a body with no comparison in it gets. Choosing one
+     * of them silently drops the other's lines, which is why choosing was refused; not choosing
+     * dropped both (issue #1140).
+     *
+     * <p>In the order the rules were read, so that what a report lists and what a search enumerates
+     * are in the order an author wrote them.
+     */
+    private static List<NumericTerm> numbersMeasuring(Axis axis, List<LineEvidence> evidence,
+                                                      EvidenceAccount account) {
+        NumericTerm declared = axis.term();
+        if (evidence.stream().anyMatch(each -> each.at().equals(declared))) {
+            return List.of(declared);
+        }
+        List<LineEvidence> here = evidence.stream()
+                .filter(each -> each.at().path().equals(axis.path())).toList();
+        // A position the declarations already divide. What a body says about another number of it is
+        // not taken up as a second measure, and this is where that is said: an account with no entry
+        // could not tell a policy from a loss.
+        if (axis.measurable()) {
+            here.forEach(each -> account.disposedOf(each.occurrence(),
+                    new EvidenceAccount.Disposition.ThePositionIsAlreadyMeasured(axis.id())));
+            return List.of();
+        }
+        List<NumericTerm> numbers = new ArrayList<>();
+        for (LineEvidence each : here) {
+            if (!numbers.contains(each.at())) {
+                numbers.add(each.at());
+            }
+        }
+        return numbers;
+    }
+
+    /**
+     * One axis, with what the rules about its number divide it into.
+     *
+     * <p>The same walk whichever number it is. What the declarations named and what a body measures
+     * a position by are two ways to arrive at a number and one thing to do with it, and a second
+     * route through this would be a second answer to what a rule about a number comes to.
+     */
+    private static void measureAt(List<Axis> out, List<Measured> measured, Axis axis,
+                                  NumericTerm term, List<LineEvidence> evidence,
+                                  souther.compiler.inputs.Quantities reading, Symbols symbols,
+                                  ReadingPolicy policy,
+                                  souther.compiler.check.PathReachability.Answers arrives,
+                                  List<RuleWithoutALine> rules, EvidenceAccount account) {
+        List<LineEvidence> mine = evidence.stream()
+                .filter(each -> each.at().equals(term)).toList();
+        List<Threshold> here = mine.stream()
+                .filter(LineEvidence.Divides.class::isInstance)
+                .map(each -> ((LineEvidence.Divides) each).line()).toList();
+        List<GuardThresholds.Guards.Singled> points = mine.stream()
+                .filter(LineEvidence.Singles.class::isInstance)
+                .map(each -> ((LineEvidence.Singles) each).point()).toList();
+        // What this term's values can be, which is the type's bound already narrowed by whatever
+        // the record it sits in says about it. Reading the type again here would put a threshold
+        // back inside a range the record has no values in.
+        NumericDomain.Bounds domain = domainOf(reading, term);
+        Carrier carrier = term.answeredOn(axis.type(), symbols);
+        if (here.isEmpty() && !points.isEmpty()) {
+            // Nothing orders this position, so its classes are the values singled out and
+            // everything else. Ranges here would ask the rows for a distinction between the two
+            // sides of a value the behavior treats alike.
+            mine.forEach(each -> account.measured(each, axis.id()));
+            keep(out, measured, refine(axis,
+                    () -> singledClasses(points, term, axis.type(), domain, symbols),
+                    mergedPoints(axis.cuts(), points, carrier),
+                    axis.parted()),
+                    new BodyCutInspection.Evidence(), rules);
+            return;
+        }
+        // Filtered once, and both answers read the filtered list. A line outside what the
+        // position holds divides nothing, and it is not a boundary either: leaving it in the
+        // cuts while the intervals dropped it asks for a row at a value the record refuses,
+        // which is the thing being fixed here happening again one field over. The end the
+        // position stops short of is outside it as much as anything past it is.
+        List<Threshold> reachable = new ArrayList<>();
+        for (LineEvidence each : mine) {
+            if (!(each instanceof LineEvidence.Divides(Threshold line))) {
+                // A value singled out beside an ordering. The model has drawn the further
+                // distinction itself, so the value is one more line among the ranges and it is
+                // merged with them below.
+                account.measured(each, axis.id());
+                continue;
+            }
+            // Asked of the place the line falls at, which the position need not hold a
+            // value at. Read off the value, a line between two of the position's values was
+            // dropped as one the rules leave nothing at.
+            if (domain != null && !admits(domain, line.parts())) {
+                account.disposedOf(each.occurrence(),
+                        new EvidenceAccount.Disposition.OutsideThePosition());
+                continue;
+            }
+            // And what the guards above it left. Only a proof drops a line: a comparison
+            // this could not settle keeps its line and its rows, which is the direction that
+            // leaves an author with work rather than with a report about a model of theirs
+            // that is fine.
+            // Asked of the comparison, where the rule is met by having produced one. A
+            // clause has no comparison a path can arrive at: it is checked whenever the
+            // behavior answers, so nothing about which branch a body took drops its line.
+            if (line.origin().comparisonAt().stream().anyMatch(arrives::dividesNothing)) {
+                account.disposedOf(each.occurrence(),
+                        new EvidenceAccount.Disposition.NothingArrivesAtIt());
+                continue;
+            }
+            account.measured(each, axis.id());
+            reachable.add(line);
+        }
+        // Through `excluding`, so that a class list replaced by the intervals a threshold cuts
+        // keeps only the exclusions it still has classes for.
+        //
+        // A rule read and left outside what the position holds divided nothing, and it is not
+        // a rule that went unread either: what it says was understood. So the answer there is
+        // that the rules were exhausted, which is what keeps `NoLine` meaning that a rule was
+        // written about the position rather than everything that came to nothing.
+        NumericDomain.Bounds within = domain;
+        keep(out, measured, refine(axis,
+                () -> Intervals.classesOf(
+                        Intervals.of(reachable, within == null ? null : within.min(),
+                                within == null ? null : within.max(), carrier),
+                        term, axis.type(), policy, symbols,
+                        within == null ? null : within.min(),
+                        within == null ? null : within.max()),
+                mergedPoints(merged(axis.cuts(), reachable, carrier), points, carrier),
+                reachable.stream()
+                        .map(each -> Parting.by(each.parts(), each.origin().authoredLine()))
+                        .toList()),
+                reachable.isEmpty() ? null : new BodyCutInspection.Evidence(), rules);
+    }
+
+    /**
      * What each position is left with, folded from the two readings that were made of it.
      *
      * <p>Nothing is searched for here. Both answers were settled where the position was read — the
@@ -448,6 +588,38 @@ public final class Partitions {
                                               souther.compiler.check.PathReachability.Answers
                                                       arrives,
                                               ReachingCuts reaching) {
+        List<LineEvidence> evidence = new ArrayList<>();
+        thresholds.forEach(each -> evidence.add(new LineEvidence.Divides(each)));
+        singled.forEach(each -> evidence.add(new LineEvidence.Singles(each)));
+        return withEvidence(base, reading, evidence, symbols, policy, rulesWithoutALine, between,
+                arrives, reaching);
+    }
+
+    /**
+     * The same, given what the rules said as the reading of them met it.
+     *
+     * <p>One list and not one per kind of thing a rule can say. What this stage does with a piece of
+     * evidence — divide a position by it, leave it outside what the position holds, or not take it
+     * up at all — is the same question whichever kind it is, and the account below is over all of
+     * them ({@link EvidenceAccount}). Handed two lists, both the fan-out and the account put them
+     * back together, and a position measured at one kind came back measured at neither
+     * (issue #1140).
+     */
+    public static Partitioning withEvidence(Partitioning base,
+                                            souther.compiler.inputs.Quantities reading,
+                                            List<LineEvidence> evidence,
+                                            Symbols symbols, ReadingPolicy policy,
+                                            List<RuleWithoutALine> rulesWithoutALine,
+                                            List<LineDrawn> between,
+                                            souther.compiler.check.PathReachability.Answers
+                                                    arrives,
+                                            ReachingCuts reaching) {
+        List<Threshold> thresholds = evidence.stream()
+                .filter(LineEvidence.Divides.class::isInstance)
+                .map(each -> ((LineEvidence.Divides) each).line()).toList();
+        List<GuardThresholds.Guards.Singled> singled = evidence.stream()
+                .filter(LineEvidence.Singles.class::isInstance)
+                .map(each -> ((LineEvidence.Singles) each).point()).toList();
         // Both producers of one kind of evidence. What a body compared and what a type's own rules
         // bound are read by different readers and answer the same question, so a position either of
         // them wrote about and neither could turn into a line is named once, whichever wrote it.
@@ -459,93 +631,21 @@ public final class Partitions {
         }
         List<Axis> out = new ArrayList<>();
         List<Measured> measured = new ArrayList<>();
+        EvidenceAccount account = new EvidenceAccount(evidence);
         for (Axis axis : base.axes()) {
-            NumericTerm declared = axis.term();
-            NumericTerm term = declared;
-            List<Threshold> here = thresholds.stream()
-                    .filter(t -> t.term().equals(declared)).toList();
-            List<GuardThresholds.Guards.Singled> points = singled.stream()
-                    .filter(one -> one.term().equals(declared)).toList();
-            if (here.isEmpty() && !points.isEmpty()) {
-                // Nothing orders this position, so its classes are the values singled out and
-                // everything else. Ranges here would ask the rows for a distinction between the two
-                // sides of a value the behavior treats alike.
-                NumericDomain.Bounds only = domainOf(reading, term);
-                NumericTerm at = term;
-                Axis here2 = axis;
-                keep(out, measured, refine(axis,
-                        () -> singledClasses(points, at, here2.type(), only, symbols),
-                        mergedPoints(axis.cuts(), points, at.answeredOn(axis.type(), symbols)),
-                        axis.parted()),
-                        new BodyCutInspection.Evidence(), rules);
+            List<NumericTerm> numbers = numbersMeasuring(axis, evidence, account);
+            if (numbers.isEmpty()) {
+                keep(out, measured, axis, null, rules);
                 continue;
             }
-            if (here.isEmpty()) {
-                // A position no rule divides, whose body measures some other number of it: a bare
-                // `List<String>` nothing bounds, under a `guard List.length(t.names) > 0`. The line
-                // is on that number, so the axis becomes one about it — there was nothing else here
-                // for it to be about, and dropping the threshold would lose a line the body draws.
-                NumericTerm drawn = axis.measurable() ? null : soleTermAt(thresholds, axis.path());
-                if (drawn == null) {
-                    keep(out, measured, axis, null, rules);
-                    continue;
-                }
-                term = drawn;
-                here = thresholds.stream().filter(t -> t.term().equals(drawn)).toList();
-                axis = axis.measuredAt(new AxisId(axis.id().behavior(), drawn.toString()), drawn);
+            for (NumericTerm term : numbers) {
+                AxisId id = term.equals(axis.term()) ? axis.id()
+                        : AxisId.of(axis.id().behavior(), term);
+                measureAt(out, measured, axis.measuredAt(id, term), term, evidence, reading,
+                        symbols, policy, arrives, rules, account);
             }
-            // What this term's values can be, which is the type's bound already narrowed by whatever
-            // the record it sits in says about it. Reading the type again here would put a threshold
-            // back inside a range the record has no values in.
-            NumericDomain.Bounds domain = domainOf(reading, term);
-            // Filtered once, and both answers read the filtered list. A line outside what the
-            // position holds divides nothing, and it is not a boundary either: leaving it in the
-            // cuts while the intervals dropped it asks for a row at a value the record refuses,
-            // which is the thing being fixed here happening again one field over. The end the
-            // position stops short of is outside it as much as anything past it is.
-            List<Threshold> reachable = here.stream()
-                    // Asked of the place the line falls at, which the position need not hold a
-                    // value at. Read off the value, a line between two of the position's values was
-                    // dropped as one the rules leave nothing at.
-                    .filter(t -> domain == null || admits(domain, t.parts()))
-                    // And what the guards above it left. Only a proof drops a line: a comparison
-                    // this could not settle keeps its line and its rows, which is the direction that
-                    // leaves an author with work rather than with a report about a model of theirs
-                    // that is fine.
-                    // Asked of the comparison, where the rule is met by having produced one. A
-                    // clause has no comparison a path can arrive at: it is checked whenever the
-                    // behavior answers, so nothing about which branch a body took drops its line.
-                    .filter(t -> t.origin().comparisonAt().stream()
-                            .noneMatch(arrives::dividesNothing))
-                    .toList();
-            // What the term is, not what an invariant said about it. There is a bound to read only
-            // where the type is a newtype carrying one, and a plain `Decimal` has none — read off the
-            // bound, every such position would be called an integer and a threshold of `0.5m` would
-            // be asked for its exact `long`. A size is a whole number whatever it is a size of.
-            Carrier carrier = term.answeredOn(axis.type(), symbols);
-            // Through `excluding`, so that a class list replaced by the intervals a threshold cuts
-            // keeps only the exclusions it still has classes for.
-            //
-            // A rule read and left outside what the position holds divided nothing, and it is not
-            // a rule that went unread either: what it says was understood. So the answer there is
-            // that the rules were exhausted, which is what keeps `NoLine` meaning that a rule was
-            // written about the position rather than everything that came to nothing.
-            NumericDomain.Bounds within = domain;
-            NumericTerm measuredAt = term;
-            Axis read = axis;
-            keep(out, measured, refine(axis.measuredAt(axis.id(), term),
-                    () -> Intervals.classesOf(
-                            Intervals.of(reachable, within == null ? null : within.min(),
-                                    within == null ? null : within.max(), carrier),
-                            measuredAt, read.type(), policy, symbols,
-                            within == null ? null : within.min(),
-                            within == null ? null : within.max()),
-                    merged(axis.cuts(), reachable, carrier),
-                    reachable.stream()
-                            .map(each -> Parting.by(each.parts(), each.origin().authoredLine()))
-                            .toList()),
-                    reachable.isEmpty() ? null : new BodyCutInspection.Evidence(), rules);
         }
+        account.everyPieceWasDisposedOf(out);
         // Both producers into the one account. A line that divides a position leaves its border on
         // the position and a line between two leaves its border beside them; they are the same
         // reading, and an accounting over one of them says nothing about the other.

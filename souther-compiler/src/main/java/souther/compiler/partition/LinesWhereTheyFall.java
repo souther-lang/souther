@@ -52,49 +52,75 @@ public final class LinesWhereTheyFall {
      * place nobody meant and a reason nobody established. So it comes back as a finding naming the
      * rule, and a reader is told what actually happened to it.
      */
-    public record Filed(List<Threshold> thresholds, List<GuardThresholds.Guards.Singled> singled,
-                        List<LineDrawn> between, List<RuleWithoutALine> notPlaced) {
+    public record Filed(List<LineEvidence> evidence, List<LineDrawn> between,
+                        List<RuleWithoutALine> notPlaced) {
 
         public Filed {
-            thresholds = List.copyOf(thresholds);
-            singled = List.copyOf(singled);
+            evidence = List.copyOf(evidence);
             between = List.copyOf(between);
             notPlaced = List.copyOf(notPlaced);
+            // What the next stage owes an answer at, each told from the others. One rule filed at
+            // three cases of a sum is three of these, and a second at one of them would close the
+            // account over both while one went unmeasured — which is the reason the identity is the
+            // rule and the number together and not the rule alone.
+            java.util.Set<LineEvidence.FiledOccurrence> seen = new java.util.LinkedHashSet<>();
+            for (LineEvidence each : evidence) {
+                if (!seen.add(each.occurrence())) {
+                    throw new IllegalStateException(
+                            "one rule filed twice at one number: " + each.occurrence());
+                }
+            }
+        }
+
+        /** The lines, for a reader that wants only those. Read off the one list and not kept
+         *  beside it. */
+        public List<Threshold> thresholds() {
+            return evidence.stream()
+                    .filter(LineEvidence.Divides.class::isInstance)
+                    .map(each -> ((LineEvidence.Divides) each).line()).toList();
+        }
+
+        /** The values singled out, likewise. */
+        public List<GuardThresholds.Guards.Singled> singled() {
+            return evidence.stream()
+                    .filter(LineEvidence.Singles.class::isInstance)
+                    .map(each -> ((LineEvidence.Singles) each).point()).toList();
         }
     }
 
     /** Every measurement where its name was filed, and the lines this had nowhere to put. */
-    public static Filed of(InputDomain inputs, List<Threshold> thresholds,
-                           List<GuardThresholds.Guards.Singled> singled, List<LineDrawn> between,
+    public static Filed of(InputDomain inputs, List<LineEvidence> evidence,
+                           List<LineDrawn> between,
                            souther.compiler.inputs.Quantities quantities, Symbols symbols) {
-        List<Threshold> outThresholds = new ArrayList<>();
-        List<GuardThresholds.Guards.Singled> outSingled = new ArrayList<>();
+        List<LineEvidence> out = new ArrayList<>();
         List<LineDrawn> outBetween = new ArrayList<>();
         List<RuleWithoutALine> notPlaced = new ArrayList<>();
-        for (Threshold each : thresholds) {
-            switch (standingOf(inputs, each.term(), symbols, each.origin())) {
-                case WhereTheNameStands.AsWritten(NumericTerm at) ->
-                        outThresholds.add(thresholdAt(each, at));
+        // One pass in the order the rules were read, so what comes out is in that order too. Walked
+        // once per kind, a body writing an equality and then a range came out with the range first,
+        // and every reader taking the numbers in this order took them in one this reading never saw.
+        for (LineEvidence each : evidence) {
+            switch (standingOf(inputs, each.at(), symbols, each.by())) {
+                case WhereTheNameStands.AsWritten(NumericTerm at) -> out.add(measuredAt(each, at));
                 case WhereTheNameStands.FiledAt(NumericTerm first, List<NumericTerm> rest) -> {
-                    outThresholds.add(thresholdAt(each, first));
-                    rest.forEach(at -> outThresholds.add(thresholdAt(each, at)));
-                }
-            }
-        }
-        for (GuardThresholds.Guards.Singled each : singled) {
-            switch (standingOf(inputs, each.term(), symbols, each.origin())) {
-                case WhereTheNameStands.AsWritten(NumericTerm at) ->
-                        outSingled.add(singledAt(each, at));
-                case WhereTheNameStands.FiledAt(NumericTerm first, List<NumericTerm> rest) -> {
-                    outSingled.add(singledAt(each, first));
-                    rest.forEach(at -> outSingled.add(singledAt(each, at)));
+                    out.add(measuredAt(each, first));
+                    rest.forEach(at -> out.add(measuredAt(each, at)));
                 }
             }
         }
         for (LineDrawn each : between) {
             place(inputs, each, quantities, symbols, outBetween, notPlaced);
         }
-        return new Filed(outThresholds, outSingled, outBetween, notPlaced);
+        return new Filed(out, outBetween, notPlaced);
+    }
+
+    /** The same piece of evidence, measured at {@code at}. */
+    private static LineEvidence measuredAt(LineEvidence evidence, NumericTerm at) {
+        return switch (evidence) {
+            case LineEvidence.Divides(Threshold line) ->
+                    new LineEvidence.Divides(thresholdAt(line, at));
+            case LineEvidence.Singles(GuardThresholds.Guards.Singled point) ->
+                    new LineEvidence.Singles(singledAt(point, at));
+        };
     }
 
     /** The same threshold, measured at {@code at}. */
