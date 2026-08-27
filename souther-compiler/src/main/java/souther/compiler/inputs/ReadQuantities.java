@@ -481,9 +481,9 @@ final class ReadQuantities implements Quantities {
     /**
      * The term, where what it sits under is something this behavior takes.
      *
-     * <p><b>Owned is not the same as known about.</b> The walk that reads an input's positions stops
-     * where a path returns to a declaration already open on it, and nothing stops a rule from naming
-     * what is under that. A term at such a path is this input's and
+     * <p><b>Owned is not the same as known about.</b> The reading holds the positions the
+     * enumeration found and the ones the measurement named, and nothing stops a rule from naming a
+     * path outside both. A term at such a path is this input's and
      * is answered for — with whatever the term guarantees of itself and nothing the declarations
      * relate it to, because the reading has no position there for a relation to be about. Refused
      * instead, an ordinary rule naming a field of a field of a field stopped a measurement rather

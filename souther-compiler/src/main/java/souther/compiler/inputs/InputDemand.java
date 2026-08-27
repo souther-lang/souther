@@ -43,11 +43,12 @@ public record InputDemand(List<TermPath> paths) {
      * <p>A list and not a set, kept in the order the paths were met. What order the reading walks
      * its demands in decides the order the positions come out in, which a report prints and a
      * measure counts against — and an immutable set iterates in an order that is not the order
-     * anything put things into it. Deduplicated on the way in, so a list is what a set would have
-     * been with an order that is somebody's.
+     * anything put things into it. Deduplicated here rather than by whoever builds one, so a list
+     * is what a set would have been with an order that is somebody's — and a caller that repeated a
+     * path has not made a reading that reads it twice.
      */
     public InputDemand {
-        paths = List.copyOf(paths);
+        paths = List.copyOf(new LinkedHashSet<>(paths));
     }
 
     /** The paths at or under {@code parameter}, which is what one parameter's reading is given. */

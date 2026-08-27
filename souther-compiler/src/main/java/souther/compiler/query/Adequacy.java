@@ -684,7 +684,7 @@ public final class Adequacy {
                             // grew a position when somebody looked one up would answer a question
                             // differently depending on what had been asked before it.
                             demandOf(db, name, spec, fn.present() ? fn.value() : null,
-                                    scope.value(), stated.get(spec.name()))));
+                                    scope.value(), statedOf(stated, spec))));
                 }
             }
             return Answer.of(Ordered.map(out));
@@ -699,9 +699,10 @@ public final class Adequacy {
      * bindings on the way and the case an arm selects; whether a row is ever written there is the
      * reading's answer, asked of the reading afterwards about the path this produced.
      *
-     * <p>Empty where nothing implements the behavior or its body did not check. A declaration's own
-     * clauses name their locations in the words of the value they are written in and reach positions
-     * by being filed at them, which is a different road and does not come through here.
+     * <p>Both producers, because either alone leaves the other's rules about a position this had
+     * not been told about. A body is where most of them are written and an injected behavior has
+     * none at all, and a clause of the behavior draws its lines whether or not anything implements
+     * it.
      */
     private static souther.compiler.inputs.InputDemand demandOf(
             Db db, String module, Hir.SpecBehavior spec, Hir.FnDef fn, Symbols symbols,

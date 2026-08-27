@@ -142,6 +142,60 @@ class APositionTheBodyNamedIsReadLikeAnyOtherTest {
                 () -> "no value of this input is ever `Off`:\n" + report);
     }
 
+    /** A chain whose deepest link has a case an arm claims nothing ever reaches. */
+    private static final String CLAIMED = """
+            module example.claimed
+
+            data On
+            data Off
+            data Flag = On | Off
+
+            data Nil
+            data Cons = { flag: Flag, tail: Chain }
+            data Chain = Nil | Cons
+
+            data Answer = Int
+
+            behavior f : (c: Chain) -> Answer
+                constructs Answer
+            let f (c) =
+                match c with
+                    | Nil -> Answer(0)
+                    | Cons as k -> match k.tail with
+                        | Nil -> Answer(1)
+                        | Cons as m -> match m.flag with
+                            | On  -> Answer(2)
+                            | Off -> unreachable "the probe never passes Off"
+
+            example f | "empty" : (Nil) -> Answer(0)
+            """;
+
+    /**
+     * A claim written past a return is judged against a position, not against an absence.
+     *
+     * <p>What a claim is held to is the reading of the position it is about, so a claim below where
+     * the enumeration stops used to come back unproven for the one reason no author can act on:
+     * nothing was read about the case. The arm names the position, so the reading has it, and the
+     * claim is answered the way one about any other position is.
+     *
+     * <p>A claim raises no demand of its own. What it is about is the scrutinee of a {@code match},
+     * which is a location the body already reads — a second collector for claims would derive the
+     * same paths a second way, which is the arrangement the demand exists to remove.
+     *
+     * <p>What is left unproven here is that the arm stands inside another, which is a limit on
+     * reading what reaches a nested arm and holds wherever one is written. It is not this position
+     * being unknown, and the two are what a reader has to be able to tell apart.
+     */
+    @Test
+    void aClaimPastAReturnIsJudgedAgainstThePositionItIsAbout() {
+        String report = report(CLAIMED);
+
+        assertTrue(report.contains("no row is in `Off` at c@Cons.tail@Cons.flag"),
+                () -> "the case the claim is about is one the reading divides:\n" + report);
+        assertFalse(report.contains("nothing was read about this case"),
+                () -> "so the claim is not refused for want of a position:\n" + report);
+    }
+
     /**
      * And the reading is the same however the paths were demanded.
      *

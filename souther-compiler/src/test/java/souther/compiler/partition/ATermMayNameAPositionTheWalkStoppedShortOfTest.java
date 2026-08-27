@@ -132,10 +132,6 @@ class ATermMayNameAPositionTheWalkStoppedShortOfTest {
                 guard List.all(i -> i.inner.a < i.inner.b, cart.items) else No { why = 0 }
                 Yes { v = 1 }
             }
-
-            example f
-                | "under" : (Cart { items = [ Item { inner = Inner { a = 1, b = 2 } } ] })
-                    -> Yes { v = 1 }
             """;
 
     /**
@@ -177,6 +173,7 @@ class ATermMayNameAPositionTheWalkStoppedShortOfTest {
     private static String report(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
         return AdequacyReport.of(compilation).human(SourceNameResolver.identity());
     }
 }
