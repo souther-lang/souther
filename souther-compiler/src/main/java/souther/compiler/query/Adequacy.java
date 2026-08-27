@@ -2716,6 +2716,27 @@ public final class Adequacy {
         public Set<Entry<String, RowReading>> entrySet() {
             return known.entrySet();
         }
+
+        /**
+         * Two of these are one where they answer alike, which is over what is written down here and
+         * not over the entries alone.
+         *
+         * <p>What this says is what it holds and what it answers for a name it has no entry for.
+         * Compared as a map — which is what comparing the entries is — two of these would be one
+         * wherever the rows agreed, and a compile that could read every source would be
+         * indistinguishable from one that could not read any of them.
+         */
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof WithFallback that && known.equals(that.known)
+                    && fallback.equals(that.fallback)
+                    && nothingEverywhere == that.nothingEverywhere;
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(known, fallback, nothingEverywhere);
+        }
     }
 
     /**

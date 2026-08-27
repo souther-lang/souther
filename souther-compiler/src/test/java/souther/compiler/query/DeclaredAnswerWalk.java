@@ -8,11 +8,9 @@ import java.lang.reflect.Type;
 import java.lang.reflect.TypeVariable;
 import java.lang.reflect.WildcardType;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 /**
  * What a question declares it answers with, walked as the declarations wrote it.
@@ -180,7 +178,33 @@ final class DeclaredAnswerWalk {
             for (int i = 0; i < letters.length && i < arguments.length; i++) {
                 under.put(letters[i], substituted(arguments[i], node.bound()));
             }
-            return under;
+            return through(raw, under);
+        }
+
+        /**
+         * And everything the types above it bind, down the way it says it extends them.
+         *
+         * <p>What a thing holds is what it declares and what everything it extends declares, and
+         * those are written in the letters of whoever declared them. Read with only this type's own
+         * letters bound, a member a generic parent declares is a member of a letter nothing here
+         * says anything about — which reads as a declaration that settles nothing, where what
+         * settles it is the {@code extends} clause one line up.
+         */
+        private static Map<TypeVariable<?>, Type> through(Class<?> raw,
+                                                          Map<TypeVariable<?>, Type> bound) {
+            Map<TypeVariable<?>, Type> out = new LinkedHashMap<>(bound);
+            for (Class<?> at = raw; at != null && at != Object.class; at = at.getSuperclass()) {
+                if (!(at.getGenericSuperclass() instanceof ParameterizedType wrote)
+                        || !(wrote.getRawType() instanceof Class<?> above)) {
+                    continue;
+                }
+                TypeVariable<?>[] letters = above.getTypeParameters();
+                Type[] arguments = wrote.getActualTypeArguments();
+                for (int i = 0; i < letters.length && i < arguments.length; i++) {
+                    out.put(letters[i], substituted(arguments[i], out));
+                }
+            }
+            return out;
         }
 
         /**
@@ -222,17 +246,19 @@ final class DeclaredAnswerWalk {
             return raw(node);
         }
 
+        /**
+         * Whether what is written here stands for what it holds.
+         *
+         * <p>And whether the declaration says what it holds. Written without its arguments, one of
+         * these holds whatever anybody put in it, which the declaration has not settled.
+         */
         @Override
         public boolean aContainer(Node node) {
-            Class<?> raw = raw(node);
-            int written = arguments(node).length;
-            return (Collection.class.isAssignableFrom(raw) || raw == Optional.class)
-                    ? written == 1
-                    : Map.class.isAssignableFrom(raw) && written == 2;
+            return AnswerShape.standsForWhatItHolds(raw(node)) && arguments(node).length > 0;
         }
 
         @Override
-        public List<WhatStandsHere.Under<Node, TypePath>> held(Node node, TypePath where) {
+        public Covered<WhatStandsHere.Under<Node, TypePath>> held(Node node, TypePath where) {
             Type[] arguments = arguments(node);
             List<WhatStandsHere.Under<Node, TypePath>> out = new ArrayList<>();
             List<String> named = arguments.length == 2 ? List.of("key", "value") : List.of("held");
@@ -241,7 +267,7 @@ final class DeclaredAnswerWalk {
                         where.then(new TypePath.Step.Argument(named.get(i))),
                         new Node(arguments[i], node.bound())));
             }
-            return List.copyOf(out);
+            return Covered.of(List.copyOf(out), List.of());
         }
 
         @Override
@@ -250,7 +276,7 @@ final class DeclaredAnswerWalk {
         }
 
         @Override
-        public List<WhatStandsHere.Under<Node, TypePath>> arms(Node node, TypePath where) {
+        public Covered<WhatStandsHere.Under<Node, TypePath>> arms(Node node, TypePath where) {
             Class<?> sum = raw(node);
             List<WhatStandsHere.Under<Node, TypePath>> out = new ArrayList<>();
             for (Class<?> arm : sum.getPermittedSubclasses()) {
@@ -258,7 +284,7 @@ final class DeclaredAnswerWalk {
                         where.then(new TypePath.Step.Arm(arm.getTypeName())),
                         new Node(arm, boundForArm(node, sum, arm))));
             }
-            return List.copyOf(out);
+            return Covered.of(List.copyOf(out), List.of());
         }
 
         /**
@@ -279,7 +305,7 @@ final class DeclaredAnswerWalk {
         }
 
         @Override
-        public List<WhatStandsHere.Under<Node, TypePath>> members(Node node, TypePath where) {
+        public Covered<WhatStandsHere.Under<Node, TypePath>> members(Node node, TypePath where) {
             Class<?> raw = raw(node);
             Map<TypeVariable<?>, Type> under = boundUnder(node, raw);
             List<WhatStandsHere.Under<Node, TypePath>> out = new ArrayList<>();
@@ -288,7 +314,7 @@ final class DeclaredAnswerWalk {
                         where.thenMember(field.getDeclaringClass(), field.getName()),
                         new Node(field.getGenericType(), under)));
             }
-            return List.copyOf(out);
+            return Covered.of(List.copyOf(out), List.of());
         }
 
         /** A type and what its letters are bound to, which is what makes two of these one shape. */

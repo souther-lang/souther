@@ -122,14 +122,19 @@ final class AnswerWalk {
             return node.getClass();
         }
 
+        /**
+         * Whether what is here stands for what it holds.
+         *
+         * <p>Asked of what it turned out to be and not of what anything was written as: a store
+         * hands over the object, and its class is what the walk has.
+         */
         @Override
         public boolean aContainer(Object node) {
-            return node instanceof Collection<?> || node instanceof Map<?, ?>
-                    || node instanceof Optional<?>;
+            return AnswerShape.standsForWhatItHolds(node.getClass());
         }
 
         @Override
-        public List<WhatStandsHere.Under<Object, Locus>> held(Object node, Locus where) {
+        public Covered<WhatStandsHere.Under<Object, Locus>> held(Object node, Locus where) {
             List<WhatStandsHere.Under<Object, Locus>> out = new ArrayList<>();
             switch (node) {
                 case Collection<?> items -> items.forEach(each ->
@@ -144,7 +149,7 @@ final class AnswerWalk {
                 });
                 default -> throw new IllegalStateException("not a container: " + node.getClass());
             }
-            return List.copyOf(out);
+            return Covered.of(List.copyOf(out), List.of());
         }
 
         /** Nothing is at a place that holds nothing, and nothing is what it says about itself. */
@@ -163,8 +168,8 @@ final class AnswerWalk {
         }
 
         @Override
-        public List<WhatStandsHere.Under<Object, Locus>> arms(Object node, Locus where) {
-            return List.of();
+        public Covered<WhatStandsHere.Under<Object, Locus>> arms(Object node, Locus where) {
+            return Covered.of(List.of(), List.of());
         }
 
         @Override
@@ -178,8 +183,9 @@ final class AnswerWalk {
         }
 
         @Override
-        public List<WhatStandsHere.Under<Object, Locus>> members(Object node, Locus where) {
+        public Covered<WhatStandsHere.Under<Object, Locus>> members(Object node, Locus where) {
             List<WhatStandsHere.Under<Object, Locus>> out = new ArrayList<>();
+            List<Gap> fellShort = new ArrayList<>();
             for (Field field : AnswerShape.fieldsOf(node.getClass())) {
                 Locus at = where.thenMember(field.getDeclaringClass(), field.getName());
                 Object held;
@@ -187,15 +193,16 @@ final class AnswerWalk {
                     field.setAccessible(true);
                     held = field.get(node);
                 } catch (RuntimeException | ReflectiveOperationException opaque) {
-                    // A field this cannot open is a subtree it did not ask about. Said out loud,
-                    // because what is under it would otherwise be counted as looked at and clean.
-                    walk.fellShort(new Gap(Gap.Why.A_FIELD_THAT_WOULD_NOT_OPEN,
+                    // A field this cannot open is a subtree it did not ask about, and what comes
+                    // back says so: read as everything this holds, it would be a thing half looked
+                    // at that nothing could tell from one looked at whole.
+                    fellShort.add(new Gap(Gap.Why.A_FIELD_THAT_WOULD_NOT_OPEN,
                             question + at.asText()));
                     continue;
                 }
                 under(out, at, held);
             }
-            return List.copyOf(out);
+            return Covered.of(List.copyOf(out), List.copyOf(fellShort));
         }
 
         /** Two objects are the same thing when they are the same object. */

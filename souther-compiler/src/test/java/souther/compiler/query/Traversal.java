@@ -94,23 +94,13 @@ final class Traversal<N, P extends Trail<P>> {
         return opened;
     }
 
-    /** Somewhere the walk covered less than it was asked to, said by whoever is walking. */
-    void fellShort(Gap gap) {
-        gaps.add(gap);
-    }
-
     /**
      * Walk {@code node}, reached at {@code where}.
      *
      * @return whether everything under it was covered, so a caller may remember what was found
      */
     boolean at(N node, P where) {
-        // Before anything is asked about it, because what a thing is is worked out by reading it —
-        // and a member the walk could not open is a subtree it never asked about, said while the
-        // shape is being made rather than while it is being walked.
-        int fellShort = gaps.size();
-        WhatStandsHere<N, P> what = WhatStandsHere.of(walking, node, where);
-        boolean whole = switch (what) {
+        return switch (WhatStandsHere.of(walking, node, where)) {
             case WhatStandsHere.ALanguageValue<N, P> _ -> true;
             case WhatStandsHere.AnArray<N, P> _ -> stop(node, where, Why.AN_ARRAY);
             case WhatStandsHere.SaysNothingOfItself<N, P> _ ->
@@ -118,24 +108,46 @@ final class Traversal<N, P extends Trail<P>> {
             case WhatStandsHere.NothingClosesIt<N, P> _ ->
                     stop(node, where, Why.NOTHING_CLOSES_IT);
             case WhatStandsHere.NotBound<N, P> _ -> stop(node, where, Why.NOT_BOUND);
-            case WhatStandsHere.AContainerOf<N, P>(List<WhatStandsHere.Under<N, P>> held) ->
-                    into(node, where, held, fellShort);
-            case WhatStandsHere.ASumOf<N, P>(List<WhatStandsHere.Under<N, P>> arms) ->
-                    into(node, where, arms, fellShort);
-            case WhatStandsHere.AClosedValue<N, P>(List<WhatStandsHere.Under<N, P>> members) ->
-                    into(node, where, members, fellShort);
+            case WhatStandsHere.AContainerOf<N, P>(Covered<WhatStandsHere.Under<N, P>> held) ->
+                    into(node, where, held);
+            case WhatStandsHere.ASumOf<N, P>(Covered<WhatStandsHere.Under<N, P>> arms) ->
+                    into(node, where, arms);
+            case WhatStandsHere.AClosedValue<N, P>(Covered<WhatStandsHere.Under<N, P>> members) ->
+                    into(node, where, members);
             case WhatStandsHere.AClosedFamily<N, P>(
-                    List<WhatStandsHere.Under<N, P>> members,
-                    List<WhatStandsHere.Under<N, P>> arms) -> {
-                List<WhatStandsHere.Under<N, P>> both = new ArrayList<>(members);
-                both.addAll(arms);
-                yield into(node, where, both, fellShort);
-            }
+                    Covered<WhatStandsHere.Under<N, P>> members,
+                    Covered<WhatStandsHere.Under<N, P>> arms) ->
+                    into(node, where, both(members, arms));
         };
-        // What was asked about under this is the whole of what is there only where nothing was
-        // missed on the way in. A caller that took this as covered would put it away as looked at,
-        // and the next path to reach it would be told there was nothing to see.
-        return whole && gaps.size() == fellShort;
+    }
+
+    /** What a family holds and what stands under it, which are each ways down from it. */
+    private static <N, P> Covered<WhatStandsHere.Under<N, P>> both(
+            Covered<WhatStandsHere.Under<N, P>> members,
+            Covered<WhatStandsHere.Under<N, P>> arms) {
+        List<WhatStandsHere.Under<N, P>> found = new ArrayList<>(ways(members));
+        found.addAll(ways(arms));
+        List<Gap> fellShort = new ArrayList<>(shortOf(members));
+        fellShort.addAll(shortOf(arms));
+        return Covered.of(List.copyOf(found), List.copyOf(fellShort));
+    }
+
+    private static <N, P> List<WhatStandsHere.Under<N, P>> ways(
+            Covered<WhatStandsHere.Under<N, P>> under) {
+        return switch (under) {
+            case Covered.Whole<WhatStandsHere.Under<N, P>>(
+                    List<WhatStandsHere.Under<N, P>> all) -> all;
+            case Covered.Partly<WhatStandsHere.Under<N, P>>(
+                    List<WhatStandsHere.Under<N, P>> all, List<Gap> _) -> all;
+        };
+    }
+
+    private static <N, P> List<Gap> shortOf(Covered<WhatStandsHere.Under<N, P>> under) {
+        return switch (under) {
+            case Covered.Whole<WhatStandsHere.Under<N, P>> _ -> List.of();
+            case Covered.Partly<WhatStandsHere.Under<N, P>>(
+                    List<WhatStandsHere.Under<N, P>> _, List<Gap> fellShort) -> fellShort;
+        };
     }
 
     /** Said here and gone no further: what is under something that cannot compare is unreachable
@@ -145,34 +157,43 @@ final class Traversal<N, P extends Trail<P>> {
         return true;
     }
 
-    private boolean into(N node, P where, List<WhatStandsHere.Under<N, P>> under, int fellShort) {
+    /**
+     * Into what a thing holds, where reading it says whether that is all of it.
+     *
+     * <p>What comes back says both, and only one of them is about the walking: a way down that was
+     * never read is a subtree nothing asked about, and a thing that holds one of those is a thing
+     * this got part way into however well the rest of it went.
+     */
+    private boolean into(N node, P where, Covered<WhatStandsHere.Under<N, P>> under) {
+        List<Gap> fellShort = shortOf(under);
+        gaps.addAll(fellShort);
         Object key = walking.keyOf(node);
         List<Stopped<P>> already = settled.get(key);
         if (already != null) {
             already.forEach(each -> out.add(new Stopped<>(
                     where.followedBy(each.where()), each.offender(), each.why())));
-            return true;
+            return fellShort.isEmpty();
         }
         if (!inside.add(key)) {
             Gap loop = walking.aLoop(node, where);
             if (loop == null) {
-                return true;
+                return fellShort.isEmpty();
             }
-            fellShort(loop);
+            gaps.add(loop);
             return false;
         }
         opened++;
         int before = out.size();
-        boolean whole = true;
+        boolean whole = fellShort.isEmpty();
         try {
-            for (WhatStandsHere.Under<N, P> each : under) {
+            for (WhatStandsHere.Under<N, P> each : ways(under)) {
                 whole &= at(each.node(), each.where());
             }
         } finally {
             inside.remove(key);
         }
-        // Everything under it was covered, and reading what it holds missed nothing on the way in.
-        if (whole && gaps.size() == fellShort) {
+        // Everything under it was covered, and reading what it holds missed nothing.
+        if (whole) {
             List<Stopped<P>> mine = new ArrayList<>();
             for (Stopped<P> each : out.subList(before, out.size())) {
                 mine.add(new Stopped<>(where.from(each.where()), each.offender(), each.why()));

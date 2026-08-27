@@ -607,7 +607,21 @@ final class AnswerClosure {
                 "WHOSE_DENIAL_THIS_IS_CANNOT_BE_TOLD .Answer#value.Scoped#values"
                         + " in A_MODULE_SPOKEN_ABOUT",
                 "WHOSE_DENIAL_THIS_IS_CANNOT_BE_TOLD .Answer#value.Scoped#values"
-                        + " in VALID_CORPUS");
+                        + " in VALID_CORPUS",
+                // What a lookup with an answer for a name it has no entry for keeps from extending
+                // what the JDK ships: two caches the language fills in and opens to nobody. The
+                // walk asks, is refused, and says so — reading it as one of the JDK's own maps
+                // instead would read it for its entries and never meet what it answers with.
+                fieldOfAJdkParent("Adequacy$Rows", "keySet", Scenario.VALID_CORPUS),
+                fieldOfAJdkParent("Adequacy$Rows", "keySet", Scenario.A_MODULE_SPOKEN_ABOUT),
+                fieldOfAJdkParent("Adequacy$Rows", "values", Scenario.VALID_CORPUS),
+                fieldOfAJdkParent("Adequacy$Rows", "values", Scenario.A_MODULE_SPOKEN_ABOUT));
+    }
+
+    /** A field of what the JDK ships, under a value of this compiler's own that extends it. */
+    private static String fieldOfAJdkParent(String question, String named, Scenario scenario) {
+        return "A_FIELD_THAT_WOULD_NOT_OPEN " + Q + question + ".Answer#value.AbstractMap#" + named
+                + " in " + scenario;
     }
 
     /** Every place written down here, whichever detector or scenario meets it. */

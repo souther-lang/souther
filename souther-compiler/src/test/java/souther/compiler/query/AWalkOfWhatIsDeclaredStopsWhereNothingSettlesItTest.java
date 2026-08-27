@@ -42,6 +42,62 @@ class AWalkOfWhatIsDeclaredStopsWhereNothingSettlesItTest {
         }
     }
 
+    /** Something of one's own that is a number the way its author says it is. */
+    private static final class ANumberOfItsOwn extends Number {
+
+        /** What extending a number brings with it, and what nothing here is about. */
+        private static final long serialVersionUID = 1L;
+
+        @Override
+        public int intValue() {
+            return 0;
+        }
+
+        @Override
+        public long longValue() {
+            return 0;
+        }
+
+        @Override
+        public float floatValue() {
+            return 0;
+        }
+
+        @Override
+        public double doubleValue() {
+            return 0;
+        }
+    }
+
+    private record ANumberOfItsOwnIsAnswered() implements Key<ANumberOfItsOwn> {
+
+        @Override
+        public Answer<ANumberOfItsOwn> compute(Db db) {
+            return Answer.absent();
+        }
+    }
+
+    /** Something of one's own that is a map the way its author says it is. */
+    private static final class AMapOfItsOwn extends java.util.AbstractMap<String, String> {
+
+        /** What it answers with beside its entries, which is the whole reason it is not one of the
+         *  language's own maps. */
+        private final ArrayDeque<String> beside = new ArrayDeque<>();
+
+        @Override
+        public java.util.Set<Entry<String, String>> entrySet() {
+            return java.util.Set.of();
+        }
+    }
+
+    private record AMapOfItsOwnIsAnswered() implements Key<AMapOfItsOwn> {
+
+        @Override
+        public Answer<AMapOfItsOwn> compute(Db db) {
+            return Answer.absent();
+        }
+    }
+
     /** Something written with what it holds, whose own equality is an address. */
     private record ADequeIsAnswered() implements Key<ArrayDeque<String>> {
 
@@ -113,6 +169,34 @@ class AWalkOfWhatIsDeclaredStopsWhereNothingSettlesItTest {
     void aContainerThatSaysNothingOfItselfIsNotReadForWhatItHolds() {
         assertEquals(List.of("SAYS_NOTHING_OF_ITSELF at  java.util.ArrayDeque"),
                 walking(ADequeIsAnswered.class));
+    }
+
+    /**
+     * What the language settles is a list of things and not whatever is under one of them.
+     *
+     * <p>Something that extends a number is a number the way its author says it is: it may hold a
+     * value it can be told to change, and it may say only which object it is. Admitted for being a
+     * number, it would go past every question this asks.
+     */
+    @Test
+    void aNumberOfSomebodysOwnIsNotWhatTheLanguageSettles() {
+        assertEquals(List.of("SAYS_NOTHING_OF_ITSELF at "
+                        + " souther.compiler.query."
+                        + "AWalkOfWhatIsDeclaredStopsWhereNothingSettlesItTest$ANumberOfItsOwn"),
+                walking(ANumberOfItsOwnIsAnswered.class));
+    }
+
+    /**
+     * And a map of somebody's own is read for everything it holds.
+     *
+     * <p>What makes reading a map its entries enough is that the map is all there is of it. One of
+     * this compiler's own holds whatever else it was written to hold — and answers with it — so
+     * read as a map it would be read for the entries and never meet the rest.
+     */
+    @Test
+    void aMapOfSomebodysOwnIsReadAsWhatItIs() {
+        assertEquals(List.of("SAYS_NOTHING_OF_ITSELF at .AMapOfItsOwn#beside java.util.ArrayDeque"),
+                walking(AMapOfItsOwnIsAnswered.class));
     }
 
     /** And a type anything may extend is where the declarations run out, whatever it says. */

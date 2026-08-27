@@ -1,6 +1,5 @@
 package souther.compiler.query;
 
-import java.util.List;
 
 /**
  * What a walk found at one place, said as one of the things it can be.
@@ -33,10 +32,10 @@ sealed interface WhatStandsHere<N, P> {
     record AnArray<N, P>() implements WhatStandsHere<N, P> {}
 
     /** Something whose equality is its members', read for the members. */
-    record AContainerOf<N, P>(List<Under<N, P>> held) implements WhatStandsHere<N, P> {}
+    record AContainerOf<N, P>(Covered<Under<N, P>> held) implements WhatStandsHere<N, P> {}
 
     /** A sum, read for every arm nothing else can be. */
-    record ASumOf<N, P>(List<Under<N, P>> arms) implements WhatStandsHere<N, P> {}
+    record ASumOf<N, P>(Covered<Under<N, P>> arms) implements WhatStandsHere<N, P> {}
 
     /**
      * A sum that is also a thing of its own, read for both.
@@ -44,11 +43,11 @@ sealed interface WhatStandsHere<N, P> {
      * <p>A closed family whose head can be built has arms and members that are each what may stand
      * here. Read for the arms alone, what the head itself holds would go unasked.
      */
-    record AClosedFamily<N, P>(List<Under<N, P>> members, List<Under<N, P>> arms)
+    record AClosedFamily<N, P>(Covered<Under<N, P>> members, Covered<Under<N, P>> arms)
             implements WhatStandsHere<N, P> {}
 
     /** Something that says what it is and nothing else can be, read for what it holds. */
-    record AClosedValue<N, P>(List<Under<N, P>> members) implements WhatStandsHere<N, P> {}
+    record AClosedValue<N, P>(Covered<Under<N, P>> members) implements WhatStandsHere<N, P> {}
 
     /** Something that says only which object it is. */
     record SaysNothingOfItself<N, P>() implements WhatStandsHere<N, P> {}
@@ -65,6 +64,12 @@ sealed interface WhatStandsHere<N, P> {
      *
      * <p>Each of these is a fact about what is in front of the walk. A walk that answered them by
      * asking them in an order of its own would be the sequence living in two places again.
+     *
+     * <p><b>Every way down comes back saying whether it is all of them.</b> Reading what a thing
+     * holds may not reach all of it, and where it did not is part of the answer. Handed back as a
+     * list, that is something a walk has to be told some other way and whoever takes the list has
+     * to remember to go and ask — which is how a thing half of which would not open came back
+     * covered, was put away as looked at, and left the next path to hold it with nothing to see.
      */
     interface Facts<N, P> {
 
@@ -79,13 +84,13 @@ sealed interface WhatStandsHere<N, P> {
         boolean aContainer(N node);
 
         /** What it holds, asked only of a container. */
-        List<Under<N, P>> held(N node, P where);
+        Covered<Under<N, P>> held(N node, P where);
 
         /** Whether what may stand here is written down: a sum, whichever way it is spelled. */
         boolean closedFamily(N node);
 
         /** The arms of that family. */
-        List<Under<N, P>> arms(N node, P where);
+        Covered<Under<N, P>> arms(N node, P where);
 
         /** Whether anything of this may itself be built, rather than only the arms under it. */
         boolean itselfStands(N node);
@@ -94,7 +99,7 @@ sealed interface WhatStandsHere<N, P> {
         boolean closesWhatStandsHere(N node);
 
         /** What it holds beside its own identity. */
-        List<Under<N, P>> members(N node, P where);
+        Covered<Under<N, P>> members(N node, P where);
     }
 
     /**
