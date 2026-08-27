@@ -138,9 +138,10 @@ class AnEqualityDividesTheValuesInTwoTest {
         compilation.answerEverything();
         Map<String, Adequacy.Filling> all = Adequacy.generatedOf(compilation.db(), compilation.modules().get(0));
         assertNotNull(all, "the model under test compiles");
-        return GeneratedRows.of(
-                souther.compiler.query.OfferingRequest.overTheModule("example.ratio", false),
-                all, null, Map.of(), SourceNameResolver.identity()).text();
+        return GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
+                        souther.compiler.query.OfferingRequest.overTheModule(
+                                "example.ratio", false)),
+                Map.of(), SourceNameResolver.identity()).text();
     }
 
     /** An ordering comparison beside it is a distinction the model does draw, and is kept. */

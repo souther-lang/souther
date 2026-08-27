@@ -893,10 +893,12 @@ class EveryFindingHasAGenerationDispositionTest {
 
     private static String saidAbout(souther.compiler.partition.GenerationReason why,
                                     souther.compiler.partition.GenerationReason alsoAtTheEdges) {
-        return GeneratedRows.of(
-                souther.compiler.query.OfferingRequest.overTheModule("example.kind", true),
-                Map.of("pick", new Adequacy.Filling(stopped(why), atTheEdges(alsoAtTheEdges),
-                        List.of())), null,
+        // The composition and not what is offered: these fillings are built here rather than
+        // searched for, so there is no store to ask what their rows would settle.
+        return GeneratedRows.of(souther.compiler.query.Offering.composed(
+                        souther.compiler.query.OfferingRequest.overTheModule("example.kind", true),
+                        Map.of("pick", new Adequacy.Filling(stopped(why),
+                                atTheEdges(alsoAtTheEdges), List.of())), null),
                 Map.of(), SourceNameResolver.identity()).text();
     }
 
@@ -968,13 +970,9 @@ class EveryFindingHasAGenerationDispositionTest {
     @Test
     void anArmNoStrategyReachesIsNamedInTheBlock() {
         Compilation compilation = compiled(POLICY);
-        Map<String, Adequacy.Filling> generated =
-                Adequacy.generatedOf(compilation.db(), "example.policy");
-        String block = GeneratedRows.of(
-                souther.compiler.query.OfferingRequest.overTheModule("example.policy", true),
-                generated,
-                Adequacy.generatedForDeclarationsOf(compilation.db(), "example.policy",
-                        new GenerationScope.Module()),
+        String block = GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
+                        souther.compiler.query.OfferingRequest.overTheModule(
+                                "example.policy", true)),
                 Map.of(), SourceNameResolver.identity()).text();
 
         assertTrue(block.contains("`then`"),

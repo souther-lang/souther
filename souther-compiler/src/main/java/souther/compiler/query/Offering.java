@@ -103,7 +103,12 @@ public record Offering(OfferingRequest request, SequencedMap<String, List<Offere
     }
 
     /**
-     * What a run offers, from what its two searches composed.
+     * What the two searches composed, before anything asks what the rows settle.
+     *
+     * <p>Not what a person is handed. A row here may answer what another here answers, and which of
+     * them goes out is settled by asking — {@link Adequacy#offeredFor} is where that happens, and
+     * what it hands back is the offering. So {@link #answered} is empty on one of these, which says
+     * nobody has asked rather than that the rows answer nothing.
      *
      * <p>Walked in the order the behaviors were asked about, and within a behavior the cells before
      * the lines. The order a person is offered the rows in is the order they were composed in, and a
@@ -115,8 +120,9 @@ public record Offering(OfferingRequest request, SequencedMap<String, List<Offere
      *                  for no boundary rows. One row per point of a line however many behaviors
      *                  carry the type, and under the behavior whose reading composed it
      */
-    public static Offering of(OfferingRequest request, Map<String, Adequacy.Filling> generated,
-                              DeclaredRows declared) {
+    public static Offering composed(OfferingRequest request,
+                                    Map<String, Adequacy.Filling> generated,
+                                    DeclaredRows declared) {
         Map<String, List<Generator.GeneratedRow>> owed = declared == null
                 ? Map.of() : declared.rowsByCarrier();
         SequencedMap<String, Map<RowKey, OfferedRow>> byBehavior = new LinkedHashMap<>();

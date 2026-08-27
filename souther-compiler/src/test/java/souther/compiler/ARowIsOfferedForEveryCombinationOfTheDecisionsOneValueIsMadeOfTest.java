@@ -68,9 +68,10 @@ class ARowIsOfferedForEveryCombinationOfTheDecisionsOneValueIsMadeOfTest {
         compilation.answerEverything();
         Map<String, Adequacy.Filling> filling = Adequacy.generatedOf(compilation.db(), compilation.modules().get(0));
         assertNotNull(filling, "the model under test compiles");
-        return GeneratedRows.of(souther.compiler.query.OfferingRequest.overTheModule(
-                        compilation.modules().get(0), false), filling, null, Map.of(),
-                SourceNameResolver.identity()).text();
+        return GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
+                        souther.compiler.query.OfferingRequest.overTheModule(
+                                compilation.modules().get(0), false)),
+                Map.of(), SourceNameResolver.identity()).text();
     }
 
     @Test
@@ -235,18 +236,20 @@ class ARowIsOfferedForEveryCombinationOfTheDecisionsOneValueIsMadeOfTest {
      * A group's combinations cost no rows of their own.
      *
      * <p>Three outcomes against four used to be twelve rows — the product of the group's factors,
-     * which is the space the search walked and which nothing reports. What is offered here is the
-     * classes: three of one position and four of the other, two of which meet in one row, so six.
-     * No row is written for a combination, and this model writes none either — it has no `example`
-     * block, so nothing read its rows and no arm is established as unreached for one to be owed at.
+     * which is the space the search walked and which nothing reports. What is offered is the
+     * classes, and fewer rows than there are of those: a row composed for a class of one position
+     * holds some class of the other, so the two whose rows would have been the third position's
+     * are answered where they stand. No row is written for a combination, and this model writes
+     * none either — it has no `example` block, so nothing read its rows and no arm is established
+     * as unreached for one to be owed at.
      */
     @Test
     void aGroupsCombinationsCostNoRowsOfTheirOwn() {
         String block = block(TWELVE);
 
-        assertEquals(6, rows(block),
-                "the seven classes, two of them meeting in one row — not the twelve combinations "
-                        + "they make: " + block);
+        assertEquals(5, rows(block),
+                "five rows for the seven classes — not the twelve combinations they make, and not "
+                        + "one row apiece: " + block);
         assertTrue(!block.contains("generation stopped"),
                 "and nothing was left for a limit to cut off: " + block);
     }
@@ -287,7 +290,8 @@ class ARowIsOfferedForEveryCombinationOfTheDecisionsOneValueIsMadeOfTest {
 
         assertEquals(List.of(), names(block).stream().filter(name -> name.contains(" x ")).toList(),
                 "every row is named for one class, none for a combination of them: " + block);
-        assertEquals(5, rows(block),
-                "the four positions' second classes and the one they meet in: " + block);
+        assertEquals(4, rows(block),
+                "four rows for the eight classes: each row holds a class of every position, so the"
+                        + " ones nothing was composed for are answered where they stand: " + block);
     }
 }

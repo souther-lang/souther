@@ -157,7 +157,7 @@ class ARowIsNotOfferedForWhatAnotherOfferedRowAnswersTest {
         Map<String, Adequacy.Filling> generated =
                 Adequacy.generatedOf(compilation.db(), "example.shippingfee");
         assertNotNull(generated, "the model under test compiles: " + compilation.errors());
-        Offering composed = Offering.of(
+        Offering composed = Offering.composed(
                 OfferingRequest.overTheModule("example.shippingfee", true), generated,
                 Adequacy.generatedForDeclarationsOf(compilation.db(), "example.shippingfee",
                         new GenerationScope.Module()));

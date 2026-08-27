@@ -124,8 +124,8 @@ public final class GeneratedRows {
      * is said once, under the declaration that drew the line, and cannot be written from evidence
      * that does not support it.
      */
-    private static void declarations(StringBuilder out, DeclaredRows declared,
-                                     Offering offering) {
+    private static void declarations(StringBuilder out, Offering offering) {
+        DeclaredRows declared = offering.declared();
         java.util.Set<String> said = new java.util.LinkedHashSet<>();
         for (Map.Entry<souther.compiler.partition.BorderObligationPoint, DeclaredRows.Unmet> each
                 : declared.unmet().entrySet()) {
@@ -169,32 +169,6 @@ public final class GeneratedRows {
     }
 
     /**
-     * The whole block for one request, from what its two searches came to.
-     *
-     * <p>For a caller that holds the searches. The request says what was asked for, and it is said
-     * rather than worked out from what was handed over: which readings a run was about and whether
-     * it asked after the lines a model draws are what decide which rows there are, and a block that
-     * guessed at either would be describing a run nobody made.
-     *
-     * @param request   what was asked for
-     * @param generated one filling per behavior, keyed the way a report keys them
-     * @param declared  the rows the module's declarations are owed, or null where the request asked
-     *                  for no boundary rows. One row per point of a line however many behaviors
-     *                  carry the type, and under the behavior whose reading composed it — how many
-     *                  there are was settled where the search was resolved
-     * @param ensures   what each behavior has written in its {@code ensures}, in the author's own
-     *                  words and keyed as {@code generated} is. Read before this is called and
-     *                  handed over: what the source says is not something a renderer works out, and
-     *                  a form of this that could be called without it would be a way of dropping it
-     * @param names     what the caller calls its sources, for the notes that name one
-     */
-    public static Block of(OfferingRequest request, Map<String, Adequacy.Filling> generated,
-                           DeclaredRows declared, Map<String, List<String>> ensures,
-                           SourceNameResolver names) {
-        return of(Offering.of(request, generated, declared), ensures, names);
-    }
-
-    /**
      * The block for one offering.
      *
      * <p>Which rows go out is settled before this is called and is not decided again here. What
@@ -231,7 +205,7 @@ public final class GeneratedRows {
         // holds, and the one that forgot would print rows with nothing said about the work beside
         // them.
         if (declared != null) {
-            declarations(out, declared, offering);
+            declarations(out, offering);
         }
         // The count leaves with the text. It was worked out here and thrown away, and the one
         // caller that needed it read the text instead.

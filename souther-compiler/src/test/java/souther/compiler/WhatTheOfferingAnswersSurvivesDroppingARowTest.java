@@ -145,13 +145,19 @@ class WhatTheOfferingAnswersSurvivesDroppingARowTest {
         Map<String, Adequacy.Filling> generated =
                 Adequacy.generatedOf(compilation.db(), "example.shipping");
         assertNotNull(generated, "the model under test compiles: " + compilation.errors());
-        Offering composed = Offering.of(
+        Offering composed = Offering.composed(
                 OfferingRequest.overTheModule("example.shipping", true), generated,
                 Adequacy.generatedForDeclarationsOf(compilation.db(), "example.shipping",
                         new GenerationScope.Module()));
         Settlements table = Settlements.of(compilation.db(), composed);
         assertFalse(table.byRow().isEmpty(), "the model under test is offered rows");
         assertFalse(table.settled().isEmpty(), "and some of them settle something");
+        // And something here is redundant, so that what the three tests below hold of the result is
+        // held of a result a row was actually taken out of. A model with nothing to drop satisfies
+        // every one of them by there being nothing to say.
+        assertTrue(table.keeping().size() < table.byRow().size(),
+                "the model under test has a row another row answers for: " + table.byRow().size()
+                        + " rows, " + table.keeping().size() + " kept");
         return table;
     }
 }

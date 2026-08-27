@@ -285,11 +285,9 @@ class CompilePartialAdequacyTest {
                 "the flag's classes are undecided, so nothing is written for them");
         assertFalse(generated.get("take").composed().reasons().isEmpty(),
                 "and the position that could not be read is named");
-        String written = GeneratedRows.of(
-                souther.compiler.query.OfferingRequest.overTheModule("example.budget", true),
-                generated,
-                Adequacy.generatedForDeclarationsOf(compilation.db(), "example.budget",
-                        new souther.compiler.query.GenerationScope.Module()),
+        String written = GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
+                        souther.compiler.query.OfferingRequest.overTheModule(
+                                "example.budget", true)),
                 Map.of(), SourceNameResolver.identity()).text();
         assertFalse(written.contains("example take"), "no row is offered: " + written);
         assertTrue(written.contains("no rows offered at"),
@@ -485,11 +483,9 @@ class CompilePartialAdequacyTest {
 
         assertEquals(List.of(), generated.get("take").composed().rows());
         assertEquals(List.of(), generated.get("take").boundaries().rows());
-        String written = GeneratedRows.of(
-                souther.compiler.query.OfferingRequest.overTheModule("example.split", true),
-                generated,
-                Adequacy.generatedForDeclarationsOf(compilation.db(), "example.split",
-                        new souther.compiler.query.GenerationScope.Module()),
+        String written = GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
+                        souther.compiler.query.OfferingRequest.overTheModule(
+                                "example.split", true)),
                 Map.of(), SourceNameResolver.identity()).text();
         assertFalse(written.contains("example take"),
                 "the row may be sitting in the file that could not be read: " + written);

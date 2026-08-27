@@ -91,11 +91,17 @@ public record Settlements(List<OfferItem> requested,
             }
             count.put(item, settling);
         }
+        // What each row was composed for, the way round this asks it. Read out of the map the other
+        // way for every row, the walk would go over every item once per row to find the few that
+        // name it.
+        Map<RowKey, List<OfferItem>> composedHere = new LinkedHashMap<>();
+        composedFor.forEach((item, row) ->
+                composedHere.computeIfAbsent(row, _ -> new ArrayList<>()).add(item));
         List<RowKey> inOrder = new ArrayList<>(byRow.keySet());
         Set<RowKey> kept = new LinkedHashSet<>(inOrder);
         for (int at = inOrder.size() - 1; at >= 0; at--) {
             RowKey row = inOrder.get(at);
-            if (goes(row, kept, count)) {
+            if (goes(row, composedHere.getOrDefault(row, List.of()), count)) {
                 kept.remove(row);
                 byRow.get(row).forEach((item, settlement) -> {
                     if (settlement.settles()) {
@@ -108,9 +114,18 @@ public record Settlements(List<OfferItem> requested,
                 inOrder.stream().filter(kept::contains).toList()));
     }
 
-    /** Whether the offering answers as much without {@code row} as with it. */
-    private boolean goes(RowKey row, Set<RowKey> kept, Map<OfferItem, Integer> count) {
-        for (Map.Entry<OfferItem, Settlement> each : byRow.get(row).entrySet()) {
+    /**
+     * Whether the offering answers as much without {@code row} as with it.
+     *
+     * <p>Asked of the counts, which hold the kept rows and this one among them. So an item this row
+     * settles needs a second settler to be left after it goes, and an item it was composed for and
+     * settles nothing of needs one at all.
+     *
+     * @param composedHere what this row was composed for
+     */
+    private boolean goes(RowKey row, List<OfferItem> composedHere, Map<OfferItem, Integer> count) {
+        Map<OfferItem, Settlement> here = byRow.get(row);
+        for (Map.Entry<OfferItem, Settlement> each : here.entrySet()) {
             if (each.getValue().settles() && count.get(each.getKey()) <= 1) {
                 return false;
             }
@@ -118,18 +133,8 @@ public record Settlements(List<OfferItem> requested,
         // And what was composed for it. An item whose own row settles nothing this could tell about
         // is one nobody would be offered a row for at all, which is a piece of work going missing
         // rather than a row being said once instead of twice.
-        for (Map.Entry<OfferItem, RowKey> each : composedFor.entrySet()) {
-            if (!each.getValue().equals(row)) {
-                continue;
-            }
-            boolean elsewhere = false;
-            for (RowKey other : kept) {
-                if (!other.equals(row) && byRow.get(other).get(each.getKey()).settles()) {
-                    elsewhere = true;
-                    break;
-                }
-            }
-            if (!elsewhere) {
+        for (OfferItem item : composedHere) {
+            if (!here.get(item).settles() && count.get(item) < 1) {
                 return false;
             }
         }

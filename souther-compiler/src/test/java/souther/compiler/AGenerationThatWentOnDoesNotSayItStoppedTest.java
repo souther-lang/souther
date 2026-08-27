@@ -82,10 +82,12 @@ class AGenerationThatWentOnDoesNotSayItStoppedTest {
     }
 
     private static String written(souther.compiler.partition.FillResult result) {
-        return GeneratedRows.of(
-                souther.compiler.query.OfferingRequest.overTheModule("example.trip", false),
-                Map.of("submit", new Adequacy.Filling(result, Generator.GenerationResult.NONE,
-                        List.of())), null,
+        // The composition and not what is offered: this filling is built here rather than searched
+        // for, so there is no store to ask what its rows would settle.
+        return GeneratedRows.of(souther.compiler.query.Offering.composed(
+                        souther.compiler.query.OfferingRequest.overTheModule("example.trip", false),
+                        Map.of("submit", new Adequacy.Filling(result,
+                                Generator.GenerationResult.NONE, List.of())), null),
                 Map.of(), SourceNameResolver.identity()).text();
     }
 
