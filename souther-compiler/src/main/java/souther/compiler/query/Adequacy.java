@@ -1690,6 +1690,68 @@ public final class Adequacy {
         return Ordered.map(out);
     }
 
+    /**
+     * How a row of one behavior is read: where its positions are, and what the model divides them
+     * into.
+     *
+     * <p>What it takes to read a row, and nothing about what anybody was asked to compose. The two
+     * arrived together while the only reader was the search that composes rows — so a row composed
+     * by a behavior nothing else was asked of could not be read at all, and every question put to it
+     * came back as one nothing could tell about.
+     *
+     * @param axes empty where the model divides this behavior's positions into nothing, or where
+     *             what it divides them into could not be read. A row still has values and still
+     *             stands where it stands; what is missing is the classes to place them in
+     */
+    record HowARowIsRead(souther.compiler.partition.BehaviorInputs where, List<Axis> axes) {
+
+        HowARowIsRead {
+            axes = List.copyOf(axes);
+        }
+    }
+
+    /**
+     * The reading, from the pieces a caller already holds.
+     *
+     * <p>The one place a {@link souther.compiler.partition.BehaviorInputs} is made for a generation.
+     * A second assembly of the same four things is a second answer to where a row's values are, and
+     * the two would agree until one of them moved.
+     */
+    static HowARowIsRead readingOf(Hir.SpecBehavior spec, Sig sig, Symbols symbols,
+                                   souther.compiler.check.ReadingPolicy policy,
+                                   souther.compiler.partition.Partitions.Partitioning divided) {
+        List<String> parameters = spec.params().stream().map(Hir.Param::name).toList();
+        return new HowARowIsRead(
+                new souther.compiler.partition.BehaviorInputs(parameters, sig.inputTypes(),
+                        symbols, policy),
+                divided == null ? List.of() : divided.axes());
+    }
+
+    /**
+     * The same, asked of the store for any behavior of a module.
+     *
+     * <p>For a reader that holds a row and not a search. A row a declaration's line is owed is
+     * composed by whichever reading could compose it, and that behavior need not be one anything
+     * else was asked about — so what it takes to read the row is asked for here rather than taken
+     * off an answer about generating rows, which such a behavior has none of.
+     */
+    static HowARowIsRead readingOf(Db db, String module, String behavior) {
+        souther.compiler.check.Prepared prepared = db.ask(new Shapes.Prepared(module)).value();
+        Map<String, Sig> sigs = db.ask(new Bodies.Signatures(module)).value();
+        Answer<Symbols> symbols = Names.derivedSymbols(db, module);
+        souther.compiler.check.ReadingPolicy policy = db.ask(new Front.Reading()).value();
+        if (prepared == null || sigs == null || !symbols.present() || policy == null) {
+            return null;
+        }
+        Hir.SpecBehavior spec = specOf(prepared, behavior);
+        Sig sig = sigs.get(behavior);
+        if (spec == null || sig == null) {
+            return null;
+        }
+        return readingOf(spec, sig, symbols.value(), policy,
+                db.ask(new Divided(module, behavior)).value());
+    }
+
     /** The behavior of that name that has inputs of its own, or null. A composition's inputs are its
      *  first stage's and are divided there. */
     private static Hir.SpecBehavior specOf(souther.compiler.check.Prepared prepared, String name) {
@@ -3379,14 +3441,13 @@ public final class Adequacy {
                 souther.compiler.check.ReadingPolicy policy,
                 souther.compiler.partition.Partitions.Partitioning partitioning,
                 InputDomain domain, List<Finding> owed, PartitionEvidence evidence) {
-            List<String> parameters = spec.params().stream().map(Hir.Param::name).toList();
             // One reading of what the behavior takes, for both halves of this: the rows already
-            // written are read by it, and the rows offered are generated from it.
-            souther.compiler.partition.BehaviorInputs inputs =
-                    new souther.compiler.partition.BehaviorInputs(parameters, sig.inputTypes(),
-                            symbols, policy);
+            // written are read by it, and the rows offered are generated from it. Made where every
+            // reading of a row is made, so that a reader holding one of these rows and a reader
+            // holding none read it the same way.
+            HowARowIsRead read = readingOf(spec, sig, symbols, policy, partitioning);
             Generator.Subject subject =
-                    new Generator.Subject(spec.name(), inputs, partitioning.axes(),
+                    new Generator.Subject(spec.name(), read.where(), read.axes(),
                             souther.compiler.partition.HeldCounts.of(domain, symbols));
             // The arms this build is owed a row at, which the measure established and this reads.
             // A combination the body settles together is where one is looked for and is not itself

@@ -202,14 +202,27 @@ public record Settlements(List<OfferItem> requested,
         // answer that no row stands at one, of rows composed to stand at exactly that.
         Map<BorderObligationPoint, Map<String, List<BorderAssessment>>> declaredReadings =
                 readingsOfTheDeclaredLines(db, module, offering.request().boundaries());
+        // A reader for every behavior a row is written under, and not only for the ones a search
+        // answered about. A row a declaration's line is owed is composed by whichever reading could
+        // compose it, and that behavior need not be one anything else was asked of — read off the
+        // searches alone, such a row came back undetermined at every item, so nothing it stands at
+        // could ever make another row redundant.
         Map<String, OneBehavior> reading = new LinkedHashMap<>();
-        for (Map.Entry<String, Adequacy.Filling> behavior : offering.searched().entrySet()) {
-            OneBehavior read = OneBehavior.of(db, module, behavior.getKey(), behavior.getValue(),
-                    sigs == null ? null : sigs.get(behavior.getKey()), building, trials,
+        Set<String> carriers = new LinkedHashSet<>(offering.rows().keySet());
+        carriers.addAll(offering.searched().keySet());
+        for (String behavior : carriers) {
+            Adequacy.Filling filling = offering.searched().get(behavior);
+            OneBehavior read = OneBehavior.of(db, module, behavior, filling,
+                    sigs == null ? null : sigs.get(behavior), building, trials,
                     offering.request().boundaries(), declaredReadings);
-            reading.put(behavior.getKey(), read);
+            if (read == null) {
+                continue;   // nothing here can read a row of it, which its rows are told below
+            }
+            reading.put(behavior, read);
             requested.addAll(read.owed());
-            composedFor.putAll(read.composed(behavior.getValue()));
+            if (filling != null) {
+                composedFor.putAll(read.composed(filling));
+            }
         }
         // And the points the module's declarations are owed, which are no behavior's own. A row of
         // whichever behavior composed one answers the line for everybody, so they are items of the
@@ -296,7 +309,13 @@ public record Settlements(List<OfferItem> requested,
                               souther.compiler.execute.RowTrials trials, boolean boundaries,
                               Map<BorderObligationPoint, Map<String, List<BorderAssessment>>>
                                       declared) {
-            Generator.Subject subject = filling.composed().plan().subject();
+            // How a row of this behavior is read, asked of the store rather than taken off a
+            // search. A behavior that composed a row for a declaration's line and was asked
+            // nothing else has no search to take it from, and its rows are read like any other.
+            Adequacy.HowARowIsRead read = Adequacy.readingOf(db, module, behavior);
+            if (read == null) {
+                return null;
+            }
             Map<OfferItem.APointOfALine, OwedBoundaryPoint> owedHere = new LinkedHashMap<>();
             Map<OfferItem.APointOfALine, List<AtAPoint>> reads = new LinkedHashMap<>();
             if (boundaries) {
@@ -330,10 +349,14 @@ public record Settlements(List<OfferItem> requested,
                     }
                 }
             });
-            return new OneBehavior(behavior, subject.inputs(), subject.axes(), sig, building,
+            // What this behavior was asked to offer a row for, which is the search's answer and
+            // is nothing where nothing asked it. A behavior with rows and no search of its own is
+            // owed no class and no arm here: what it holds is a row somebody else's line needed.
+            return new OneBehavior(behavior, read.where(), read.axes(), sig, building,
                     sig == null || trials == null ? Generator.Trial.NOTHING_RUNS
                             : Adequacy.runningRowsOf(trials, behavior, sig),
-                    filling.composed().plan().classesOwed(), filling.composed().plan().armsOwed(),
+                    filling == null ? List.of() : filling.composed().plan().classesOwed(),
+                    filling == null ? List.of() : filling.composed().plan().armsOwed(),
                     owedHere, reads);
         }
 
