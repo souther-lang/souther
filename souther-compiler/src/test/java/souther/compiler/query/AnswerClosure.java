@@ -162,30 +162,6 @@ final class AnswerClosure {
     private static final Locus.Step VALUE = new Locus.Step.MapValue();
 
     /**
-     * An end of a coordinate's range, and the declarations holding it, reached two ways.
-     *
-     * <p>Met by the walk that holds two stores together and not by the walk that asks each object
-     * what it is. The second stops at {@code InputDomain}, which says nothing by {@code equals}
-     * either and is written down above — so what is under it is out of that walk's sight, and this
-     * is what the other one is for.
-     */
-    private static Known heldEnd(Locus.Step into, Locus.Step through) {
-        return new Known(new Identity(at(Q + "Adequacy$Inputs",
-                "souther.compiler.check.Held", m(ANSWER, "value"), VALUE, into,
-                through, m("souther.compiler.inputs.ReadPosition", "narrowedEnds"),
-                m("souther.compiler.check.NarrowedBounds$Reading", "lower"),
-                m("souther.compiler.check.NarrowedEnd", "held")),
-                Nature.VALUE, Cause.MISSING_VALUE_EQUALITY),
-                Set.of(compared(Scenario.VALID_CORPUS)),
-                "the declarations holding one end of a range, worked out once and kept. A value: "
-                        + "two of these that would name the same declarations name the same "
-                        + "declarations. It is here for the reason the standard library is — what "
-                        + "it holds is worked out on demand, and comparing two of them is the one "
-                        + "way to reach that work without meaning to, which is what its own header "
-                        + "says about comparing, hashing and printing one");
-    }
-
-    /**
      * The end itself, on the way to what is holding it.
      *
      * <p>Under the range and never beside it: one of these exists only where there is an end, and
@@ -255,19 +231,12 @@ final class AnswerClosure {
                     Nature.VALUE, Cause.MISSING_VALUE_EQUALITY), ONLY_WALKED,
                     "the same library, reached through the table an expansion reads. One thing to "
                             + "fix and two places it is held"),
-            new Known(new Identity(at(Q + "Adequacy$Inputs", "souther.compiler.inputs.InputDomain",
-                    m(ANSWER, "value"), VALUE), Nature.NOT_READ, Cause.UNCLASSIFIED),
-                    BOTH_EVERYWHERE,
-                    "whether it is something that says what it is or something that does something "
-                            + "has to be read before it is either, so the fix is to read it"),
-            heldEnd(m("souther.compiler.inputs.InputDomain", "byPath"), VALUE),
-            heldEnd(m("souther.compiler.inputs.InputDomain", "positions"), ELEMENT),
-            narrowedEnd(Q + "Adequacy$Inputs", compared(Scenario.VALID_CORPUS),
+            narrowedEnd(Q + "Adequacy$Inputs", walked(Scenario.VALID_CORPUS),
                     m(ANSWER, "value"), VALUE,
                     m("souther.compiler.inputs.InputDomain", "byPath"), VALUE,
                     m("souther.compiler.inputs.ReadPosition", "narrowedEnds"),
                     m("souther.compiler.check.NarrowedBounds$Reading", "lower")),
-            narrowedEnd(Q + "Adequacy$Inputs", compared(Scenario.VALID_CORPUS),
+            narrowedEnd(Q + "Adequacy$Inputs", walked(Scenario.VALID_CORPUS),
                     m(ANSWER, "value"), VALUE,
                     m("souther.compiler.inputs.InputDomain", "positions"), ELEMENT,
                     m("souther.compiler.inputs.ReadPosition", "narrowedEnds"),
