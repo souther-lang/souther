@@ -93,9 +93,16 @@ record Divergence(Locus at, String cause, Divergence.Kind kind) {
             this.budget = budget;
         }
 
+        /**
+         * What the language says the meaning of, which is {@link AnswerShape}'s to say.
+         *
+         * <p>The same list as the walk of one store reads. Written again here, one of them had a
+         * rule admitting whatever extends a number, so a thing whose equality is an address came
+         * back from this walk as two compiles answering different things — true of the objects and
+         * wrong about the compiler.
+         */
         private static boolean opaque(Class<?> c) {
-            return c == String.class || Number.class.isAssignableFrom(c) || c == Boolean.class
-                    || c == Character.class || c.isEnum();
+            return AnswerShape.isLeaf(c);
         }
 
         private void say(Locus at, Class<?> c, Kind kind) {
@@ -375,7 +382,18 @@ record Divergence(Locus at, String cause, Divergence.Kind kind) {
             }
         }
 
+        /**
+         * Which contract a thing is read under, where it keeps one at all.
+         *
+         * <p>Something that says it keeps none of it is read as a thing of its own, which is
+         * {@link AnswerShape#keepsThatContract}'s to say and is what the walk of one store reads
+         * too. A map whose equality is which objects were put in it, paired entry by entry, would
+         * have its members compared and its own answer never asked.
+         */
         private static Contract contractOf(Object each) {
+            if (!AnswerShape.keepsThatContract(each.getClass())) {
+                return Contract.A_THING;
+            }
             if (each instanceof List<?>) {
                 return Contract.A_LIST;
             }

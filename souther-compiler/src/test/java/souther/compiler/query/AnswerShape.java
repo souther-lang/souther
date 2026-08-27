@@ -53,19 +53,60 @@ final class AnswerShape {
     }
 
     /**
-     * Whether a thing of this type stands for what it holds, so that reading it is reading them.
+     * The contracts under which comparing a thing compares what it holds, named one at a time.
      *
-     * <p>A collection, a map or an absence <em>the language ships</em>. The second half is what
-     * makes this a rule rather than a shape anybody may claim: something of this compiler's own
-     * that implements a map holds whatever else it was written to hold, and read as a map it would
-     * be read for its entries and for nothing else — so what is written here is a value like any
-     * other and is read as one.
+     * <p>What a declaration promises when it writes one of these is the contract: two of them are
+     * equal when they hold equal things. Anything else a declaration may write — a class of this
+     * compiler's own that implements a map, or one of the language's own that says it keeps none of
+     * the contract — promises whatever that class promises, which is not this.
+     */
+    private static final Set<Class<?>> THE_CONTRACTS = Set.of(
+            java.util.Collection.class, java.util.List.class, java.util.Set.class,
+            java.util.SequencedSet.class, java.util.SortedSet.class,
+            java.util.Map.class, java.util.SortedMap.class, java.util.SequencedMap.class,
+            java.util.Optional.class);
+
+    /**
+     * The things the language ships that say they keep none of it.
+     *
+     * <p>Named, and each of them held to failing the contract by
+     * {@code AWalkOfOneAnswerNamesWhatMeansNothingTest} — a name here that turned out to keep the
+     * contract would be something excluded for nothing, and one that is missing is what the same
+     * test's other half is for.
+     */
+    private static final Set<Class<?>> WHICH_KEEP_NONE_OF_IT =
+            Set.of(java.util.IdentityHashMap.class);
+
+    /**
+     * Whether a declaration writing this type promises that comparing one compares what it holds.
+     *
+     * <p>The contract itself and not whatever implements it. A declaration naming an
+     * implementation names what that implementation does, which may be to compare by which objects
+     * were put in it — and read as one of these it would be read for what it holds and never asked.
      */
     static boolean standsForWhatItHolds(Class<?> type) {
-        return (java.util.Collection.class.isAssignableFrom(type)
-                || java.util.Map.class.isAssignableFrom(type)
-                || type == java.util.Optional.class)
-                && type.getModule() == Object.class.getModule();
+        return THE_CONTRACTS.contains(type);
+    }
+
+    /**
+     * Whether a thing that turned out to be of this class keeps one of those contracts.
+     *
+     * <p>Asked where an object is in hand and nothing was declared: the language ships one of these
+     * for a walk to hold, and what it is is what it turned out to be. Of the language's own, since
+     * something of this compiler's own that implements a map holds whatever else it was written to
+     * hold; and not one that says it keeps none of the contract, which is written down above.
+     */
+    static boolean keepsThatContract(Class<?> type) {
+        return !WHICH_KEEP_NONE_OF_IT.contains(type)
+                && type.getModule() == Object.class.getModule()
+                && (java.util.Collection.class.isAssignableFrom(type)
+                        || java.util.Map.class.isAssignableFrom(type)
+                        || type == java.util.Optional.class);
+    }
+
+    /** What is named as keeping none of it, for a test that holds each of them to it. */
+    static Set<Class<?>> whichKeepNoneOfIt() {
+        return WHICH_KEEP_NONE_OF_IT;
     }
 
     /** Whether {@code type} says what it is, rather than which object it is. */

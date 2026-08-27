@@ -98,6 +98,15 @@ class AWalkOfWhatIsDeclaredStopsWhereNothingSettlesItTest {
         }
     }
 
+    private record AnIdentityMapIsAnswered()
+            implements Key<java.util.IdentityHashMap<String, String>> {
+
+        @Override
+        public Answer<java.util.IdentityHashMap<String, String>> compute(Db db) {
+            return Answer.absent();
+        }
+    }
+
     /** Something written with what it holds, whose own equality is an address. */
     private record ADequeIsAnswered() implements Key<ArrayDeque<String>> {
 
@@ -184,6 +193,20 @@ class AWalkOfWhatIsDeclaredStopsWhereNothingSettlesItTest {
                         + " souther.compiler.query."
                         + "AWalkOfWhatIsDeclaredStopsWhereNothingSettlesItTest$ANumberOfItsOwn"),
                 walking(ANumberOfItsOwnIsAnswered.class));
+    }
+
+    /**
+     * What a declaration writes is the contract or it is a thing of its own.
+     *
+     * <p>Naming an implementation names what that implementation does. The language ships one whose
+     * equality is which objects were put in it, and read for what it holds — because it is a map,
+     * and a map's equality is its entries — two of them holding equal things would be one where
+     * they are two. So a declaration naming it is read as naming that class, which nothing closes.
+     */
+    @Test
+    void aMapTheLanguageShipsThatKeepsNoneOfTheContractIsNotReadForWhatItHolds() {
+        assertEquals(List.of("NOTHING_CLOSES_IT at  java.util.IdentityHashMap"),
+                walking(AnIdentityMapIsAnswered.class));
     }
 
     /**

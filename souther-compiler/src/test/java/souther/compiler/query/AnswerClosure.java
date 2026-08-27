@@ -88,34 +88,43 @@ final class AnswerClosure {
         OPEN_VALUE_SLOT
     }
 
-    /** What is wrong at a place: what the thing there is, or what its declaration leaves open. */
-    private sealed interface Fault {
+    /**
+     * What was read at a place: what the thing there is, or what its declaration leaves open.
+     *
+     * <p>Not what to do about it. What a thing is is one reading however many places hold it, and
+     * what it obliges anybody to do turns on where it stands — a way of asking is a defect under a
+     * question this compiler computes and is what somebody handed in under one it is given. Held as
+     * a fault, the reading would be saying the second is owed work, which the contract says it is
+     * not.
+     */
+    private sealed interface WhatItIs {
 
         /** The thing was read and this is what it is. */
-        record OfTheThing(Meaning meaning) implements Fault {}
+        record OfTheThing(Meaning meaning) implements WhatItIs {}
 
-        /** The declaration was read and it settles nothing here. */
-        record OfTheDeclaration(DeclarationProblem problem) implements Fault {}
+        /** The declaration was read and it settles nothing here, which is owed work wherever it
+         *  stands. */
+        record OfTheDeclaration(DeclarationProblem problem) implements WhatItIs {}
     }
 
     /** Something that says what it is and defines no equality over that. */
-    private static final Fault MISSING_EQUALITY =
-            new Fault.OfTheThing(new Meaning.Value(ValueProblem.MISSING_EQUALITY));
+    private static final WhatItIs MISSING_EQUALITY =
+            new WhatItIs.OfTheThing(new Meaning.Value(ValueProblem.MISSING_EQUALITY));
 
     /** A way of asking something rather than an answer, so it is one object per store whatever it
      *  is compared with. */
-    private static final Fault CAPABILITY = new Fault.OfTheThing(new Meaning.Capability());
+    private static final WhatItIs CAPABILITY = new WhatItIs.OfTheThing(new Meaning.Capability());
 
     /** A place the declarations leave open, so no walk of them can say which of the two it is. */
-    private static final Fault AN_OPEN_SLOT =
-            new Fault.OfTheDeclaration(DeclarationProblem.OPEN_VALUE_SLOT);
+    private static final WhatItIs AN_OPEN_SLOT =
+            new WhatItIs.OfTheDeclaration(DeclarationProblem.OPEN_VALUE_SLOT);
 
     /** What one of these is, in the words a reader of a failure gets. */
-    private static String said(Fault fault) {
-        return switch (fault) {
-            case Fault.OfTheThing(Meaning.Value(ValueProblem problem)) -> "VALUE/" + problem;
-            case Fault.OfTheThing(Meaning.Capability _) -> "CAPABILITY";
-            case Fault.OfTheDeclaration(DeclarationProblem problem) -> problem.toString();
+    private static String said(WhatItIs whatItIs) {
+        return switch (whatItIs) {
+            case WhatItIs.OfTheThing(Meaning.Value(ValueProblem problem)) -> "VALUE/" + problem;
+            case WhatItIs.OfTheThing(Meaning.Capability _) -> "CAPABILITY";
+            case WhatItIs.OfTheDeclaration(DeclarationProblem problem) -> problem.toString();
         };
     }
 
@@ -199,18 +208,23 @@ final class AnswerClosure {
     }
 
     /**
-     * One thing to fix, named once and pointed at by every place it is met at.
+     * One reading, named once and pointed at by every place it is met at.
      *
-     * <p>What a thing is is one judgement however many places hold it. Written per place, the four
-     * ends of two ranges would be four readings of one class, and fixing it would be four lines to
-     * strike with four chances to leave one saying something that is no longer so.
+     * <p>What a thing is is one reading however many places hold it. Written per place, the four
+     * ends of two ranges would be four readings of one class, and acting on it would be four lines
+     * to strike with four chances to leave one saying something that is no longer so.
      *
-     * @param named what this problem is called where a failure is read
+     * <p>Whether it is owed work is not here. That is read from this and from where the place
+     * stands ({@link Where}), and the two are apart because they move apart: a way of asking is a
+     * defect under a question this compiler computes and is what a caller handed in under one it is
+     * given, and it is the same reading either way.
+     *
+     * @param named what this reading is called where a failure is read
      */
-    private record Problem(String named, Fault fault, String reason) {}
+    private record Reading(String named, WhatItIs whatItIs, String reason) {}
 
     /** One place, what is wrong with what is there, and who met it. */
-    private record Known(Locus.Place place, Problem problem, Set<Observation> seenBy) {}
+    private record Known(Locus.Place place, Reading reading, Set<Observation> seenBy) {}
 
     private static Observation walked(Scenario scenario) {
         return new Observation(Detector.ONE_ANSWER_WALKED, scenario);
@@ -228,12 +242,12 @@ final class AnswerClosure {
      * again. Written as a value with an array inside, the array is what a walk arrives at one step
      * further along, which is this place moved rather than struck off.
      */
-    private static final Problem BYTES = new Problem("BYTES", MISSING_EQUALITY,
+    private static final Reading BYTES = new Reading("BYTES", MISSING_EQUALITY,
             "what a class is is its bytes, so what lets a module whose classes came out the same "
                     + "leave its readers alone is holding them as something that says so");
 
     /** The library this compiler ships, reached wherever a compilation holds it. */
-    private static final Problem STDLIB = new Problem("STDLIB", MISSING_EQUALITY,
+    private static final Reading STDLIB = new Reading("STDLIB", MISSING_EQUALITY,
             "a value, and here for a reason the others are not: one is built per process and every "
                     + "answer of a compilation holds that one, so identity is the answer structural "
                     + "equality would give. Writing that equality out would walk every declaration "
@@ -241,7 +255,7 @@ final class AnswerClosure {
                     + "other\" would be true only while there is one of them");
 
     /** How a module is found, which is something run rather than something said. */
-    private static final Problem MODULE_PATH = new Problem("MODULE_PATH", CAPABILITY,
+    private static final Reading MODULE_PATH = new Reading("MODULE_PATH", CAPABILITY,
             "a module path resolves a module by running something, and a function never equals the "
                     + "same function computed again");
 
@@ -253,21 +267,21 @@ final class AnswerClosure {
      * asking, which nothing closes; a walk of what was built goes on through it to the store it
      * holds. Neither is a defect the other does not have.
      */
-    private static final Problem A_STORE = new Problem("A_STORE", CAPABILITY,
+    private static final Reading A_STORE = new Reading("A_STORE", CAPABILITY,
             "Scoping.Scoped carries a way of asking the modules around this one a further question, "
                     + "and it holds this store to ask with. Where a scope has been taken apart "
                     + "already, that is the half of the assembly nobody has yet — it belongs inside "
                     + "the compute that asks");
 
     /** How long a piece of work gets, and what a caller is handed when it does not finish. */
-    private static final Problem A_DEADLINE = new Problem("A_DEADLINE", CAPABILITY,
+    private static final Reading A_DEADLINE = new Reading("A_DEADLINE", CAPABILITY,
             "a deadline decides by running a clock, or by reading which piece of work it is, and a "
                     + "way of deciding never equals the same way of deciding built again. Handed in "
                     + "rather than computed, so what is left of it is that the store hears a new "
                     + "one as a change to the outside");
 
     /** What a generation is asked for on behalf of, carrying what it takes to go on asking. */
-    private static final Problem GENERATION_READERS = new Problem("GENERATION_READERS", CAPABILITY,
+    private static final Reading GENERATION_READERS = new Reading("GENERATION_READERS", CAPABILITY,
             "the subject a row would be written for carries the means to ask further questions — "
                     + "the symbols a name is read against, and the reading a quantity over several "
                     + "positions is asked of. Both are built where they are used and neither is "
@@ -282,7 +296,7 @@ final class AnswerClosure {
      * stand there. So writing the equality moves this place from one word to the other rather than
      * striking it off, and the day it moves is the day the register says so.
      */
-    private static final Problem AN_EXCEPTION = new Problem("AN_EXCEPTION", MISSING_EQUALITY,
+    private static final Reading AN_EXCEPTION = new Reading("AN_EXCEPTION", MISSING_EQUALITY,
             "a name nothing resolved is answered with what was raised where it was read. What it "
                     + "says is where the name is and what is wrong with it, and two compiles that "
                     + "found the same thing found the same thing — so that is what it wants an "
@@ -291,8 +305,8 @@ final class AnswerClosure {
                     + "here is settled by what a raise happens to be of");
 
     /** What a term holds beside its parts, declared as anything at all. */
-    private static final Problem A_TERM_HOLDS_ANYTHING =
-            new Problem("A_TERM_HOLDS_ANYTHING", AN_OPEN_SLOT,
+    private static final Reading A_TERM_HOLDS_ANYTHING =
+            new Reading("A_TERM_HOLDS_ANYTHING", AN_OPEN_SLOT,
                     "what a shape holds beside its parts is a location, a written value, an "
                             + "operator, the name of an operation, or the type and fields of a "
                             + "construction — six things, written as one that admits anything. Each "
@@ -301,13 +315,13 @@ final class AnswerClosure {
                             + "may stand here is settled by whatever happens to be put there");
 
     /** One end of what a reading leaves a position. */
-    private static final Problem NARROWED_END = new Problem("NARROWED_END", MISSING_EQUALITY,
+    private static final Reading NARROWED_END = new Reading("NARROWED_END", MISSING_EQUALITY,
             "one end of what a reading leaves a position, with what is holding it. A value, and one "
                     + "nothing compares on its own: the range it sits in writes its own equality "
                     + "and reaches both ends through it");
 
     /** What a compile said on the way to an answer. */
-    private static final Problem A_REPORT = new Problem("A_REPORT", MISSING_EQUALITY,
+    private static final Reading A_REPORT = new Reading("A_REPORT", MISSING_EQUALITY,
             "a report says what this compile found, and two compiles that found the same thing "
                     + "found the same thing — so what it wants is equality over what it says. "
                     + "Reached because an answer is its value and its reports together, which is "
@@ -418,7 +432,7 @@ final class AnswerClosure {
      * place starts failing for another reason is the day something about the declaration moved
      * under a judgement that still reads as if it had not.
      */
-    private record KnownDeclared(TypePath.Place place, Problem problem,
+    private record KnownDeclared(TypePath.Place place, Reading reading,
                                  Traversal.Why why) {}
 
     /** A place, written the way the walk of declarations writes one. */
@@ -598,8 +612,8 @@ final class AnswerClosure {
     static Map<TypePath.Place, String> declaredReasons() {
         Map<TypePath.Place, String> out = new LinkedHashMap<>();
         DECLARED.forEach(each -> out.put(each.place(),
-                said(each.problem().fault()) + " " + whereItStands(each.place().question())
-                        + " [" + each.problem().named() + "] " + each.problem().reason()));
+                said(each.reading().whatItIs()) + " " + whereItStands(each.place().question())
+                        + " [" + each.reading().named() + "] " + each.reading().reason()));
         return out;
     }
 
@@ -627,16 +641,36 @@ final class AnswerClosure {
                 // what the JDK ships: two caches the language fills in and opens to nobody. The
                 // walk asks, is refused, and says so — reading it as one of the JDK's own maps
                 // instead would read it for its entries and never meet what it answers with.
-                fieldOfAJdkParent("Adequacy$Rows", "keySet", Scenario.VALID_CORPUS),
-                fieldOfAJdkParent("Adequacy$Rows", "keySet", Scenario.A_MODULE_SPOKEN_ABOUT),
-                fieldOfAJdkParent("Adequacy$Rows", "values", Scenario.VALID_CORPUS),
-                fieldOfAJdkParent("Adequacy$Rows", "values", Scenario.A_MODULE_SPOKEN_ABOUT));
+                fieldOfAJdkParent("Adequacy$Rows", "", "keySet", Scenario.VALID_CORPUS),
+                fieldOfAJdkParent("Adequacy$Rows", "", "keySet", Scenario.A_MODULE_SPOKEN_ABOUT),
+                fieldOfAJdkParent("Adequacy$Rows", "", "values", Scenario.VALID_CORPUS),
+                fieldOfAJdkParent("Adequacy$Rows", "", "values", Scenario.A_MODULE_SPOKEN_ABOUT),
+                // The correspondence between a row's operand and the method it runs as, keyed on
+                // the very nodes this answer hands out — so what it means it means inside the
+                // answer that holds it, and what the answer says it is leaves it out on purpose.
+                // Which is why it is read as a thing of its own: a map that compares by which
+                // objects were put in it keeps none of what makes reading a map its entries enough.
+                operandMethodsOf("AbstractMap#keySet", Scenario.VALID_CORPUS),
+                operandMethodsOf("AbstractMap#keySet", Scenario.A_MODULE_SPOKEN_ABOUT),
+                operandMethodsOf("AbstractMap#values", Scenario.VALID_CORPUS),
+                operandMethodsOf("AbstractMap#values", Scenario.A_MODULE_SPOKEN_ABOUT),
+                operandMethodsOf("IdentityHashMap#entrySet", Scenario.VALID_CORPUS),
+                operandMethodsOf("IdentityHashMap#entrySet", Scenario.A_MODULE_SPOKEN_ABOUT),
+                operandMethodsOf("IdentityHashMap#table", Scenario.VALID_CORPUS),
+                operandMethodsOf("IdentityHashMap#table", Scenario.A_MODULE_SPOKEN_ABOUT));
     }
 
-    /** A field of what the JDK ships, under a value of this compiler's own that extends it. */
-    private static String fieldOfAJdkParent(String question, String named, Scenario scenario) {
-        return "A_FIELD_THAT_WOULD_NOT_OPEN " + Q + question + ".Answer#value.AbstractMap#" + named
-                + " in " + scenario;
+    /** A field of what the JDK ships, under something of this compiler's own that holds it. */
+    private static String fieldOfAJdkParent(String question, String under, String named,
+                                            Scenario scenario) {
+        return "A_FIELD_THAT_WOULD_NOT_OPEN " + Q + question + ".Answer#value" + under
+                + ".AbstractMap#" + named + " in " + scenario;
+    }
+
+    /** And the same, under the correspondence a prepared module keeps. */
+    private static String operandMethodsOf(String named, Scenario scenario) {
+        return "A_FIELD_THAT_WOULD_NOT_OPEN " + Q + "Shapes$Prepared.Answer#value"
+                + ".Prepared#operandMethods." + named + " in " + scenario;
     }
 
     /** Every place written down here, whichever detector or scenario meets it. */
@@ -664,8 +698,8 @@ final class AnswerClosure {
     static Map<Locus.Place, String> reasons() {
         Map<Locus.Place, String> out = new LinkedHashMap<>();
         KNOWN.forEach(each -> out.put(each.place(),
-                said(each.problem().fault()) + " " + whereItStands(each.place().question())
-                        + " [" + each.problem().named() + "] " + each.problem().reason()));
+                said(each.reading().whatItIs()) + " " + whereItStands(each.place().question())
+                        + " [" + each.reading().named() + "] " + each.reading().reason()));
         return out;
     }
 

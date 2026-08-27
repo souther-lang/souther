@@ -135,7 +135,7 @@ final class AnswerWalk {
          */
         @Override
         public boolean aContainer(Object node) {
-            return AnswerShape.standsForWhatItHolds(node.getClass());
+            return AnswerShape.keepsThatContract(node.getClass());
         }
 
         @Override
