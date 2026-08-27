@@ -1,0 +1,340 @@
+package souther.compiler.query;
+
+import souther.compiler.check.Sig;
+import souther.compiler.execute.BoundaryValues;
+import souther.compiler.observe.ObservedValue;
+import souther.compiler.partition.Axis;
+import souther.compiler.partition.BehaviorInputs;
+import souther.compiler.partition.FixtureTemplate;
+import souther.compiler.partition.Generator;
+import souther.compiler.partition.InputClassifications;
+import souther.compiler.partition.ObservedInputs;
+import souther.compiler.partition.StandingAtAPoint;
+import souther.compiler.observe.Classification;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.SequencedMap;
+import java.util.Set;
+
+/**
+ * What each row a run offers would do about each thing the run was asked to offer a row for.
+ *
+ * <p>The whole table and not the diagonal. A row is composed for one thing, and what else it turns
+ * out to answer is the question this exists to put — so every row is asked about every item, and a
+ * row's own item is one entry of its column like any other.
+ *
+ * <p><b>The items are what was asked for.</b> They come from the plan a run was made with and from
+ * the points its searches were put, never from what the rows say they were composed for: a row
+ * carries the classes and arms it may be named after and never a line, so an item universe read off
+ * the rows would be missing every line in the block.
+ *
+ * <p>Nothing here is a measurement. Each entry says what would follow if the row were written, and
+ * the rows are questions nobody has answered yet.
+ */
+public record Settlements(List<OfferItem> requested,
+                          SequencedMap<OfferItem, RowKey> composedFor,
+                          SequencedMap<RowKey, Map<OfferItem, Settlement>> byRow) {
+
+    public Settlements {
+        requested = List.copyOf(requested);
+        composedFor = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(composedFor));
+        byRow = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(byRow));
+    }
+
+    /** What {@code row} would do about {@code item}, for a reader holding both. */
+    public Settlement at(RowKey row, OfferItem item) {
+        Map<OfferItem, Settlement> here = byRow.get(row);
+        if (here == null || !here.containsKey(item)) {
+            throw new IllegalArgumentException("no entry for " + row + " at " + item);
+        }
+        return here.get(item);
+    }
+
+    /** The items some row of this offering settles, which is what a reduction has to keep answered. */
+    public Set<OfferItem> settled() {
+        Set<OfferItem> out = new LinkedHashSet<>();
+        for (OfferItem item : requested) {
+            for (Map<OfferItem, Settlement> here : byRow.values()) {
+                if (here.get(item).settles()) {
+                    out.add(item);
+                    break;
+                }
+            }
+        }
+        return Collections.unmodifiableSet(out);
+    }
+
+    /**
+     * The table for one offering.
+     *
+     * <p>Read with the same walk a written row is read with. Where a candidate's values sit is
+     * {@link InputClassifications}'s answer, whether it stands at a line is
+     * {@link StandingAtAPoint}'s, and which arms it takes is what running it recorded — the three
+     * questions a measurement puts to the rows in a file, put here to the rows a person is being
+     * handed.
+     */
+    public static Settlements of(Db db, Offering offering) {
+        String module = offering.request().module();
+        Map<String, Sig> sigs = db.ask(new Bodies.Signatures(module)).value();
+        BoundaryValues building = Adequacy.constructing(db, module);
+        souther.compiler.execute.RowTrials trials = Adequacy.trialling(db, module);
+        List<OfferItem> requested = new ArrayList<>();
+        SequencedMap<OfferItem, RowKey> composedFor = new LinkedHashMap<>();
+        SequencedMap<RowKey, Map<OfferItem, Settlement>> byRow = new LinkedHashMap<>();
+        Map<String, OneBehavior> reading = new LinkedHashMap<>();
+        for (Map.Entry<String, Adequacy.Filling> behavior : offering.searched().entrySet()) {
+            OneBehavior read = OneBehavior.of(db, module, behavior.getKey(), behavior.getValue(),
+                    sigs == null ? null : sigs.get(behavior.getKey()), building, trials,
+                    offering.request().boundaries());
+            reading.put(behavior.getKey(), read);
+            requested.addAll(read.owed());
+            composedFor.putAll(read.composed(behavior.getValue()));
+        }
+        // And the points the module's declarations are owed, which are no behavior's own. A row of
+        // whichever behavior composed one answers the line for everybody, so they are items of the
+        // offering rather than of the block a row happens to sit in.
+        if (offering.declared() != null) {
+            offering.declared().resolved().forEach((point, answer) -> {
+                OfferItem item = new OfferItem.APointOfALine(point);
+                requested.add(item);
+                if (answer.resolution() instanceof DeclarationResolution.Generated(var by,
+                        var row)) {
+                    composedFor.put(item, RowKey.of(by, row));
+                }
+            });
+        }
+        List<OfferItem> items = List.copyOf(new LinkedHashSet<>(requested));
+        offering.rows().forEach((behavior, rows) -> {
+            OneBehavior read = reading.get(behavior);
+            for (Offering.OfferedRow row : rows) {
+                // Read once for the row and asked of every item. What a row is — where its values
+                // sit and what running it recorded — does not change between the questions put to
+                // it, and reading it per item would be the same row read as many times as this run
+                // happens to be asked about, at the price of running it that many times.
+                OneRow one = read == null ? OneRow.nothingRead() : read.read(row.inputs());
+                Map<OfferItem, Settlement> here = new LinkedHashMap<>();
+                for (OfferItem item : items) {
+                    here.put(item, read == null ? one.undetermined() : read.settlementOf(one, item));
+                }
+                byRow.put(row.key(), Collections.unmodifiableMap(here));
+            }
+        });
+        return new Settlements(items, composedFor, byRow);
+    }
+
+    /**
+     * One behavior's own reading of a candidate: what it is asked for, and how a row of it is read.
+     *
+     * <p>Made once per behavior and not once per row. What a row is read against — where its
+     * positions are, what the model divides them into, and which lines this behavior's readings meet
+     * — is the behavior's and does not move between the rows of one block.
+     */
+    private record OneBehavior(String behavior, BehaviorInputs where, List<Axis> axes, Sig sig,
+                               BoundaryValues building, Generator.Trial trial,
+                               List<Generator.ClassOwed> classes, List<Generator.ArmOwed> arms,
+                               Map<OfferItem.APointOfALine, OwedBoundaryPoint> points) {
+
+        static OneBehavior of(Db db, String module, String behavior, Adequacy.Filling filling,
+                              Sig sig, BoundaryValues building,
+                              souther.compiler.execute.RowTrials trials, boolean boundaries) {
+            Generator.Subject subject = filling.composed().plan().subject();
+            Map<OfferItem.APointOfALine, OwedBoundaryPoint> points = new LinkedHashMap<>();
+            if (boundaries) {
+                List<BorderAssessment> edges =
+                        db.ask(new Adequacy.BoundarySearch(module, behavior)).value();
+                if (edges != null) {
+                    // One entry per point, which is what a row standing there answers. Two readings
+                    // of one line at one role are one thing to be told about, and the walk that
+                    // offers the rows takes the same view.
+                    OwedBoundaryPoint.oneForEachPoint(OwedBoundaryPoint.across(edges))
+                            .forEach(point -> points.put(
+                                    new OfferItem.APointOfALine(point.owed()), point));
+                }
+            }
+            return new OneBehavior(behavior, subject.inputs(), subject.axes(), sig, building,
+                    sig == null || trials == null ? Generator.Trial.NOTHING_RUNS
+                            : Adequacy.runningRowsOf(trials, behavior, sig),
+                    filling.composed().plan().classesOwed(), filling.composed().plan().armsOwed(),
+                    points);
+        }
+
+        /**
+         * Which row was composed for each of them, where one was.
+         *
+         * <p>Read off what the searches answered with and never off the rows. A row carries the
+         * classes and arms it may be named after and never a line, so a walk from the rows would
+         * have every line in the block composed for nothing.
+         */
+        Map<OfferItem, RowKey> composed(Adequacy.Filling filling) {
+            Map<OfferItem, RowKey> out = new LinkedHashMap<>();
+            for (Generator.ClassOwed each : classes) {
+                if (filling.composed().discharge().at(each)
+                        instanceof souther.compiler.partition.ClassDisposition.Built built) {
+                    out.put(new OfferItem.AClass(each),
+                            RowKey.of(behavior, filling.composed().rowFor(built.row())));
+                }
+            }
+            for (Generator.ArmOwed each : arms) {
+                if (filling.composed().discharge().at(each)
+                        instanceof souther.compiler.partition.ArmDisposition.Built built) {
+                    out.put(new OfferItem.AnArm(each),
+                            RowKey.of(behavior, filling.composed().rowFor(built.row())));
+                }
+            }
+            points.forEach((item, point) -> {
+                if (point.item().attempt() instanceof ItemAssessment.Attempt.Built built) {
+                    out.put(item, RowKey.of(behavior, built.row()));
+                }
+            });
+            return out;
+        }
+
+        /** What this behavior was asked to offer a row for. */
+        List<OfferItem> owed() {
+            List<OfferItem> out = new ArrayList<>();
+            classes.forEach(each -> out.add(new OfferItem.AClass(each)));
+            arms.forEach(each -> out.add(new OfferItem.AnArm(each)));
+            out.addAll(points.keySet());
+            return out;
+        }
+
+        /**
+         * The row as the two things every question here is put to.
+         *
+         * <p>Made once. The values are built through this module's own decoders and the account is
+         * what running it recorded — and a row read again for the next item would be run again for
+         * it, which is the same row asked to do the same thing as many times as this run has
+         * questions.
+         */
+        OneRow read(List<FixtureTemplate> inputs) {
+            Generator.Watched watched = trial.run(inputs);
+            if (building == null || sig == null) {
+                return new OneRow(null, Settlement.Reason.NOTHING_BUILT_THE_VALUES, watched);
+            }
+            List<ObservedValue> values = new ArrayList<>();
+            for (int at = 0; at < inputs.size(); at++) {
+                if (at >= sig.ins().size()) {
+                    return new OneRow(null, Settlement.Reason.NOTHING_BUILT_THE_VALUES, watched);
+                }
+                switch (building.build(sig.ins().get(at), inputs.get(at).value())) {
+                    case BoundaryValues.Built.Value(var observed) -> values.add(observed);
+                    // The model would not take the value the row names. Told apart from having
+                    // nothing to build against: this found something out about the row, and that
+                    // found nothing out at all.
+                    case BoundaryValues.Built.Refused _ -> {
+                        return new OneRow(null, Settlement.Reason.THE_VALUES_WERE_REFUSED, watched);
+                    }
+                }
+            }
+            return new OneRow(List.copyOf(values), null, watched);
+        }
+
+        Settlement settlementOf(OneRow row, OfferItem item) {
+            return switch (item) {
+                case OfferItem.AClass(var owed) -> inClass(row, owed);
+                case OfferItem.AnArm(var owed) -> throughArm(row, owed);
+                case OfferItem.APointOfALine at -> atThePoint(row, at);
+            };
+        }
+
+        /**
+         * Whether the row's value at the position falls in the class.
+         *
+         * <p>Of this behavior's positions only. An axis names the behavior it divides, so a class of
+         * another one is not something a row written here has a value at — which is a row that does
+         * not settle it rather than one nothing could tell about.
+         */
+        private Settlement inClass(OneRow row, Generator.ClassOwed owed) {
+            if (!behavior.equals(owed.at().behavior())) {
+                return new Settlement.DoesNotSettle();
+            }
+            if (row.values() == null) {
+                return row.undetermined();
+            }
+            Classification at =
+                    InputClassifications.of(row.values(), where, axes).get(owed.at());
+            if (at == null) {
+                return new Settlement.DoesNotSettle();
+            }
+            return switch (at) {
+                case Classification.Classified in -> in.classIds().contains(owed.classId())
+                        ? new Settlement.Settles() : new Settlement.DoesNotSettle();
+                case Classification.Unclassified _ -> new Settlement.Undetermined(
+                        Settlement.Reason.THE_VALUES_COULD_NOT_BE_READ);
+            };
+        }
+
+        /**
+         * Whether running the row goes through the arm.
+         *
+         * <p>Not something the values answer. A row whose values sit in the classes a way into an
+         * arm leaves may still go elsewhere, so the account of the run is the whole of the evidence
+         * — and where there is none, this says so rather than reading the absence as a row that
+         * missed.
+         */
+        private Settlement throughArm(OneRow row, Generator.ArmOwed owed) {
+            return switch (row.watched()) {
+                case Generator.Watched.Ran(var account) -> account.taken().contains(owed.probe())
+                        ? new Settlement.Settles() : new Settlement.DoesNotSettle();
+                case Generator.Watched.NoAccount _ ->
+                        new Settlement.Undetermined(Settlement.Reason.NO_ACCOUNT_OF_THE_RUN);
+            };
+        }
+
+        /**
+         * Whether the row stands at the point, as this behavior reads the line.
+         *
+         * <p>A line is owed a row once and is met at whichever position reads it, so a point this
+         * behavior's readings do not meet is one a row written here does not settle. Where they do,
+         * the walk that reads a written row against the point reads this one.
+         */
+        private Settlement atThePoint(OneRow read, OfferItem.APointOfALine at) {
+            OwedBoundaryPoint point = points.get(at);
+            if (point == null) {
+                return new Settlement.DoesNotSettle();
+            }
+            if (read.values() == null) {
+                return read.undetermined();
+            }
+            ObservedInputs row = new ObservedInputs(read.values(), read.watched());
+            return switch (StandingAtAPoint.met(point.line().cut().of(), where, List.of(row),
+                    point.item().criterion(), point.line().origin().comparisonAt())) {
+                case YES -> new Settlement.Settles();
+                case NO -> new Settlement.DoesNotSettle();
+                case NOT_WATCHED ->
+                        new Settlement.Undetermined(Settlement.Reason.NO_ACCOUNT_OF_THE_RUN);
+                case UNREADABLE -> new Settlement.Undetermined(
+                        Settlement.Reason.THE_VALUES_COULD_NOT_BE_READ);
+            };
+        }
+
+    }
+
+    /**
+     * One row of the offering, read.
+     *
+     * @param values      what its inputs build to, or null where they do not all build
+     * @param whyNotBuilt why they did not, where they did not, and null where they did
+     * @param watched     what running it recorded, which a row whose values would not build still
+     *                    has: the two are found out separately and one failing is not the other
+     *                    failing
+     */
+    private record OneRow(List<ObservedValue> values, Settlement.Reason whyNotBuilt,
+                          Generator.Watched watched) {
+
+        static OneRow nothingRead() {
+            return new OneRow(null, Settlement.Reason.NOTHING_BUILT_THE_VALUES,
+                    new Generator.Watched.NoAccount());
+        }
+
+        /** What an item that needs the values is told, where they are not here. */
+        Settlement undetermined() {
+            return new Settlement.Undetermined(whyNotBuilt);
+        }
+    }
+}

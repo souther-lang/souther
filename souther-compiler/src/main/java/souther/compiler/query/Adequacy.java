@@ -3133,27 +3133,6 @@ public final class Adequacy {
         }
 
         /**
-         * A way to run this behavior's composed rows, said in the generator's words.
-         *
-         * <p>Two seams and one adaptation, the way the check that a value can be built already is.
-         * What runs a row is the evaluation's business and speaks in what a fixture states; what a
-         * generator has is a template it composed. Neither has to know the other's word for a row.
-         */
-        private static Generator.Trial runningRowsOf(
-                RowTrials trials, String behavior, Sig sig) {
-            if (trials == null) {
-                return Generator.Trial.NOTHING_RUNS;
-            }
-            RowTrials.OfBehavior application =
-                    trials.forBehavior(behavior, sig);
-            return inputs -> application
-                    .run(inputs.stream()
-                            .map(souther.compiler.partition.FixtureTemplate::value).toList())
-                    .<Generator.Watched>map(Generator.Watched.Ran::new)
-                    .orElseGet(Generator.Watched.NoAccount::new);
-        }
-
-        /**
          * The values a row's positions can be composed against, in the order the search should try
          * them.
          *
@@ -3437,6 +3416,29 @@ public final class Adequacy {
         }
         ExampleExecution asked = ExampleExecutions.of(db, module);
         return asked == null ? null : db.execution().trials(asked, armsAsked(db));
+    }
+
+    /**
+     * A way to run one behavior's composed rows, said in the generator's words.
+     *
+     * <p>Two seams and one adaptation, the way the check that a value can be built already is. What
+     * runs a row is the evaluation's business and speaks in what a fixture states; what a generator
+     * has is a template it composed. Neither has to know the other's word for a row.
+     *
+     * <p>Beside {@link #trialling} rather than inside the search, because running a composed row is
+     * what anybody asking after one does — the search that composes them, and whoever asks what one
+     * of them would settle.
+     */
+    static Generator.Trial runningRowsOf(RowTrials trials, String behavior, Sig sig) {
+        if (trials == null) {
+            return Generator.Trial.NOTHING_RUNS;
+        }
+        RowTrials.OfBehavior application = trials.forBehavior(behavior, sig);
+        return inputs -> application
+                .run(inputs.stream()
+                        .map(souther.compiler.partition.FixtureTemplate::value).toList())
+                .<Generator.Watched>map(Generator.Watched.Ran::new)
+                .orElseGet(Generator.Watched.NoAccount::new);
     }
 
     /**
