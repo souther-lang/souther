@@ -699,8 +699,13 @@ public final class InvariantChecker {
                                 (part, said) -> adoptedBy
                                         .computeIfAbsent(each.from(), _ -> new java.util.IdentityHashMap<>())
                                         .put(part, said.adopted()));
-                stated = stated.meet(one);
+                // Both of what this clause came to, taken before it is met with the rest. What the
+                // meet holds is a set of values, and every clause's reasons meet into it — so a
+                // caller asking the whole what stopped it at a position is asking about the
+                // position and hearing whichever clause reached it.
                 one.adopted().forEach(position -> took.record(each.from(), position));
+                took.stoppedBy(each.from(), one.values());
+                stated = stated.meet(one);
             }
             // What was counted bounds what was built, which is the whole of why counting before
             // reading is enough. It is an induction and its steps are held where they are taken —

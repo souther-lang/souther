@@ -10,7 +10,9 @@ import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 import souther.compiler.values.UnreadReason;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -46,6 +48,22 @@ class EveryPartAReadingStoppedOnSaysWhyTest {
                 invariant both = String.matches("x+", a) && a /= b
             """;
 
+    /**
+     * Two rules about the one position, stopped in two ways.
+     *
+     * <p>{@code shape} is a form this reading does not take apart. {@code either} it reads in full
+     * on the side that names {@code a} and not on the side beside it, so what {@code a} is left
+     * with is that an alternative went unread — a value satisfying the branch nothing read owes the
+     * branch that was read nothing. Two rules, two limits, one position.
+     */
+    private static final String TWO_RULES_AT_ONE_POSITION = """
+            module demo
+
+            data N = { a: String, b: String }
+                invariant shape = String.matches("x+", a)
+                invariant either = a == "q" || String.matches("x+", b)
+            """;
+
     private static FieldDomains read(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
@@ -63,12 +81,39 @@ class EveryPartAReadingStoppedOnSaysWhyTest {
     /** What the reading of values was stopped by, over every question of every rule of the value. */
     private static List<UnreadReason> stoppedBy(FieldDomains read) {
         return read.accounting().values().stream()
-                .flatMap(each -> each.answers().values().stream())
+                .flatMap(each -> stoppedBy(each).stream())
+                .toList();
+    }
+
+    /** The same, of one rule. */
+    private static List<UnreadReason> stoppedBy(RuleAccounting accounting) {
+        return accounting.answers().values().stream()
                 .filter(RuleAccounting.Outcome.Unaccounted.class::isInstance)
                 .map(each -> ((RuleAccounting.Outcome.Unaccounted) each).why())
                 .filter(RuleAccounting.Why.TheValueReadingSays.class::isInstance)
                 .flatMap(each -> ((RuleAccounting.Why.TheValueReadingSays) each).why().stream())
                 .toList();
+    }
+
+    /**
+     * Every question of every rule that nothing answered, and what stopped this reading of it.
+     *
+     * <p>Keyed by the rule and the subject together, which is what a question is. One rule raises a
+     * question about every position it names, and a helper folding them together would report a
+     * rule answered for at one position with the limit it met at another.
+     */
+    private static Map<String, List<UnreadReason>> byQuestion(FieldDomains read) {
+        Map<String, List<UnreadReason>> out = new LinkedHashMap<>();
+        read.accounting().values().forEach(accounting ->
+                accounting.answers().forEach((owed, outcome) -> {
+                    if (outcome instanceof RuleAccounting.Outcome.Unaccounted unaccounted
+                            && unaccounted.why()
+                                    instanceof RuleAccounting.Why.TheValueReadingSays says) {
+                        out.put(((RuleCitation.Named) accounting.cited()).name() + " at " + owed,
+                                says.why());
+                    }
+                }));
+        return out;
     }
 
     /** Both parts say why, and neither stands in for the other. */
@@ -91,5 +136,24 @@ class EveryPartAReadingStoppedOnSaysWhyTest {
         assertEquals(
                 List.of(UnreadReason.FORM_NOT_READ, UnreadReason.RELATES_TWO_POSITIONS),
                 stoppedBy(read(THE_OTHER_ORDER)));
+    }
+
+    /**
+     * Each rule is answered for by what stopped this reading of that rule.
+     *
+     * <p>Two limits at one position, met by two rules. Answered from the position, each of them is
+     * told about the limit its neighbour met as well — and an author sent to rewrite {@code either}
+     * is told their clause is written in a form this compiler does not read, which is false of it
+     * and true of the rule beside it.
+     */
+    @Test
+    void aRuleIsAnsweredForByWhatStoppedThatRule() {
+        assertEquals(
+                Map.of("invariant N (shape) at a", List.of(UnreadReason.FORM_NOT_READ),
+                        "invariant N (either) at a", List.of(UnreadReason.ALTERNATIVE_NOT_READ),
+                        // The other position the second rule names, which is where the branch this
+                        // reading has no word for is written.
+                        "invariant N (either) at b", List.of(UnreadReason.FORM_NOT_READ)),
+                byQuestion(read(TWO_RULES_AT_ONE_POSITION)));
     }
 }

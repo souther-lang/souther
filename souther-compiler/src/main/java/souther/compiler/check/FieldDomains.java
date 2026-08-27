@@ -802,7 +802,7 @@ public final class FieldDomains {
         // one conjunct is not an account of the conjunct written beside it.
         if (took.anyLeftStanding(rule, named)) {
             return new RuleAccounting.Outcome.Unaccounted(
-                    new RuleAccounting.Why.TheValueReadingSays(stoppedAt(at)));
+                    new RuleAccounting.Why.TheValueReadingSays(stoppedBy(rule, named)));
         }
         // The reading that turns this clause into where the values stop, said by the end it placed.
         if (directs.stream()
@@ -815,18 +815,24 @@ public final class FieldDomains {
             return new RuleAccounting.Outcome.Accounted(RuleAccounting.Reader.THE_VALUE_READING);
         }
         return new RuleAccounting.Outcome.Unaccounted(
-                new RuleAccounting.Why.TheValueReadingSays(stoppedAt(at)));
+                new RuleAccounting.Why.TheValueReadingSays(stoppedBy(rule, named)));
     }
 
     /**
-     * Everything the reading of values was stopped by at {@code at}.
+     * Everything the reading of values was stopped by, of {@code rule} at {@code named}.
      *
-     * <p>A form it has no word for where it recorded nothing. What reaches here is a rule no
-     * reading took in, so this reading was stopped by it whether or not the position kept the
-     * reason — and an empty answer would say a question stands with nothing behind it.
+     * <p>Asked of the rule and never of the position. Two clauses reach one position and are short
+     * of this reading in two ways, and the position holds what both of them came to — so a rule
+     * answered from there is named beside a limit that belongs to its neighbour, which is the
+     * misattribution the whole accounting is asked per rule to avoid.
+     *
+     * <p>A form this reading has no word for where it recorded nothing of the rule there. What
+     * reaches here is a rule no reading took in, so this reading was short of it however little it
+     * wrote down — and an empty answer would say a question stands with nothing behind it. Not the
+     * position's reasons: those belong to whichever rule left them.
      */
-    private List<UnreadReason> stoppedAt(String at) {
-        List<UnreadReason> why = unreadByField.getOrDefault(at, List.of());
+    private List<UnreadReason> stoppedBy(RuleRef rule, List<FactSubject> named) {
+        List<UnreadReason> why = took.stoppedBy(rule, named);
         return why.isEmpty() ? List.of(UnreadReason.FORM_NOT_READ) : why;
     }
 
