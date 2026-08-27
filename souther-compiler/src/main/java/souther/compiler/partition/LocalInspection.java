@@ -2,9 +2,11 @@ package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
 import souther.compiler.check.DeclaredBounds;
+import souther.compiler.check.MatchedEndAttribution;
 import souther.compiler.check.NarrowedBounds;
 import souther.compiler.check.Symbols;
 import souther.compiler.inputs.Position;
+import souther.compiler.numeric.EndSide;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
@@ -13,6 +15,7 @@ import souther.compiler.types.TypeSymbol;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * What a position's own declarations divide it into, derived from the one reading of it.
@@ -114,41 +117,54 @@ final class LocalInspection {
             return List.of();
         }
         Map<String, Cut> byValue = new LinkedHashMap<>();
-        cut(byValue, bounds.min(), own == null ? null : own.min(), bounds.carrier(),
-                souther.compiler.numeric.Towards.ABOVE, narrowed.minBy());
-        cut(byValue, bounds.max(), own == null ? null : own.max(), bounds.carrier(),
-                souther.compiler.numeric.Towards.BELOW, narrowed.maxBy());
+        // One side at a time, and everything about a side read from the side. Where the position
+        // stops, where its own type stops, which of the reading's two answers is about it and which
+        // end a bound placed are four answers to one choice, and a reader making that choice four
+        // times can make it four ways.
+        for (EndSide side : EndSide.values()) {
+            cut(byValue, side, bounds.at(side), own == null ? null : own.at(side),
+                    bounds.carrier(), narrowed);
+        }
         return List.copyOf(byValue.values());
     }
 
     /**
      * One end as a cut, owed once to each rule that put it there.
      *
-     * @param keeps which way the bound runs from this end, which is which of the two ends it is.
-     *              Known here because the ends are read one at a time, and nowhere below: a bound
-     *              records where it stops, and everything past this holds the range the rules leave
-     *              rather than the end that made it
+     * @param side which of the position's two ends this is. Known here because the ends are read one
+     *             at a time, and nowhere below: a bound records where it stops, and everything past
+     *             this holds the range the rules leave rather than the end that made it
      */
-    private static void cut(Map<String, Cut> into, DeclaredBounds.End end, DeclaredBounds.End own,
-                            Carrier carrier, souther.compiler.numeric.Towards keeps,
-                            List<TypeSymbol.AtModule> within) {
+    private static void cut(Map<String, Cut> into, EndSide side, DeclaredBounds.End end,
+                            DeclaredBounds.End own, Carrier carrier, NarrowedBounds narrowed) {
         if (end == null) {
             return;
         }
+        // Whether what the value above holds is about this end at all. Where the position's own type
+        // stops is taken into account below and the value above knows nothing of it, so the two can
+        // leave the position in different places — and the names are worked out against one number
+        // and are true of no other.
+        Optional<MatchedEndAttribution> held = narrowed.matching(side, end.at());
         // Taken in, which a record can do by moving the end or by taking away the value it stops
         // at. `low < high` under one `[0, 1]` leaves `low` the same 1 and no longer holding it, and
         // that is the record's doing as much as a smaller number would have been — so this asks
         // whether the two are the same end, which is where a range stops and not what an end holds.
         boolean moved = own != null && !own.at().sameAs(end.at());
+        // Read only where both hold. Being about this end is what says a name may be written here at
+        // all; whether it should be is this reader's own question, and asking the names for it
+        // before that is answered does the work an end nobody is told about never needed.
+        List<TypeSymbol.AtModule> within = moved
+                ? held.map(MatchedEndAttribution::names).orElseGet(List::of)
+                : List.<TypeSymbol.AtModule>of();
         // Wrapped here, and this is not a consumer settling what a rule is: which rule drew the end
         // was settled where the clause was read and arrives as it was. What is added is a
         // boundary's own answer about that rule — that a reading of it drew this cut, taken in by
         // these declarations — which is nothing the rule says about itself.
         for (DeclaredBounds.Drawn from : end.from()) {
             put(into, carrier, end.value(),
-                    new OriginRef.InvariantOrigin(from.rule(), from.conjunct(), keeps,
+                    new OriginRef.InvariantOrigin(from.rule(), from.conjunct(), side,
                             end.at().inclusive()),
-                    moved ? within : List.<TypeSymbol.AtModule>of());
+                    within);
         }
     }
 

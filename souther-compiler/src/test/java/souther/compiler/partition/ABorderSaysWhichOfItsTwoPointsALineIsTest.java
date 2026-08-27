@@ -209,13 +209,13 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
     void aBoundThatStopsShortOfItsLineWhereTheOrderStepsIsRefused() {
         Border kept = borderOf(
                 new OriginRef.InvariantOrigin(invariant(), THE_ONLY_CONJUNCT,
-                        souther.compiler.numeric.Towards.ABOVE, true));
+                        souther.compiler.numeric.EndSide.LOWER, true));
         assertEquals("= 5", kept.demand(PointRole.ON).criterion().asked(kept.cut().of()),
                 "a bound that admits its own end is at that end's ON point");
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
                 () -> borderOf(new OriginRef.InvariantOrigin(invariant(), THE_ONLY_CONJUNCT,
-                        souther.compiler.numeric.Towards.ABOVE, false)),
+                        souther.compiler.numeric.EndSide.LOWER, false)),
                 "an `Int` bounded strictly at 5 is an inclusive 6 long before it reaches a border");
         assertTrue(refused.getMessage().startsWith(
                         "a bound that stops short of its own line where the order names 6 beside it"),
@@ -263,7 +263,7 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
 
         // A bound owes nothing outside itself, and says which of the three answers settled it.
         Border bound = borderOf(new OriginRef.InvariantOrigin(invariant(), THE_ONLY_CONJUNCT,
-                        souther.compiler.numeric.Towards.ABOVE, true));
+                        souther.compiler.numeric.EndSide.LOWER, true));
         assertEquals(new Demand.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT),
                 bound.demand(PointRole.OFF));
         assertEquals(new Demand.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT),

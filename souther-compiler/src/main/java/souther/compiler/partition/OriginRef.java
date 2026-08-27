@@ -46,14 +46,17 @@ public sealed interface OriginRef {
      *                        other. The clause's own text and not the number it was written about,
      *                        which is spelled differently by every reading that reaches it
      *                        ({@link souther.compiler.check.DeclaredBounds.Drawn})
-     * @param keeps           which way along the order the bound keeps its values, which is the end
-     *                        it placed: a minimum keeps what is above it and a maximum what is
-     *                        below. Read where the end is read, and carried for the same reason the
-     *                        inclusivity beside it is — a bound orders nothing across its line, so
-     *                        there is no side to read off the rule further down, and what is left to
-     *                        work it back out of is the range the rules leave. That derivation has a
-     *                        case with no answer, and it answers a rule leaving one value the same
-     *                        way for both of its ends
+     * @param keeps           which of the two ends the bound placed. Read where the end is read,
+     *                        and carried for the same reason the inclusivity beside it is — a bound
+     *                        orders nothing across its line, so there is no side to read off the
+     *                        rule further down, and what is left to work it back out of is the range
+     *                        the rules leave. That derivation has a case with no answer, and it
+     *                        answers a rule leaving one value the same way for both of its ends.
+     *                        The end and not a direction along the order: a minimum is where the
+     *                        values start, and that it keeps what is above it is the same fact read
+     *                        the other way round. Said as the direction, this was the fifth question
+     *                        {@link souther.compiler.numeric.Towards} answered, and which end a
+     *                        bound placed is the one it is about
      * @param holdsAtTheValue whether the cut value is one the bound admits, which is the end's own
      *                        inclusivity and is what says whether a row at the cut is the border's
      *                        {@code ON} point or its {@code OFF} point. Carried for the same reason
@@ -68,7 +71,7 @@ public sealed interface OriginRef {
      *                        keeps the two from being confused if it ever does get further
      */
     record InvariantOrigin(RuleRef.Invariant rule, int conjunct,
-                           souther.compiler.numeric.Towards keeps, boolean holdsAtTheValue)
+                           souther.compiler.numeric.EndSide keeps, boolean holdsAtTheValue)
             implements OriginRef {
 
         public InvariantOrigin {
@@ -77,7 +80,7 @@ public sealed interface OriginRef {
             }
             if (keeps == null) {
                 throw new IllegalArgumentException(
-                        "a bound keeps its values one way or the other: " + rule.named());
+                        "a bound places one of a range's two ends: " + rule.named());
             }
             if (conjunct < 0) {
                 throw new IllegalArgumentException(
@@ -325,7 +328,7 @@ public sealed interface OriginRef {
             // of the order — and that the far side holds no value at all is a different answer,
             // given where a border reads what a line has sides.
             case InvariantOrigin i -> new LineFacts(
-                    (i.keeps() == souther.compiler.numeric.Towards.BELOW) == i.holdsAtTheValue(),
+                    (i.keeps() == souther.compiler.numeric.EndSide.UPPER) == i.holdsAtTheValue(),
                     i.holdsAtTheValue(), false);
             case NarrowedOrigin n -> n.bound().lineFacts();
         };

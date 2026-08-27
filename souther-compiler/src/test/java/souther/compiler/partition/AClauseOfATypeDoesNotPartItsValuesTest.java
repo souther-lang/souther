@@ -10,7 +10,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
-import souther.compiler.numeric.Towards;
+import souther.compiler.numeric.EndSide;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 
@@ -76,7 +76,7 @@ class AClauseOfATypeDoesNotPartItsValuesTest {
     private static OriginRef.InvariantOrigin aBound() {
         return new OriginRef.InvariantOrigin(new RuleRef.Invariant(new Clause.Ref(
                 new Clause.Id(TypeSymbols.declared(new TypeKey("example.weigh", "Amount")), 0),
-                Optional.of(new ClauseName("cap")))), 0, Towards.ABOVE, true);
+                Optional.of(new ClauseName("cap")))), 0, EndSide.LOWER, true);
     }
 
     private static OriginRef aComparison() {

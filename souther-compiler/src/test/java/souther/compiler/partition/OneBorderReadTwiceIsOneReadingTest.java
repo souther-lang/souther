@@ -2,14 +2,17 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.AReadingOfAPosition;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.Clause;
 import souther.compiler.check.ClauseName;
+import souther.compiler.check.NarrowedBounds;
 import souther.compiler.check.RuleRef;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.EndSide;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Towards;
@@ -76,8 +79,9 @@ class OneBorderReadTwiceIsOneReadingTest {
      */
     @Test
     void whoCanMoveTheEndIsNoPartOfWhichReadingThisIs() {
-        Border narrowed = bound(List.of(), new NarrowedEnds(List.of(), List.of(aDeclaration())));
-        Border bare = bound(List.of(), NarrowedEnds.NONE);
+        Border narrowed = bound(List.of(), AReadingOfAPosition.withAnUpperEndAt(
+                Endpoint.inclusive(Count.of(1000)), aDeclaration()));
+        Border bare = bound(List.of(), NarrowedBounds.NOTHING);
 
         assertNotEquals(bare, narrowed,
                 "the two do differ, and this is what they differ in");
@@ -156,11 +160,11 @@ class OneBorderReadTwiceIsOneReadingTest {
 
     /** A bound at a hundred, leaving everything up to a thousand, told about {@code parted}. */
     private static Border bound(List<Parting> parted) {
-        return bound(parted, NarrowedEnds.NONE);
+        return bound(parted, NarrowedBounds.NOTHING);
     }
 
-    /** The same, told which declarations took the ends of the position in. */
-    private static Border bound(List<Parting> parted, NarrowedEnds narrowed) {
+    /** The same, told what the value the position sits in leaves it and who holds each end. */
+    private static Border bound(List<Parting> parted, NarrowedBounds narrowed) {
         return Border.at(aLineAt("w.a", 100), aBound(),
                 new NumericDomain.Bounds(Endpoint.inclusive(Count.of(100)),
                         Endpoint.inclusive(Count.of(1000))),
@@ -206,7 +210,7 @@ class OneBorderReadTwiceIsOneReadingTest {
     private static OriginRef aBound() {
         return new OriginRef.InvariantOrigin(new RuleRef.Invariant(new Clause.Ref(
                 new Clause.Id(TypeSymbols.declared(new TypeKey("example.weigh", "Amount")), 0),
-                Optional.of(new ClauseName("cap")))), 0, Towards.ABOVE, true);
+                Optional.of(new ClauseName("cap")))), 0, EndSide.LOWER, true);
     }
 
     /** A line of a body, for a place to be parted by something other than the bound. */

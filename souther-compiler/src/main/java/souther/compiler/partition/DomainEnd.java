@@ -1,8 +1,7 @@
 package souther.compiler.partition;
 
-import souther.compiler.types.TypeSymbol;
-
-import java.util.List;
+import souther.compiler.check.MatchedEndAttribution;
+import souther.compiler.numeric.EndSide;
 
 /**
  * Where the rules leave a quantity off on one side, and which declarations took it in there.
@@ -17,22 +16,65 @@ import java.util.List;
  * carried apart is the day something has to put them back together by what they have in common —
  * which is the value, and reading the declarations back off a value is what this exists to avoid.
  *
- * @param bound     where the rules leave off
- * @param narrowers the declarations that took the end in, which is empty where nothing did and the
- *                  end is the type's own or the order's
+ * <p><b>Which of the two ends this is, travels too.</b> A quantity holding one value stops there
+ * both ways, so the two ends can lower to one {@link Bound} — and told apart by the place alone,
+ * what was worked out at one end can be written down beside the other. The side is carried from
+ * where the end was read rather than recovered here: the comparison a run makes against this
+ * ({@link QuantityArrangement}) asks whether the run stops at this place, which is a different
+ * question and answers nothing about which end it is.
+ *
+ * <p>The attribution is kept as it came from the reading, unopened. A name is made bare where the
+ * point is settled and not before, so an end the run turns out not to stop at costs nothing to have
+ * carried.
  */
-public record DomainEnd(Bound bound, List<TypeSymbol.AtModule> narrowers) {
+public final class DomainEnd {
 
-    public DomainEnd {
-        if (bound == null) {
-            throw new IllegalArgumentException("an end the rules leave is somewhere");
+    private final EndSide side;
+    private final Bound bound;
+    private final MatchedEndAttribution attribution;
+
+    private DomainEnd(EndSide side, Bound bound, MatchedEndAttribution attribution) {
+        if (side == null || bound == null) {
+            throw new IllegalArgumentException("an end the rules leave is one of the two, somewhere");
         }
-        narrowers = List.copyOf(narrowers);
+        this.side = side;
+        this.bound = bound;
+        this.attribution = attribution;
+    }
+
+    /**
+     * An end the reading holding {@code attribution} was asked about and answered for, lowered onto
+     * the value the quantity takes.
+     *
+     * <p>The attribution comes from a reading that was asked about this very end, so nothing here
+     * has to decide whether the names belong to it. What is added is the lowering, which is why this
+     * is the only way one of these is built with names: the {@link Bound} and the {@link
+     * souther.compiler.numeric.Endpoint} the names were matched against are two layers' answers
+     * about one end, and a caller free to pair them would be pairing them by the number again.
+     */
+    static DomainEnd at(EndSide side, Bound bound, MatchedEndAttribution attribution) {
+        return bound == null ? null : new DomainEnd(side, bound, attribution);
     }
 
     /** An end nothing took in, which is what a position no declaration relates to anything has. */
-    public static DomainEnd at(Bound bound) {
-        return bound == null ? null : new DomainEnd(bound, List.of());
+    static DomainEnd at(EndSide side, Bound bound) {
+        return at(side, bound, null);
+    }
+
+    /** Which of the quantity's two ends this is. */
+    public EndSide side() {
+        return side;
+    }
+
+    /** Where the rules leave off. */
+    public Bound bound() {
+        return bound;
+    }
+
+    /** What took the end in, or null where nothing did — the reading answered about another end, or
+     *  about none. */
+    MatchedEndAttribution attribution() {
+        return attribution;
     }
 
     /** Where {@code end} is, or null where there is no end that way. */

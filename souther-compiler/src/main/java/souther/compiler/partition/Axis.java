@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.NarrowedBounds;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.StructuralInspection;
@@ -69,7 +70,7 @@ import java.util.List;
  *                 from the other end
  */
 public record Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> classes,
-                   List<Cut> cuts, List<Parting> parted, NarrowedEnds narrowed,
+                   List<Cut> cuts, List<Parting> parted, NarrowedBounds narrowed,
                    ReadingResidue residue,
                    StructuralInspection.Continuation pending, LeftAtThePosition leftWith) {
 
@@ -85,8 +86,8 @@ public record Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> 
 
     public Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> classes,
                 List<Cut> cuts) {
-        this(id, term, type, classes, cuts, List.of(), NarrowedEnds.NONE, ReadingResidue.NOTHING,
-                null, null);
+        this(id, term, type, classes, cuts, List.of(), NarrowedBounds.NOTHING,
+                ReadingResidue.NOTHING, null, null);
     }
 
     /**
@@ -99,7 +100,7 @@ public record Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> 
     public static Axis pendingAt(AxisId id, NumericTerm term, Type type, ReadingResidue residue,
                                  StructuralInspection.Continuation found,
                                  LeftAtThePosition leftWith) {
-        return new Axis(id, term, type, List.of(), List.of(), List.of(), NarrowedEnds.NONE,
+        return new Axis(id, term, type, List.of(), List.of(), List.of(), NarrowedBounds.NOTHING,
                 residue, found, leftWith);
     }
 

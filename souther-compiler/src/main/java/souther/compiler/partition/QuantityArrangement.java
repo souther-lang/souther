@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.numeric.EndSide;
 import souther.compiler.numeric.Towards;
 
 import java.util.ArrayList;
@@ -53,8 +54,8 @@ public record QuantityArrangement(List<Parting> partings, List<Run> runs) {
             }
             below = List.copyOf(below);
             above = List.copyOf(above);
-            agree(values.lower(), below, Towards.BELOW);
-            agree(values.upper(), above, Towards.ABOVE);
+            agree(values.lower(), below, EndSide.LOWER);
+            agree(values.upper(), above, EndSide.UPPER);
         }
 
         /**
@@ -70,7 +71,7 @@ public record QuantityArrangement(List<Parting> partings, List<Run> runs) {
          *
          * @param side which end of the run this is, so that the run lies the other way from it
          */
-        private static void agree(BandEnd end, List<RegionClaim> claims, Towards side) {
+        private static void agree(BandEnd end, List<RegionClaim> claims, EndSide side) {
             if (claims.isEmpty()) {
                 throw new IllegalArgumentException(
                         "a run stops at its " + side + " end because something stops it");
@@ -78,7 +79,7 @@ public record QuantityArrangement(List<Parting> partings, List<Run> runs) {
             Bound reaches = end.reaches();
             if (reaches == null) {
                 if (!claims.equals(List.of(new RegionClaim(
-                        new RegionBasis.Beside(new FarEnd.AtTheOrderEnd(side)),
+                        new RegionBasis.Beside(new FarEnd.AtTheOrderEnd(side.outward())),
                         PointContributions.none())))) {
                     throw new IllegalArgumentException("a run nothing stops at its " + side
                             + " end, stopped by " + claims);
@@ -91,7 +92,7 @@ public record QuantityArrangement(List<Parting> partings, List<Run> runs) {
                             + " stops it, and this is not: " + claim.basis());
                 }
                 Bound at = switch (beside.farEnd()) {
-                    case FarEnd.AtALine line -> Band.atTheLine(line.where(), side.opposite());
+                    case FarEnd.AtALine line -> Band.atTheLine(line.where(), side.inward());
                     case FarEnd.AtTheDomain domain -> domain.reaches();
                     case FarEnd.AtTheOrderEnd _ -> null;
                 };
@@ -129,28 +130,33 @@ public record QuantityArrangement(List<Parting> partings, List<Run> runs) {
      * <p>Compared as places rather than as they are written, so that two spellings of one end are
      * one end ({@link Bound#canonical()}).
      *
-     * @param inward which way the run lies from this end
+     * @param side which end of the run this is, which the run lies inward of
      */
     private static List<RegionClaim> stoppedBy(BandEnd end, Parting parted, DomainEnd leaves,
-                                               Towards inward) {
+                                               EndSide side) {
         Bound reaches = end.reaches();
         if (reaches == null) {
             return List.of(new RegionClaim(
-                    new RegionBasis.Beside(new FarEnd.AtTheOrderEnd(inward.opposite())),
+                    new RegionBasis.Beside(new FarEnd.AtTheOrderEnd(side.outward())),
                     PointContributions.none()));
         }
         List<RegionClaim> out = new ArrayList<>();
         if (parted != null
-                && Band.atTheLine(parted.geometry(), inward).canonical().equals(
+                && Band.atTheLine(parted.geometry(), side.inward()).canonical().equals(
                         reaches.canonical())) {
             parted.alternatives().forEach(line -> out.add(new RegionClaim(
                     new RegionBasis.Beside(new FarEnd.AtALine(line, parted.geometry())),
                     PointContributions.by(line))));
         }
+        // The end of the rules and the place the run gets to, which are two answers about two
+        // layers: the attribution came matched to where the reading left the quantity, and this asks
+        // whether the run stops at the value that end lowers onto. Both have to hold before a name
+        // is written, and neither is the other's answer — so the names are read here and not where
+        // the end was lowered.
         if (leaves != null && leaves.bound().canonical().equals(reaches.canonical())) {
             out.add(new RegionClaim(
                     new RegionBasis.Beside(new FarEnd.AtTheDomain(leaves.bound())),
-                    PointContributions.byNarrowing(leaves.narrowers())));
+                    PointContributions.byNarrowing(leaves)));
         }
         if (out.isEmpty()) {
             // Where the run reaches is the tighter of the two, so one of them is it. Reaching here
@@ -176,33 +182,32 @@ public record QuantityArrangement(List<Parting> partings, List<Run> runs) {
      * are kept beside it, while what the quantity is divided into is a property of the quantity.
      */
     public static QuantityArrangement of(LevelSpace space, List<Parting> parted) {
-        return of(space, parted, (DomainEnd) null, null);
+        return of(space, parted, DomainEnds.NONE);
     }
 
 
     /**
-     * The same, where the rules leave the quantity only what runs from {@code from} to {@code to}.
+     * The same, where the rules leave the quantity only what runs between {@code ends}.
      *
      * <p>The ends are not seams and never become runs of their own. Nothing outside a bound can be
      * constructed, so there is no run on the far side of one to cover (ADR-0090); what a bound does
      * is stop the run beside it, which is why the two either side of a line at ten run from the
      * bound rather than from the order's own extent.
      *
-     * @param from where the rules leave off at the low end and whether they keep the place they
-     *             leave off at, or null where they leave it everything that way. Not the first value
-     *             in the run: a strict bound on a carrier with no step leaves no first value, and
-     *             read as one such a run either had no end at all or held the value its bound
-     *             refuses
-     * @param to   the same at the high end
+     * @param ends where the rules leave off either way and whether they keep the place they leave
+     *             off at, each under the side it is. Not the first value in the run: a strict bound
+     *             on a carrier with no step leaves no first value, and read as one such a run either
+     *             had no end at all or held the value its bound refuses. Taken as one value rather
+     *             than as two arguments so that which end is which is not said again here
      */
-    public static QuantityArrangement of(LevelSpace space, List<Parting> parted, DomainEnd from,
-                                         DomainEnd to) {
+    public static QuantityArrangement of(LevelSpace space, List<Parting> parted, DomainEnds ends) {
         Map<String, Parting> distinct = new LinkedHashMap<>();
         for (Parting each : parted) {
             // A place the rules leave nothing at divides nothing. The values it would tell apart are
             // values no row can be written at, so it is dropped rather than kept as a run holding
             // none — which is a class an author would be told to write a row for and could not.
-            if (outside(each.geometry(), DomainEnd.boundOf(from), DomainEnd.boundOf(to))) {
+            if (outside(each.geometry(), ends.boundAt(EndSide.LOWER),
+                    ends.boundAt(EndSide.UPPER))) {
                 continue;
             }
             // One place, and every line the model wrote there against it. Which is the whole of what
@@ -216,26 +221,26 @@ public record QuantityArrangement(List<Parting> partings, List<Run> runs) {
         List<Run> runs = new ArrayList<>();
         Parting under = null;
         for (Parting parting : ordered) {
-            keep(space, runs, runBetween(under, parting, from, to));
+            keep(space, runs, runBetween(under, parting, ends));
             under = parting;
         }
-        keep(space, runs, runBetween(under, null, from, to));
+        keep(space, runs, runBetween(under, null, ends));
         return new QuantityArrangement(ordered, runs);
     }
 
     /** The run between two of the places the values part, held to what the rules leave either
      *  side. */
-    private static Run runBetween(Parting under, Parting over, DomainEnd from, DomainEnd to) {
+    private static Run runBetween(Parting under, Parting over, DomainEnds ends) {
         // The places and not the lines against them go into the values. What a run asks a row for is
         // the same however many rules wrote a line where it stops, and which of them did is kept
         // beside it — carried in, it would be inside every value that says what is asked of a row.
         BandEnd lower = Band.endAt(under == null ? null : under.geometry(),
-                DomainEnd.boundOf(from), Towards.ABOVE);
+                ends.boundAt(EndSide.LOWER), EndSide.LOWER.inward());
         BandEnd upper = Band.endAt(over == null ? null : over.geometry(),
-                DomainEnd.boundOf(to), Towards.BELOW);
+                ends.boundAt(EndSide.UPPER), EndSide.UPPER.inward());
         return new Run(new Band(lower, upper),
-                stoppedBy(lower, under, from, Towards.ABOVE),
-                stoppedBy(upper, over, to, Towards.BELOW));
+                stoppedBy(lower, under, ends.at(EndSide.LOWER), EndSide.LOWER),
+                stoppedBy(upper, over, ends.at(EndSide.UPPER), EndSide.UPPER));
     }
 
     /**

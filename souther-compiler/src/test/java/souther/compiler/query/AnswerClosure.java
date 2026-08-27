@@ -171,9 +171,10 @@ final class AnswerClosure {
      */
     private static Known heldEnd(Locus.Step into, Locus.Step through) {
         return new Known(new Identity(at(Q + "Adequacy$Inputs",
-                "souther.compiler.check.NarrowedBounds$Held", m(ANSWER, "value"), VALUE, into,
+                "souther.compiler.check.Held", m(ANSWER, "value"), VALUE, into,
                 through, m("souther.compiler.inputs.ReadPosition", "narrowedEnds"),
-                m("souther.compiler.check.NarrowedBounds", "minBy")),
+                m("souther.compiler.check.NarrowedBounds$Reading", "lower"),
+                m("souther.compiler.check.NarrowedEnd", "held")),
                 Nature.VALUE, Cause.MISSING_VALUE_EQUALITY),
                 Set.of(compared(Scenario.VALID_CORPUS)),
                 "the declarations holding one end of a range, worked out once and kept. A value: "
@@ -182,6 +183,26 @@ final class AnswerClosure {
                         + "it holds is worked out on demand, and comparing two of them is the one "
                         + "way to reach that work without meaning to, which is what its own header "
                         + "says about comparing, hashing and printing one");
+    }
+
+    /**
+     * The end itself, on the way to what is holding it.
+     *
+     * <p>Under the range and never beside it: one of these exists only where there is an end, and
+     * the two of them are which side of the range they sit in. So the answer to comparing two is
+     * {@code NarrowedBounds}'s own, which is written out and does compare the ends and the names —
+     * a reader never reaches this one, and what it is missing is never the answer anybody gets.
+     *
+     * <p>Reached at all because the walk asks each object what it is rather than asking whoever
+     * holds it. Which is the point of asking that way: the day something takes one of these out
+     * from under the range that answers for it, this place is what says so.
+     */
+    private static Known narrowedEnd(String question, Observation met, Locus.Step... steps) {
+        return new Known(new Identity(at(question, "souther.compiler.check.NarrowedEnd", steps),
+                Nature.VALUE, Cause.MISSING_VALUE_EQUALITY), Set.of(met),
+                "one end of what a reading leaves a position, with what is holding it. A value, and "
+                        + "one nothing compares on its own: the range it sits in writes its own "
+                        + "equality and reaches both ends through it");
     }
 
     private static Known bytes(String question, Locus.Step... steps) {
@@ -244,6 +265,24 @@ final class AnswerClosure {
                     "as above"),
             heldEnd(m("souther.compiler.inputs.InputDomain", "byPath"), VALUE),
             heldEnd(m("souther.compiler.inputs.InputDomain", "positions"), ELEMENT),
+            narrowedEnd(Q + "Adequacy$Inputs", compared(Scenario.VALID_CORPUS),
+                    m(ANSWER, "value"), VALUE,
+                    m("souther.compiler.inputs.InputDomain", "byPath"), VALUE,
+                    m("souther.compiler.inputs.ReadPosition", "narrowedEnds"),
+                    m("souther.compiler.check.NarrowedBounds$Reading", "lower")),
+            narrowedEnd(Q + "Adequacy$Inputs", compared(Scenario.VALID_CORPUS),
+                    m(ANSWER, "value"), VALUE,
+                    m("souther.compiler.inputs.InputDomain", "positions"), ELEMENT,
+                    m("souther.compiler.inputs.ReadPosition", "narrowedEnds"),
+                    m("souther.compiler.check.NarrowedBounds$Reading", "lower")),
+            // The partition's own copy. An axis carries what the reading left the position rather
+            // than the names it came to, so that a border can ask whether they are about the end it
+            // has — and the walk that asks each object what it is meets the end on the way.
+            narrowedEnd(Q + "Adequacy$Divided", walked(Scenario.VALID_CORPUS),
+                    m(ANSWER, "value"),
+                    m("souther.compiler.partition.Partitions$Partitioning", "axes"), ELEMENT,
+                    m("souther.compiler.partition.Axis", "narrowed"),
+                    m("souther.compiler.check.NarrowedBounds$Reading", "lower")),
             new Known(new Identity(at("*", "souther.compiler.diag.Diagnostic",
                     m(ANSWER, "reports"), ELEMENT, m("souther.compiler.query.Report", "diagnostic")),
                     Nature.VALUE, Cause.MISSING_VALUE_EQUALITY),

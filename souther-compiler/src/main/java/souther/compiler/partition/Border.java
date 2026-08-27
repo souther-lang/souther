@@ -1,5 +1,7 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.NarrowedBounds;
+import souther.compiler.numeric.EndSide;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
@@ -303,19 +305,26 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, PointA
      */
     public static Border at(BoundaryTarget target, OriginRef origin, NumericDomain.Bounds within,
                             java.util.List<Parting> parted) {
-        return at(target, origin, within, parted, NarrowedEnds.NONE);
+        return at(target, origin, within, parted, NarrowedBounds.NOTHING);
     }
 
     /**
-     * The same, told which declarations took in where the position stops.
+     * The same, told what the value the position sits in leaves it and which declarations hold each
+     * end of that.
      *
      * <p>Which is what a run stopping at one of those ends is owed to besides the line it lies
      * against. Carried from the reading that placed the end, because nothing downstream can work it
      * out: an end is where every rule about the position leaves off, and the number it leaves off at
      * says nothing about who moved it.
+     *
+     * <p><b>The reading and not the names it came to.</b> What {@code within} leaves this quantity
+     * is a second reading — the behavior's own rules are in it, and the record's reading knows
+     * nothing of them — so the two can stop the position in different places, and a name worked out
+     * against one of them says nothing about the other. Which is why what arrives here is something
+     * that can be asked about an end, rather than an answer already given about somebody else's.
      */
     public static Border at(BoundaryTarget target, OriginRef origin, NumericDomain.Bounds within,
-                            java.util.List<Parting> parted, NarrowedEnds narrowed) {
+                            java.util.List<Parting> parted, NarrowedBounds narrowed) {
         NumericDomain.Bounds reach = within == null ? new NumericDomain.Bounds(null, null) : within;
         LevelSpace space = target.levels();
         Level cut = target.at();
@@ -336,8 +345,7 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, PointA
             all.add(mine);
         }
         QuantityArrangement arrangement = QuantityArrangement.of(space, all,
-                leaves(endOf(space, reach.min(), Towards.ABOVE, cut), narrowed.below()),
-                leaves(endOf(space, reach.max(), Towards.BELOW, cut), narrowed.above()));
+                DomainEnds.of(side -> leaves(space, cut, reach, side, narrowed)));
         boolean holdsHere = holdsAtTheValue(origin);
         Map<PointRole, PointAnswer> demands = new EnumMap<>(PointRole.class);
         if (!ordersAroundTheCut(origin)) {
@@ -520,12 +528,20 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, PointA
                 : new PointAnswer.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT);
     }
 
-    /** Where the rules leave the quantity, with the declarations that took that end in beside it.
-     *  Null where they leave it everything that way and there is no end at all. */
-    private static DomainEnd leaves(Bound end,
-                                    java.util.List<souther.compiler.types.TypeSymbol.AtModule>
-                                            narrowers) {
-        return end == null ? null : new DomainEnd(end, narrowers);
+    /**
+     * Where the rules leave the quantity on one side, with the declarations that took that end in
+     * beside it. Null where they leave it everything that way and there is no end at all.
+     *
+     * <p>The side is asked of {@code narrowed} and used to read {@code reach} in the one call, so
+     * the end the names are matched against is the end this lowers. Read apart, the reading would be
+     * asked about one end and the answer written down beside the other — which is the same value at
+     * a quantity holding one value, and two values at every other.
+     */
+    private static DomainEnd leaves(LevelSpace space, Level cut, NumericDomain.Bounds reach,
+                                    EndSide side, NarrowedBounds narrowed) {
+        Endpoint end = side.at(reach);
+        return DomainEnd.at(side, endOf(space, end, side.inward(), cut),
+                narrowed.matching(side, end).orElse(null));
     }
 
     /** The level a point against the line stands at, or null where no row is owed there. */

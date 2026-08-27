@@ -157,7 +157,9 @@ class AClauseAboveASumIsReadAtTheFieldItIsAboutTest {
 
     /** The declarations whose clauses are holding this position's ceiling, named. */
     private static List<String> holdingTheCeiling(Position at) {
-        return at.narrowedEnds().maxBy().stream().map(TypeSymbol::name).toList();
+        return souther.compiler.check.AReadingOfAPosition
+                .holding(at.narrowedEnds(), souther.compiler.numeric.EndSide.UPPER).stream()
+                .map(TypeSymbol::name).toList();
     }
 
     /**

@@ -78,7 +78,8 @@ class WhichRuleHoldsAnEndIsAskedOfTheRuleAndNotOfWhereItIsReadTest {
      */
     @Test
     void aSpreadRuleIsHeldByTheDeclarationThatWroteIt() {
-        List<String> holding = reading().at("hi").minBy().stream()
+        List<String> holding = AReadingOfAPosition
+                .holding(reading().at("hi"), souther.compiler.numeric.EndSide.LOWER).stream()
                 .map(TypeSymbol::name)
                 .toList();
 
