@@ -13,31 +13,41 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * What a declaration already says about a value a fixture wrote.
+ * What declarations already say about the type of a value expression.
  *
- * <p>One walk, read by both of the things that need it: the reading that builds a row, and the pass
- * that decides which methods a row's calls need emitted. Two walks would be two answers about which
- * calls are applicable, and the one that answered later would find no method.
+ * <p>One walk. Every consumer that needs the question reads this rather than putting declaration-led
+ * typing together again: the reading that builds a row, the pass that decides which methods a row's
+ * calls need emitted, the measure that asks what a fixture states, and the editor asking what may be
+ * written after a {@code .}. Two walks would be two answers about the same declarations, and the one
+ * that answered later would find nothing.
  *
  * <p>Nothing is run. Every step reads a name {@code Resolve} already settled or a declaration a
  * module already made, so asking costs no helper a second application against a row's budget.
  *
- * @param values the definitions a name in a fixture may stand for
- * @param bound  what a {@code let} has in force where the walk starts, which the walk adds to as it
- *               enters more of them
+ * @param values the definitions a bare name may stand for
+ * @param bound  what the bindings in force where the walk starts have to say about themselves, which
+ *               the walk adds to as it enters more of them
  */
-public record FixtureEvidence(Symbols symbols, Map<String, Hir.FnDef> values,
-                              Map<BindingId, Hir.Expr> bound) {
+public record DeclaredTypeEvidence(Symbols symbols, Map<String, Hir.FnDef> values,
+                                   Map<BindingId, BindingEvidence> bound) {
 
-    public FixtureEvidence(Symbols symbols, Map<String, Hir.FnDef> values) {
+    public DeclaredTypeEvidence(Symbols symbols, Map<String, Hir.FnDef> values) {
         this(symbols, values, Map.of());
     }
 
     /** The same, with {@code binding} standing for {@code value} as well. */
-    public FixtureEvidence with(BindingId binding, Hir.Expr value) {
-        Map<BindingId, Hir.Expr> wider = new LinkedHashMap<>(bound);
-        wider.put(binding, value);
-        return new FixtureEvidence(symbols, values, wider);
+    public DeclaredTypeEvidence with(BindingId binding, Hir.Expr value) {
+        Map<BindingId, BindingEvidence> wider = new LinkedHashMap<>(bound);
+        wider.put(binding, new BindingEvidence.BoundTo(value));
+        return new DeclaredTypeEvidence(symbols, values, wider);
+    }
+
+    /** Bindings that each stand for an expression, as this walk holds them — what a caller keeping
+     *  its own record of what a {@code let} put in force hands over. */
+    public static Map<BindingId, BindingEvidence> boundTo(Map<BindingId, Hir.Expr> expressions) {
+        Map<BindingId, BindingEvidence> out = new LinkedHashMap<>();
+        expressions.forEach((binding, value) -> out.put(binding, new BindingEvidence.BoundTo(value)));
+        return out;
     }
 
     /**
@@ -55,7 +65,8 @@ public record FixtureEvidence(Symbols symbols, Map<String, Hir.FnDef> values,
     }
 
     /** As above, from a walk that already has names in force and a record of what it has entered. */
-    public Type declaredTypeOf(Hir.Expr e, Set<ValueName> seen, Map<BindingId, Hir.Expr> inForce) {
+    public Type declaredTypeOf(Hir.Expr e, Set<ValueName> seen,
+                               Map<BindingId, BindingEvidence> inForce) {
         return switch (e) {
             case Hir.NewData nd -> nd.typeName().answered() == null
                     ? null : Type.ref(nd.typeName().answered().type());
@@ -67,7 +78,8 @@ public record FixtureEvidence(Symbols symbols, Map<String, Hir.FnDef> values,
             }
             case Hir.LetIn let -> {
                 BindingId binding = let.binder().id();
-                Hir.Expr outer = inForce.put(binding, let.value());
+                BindingEvidence outer =
+                        inForce.put(binding, new BindingEvidence.BoundTo(let.value()));
                 try {
                     yield declaredTypeOf(let.body(), seen, inForce);
                 } finally {
@@ -87,9 +99,17 @@ public record FixtureEvidence(Symbols symbols, Map<String, Hir.FnDef> values,
                 if (!seen.add(denotes)) {
                     yield null;
                 }
-                Hir.Expr body = denotes instanceof ValueName.Local local
-                        ? inForce.get(local.id())
-                        : valueBody(v.name());
+                if (denotes instanceof ValueName.Local local) {
+                    // What the binding says about itself: one more step of this walk where it stands
+                    // for an expression, and the answer outright where a declaration gave it one.
+                    yield switch (inForce.get(local.id())) {
+                        case BindingEvidence.BoundTo(Hir.Expr body) ->
+                                declaredTypeOf(body, seen, inForce);
+                        case BindingEvidence.DeclaredAs(Type declared) -> declared;
+                        case null -> null;
+                    };
+                }
+                Hir.Expr body = valueBody(v.name());
                 yield body == null ? null : declaredTypeOf(body, seen, inForce);
             }
             case null, default -> null;

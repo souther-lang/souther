@@ -36,6 +36,9 @@ public sealed interface MemberReceiver {
      */
     Region writtenAt();
 
+    /** A value, and what it is. */
+    record Value(TypeFact type, Region writtenAt) implements MemberReceiver {}
+
     /**
      * A value, and nothing a declaration says about what type it has.
      *

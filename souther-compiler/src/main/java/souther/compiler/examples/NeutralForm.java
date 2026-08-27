@@ -4,7 +4,7 @@ import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.AtomSpace;
 import souther.compiler.check.Boundary;
-import souther.compiler.check.FixtureEvidence;
+import souther.compiler.check.DeclaredTypeEvidence;
 import souther.compiler.check.Symbols;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
@@ -406,7 +406,7 @@ final class NeutralForm {
 
     /** A data's fields by name, following the `...includes` it composes in (spec §data). */
     Map<String, Hir.TypeRef> fieldTypes(TypeSymbol typeName) {
-        return FixtureEvidence.fieldTypes(typeName, symbols);
+        return DeclaredTypeEvidence.fieldTypes(typeName, symbols);
     }
 
     /**
@@ -417,20 +417,20 @@ final class NeutralForm {
      * declaring file's position).
      */
     Type shapeOf(Hir.TypeRef declaredType) {
-        return FixtureEvidence.shapeOf(declaredType);
+        return DeclaredTypeEvidence.shapeOf(declaredType);
     }
 
     /** Whether {@code name} is a newtype — asked of a name resolution settled, never of a spelling:
      * an imported value's body names its own module's types, which the module reading the row need
      * not have imported, and a module of its own may declare something else of that spelling. */
     boolean isNewtype(TypeSymbol name) {
-        return FixtureEvidence.isNewtype(name, symbols);
+        return DeclaredTypeEvidence.isNewtype(name, symbols);
     }
 
     /** The written form of what a newtype wraps, kept whole so a generic base
      * ({@code data 在庫 = Map<商品ID, Int>}) keeps its type arguments. */
     Hir.TypeRef newtypeBaseType(TypeSymbol name) {
-        return FixtureEvidence.newtypeBaseType(name, symbols);
+        return DeclaredTypeEvidence.newtypeBaseType(name, symbols);
     }
 
     // --- reading a position's type ----------------------------------------------------------------

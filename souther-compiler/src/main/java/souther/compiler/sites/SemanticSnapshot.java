@@ -1,16 +1,27 @@
 package souther.compiler.sites;
 
+import souther.compiler.Reserved;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.WrittenName;
-import souther.compiler.Reserved;
+import souther.compiler.check.BindingEvidence;
+import souther.compiler.check.DeclaredTypeEvidence;
+import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.query.Answer;
+import souther.compiler.query.Bodies;
 import souther.compiler.query.Db;
 import souther.compiler.query.Names;
 import souther.compiler.query.Sites;
+import souther.compiler.types.BindingId;
+import souther.compiler.types.Type;
 
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -26,16 +37,20 @@ import java.util.Optional;
  * be memoised by, and a caller that kept one would be keeping the compilation it was made from.
  *
  * <p>Absent where the occurrences of the module could not be told apart. What an editor does then is
- * everything it can do from the syntax alone — where a bracket's match is, what the declarations in
- * a file are — and nothing that rests on knowing which occurrence a position is. Half of a snapshot
- * is not published.
+ * everything it can do from the syntax alone, and nothing that rests on knowing which occurrence a
+ * position is. Half of a snapshot is not published. What an individual answer rests on is a separate
+ * question: a fact this cannot reach is that fact absent, and not the snapshot going away.
  */
 public final class SemanticSnapshot {
 
+    private final Db db;
+    private final String module;
     private final AuthoredSites sites;
     private final Symbols symbols;
 
-    private SemanticSnapshot(AuthoredSites sites, Symbols symbols) {
+    private SemanticSnapshot(Db db, String module, AuthoredSites sites, Symbols symbols) {
+        this.db = db;
+        this.module = module;
         this.sites = sites;
         this.symbols = symbols;
     }
@@ -51,7 +66,7 @@ public final class SemanticSnapshot {
         Answer<AuthoredSites> occurrences = db.ask(new Sites.Authored(module));
         Answer<Symbols> scope = Names.derivedSymbols(db, module);
         return occurrences.present() && scope.present()
-                ? Optional.of(new SemanticSnapshot(occurrences.value(), scope.value()))
+                ? Optional.of(new SemanticSnapshot(db, module, occurrences.value(), scope.value()))
                 : Optional.empty();
     }
 
@@ -78,11 +93,76 @@ public final class SemanticSnapshot {
             // A field taken off a value. That it is one is already settled: the parser reads
             // `m.name` and `x.field` alike, and this is a field read because a binding was in force
             // where the chain is rooted.
-            case Hir.FieldAccess access ->
-                    Optional.of(new MemberReceiver.UntypedValue(access.target().region()));
+            case Hir.FieldAccess access -> Optional.of(valueReceiver(access.target()));
             case Hir.Var written -> namespaceOf(written.written());
             case null, default -> Optional.empty();
         };
+    }
+
+    /**
+     * A value receiver, with what the declarations say it is where they say anything.
+     *
+     * <p>Asked of the one walk that answers what a declaration says about an expression's type, so
+     * what an editor is told about {@code request.plannedCost} and what a row's reading is told
+     * about it are the same answer. What is added here is the one thing that walk has no way to
+     * know on its own: a behavior's parameter is bound by nothing and its type is in the signature
+     * above it.
+     */
+    private MemberReceiver valueReceiver(Hir.Expr receiver) {
+        Type declared = declaredTypeOf(receiver);
+        return declared == null
+                ? new MemberReceiver.UntypedValue(receiver.region())
+                : new MemberReceiver.Value(new TypeFact(declared, new Evidence.Declared()),
+                        receiver.region());
+    }
+
+    /** What the declarations say {@code e} is, or null where they say nothing — including where the
+     *  module's signatures or definitions are not answerable, which is one fact being absent rather
+     *  than this reading being. */
+    private Type declaredTypeOf(Hir.Expr e) {
+        Answer<Map<String, Hir.FnDef>> values = db.ask(new Bodies.ModuleDefinitions(module));
+        if (!values.present()) {
+            return null;
+        }
+        Map<BindingId, BindingEvidence> parameters = parametersOfEveryBehavior();
+        return new DeclaredTypeEvidence(symbols, values.value(), parameters)
+                .declaredTypeOf(e, new HashSet<>(), new HashMap<>(parameters));
+    }
+
+    /**
+     * What every parameter written in this module is declared to arrive as.
+     *
+     * <p>All of them at once and not the ones the cursor is inside. A binding tells itself from
+     * every other, so a parameter of one behavior cannot be reached by a name in another, and
+     * working out which body a position is in would be a scope this does not have to keep.
+     *
+     * <p>A behavior whose signature says a different number of things from what its {@code let}
+     * writes is left out. The two disagreeing is a mistake in the module, reported where it is
+     * written, and pairing them off by position anyway would say a parameter arrives as something
+     * the declaration never said it does.
+     */
+    private Map<BindingId, BindingEvidence> parametersOfEveryBehavior() {
+        Answer<Hir.Module> resolved = db.ask(new Names.Resolved(module));
+        Answer<Map<String, Sig>> signatures = db.ask(new Bodies.Signatures(module));
+        if (!resolved.present() || !signatures.present()) {
+            return Map.of();
+        }
+        Map<BindingId, BindingEvidence> declared = new LinkedHashMap<>();
+        for (Hir.FnDef fn : resolved.value().fns()) {
+            Sig sig = signatures.value().get(fn.written().canonical());
+            if (sig == null) {
+                continue;
+            }
+            List<Type> arrives = sig.inputTypes();
+            if (arrives.size() != fn.params().size()) {
+                continue;
+            }
+            for (int at = 0; at < arrives.size(); at++) {
+                declared.put(fn.params().get(at).binder().id(),
+                        new BindingEvidence.DeclaredAs(arrives.get(at)));
+            }
+        }
+        return declared;
     }
 
     /**
@@ -105,9 +185,9 @@ public final class SemanticSnapshot {
         // whatever the grammar lets stand between a qualifier and the name it qualifies.
         Region at = new Region(name.segments().getFirst().start(),
                 name.segments().get(name.segments().size() - 2).end());
-        String module = symbols.scope().moduleOfQualifier(qualifier);
-        if (module != null) {
-            return Optional.of(new MemberReceiver.Namespace.OfModule(module, at));
+        String namespace = symbols.scope().moduleOfQualifier(qualifier);
+        if (namespace != null) {
+            return Optional.of(new MemberReceiver.Namespace.OfModule(namespace, at));
         }
         return Reserved.isQualifier(qualifier)
                 ? Optional.of(new MemberReceiver.Namespace.OfLibrary(qualifier, at))

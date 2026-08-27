@@ -3,9 +3,12 @@ package souther.lsp.analysis;
 import org.junit.jupiter.api.Test;
 import souther.compiler.cst.LineIndex;
 import souther.compiler.meta.ModulePath;
+import souther.compiler.sites.Evidence;
 import souther.compiler.sites.MemberReceiver;
 import souther.compiler.sites.SemanticSnapshot;
+import souther.compiler.sites.TypeFact;
 import souther.compiler.source.SourceId;
+import souther.compiler.types.Type;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -50,11 +53,43 @@ class WhatIsLeftOfADotIsSaidByTheSnapshotAndNotGuessedTest {
                 """ + body;
     }
 
+    /**
+     * The line the issue is about, answered from declarations alone.
+     *
+     * <p>Two steps, and neither is inference. What arrives as {@code request} is on the
+     * {@code behavior} line; what {@code plannedCost} is is in the {@code data} declaration — in
+     * another module, which is where a field list is least guessable and most wanted. Nothing here
+     * needs the body to have compiled, which is the point: it has not, and cannot, while the line
+     * ends at a {@code .}.
+     */
     @Test
-    void aFieldTakenOffAValueIsAValueReceiver() {
-        assertInstanceOf(MemberReceiver.UntypedValue.class,
-                leftOfTheDot(model("request.plannedCost.\n")),
-                "`request.plannedCost` is a value, and no declaration read here says its type yet");
+    void aFieldTakenOffAParameterIsTheTypeTheDeclarationsSay() {
+        MemberReceiver receiver = leftOfTheDot(model("request.plannedCost.\n"));
+
+        TypeFact fact = assertInstanceOf(MemberReceiver.Value.class, receiver).type();
+        assertEquals("Cost",
+                assertInstanceOf(Type.Ref.class, fact.type()).name().name(),
+                "`request.plannedCost` is a `Cost`, said by a signature and a data declaration");
+        assertInstanceOf(Evidence.Declared.class, fact.evidence(),
+                "and said by declarations, which is what a reader is entitled to know");
+    }
+
+    @Test
+    void aReceiverNoDeclarationSpeaksForIsStillAValue() {
+        // `submitted()` answers something no declaration read here states, so what is missing is the
+        // type and not the receiver.
+        MemberReceiver receiver = leftOfTheDot("""
+                module m
+
+                data Draft = { plannedCost: Int }
+
+                behavior make : () -> Draft
+                behavior submit : (request: Draft) -> Int
+                let submit (request) = make().
+                """);
+
+        assertInstanceOf(MemberReceiver.UntypedValue.class, receiver,
+                "a call's answer is a value, and no declaration read here says what it is");
     }
 
     @Test
