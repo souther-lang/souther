@@ -94,6 +94,10 @@ public abstract sealed class NarrowedBounds {
      *
      * <p>An answer here is not a licence to print the names. It says they are about this end; what
      * a report owes at it is the asking consumer's own question.
+     *
+     * <p>A {@code null} target is a caller whose own reading stops the coordinate nowhere on that
+     * side, and nothing is what this reading holds against it — an end that is there is not the same
+     * end as one that is not.
      */
     public abstract Optional<MatchedEndAttribution> matching(EndSide side, Endpoint target);
 

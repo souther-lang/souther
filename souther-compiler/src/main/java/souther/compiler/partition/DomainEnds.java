@@ -47,17 +47,6 @@ record DomainEnds(Map<EndSide, DomainEnd> byEnd) {
         return out.isEmpty() ? NONE : new DomainEnds(out);
     }
 
-    /**
-     * The same, where nothing took either end in.
-     *
-     * <p>What a caller that has the two places and no reading behind them has. Safe to write side by
-     * side because there is no attribution to put beside the wrong one: the mistake this type exists
-     * to stop needs names to make.
-     */
-    static DomainEnds unattributed(Bound low, Bound high) {
-        return of(side -> DomainEnd.at(side, side == EndSide.LOWER ? low : high));
-    }
-
     /** The end on one side, or null where the rules leave the quantity everything that way. */
     DomainEnd at(EndSide side) {
         return byEnd.get(side);

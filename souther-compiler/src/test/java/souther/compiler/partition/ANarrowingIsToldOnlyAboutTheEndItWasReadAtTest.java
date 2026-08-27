@@ -73,11 +73,12 @@ class ANarrowingIsToldOnlyAboutTheEndItWasReadAtTest {
     /**
      * Nor is a reading of the end at the other side of the run.
      *
-     * <p>The low end of what the rules leave is where this run starts and not where it stops, and
-     * the reading answering about it is answering about the other question. Which side each of the
-     * two is about travels with it from the reading to here, and the numbers alone do not say: a
-     * quantity the rules leave one value stops at that value both ways, and there the two ends are
-     * one number ({@code ARangeStoppingAtOneValueStillHasTwoEndsTest}).
+     * <p>The low end of what the rules leave is where this run starts and not where it stops, so a
+     * reading answering about it is answering about another end. Here the two are at two numbers and
+     * that is all this shows — whether the side travels beside the number is a question the numbers
+     * cannot be made to ask at a border, because a quantity whose two ends are one number holds one
+     * value and has no point inside a run to be owed anything.
+     * {@code ARangeStoppingAtOneValueStillHasTwoEndsTest} asks it where it can be asked.
      */
     @Test
     void aReadingOfTheEndTheRunStartsAtIsNotNamedWhereItStops() {

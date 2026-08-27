@@ -56,11 +56,6 @@ public final class DomainEnd {
         return bound == null ? null : new DomainEnd(side, bound, attribution);
     }
 
-    /** An end nothing took in, which is what a position no declaration relates to anything has. */
-    static DomainEnd at(EndSide side, Bound bound) {
-        return at(side, bound, null);
-    }
-
     /** Which of the quantity's two ends this is. */
     public EndSide side() {
         return side;

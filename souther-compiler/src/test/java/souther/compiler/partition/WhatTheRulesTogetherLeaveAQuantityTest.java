@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.Carrier;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.EndSide;
 import souther.compiler.numeric.Towards;
 
 import java.util.List;
@@ -52,10 +53,21 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
     /** The same, where the rules leave the quantity only what lies between two values. */
     private static List<String> within(String low, String high, Seam... parted) {
         return QuantityArrangement.of(NUMBERS, byItsOwnRule(parted),
-                        DomainEnds.unattributed(
-                                low == null ? null : Bound.at(at(low), true),
+                        between(low == null ? null : Bound.at(at(low), true),
                                 high == null ? null : Bound.at(at(high), true)))
                 .bands().stream().map(Band::key).toList();
+    }
+
+    /**
+     * The two places the rules leave the quantity between, with nothing having taken either in.
+     *
+     * <p>Written side by side here and not offered by {@link DomainEnds}, which asks for the end at
+     * a side rather than being handed a pair: what that keeps a caller from doing is putting one
+     * end's attribution beside the other's, and there is no attribution here to put anywhere.
+     */
+    private static DomainEnds between(Bound low, Bound high) {
+        return DomainEnds.of(side ->
+                DomainEnd.at(side, side == EndSide.LOWER ? low : high, null));
     }
 
     /**
@@ -163,7 +175,7 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
     @Test
     void aRunWithNothingPartingItBelowRunsFromTheStart() {
         Band first = QuantityArrangement.of(NUMBERS, byItsOwnRule(upTo("10")),
-                        DomainEnds.unattributed(Bound.at(at("0"), true), null))
+                        between(Bound.at(at("0"), true), null))
                 .bands().get(0);
 
         assertEquals(false, first.holds(at("-1")), "the rules leave nothing below zero");
@@ -292,10 +304,10 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
     void aLineWhereTheRulesAlreadyStopTheQuantityStopsTheRunAsWell() {
         Bound upTo100 = Bound.at(at("100"), true);
         QuantityArrangement withoutTheLine = QuantityArrangement.of(NUMBERS, List.of(),
-                DomainEnds.unattributed(null, upTo100));
+                between(null, upTo100));
         QuantityArrangement withTheLine = QuantityArrangement.of(NUMBERS,
                 List.of(Parting.by(upTo("100"), aLine(0))),
-                DomainEnds.unattributed(null, upTo100));
+                between(null, upTo100));
 
         assertEquals(List.of(new FarEnd.AtTheDomain(upTo100)),
                 farEndsOf(withoutTheLine),
@@ -323,7 +335,7 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
     void aLineTheRulesStopShortOfDoesNotStopTheRun() {
         QuantityArrangement arranged = QuantityArrangement.of(NUMBERS,
                 List.of(Parting.by(upTo("100"), aLine(0))),
-                DomainEnds.unattributed(null, Bound.at(at("50"), true)));
+                between(null, Bound.at(at("50"), true)));
 
         assertEquals(List.of(new FarEnd.AtTheDomain(Bound.at(at("50"), true))),
                 farEndsOf(arranged),
