@@ -2195,6 +2195,35 @@ public final class Bodies {
             this.decisions = decisions;
         }
 
+        /**
+         * Two of these are one where the check produced the same module for the backend.
+         *
+         * <p>The question it answers is whether a check that ran again has anything new to emit
+         * from. This is what {@link Checked} answers with, and an answer that never equals the one
+         * it replaces leaves everything downstream of the check running again — the emitter, what
+         * a report says about a claim, and every measure that reads a body.
+         *
+         * <p>All six and not the bodies alone. What a body means to whoever reads it is the Core
+         * together with what was decided about it, so two checks that produced one tree and
+         * disagreed about which rule a fork decides by produced two modules.
+         */
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Elaborated that
+                    && behaviorBodies.equals(that.behaviorBodies)
+                    && emittedHelpers.equals(that.emittedHelpers)
+                    && claims.equals(that.claims)
+                    && elements.equals(that.elements)
+                    && decisions.equals(that.decisions)
+                    && supplied.equals(that.supplied);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(behaviorBodies, emittedHelpers, claims, elements,
+                    decisions, supplied);
+        }
+
         /** Who owns the rule each fork of this module's bodies decides by. */
         public souther.compiler.coverage.DecisionSources decisions() {
             return decisions;

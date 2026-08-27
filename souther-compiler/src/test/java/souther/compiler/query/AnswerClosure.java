@@ -260,9 +260,6 @@ final class AnswerClosure {
                     BOTH_EVERYWHERE,
                     "whether it is something that says what it is or something that does something "
                             + "has to be read before it is either, so the fix is to read it"),
-            new Known(new Identity(at(Q + "Bodies$Checked", Q + "Bodies$Elaborated",
-                    m(ANSWER, "value")), Nature.NOT_READ, Cause.UNCLASSIFIED), BOTH_EVERYWHERE,
-                    "as above"),
             heldEnd(m("souther.compiler.inputs.InputDomain", "byPath"), VALUE),
             heldEnd(m("souther.compiler.inputs.InputDomain", "positions"), ELEMENT),
             narrowedEnd(Q + "Adequacy$Inputs", compared(Scenario.VALID_CORPUS),
