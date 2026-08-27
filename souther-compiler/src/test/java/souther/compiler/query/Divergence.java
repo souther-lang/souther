@@ -383,17 +383,15 @@ record Divergence(Locus at, String cause, Divergence.Kind kind) {
         }
 
         /**
-         * Which contract a thing is read under, where it keeps one at all.
+         * Which contract a thing is read under.
          *
-         * <p>Something that says it keeps none of it is read as a thing of its own, which is
-         * {@link AnswerShape#keepsThatContract}'s to say and is what the walk of one store reads
-         * too. A map whose equality is which objects were put in it, paired entry by entry, would
-         * have its members compared and its own answer never asked.
+         * <p>What a thing claims and not whether it keeps it. This walk holds two of them together
+         * and pairs what they hold by what the members say, so a map whose equality is which
+         * objects were put in it is paired like any other and then asked its own answer — which is
+         * where it is named. Refusing it the contract here would take away the pairing and leave
+         * the naming to a walk of its fields, which belong to a module that opens nothing.
          */
         private static Contract contractOf(Object each) {
-            if (!AnswerShape.keepsThatContract(each.getClass())) {
-                return Contract.A_THING;
-            }
             if (each instanceof List<?>) {
                 return Contract.A_LIST;
             }

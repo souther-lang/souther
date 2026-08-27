@@ -3,7 +3,6 @@ package souther.compiler.query;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -194,7 +193,7 @@ class AWalkOfOneAnswerNamesWhatMeansNothingTest {
     void whatIsNamedAsKeepingNoneOfTheContractKeepsNoneOfIt() {
         Set<String> keptItAfterAll = new TreeSet<>();
         for (Class<?> each : AnswerShape.whichKeepNoneOfIt()) {
-            if (twoOfThemSayingTheSameThingAreEqual(each)) {
+            if (HowAnAnswerHoldsThings.twoOfThemSayingTheSameThingAreEqual(each)) {
                 keptItAfterAll.add(each.getName());
             }
         }
@@ -214,7 +213,7 @@ class AWalkOfOneAnswerNamesWhatMeansNothingTest {
     @Test
     void whatIsReadForWhatItHoldsKeepsTheContract() {
         Set<String> saidNo = new TreeSet<>();
-        for (Supplier<Object> each : theWaysAnAnswerHoldsThings()) {
+        for (Supplier<Object> each : HowAnAnswerHoldsThings.all()) {
             Object one = each.get();
             if (AnswerShape.keepsThatContract(one.getClass()) && !one.equals(each.get())) {
                 saidNo.add(one.getClass().getName());
@@ -223,58 +222,6 @@ class AWalkOfOneAnswerNamesWhatMeansNothingTest {
 
         assertEquals(Set.of(), saidNo, "read for what it holds, and comparing two of them does not"
                 + " compare what they hold");
-    }
-
-    /**
-     * How an answer comes to hold a collection, a map or an absence, one way per line.
-     *
-     * <p>Built twice from one line rather than reflected into: what the language hands back for one
-     * of these is its own business — a list of one thing and a list of many are two classes — and
-     * what is asked is what an answer would hold, not what a name can be constructed.
-     */
-    private static List<Supplier<Object>> theWaysAnAnswerHoldsThings() {
-        return List.of(
-                () -> Map.of(new String("a"), new String("b")),
-                () -> new LinkedHashMap<>(Map.of(new String("a"), new String("b"))),
-                () -> new HashMap<>(Map.of(new String("a"), new String("b"))),
-                () -> new java.util.TreeMap<>(Map.of(new String("a"), new String("b"))),
-                () -> java.util.Collections.unmodifiableMap(
-                        new LinkedHashMap<>(Map.of(new String("a"), new String("b")))),
-                () -> List.of(new String("a")),
-                () -> List.of(new String("a"), new String("b"), new String("c")),
-                () -> new java.util.ArrayList<>(List.of(new String("a"))),
-                () -> java.util.Collections.unmodifiableList(
-                        new java.util.ArrayList<>(List.of(new String("a")))),
-                () -> Set.of(new String("a")),
-                () -> new java.util.LinkedHashSet<>(Set.of(new String("a"))),
-                () -> new java.util.HashSet<>(Set.of(new String("a"))),
-                () -> java.util.Collections.unmodifiableSet(
-                        new java.util.LinkedHashSet<>(Set.of(new String("a")))),
-                () -> Optional.of(new String("a")),
-                // And the one that is named as keeping none of it, so that a line above going
-                // quiet is not the whole of what this says.
-                () -> {
-                    Map<Object, Object> byWhichObject = new java.util.IdentityHashMap<>();
-                    byWhichObject.put(new String("a"), new String("b"));
-                    return byWhichObject;
-                });
-    }
-
-    /**
-     * Whether two of these built apart, holding what compares equal, compare equal.
-     *
-     * <p>Which is the whole of the contract: a walk that reads one for its members is saying that
-     * comparing two of them is comparing the members. Asked by building two, because nothing a
-     * class says about itself distinguishes one that keeps this from one that does not.
-     */
-    private static boolean twoOfThemSayingTheSameThingAreEqual(Class<?> type) {
-        for (Supplier<Object> each : theWaysAnAnswerHoldsThings()) {
-            if (each.get().getClass() == type) {
-                return each.get().equals(each.get());
-            }
-        }
-        throw new IllegalStateException("nothing here builds a " + type.getName()
-                + ", so nothing here says whether it keeps the contract");
     }
 
     /** And two ways down to one of those. */
