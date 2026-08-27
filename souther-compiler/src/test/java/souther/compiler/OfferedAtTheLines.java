@@ -38,7 +38,7 @@ public final class OfferedAtTheLines {
         List<Generator.GeneratedRow> rows = souther.compiler.query.Offering.atTheLines(
                 own.rows(), declared.rowsByCarrier().get(behavior));
         List<Generator.UnresolvedCombination> unresolved = new ArrayList<>(own.unresolved());
-        declared.unmet().forEach(unmet -> {
+        declared.unmet().forEach((_, unmet) -> {
             switch (unmet) {
                 case DeclaredRows.Unmet.TheLineCannotBeWritten(var _, var _, var proving) ->
                         proving.forEach(at -> searched(unresolved, at));

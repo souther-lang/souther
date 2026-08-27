@@ -98,14 +98,14 @@ public record DeclaredRows(GenerationScope scope,
      * sentence a reader may act on (ADR-0091) was printed under the declaration's own name for a
      * line one reading had merely refused.
      */
-    public List<Unmet> unmet() {
-        List<Unmet> out = new ArrayList<>();
-        resolved.forEach((_, answer) -> {
+    public SequencedMap<BorderObligationPoint, Unmet> unmet() {
+        SequencedMap<BorderObligationPoint, Unmet> out = new LinkedHashMap<>();
+        resolved.forEach((at, answer) -> {
             if (answer.resolution() instanceof DeclarationResolution.Unresolved _) {
-                out.add(unmet(answer));
+                out.put(at, unmet(answer));
             }
         });
-        return List.copyOf(out);
+        return java.util.Collections.unmodifiableSequencedMap(out);
     }
 
     /**
@@ -147,7 +147,8 @@ public record DeclaredRows(GenerationScope scope,
             return new Unmet.NothingWasSearched(answer.owedBy(), answer.said());
         }
         return coverage.provesTheLineCannotBeWritten()
-                ? new Unmet.TheLineCannotBeWritten(answer.owedBy(), answer.said(), List.copyOf(came))
+                ? new Unmet.TheLineCannotBeWritten(answer.owedBy(), answer.said(),
+                        List.copyOf(came))
                 : new Unmet.WhatTheReadingsCameTo(answer.owedBy(), answer.said(),
                         List.copyOf(came));
     }
@@ -248,7 +249,9 @@ public record DeclaredRows(GenerationScope scope,
                         "a finding about a line this generation was asked about and holds no answer"
                                 + " for: " + at);
             }
-            out.add(new Adequacy.GenerationDisposition(finding, switch (answer.resolution()) {
+            out.add(new Adequacy.GenerationDisposition(finding,
+                    java.util.Optional.of(new OfferItem.APointOfALine(at)),
+                    switch (answer.resolution()) {
                 case DeclarationResolution.Generated(var _, var row) ->
                         new GenerationOutcome.Generated(List.of(row));
                 case DeclarationResolution.Unresolved _ -> cannot(unmet(answer));

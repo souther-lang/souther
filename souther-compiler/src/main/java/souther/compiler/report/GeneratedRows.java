@@ -11,6 +11,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.DeclaredRows;
 import souther.compiler.query.GenerationScope;
+import souther.compiler.query.OfferItem;
 import souther.compiler.query.Offering;
 import souther.compiler.query.OfferingRequest;
 
@@ -123,10 +124,18 @@ public final class GeneratedRows {
      * is said once, under the declaration that drew the line, and cannot be written from evidence
      * that does not support it.
      */
-    private static void declarations(StringBuilder out, DeclaredRows declared) {
+    private static void declarations(StringBuilder out, DeclaredRows declared,
+                                     Offering offering) {
         java.util.Set<String> said = new java.util.LinkedHashSet<>();
-        for (DeclaredRows.Unmet unmet : declared.unmet()) {
-            switch (unmet) {
+        for (Map.Entry<souther.compiler.partition.BorderObligationPoint, DeclaredRows.Unmet> each
+                : declared.unmet().entrySet()) {
+            // Nothing about a point one of the rows above stands at. What is left to write is what
+            // this says, and a line telling a person no row was composed for something they are
+            // being handed a row for is work that is not left.
+            if (offering.answered().contains(new OfferItem.APointOfALine(each.getKey()))) {
+                continue;
+            }
+            switch (each.getValue()) {
                 // Said once, of the line, and in the declaration's own words. What each reading
                 // proved it of is not repeated: they agree, which is what let this be said at all.
                 case DeclaredRows.Unmet.TheLineCannotBeWritten(var owedBy, var asked, var _) ->
@@ -214,7 +223,7 @@ public final class GeneratedRows {
             out.append(commented(stated(blocks(module, offered), ensures)));
         }
         for (Map.Entry<String, Adequacy.Filling> behavior : offering.searched().entrySet()) {
-            notes(out, behavior.getKey(), behavior.getValue(), boundaries, names);
+            notes(out, behavior.getKey(), behavior.getValue(), boundaries, names, offering);
         }
         // And what the module's declarations are owed that nothing composed a row for. Here rather
         // than after this returns, because what this builds is the block: a caller that rendered
@@ -222,7 +231,7 @@ public final class GeneratedRows {
         // holds, and the one that forgot would print rows with nothing said about the work beside
         // them.
         if (declared != null) {
-            declarations(out, declared);
+            declarations(out, declared, offering);
         }
         // The count leaves with the text. It was worked out here and thrown away, and the one
         // caller that needed it read the text instead.
@@ -247,11 +256,17 @@ public final class GeneratedRows {
      * a list of the author's work. The report says those findings, which is where they belong.
      */
     private static List<Adequacy.GenerationDisposition> shown(Adequacy.Filling filling,
-                                                              boolean boundaries) {
+                                                              boolean boundaries,
+                                                              Offering offering) {
         return filling.generation().stream()
                 .filter(each -> !(each.outcome() instanceof GenerationOutcome.NotApplicable))
                 .filter(each -> boundaries
                         || !(each.finding().about() instanceof About.APointOfABorder))
+                // And nothing about something one of the rows above stands at. What the search for
+                // this finding came to is what it came to, and a person reading the block is being
+                // told what is left to write — which a row in front of them is not.
+                .filter(each -> each.item().stream()
+                        .noneMatch(offering.answered()::contains))
                 .toList();
     }
 
@@ -508,7 +523,7 @@ public final class GeneratedRows {
      * the rows it was offering were printed two lines above the line saying it had stopped.
      */
     private static void notes(StringBuilder out, String behavior, Adequacy.Filling filling,
-                              boolean boundaries, SourceNameResolver names) {
+                              boolean boundaries, SourceNameResolver names, Offering offering) {
         Set<String> said = new LinkedHashSet<>();
         List<Generator.UnresolvedCombination> left =
                 new ArrayList<>(filling.composed().unresolved());
@@ -522,7 +537,7 @@ public final class GeneratedRows {
         // Every finding a row could answer, and not only the ones a strategy took. One printed in
         // the report and left out of this block is one an author is told nothing about, while the
         // rows above it read as though they filled everything.
-        for (Adequacy.GenerationDisposition each : shown(filling, boundaries)) {
+        for (Adequacy.GenerationDisposition each : shown(filling, boundaries, offering)) {
             switch (each.outcome()) {
                 case GenerationOutcome.Generated _ -> { }
                 // Each of what was tried, because they are not one fact: a combination the model

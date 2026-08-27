@@ -1,0 +1,157 @@
+package souther.compiler;
+
+import org.junit.jupiter.api.Test;
+import souther.compiler.query.Adequacy;
+import souther.compiler.query.Compilation;
+import souther.compiler.query.GenerationScope;
+import souther.compiler.query.OfferItem;
+import souther.compiler.query.Offering;
+import souther.compiler.query.OfferingRequest;
+import souther.compiler.query.RowKey;
+import souther.compiler.query.Settlements;
+
+import java.util.LinkedHashSet;
+import java.util.Map;
+import java.util.Set;
+
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * A row goes only where the offering answers as much without it.
+ *
+ * <p>Three things hold of what is left, and they are what the reduction is. Everything some row
+ * settled is still settled by one. Everything a row was composed for still has a row that answers
+ * it. And nothing else can go: every row left is the only one settling something, which is what
+ * makes the result irredundant rather than merely smaller.
+ *
+ * <p>The fourth is what may not be acted on. A row that cannot be told about is not a row that
+ * answers, so nothing is dropped on the strength of one — a reduction that counted what it could not
+ * tell would drop the row that was the only offer for something.
+ */
+class WhatTheOfferingAnswersSurvivesDroppingARowTest {
+
+    /**
+     * Lines a declaration draws, classes the model divides its positions into, and arms a body
+     * takes — the three kinds of thing a row is offered for, in one model with no rows written.
+     */
+    private static final String MODEL = """
+            module example.shipping
+
+            data Total = Int
+                invariant value >= 0
+                invariant value <= 1000000
+
+            data Membership = Premium | Standard
+
+            data Delivery = Express | Regular
+
+            data Fee = Int
+                invariant value >= 0
+
+            behavior shippingFee : (total: Total, member: Membership, delivery: Delivery) -> Fee
+                constructs Fee
+
+            let baseFee (total: Total, member: Membership): Int =
+                match member with
+                    | Premium -> 0
+                    | Standard -> if total.value >= 5000 then 0 else 500
+
+            let expressFee (delivery: Delivery): Int =
+                match delivery with
+                    | Express -> 500
+                    | Regular -> 0
+
+            let shippingFee (total, member, delivery) =
+                Fee(baseFee(total, member) + expressFee(delivery))
+            """;
+
+    @Test
+    void everythingSomeRowSettledIsStillSettled() {
+        Settlements table = table();
+        Set<OfferItem> before = table.settled();
+        Set<RowKey> kept = table.keeping();
+        assertFalse(kept.isEmpty(), "something is offered: " + table.byRow().keySet());
+        for (OfferItem item : before) {
+            assertTrue(kept.stream().anyMatch(row -> table.at(row, item).settles()),
+                    "a kept row still settles " + item);
+        }
+    }
+
+    @Test
+    void everyItemARowWasComposedForStillHasOneThatAnswersIt() {
+        Settlements table = table();
+        Set<RowKey> kept = table.keeping();
+        table.composedFor().forEach((item, row) -> assertTrue(
+                kept.contains(row) || kept.stream().anyMatch(one -> table.at(one, item).settles()),
+                "the row composed for " + item + " went, and nothing kept settles it"));
+    }
+
+    @Test
+    void nothingElseCanGo() {
+        Settlements table = table();
+        Set<RowKey> kept = table.keeping();
+        for (RowKey row : kept) {
+            Set<RowKey> without = new LinkedHashSet<>(kept);
+            without.remove(row);
+            assertTrue(lost(table, kept, without),
+                    row + " could go too, so what is left is not irredundant");
+        }
+    }
+
+    @Test
+    void nothingGoesOnWhatCouldNotBeToldAbout() {
+        Settlements table = table();
+        Set<RowKey> kept = table.keeping();
+        for (RowKey row : table.byRow().keySet()) {
+            if (kept.contains(row)) {
+                continue;
+            }
+            // What it was dropped for has to be something another kept row settles. A row dropped
+            // where the only reading of it was undetermined is a row dropped on not knowing.
+            table.composedFor().forEach((item, composed) -> {
+                if (composed.equals(row)) {
+                    assertTrue(kept.stream().anyMatch(one -> table.at(one, item).settles()),
+                            "the row composed for " + item + " went on an answer nobody has");
+                }
+            });
+        }
+    }
+
+    /** Whether {@code without} answers less than {@code kept} does. */
+    private static boolean lost(Settlements table, Set<RowKey> kept, Set<RowKey> without) {
+        for (OfferItem item : table.requested()) {
+            boolean here = kept.stream().anyMatch(row -> table.at(row, item).settles());
+            boolean there = without.stream().anyMatch(row -> table.at(row, item).settles());
+            if (here && !there) {
+                return true;
+            }
+        }
+        // Or a row that was the only offer for something it could not be told to settle.
+        for (Map.Entry<OfferItem, RowKey> each : table.composedFor().entrySet()) {
+            if (kept.contains(each.getValue()) && !without.contains(each.getValue())
+                    && without.stream().noneMatch(row -> table.at(row, each.getKey()).settles())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static Settlements table() {
+        Compilation compilation = Compilation.ofSource(MODEL, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        Map<String, Adequacy.Filling> generated =
+                Adequacy.generatedOf(compilation.db(), "example.shipping");
+        assertNotNull(generated, "the model under test compiles: " + compilation.errors());
+        Offering composed = Offering.of(
+                OfferingRequest.overTheModule("example.shipping", true), generated,
+                Adequacy.generatedForDeclarationsOf(compilation.db(), "example.shipping",
+                        new GenerationScope.Module()));
+        Settlements table = Settlements.of(compilation.db(), composed);
+        assertFalse(table.byRow().isEmpty(), "the model under test is offered rows");
+        assertFalse(table.settled().isEmpty(), "and some of them settle something");
+        return table;
+    }
+}

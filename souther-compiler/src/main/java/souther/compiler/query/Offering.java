@@ -32,13 +32,20 @@ import java.util.SequencedMap;
  * @param searched what each behavior's own search came to, keyed the way a report keys them
  * @param declared what the module's declarations are owed, or null where the request asked for no
  *                 boundary rows — which is not the same as a request that asked and found none
+ * @param answered what the rows here settle: every item one of them would answer if it were
+ *                 written, whichever row it was composed for. Empty on a composition nobody has
+ *                 put the question to, which is a run that has not been asked rather than one whose
+ *                 rows answer nothing
  */
 public record Offering(OfferingRequest request, SequencedMap<String, List<OfferedRow>> rows,
-                       SequencedMap<String, Adequacy.Filling> searched, DeclaredRows declared) {
+                       SequencedMap<String, Adequacy.Filling> searched, DeclaredRows declared,
+                       java.util.Set<OfferItem> answered) {
 
     public Offering {
         rows = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(rows));
         searched = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(searched));
+        answered = java.util.Collections.unmodifiableSet(
+                new java.util.LinkedHashSet<>(answered));
     }
 
     /**
@@ -130,7 +137,8 @@ public record Offering(OfferingRequest request, SequencedMap<String, List<Offere
         }
         SequencedMap<String, List<OfferedRow>> out = new LinkedHashMap<>();
         byBehavior.forEach((behavior, here) -> out.put(behavior, List.copyOf(here.values())));
-        return new Offering(request, out, new LinkedHashMap<>(generated), declared);
+        return new Offering(request, out, new LinkedHashMap<>(generated), declared,
+                java.util.Set.of());
     }
 
     /** One behavior's rows, joined onto whatever it already offers. */
@@ -178,5 +186,23 @@ public record Offering(OfferingRequest request, SequencedMap<String, List<Offere
     /** How many pieces of work this offers, which is what a block says at the top of it. */
     public int count() {
         return rows.values().stream().mapToInt(List::size).sum();
+    }
+
+    /**
+     * The same offering with only {@code kept} in it.
+     *
+     * <p>The rows and nothing else. What the searches came to is what they came to whatever a person
+     * is handed afterwards — a row not offered was still composed, and the note beside a search that
+     * came to nothing says what happened rather than what is in the block.
+     */
+    public Offering keeping(java.util.Set<RowKey> kept, java.util.Set<OfferItem> answered) {
+        SequencedMap<String, List<OfferedRow>> out = new LinkedHashMap<>();
+        rows.forEach((behavior, here) -> {
+            List<OfferedRow> left = here.stream().filter(row -> kept.contains(row.key())).toList();
+            if (!left.isEmpty()) {
+                out.put(behavior, left);
+            }
+        });
+        return new Offering(request, out, searched, declared, answered);
     }
 }

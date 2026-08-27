@@ -56,6 +56,86 @@ public record Settlements(List<OfferItem> requested,
         return here.get(item);
     }
 
+    /**
+     * The rows to keep: every one whose going would cost the offering something.
+     *
+     * <p><b>What is preserved is what the offering can do, and not what each row was for.</b> Two
+     * things would go wrong with a rule written per row. One is that a row's own purpose can be
+     * handed on and then handed on again — a row answering what another was for is itself dropped
+     * for a third, and the first item ends up answered by nothing — so what is counted is how many
+     * kept rows settle each item, and a row goes only while every item it settles is settled by
+     * another. The other is that an item whose row settles nothing this could tell about would lose
+     * the only row anybody was offered for it, so a row also stays while something composed for it
+     * is not settled elsewhere.
+     *
+     * <p>Only {@link Settlement.Settles} counts. A row that cannot be told about is not a row that
+     * answers, and counting it would drop the row that did.
+     *
+     * <p>Walked from the back, so a row that came first stays. Which of two rows answering the same
+     * things a person is handed is arbitrary, and taking the earlier one keeps the block steady:
+     * the order rows are composed in is the order the searches were asked, and an edit somewhere
+     * later in the model does not move what is offered above it.
+     *
+     * <p>What comes out is irredundant and not smallest. Every row left is the only kept row
+     * settling something, so nothing more can go without the offering answering less; a smaller set
+     * answering the same items may exist, and finding one is a different question from this.
+     */
+    public Set<RowKey> keeping() {
+        Map<OfferItem, Integer> count = new LinkedHashMap<>();
+        for (OfferItem item : requested) {
+            int settling = 0;
+            for (Map<OfferItem, Settlement> here : byRow.values()) {
+                if (here.get(item).settles()) {
+                    settling++;
+                }
+            }
+            count.put(item, settling);
+        }
+        List<RowKey> inOrder = new ArrayList<>(byRow.keySet());
+        Set<RowKey> kept = new LinkedHashSet<>(inOrder);
+        for (int at = inOrder.size() - 1; at >= 0; at--) {
+            RowKey row = inOrder.get(at);
+            if (goes(row, kept, count)) {
+                kept.remove(row);
+                byRow.get(row).forEach((item, settlement) -> {
+                    if (settlement.settles()) {
+                        count.merge(item, -1, Integer::sum);
+                    }
+                });
+            }
+        }
+        return Collections.unmodifiableSet(new LinkedHashSet<>(
+                inOrder.stream().filter(kept::contains).toList()));
+    }
+
+    /** Whether the offering answers as much without {@code row} as with it. */
+    private boolean goes(RowKey row, Set<RowKey> kept, Map<OfferItem, Integer> count) {
+        for (Map.Entry<OfferItem, Settlement> each : byRow.get(row).entrySet()) {
+            if (each.getValue().settles() && count.get(each.getKey()) <= 1) {
+                return false;
+            }
+        }
+        // And what was composed for it. An item whose own row settles nothing this could tell about
+        // is one nobody would be offered a row for at all, which is a piece of work going missing
+        // rather than a row being said once instead of twice.
+        for (Map.Entry<OfferItem, RowKey> each : composedFor.entrySet()) {
+            if (!each.getValue().equals(row)) {
+                continue;
+            }
+            boolean elsewhere = false;
+            for (RowKey other : kept) {
+                if (!other.equals(row) && byRow.get(other).get(each.getKey()).settles()) {
+                    elsewhere = true;
+                    break;
+                }
+            }
+            if (!elsewhere) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     /** The items some row of this offering settles, which is what a reduction has to keep answered. */
     public Set<OfferItem> settled() {
         Set<OfferItem> out = new LinkedHashSet<>();

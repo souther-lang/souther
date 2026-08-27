@@ -1594,8 +1594,25 @@ public final class Adequacy {
         // And what the module's own declarations are owed, which is no behavior's and so is in none
         // of the fillings above. Asked only where the request asked for the edges: a request that
         // asked for no boundary rows is not asking about these either.
-        return Offering.of(request, generated, request.boundaries()
+        Offering composed = Offering.of(request, generated, request.boundaries()
                 ? generatedForDeclarationsOf(db, request.module(), request.scope()) : null);
+        // And then only the rows whose going would cost the offering something. A candidate is
+        // composed for one thing and the positions that thing does not name hold whatever the row
+        // has to hold, so a row composed for one item can stand where another item asks — and the
+        // two went out as two pieces of work because nothing asked what an offered row settles.
+        Settlements table = Settlements.of(db, composed);
+        Set<RowKey> kept = table.keeping();
+        // And what the rows that are left answer, which is what the block may not say nothing
+        // offers. A row composed for one thing standing where another asks is the whole of this,
+        // and a note printed over it would send a person after work that is already in front of
+        // them.
+        Set<OfferItem> answered = new LinkedHashSet<>();
+        for (OfferItem item : table.requested()) {
+            if (kept.stream().anyMatch(row -> table.at(row, item).settles())) {
+                answered.add(item);
+            }
+        }
+        return composed.keeping(kept, answered);
     }
 
     /**
@@ -2673,7 +2690,25 @@ public final class Adequacy {
      * finding: the two are separate readings of one set of findings, and a name that said gap kept
      * the older arrangement alive in every reader that met it.
      */
-    public record GenerationDisposition(Finding finding, GenerationOutcome outcome) {}
+    public record GenerationDisposition(Finding finding, java.util.Optional<OfferItem> item,
+                                        GenerationOutcome outcome) {
+
+        public GenerationDisposition {
+            item = item == null ? java.util.Optional.empty() : item;
+        }
+
+        /**
+         * The finding and what came of it, for a finding nothing offers a row for.
+         *
+         * <p>Empty and not a name for the finding: what a row would be offered for is the thing an
+         * offering answers, and a measure this compiler could not make is not one of those. A
+         * reader asking whether something else answers this has nothing to ask about, which is what
+         * having no item says.
+         */
+        public GenerationDisposition(Finding finding, GenerationOutcome outcome) {
+            this(finding, java.util.Optional.empty(), outcome);
+        }
+    }
 
     public record Generated(String name, String behavior) implements Key<Filling> {
 
@@ -2814,7 +2849,8 @@ public final class Adequacy {
             List<GenerationDisposition> out = new ArrayList<>();
             for (Finding finding : findings) {
                 GenerationOutcome none = whereNoRowCouldAnswer(finding.about());
-                out.add(new GenerationDisposition(finding, none != null ? none
+                out.add(new GenerationDisposition(finding, itemOf(finding, composed, spec),
+                        none != null ? none
                         : switch (finding.about()) {
                             case About.APointOfABorder(var point) -> atEdge(finding, point, edges);
                             case About.ACaseNoRowAppliesItTo(var input, var missing) ->
@@ -2836,6 +2872,56 @@ public final class Adequacy {
                         }));
             }
             return out;
+        }
+
+        /**
+         * What a row would be offered for, where the finding is something a row is offered for.
+         *
+         * <p>Made where the outcome is and from the same reading. What tells two of them apart is
+         * the thing itself — a class of a position, an arm of a body, a point of a line — and a
+         * second walk that worked the identity out again would be free to name a different one than
+         * the search answered for.
+         *
+         * <p>Empty for the rest. A case whose position this run has no axis at is not something a
+         * row is offered for, and neither is a measure this compiler could not make.
+         */
+        private static java.util.Optional<OfferItem> itemOf(
+                Finding finding, souther.compiler.partition.FillResult composed,
+                Hir.SpecBehavior spec) {
+            return switch (finding.about()) {
+                case About.APointOfABorder(var point) ->
+                        java.util.Optional.of(new OfferItem.APointOfALine(point.owed()));
+                case About.AnArmNoRowGoesThrough(var arm) -> java.util.Optional.of(
+                        new OfferItem.AnArm(new Generator.ArmOwed(arm.index())));
+                case About.AClassNoRowIsIn(var missing) -> java.util.Optional.of(
+                        new OfferItem.AClass(new Generator.ClassOwed(missing.axis().at(),
+                                missing.name())));
+                case About.ACaseNoRowAppliesItTo(var input, var missing) ->
+                        classOfTheCase(input, missing, composed, spec)
+                                .map(OfferItem.AClass::new);
+                default -> java.util.Optional.empty();
+            };
+        }
+
+        /**
+         * The class a case of an input is, where this run has an axis at that position.
+         *
+         * <p>Asked of the subject the search was made over, which is what says what this run had
+         * classes for — the same question {@link #atCase} puts, so that what is offered for the
+         * case and what it is called are one thing.
+         */
+        private static java.util.Optional<Generator.ClassOwed> classOfTheCase(
+                InputCaseEvidence input, TypeSymbol case_,
+                souther.compiler.partition.FillResult composed, Hir.SpecBehavior spec) {
+            int at = input.at();
+            if (at < 0 || at >= spec.params().size()) {
+                return java.util.Optional.empty();
+            }
+            Generator.ClassOwed owed = new Generator.ClassOwed(
+                    new souther.compiler.partition.AxisId(spec.name(), spec.params().get(at).name()),
+                    case_.name());
+            return composed.plan().subject().divides(owed)
+                    ? java.util.Optional.of(owed) : java.util.Optional.empty();
         }
 
         /**
@@ -3043,21 +3129,12 @@ public final class Adequacy {
         private static GenerationOutcome atCase(InputCaseEvidence input, TypeSymbol case_,
                                                 souther.compiler.partition.FillResult composed,
                                                 Hir.SpecBehavior spec) {
-            String missing = case_.name();
-            int at = input.at();
-            String parameter = at >= 0 && at < spec.params().size()
-                    ? spec.params().get(at).name() : null;
-            if (parameter == null) {
-                return new GenerationOutcome.NotSupported(
-                        GenerationOutcome.NotSupported.Reason.NO_AXIS_AT_THIS_POSITION);
-            }
             // Asked of the subject the search was made over, which is what says what this run had
             // classes for. Worked out from a partition's axes beside it, the answer was a second
             // reading of the search's own universe, and a case whose position the search divides
             // could be told there was no axis there.
-            Generator.ClassOwed owed = new Generator.ClassOwed(
-                    new souther.compiler.partition.AxisId(spec.name(), parameter), missing);
-            if (!composed.plan().subject().divides(owed)) {
+            if (!(classOfTheCase(input, case_, composed, spec)
+                    .orElse(null) instanceof Generator.ClassOwed owed)) {
                 return new GenerationOutcome.NotSupported(
                         GenerationOutcome.NotSupported.Reason.NO_AXIS_AT_THIS_POSITION);
             }

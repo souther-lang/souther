@@ -54,10 +54,7 @@ class ARowComposedForAnItemSettlesThatItemTest {
         Compilation compilation = Compilation.ofSource(DECLARED, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        Offering offering = Adequacy.offeredFor(compilation.db(),
-                OfferingRequest.overTheModule("example.declared", true));
-        assertNotNull(offering, "the model under test compiles");
-        Settlements table = Settlements.of(compilation.db(), offering);
+        Settlements table = Settlements.of(compilation.db(), composed(compilation));
 
         assertFalse(table.composedFor().isEmpty(),
                 "the declarations draw lines and rows are composed at them: " + table.requested());
@@ -77,10 +74,7 @@ class ARowComposedForAnItemSettlesThatItemTest {
         Compilation compilation = Compilation.ofSource(DECLARED, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        Offering offering = Adequacy.offeredFor(compilation.db(),
-                OfferingRequest.overTheModule("example.declared", true));
-        assertNotNull(offering, "the model under test compiles");
-        Settlements table = Settlements.of(compilation.db(), offering);
+        Settlements table = Settlements.of(compilation.db(), composed(compilation));
 
         assertFalse(table.byRow().isEmpty(), "there are rows to answer for");
         for (Map.Entry<RowKey, Map<OfferItem, Settlement>> row : table.byRow().entrySet()) {
@@ -89,5 +83,21 @@ class ARowComposedForAnItemSettlesThatItemTest {
                         row.getKey() + " is answered for at " + item);
             }
         }
+    }
+
+    /**
+     * What the searches composed, before anything asks what the rows settle.
+     *
+     * <p>What a row was composed for is a fact about the composition. Read off what a person is
+     * finally handed, a row answering something another row also answers is not there to be asked
+     * about — so the two would agree by one of them being gone.
+     */
+    private static Offering composed(Compilation compilation) {
+        Map<String, Adequacy.Filling> generated =
+                Adequacy.generatedOf(compilation.db(), "example.declared");
+        assertNotNull(generated, "the model under test compiles");
+        return Offering.of(OfferingRequest.overTheModule("example.declared", true), generated,
+                Adequacy.generatedForDeclarationsOf(compilation.db(), "example.declared",
+                        new souther.compiler.query.GenerationScope.Module()));
     }
 }
