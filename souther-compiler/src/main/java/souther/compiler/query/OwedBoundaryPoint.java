@@ -176,18 +176,35 @@ public final class OwedBoundaryPoint {
     }
 
     /**
-     * The account with one entry per point of a line rather than one per thing owed there.
+     * The places a row is composed at, one per point of a line rather than one per thing owed there.
      *
-     * <p>For a reader whose unit is the row and not the obligation. A row stands at a point of a
-     * line, and what a row there shows answers everything a row there is owed for — so a place two
-     * of this body's rules drew a line at is two things to be told about and one value to compose.
-     * Walked as the obligations, a search that composed one value would offer it twice.
+     * <p><b>Its own type, because it is not the account.</b> What is dropped getting here is
+     * {@link OwedBoundaryPoint#owed()} — the thing owed, which is what tells two obligations at one
+     * point apart — so a reader whose unit is the obligation and one whose unit is the row want
+     * different lists. Handed back as the account's own type, either could be passed where the other
+     * was meant, and the one that wanted the obligations would silently be given as many as there
+     * are points.
      *
-     * <p>What is dropped is {@link #owed()} and nothing else: the entries that come back name one of
-     * the things owed at their point, and everything a row is composed and labelled from — the line,
-     * the role and what was measured — is the same at all of them.
+     * @param at one entry per point, each naming one of the things owed there. Everything a row is
+     *           composed and labelled from — the line, the role and what was measured — is the same
+     *           at all of them, which is what makes one value enough
      */
-    public static List<OwedBoundaryPoint> oneForEachPoint(List<OwedBoundaryPoint> account) {
+    public record WhereARowIsComposed(List<OwedBoundaryPoint> at) {
+
+        public WhereARowIsComposed {
+            at = List.copyOf(at);
+        }
+    }
+
+    /**
+     * The account read as the places a row is composed at.
+     *
+     * <p>A row stands at a point of a line, and what a row there shows answers everything a row
+     * there is owed for — so a place two of this body's rules drew a line at is two things to be
+     * told about and one value to compose. Walked as the obligations, a search that composed one
+     * value would offer it twice.
+     */
+    public static WhereARowIsComposed oneForEachPoint(List<OwedBoundaryPoint> account) {
         List<OwedBoundaryPoint> at = new ArrayList<>();
         for (OwedBoundaryPoint each : account) {
             if (at.stream().noneMatch(
@@ -195,7 +212,7 @@ public final class OwedBoundaryPoint {
                 at.add(each);
             }
         }
-        return List.copyOf(at);
+        return new WhereARowIsComposed(at);
     }
 
     /** The position the line is on, as a report names it. */

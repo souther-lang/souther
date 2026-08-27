@@ -3164,7 +3164,7 @@ public final class Adequacy {
             // What this behavior is owed a row for, as the values a row is composed at: one per
             // point, since a row at a point answers everything a row there is owed for.
             for (OwedBoundaryPoint point
-                    : OwedBoundaryPoint.oneForEachPoint(OwedBoundaryPoint.across(boundaries))) {
+                    : OwedBoundaryPoint.oneForEachPoint(OwedBoundaryPoint.across(boundaries)).at()) {
                 ItemAssessment.Owed each = point.item();
                 switch (each.attempt()) {
                     case ItemAssessment.Attempt.Built built -> rows.add(built.row());

@@ -21,14 +21,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * A row goes only where the offering answers as much without it.
  *
- * <p>Three things hold of what is left, and they are what the reduction is. Everything some row
- * settled is still settled by one. Everything a row was composed for still has a row that answers
- * it. And nothing else can go: every row left is the only one settling something, which is what
- * makes the result irredundant rather than merely smaller.
+ * <p>What is preserved is what the offering puts in front of a person for each item: a row that
+ * settles it, or the row composed for it. Everything the rows offered for before, the rows that are
+ * left offer for; and no row of what is left can go and leave that true.
  *
- * <p>The fourth is what may not be acted on. A row that cannot be told about is not a row that
- * answers, so nothing is dropped on the strength of one — a reduction that counted what it could not
- * tell would drop the row that was the only offer for something.
+ * <p>The first of those is checked here in the narrower words as well — everything some row settled
+ * is still settled — so that the two statements do not both rest on one method. The second reads
+ * {@link Settlements#offers}, which is what the reduction preserves: written out again here, this
+ * test and the reduction would be two statements of one contract.
+ *
+ * <p>And what may not be acted on. A row that cannot be told about is not a row that answers, so
+ * nothing is dropped on the strength of one — a reduction that counted what it could not tell would
+ * drop the row that was the only offer for something.
  */
 class WhatTheOfferingAnswersSurvivesDroppingARowTest {
 
@@ -119,19 +123,17 @@ class WhatTheOfferingAnswersSurvivesDroppingARowTest {
         }
     }
 
-    /** Whether {@code without} answers less than {@code kept} does. */
+    /**
+     * Whether {@code without} offers less than {@code kept} does.
+     *
+     * <p>Asked of {@link Settlements#offers}, which is what the reduction preserves — both halves of
+     * it, so a row that is the only offer for something it could not be told to settle counts as
+     * something lost. Written out here instead, this test and the reduction would be two statements
+     * of one contract, and the one that drifted would be the one nobody reads.
+     */
     private static boolean lost(Settlements table, Set<RowKey> kept, Set<RowKey> without) {
         for (OfferItem item : table.requested()) {
-            boolean here = kept.stream().anyMatch(row -> table.at(row, item).settles());
-            boolean there = without.stream().anyMatch(row -> table.at(row, item).settles());
-            if (here && !there) {
-                return true;
-            }
-        }
-        // Or a row that was the only offer for something it could not be told to settle.
-        for (Map.Entry<OfferItem, RowKey> each : table.composedFor().entrySet()) {
-            if (kept.contains(each.getValue()) && !without.contains(each.getValue())
-                    && without.stream().noneMatch(row -> table.at(row, each.getKey()).settles())) {
+            if (table.offers(kept, item) && !table.offers(without, item)) {
                 return true;
             }
         }

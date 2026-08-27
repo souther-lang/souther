@@ -57,28 +57,51 @@ public record Settlements(List<OfferItem> requested,
     }
 
     /**
+     * What a set of rows puts in front of a person for one item.
+     *
+     * <p>Two ways, and a reduction has to keep both. A row that settles the item answers it whoever
+     * it was composed for; and the row composed <em>for</em> the item is what a person was offered
+     * for it, whether or not this walk can tell that it settles it — a row whose reading came back
+     * undetermined is still the one piece of work anybody was handed there.
+     *
+     * <p>Written once because it is what {@link #keeping()} preserves. Said as two rules in two
+     * places, the second is the one a later reader drops as an oversight.
+     */
+    public boolean offers(Set<RowKey> rows, OfferItem item) {
+        for (RowKey row : rows) {
+            if (byRow.get(row).get(item).settles()) {
+                return true;
+            }
+        }
+        return rows.contains(composedFor.get(item));
+    }
+
+    /**
      * The rows to keep: every one whose going would cost the offering something.
      *
-     * <p><b>What is preserved is what the offering can do, and not what each row was for.</b> Two
-     * things would go wrong with a rule written per row. One is that a row's own purpose can be
-     * handed on and then handed on again — a row answering what another was for is itself dropped
-     * for a third, and the first item ends up answered by nothing — so what is counted is how many
-     * kept rows settle each item, and a row goes only while every item it settles is settled by
-     * another. The other is that an item whose row settles nothing this could tell about would lose
-     * the only row anybody was offered for it, so a row also stays while something composed for it
-     * is not settled elsewhere.
+     * <p>What is preserved is {@link #offers}, for every item. So the result holds, of the rows
+     * {@code R*} it comes back with and the rows {@code R} it was given:
      *
-     * <p>Only {@link Settlement.Settles} counts. A row that cannot be told about is not a row that
-     * answers, and counting it would drop the row that did.
+     * <ol>
+     *   <li>every item {@code R} offers something for, {@code R*} offers something for;</li>
+     *   <li>no row of {@code R*} can go and leave that true.</li>
+     * </ol>
+     *
+     * <p><b>Which is not "every row left settles something nothing else does".</b> A row kept by the
+     * second half of {@code offers} settles nothing this could tell about — it is there because it
+     * is the only thing composed for its item — and a reduction written to the shorter sentence
+     * would drop it and take that item's only offer with it.
+     *
+     * <p>Nor is it the smallest set: a different, smaller set of rows may offer for the same items.
+     * Irredundant is what this is, and finding a minimum is a different question.
+     *
+     * <p>Only {@link Settlement.Settles} counts as settling. A row that cannot be told about is not
+     * a row that answers, and counting it would drop the row that did.
      *
      * <p>Walked from the back, so a row that came first stays. Which of two rows answering the same
      * things a person is handed is arbitrary, and taking the earlier one keeps the block steady:
      * the order rows are composed in is the order the searches were asked, and an edit somewhere
      * later in the model does not move what is offered above it.
-     *
-     * <p>What comes out is irredundant and not smallest. Every row left is the only kept row
-     * settling something, so nothing more can go without the offering answering less; a smaller set
-     * answering the same items may exist, and finding one is a different question from this.
      */
     public Set<RowKey> keeping() {
         Map<OfferItem, Integer> count = new LinkedHashMap<>();
@@ -115,11 +138,12 @@ public record Settlements(List<OfferItem> requested,
     }
 
     /**
-     * Whether the offering answers as much without {@code row} as with it.
+     * Whether the offering offers as much without {@code row} as with it — {@link #offers} for
+     * every item, read off the counts rather than walked again.
      *
-     * <p>Asked of the counts, which hold the kept rows and this one among them. So an item this row
-     * settles needs a second settler to be left after it goes, and an item it was composed for and
-     * settles nothing of needs one at all.
+     * <p>The counts hold the kept rows and this one among them. So an item this row settles needs a
+     * second settler to be left after it goes, and an item it was composed for and settles nothing
+     * of needs one at all: without a settler, taking the row away takes the item's only offer.
      *
      * @param composedHere what this row was composed for
      */
@@ -271,11 +295,13 @@ public record Settlements(List<OfferItem> requested,
                 List<BorderAssessment> edges =
                         db.ask(new Adequacy.BoundarySearch(module, behavior)).value();
                 if (edges != null) {
-                    // One entry per point, which is what a row standing there answers. Two readings
-                    // of one line at one role are one thing to be told about, and the walk that
-                    // offers the rows takes the same view.
-                    for (OwedBoundaryPoint point
-                            : OwedBoundaryPoint.oneForEachPoint(OwedBoundaryPoint.across(edges))) {
+                    // The account, and not the places a row is composed at. Those drop what tells
+                    // two obligations at one point apart — a region stopped by two different things
+                    // is two of them — and this is asking what the run is owed rather than how many
+                    // values it has to compose. Dropped here, the second obligation would be in no
+                    // item universe: nothing would count a row as settling it, and a note saying
+                    // nothing offers a row for it would print over the row that stands there.
+                    for (OwedBoundaryPoint point : OwedBoundaryPoint.across(edges)) {
                         OfferItem.APointOfALine item =
                                 new OfferItem.APointOfALine(point.owed());
                         owedHere.put(item, point);
