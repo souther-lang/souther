@@ -24,17 +24,34 @@ import java.util.List;
  * either of those is a fact about the reading's surroundings, and two readings that answer it
  * differently are still one point.
  *
- * @param lines     the rules that drew what settled this point
- * @param narrowers the declarations that took in where the position stops, where that is what stops
- *                  the region
+ * <p><b>Read from anywhere and written from three places.</b> What is here can be looked at freely —
+ * it is what a report says — but a value of it is only ever made from a line the model wrote or from
+ * the end a reading answered about, never from a list of names somebody is holding. A declaration's
+ * name reaches a report by having been matched to an end and carried to the place that end lowers
+ * onto, and a constructor taking the names would let a caller that did none of that write them down
+ * all the same.
  */
-public record PointContributions(List<AuthoredLine> lines, List<TypeSymbol.AtModule> narrowers) {
+public final class PointContributions {
 
     private static final PointContributions NONE = new PointContributions(List.of(), List.of());
 
-    public PointContributions {
-        lines = List.copyOf(lines);
-        narrowers = List.copyOf(narrowers);
+    private final List<AuthoredLine> lines;
+    private final List<TypeSymbol.AtModule> narrowers;
+
+    private PointContributions(List<AuthoredLine> lines, List<TypeSymbol.AtModule> narrowers) {
+        this.lines = List.copyOf(lines);
+        this.narrowers = List.copyOf(narrowers);
+    }
+
+    /** The rules that drew what settled this point. */
+    public List<AuthoredLine> lines() {
+        return lines;
+    }
+
+    /** The declarations that took in where the position stops, where that is what stops the
+     *  region. */
+    public List<TypeSymbol.AtModule> narrowers() {
+        return narrowers;
     }
 
     /**
@@ -54,9 +71,18 @@ public record PointContributions(List<AuthoredLine> lines, List<TypeSymbol.AtMod
         return new PointContributions(List.of(line), List.of());
     }
 
-    /** The declarations that took in where a position stops. */
-    public static PointContributions byNarrowing(List<TypeSymbol.AtModule> narrowers) {
-        return new PointContributions(List.of(), narrowers);
+    /**
+     * The declarations that took in where a position stops, read off the end they took in.
+     *
+     * <p>The end and not the names. This is where they stop being held against one and start being
+     * what a report writes back, and it is the last step of the way they came: a reading answered
+     * that they are about that end, the lowering kept which end it was, and the caller has just
+     * found that the run stops at the place it lowers onto. Taking the names instead would let a
+     * caller that skipped any of those write them down all the same.
+     */
+    static PointContributions byNarrowing(DomainEnd leaves) {
+        return leaves.attribution() == null ? NONE
+                : new PointContributions(List.of(), leaves.attribution().names());
     }
 
     /** Whether nothing has contributed, which is a value nothing can be concluded from. */
@@ -113,5 +139,27 @@ public record PointContributions(List<AuthoredLine> lines, List<TypeSymbol.AtMod
         }
         narrowers.stream().filter(each -> !out.contains(each)).forEach(out::add);
         return List.copyOf(out);
+    }
+
+    /**
+     * Two of these are one where the same contributors arrived, in the same order.
+     *
+     * <p>The order and not the set, because it is the order a finding names them in. What a record
+     * of the two lists would have said, kept by hand now that the lists are not handed in.
+     */
+    @Override
+    public boolean equals(Object other) {
+        return other instanceof PointContributions it && lines.equals(it.lines)
+                && narrowers.equals(it.narrowers);
+    }
+
+    @Override
+    public int hashCode() {
+        return java.util.Objects.hash(lines, narrowers);
+    }
+
+    @Override
+    public String toString() {
+        return "PointContributions[lines=" + lines + ", narrowers=" + narrowers + "]";
     }
 }

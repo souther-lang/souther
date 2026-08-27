@@ -59,7 +59,7 @@ class WhoHoldsAnEndIsWorkedOutWhenItIsAskedForTest {
 
         long beforeNames = FieldDomains.readingsMade();
         assertEquals(java.util.List.of("Common"),
-                hi.minBy().stream().map(TypeSymbol::name).toList(),
+                holding(hi).stream().map(TypeSymbol::name).toList(),
                 "and ten above is Common's doing");
         assertTrue(FieldDomains.readingsMade() > beforeNames,
                 "which took reading the declaration again without a declaration's clauses");
@@ -69,10 +69,10 @@ class WhoHoldsAnEndIsWorkedOutWhenItIsAskedForTest {
     @Test
     void whoHoldsAnEndIsWorkedOutAtMostOnce() {
         NarrowedBounds hi = reading().at("hi");
-        hi.minBy();
+        holding(hi);
 
         long before = FieldDomains.readingsMade();
-        assertEquals(hi.minBy(), hi.minBy(), "the same answer");
+        assertEquals(holding(hi), holding(hi), "the same answer");
         assertEquals(before, FieldDomains.readingsMade(), "and no reading to arrive at it again");
     }
 
@@ -88,7 +88,7 @@ class WhoHoldsAnEndIsWorkedOutWhenItIsAskedForTest {
         // The reading of `Held` puts `hi` at 110, and this other reading puts it at 200. A floor is
         // the greater of the two, so the one that read the declaration is the one that loses.
         NarrowedBounds lost = reading().at("hi");
-        NarrowedBounds tighter = new NarrowedBounds(
+        NarrowedBounds tighter = NarrowedBounds.of(
                 new souther.compiler.numeric.NumericDomain.Bounds(
                         new souther.compiler.numeric.Endpoint(
                                 souther.compiler.numeric.Count.of(200), true), null),
@@ -98,10 +98,15 @@ class WhoHoldsAnEndIsWorkedOutWhenItIsAskedForTest {
         NarrowedBounds met = lost.meet(tighter);
         long before = FieldDomains.readingsMade();
         assertEquals(java.util.List.of("Elsewhere"),
-                met.minBy().stream().map(TypeSymbol::name).toList(),
+                holding(met).stream().map(TypeSymbol::name).toList(),
                 "200 is where it starts, and only what says 200 is holding it");
         assertEquals(before, FieldDomains.readingsMade(),
                 "and what the losing reading would have named was never worked out");
+    }
+
+    /** Who is holding the floor this reading leaves, asked with that floor. */
+    private static java.util.List<TypeSymbol.AtModule> holding(NarrowedBounds narrowed) {
+        return AReadingOfAPosition.holding(narrowed, souther.compiler.numeric.EndSide.LOWER);
     }
 
     private static FieldDomains reading() {

@@ -63,7 +63,7 @@ final class AReportOfOneBorder {
         OriginRef origin = new OriginRef.InvariantOrigin(new RuleRef.Invariant(new Clause.Ref(
                 new Clause.Id(TypeSymbols.declared(new TypeKey("example.rate", "Amount")), 0),
                 java.util.Optional.of(new ClauseName("cap")))), 0,
-                souther.compiler.numeric.Towards.ABOVE, true);
+                souther.compiler.numeric.EndSide.LOWER, true);
         return Border.at(
                 BoundaryTarget.at(
                         new BorderQuantity.OfACoordinate(new AxisId("weigh", "w.a"),
@@ -110,7 +110,7 @@ final class AReportOfOneBorder {
         OriginRef origin = new OriginRef.InvariantOrigin(new RuleRef.Invariant(new Clause.Ref(
                 new Clause.Id(TypeSymbols.declared(new TypeKey("example.rate", "Amount")), 0),
                 java.util.Optional.of(new ClauseName("cap")))), 0,
-                souther.compiler.numeric.Towards.ABOVE, true);
+                souther.compiler.numeric.EndSide.LOWER, true);
         return Border.at(
                 BoundaryTarget.at(
                         new BorderQuantity.OfACoordinate(new AxisId("weigh", "w.a"),

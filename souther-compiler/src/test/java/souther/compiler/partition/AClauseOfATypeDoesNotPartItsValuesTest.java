@@ -2,19 +2,21 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.AReadingOfAPosition;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.Clause;
 import souther.compiler.check.ClauseName;
+import souther.compiler.check.MatchedEndAttribution;
 import souther.compiler.check.RuleRef;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
-import souther.compiler.numeric.Towards;
+import souther.compiler.numeric.EndSide;
+import souther.compiler.numeric.Endpoint;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 
-import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -51,9 +53,25 @@ class AClauseOfATypeDoesNotPartItsValuesTest {
     /** And a bound another declaration took in is still a bound. */
     @Test
     void aBoundADeclarationTookInPartsNothingEither() {
-        assertNull(Border.partedBy(aLineAt(100), new OriginRef.NarrowedOrigin(aBound(),
-                        List.of(TypeSymbols.declared(new TypeKey("example.weigh", "Held"))))),
+        Endpoint at = Endpoint.inclusive(Count.of(100));
+        assertNull(Border.partedBy(aLineAt(100),
+                        OriginRef.NarrowedOrigin.of(aBound(), at, aDeclarationHolding(at))),
                 "taking an end in moves where the position stops, which is not dividing it");
+    }
+
+    /**
+     * A reading answering that one declaration holds {@code at} on the side {@link #aBound()}
+     * placed.
+     *
+     * <p>The side is the bound's, because a bound is answered for by the end it placed. Written as
+     * the other one, this fixture said a minimum had been taken in by whatever holds a maximum —
+     * which is the pairing the origin refuses, and which is why it refuses it here rather than
+     * downstream where the two are one number.
+     */
+    private static MatchedEndAttribution aDeclarationHolding(Endpoint at) {
+        return AReadingOfAPosition
+                .withALowerEndAt(at, TypeSymbols.declared(new TypeKey("example.weigh", "Held")))
+                .matching(EndSide.LOWER, at).orElseThrow();
     }
 
     /** While a comparison in a body does part them, which is why a run can stop at a line at all. */
@@ -76,7 +94,7 @@ class AClauseOfATypeDoesNotPartItsValuesTest {
     private static OriginRef.InvariantOrigin aBound() {
         return new OriginRef.InvariantOrigin(new RuleRef.Invariant(new Clause.Ref(
                 new Clause.Id(TypeSymbols.declared(new TypeKey("example.weigh", "Amount")), 0),
-                Optional.of(new ClauseName("cap")))), 0, Towards.ABOVE, true);
+                Optional.of(new ClauseName("cap")))), 0, EndSide.LOWER, true);
     }
 
     private static OriginRef aComparison() {

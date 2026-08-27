@@ -900,9 +900,7 @@ public final class Partitions {
                 // and taking that off the axis with the fallback is how the stop went unreported
                 // (issue #1084).
                 out.add(new Axis(id, term, position.type(), divided.classes(),
-                        divided.cuts().cuts(), List.of(),
-                        new NarrowedEnds(position.narrowedEnds().minBy(),
-                                position.narrowedEnds().maxBy()),
+                        divided.cuts().cuts(), List.of(), position.narrowedEnds(),
                         ReadingResidue.of(position), null, null));
             }
             // Nothing local divides the position, which is what licenses asking what it is made of.

@@ -2,17 +2,19 @@ package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
 import souther.compiler.check.DeclaredBounds;
+import souther.compiler.check.MatchedEndAttribution;
 import souther.compiler.check.NarrowedBounds;
 import souther.compiler.check.Symbols;
 import souther.compiler.inputs.Position;
+import souther.compiler.numeric.EndSide;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
-import souther.compiler.types.TypeSymbol;
 
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * What a position's own declarations divide it into, derived from the one reading of it.
@@ -102,8 +104,9 @@ final class LocalInspection {
      *                 names the wrong one for at least one of them. Not the ends {@code bounds}
      *                 carries — those are what the position's own type stops at, taken in to where
      *                 every rule reaching it leaves it, and these names were worked out against what
-     *                 the value it sits in projects. Whether a name may be carried from the one to
-     *                 the other is what {@code moved} below decides
+     *                 the value it sits in projects. Whether a name is about the end a cut stands
+     *                 at is asked of this; whether a cut owes anything to a name that is, is what
+     *                 {@code moved} below decides
      */
     private static List<Cut> cutsOf(DeclaredBounds.Bounds bounds, DeclaredBounds.Bounds own,
                                     NarrowedBounds narrowed) {
@@ -114,52 +117,73 @@ final class LocalInspection {
             return List.of();
         }
         Map<String, Cut> byValue = new LinkedHashMap<>();
-        cut(byValue, bounds.min(), own == null ? null : own.min(), bounds.carrier(),
-                souther.compiler.numeric.Towards.ABOVE, narrowed.minBy());
-        cut(byValue, bounds.max(), own == null ? null : own.max(), bounds.carrier(),
-                souther.compiler.numeric.Towards.BELOW, narrowed.maxBy());
+        // One side at a time, and everything about a side read from the side. Where the position
+        // stops, where its own type stops, which of the reading's two answers is about it and which
+        // end a bound placed are four answers to one choice, and a reader making that choice four
+        // times can make it four ways.
+        for (EndSide side : EndSide.values()) {
+            cut(byValue, side, bounds.at(side), own == null ? null : own.at(side),
+                    bounds.carrier(), narrowed);
+        }
         return List.copyOf(byValue.values());
     }
 
     /**
      * One end as a cut, owed once to each rule that put it there.
      *
-     * @param keeps which way the bound runs from this end, which is which of the two ends it is.
-     *              Known here because the ends are read one at a time, and nowhere below: a bound
-     *              records where it stops, and everything past this holds the range the rules leave
-     *              rather than the end that made it
+     * @param side which of the position's two ends this is. Known here because the ends are read one
+     *             at a time, and nowhere below: a bound records where it stops, and everything past
+     *             this holds the range the rules leave rather than the end that made it
      */
-    private static void cut(Map<String, Cut> into, DeclaredBounds.End end, DeclaredBounds.End own,
-                            Carrier carrier, souther.compiler.numeric.Towards keeps,
-                            List<TypeSymbol.AtModule> within) {
+    private static void cut(Map<String, Cut> into, EndSide side, DeclaredBounds.End end,
+                            DeclaredBounds.End own, Carrier carrier, NarrowedBounds narrowed) {
         if (end == null) {
             return;
         }
+        // Whether what the value above holds is about this end at all. Where the position's own type
+        // stops is taken into account below and the value above knows nothing of it, so the two can
+        // leave the position in different places — and the names are worked out against one number
+        // and are true of no other.
+        Optional<MatchedEndAttribution> held = narrowed.matching(side, end.at());
         // Taken in, which a record can do by moving the end or by taking away the value it stops
         // at. `low < high` under one `[0, 1]` leaves `low` the same 1 and no longer holding it, and
         // that is the record's doing as much as a smaller number would have been — so this asks
         // whether the two are the same end, which is where a range stops and not what an end holds.
+        //
+        // Which declarations can move this cut, and not which are holding the end they were read
+        // at. The two are different questions and this is the first. Where the type's own end is
+        // the tighter, `axisBounds` answers with it and nothing the record leaves reaches the cut:
+        // taking a declaration's clauses away only widens what the record leaves, and the tighter of
+        // the two is still the type's. So a declaration named here would be one an author can
+        // rewrite while the line stays where it is — and a line a declaration took in is that
+        // declaration's to answer for rather than the type's
+        // ({@link AuthoredLine#obligationOwners}), so writing it down does not add a name beside the
+        // type's: it moves the row to somebody who cannot move the line.
         boolean moved = own != null && !own.at().sameAs(end.at());
+        // Carried on where both hold. Being about this end is what says a name may be written here
+        // at all; whether it should be is this reader's own question, and the answer travels as what
+        // the reading gave rather than as the names it came to, so that nothing between here and the
+        // origin can put it beside another end.
+        MatchedEndAttribution took = moved ? held.orElse(null) : null;
         // Wrapped here, and this is not a consumer settling what a rule is: which rule drew the end
         // was settled where the clause was read and arrives as it was. What is added is a
         // boundary's own answer about that rule — that a reading of it drew this cut, taken in by
         // these declarations — which is nothing the rule says about itself.
         for (DeclaredBounds.Drawn from : end.from()) {
             put(into, carrier, end.value(),
-                    new OriginRef.InvariantOrigin(from.rule(), from.conjunct(), keeps,
+                    new OriginRef.InvariantOrigin(from.rule(), from.conjunct(), side,
                             end.at().inclusive()),
-                    moved ? within : List.<TypeSymbol.AtModule>of());
+                    end.at(), took);
         }
     }
 
     private static void put(Map<String, Cut> into, Carrier carrier, Place at,
-                            OriginRef.InvariantOrigin drawnBy,
-                            List<TypeSymbol.AtModule> narrowedBy) {
+                            OriginRef.InvariantOrigin drawnBy, Endpoint cutAt,
+                            MatchedEndAttribution took) {
         // The rule as the end already names it. Narrowing is the one thing said here, and it is
         // said about the rule rather than in place of it: which declarations took the end in is a
         // fact about this reading of the position, and what drew the end is not.
-        OriginRef origin = narrowedBy.isEmpty() ? drawnBy
-                : new OriginRef.NarrowedOrigin(drawnBy, narrowedBy);
+        OriginRef origin = OriginRef.NarrowedOrigin.of(drawnBy, cutAt, took);
         Cut cut = Cut.at(carrier, at, origin);
         into.merge(cut.key(), cut, (had, _) -> had.and(origin));
     }

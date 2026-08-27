@@ -5,6 +5,7 @@ import souther.compiler.source.SourceId;
 import souther.compiler.check.RuleRef;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourceNameResolver;
+import souther.compiler.numeric.Endpoint;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
@@ -46,14 +47,17 @@ public sealed interface OriginRef {
      *                        other. The clause's own text and not the number it was written about,
      *                        which is spelled differently by every reading that reaches it
      *                        ({@link souther.compiler.check.DeclaredBounds.Drawn})
-     * @param keeps           which way along the order the bound keeps its values, which is the end
-     *                        it placed: a minimum keeps what is above it and a maximum what is
-     *                        below. Read where the end is read, and carried for the same reason the
-     *                        inclusivity beside it is — a bound orders nothing across its line, so
-     *                        there is no side to read off the rule further down, and what is left to
-     *                        work it back out of is the range the rules leave. That derivation has a
-     *                        case with no answer, and it answers a rule leaving one value the same
-     *                        way for both of its ends
+     * @param keeps           which of the two ends the bound placed. Read where the end is read,
+     *                        and carried for the same reason the inclusivity beside it is — a bound
+     *                        orders nothing across its line, so there is no side to read off the
+     *                        rule further down, and what is left to work it back out of is the range
+     *                        the rules leave. That derivation has a case with no answer, and it
+     *                        answers a rule leaving one value the same way for both of its ends.
+     *                        The end and not a direction along the order: a minimum is where the
+     *                        values start, and that it keeps what is above it is the same fact read
+     *                        the other way round. Said as the direction, this was the fifth question
+     *                        {@link souther.compiler.numeric.Towards} answered, and which end a
+     *                        bound placed is the one it is about
      * @param holdsAtTheValue whether the cut value is one the bound admits, which is the end's own
      *                        inclusivity and is what says whether a row at the cut is the border's
      *                        {@code ON} point or its {@code OFF} point. Carried for the same reason
@@ -68,7 +72,7 @@ public sealed interface OriginRef {
      *                        keeps the two from being confused if it ever does get further
      */
     record InvariantOrigin(RuleRef.Invariant rule, int conjunct,
-                           souther.compiler.numeric.Towards keeps, boolean holdsAtTheValue)
+                           souther.compiler.numeric.EndSide keeps, boolean holdsAtTheValue)
             implements OriginRef {
 
         public InvariantOrigin {
@@ -77,7 +81,7 @@ public sealed interface OriginRef {
             }
             if (keeps == null) {
                 throw new IllegalArgumentException(
-                        "a bound keeps its values one way or the other: " + rule.named());
+                        "a bound places one of a range's two ends: " + rule.named());
             }
             if (conjunct < 0) {
                 throw new IllegalArgumentException(
@@ -224,14 +228,76 @@ public sealed interface OriginRef {
      *               where an inner record's clause and an outer record's reach one coordinate at one
      *               value, so this is not a set with a module of its own
      */
-    record NarrowedOrigin(InvariantOrigin bound, List<TypeSymbol.AtModule> within)
-            implements OriginRef {
+    final class NarrowedOrigin implements OriginRef {
 
-        public NarrowedOrigin {
-            within = List.copyOf(within);
-            if (within.isEmpty()) {
+        private final InvariantOrigin bound;
+        private final List<TypeSymbol.AtModule> within;
+
+        private NarrowedOrigin(InvariantOrigin bound, List<TypeSymbol.AtModule> within) {
+            this.bound = bound;
+            this.within = List.copyOf(within);
+            if (this.within.isEmpty()) {
                 throw new IllegalArgumentException("a bound narrowed by nothing is not narrowed");
             }
+        }
+
+        /**
+         * A bound at {@code at}, said to have been taken in by what {@code took} names.
+         *
+         * <p>The one way one of these is made, and it is held to the end it claims to be about. A
+         * reading's answer says the names are about one end of one side, and this is where that
+         * stops being a fact about a reading and becomes what a report writes beside a line — so the
+         * end and the side are asked here rather than taken on trust. Neither is a restatement of
+         * the caller's own work: {@link souther.compiler.check.MatchedEndAttribution} says the
+         * transport was allowed and says nothing about which line it was allowed onto, so a caller
+         * holding one could otherwise write it beside any bound it had.
+         *
+         * <p>What it does not ask is whether the names should be written at all. That is the
+         * reader's own rule about what a cut is owed to, answered before this is reached; a
+         * {@code null} here is that answer, or a reading with nothing to say about this end.
+         *
+         * @param at where the cut this bound drew falls, which is the end the names have to be about
+         */
+        static OriginRef of(InvariantOrigin bound, Endpoint at,
+                            souther.compiler.check.MatchedEndAttribution took) {
+            if (took == null) {
+                return bound;
+            }
+            if (took.side() != bound.keeps()) {
+                throw new IllegalArgumentException("a bound placing the " + bound.keeps()
+                        + " end, taken in by what holds the " + took.side() + " one");
+            }
+            if (!took.endpoint().sameAs(at)) {
+                throw new IllegalArgumentException("a cut at " + at
+                        + ", taken in by what holds " + took.endpoint());
+            }
+            return took.names().isEmpty() ? bound : new NarrowedOrigin(bound, took.names());
+        }
+
+        /** The rule that put an edge here. */
+        public InvariantOrigin bound() {
+            return bound;
+        }
+
+        /** The declarations whose own clauses decided where it stopped. Never empty. */
+        public List<TypeSymbol.AtModule> within() {
+            return within;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof NarrowedOrigin it && bound.equals(it.bound)
+                    && within.equals(it.within);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(bound, within);
+        }
+
+        @Override
+        public String toString() {
+            return "NarrowedOrigin[bound=" + bound + ", within=" + within + "]";
         }
     }
 
@@ -325,7 +391,7 @@ public sealed interface OriginRef {
             // of the order — and that the far side holds no value at all is a different answer,
             // given where a border reads what a line has sides.
             case InvariantOrigin i -> new LineFacts(
-                    (i.keeps() == souther.compiler.numeric.Towards.BELOW) == i.holdsAtTheValue(),
+                    (i.keeps() == souther.compiler.numeric.EndSide.UPPER) == i.holdsAtTheValue(),
                     i.holdsAtTheValue(), false);
             case NarrowedOrigin n -> n.bound().lineFacts();
         };

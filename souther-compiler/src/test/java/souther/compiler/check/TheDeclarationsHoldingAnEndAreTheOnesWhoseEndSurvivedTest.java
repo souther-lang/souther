@@ -3,6 +3,7 @@ package souther.compiler.check;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.EndSide;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.types.TypeKey;
@@ -48,9 +49,9 @@ class TheDeclarationsHoldingAnEndAreTheOnesWhoseEndSurvivedTest {
         NarrowedBounds tight = upper(3, true, A);
         NarrowedBounds loose = upper(10, true, B);
 
-        assertEquals(List.of(A), tight.meet(loose).maxBy(),
+        assertEquals(List.of(A), holding(tight.meet(loose), EndSide.UPPER),
                 "3 is where it stops, and A is what says 3");
-        assertEquals(List.of(A), loose.meet(tight).maxBy(),
+        assertEquals(List.of(A), holding(loose.meet(tight), EndSide.UPPER),
                 "whichever way round the two are met");
         assertEquals(endAt(3, true), tight.meet(loose).bounds().max(),
                 "and the end is the one that survived");
@@ -65,7 +66,8 @@ class TheDeclarationsHoldingAnEndAreTheOnesWhoseEndSurvivedTest {
      */
     @Test
     void bothAreHoldingAnEndTheyBothArriveAt() {
-        assertEquals(List.of(A, B), upper(3, true, A).meet(upper(3, true, B)).maxBy(),
+        assertEquals(List.of(A, B),
+                holding(upper(3, true, A).meet(upper(3, true, B)), EndSide.UPPER),
                 "one end, arrived at twice");
     }
 
@@ -83,7 +85,7 @@ class TheDeclarationsHoldingAnEndAreTheOnesWhoseEndSurvivedTest {
 
         assertEquals(endAt(3, false), admits.meet(refuses).bounds().max(),
                 "what both leave stops short of 3");
-        assertEquals(List.of(B), admits.meet(refuses).maxBy(),
+        assertEquals(List.of(B), holding(admits.meet(refuses), EndSide.UPPER),
                 "and only the clause that takes 3 away is holding it");
     }
 
@@ -91,13 +93,13 @@ class TheDeclarationsHoldingAnEndAreTheOnesWhoseEndSurvivedTest {
      *  ceiling. */
     @Test
     void theTwoEndsAreHeldSeparately() {
-        NarrowedBounds floor = new NarrowedBounds(
+        NarrowedBounds floor = NarrowedBounds.of(
                 new NumericDomain.Bounds(endAt(0, true), null), List.of(A), List.of());
         NarrowedBounds ceiling = upper(10, true, B);
 
         NarrowedBounds met = floor.meet(ceiling);
-        assertEquals(List.of(A), met.minBy(), "A holds the floor");
-        assertEquals(List.of(B), met.maxBy(), "and B the ceiling");
+        assertEquals(List.of(A), holding(met, EndSide.LOWER), "A holds the floor");
+        assertEquals(List.of(B), holding(met, EndSide.UPPER), "and B the ceiling");
     }
 
     /** An end nobody stops is nobody's, and two readings with no end on a side have not agreed on
@@ -106,9 +108,10 @@ class TheDeclarationsHoldingAnEndAreTheOnesWhoseEndSurvivedTest {
     void anEndThatIsNotThereIsHeldByNobody() {
         NarrowedBounds met = upper(3, true, A).meet(NarrowedBounds.NOTHING);
 
-        assertEquals(List.of(), met.minBy(), "nothing stops it from below");
-        assertEquals(List.of(A), met.maxBy(), "and the one end there is stands");
-        assertEquals(List.of(), NarrowedBounds.NOTHING.meet(NarrowedBounds.NOTHING).maxBy(),
+        assertEquals(List.of(), holding(met, EndSide.LOWER), "nothing stops it from below");
+        assertEquals(List.of(A), holding(met, EndSide.UPPER), "and the one end there is stands");
+        assertEquals(List.of(),
+                holding(NarrowedBounds.NOTHING.meet(NarrowedBounds.NOTHING), EndSide.UPPER),
                 "two readings that stop it nowhere have not met at an end");
     }
 
@@ -116,7 +119,7 @@ class TheDeclarationsHoldingAnEndAreTheOnesWhoseEndSurvivedTest {
     @Test
     void namingAnEndThatIsNotThereIsRefused() {
         assertThrows(IllegalArgumentException.class,
-                () -> new NarrowedBounds(new NumericDomain.Bounds(null, endAt(3, true)),
+                () -> NarrowedBounds.of(new NumericDomain.Bounds(null, endAt(3, true)),
                         List.of(A), List.of()),
                 "nothing stops it from below for A to be holding");
     }
@@ -131,7 +134,7 @@ class TheDeclarationsHoldingAnEndAreTheOnesWhoseEndSurvivedTest {
     @Test
     void theNamesAreCanonical() {
         assertEquals(List.of(A, B),
-                upper(3, true, B, A).meet(upper(3, true, A)).maxBy(),
+                holding(upper(3, true, B, A).meet(upper(3, true, A)), EndSide.UPPER),
                 "in the declarations' own order, and each once");
     }
 
@@ -148,9 +151,9 @@ class TheDeclarationsHoldingAnEndAreTheOnesWhoseEndSurvivedTest {
         NarrowedBounds plain = upper(endAt("3", true), A);
         NarrowedBounds padded = upper(endAt("3.00", true), B);
 
-        assertEquals(List.of(A, B), plain.meet(padded).maxBy(),
+        assertEquals(List.of(A, B), holding(plain.meet(padded), EndSide.UPPER),
                 "one end, spelled twice, held by both");
-        assertEquals(List.of(A, B), padded.meet(plain).maxBy(),
+        assertEquals(List.of(A, B), holding(padded.meet(plain), EndSide.UPPER),
                 "and the spelling the meet kept decides nothing");
     }
 
@@ -197,20 +200,32 @@ class TheDeclarationsHoldingAnEndAreTheOnesWhoseEndSurvivedTest {
      */
     private static void assertSameAnswer(NarrowedBounds left, NarrowedBounds right,
                                          java.util.function.Supplier<String> what) {
-        assertTrue(sameEnd(endOf(left, true), endOf(right, true)), () -> "lower end: " + what.get());
-        assertTrue(sameEnd(endOf(left, false), endOf(right, false)),
-                () -> "upper end: " + what.get());
-        assertEquals(left.minBy(), right.minBy(), () -> "holding the lower end: " + what.get());
-        assertEquals(left.maxBy(), right.maxBy(), () -> "holding the upper end: " + what.get());
+        for (EndSide side : EndSide.values()) {
+            assertTrue(sameEnd(endOf(left, side), endOf(right, side)),
+                    () -> side + " end: " + what.get());
+            assertEquals(holding(left, side), holding(right, side),
+                    () -> "holding the " + side + " end: " + what.get());
+        }
     }
 
     private static boolean sameEnd(Endpoint left, Endpoint right) {
         return left == null ? right == null : left.sameAs(right);
     }
 
-    private static Endpoint endOf(NarrowedBounds narrowed, boolean lower) {
-        return narrowed.bounds() == null ? null
-                : lower ? narrowed.bounds().min() : narrowed.bounds().max();
+    private static Endpoint endOf(NarrowedBounds narrowed, EndSide side) {
+        return side.at(narrowed.bounds());
+    }
+
+    /**
+     * Who is holding the end this reading leaves on one side.
+     *
+     * <p>Asked with that end, because that is the only way to ask. What a reading holds is about the
+     * number it arrived at, so a caller wanting the names says which number it means — and here the
+     * caller means this reading's own, which is what the laws below are about.
+     */
+    private static List<TypeSymbol.AtModule> holding(NarrowedBounds narrowed, EndSide side) {
+        return narrowed.matching(side, endOf(narrowed, side))
+                .map(MatchedEndAttribution::names).orElseGet(List::of);
     }
 
     /**
@@ -228,14 +243,14 @@ class TheDeclarationsHoldingAnEndAreTheOnesWhoseEndSurvivedTest {
                 upper(endAt("3.00", true), B), upper(endAt("3.00", true), C),
                 upper(endAt("3", false), A), upper(endAt("3.00", false), C),
                 upper(endAt("10", true), A), upper(endAt("10", true), B),
-                new NarrowedBounds(new NumericDomain.Bounds(null, endAt("3", true)),
+                NarrowedBounds.of(new NumericDomain.Bounds(null, endAt("3", true)),
                         List.of(), List.of()),
-                new NarrowedBounds(new NumericDomain.Bounds(endAt("0", true), endAt("10", true)),
+                NarrowedBounds.of(new NumericDomain.Bounds(endAt("0", true), endAt("10", true)),
                         List.of(C), List.of(A)));
     }
 
     private static NarrowedBounds upper(Endpoint at, TypeSymbol.AtModule... by) {
-        return new NarrowedBounds(new NumericDomain.Bounds(null, at), List.of(), List.of(by));
+        return NarrowedBounds.of(new NumericDomain.Bounds(null, at), List.of(), List.of(by));
     }
 
     private static NarrowedBounds upper(long at, boolean inclusive, TypeSymbol.AtModule... by) {

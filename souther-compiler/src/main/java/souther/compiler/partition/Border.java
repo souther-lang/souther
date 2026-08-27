@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.NarrowedBounds;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
@@ -303,19 +304,26 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, PointA
      */
     public static Border at(BoundaryTarget target, OriginRef origin, NumericDomain.Bounds within,
                             java.util.List<Parting> parted) {
-        return at(target, origin, within, parted, NarrowedEnds.NONE);
+        return at(target, origin, within, parted, NarrowedBounds.NOTHING);
     }
 
     /**
-     * The same, told which declarations took in where the position stops.
+     * The same, told what the value the position sits in leaves it and which declarations hold each
+     * end of that.
      *
      * <p>Which is what a run stopping at one of those ends is owed to besides the line it lies
      * against. Carried from the reading that placed the end, because nothing downstream can work it
      * out: an end is where every rule about the position leaves off, and the number it leaves off at
      * says nothing about who moved it.
+     *
+     * <p><b>The reading and not the names it came to.</b> What {@code within} leaves this quantity
+     * is a second reading — the behavior's own rules are in it, and the record's reading knows
+     * nothing of them — so the two can stop the position in different places, and a name worked out
+     * against one of them says nothing about the other. Which is why what arrives here is something
+     * that can be asked about an end, rather than an answer already given about somebody else's.
      */
     public static Border at(BoundaryTarget target, OriginRef origin, NumericDomain.Bounds within,
-                            java.util.List<Parting> parted, NarrowedEnds narrowed) {
+                            java.util.List<Parting> parted, NarrowedBounds narrowed) {
         NumericDomain.Bounds reach = within == null ? new NumericDomain.Bounds(null, null) : within;
         LevelSpace space = target.levels();
         Level cut = target.at();
@@ -336,8 +344,7 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, PointA
             all.add(mine);
         }
         QuantityArrangement arrangement = QuantityArrangement.of(space, all,
-                leaves(endOf(space, reach.min(), Towards.ABOVE, cut), narrowed.below()),
-                leaves(endOf(space, reach.max(), Towards.BELOW, cut), narrowed.above()));
+                DomainEnds.leaving(space, cut, reach, narrowed));
         boolean holdsHere = holdsAtTheValue(origin);
         Map<PointRole, PointAnswer> demands = new EnumMap<>(PointRole.class);
         if (!ordersAroundTheCut(origin)) {
@@ -520,43 +527,9 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, PointA
                 : new PointAnswer.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT);
     }
 
-    /** Where the rules leave the quantity, with the declarations that took that end in beside it.
-     *  Null where they leave it everything that way and there is no end at all. */
-    private static DomainEnd leaves(Bound end,
-                                    java.util.List<souther.compiler.types.TypeSymbol.AtModule>
-                                            narrowers) {
-        return end == null ? null : new DomainEnd(end, narrowers);
-    }
-
     /** The level a point against the line stands at, or null where no row is owed there. */
     private static Level against(PointAnswer point) {
         return point.criterion() instanceof Criterion.AtTheLevel at ? at.at() : null;
-    }
-
-    /**
-     * The first or last value the rules leave the quantity, from the end they wrote.
-     *
-     * <p>A value the quantity takes rather than the number a bound carries: a bound the quantity
-     * does not stand at leaves the first value it does, and a bound it stands at but does not keep
-     * leaves the one beside it.
-     */
-    private static Bound endOf(LevelSpace space, Endpoint end, Towards inward, Level like) {
-        if (end == null) {
-            return null;
-        }
-        Level at = like instanceof Level.OnACarrier on
-                ? new Level.OnACarrier(on.of(), end.at())
-                : new Level.ACount(souther.compiler.numeric.Count.number(end.at()));
-        Optional<Level> value = end.inclusive() ? space.nearestAtOrBeyond(at, inward)
-                : beyond(space, at, inward);
-        if (value.isPresent()) {
-            return Bound.at(value.get(), true);
-        }
-        // A strict end the quantity takes no first value past. The run stops where the rule stops
-        // and does not keep the place it stops at, which is what the two together say: read as no
-        // end at all, such a run ran to the end of the order and held every value the bound
-        // refuses; read as the value, it held the one value the bound refuses.
-        return end.inclusive() ? null : Bound.at(at, false);
     }
 
     /**
@@ -593,7 +566,7 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, PointA
      * neighbour of 9 to ask for, because 9 is not a level it stands at, and the level it stands at
      * below 9 is not one step from anything.
      */
-    private static Optional<Level> beyond(LevelSpace space, Level cut, Towards towards) {
+    static Optional<Level> beyond(LevelSpace space, Level cut, Towards towards) {
         return space.attainable(cut) ? space.neighbour(cut, towards)
                 : space.nearestAtOrBeyond(cut, towards);
     }

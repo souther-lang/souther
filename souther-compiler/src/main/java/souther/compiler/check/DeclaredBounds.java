@@ -123,6 +123,19 @@ public final class DeclaredBounds {
         public boolean isEmpty() {
             return min == null && max == null;
         }
+
+        /**
+         * The end on one side, or null where nothing stops the values that way.
+         *
+         * <p>Asked by the side rather than by name, so that a reader walking both ends chooses which
+         * it is on once. Everything an end is read beside — where the position's own type stops,
+         * which declarations hold it, which way a bound keeps its values — is a second answer to
+         * that same choice, and a reader making it once per lookup makes it as many times as it
+         * looks.
+         */
+        public End at(souther.compiler.numeric.EndSide side) {
+            return side == souther.compiler.numeric.EndSide.LOWER ? min : max;
+        }
     }
 
     /** What a numeric newtype's own rules leave its value between, for a caller that is asking about
