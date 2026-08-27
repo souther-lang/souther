@@ -18,11 +18,11 @@ import java.util.Set;
  * some other answer would be waved through as known; keyed by the place, it is a new place the debt
  * has reached and says so.
  *
- * <p><b>Two axes.</b> {@link Nature} says whether the thing is something that says what it is or
- * something that does something; {@link Cause} says what is wrong with it as it stands. One word for
- * both would run them together, and they do not move together: a thing can be a value and want an
- * equality, or a value and have one that is an address, and those want different work. The remedy
- * follows from the pair — a value is finished where it is, and everything else leaves the answer.
+ * <p><b>Two ways out and no third.</b> {@link Meaning} is what a thing is, and there are two of
+ * them: something that says what it is, with what is wrong with how it says it, or something that
+ * does something. A word for a thing nobody has read yet would be a third, and it is what let a
+ * place stand here twice with no remedy attached — so there is none, and a walk meeting something
+ * unread fails until somebody says which of the two it is.
  *
  * <p><b>Where it was seen is not what it is.</b> A finding is one finding however many detectors and
  * however many scenarios meet it, so the detector and the scenario are provenance beside the entry
@@ -31,24 +31,34 @@ import java.util.Set;
  */
 final class AnswerClosure {
 
-    /** Which of the two ways out a thing takes. */
-    enum Nature {
-        /** Something that says what it is. Such a thing becomes comparable by what it says. */
-        VALUE,
-        /** Something that does something, or that carries something that does. Such a thing is
-         *  built where it is used and never answered with. */
-        NON_VALUE,
-        /** Which of the two it is has not been read. The absence of a reading and not a third kind
-         *  of thing, so it stands with {@link Cause#UNCLASSIFIED} and with nothing else. */
-        NOT_READ
+    /**
+     * What a thing is, which is the whole of the reading and takes one of two forms.
+     *
+     * <p>Written as one thing rather than as a kind beside a fault. What says a thing is a value is
+     * the same reading that says what is wrong with it as it stands, so the two were never apart:
+     * held as two words, a line could say a thing is a value and a way of asking at once, and a line
+     * could say the reading got as far as the kind and stopped. Neither is a state anybody can act
+     * on, and the second is what let a place stand here with no remedy attached.
+     *
+     * <p>So there is no word for an unread one. A thing nobody has read yet is not written down, and
+     * the walk that meets it fails until somebody says which of these it is.
+     */
+    sealed interface Meaning {
+
+        /** Something that says what it is, and what is wrong with how it says it. */
+        record Value(ValueProblem problem) implements Meaning {}
+
+        /** Something that does something, or that carries something that does. What such a thing is
+         *  worth to whoever holds it turns on where it is held. */
+        record Capability() implements Meaning {}
     }
 
-    /** What is wrong with it as it stands. */
-    enum Cause {
-        /** It says what it is and defines no equality over that. */
-        MISSING_VALUE_EQUALITY,
+    /** What is wrong with how a value says what it is. */
+    enum ValueProblem {
+        /** It defines no equality over what it says. */
+        MISSING_EQUALITY,
         /**
-         * It has an equality and that equality is an address — its own, or its members'.
+         * Its equality is an address — its own, or its members'.
          *
          * <p>Its own word beside the one above because the work is different. Something with no
          * equality wants one written; something whose equality is an address has one already and it
@@ -56,12 +66,23 @@ final class AnswerClosure {
          * says. Filed under the first, the second sends whoever picks it up to add a method beside
          * one that is already there.
          */
-        IDENTITY_SEMANTICS,
-        /** It is a way of asking something rather than an answer, so it is one object per store
-         *  whatever it is compared with. */
-        CAPABILITY,
-        /** Nobody has read which of the two it is, and reading it is the fix. */
-        UNCLASSIFIED
+        IDENTITY_SEMANTICS
+    }
+
+    /** Something that says what it is and defines no equality over that. */
+    private static final Meaning MISSING_EQUALITY =
+            new Meaning.Value(ValueProblem.MISSING_EQUALITY);
+
+    /** A way of asking something rather than an answer, so it is one object per store whatever it
+     *  is compared with. */
+    private static final Meaning CAPABILITY = new Meaning.Capability();
+
+    /** What one of these is, in the words a reader of a failure gets. */
+    private static String said(Meaning meaning) {
+        return switch (meaning) {
+            case Meaning.Value(ValueProblem problem) -> "VALUE/" + problem;
+            case Meaning.Capability _ -> "CAPABILITY";
+        };
     }
 
     /** Which walk met it. */
@@ -86,27 +107,11 @@ final class AnswerClosure {
     /**
      * One thing in one place, and what it is.
      *
-     * @param question the answer it is under, by the name of the key that asks it
-     * @param at where in that answer it sits, as the steps of the answer's own shape
-     * @param offender the class of the thing, or the array type
+     * @param place the question it is under, where in that answer it sits, and the class of the
+     *              thing or the array type
+     * @param meaning what it is, which is also what the remedy follows from
      */
-    record Identity(Locus.Place place, Nature nature, Cause cause) {
-
-        /**
-         * The two axes say one thing between them or neither says anything.
-         *
-         * <p>A reading that got as far as the kind of thing and no further is not a state: what says
-         * a thing is a value is the same reading that says what is wrong with it, so a line claiming
-         * one without the other is a line nobody could act on.
-         */
-        Identity {
-            if (nature == Nature.NOT_READ ^ cause == Cause.UNCLASSIFIED) {
-                throw new IllegalArgumentException(
-                        "what a thing is and what is wrong with it are read together: "
-                                + place + " is " + nature + "/" + cause);
-            }
-        }
-    }
+    record Identity(Locus.Place place, Meaning meaning) {}
 
     /** One detector meeting one identity in one scenario. */
     record Observation(Detector detector, Scenario scenario) implements Comparable<Observation> {
@@ -175,15 +180,15 @@ final class AnswerClosure {
      */
     private static Known narrowedEnd(String question, Observation met, Locus.Step... steps) {
         return new Known(new Identity(at(question, "souther.compiler.check.NarrowedEnd", steps),
-                Nature.VALUE, Cause.MISSING_VALUE_EQUALITY), Set.of(met),
+                MISSING_EQUALITY), Set.of(met),
                 "one end of what a reading leaves a position, with what is holding it. A value, and "
                         + "one nothing compares on its own: the range it sits in writes its own "
                         + "equality and reaches both ends through it");
     }
 
     private static Known bytes(String question, Locus.Step... steps) {
-        return new Known(new Identity(at(question, "byte[]", steps), Nature.VALUE,
-                Cause.MISSING_VALUE_EQUALITY), BOTH_EVERYWHERE, CLASS_BYTES);
+        return new Known(new Identity(at(question, "byte[]", steps), MISSING_EQUALITY),
+                BOTH_EVERYWHERE, CLASS_BYTES);
     }
 
     private static final String Q = "souther.compiler.query.";
@@ -198,19 +203,19 @@ final class AnswerClosure {
             // The one of the five a module on its own does not reach: nothing is linked against
             // where there is nothing to link against.
             new Known(new Identity(at(Q + "Output$Linked", "byte[]", m(ANSWER, "value"), VALUE),
-                    Nature.VALUE, Cause.MISSING_VALUE_EQUALITY),
+                    MISSING_EQUALITY),
                     Set.of(walked(Scenario.VALID_CORPUS), compared(Scenario.VALID_CORPUS)),
                     CLASS_BYTES),
             new Known(new Identity(at(Q + "Names$ModuleScope", Q + "Db",
                     m(ANSWER, "value"), m("souther.compiler.check.Scoping$Scoped", "values"), m("souther.compiler.check.Resolve$Values", "elsewhere"),
                     m("souther.compiler.check.Scoping$OfTheUniverse", "universe"), m("souther.compiler.query.CompilationUniverse", "db")),
-                    Nature.NON_VALUE, Cause.CAPABILITY), BOTH_EVERYWHERE,
+                    CAPABILITY), BOTH_EVERYWHERE,
                     "Scoping.Scoped carries a way of asking the modules around this one a further "
                             + "question, and it holds this store to ask with. Where a scope has "
                             + "been taken apart already, that is the half of the assembly nobody "
                             + "has yet — it belongs inside the compute that asks"),
             new Known(new Identity(at(Q + "Front$Path", "souther.compiler.meta.ModulePath$$Lambda",
-                    m(ANSWER, "value")), Nature.NON_VALUE, Cause.CAPABILITY),
+                    m(ANSWER, "value")), CAPABILITY),
                     // A function is not compared, so two of them never come apart under a walk that
                     // holds one against another; only the walk that asks each object what it is
                     // meets this.
@@ -218,7 +223,7 @@ final class AnswerClosure {
                     "a module path resolves a module by running something, and a function never "
                             + "equals the same function computed again"),
             new Known(new Identity(at(Q + "Front$Library", "souther.compiler.stdlib.Stdlib",
-                    m(ANSWER, "value")), Nature.VALUE, Cause.MISSING_VALUE_EQUALITY),
+                    m(ANSWER, "value")), MISSING_EQUALITY),
                     ONLY_WALKED,
                     "a value, and here for a reason the others are not: one is built per process "
                             + "and every answer of a compilation holds that one, so identity is the "
@@ -228,7 +233,7 @@ final class AnswerClosure {
                             + "while there is one of them"),
             new Known(new Identity(at(Q + "Bodies$Expanding", "souther.compiler.stdlib.Stdlib",
                     m(ANSWER, "value"), m("souther.compiler.query.Bodies$Expanding$Of", "table"), m("souther.compiler.check.HelperTable", "stdlib")),
-                    Nature.VALUE, Cause.MISSING_VALUE_EQUALITY), ONLY_WALKED,
+                    MISSING_EQUALITY), ONLY_WALKED,
                     "the same library, reached through the table an expansion reads. One thing to "
                             + "fix and two places it is held"),
             narrowedEnd(Q + "Adequacy$Inputs", walked(Scenario.VALID_CORPUS),
@@ -251,7 +256,7 @@ final class AnswerClosure {
                     m("souther.compiler.check.NarrowedBounds$Reading", "lower")),
             new Known(new Identity(at("*", "souther.compiler.diag.Diagnostic",
                     m(ANSWER, "reports"), ELEMENT, m("souther.compiler.query.Report", "diagnostic")),
-                    Nature.VALUE, Cause.MISSING_VALUE_EQUALITY),
+                    MISSING_EQUALITY),
                     Set.of(walked(Scenario.A_MODULE_SPOKEN_ABOUT),
                             compared(Scenario.A_MODULE_SPOKEN_ABOUT)),
                     "a report says what this compile found, and two compiles that found the same "
@@ -306,8 +311,7 @@ final class AnswerClosure {
     static Map<Locus.Place, String> reasons() {
         Map<Locus.Place, String> out = new LinkedHashMap<>();
         KNOWN.forEach(each -> out.put(each.identity().place(),
-                each.identity().nature() + "/" + each.identity().cause() + ": "
-                        + each.reason()));
+                said(each.identity().meaning()) + ": " + each.reason()));
         return out;
     }
 
