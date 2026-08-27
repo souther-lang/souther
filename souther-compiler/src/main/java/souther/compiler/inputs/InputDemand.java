@@ -34,33 +34,53 @@ import java.util.Set;
  * already see — which is the difference between this and a list assembled from the rule kinds there
  * happen to be today.
  */
-public record InputDemand(Set<TermPath> paths) {
+public record InputDemand(List<TermPath> paths) {
 
     /** A behavior whose measurement names nothing beyond what the enumeration finds. */
-    public static final InputDemand NONE = new InputDemand(Set.of());
+    public static final InputDemand NONE = new InputDemand(List.of());
 
+    /**
+     * <p>A list and not a set, kept in the order the paths were met. What order the reading walks
+     * its demands in decides the order the positions come out in, which a report prints and a
+     * measure counts against — and an immutable set iterates in an order that is not the order
+     * anything put things into it. Deduplicated on the way in, so a list is what a set would have
+     * been with an order that is somebody's.
+     */
     public InputDemand {
-        paths = Set.copyOf(paths);
+        paths = List.copyOf(paths);
+    }
+
+    /** The paths at or under {@code parameter}, which is what one parameter's reading is given. */
+    public List<TermPath> under(TermPath parameter) {
+        List<TermPath> out = new java.util.ArrayList<>();
+        for (TermPath each : paths) {
+            if (each.isAtOrUnder(parameter)) {
+                out.add(each);
+            }
+        }
+        return List.copyOf(out);
     }
 
     /**
      * Every location {@code body} names, read under the bindings on the way to each of them.
      *
-     * <p>The environment is the one every reader of a body carries ({@link InputReads}), moved along
-     * by the two things that change what a name means: a binding, and an arm that says which case
-     * the value it matched turned out to be. Everything else is walked with the environment it
-     * stands in.
+     * <p>The environment is the one every reader of a body carries, moved along by the two things
+     * that change what a name means: a binding, and an arm that says which case the value it matched
+     * turned out to be. Everything else is walked with the environment it stands in.
+     *
+     * <p>Taken as {@link InputPaths} and not as the reader that implements it, so that the reading
+     * of the input is not reachable from here at all. It is the thing being built.
      */
-    public static InputDemand of(Core body, InputReads names, Symbols symbols) {
+    public static InputDemand of(Core body, InputPaths names, Symbols symbols) {
         if (body == null) {
             return NONE;
         }
         Set<TermPath> found = new LinkedHashSet<>();
         walk(body, names, symbols, found);
-        return new InputDemand(found);
+        return new InputDemand(List.copyOf(found));
     }
 
-    private static void walk(Core e, InputReads names, Symbols symbols, Set<TermPath> found) {
+    private static void walk(Core e, InputPaths names, Symbols symbols, Set<TermPath> found) {
         TermPath at = names.pathOf(e, symbols);
         if (at != null) {
             found.add(at);
@@ -90,6 +110,6 @@ public record InputDemand(Set<TermPath> paths) {
         }
         Set<TermPath> wider = new LinkedHashSet<>(paths);
         wider.addAll(more);
-        return new InputDemand(wider);
+        return new InputDemand(List.copyOf(wider));
     }
 }

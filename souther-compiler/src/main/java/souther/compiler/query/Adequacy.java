@@ -660,6 +660,10 @@ public final class Adequacy {
             if (souther.compiler.check.TypeOps.holdsAnErroneousType(settled.value())) {
                 return Answer.absent();
             }
+            // What the behaviors state about their own answers, which name locations of an input as
+            // readily as a body does and reach them by the same paths.
+            Map<String, souther.compiler.check.StatedContract> stated =
+                    db.ask(new Bodies.StatedContracts(name)).value();
             Map<String, InputDomain> out = new LinkedHashMap<>();
             for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
                 if (!(behavior instanceof Hir.SpecBehavior spec)) {
@@ -680,7 +684,7 @@ public final class Adequacy {
                             // grew a position when somebody looked one up would answer a question
                             // differently depending on what had been asked before it.
                             demandOf(db, name, spec, fn.present() ? fn.value() : null,
-                                    scope.value())));
+                                    scope.value(), stated.get(spec.name()))));
                 }
             }
             return Answer.of(Ordered.map(out));
@@ -700,11 +704,16 @@ public final class Adequacy {
      * by being filed at them, which is a different road and does not come through here.
      */
     private static souther.compiler.inputs.InputDemand demandOf(
+            Db db, String module, Hir.SpecBehavior spec, Hir.FnDef fn, Symbols symbols,
+            souther.compiler.check.StatedContract stated) {
+        return statedIn(stated, symbols, bodyIn(db, module, spec, fn, symbols));
+    }
+
+    /** The locations the implementation reads, or none where nothing implements the behavior. */
+    private static souther.compiler.inputs.InputDemand bodyIn(
             Db db, String module, Hir.SpecBehavior spec, Hir.FnDef fn, Symbols symbols) {
-        if (fn == null) {
-            return souther.compiler.inputs.InputDemand.NONE;
-        }
-        Bodies.CheckedBody checked = db.ask(new Bodies.CheckedBehavior(module, spec.name())).value();
+        Bodies.CheckedBody checked = fn == null ? null
+                : db.ask(new Bodies.CheckedBehavior(module, spec.name())).value();
         if (checked == null) {
             return souther.compiler.inputs.InputDemand.NONE;
         }
@@ -718,6 +727,43 @@ public final class Adequacy {
         return souther.compiler.inputs.InputDemand.of(checked.body(),
                 souther.compiler.inputs.InputReads.ofParameters(parameters, checked.elements()),
                 symbols);
+    }
+
+    /**
+     * And the locations the behavior's own clauses name, added to them.
+     *
+     * <p>A second source and not a second reading. What draws a line on an input is written in a
+     * body or in an {@code ensures}, and a reading built over one of them answers about the rules of
+     * the other by not having the position they are about — which is the same silence a depth used
+     * to produce, arriving from the other producer. An injected behavior has no body at all and
+     * still states rules.
+     *
+     * <p>The parameters under the bindings the declaration gave them, which is not what a body binds:
+     * a clause names them where it was written.
+     */
+    private static souther.compiler.inputs.InputDemand statedIn(
+            souther.compiler.check.StatedContract stated, Symbols symbols,
+            souther.compiler.inputs.InputDemand demand) {
+        if (stated == null || stated.isEmpty()) {
+            return demand;
+        }
+        Map<souther.compiler.types.BindingId, String> parameters = new LinkedHashMap<>();
+        for (souther.compiler.core.Contract.Param param : stated.params()) {
+            parameters.putIfAbsent(param.binding(), param.name());
+        }
+        souther.compiler.inputs.InputPaths names =
+                souther.compiler.inputs.InputReads.ofWhatIsDeclared(parameters);
+        souther.compiler.inputs.InputDemand out = demand;
+        for (souther.compiler.check.StatedContract.StatedRule rule : stated.rules()) {
+            for (souther.compiler.check.StatedContract.Conjunct conjunct : rule.conjuncts()) {
+                souther.compiler.core.Core said = conjunct.stated().orNull();
+                if (said != null) {
+                    out = out.and(souther.compiler.inputs.InputDemand
+                            .of(said, names, symbols).paths());
+                }
+            }
+        }
+        return out;
     }
 
     /**

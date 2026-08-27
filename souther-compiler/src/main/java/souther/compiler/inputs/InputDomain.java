@@ -206,23 +206,14 @@ public final class InputDomain {
             roots.add(new RuleRoot(at, parameter.type()));
             PlacedRules rules = PlacedRules.of(at, parameter.type(), symbols, policy);
             account.addAll(rules.placed());
+            // One walk, carrying the paths the measurement named under this parameter. Walked once
+            // per demand instead, two paths sharing a prefix would open that prefix's declaration
+            // twice, place its rules twice, and record a second answer where the ledger of what was
+            // handed on keeps one — so a reading assembled from replays would depend on how many
+            // demands ran through it.
             walk(at, parameter.type(), ExpansionTrace.NONE, symbols, policy, rules, found, roots,
-                    java.util.Set.of(), handoffs, observed, account, null);
-        }
-        // And then the paths the measurement named, each followed to its end. Second because a path
-        // the enumeration already reached is one this reading has, and the first reading under a
-        // path stands: a demand adds a position where there was none and never a second answer at
-        // one there was.
-        for (TermPath named : demand.paths()) {
-            for (Parameter parameter : parameters) {
-                if (!parameter.name().equals(named.head()) || byPathOf(found, named) != null) {
-                    continue;
-                }
-                TermPath at = TermPath.of(parameter.name());
-                walk(at, parameter.type(), ExpansionTrace.NONE, symbols, policy,
-                        PlacedRules.of(at, parameter.type(), symbols, policy), found, roots,
-                        java.util.Set.of(), handoffs, observed, account, named);
-            }
+                    java.util.Set.of(), handoffs, observed, account,
+                    Reach.enumerating(demand.under(at)));
         }
         // And only now, because a handoff is discharged by a descent that happens after the
         // position above it has been read. Held the other way round, every position that hands its
@@ -275,16 +266,6 @@ public final class InputDomain {
     public static InputDomain of(Hir.SpecBehavior behavior, Sig sig, Symbols symbols,
                                  ReadingPolicy policy) {
         return of(behavior, null, sig, symbols, policy);
-    }
-
-    /** The position already found at {@code path}, or null where none was. */
-    private static Position byPathOf(List<Position> found, TermPath path) {
-        for (Position each : found) {
-            if (each.path().equals(path)) {
-                return each;
-            }
-        }
-        return null;
     }
 
     /** The positions, in the order they were read. */
@@ -763,6 +744,55 @@ public final class InputDomain {
     }
 
     /**
+     * What this step of the reading is doing.
+     *
+     * <p>Two roads reach a position and one walk takes both, so every step has to say which of them
+     * it is on. Enumerating is following what a type has; demanding is following what the
+     * measurement named. A step is usually on both — the paths a measurement names mostly run
+     * through positions the enumeration finds anyway — and the two part only under a position the
+     * enumeration stopped at, where the demands go on alone.
+     *
+     * <p>Taken as one value rather than as three arguments, because the three change together and a
+     * caller that moved one without the others would be describing a step that does not exist.
+     *
+     * @param demanded    the paths the measurement named that are at or under this position, which
+     *                    is what decides where the reading goes on once the enumeration has stopped
+     * @param enumerating whether every step to here is one the enumeration itself takes. Where it is
+     *                    not, this position is here because the measurement named it and its
+     *                    siblings are not
+     * @param handedOn    whether the position above passed its rules down to here. False under a
+     *                    position the reading stopped at: what is owed there is owed by the reading
+     *                    that stopped, and a demand walking past it discharges none of it
+     */
+    private record Reach(List<TermPath> demanded, boolean enumerating, boolean handedOn) {
+
+        static Reach enumerating(List<TermPath> demanded) {
+            return new Reach(demanded, true, true);
+        }
+
+        /** Whether this position is one the reading reports, rather than one it walked through. */
+        boolean reports(TermPath at) {
+            return enumerating || demanded.contains(at);
+        }
+
+        /** The same at {@code child}: the demands that go on through it, and what the step is. */
+        Reach into(TermPath child, boolean stopped) {
+            List<TermPath> on = new ArrayList<>();
+            for (TermPath each : demanded) {
+                if (each.isAtOrUnder(child)) {
+                    on.add(each);
+                }
+            }
+            return new Reach(on, enumerating && !stopped, handedOn && !stopped);
+        }
+
+        /** Whether the reading goes on into the position this reaches. */
+        boolean enters() {
+            return enumerating || !demanded.isEmpty();
+        }
+    }
+
+    /**
      * One position, read, and then what is under it.
      *
      * <p>What is under a position is walked whether or not the position itself came to anything.
@@ -775,7 +805,7 @@ public final class InputDomain {
                              ReadingPolicy policy, PlacedRules placed, List<Position> found,
                              List<RuleRoot> roots, java.util.Set<Type> visited,
                              RuleHandoffs handoffs, NameReach.Observed observed,
-                             List<PlacementSeed> account, TermPath following) {
+                             List<PlacementSeed> account, Reach reach) {
         // The proof first, and before anything is read off the position. A shape a reading is not
         // made of is this compiler disagreeing with itself about what may stand at a position, and
         // it is refused here rather than arriving further down as a position nothing divides.
@@ -793,7 +823,7 @@ public final class InputDomain {
         // what positions a type can have; a reading following one path the model named has the path
         // for a bound and needs no other, which is why the same walk answers both questions and
         // stops for only one of them.
-        TermPath already = following == null ? ancestry.openedAt(unfolds) : null;
+        TermPath already = reach.enumerating() ? ancestry.openedAt(unfolds) : null;
         StructuralInspection structure = already != null
                 ? StructuralInspection.stoppedAt(
                         new BlockReason.RecursiveExpansion(unfolds, already))
@@ -804,53 +834,43 @@ public final class InputDomain {
         // and whose rules reach the end of it — and what it reports is the end. Published all the
         // way down, one threshold written five links into a chain would put four sums into the
         // measure and ask for a row at each of them, which is the listing this reading does not do.
-        if (following == null || path.equals(following)) {
+        if (reach.reports(path)) {
             found.add(here);
         }
         // Said as the position is read and before anything under it is walked, so that a descent
         // that never happens leaves the obligation standing rather than never making one.
-        if (placed.handsTheRulesOnAt(path)) {
+        if (reach.handedOn() && placed.handsTheRulesOnAt(path)) {
             handoffs.owes(placed.root(), path);
         }
         // Handed down and never back up, so that two fields declared as one type are two positions
         // and both are read. Shared between them, the second would come back as a path returning to
         // where it had been, which is a different fact entirely.
         ExpansionTrace deeper = ancestry.opening(unfolds, path);
-        switch (structure) {
+        // What the descent may take, which is what the shape has. This reading having stopped is an
+        // answer about the reading — it decides what the position reports and where the enumeration
+        // goes next — and it does not change what stands under the type, so a path the measurement
+        // named goes on through here while its siblings do not.
+        StructuralInspection descent = already != null
+                ? StructuralInspection.of(input.shape(), declared) : structure;
+        switch (descent) {
             case StructuralInspection.Decomposed decomposed -> {
                 for (Map.Entry<String, Type> field : decomposed.under().entrySet()) {
-                    if (!goesOn(following, path, new TermPath.Step.Field(field.getKey()))) {
+                    Reach on = reach.into(path.then(field.getKey()), already != null);
+                    if (!on.enters()) {
                         continue;
                     }
                     walk(path.then(field.getKey()), field.getValue(), deeper, symbols, policy,
                             // A field is a value of its own, so a sum met under it is one this walk
                             // has not taken apart however many were taken apart above.
                             placed, found, roots, java.util.Set.of(), handoffs, observed, account,
-                            following);
+                            on);
                 }
             }
             case StructuralInspection.Retained retained ->
                     under(retained.continuation(), here, path, sharedAt(input), deeper, symbols,
                             policy, placed, found, roots, visited, handoffs, observed, account,
-                            following);
+                            reach, already != null);
         }
-    }
-
-    /**
-     * Whether a reading at {@code at} takes {@code step}.
-     *
-     * <p>True of every step where this reading is enumerating, and of one step where it is following
-     * a path the model named — the step that path takes from here. A reading that has arrived takes
-     * none, which is what ends a following reading: the path is as long as an author wrote it, and
-     * that is the whole of what bounds it.
-     */
-    private static boolean goesOn(TermPath following, TermPath at, TermPath.Step step) {
-        if (following == null) {
-            return true;
-        }
-        List<TermPath.Step> steps = following.steps();
-        int next = at.steps().size();
-        return next < steps.size() && steps.get(next).equals(step);
     }
 
     /**
@@ -906,7 +926,7 @@ public final class InputDomain {
                               PlacedRules placed, List<Position> found, List<RuleRoot> roots,
                               java.util.Set<Type> visited, RuleHandoffs handoffs,
                               NameReach.Observed observed, List<PlacementSeed> account,
-                              TermPath following) {
+                              Reach reach, boolean stopped) {
         switch (continuation) {
             // Nothing is opened under the position, so a handoff made there stays standing. Which
             // is the answer whichever of the two this is: a shape this compiler does not enter and
@@ -914,24 +934,29 @@ public final class InputDomain {
             case StructuralInspection.Continuation.None _,
                  StructuralInspection.Continuation.Blocked _ -> { }
             case StructuralInspection.Continuation.Elements elements -> {
-                if (!goesOn(following, path, new TermPath.Step.Element())) {
+                TermPath at = path.element();
+                Reach on = reach.into(at, stopped);
+                if (!on.enters()) {
                     break;
                 }
-                TermPath at = path.element();
-                handoffs.passesTo(placed.root(), path, List.of(at));
+                // Not where the reading stopped here. What a demand reaches past a stop is reached
+                // by the demand, and saying the rules were passed on would have the ledger record a
+                // recipient for an obligation this reading never discharged.
+                if (!stopped) {
+                    handoffs.passesTo(placed.root(), path, List.of(at));
+                }
                 // Nothing crosses into what a sequence holds: what a clause of the value out here
                 // says is written about the sequence, and an element is a value with a declaration
                 // of its own.
                 takeTheRulesOver(placed.root(), path, at, elements.element(), ancestry, symbols,
                         policy, found, roots, java.util.Set.of(), handoffs, observed, null,
-                        account, following);
+                        account, on);
             }
             case StructuralInspection.Continuation.Branches branches -> {
                 List<StructuralInspection.Branch> standing = new ArrayList<>();
                 List<TermPath> passedTo = new ArrayList<>();
                 for (StructuralInspection.Branch branch : branches.branches()) {
-                    if (!goesOn(following, path,
-                            new TermPath.Step.Refine(branch.refinement()))) {
+                    if (!reach.into(path.refine(branch.refinement()), stopped).enters()) {
                         continue;
                     }
                     // A branch that is the whole of a value puts no position anywhere, and one the
@@ -953,7 +978,9 @@ public final class InputDomain {
                     standing.add(branch);
                     passedTo.add(path.refine(branch.refinement()));
                 }
-                handoffs.passesTo(placed.root(), path, passedTo);
+                if (!stopped) {
+                    handoffs.passesTo(placed.root(), path, passedTo);
+                }
                 for (StructuralInspection.Branch branch : standing) {
                     int before = found.size();
                     // What the value above calls the positions under this case, where it calls them
@@ -964,7 +991,8 @@ public final class InputDomain {
                             : new PlacedRules.Reaching(placed, path, branch.refinement(),
                                     new java.util.LinkedHashSet<>(shared));
                     walkBranch(branch, placed.root(), path, ancestry, symbols, policy, found, roots,
-                            visited, handoffs, observed, crossing, account, following);
+                            visited, handoffs, observed, crossing, account,
+                            reach.into(path.refine(branch.refinement()), stopped), stopped);
                     crossed(observed, path, shared, branch.refinement(), found, before, crossing);
                 }
             }
@@ -1051,15 +1079,17 @@ public final class InputDomain {
                                          java.util.Set<Type> visited, RuleHandoffs handoffs,
                                          NameReach.Observed observed,
                                          PlacedRules.Reaching crossing,
-                                         List<PlacementSeed> account, TermPath following) {
+                                         List<PlacementSeed> account, Reach reach) {
         roots.add(new RuleRoot(opened, type));
-        handoffs.accepts(by, at, opened);
+        if (reach.handedOn()) {
+            handoffs.accepts(by, at, opened);
+        }
         PlacedRules rules = PlacedRules.of(opened, type, symbols, policy, crossing);
         // Said as the reading of this value is opened, so that what a build has to account for is
         // what the rules of the values it read actually placed.
         account.addAll(rules.placed());
         walk(opened, type, ancestry, symbols, policy, rules, found, roots, visited,
-                handoffs, observed, account, following);
+                handoffs, observed, account, reach);
     }
 
     /**
@@ -1079,7 +1109,7 @@ public final class InputDomain {
                                    List<Position> found, List<RuleRoot> roots,
                                    java.util.Set<Type> visited, RuleHandoffs handoffs,
                                    NameReach.Observed observed, PlacedRules.Reaching crossing,
-                                   List<PlacementSeed> account, TermPath following) {
+                                   List<PlacementSeed> account, Reach reach, boolean stopped) {
         // <b>A descent that costs no level stops only where it returns to a value it has already
         // been at without a step into one.</b> That is the whole of the rule, and what it is keyed
         // on is the value reached and never the narrowing taken: a narrowing is an edge and the
@@ -1102,7 +1132,7 @@ public final class InputDomain {
         deeper.add(branch.under());
         takeTheRulesOver(by, path, path.refine(branch.refinement()), branch.under(), ancestry,
                 symbols, policy, found, roots, deeper, handoffs, observed, crossing, account,
-                following);
+                reach);
     }
 
     /**

@@ -71,15 +71,17 @@ public record ExpansionTrace(Map<TypeSymbol, TermPath> open) {
     }
 
     /**
-     * The same trace with {@code declaration} open at {@code at}, or this one where there is nothing
-     * to add.
+     * The same trace with {@code declaration} open at {@code at}, or this one where it is open
+     * already and where there is nothing to open.
      *
-     * <p>Only ever called where {@link #openedAt} answered null, so an entry is never replaced: the
-     * first position a declaration was opened at is the one the cycle is reported against, and
-     * overwriting it would move the far end of the cycle to wherever the walk happened to be last.
+     * <p>The first position a declaration was opened at is the one a return is reported against, so
+     * an entry already here stands. A reading following a path the measurement named walks past a
+     * return and goes on opening declarations it has open — held as a replacement, the far end of a
+     * cycle would move to wherever such a walk happened to be last, and what a report says about a
+     * return would depend on what else was demanded.
      */
     public ExpansionTrace opening(TypeSymbol declaration, TermPath at) {
-        if (declaration == null) {
+        if (declaration == null || open.containsKey(declaration)) {
             return this;
         }
         Map<TypeSymbol, TermPath> deeper = new LinkedHashMap<>(open);

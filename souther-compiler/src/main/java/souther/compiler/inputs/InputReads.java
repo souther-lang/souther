@@ -45,7 +45,8 @@ import java.util.Map;
  */
 public record InputReads(InputDomain read, Map<BindingId, TermPath> roots,
                          Map<BindingId, Core> bound,
-                         souther.compiler.check.ElementBindings elements, boolean callsStand) {
+                         souther.compiler.check.ElementBindings elements, boolean callsStand)
+        implements InputPaths {
 
     public InputReads {
         roots = Map.copyOf(roots);
@@ -120,6 +121,12 @@ public record InputReads(InputDomain read, Map<BindingId, TermPath> roots,
                 souther.compiler.check.ElementBindings.NONE, true);
     }
 
+    /** The same, before there is a reading to hold beside it ({@link #ofParameters}). */
+    public static InputReads ofWhatIsDeclared(Map<BindingId, String> roots) {
+        return new InputReads(null, rooted(roots), Map.of(),
+                souther.compiler.check.ElementBindings.NONE, true);
+    }
+
     /**
      * The same, inside one arm of a {@code match}.
      *
@@ -133,6 +140,7 @@ public record InputReads(InputDomain read, Map<BindingId, TermPath> roots,
      * in particular, and a name that stands for no position is what a reader is given for it —
      * which is what it was given before there was anything to say.
      */
+    @Override
     public InputReads insideArm(Core.Match match, Core.Case arm, Symbols symbols) {
         if (arm.binder() == null || arm.binder().binding() == null
                 || arm.caseTypes().size() != 1) {
@@ -159,6 +167,7 @@ public record InputReads(InputDomain read, Map<BindingId, TermPath> roots,
     }
 
     /** The same, inside what {@code binder} binds. */
+    @Override
     public InputReads and(Core.Binder binder, Core value) {
         if (binder == null || binder.binding() == null || value == null) {
             return this;
@@ -170,6 +179,7 @@ public record InputReads(InputDomain read, Map<BindingId, TermPath> roots,
     }
 
     /** The position {@code e} names here, or null where it names none. */
+    @Override
     public TermPath pathOf(Core e, Symbols symbols) {
         return InputPath.of(e, roots, bound, elements, symbols, callsStand);
     }
