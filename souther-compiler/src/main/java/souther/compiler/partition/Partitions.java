@@ -899,9 +899,9 @@ public final class Partitions {
                 // all the same: a `Map` a rule about its size divides is one nothing was read into,
                 // and taking that off the axis with the fallback is how the stop went unreported
                 // (issue #1084).
-                out.add(new Axis(id, term, position.type(), divided.classes(),
-                        divided.cuts().cuts(), List.of(), position.narrowedEnds(),
-                        ReadingResidue.of(position), null, null));
+                out.add(new Axis(id, term, PositionAccount.of(position, null, null),
+                        divided.classes(), divided.cuts().cuts(), List.of(),
+                        position.narrowedEnds()));
             }
             // Nothing local divides the position, which is what licenses asking what it is made of.
             // Whether the reading got to the end of the rules is carried rather than acted on here:
@@ -918,9 +918,8 @@ public final class Partitions {
                     // position that the local reading could not take in, which is what keeps the
                     // position from completing as one the model divides no way.
                     case StructuralInspection.Retained retained ->
-                            out.add(Axis.pendingAt(id, term, position.type(),
-                                    ReadingResidue.of(position),
-                                    retained.continuation(), leftAt(position)));
+                            out.add(Axis.pendingAt(id, term, PositionAccount.of(position,
+                                    retained.continuation(), leftAt(position))));
                 }
             }
         }

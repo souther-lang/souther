@@ -33,61 +33,61 @@ import java.util.List;
  * beside the report rather than taken out of the count — a claim the rules bear out has already
  * left, because the reading these classes come from is what took it out.
  *
- * @param term     the number this axis is of: a location's own content, or something taken of it
- * @param classes  exclusive and exhaustive over the term's values, or empty where the model does
- *                 not divide them
- * @param cuts     the values the classes meet at, each carrying every rule that drew it there
- * @param parted   where the rules part this position's values, which is not the same list. A cut is
- *                 a value a row can be written against and a bound has one without parting
- *                 anything; a rule that wrote a multiple of the position parts its values where the
- *                 position may hold none, and has no cut. What every border on this position owes
- *                 away from its line is a run of what these leave together, so a border built from
- *                 the cuts alone read its two sides past the lines that have no value (issue #880)
- * @param pending  where nothing has answered for this position yet, what the structural reading
- *                 found — and so what this position is left with if nothing else answers. Null on
- *                 an axis that already has evidence, which needs no fallback.
- *
- *                 <p>Carried here rather than beside: the reason and the position it is about are
- *                 one fact, and holding them in two lists joined afterwards by the spelling of a
- *                 path is how a reason came to be recovered by string match. A reason travels with
- *                 the position or it is a reason about whatever the strings happened to pair it
- *                 with.
- * @param residue  what the reading of this position left behind that nothing later takes away: the
- *                 rules it was owed and did not reach, and whether the walk could go into what it
- *                 holds. Beside the questions and not among them — a position whose rules were never
- *                 enumerated raises no question and is not one whose rules were all accounted for,
- *                 and an empty list says the second (issue #791).
- *
- *                 <p>Apart from {@link #pending} because the two do not live as long. A position a
- *                 body's rule divides keeps no continuation to be pending on, and was still never
- *                 entered; read off the continuation, that stop went unsaid (issue #1084)
- * @param leftWith what the position is left with where the local reading gave it no axis, or null
- *                 where nothing is. Which of the two it is comes with it: a reading stopped, or a
- *                 rule was read to the end and draws no line. Carried for the same reason
- *                 {@link #pending} is, and kept apart from it because the two are lifted by
- *                 different work and one outranks the other — where the walk could not reach into
- *                 what the position holds, a rule about what is inside describes that same stop
- *                 from the other end
+ * @param term    the number this axis is of: a location's own content, or something taken of it
+ * @param at      the position the number is read from, and what this phase is left answering for
+ *                there. Pointed at rather than copied out, because a position carries as many of
+ *                these axes as the rules name numbers of it and what is in there is true of the
+ *                position once ({@link PositionAccount})
+ * @param classes exclusive and exhaustive over the term's values, or empty where the model does
+ *                not divide them
+ * @param cuts    the values the classes meet at, each carrying every rule that drew it there
+ * @param parted  where the rules part this position's values, which is not the same list. A cut is
+ *                a value a row can be written against and a bound has one without parting
+ *                anything; a rule that wrote a multiple of the position parts its values where the
+ *                position may hold none, and has no cut. What every border on this position owes
+ *                away from its line is a run of what these leave together, so a border built from
+ *                the cuts alone read its two sides past the lines that have no value (issue #880)
  */
-public record Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> classes,
-                   List<Cut> cuts, List<Parting> parted, NarrowedBounds narrowed,
-                   ReadingResidue residue,
-                   StructuralInspection.Continuation pending, LeftAtThePosition leftWith) {
+public record Axis(AxisId id, NumericTerm term, PositionAccount at, List<PartitionClass> classes,
+                   List<Cut> cuts, List<Parting> parted, NarrowedBounds narrowed) {
 
     public Axis {
         classes = List.copyOf(classes);
         cuts = List.copyOf(cuts);
         parted = List.copyOf(parted);
-        if (residue == null) {
-            throw new IllegalArgumentException(
-                    "an axis with no account of what its reading came to");
+        if (at == null) {
+            throw new IllegalArgumentException("an axis of no position");
         }
     }
 
     public Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> classes,
                 List<Cut> cuts) {
-        this(id, term, type, classes, cuts, List.of(), NarrowedBounds.NOTHING,
-                ReadingResidue.NOTHING, null, null);
+        this(id, term, PositionAccount.at(term.path(), type), classes, cuts, List.of(),
+                NarrowedBounds.NOTHING);
+    }
+
+    /** The position's type, which is what a value read here is of. Not the term's: a string is
+     *  measured at how long it is, and what stands at the location is still a string. */
+    public Type type() {
+        return at.type();
+    }
+
+    /** What the reading of this position left behind that nothing later takes away. Beside the
+     *  questions and not among them — a position whose rules were never enumerated raises no
+     *  question and is not one whose rules were all accounted for, and an empty list says the
+     *  second (issue #791). */
+    public ReadingResidue residue() {
+        return at.residue();
+    }
+
+    /** Where nothing has answered for this position yet, what the structural reading found. */
+    public StructuralInspection.Continuation pending() {
+        return at.pending();
+    }
+
+    /** What the position is left with where the local reading gave it no axis. */
+    public LeftAtThePosition leftWith() {
+        return at.leftWith();
     }
 
     /**
@@ -97,32 +97,27 @@ public record Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> 
      * and only where none does is what was found here what a report says — an absence where every
      * reading ran to the end and found nothing, and what stopped one where it did not.
      */
-    public static Axis pendingAt(AxisId id, NumericTerm term, Type type, ReadingResidue residue,
-                                 StructuralInspection.Continuation found,
-                                 LeftAtThePosition leftWith) {
-        return new Axis(id, term, type, List.of(), List.of(), List.of(), NarrowedBounds.NOTHING,
-                residue, found, leftWith);
+    public static Axis pendingAt(AxisId id, NumericTerm term, PositionAccount at) {
+        return new Axis(id, term, at, List.of(), List.of(), List.of(), NarrowedBounds.NOTHING);
     }
 
     /**
      * The same position, measured at another number.
      *
      * <p>A transition rather than a constructor at the call site. What a body's rules add is a term,
-     * classes and cuts; everything else about the position was settled by the reading that made
-     * this one, and a caller rebuilding an axis from its parts drops whatever it did not think to
-     * name. What went that way was {@link #pending}: a position whose elements could not be reached
-     * came back out of the second phase with nothing to say it had ever stopped, and was reported
-     * as one the model divides no way.
+     * classes and cuts; what the position came to was settled by the reading that made this one,
+     * and a caller rebuilding an axis from its parts drops whatever it did not think to name. What
+     * went that way was the continuation: a position whose elements could not be reached came back
+     * out of the second phase with nothing to say it had ever stopped, and was reported as one the
+     * model divides no way. It is one field now, so a rebuild names it or does not compile.
      */
     public Axis measuredAt(AxisId id, NumericTerm term) {
-        return new Axis(id, term, type, classes, cuts, parted, narrowed, residue, pending,
-                leftWith);
+        return new Axis(id, term, at, classes, cuts, parted, narrowed);
     }
 
     /** The same position, with what a body's rules divided it into and the lines they drew. */
     public Axis carrying(List<PartitionClass> classes, List<Cut> cuts, List<Parting> parted) {
-        return new Axis(id, term, type, classes, cuts, parted, narrowed, residue, pending,
-                leftWith);
+        return new Axis(id, term, at, classes, cuts, parted, narrowed);
     }
 
     /** Where the value this axis is about sits, which is where a row is walked to before the term is
