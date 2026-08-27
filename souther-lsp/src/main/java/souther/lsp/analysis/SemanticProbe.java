@@ -70,7 +70,7 @@ final class SemanticProbe {
      * <p>{@code firstInserted} is a place rather than an offset because what is compared against it
      * is an extent, and an extent is two places.
      */
-    record Reading(Compilation compilation, String uri, SourcePos firstInserted) {
+    record Reading(Compilation compilation, String uri, String repaired, SourcePos firstInserted) {
 
         /**
          * Whether what is written over {@code extent} is the author's rather than the probe's.
@@ -147,7 +147,7 @@ final class SemanticProbe {
         // In the document it was inserted into, and said so: a place that names no text is in the
         // same text as nothing, and every extent would compare as being somewhere else — which
         // reads as "the author wrote this" about all of them.
-        return new Reading(compile, uri,
+        return new Reading(compile, uri, repair.text(),
                 new LineIndex(text, new SourceId(uri)).posOf(repair.firstInserted()));
     }
 

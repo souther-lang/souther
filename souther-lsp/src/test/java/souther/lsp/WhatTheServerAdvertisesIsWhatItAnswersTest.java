@@ -233,6 +233,9 @@ class WhatTheServerAdvertisesIsWhatItAnswersTest {
                     "documentHighlightProvider"),
             offered(LspMethod.SELECTION_RANGE, "textDocument/selectionRange",
                     "selectionRangeProvider"),
+            offered(LspMethod.WORKSPACE_SYMBOL, "workspace/symbol", "workspaceSymbolProvider"),
+            new Protocol(LspMethod.SIGNATURE_HELP, "textDocument/signatureHelp",
+                    new Told.Capability("signatureHelpProvider", OPTIONS, "an options object")),
             new Protocol(LspMethod.CODE_ACTION, "textDocument/codeAction",
                     new Told.Capability("codeActionProvider", OPTIONS, "an options object")),
             // Announced by a flag inside the capability above rather than by one of its own: a

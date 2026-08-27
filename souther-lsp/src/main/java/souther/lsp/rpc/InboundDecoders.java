@@ -58,6 +58,10 @@ public final class InboundDecoders {
             combine(field("textDocument", field("uri", string()).asDecoder()), field("position", POSITION))
                     .map(Params.PositionParams::new);
 
+    /** {@code { query }} */
+    public static final Decoder<JsonNode, Params.Query> QUERY =
+            field("query", string()).asDecoder().map(Params.Query::new);
+
     /** {@code { textDocument: { uri }, positions: [ { line, character }, ... ] }} */
     public static final Decoder<JsonNode, Params.PositionsParams> POSITIONS_PARAMS =
             combine(field("textDocument", field("uri", string()).asDecoder()),

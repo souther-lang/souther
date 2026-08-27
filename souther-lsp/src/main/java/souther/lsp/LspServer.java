@@ -18,6 +18,7 @@ import souther.lsp.protocol.Location;
 import souther.lsp.protocol.LspDiagnostic;
 import souther.lsp.protocol.Position;
 import souther.lsp.protocol.Range;
+import souther.lsp.protocol.WorkspaceSymbol;
 import souther.lsp.rpc.InboundDecoders;
 import souther.lsp.rpc.Params;
 import souther.lsp.transport.MessageConnection;
@@ -181,6 +182,8 @@ public final class LspServer {
             case INLAY_HINT -> { respond(id, inlayHints(params)); yield false; }
             case DOCUMENT_HIGHLIGHT -> { respond(id, documentHighlights(params)); yield false; }
             case SELECTION_RANGE -> { respond(id, selectionRanges(params)); yield false; }
+            case WORKSPACE_SYMBOL -> { respond(id, workspaceSymbols(params)); yield false; }
+            case SIGNATURE_HELP -> { respond(id, signatureHelp(params)); yield false; }
             case CODE_ACTION -> { respond(id, codeActions(params)); yield false; }
             case CODE_ACTION_RESOLVE -> { respond(id, codeActionResolve(params)); yield false; }
             case CODE_LENS -> { respond(id, codeLenses(params)); yield false; }
@@ -472,6 +475,41 @@ public final class LspServer {
         for (CodeLens lens : analyzer.codeLenses(uri, graph)) {
             out.add(Map.of("range", rangeJson(lens.range()),
                     "command", Map.of("title", lens.title(), "command", "")));
+        }
+        return out;
+    }
+
+    /** Null where the cursor is in no call the server can say anything about, which the protocol
+     *  reads as no help rather than as help with nothing in it. */
+    private Object signatureHelp(JsonNode params) {
+        Params.PositionParams p = InboundDecoders.decode(InboundDecoders.POSITION_PARAMS, params)
+                .orElse(null);
+        if (p == null || documents.get(p.uri()) == null) {
+            return null;
+        }
+        ModuleGraph graph = workspace.snapshot(documents.openDocuments());
+        return analyzer.signatureHelp(p.uri(), p.position(), graph).<Object>map(help -> {
+            List<Object> parameters = new ArrayList<>();
+            for (String each : help.parameters()) {
+                parameters.add(Map.of("label", each));
+            }
+            return Map.of("signatures",
+                    List.of(Map.of("label", help.label(), "parameters", parameters)),
+                    "activeSignature", 0, "activeParameter", help.active());
+        }).orElse(null);
+    }
+
+    private Object workspaceSymbols(JsonNode params) {
+        Params.Query p = InboundDecoders.decode(InboundDecoders.QUERY, params).orElse(null);
+        if (p == null) {
+            return List.of();
+        }
+        ModuleGraph graph = workspace.snapshot(documents.openDocuments());
+        List<Object> out = new ArrayList<>();
+        for (WorkspaceSymbol symbol : analyzer.workspaceSymbols(p.query(), graph)) {
+            out.add(Map.of("name", symbol.name(), "kind", symbol.kind(),
+                    "location", Map.of("uri", symbol.location().uri(),
+                            "range", rangeJson(symbol.location().range()))));
         }
         return out;
     }

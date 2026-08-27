@@ -16,6 +16,7 @@ import souther.compiler.query.Names;
 import souther.compiler.query.Sites;
 import souther.compiler.source.SourceId;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.ValueName;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSpelling;
 import souther.compiler.types.TypeSymbol;
@@ -167,6 +168,110 @@ public final class SemanticSnapshot {
             }
         }
         return List.copyOf(out);
+    }
+
+    /**
+     * The behavior the name written over {@code extent} reaches, and what it declares it takes.
+     *
+     * <p>Asked of the callee and not of the call. A call is written over everything in it, brackets
+     * included, and the last of those may not be typed yet — the name is written before any of that
+     * and says which declaration this is about.
+     *
+     * <p>Empty where the name reaches no behavior: a helper, a local holding a function, a name that
+     * resolves to nothing. What those take is not written on a `behavior` line, and there is no
+     * declaration here to show.
+     */
+    public Optional<CalledBehavior> calledAt(Region extent) {
+        if (!(sites.written(extent) instanceof Hir.Var.Denoting called)
+                || !(called.reachedAs().denotes() instanceof ValueName.Behavior reached)) {
+            return Optional.empty();
+        }
+        Answer<Map<ValueName.Behavior, Sig>> reachable = db.ask(new Bodies.Reachable(module));
+        Answer<Hir.Module> declaring = db.ask(new Names.Resolved(reached.module()));
+        if (!reachable.present() || !declaring.present()) {
+            return Optional.empty();
+        }
+        Sig sig = reachable.value().get(reached);
+        List<Hir.Param> written = parametersOf(declaring.value(), reached.name());
+        if (sig == null || written == null || sig.inputTypes().size() != written.size()) {
+            // A signature and a declaration that disagree about how many things arrive is a mistake
+            // in that module, reported where it is written. Pairing them off anyway would name an
+            // argument after a parameter that is not the one arriving there.
+            return Optional.empty();
+        }
+        List<CalledBehavior.Takes> takes = new ArrayList<>();
+        for (int at = 0; at < written.size(); at++) {
+            takes.add(new CalledBehavior.Takes(written.get(at).name(),
+                    new TypeFact(sig.inputTypes().get(at), new Evidence.Declared())));
+        }
+        return Optional.of(new CalledBehavior(reached.name(), List.copyOf(takes)));
+    }
+
+    /** The parameters {@code behavior} is declared with, or null where the module declares no such
+     *  behavior or declares it as a composition, which writes none. */
+    private static List<Hir.Param> parametersOf(Hir.Module declaring, String behavior) {
+        for (Hir.BehaviorDef each : declaring.behaviors()) {
+            if (each.written().canonical().equals(behavior)) {
+                return each instanceof Hir.SpecBehavior spec ? spec.params() : null;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The names a namespace offers, in the order it declares them.
+     *
+     * <p>What a module publishes and not what it holds: an author writing {@code m.} may write what
+     * {@code m} exposes, and offering the rest would be offering names that do not resolve. The
+     * module's own {@code exposing} line is that answer, made by the module rather than worked out
+     * here from what it happens to declare.
+     *
+     * <p>Empty for a namespace the language reserves. What is inside one is the standard library's
+     * to say, and this reading has not asked it.
+     */
+    public List<Published> namesIn(MemberReceiver.Namespace namespace) {
+        if (!(namespace instanceof MemberReceiver.Namespace.OfModule(String named, Region _))) {
+            return List.of();
+        }
+        Answer<Hir.Module> offering = db.ask(new Names.Resolved(named));
+        if (!offering.present()) {
+            return List.of();
+        }
+        Hir.Module offered = offering.value();
+        List<Published> out = new ArrayList<>();
+        for (String name : offered.exposing()) {
+            published(offered, name).ifPresent(out::add);
+        }
+        return List.copyOf(out);
+    }
+
+    /**
+     * Which of the things a module declares {@code name} is, or empty where it declares none of
+     * them.
+     *
+     * <p>Empty rather than a fourth kind. A name on an {@code exposing} line that the module does
+     * not declare is a mistake in that module, reported where it is written, and offering it here
+     * would be offering a name that resolves to nothing.
+     */
+    private static Optional<Published> published(Hir.Module offered, String name) {
+        for (Hir.Def def : offered.defs()) {
+            if (def.name().equals(name)) {
+                return Optional.of(new Published.AType(name));
+            }
+        }
+        for (Hir.BehaviorDef behavior : offered.behaviors()) {
+            if (behavior.written().canonical().equals(name)) {
+                return Optional.of(new Published.ABehavior(name));
+            }
+        }
+        for (Hir.FnDef fn : offered.fns()) {
+            // A behavior's implementation is declared under the behavior's name and was answered
+            // above; what is left here is a definition of the module's own.
+            if (fn.written().canonical().equals(name)) {
+                return Optional.of(new Published.ADefinition(name));
+            }
+        }
+        return Optional.empty();
     }
 
     /**

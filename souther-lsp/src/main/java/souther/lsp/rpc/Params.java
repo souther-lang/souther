@@ -36,6 +36,11 @@ public final class Params {
     public record PositionsParams(String uri, java.util.List<Position> positions) {
     }
 
+    /** {@code workspace/symbol}: what is being looked for. Empty asks for everything, which is what
+     *  the protocol says an empty query means. */
+    public record Query(String query) {
+    }
+
     /** {@code textDocument/rename}: the document, the cursor, and the new name to bind. */
     public record RenameParams(String uri, Position position, String newName) {
     }

@@ -50,6 +50,13 @@ public enum LspMethod {
             new Advertisement.StaticCapability("documentHighlightProvider", true)),
     SELECTION_RANGE("textDocument/selectionRange",
             new Advertisement.StaticCapability("selectionRangeProvider", true)),
+    WORKSPACE_SYMBOL("workspace/symbol",
+            new Advertisement.StaticCapability("workspaceSymbolProvider", true)),
+    // `(` and `,` open it: a signature is wanted when an argument is begun, and every argument is
+    // begun by one of the two.
+    SIGNATURE_HELP("textDocument/signatureHelp",
+            new Advertisement.StaticCapability("signatureHelpProvider",
+                    Map.of("triggerCharacters", List.of("(", ",")))),
     CODE_ACTION("textDocument/codeAction",
             new Advertisement.StaticCapability("codeActionProvider",
                     Map.of("resolveProvider", true))),
