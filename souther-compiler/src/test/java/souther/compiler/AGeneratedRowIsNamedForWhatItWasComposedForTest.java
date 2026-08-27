@@ -73,12 +73,10 @@ class AGeneratedRowIsNamedForWhatItWasComposedForTest {
         compilation.answerEverything();
         Map<String, Adequacy.Filling> filling = Adequacy.generatedOf(compilation.db(), compilation.modules().get(0));
         assertNotNull(filling, "the model under test compiles");
-        return GeneratedRows.of(compilation.modules().get(0), filling,
-                boundaries ? Adequacy.generatedForDeclarationsOf(compilation.db(),
-                        compilation.modules().get(0),
-                        new souther.compiler.query.GenerationScope.Module()) : null,
-                Map.of(), boundaries,
-                SourceNameResolver.identity()).text();
+        return GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
+                        souther.compiler.query.OfferingRequest.overTheModule(
+                                compilation.modules().get(0), boundaries)),
+                Map.of(), SourceNameResolver.identity()).text();
     }
 
     /** Two minimum edges of one behavior, which compose one row between them. */
@@ -133,23 +131,16 @@ class AGeneratedRowIsNamedForWhatItWasComposedForTest {
         String block = block(LIMIT, true);
         List<String> offered = names(block);
 
-        assertEquals(7, rows(block),
-                "a row for each class owed one, two of them meeting in one row, and four at the"
-                        + " points of the border:\n" + block);
+        assertEquals(4, rows(block),
+                "two rows for the classes and two at the points of the border:\n" + block);
 
-        // Every class owed a row is said, and each of them once. Two of them come out as one row —
-        // the class at the bottom of the range and the first tier hold the same values — and that
-        // row is offered under neither name. Naming it for whichever of the two arrived first is
-        // a name that says the row is about one thing while it answers two, and joining them into
-        // `a x b` reads as one thing owed at two positions at once. So it is unnamed and what it
-        // fills is said over it, once per class.
-        List<String> said = new ArrayList<>(offered);
-        block.lines().filter(line -> line.contains("fills "))
-                .map(line -> line.substring(line.indexOf("fills ") + "fills ".length()))
-                .forEach(said::add);
-        assertEquals(List.of("request.cost=0 <= x <= 100", "request.cost=100 < x",
-                        "request.tier=Gold", "request.tier=Silver"),
-                said.stream().sorted().toList(), block);
+        // Two of the four classes are named, and the two that are not are where the named rows
+        // stand: the row at the top of the range holds the first tier, and the row for the other
+        // tier holds the bottom of the range. A row is named for what it was composed for, so
+        // neither name moves onto the row that answers it — what a class is offered under is the
+        // row a person writes, and which class that row also settles is in the report.
+        assertEquals(List.of("request.cost=100 < x", "request.tier=Silver"),
+                offered.stream().sorted().toList(), block);
 
         Set<String> distinct = new LinkedHashSet<>(offered);
         assertEquals(offered.size(), distinct.size(),

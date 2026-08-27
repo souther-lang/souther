@@ -3,7 +3,6 @@ package souther.compiler.report;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.fmt.Formatter;
 import souther.compiler.observe.Incompleteness;
-import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.partition.GenerationReason;
 import souther.compiler.partition.GenerationOutcome;
 import souther.compiler.partition.Generator;
@@ -12,6 +11,9 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.DeclaredRows;
 import souther.compiler.query.GenerationScope;
+import souther.compiler.query.OfferItem;
+import souther.compiler.query.Offering;
+import souther.compiler.query.OfferingRequest;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -83,36 +85,17 @@ public final class GeneratedRows {
             if (module != null && !module.equals(name)) {
                 continue;
             }
-            Map<String, Adequacy.Filling> filling;
-            if (behavior != null) {
-                // One behavior, asked about on its own. Generating rows searches the pair space and
-                // composes values at the edges, and a caller that named a behavior would otherwise
-                // pay for every other behavior of the module to find out about the one it asked for.
-                Adequacy.Filling only =
-                        compilation.db().ask(new Adequacy.Generated(name, behavior)).value();
-                filling = only == null ? Map.of() : Map.of(behavior, only);
-            } else {
-                filling = Adequacy.generatedOf(compilation.db(), name);
-            }
-            if (filling == null) {
+            // What this run offers, asked as one question. Which rows go out is settled where both
+            // searches are read ({@link Adequacy#offeredFor}) — a behavior's own and the ones a
+            // declaration's line is owed are work for one person, and a renderer putting them
+            // together would be deciding that where the layout is.
+            Offering offering = Adequacy.offeredFor(compilation.db(),
+                    new OfferingRequest(name, behavior == null ? new GenerationScope.Module()
+                            : new GenerationScope.Behavior(behavior), boundaries));
+            if (offering == null) {
                 continue;
             }
-            // And what the module's own declarations are owed, which is no behavior's and so is in
-            // none of the fillings above. The rows go in beside the rest — a line is one piece of
-            // work and is offered once, in the terms of whichever reading composed it — and what
-            // nothing composed a row for is said afterwards, for the reason every other disposition
-            // is said: a block that printed only what it managed reads as though it filled
-            // everything (issue #1062).
-            //
-            // Only where the caller asked for the edges, as the lines about them are: a caller that
-            // asked for no boundary rows is not asking about these either.
-            DeclaredRows declared = boundaries
-                    ? Adequacy.generatedForDeclarationsOf(compilation.db(), name,
-                            behavior == null ? new GenerationScope.Module()
-                                    : new GenerationScope.Behavior(behavior))
-                    : null;
-            Block one = of(name, filling, declared, WrittenEnsures.of(compilation.db(), name),
-                    boundaries, names);
+            Block one = of(offering, WrittenEnsures.of(compilation.db(), name), names);
             out.append(one.text());
             rows += one.rows();
         }
@@ -141,10 +124,18 @@ public final class GeneratedRows {
      * is said once, under the declaration that drew the line, and cannot be written from evidence
      * that does not support it.
      */
-    private static void declarations(StringBuilder out, DeclaredRows declared) {
+    private static void declarations(StringBuilder out, Offering offering) {
+        DeclaredRows declared = offering.declared();
         java.util.Set<String> said = new java.util.LinkedHashSet<>();
-        for (DeclaredRows.Unmet unmet : declared.unmet()) {
-            switch (unmet) {
+        for (Map.Entry<souther.compiler.partition.BorderObligationPoint, DeclaredRows.Unmet> each
+                : declared.unmet().entrySet()) {
+            // Nothing about a point one of the rows above stands at. What is left to write is what
+            // this says, and a line telling a person no row was composed for something they are
+            // being handed a row for is work that is not left.
+            if (offering.answered().contains(new OfferItem.APointOfALine(each.getKey()))) {
+                continue;
+            }
+            switch (each.getValue()) {
                 // Said once, of the line, and in the declaration's own words. What each reading
                 // proved it of is not repeated: they agree, which is what let this be said at all.
                 case DeclaredRows.Unmet.TheLineCannotBeWritten(var owedBy, var asked, var _) ->
@@ -178,51 +169,23 @@ public final class GeneratedRows {
     }
 
     /**
-     * The whole block for one module, or an empty string where there is nothing to fill.
+     * The block for one offering.
      *
-     * @param module     the module the rows are about, which an attached file names in its header
-     * @param generated  one filling per behavior, keyed the way a report keys them
-     * @param declared   the rows the module's declarations are owed, or null where the caller asked
-     *                   for no boundary rows. One row per point of a line however many behaviors
-     *                   carry the type, and under the behavior whose reading composed it — how many
-     *                   there are was settled where the search was resolved, and this puts each in
-     *                   the block its terms belong to
-     * @param ensures    what each behavior has written in its {@code ensures}, in the author's own
-     *                   words and keyed as {@code generated} is. Read before this is called and
-     *                   handed over: what the source says is not something a renderer works out, and
-     *                   a form of this that could be called without it would be a way of dropping it
-     * @param boundaries whether to add the rows that sit on an edge nothing has been written at
-     * @param names      what the caller calls its sources, for the notes that name one
+     * <p>Which rows go out is settled before this is called and is not decided again here. What
+     * this adds is what they are called and how they are laid out — an arm's name is the report's
+     * word, and a heading, a note and a comment marker are not things a row carries.
      */
-    public static Block of(String module, Map<String, Adequacy.Filling> generated,
-                           DeclaredRows declared, Map<String, List<String>> ensures,
-                           boolean boundaries, SourceNameResolver names) {
-        Map<String, List<Generator.GeneratedRow>> owed = declared == null
-                ? Map.of() : declared.rowsByCarrier();
-        List<Map.Entry<String, Composed>> asked = new ArrayList<>();
-        for (Map.Entry<String, Adequacy.Filling> behavior : generated.entrySet()) {
-            asked.add(Map.entry(behavior.getKey(),
-                    new Composed(behavior.getValue().composed().rows(),
-                            boundaries ? atTheLines(behavior.getValue().boundaries().rows(),
-                                    owed.get(behavior.getKey()))
-                                    : List.of(),
-                            armNames(behavior.getValue()))));
-        }
-        // A behavior with nothing of its own to fill can still be the one reading that composed the
-        // row a declaration is owed. Left out, that row would be resolved and then dropped on the
-        // way to the block.
-        for (Map.Entry<String, List<Generator.GeneratedRow>> carrier : owed.entrySet()) {
-            if (!generated.containsKey(carrier.getKey())) {
-                asked.add(Map.entry(carrier.getKey(),
-                        new Composed(List.of(), carrier.getValue(), Map.of())));
-            }
-        }
+    public static Block of(Offering offering, Map<String, List<String>> ensures,
+                           SourceNameResolver names) {
+        String module = offering.request().module();
+        boolean boundaries = offering.request().boundaries();
+        DeclaredRows declared = offering.declared();
         // Written once and then read three times — printed, counted, and asked whether there is
         // anything to answer. Counting the candidates instead gives a number about work a reader
         // cannot see, and asking the candidates whether the block holds a hole prints the line
         // telling them to fill one over a block that has none.
-        Map<String, List<Offered>> offered = offered(asked);
-        int rows = offered.values().stream().mapToInt(List::size).sum();
+        Map<String, List<Offered>> offered = named(offering);
+        int rows = offering.count();
         StringBuilder out = new StringBuilder();
         if (rows > 0) {
             out.append(String.format(
@@ -233,8 +196,8 @@ public final class GeneratedRows {
                     UNANSWERED));
             out.append(commented(stated(blocks(module, offered), ensures)));
         }
-        for (Map.Entry<String, Adequacy.Filling> behavior : generated.entrySet()) {
-            notes(out, behavior.getKey(), behavior.getValue(), boundaries, names);
+        for (Map.Entry<String, Adequacy.Filling> behavior : offering.searched().entrySet()) {
+            notes(out, behavior.getKey(), behavior.getValue(), boundaries, names, offering);
         }
         // And what the module's declarations are owed that nothing composed a row for. Here rather
         // than after this returns, because what this builds is the block: a caller that rendered
@@ -242,7 +205,7 @@ public final class GeneratedRows {
         // holds, and the one that forgot would print rows with nothing said about the work beside
         // them.
         if (declared != null) {
-            declarations(out, declared);
+            declarations(out, offering);
         }
         // The count leaves with the text. It was worked out here and thrown away, and the one
         // caller that needed it read the text instead.
@@ -267,11 +230,17 @@ public final class GeneratedRows {
      * a list of the author's work. The report says those findings, which is where they belong.
      */
     private static List<Adequacy.GenerationDisposition> shown(Adequacy.Filling filling,
-                                                              boolean boundaries) {
+                                                              boolean boundaries,
+                                                              Offering offering) {
         return filling.generation().stream()
                 .filter(each -> !(each.outcome() instanceof GenerationOutcome.NotApplicable))
                 .filter(each -> boundaries
                         || !(each.finding().about() instanceof About.APointOfABorder))
+                // And nothing about something one of the rows above stands at. What the search for
+                // this finding came to is what it came to, and a person reading the block is being
+                // told what is left to write — which a row in front of them is not.
+                .filter(each -> each.item().stream()
+                        .noneMatch(offering.answered()::contains))
                 .toList();
     }
 
@@ -283,22 +252,15 @@ public final class GeneratedRows {
     /**
      * One row as it will be written, and everything it was composed for.
      *
-     * <p>A candidate is composed once per thing it is owed for, and the positions that thing does
-     * not name hold whatever the row has to hold — so two of them can come out as one row. What is
-     * offered is the row: a reader is handed one piece of work rather than the same values twice.
-     *
-     * <p><b>Every purpose, and not the first.</b> Two purposes converging on one row is a fact
-     * about this run, and dropping one of them keeps a name that says the row is about one thing
-     * while it answers two — which is what a name for the first arrival was. Joining them into one
-     * name is the other way of being wrong: {@code "a x b"} reads as one thing owed at two
-     * positions at once, which is the shape this whole block was written against.
-     *
-     * <p>So one purpose is a name and several are a note apiece over a row with none. The language
-     * lets a row be written without a name and an author names it when they answer it; what it is
-     * for is said in words above it, once per thing.
+     * <p>One name is a name and several are a note apiece over a row with none. Joining them into
+     * one name is the way of being wrong that reads worst: {@code "a x b"} reads as one thing owed
+     * at two positions at once, which is the shape this whole block was written against. The
+     * language lets a row be written without a name and an author names it when they answer it;
+     * what it is for is said in words above it, once per thing.
      *
      * @param inputs   the row's values, in the form they are written in
-     * @param purposes what it was composed for, in the order the things were taken
+     * @param purposes what this layer calls the things it was composed for, in the order they were
+     *                 taken
      */
     private record Offered(String inputs, List<String> purposes) {
 
@@ -333,41 +295,6 @@ public final class GeneratedRows {
     }
 
     /**
-     * What one behavior's rows were composed for: the classes and arms of it, and the lines a rule
-     * draws. Kept apart because a row's name comes from what it was composed for.
-     *
-     * @param armNames what each arm of the body is called, by the probe the plan gave it. The
-     *                 generator composes a row for an arm by that number and spells no name for it:
-     *                 what an arm is called is this layer's word, and a second spelling made where
-     *                 the search runs would be free to drift from the one the finding is written in
-     */
-    private record Composed(List<Generator.GeneratedRow> cells, List<Generator.GeneratedRow> lines,
-                            Map<Integer, String> armNames) {}
-
-    /**
-     * The rows at one behavior's lines: the ones its own readings are owed, and the ones a
-     * declaration is owed that this behavior's reading composed.
-     *
-     * <p>Two sources and one list, because they are one kind of row — a value standing at a line —
-     * and what tells them apart is who owes the line rather than anything a reader of the block
-     * would act on. Where they coincide the block offers one row, which is what it already does for
-     * two of a behavior's own lines that meet.
-     *
-     * <p>Public because it is a question and not a step of the layout: what is offered at one
-     * behavior's lines is what a reader of the block beside that behavior sees, and it is asked
-     * elsewhere. Written twice, the two would come apart the day either half of the join moved.
-     */
-    public static List<Generator.GeneratedRow> atTheLines(List<Generator.GeneratedRow> own,
-                                                          List<Generator.GeneratedRow> owed) {
-        if (owed == null || owed.isEmpty()) {
-            return own;
-        }
-        List<Generator.GeneratedRow> out = new ArrayList<>(own);
-        out.addAll(owed);
-        return List.copyOf(out);
-    }
-
-    /**
      * What each arm of one behavior is called, by the probe the plan gave it.
      *
      * <p>Read off the findings the generation answers, which is where an arm's name is already
@@ -376,6 +303,12 @@ public final class GeneratedRows {
      */
     private static Map<Integer, String> armNames(Adequacy.Filling filling) {
         Map<Integer, String> out = new LinkedHashMap<>();
+        if (filling == null) {
+            // A behavior with no search of its own, which is one that composed a row a declaration
+            // is owed and nothing else. A row at a line is offered without a name, so there is no
+            // arm here to be called anything.
+            return out;
+        }
         for (Adequacy.GenerationDisposition each : filling.generation()) {
             if (each.finding().about() instanceof About.AnArmNoRowGoesThrough(var arm)) {
                 out.put(arm.index(), ArmVocabulary.label(arm));
@@ -391,9 +324,9 @@ public final class GeneratedRows {
      * two things, and `a x b` spelt over the pair reads as an obligation nobody raised — the same
      * fault as naming a row for everything it turns out to settle, arriving from the other side.
      */
-    private static List<String> named(Generator.GeneratedRow row, Map<Integer, String> arms) {
+    private static List<String> named(List<Generator.Purpose> purposes, Map<Integer, String> arms) {
         List<String> out = new ArrayList<>();
-        for (Generator.Purpose purpose : row.purposes()) {
+        for (Generator.Purpose purpose : purposes) {
             if (purpose instanceof Generator.Purpose.ForAnArm(int probe)) {
                 // Left unnamed where nothing named the arm, which is the state of a row nobody has
                 // named yet and is what the language writes for one. A name invented here would be
@@ -409,61 +342,32 @@ public final class GeneratedRows {
     }
 
     /**
-     * The candidates as rows, one per row rather than one per obligation.
+     * The rows this run offers, each under the words this layer calls what it was composed for.
      *
-     * <p>Grouped on what is written, which is what a reader would be pasting twice. Not on the values
-     * themselves: two rows of one behavior meaning the same thing and spelt differently stay two rows,
-     * each naming its own obligation, and that is the direction to be wrong in. A grouping on values
-     * would need an identity for them that nothing here has — a fixture carries the position it was
-     * parsed at and the path it was constructed through — and the row a person reads is the row.
+     * <p>Which rows go out and what each was composed for is {@link Offering}'s; what those things
+     * are called is this layer's. An arm is named by the report ({@link ArmVocabulary}) and a
+     * generation spells no name for one, so the two are joined here — and a row whose arm nothing
+     * named is offered without a name, which is the state of a row nobody has named yet and is what
+     * the language writes for one.
      *
-     * <p>A row is named for what it was composed for and not for everything it turned out to settle.
-     * The two are different questions: which row this is, and what this run of the generator is
-     * handing it. The second changes with the rest of the model — a row written elsewhere can meet a
-     * line this row also sits on, and the line stops being offered — and a name that moved with it
-     * would be a name for the state of the generation rather than for the row.
-     *
-     * <p>A cell can name a row: two cells never compose one row, since a candidate's values follow
-     * from the classes it was composed for, so the cell a row is named by is the row's own and is
-     * there whatever else this run offers. A line cannot. Lines coincide — each probe fills the
-     * positions its own edge does not name from the bottom of their domains, so two minimum edges
-     * compose one row — and which of them is offered is exactly what changes when something else is
-     * written: a row meeting one of the two leaves the other, and a row named for whichever line
-     * happened to be offered would be renamed by an edit that did not touch it. That is the same
-     * fault as naming a row for everything it settles, with the joining written as a choice.
-     *
-     * <p>So a row composed only for lines is offered without a name. Nothing here can name it from
-     * one thing, and the language lets a row be written without one — an unnamed row cannot be
-     * addressed from outside, which is exactly the state of a row nobody has named yet. The author
-     * names it when they answer it. What a row sits on is in the report, where what this run owes is
-     * said.
+     * <p>Names without repeats. Two purposes with one name are one thing said twice, and what tells
+     * them apart is the name rather than the purpose: a class of one position and a class of another
+     * can be written the same way, and a reader handed both would be told the same fact twice.
      */
-    private static Map<String, List<Offered>> offered(List<Map.Entry<String, Composed>> asked) {
-        // One block per behavior, however many kinds of row it holds. Rows of one behavior written
-        // under two headings are legal and read as two lists of something, which they are not.
-        Map<String, Map<String, Offered>> byBehavior = new LinkedHashMap<>();
-        for (Map.Entry<String, Composed> behavior : asked) {
-            Map<String, Offered> here =
-                    byBehavior.computeIfAbsent(behavior.getKey(), _ -> new LinkedHashMap<>());
-            for (Generator.GeneratedRow row : behavior.getValue().cells()) {
-                String inputs = String.join(", ", textsOf(row.inputs()));
-                Offered offered = here.computeIfAbsent(inputs, _ -> new Offered(inputs, List.of()));
-                for (String purpose : named(row, behavior.getValue().armNames())) {
-                    offered = offered.and(purpose);
-                }
-                here.put(inputs, offered);
-            }
-            // A row composed for an edge is offered without one. The points of a border coincide —
-            // each probe fills the positions its own edge does not name from the bottom of their
-            // domains, so two minimum edges compose one row — and which of them is offered is
-            // exactly what changes when something else is written.
-            for (Generator.GeneratedRow row : behavior.getValue().lines()) {
-                String inputs = String.join(", ", textsOf(row.inputs()));
-                here.putIfAbsent(inputs, new Offered(inputs, List.of()));
-            }
-        }
+    private static Map<String, List<Offered>> named(Offering offering) {
         Map<String, List<Offered>> out = new LinkedHashMap<>();
-        byBehavior.forEach((behavior, rows) -> out.put(behavior, List.copyOf(rows.values())));
+        offering.rows().forEach((behavior, rows) -> {
+            Map<Integer, String> arms = armNames(offering.searched().get(behavior));
+            List<Offered> here = new ArrayList<>();
+            for (souther.compiler.query.OfferedRow row : rows) {
+                Offered offered = new Offered(row.key().inputs(), List.of());
+                for (String name : named(row.namedFor(), arms)) {
+                    offered = offered.and(name);
+                }
+                here.add(offered);
+            }
+            out.put(behavior, List.copyOf(here));
+        });
         return out;
     }
 
@@ -593,7 +497,7 @@ public final class GeneratedRows {
      * the rows it was offering were printed two lines above the line saying it had stopped.
      */
     private static void notes(StringBuilder out, String behavior, Adequacy.Filling filling,
-                              boolean boundaries, SourceNameResolver names) {
+                              boolean boundaries, SourceNameResolver names, Offering offering) {
         Set<String> said = new LinkedHashSet<>();
         List<Generator.UnresolvedCombination> left =
                 new ArrayList<>(filling.composed().unresolved());
@@ -607,7 +511,7 @@ public final class GeneratedRows {
         // Every finding a row could answer, and not only the ones a strategy took. One printed in
         // the report and left out of this block is one an author is told nothing about, while the
         // rows above it read as though they filled everything.
-        for (Adequacy.GenerationDisposition each : shown(filling, boundaries)) {
+        for (Adequacy.GenerationDisposition each : shown(filling, boundaries, offering)) {
             switch (each.outcome()) {
                 case GenerationOutcome.Generated _ -> { }
                 // Each of what was tried, because they are not one fact: a combination the model
@@ -810,9 +714,6 @@ public final class GeneratedRows {
         };
     }
 
-    private static List<String> textsOf(List<FixtureTemplate> inputs) {
-        return inputs.stream().map(FixtureTemplate::text).toList();
-    }
 
     private GeneratedRows() {}
 }

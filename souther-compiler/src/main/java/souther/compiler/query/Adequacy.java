@@ -20,7 +20,6 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.observe.Disposition;
 import souther.compiler.observe.Incompleteness;
-import souther.compiler.observe.Counting;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.Stage;
 import souther.compiler.partition.Axis;
@@ -29,6 +28,7 @@ import souther.compiler.inputs.InputDomain;
 import souther.compiler.partition.GenerationOutcome;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.InputClassifications;
+import souther.compiler.partition.ObservedInputs;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
@@ -1565,6 +1565,57 @@ public final class Adequacy {
     }
 
     /**
+     * The rows one request is offered, from the two searches that compose them.
+     *
+     * <p>Both halves and one answer. A behavior's own rows and the rows a declaration's line is owed
+     * are asked for in two ways and are work for one person, so which rows go out is settled here
+     * rather than wherever they are printed — and the joining of them is a question about the work
+     * rather than a step of the layout.
+     *
+     * <p>Here rather than in a key of its own, for the reason the two aggregations above are: what a
+     * generation costs is paid by {@link Generated} and {@link BoundarySearch}, which are keyed, so
+     * nothing is searched twice however many times this is asked. What identifies the question is
+     * the request, and it is a value the caller states.
+     */
+    public static Offering offeredFor(Db db, OfferingRequest request) {
+        Map<String, Filling> generated;
+        if (request.scope() instanceof GenerationScope.Behavior one) {
+            // One behavior, asked about on its own. Generating rows searches the pair space and
+            // composes values at the edges, and a caller that named a behavior would otherwise pay
+            // for every other behavior of the module to find out about the one it asked for.
+            Filling only = db.ask(new Generated(request.module(), one.name())).value();
+            generated = only == null ? Map.of() : Map.of(one.name(), only);
+        } else {
+            generated = generatedOf(db, request.module());
+        }
+        if (generated == null) {
+            return null;
+        }
+        // And what the module's own declarations are owed, which is no behavior's and so is in none
+        // of the fillings above. Asked only where the request asked for the edges: a request that
+        // asked for no boundary rows is not asking about these either.
+        Composition composed = Composition.composed(request, generated, request.boundaries()
+                ? generatedForDeclarationsOf(db, request.module(), request.scope()) : null);
+        // And then only the rows whose going would cost the offering something. A candidate is
+        // composed for one thing and the positions that thing does not name hold whatever the row
+        // has to hold, so a row composed for one item can stand where another item asks — and the
+        // two went out as two pieces of work because nothing asked what an offered row settles.
+        Settlements table = Settlements.of(db, composed);
+        Set<RowKey> kept = table.keeping();
+        // And what the rows that are left answer, which is what the block may not say nothing
+        // offers. A row composed for one thing standing where another asks is the whole of this,
+        // and a note printed over it would send a person after work that is already in front of
+        // them.
+        Set<OfferItem> answered = new LinkedHashSet<>();
+        for (OfferItem item : table.requested()) {
+            if (kept.stream().anyMatch(row -> table.at(row, item).settles())) {
+                answered.add(item);
+            }
+        }
+        return composed.keeping(kept, answered);
+    }
+
+    /**
      * What one behavior's reading of one line holds at one of its points.
      *
      * <p>Asked of {@link BoundarySearch} and never of the measurement. The two are both called an
@@ -1637,6 +1688,68 @@ public final class Adequacy {
             }
         }
         return Ordered.map(out);
+    }
+
+    /**
+     * How a row of one behavior is read: where its positions are, and what the model divides them
+     * into.
+     *
+     * <p>What it takes to read a row, and nothing about what anybody was asked to compose. The two
+     * arrived together while the only reader was the search that composes rows — so a row composed
+     * by a behavior nothing else was asked of could not be read at all, and every question put to it
+     * came back as one nothing could tell about.
+     *
+     * @param axes empty where the model divides this behavior's positions into nothing, or where
+     *             what it divides them into could not be read. A row still has values and still
+     *             stands where it stands; what is missing is the classes to place them in
+     */
+    record HowARowIsRead(souther.compiler.partition.BehaviorInputs where, List<Axis> axes) {
+
+        HowARowIsRead {
+            axes = List.copyOf(axes);
+        }
+    }
+
+    /**
+     * The reading, from the pieces a caller already holds.
+     *
+     * <p>The one place a {@link souther.compiler.partition.BehaviorInputs} is made for a generation.
+     * A second assembly of the same four things is a second answer to where a row's values are, and
+     * the two would agree until one of them moved.
+     */
+    static HowARowIsRead readingOf(Hir.SpecBehavior spec, Sig sig, Symbols symbols,
+                                   souther.compiler.check.ReadingPolicy policy,
+                                   souther.compiler.partition.Partitions.Partitioning divided) {
+        List<String> parameters = spec.params().stream().map(Hir.Param::name).toList();
+        return new HowARowIsRead(
+                new souther.compiler.partition.BehaviorInputs(parameters, sig.inputTypes(),
+                        symbols, policy),
+                divided == null ? List.of() : divided.axes());
+    }
+
+    /**
+     * The same, asked of the store for any behavior of a module.
+     *
+     * <p>For a reader that holds a row and not a search. A row a declaration's line is owed is
+     * composed by whichever reading could compose it, and that behavior need not be one anything
+     * else was asked about — so what it takes to read the row is asked for here rather than taken
+     * off an answer about generating rows, which such a behavior has none of.
+     */
+    static HowARowIsRead readingOf(Db db, String module, String behavior) {
+        souther.compiler.check.Prepared prepared = db.ask(new Shapes.Prepared(module)).value();
+        Map<String, Sig> sigs = db.ask(new Bodies.Signatures(module)).value();
+        Answer<Symbols> symbols = Names.derivedSymbols(db, module);
+        souther.compiler.check.ReadingPolicy policy = db.ask(new Front.Reading()).value();
+        if (prepared == null || sigs == null || !symbols.present() || policy == null) {
+            return null;
+        }
+        Hir.SpecBehavior spec = specOf(prepared, behavior);
+        Sig sig = sigs.get(behavior);
+        if (spec == null || sig == null) {
+            return null;
+        }
+        return readingOf(spec, sig, symbols.value(), policy,
+                db.ask(new Divided(module, behavior)).value());
     }
 
     /** The behavior of that name that has inputs of its own, or null. A composition's inputs are its
@@ -2639,7 +2752,25 @@ public final class Adequacy {
      * finding: the two are separate readings of one set of findings, and a name that said gap kept
      * the older arrangement alive in every reader that met it.
      */
-    public record GenerationDisposition(Finding finding, GenerationOutcome outcome) {}
+    public record GenerationDisposition(Finding finding, java.util.Optional<OfferItem> item,
+                                        GenerationOutcome outcome) {
+
+        public GenerationDisposition {
+            item = item == null ? java.util.Optional.empty() : item;
+        }
+
+        /**
+         * The finding and what came of it, for a finding nothing offers a row for.
+         *
+         * <p>Empty and not a name for the finding: what a row would be offered for is the thing an
+         * offering answers, and a measure this compiler could not make is not one of those. A
+         * reader asking whether something else answers this has nothing to ask about, which is what
+         * having no item says.
+         */
+        public GenerationDisposition(Finding finding, GenerationOutcome outcome) {
+            this(finding, java.util.Optional.empty(), outcome);
+        }
+    }
 
     public record Generated(String name, String behavior) implements Key<Filling> {
 
@@ -2780,7 +2911,8 @@ public final class Adequacy {
             List<GenerationDisposition> out = new ArrayList<>();
             for (Finding finding : findings) {
                 GenerationOutcome none = whereNoRowCouldAnswer(finding.about());
-                out.add(new GenerationDisposition(finding, none != null ? none
+                out.add(new GenerationDisposition(finding, itemOf(finding, composed, spec),
+                        none != null ? none
                         : switch (finding.about()) {
                             case About.APointOfABorder(var point) -> atEdge(finding, point, edges);
                             case About.ACaseNoRowAppliesItTo(var input, var missing) ->
@@ -2802,6 +2934,56 @@ public final class Adequacy {
                         }));
             }
             return out;
+        }
+
+        /**
+         * What a row would be offered for, where the finding is something a row is offered for.
+         *
+         * <p>Made where the outcome is and from the same reading. What tells two of them apart is
+         * the thing itself — a class of a position, an arm of a body, a point of a line — and a
+         * second walk that worked the identity out again would be free to name a different one than
+         * the search answered for.
+         *
+         * <p>Empty for the rest. A case whose position this run has no axis at is not something a
+         * row is offered for, and neither is a measure this compiler could not make.
+         */
+        private static java.util.Optional<OfferItem> itemOf(
+                Finding finding, souther.compiler.partition.FillResult composed,
+                Hir.SpecBehavior spec) {
+            return switch (finding.about()) {
+                case About.APointOfABorder(var point) ->
+                        java.util.Optional.of(new OfferItem.APointOfALine(point.owed()));
+                case About.AnArmNoRowGoesThrough(var arm) -> java.util.Optional.of(
+                        new OfferItem.AnArm(new Generator.ArmOwed(arm.index())));
+                case About.AClassNoRowIsIn(var missing) -> java.util.Optional.of(
+                        new OfferItem.AClass(new Generator.ClassOwed(missing.axis().at(),
+                                missing.name())));
+                case About.ACaseNoRowAppliesItTo(var input, var missing) ->
+                        classOfTheCase(input, missing, composed, spec)
+                                .map(OfferItem.AClass::new);
+                default -> java.util.Optional.empty();
+            };
+        }
+
+        /**
+         * The class a case of an input is, where this run has an axis at that position.
+         *
+         * <p>Asked of the subject the search was made over, which is what says what this run had
+         * classes for — the same question {@link #atCase} puts, so that what is offered for the
+         * case and what it is called are one thing.
+         */
+        private static java.util.Optional<Generator.ClassOwed> classOfTheCase(
+                InputCaseEvidence input, TypeSymbol case_,
+                souther.compiler.partition.FillResult composed, Hir.SpecBehavior spec) {
+            int at = input.at();
+            if (at < 0 || at >= spec.params().size()) {
+                return java.util.Optional.empty();
+            }
+            Generator.ClassOwed owed = new Generator.ClassOwed(
+                    new souther.compiler.partition.AxisId(spec.name(), spec.params().get(at).name()),
+                    case_.name());
+            return composed.plan().subject().divides(owed)
+                    ? java.util.Optional.of(owed) : java.util.Optional.empty();
         }
 
         /**
@@ -3009,21 +3191,12 @@ public final class Adequacy {
         private static GenerationOutcome atCase(InputCaseEvidence input, TypeSymbol case_,
                                                 souther.compiler.partition.FillResult composed,
                                                 Hir.SpecBehavior spec) {
-            String missing = case_.name();
-            int at = input.at();
-            String parameter = at >= 0 && at < spec.params().size()
-                    ? spec.params().get(at).name() : null;
-            if (parameter == null) {
-                return new GenerationOutcome.NotSupported(
-                        GenerationOutcome.NotSupported.Reason.NO_AXIS_AT_THIS_POSITION);
-            }
             // Asked of the subject the search was made over, which is what says what this run had
             // classes for. Worked out from a partition's axes beside it, the answer was a second
             // reading of the search's own universe, and a case whose position the search divides
             // could be told there was no axis there.
-            Generator.ClassOwed owed = new Generator.ClassOwed(
-                    new souther.compiler.partition.AxisId(spec.name(), parameter), missing);
-            if (!composed.plan().subject().divides(owed)) {
+            if (!(classOfTheCase(input, case_, composed, spec)
+                    .orElse(null) instanceof Generator.ClassOwed owed)) {
                 return new GenerationOutcome.NotSupported(
                         GenerationOutcome.NotSupported.Reason.NO_AXIS_AT_THIS_POSITION);
             }
@@ -3053,7 +3226,7 @@ public final class Adequacy {
             // What this behavior is owed a row for, as the values a row is composed at: one per
             // point, since a row at a point answers everything a row there is owed for.
             for (OwedBoundaryPoint point
-                    : OwedBoundaryPoint.oneForEachPoint(OwedBoundaryPoint.across(boundaries))) {
+                    : OwedBoundaryPoint.oneForEachPoint(OwedBoundaryPoint.across(boundaries)).at()) {
                 ItemAssessment.Owed each = point.item();
                 switch (each.attempt()) {
                     case ItemAssessment.Attempt.Built built -> rows.add(built.row());
@@ -3096,27 +3269,6 @@ public final class Adequacy {
             }
             return new Generator.GenerationResult(rows, unresolved,
                     stopped.stream().distinct().toList());
-        }
-
-        /**
-         * A way to run this behavior's composed rows, said in the generator's words.
-         *
-         * <p>Two seams and one adaptation, the way the check that a value can be built already is.
-         * What runs a row is the evaluation's business and speaks in what a fixture states; what a
-         * generator has is a template it composed. Neither has to know the other's word for a row.
-         */
-        private static Generator.Trial runningRowsOf(
-                RowTrials trials, String behavior, Sig sig) {
-            if (trials == null) {
-                return Generator.Trial.NOTHING_RUNS;
-            }
-            RowTrials.OfBehavior application =
-                    trials.forBehavior(behavior, sig);
-            return inputs -> application
-                    .run(inputs.stream()
-                            .map(souther.compiler.partition.FixtureTemplate::value).toList())
-                    .<Generator.Watched>map(Generator.Watched.Ran::new)
-                    .orElseGet(Generator.Watched.NoAccount::new);
         }
 
         /**
@@ -3289,14 +3441,13 @@ public final class Adequacy {
                 souther.compiler.check.ReadingPolicy policy,
                 souther.compiler.partition.Partitions.Partitioning partitioning,
                 InputDomain domain, List<Finding> owed, PartitionEvidence evidence) {
-            List<String> parameters = spec.params().stream().map(Hir.Param::name).toList();
             // One reading of what the behavior takes, for both halves of this: the rows already
-            // written are read by it, and the rows offered are generated from it.
-            souther.compiler.partition.BehaviorInputs inputs =
-                    new souther.compiler.partition.BehaviorInputs(parameters, sig.inputTypes(),
-                            symbols, policy);
+            // written are read by it, and the rows offered are generated from it. Made where every
+            // reading of a row is made, so that a reader holding one of these rows and a reader
+            // holding none read it the same way.
+            HowARowIsRead read = readingOf(spec, sig, symbols, policy, partitioning);
             Generator.Subject subject =
-                    new Generator.Subject(spec.name(), inputs, partitioning.axes(),
+                    new Generator.Subject(spec.name(), read.where(), read.axes(),
                             souther.compiler.partition.HeldCounts.of(domain, symbols));
             // The arms this build is owed a row at, which the measure established and this reads.
             // A combination the body settles together is where one is looked for and is not itself
@@ -3403,6 +3554,29 @@ public final class Adequacy {
         }
         ExampleExecution asked = ExampleExecutions.of(db, module);
         return asked == null ? null : db.execution().trials(asked, armsAsked(db));
+    }
+
+    /**
+     * A way to run one behavior's composed rows, said in the generator's words.
+     *
+     * <p>Two seams and one adaptation, the way the check that a value can be built already is. What
+     * runs a row is the evaluation's business and speaks in what a fixture states; what a generator
+     * has is a template it composed. Neither has to know the other's word for a row.
+     *
+     * <p>Beside {@link #trialling} rather than inside the search, because running a composed row is
+     * what anybody asking after one does — the search that composes them, and whoever asks what one
+     * of them would settle.
+     */
+    static Generator.Trial runningRowsOf(RowTrials trials, String behavior, Sig sig) {
+        if (trials == null) {
+            return Generator.Trial.NOTHING_RUNS;
+        }
+        RowTrials.OfBehavior application = trials.forBehavior(behavior, sig);
+        return inputs -> application
+                .run(inputs.stream()
+                        .map(souther.compiler.partition.FixtureTemplate::value).toList())
+                .<Generator.Watched>map(Generator.Watched.Ran::new)
+                .orElseGet(Generator.Watched.NoAccount::new);
     }
 
     /**
@@ -4740,15 +4914,14 @@ public final class Adequacy {
     /**
      * What a row is known to have done.
      *
-     * <p>Read as a {@code switch} so that a counting this does not know about is a compile error
-     * here rather than a row silently counted as having done nothing. A row whose counting was never
-     * read is known to have done none of it, and that it was left undecided is said where the row is
-     * reported.
+     * <p>For the two readers here that a run reaching nothing and a run nobody watched are one
+     * answer for. A row whose counting was never read is known to have done none of it, and that it
+     * was left undecided is said where the row is reported.
      */
     private static souther.compiler.coverage.Observation seenBy(RowOutcome row) {
-        return switch (row.run().counting()) {
-            case Counting.Read read -> read.observation();
-            case Counting.Unread _ -> souther.compiler.coverage.Observation.NONE;
+        return switch (ObservedInputs.of(row).watched()) {
+            case Generator.Watched.Ran(var account) -> account;
+            case Generator.Watched.NoAccount _ -> souther.compiler.coverage.Observation.NONE;
         };
     }
 
@@ -4768,11 +4941,10 @@ public final class Adequacy {
             // row that reached nothing leaves and is a different thing to have found out.
             return new souther.compiler.partition.Generator.Watched.NoAccount();
         }
-        return switch (row.run().counting()) {
-            case Counting.Read read ->
-                    new souther.compiler.partition.Generator.Watched.Ran(read.observation());
-            case Counting.Unread _ -> new souther.compiler.partition.Generator.Watched.NoAccount();
-        };
+        // What the row's own run came to, which is one reading and is made where a tuple of values
+        // is read. Whether this build was recording is the question above and is this caller's: it
+        // follows from what was asked for rather than from the row.
+        return ObservedInputs.of(row).watched();
     }
 
 }
