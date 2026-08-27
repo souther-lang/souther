@@ -6,6 +6,7 @@ import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.source.SourceId;
 
+
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -46,9 +47,17 @@ public final class AuthoredSites {
         record OneRegionTwoSources(Region extent) implements Census {}
     }
 
-    private final Map<Region, SourceSiteId> byExtent;
+    /**
+     * The occurrences, each under the characters it was written over.
+     *
+     * <p>The expression is kept beside the identity rather than looked up again. A second walk to
+     * find the node at an extent would be a second answer about which occurrence an extent is, from
+     * a walk that has not checked what this one checked — and the check is the whole of what an
+     * identity here is worth.
+     */
+    private final Map<Region, Hir.Expr> byExtent;
 
-    private AuthoredSites(Map<Region, SourceSiteId> byExtent) {
+    private AuthoredSites(Map<Region, Hir.Expr> byExtent) {
         this.byExtent = Map.copyOf(byExtent);
     }
 
@@ -76,7 +85,53 @@ public final class AuthoredSites {
      * everything, which is the answer a lookup must never give.
      */
     SourceSiteId site(Region extent) {
+        return extent != null && byExtent.containsKey(extent) ? new SourceSiteId(extent) : null;
+    }
+
+    /** What was written over {@code extent}, or null where nothing was. The identity's whole content
+     *  is the extent, so this is that occurrence and not another one that happens to be there. */
+    Hir.Expr written(Region extent) {
         return extent == null ? null : byExtent.get(extent);
+    }
+
+    /**
+     * The narrowest occurrence written over {@code at}, or null where none is.
+     *
+     * <p>A different question from {@link #site}, and kept apart from it by name as well as by
+     * signature. That one is handed an extent by whoever read it off the tree and answers whether it
+     * is an occurrence; this one is handed a place somebody's cursor is at and answers which
+     * occurrence they are in. Several are, one inside another, and the narrowest is the one they are
+     * looking at.
+     *
+     * <p>The containment is written out rather than taken from {@code Region.encloses}, which is
+     * true of a region that is nowhere and so true of everything — an answer a lookup must never
+     * give.
+     */
+    Region innermostContaining(SourcePos at) {
+        Region narrowest = null;
+        for (Region extent : byExtent.keySet()) {
+            if (contains(extent, at) && (narrowest == null || contains(narrowest, extent))) {
+                narrowest = extent;
+            }
+        }
+        return narrowest;
+    }
+
+    /** Whether {@code at} is within {@code extent} — from its start inclusive to its end exclusive,
+     *  which is what a region is, and in the text the region is in. */
+    private static boolean contains(Region extent, SourcePos at) {
+        return extent.start().isInTheSameTextAs(at)
+                && !before(at, extent.start()) && before(at, extent.end());
+    }
+
+    /** Whether {@code outer} covers the whole of {@code inner}, ends allowed to meet. */
+    private static boolean contains(Region outer, Region inner) {
+        return outer.start().isInTheSameTextAs(inner.start())
+                && !before(inner.start(), outer.start()) && !before(outer.end(), inner.end());
+    }
+
+    private static boolean before(SourcePos a, SourcePos b) {
+        return a.line() != b.line() ? a.line() < b.line() : a.column() < b.column();
     }
 
     @Override
@@ -103,7 +158,7 @@ public final class AuthoredSites {
      */
     private static final class Walk {
 
-        private final Map<Region, SourceSiteId> byExtent = new LinkedHashMap<>();
+        private final Map<Region, Hir.Expr> byExtent = new LinkedHashMap<>();
         private Census refusal;
 
         void module(Hir.Module module) {
@@ -252,27 +307,27 @@ public final class AuthoredSites {
             }
             switch (e) {
                 case Hir.IntLit _, Hir.DecimalLit _, Hir.StringLit _, Hir.BoolLit _, Hir.Var _,
-                     Hir.Unreachable _ -> take(e.region());
+                     Hir.Unreachable _ -> take(e);
                 case Hir.Neg neg -> {
-                    take(e.region());
+                    take(e);
                     expr(neg.operand());
                 }
                 case Hir.FieldAccess access -> {
-                    take(e.region());
+                    take(e);
                     expr(access.target());
                 }
                 case Hir.Apply apply -> {
-                    take(e.region());
+                    take(e);
                     expr(apply.function());
                     each(apply.args());
                 }
                 case Hir.Binary binary -> {
-                    take(e.region());
+                    take(e);
                     expr(binary.left());
                     expr(binary.right());
                 }
                 case Hir.NewData data -> {
-                    take(e.region());
+                    take(e);
                     for (Hir.FieldInit init : data.inits()) {
                         expr(init.value());
                     }
@@ -281,20 +336,20 @@ public final class AuthoredSites {
                     }
                 }
                 case Hir.Match match -> {
-                    take(e.region());
+                    take(e);
                     expr(match.scrutinee());
                     for (Hir.Case one : match.cases()) {
                         expr(one.body());
                     }
                 }
                 case Hir.If branch -> {
-                    take(e.region());
+                    take(e);
                     expr(branch.cond());
                     expr(branch.then());
                     expr(branch.els());
                 }
                 case Hir.IfConstructed attempt -> {
-                    take(e.region());
+                    take(e);
                     expr(attempt.construct());
                     expr(attempt.then());
                     for (Hir.ElseArm arm : attempt.els()) {
@@ -302,33 +357,33 @@ public final class AuthoredSites {
                     }
                 }
                 case Hir.ListLit list -> {
-                    take(e.region());
+                    take(e);
                     each(list.elements());
                 }
                 case Hir.RowCollection collection -> {
-                    take(e.region());
+                    take(e);
                     each(collection.elements());
                 }
                 case Hir.Tuple tuple -> {
-                    take(e.region());
+                    take(e);
                     each(tuple.elements());
                 }
                 case Hir.TupleGet get -> {
-                    take(e.region());
+                    take(e);
                     expr(get.tuple());
                 }
                 case Hir.ListComp comp -> {
-                    take(e.region());
+                    take(e);
                     expr(comp.element());
                     each(comp.guards());
                 }
                 case Hir.LetIn let -> {
-                    take(e.region());
+                    take(e);
                     expr(let.value());
                     expr(let.body());
                 }
                 case Hir.Block block -> {
-                    take(e.region());
+                    take(e);
                     expr(block.body());
                 }
                 case Hir.Expansion _ -> { }
@@ -350,7 +405,8 @@ public final class AuthoredSites {
          * occurrences of this source. What is refused is a region that names two sources: a region is
          * a stretch of one text, and one that is not says nothing about how far anything runs.
          */
-        private void take(Region extent) {
+        private void take(Hir.Expr written) {
+            Region extent = written.region();
             if (extent == null) {
                 return;
             }
@@ -366,7 +422,7 @@ public final class AuthoredSites {
                 refusal = new Census.OneRegionTwoSources(extent);
                 return;
             }
-            if (byExtent.putIfAbsent(extent, new SourceSiteId(extent)) != null) {
+            if (byExtent.putIfAbsent(extent, written) != null) {
                 refusal = new Census.TwoOccurrencesOneExtent(extent);
             }
         }
