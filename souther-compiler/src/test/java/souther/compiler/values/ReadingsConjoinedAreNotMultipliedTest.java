@@ -8,7 +8,6 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -90,18 +89,17 @@ class ReadingsConjoinedAreNotMultipliedTest {
      * The readings of a component are met in the order they arrived, not in the order they were
      * reached.
      *
-     * <p>{@link AdmissibleValues#meet} does not answer the same either way. What stopped a
-     * position's rules from being read is the first reason given for it, so two readings that both
-     * went unread at one position are told apart by which of them was met first — and that has to be
-     * which of them arrived, since the order a conjunction holds its readings in is the order they
-     * came.
+     * <p>{@link AdmissibleValues#meet} does not answer the same either way. Every reason two
+     * readings gave at one position is kept, and they are kept in the order the readings were met —
+     * so which order that is decides the order an author is shown their own rules in, and it has to
+     * be the order the readings arrived, since that is the order a conjunction holds them in.
      *
      * <p>Three readings met at once, in a shape where the two orders differ. Held apart are one over
      * {@code {a, b}} and one over {@code {x}}, which share nothing; met with them is one over
      * {@code {b, x}}, which reaches both. Walking out of the first, {@code b} leads to the bridge and
      * the bridge leads to the third — so the bridge is reached second and the third last, while the
      * order they arrived in is the other way round. Both of the last two say why {@code x} went
-     * unread, and which of them is heard is the whole difference.
+     * unread, and the order they are said in is the whole difference.
      */
     @Test
     void aComponentIsMetInTheOrderItsReadingsArrived() {
@@ -120,8 +118,9 @@ class ReadingsConjoinedAreNotMultipliedTest {
                 apart.meet(ConjoinedAdmissibleValues.of(bridge));
 
         assertEquals(1, joined.factors().size(), "and the third reaches both of them");
-        assertEquals(UnreadReason.FORM_NOT_READ, joined.whyUnread("x"),
-                "the reading that arrived first is the one that says why");
+        assertEquals(List.of(UnreadReason.FORM_NOT_READ, UnreadReason.RELATES_TWO_POSITIONS),
+                joined.whyUnread("x"),
+                "both readings say why, in the order they arrived");
     }
 
     /**
@@ -139,7 +138,7 @@ class ReadingsConjoinedAreNotMultipliedTest {
         assertFalse(read.subjects().contains("elsewhere"));
         assertTrue(read.at("elsewhere").isAny(), "every value stands at a position nothing named");
         assertTrue(read.projectionExactAt("elsewhere"));
-        assertNull(read.whyUnread("elsewhere"));
+        assertEquals(List.of(), read.whyUnread("elsewhere"));
 
         assertTrue(ConjoinedAdmissibleValues.of(read).at("elsewhere").isAny());
         assertTrue(ConjoinedAdmissibleValues.<String>top().at("elsewhere").isAny(),

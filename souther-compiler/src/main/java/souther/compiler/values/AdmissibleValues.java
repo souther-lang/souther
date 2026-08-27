@@ -1,8 +1,10 @@
 package souther.compiler.values;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.BinaryOperator;
@@ -93,7 +95,7 @@ import java.util.stream.Collectors;
  * same clause two ways depending on where its brackets fell.
  */
 public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
-                                  Map<A, UnreadReason> standing,
+                                  Map<A, List<UnreadReason>> standing,
                                   boolean dropped,
                                   Map<A, ValueSet> guaranteed, ValueSet defaultGuaranteed,
                                   boolean guaranteedTogether,
@@ -181,6 +183,15 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
      *                different work and reported differently, and a reader handed the positions
      *                alone would have to go back to the rules to find out which it was.
      *
+     *                <p><b>Every reason and not the first of them.</b> One position is named by as
+     *                many parts of a clause as the author wrote about it, and two of those can stop
+     *                this reading in two ways: {@code a /= b} relates the position to another and
+     *                {@code String.matches(p, a)} is a form this has no word for, and each is
+     *                lifted by different work. Kept as one, which of the two a reader was shown
+     *                turned on the order the parts were met in, and the other was gone with nothing
+     *                saying so. In the order they were met, which is the order the author wrote
+     *                them, so that two runs over one model produce the same list.
+     *
      *                <p><b>Not the positions this cannot speak for.</b> A rule left standing where
      *                the alternatives cover the position between them is one nothing there is
      *                answerable for, and it is held all the same, since whether they still cover it
@@ -230,7 +241,7 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
         // declaration, because a list written here is one a part added later is missing from and
         // a list written there would be a copy of it with the same hole.
         perPosition = said(perPosition);
-        standing = Collections.unmodifiableMap(new LinkedHashMap<>(standing));
+        standing = heldReasons(standing);
         // A guarantee empty at one position is empty at all of them. What is promised is one set
         // per position standing for the product of them, and a product with an empty side is
         // empty — so there is no value at any position that this can promise. This is also where a
@@ -248,6 +259,23 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
         // same on two compiles of one model.
         tangled = Collections.unmodifiableSet(new LinkedHashSet<>(tangled));
         widened = Collections.unmodifiableSet(new LinkedHashSet<>(widened));
+    }
+
+    /**
+     * The reasons kept as they were given, and unable to be changed after.
+     *
+     * <p>A position with an empty list is left out. What the map answers is which positions a rule
+     * was left standing at, and one whose list is empty is not one of them — kept, it would be a
+     * position {@link #speaksFor} calls unanswerable with no reason to give for it.
+     */
+    private static <A> Map<A, List<UnreadReason>> heldReasons(Map<A, List<UnreadReason>> why) {
+        Map<A, List<UnreadReason>> out = new LinkedHashMap<>();
+        why.forEach((atom, reasons) -> {
+            if (!reasons.isEmpty()) {
+                out.put(atom, List.copyOf(reasons));
+            }
+        });
+        return Collections.unmodifiableMap(out);
     }
 
     /** What was said, which is what is not {@link ValueSet#ANY}: a position nothing narrowed is
@@ -358,8 +386,8 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
      * was not read, and what that costs is settled where it is joined rather than here.
      */
     public static <A> AdmissibleValues<A> unreadable(Set<A> named, UnreadReason why) {
-        Map<A, UnreadReason> spoiled = new LinkedHashMap<>();
-        named.forEach(each -> spoiled.put(each, why));
+        Map<A, List<UnreadReason>> spoiled = new LinkedHashMap<>();
+        named.forEach(each -> spoiled.put(each, List.of(why)));
         // Nothing is guaranteed anywhere, and at the positions it does not name as much as at the
         // ones it does: what a rule this has no word for admits is not known, so a choice offering
         // it as an alternative is offering nothing that can be counted on.
@@ -425,9 +453,16 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
         return !standing.containsKey(atom) || guaranteedAt(atom).equals(at(atom));
     }
 
-    /** What stopped this reading from speaking for {@code atom}, or null where nothing did. */
-    public UnreadReason whyUnread(A atom) {
-        return speaksFor(atom) ? null : standing.get(atom);
+    /**
+     * Everything that stopped this reading from speaking for {@code atom}, empty where nothing did.
+     *
+     * <p>Every one of them, in the order the parts of the clause were met. A part this could not
+     * take in is not an account of the part written beside it, so a caller choosing among them is
+     * choosing which of an author's rules to tell them about — and the choice would be made here,
+     * where the only thing to choose by is which came first.
+     */
+    public List<UnreadReason> whyUnread(A atom) {
+        return speaksFor(atom) ? List.of() : standing.getOrDefault(atom, List.of());
     }
 
     /** Whether nothing satisfies these rules, at a position or otherwise. */
@@ -635,7 +670,7 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
         Map<A, ValueSet> covered = guaranteedBy(guaranteed, defaultGuaranteed,
                 other.guaranteed, other.defaultGuaranteed, ValueSet::join);
         ValueSet coveredElsewhere = defaultGuaranteed.join(other.defaultGuaranteed);
-        Map<A, UnreadReason> spoiled = union(standing, other.standing);
+        Map<A, List<UnreadReason>> spoiled = union(standing, other.standing);
         // Spoiled by there having been an alternative this could not read, which is what happened
         // to them: a value satisfying that branch is under no obligation from this one. Not by what
         // the unread rule was about — a rule relating two other positions relates this one to
@@ -803,25 +838,56 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
         return guaranteed.keySet();
     }
 
-    /** The same, with {@code these} left open by an alternative — where nothing has spoiled them
-     *  already. A reason already recorded for a position is a rule that named it, which is nearer
-     *  than a branch that widened it from outside. */
-    private static <A> Map<A, UnreadReason> spoiling(Map<A, UnreadReason> had, Set<A> these) {
+    /**
+     * The same, with {@code these} left open by an alternative — where nothing has spoiled them
+     * already. A reason already recorded for a position is a rule that named it, which is nearer
+     * than a branch that widened it from outside.
+     *
+     * <p>The one place a reason is not added beside the reasons already there. What this says is
+     * that the choice offered an alternative nothing could read, which is one fact about the choice
+     * however many positions it reaches — a position whose own rules already stopped this reading
+     * is not stopped a second time by it.
+     */
+    private static <A> Map<A, List<UnreadReason>> spoiling(Map<A, List<UnreadReason>> had,
+                                                           Set<A> these) {
         if (these.isEmpty()) {
             return had;
         }
-        Map<A, UnreadReason> out = new LinkedHashMap<>(had);
-        these.forEach(each -> out.putIfAbsent(each, UnreadReason.ALTERNATIVE_NOT_READ));
+        Map<A, List<UnreadReason>> out = new LinkedHashMap<>(had);
+        these.forEach(each ->
+                out.putIfAbsent(each, List.of(UnreadReason.ALTERNATIVE_NOT_READ)));
         return out;
     }
 
-    private static <A> Map<A, UnreadReason> union(Map<A, UnreadReason> these,
-                                                  Map<A, UnreadReason> those) {
+    /**
+     * Both accounts of what was left standing, each position keeping every reason either gave.
+     *
+     * <p>Appended and not chosen between. Two parts of one clause stop this reading at one position
+     * in two ways, and each is a rule of the author's to act on — the second was dropped here while
+     * a position held one reason, and a report then named whichever part happened to be read first.
+     */
+    private static <A> Map<A, List<UnreadReason>> union(Map<A, List<UnreadReason>> these,
+                                                        Map<A, List<UnreadReason>> those) {
         if (those.isEmpty()) {
             return these;
         }
-        Map<A, UnreadReason> out = new LinkedHashMap<>(these);
-        those.forEach(out::putIfAbsent);
+        Map<A, List<UnreadReason>> out = new LinkedHashMap<>(these);
+        those.forEach((atom, reasons) -> out.merge(atom, reasons, AdmissibleValues::appended));
+        return out;
+    }
+
+    /** The reasons of both, in the order they were met, and each said once. */
+    private static List<UnreadReason> appended(List<UnreadReason> these,
+                                               List<UnreadReason> those) {
+        List<UnreadReason> out = new ArrayList<>(these);
+        // Once per reason and not once per part. What is held is why this reading was stopped, and
+        // two parts stopped by the same limit are one thing for a reader to lift; which parts they
+        // were is the clause's and is not what this answers.
+        those.forEach(each -> {
+            if (!out.contains(each)) {
+                out.add(each);
+            }
+        });
         return out;
     }
 }

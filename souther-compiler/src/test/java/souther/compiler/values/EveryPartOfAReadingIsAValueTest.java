@@ -37,10 +37,19 @@ class EveryPartOfAReadingIsAValueTest {
      *  to still be holding. */
     private record Handed(Object given, Object mutable) {}
 
-    private static Handed sampleFor(Class<?> type) {
+    /**
+     * Something to hand over for one part, of the shape that part is declared to hold.
+     *
+     * <p>The declared shape and not the erased one. A map of a reading is a map of something, and
+     * the constructor copies its values as what they are — handed a value of another kind, it
+     * throws on the way in and the part goes unasked while the failure reads as this test's own.
+     * Which is what a part whose values are not sets met the day one was added.
+     */
+    private static Handed sampleFor(java.lang.reflect.Type declared) {
+        Class<?> type = erased(declared);
         if (Map.class.isAssignableFrom(type)) {
             Map<Object, Object> out = new LinkedHashMap<>();
-            out.put("a", ValueSet.just(Value.text("5")));
+            out.put("a", inside(declared, 1));
             return new Handed(out, out);
         }
         if (Set.class.isAssignableFrom(type)) {
@@ -58,15 +67,37 @@ class EveryPartOfAReadingIsAValueTest {
             return new Handed(new AdmissibleValues.Held.Alternatives<>(
                     Set.of(new AdmissibleValues.Box<>(Map.of()))), null);
         }
-        throw new IllegalArgumentException("nothing here knows how to hand over a " + type
+        throw new IllegalArgumentException("nothing here knows how to hand over a " + declared
                 + ": a part of a reading was added in a shape this has no sample of");
+    }
+
+    /** What {@code declared} holds at argument {@code which}, or {@code Object} where it says. */
+    private static java.lang.reflect.Type held(java.lang.reflect.Type declared, int which) {
+        return declared instanceof java.lang.reflect.ParameterizedType parameterized
+                ? parameterized.getActualTypeArguments()[which] : Object.class;
+    }
+
+    /** A value of what {@code declared} holds at argument {@code which}. */
+    private static Object inside(java.lang.reflect.Type declared, int which) {
+        java.lang.reflect.Type what = held(declared, which);
+        if (List.class.isAssignableFrom(erased(what))) {
+            return List.of(UnreadReason.FORM_NOT_READ);
+        }
+        return ValueSet.just(Value.text("5"));
+    }
+
+    /** The class a declared type is written in terms of. */
+    private static Class<?> erased(java.lang.reflect.Type declared) {
+        return declared instanceof java.lang.reflect.ParameterizedType parameterized
+                ? (Class<?>) parameterized.getRawType()
+                : declared instanceof Class<?> type ? type : Object.class;
     }
 
     /** Every part of one, and what was handed over for each, in the order the record declares. */
     private static List<Handed> handedOver(RecordComponent[] parts) {
         List<Handed> out = new ArrayList<>();
         for (RecordComponent part : parts) {
-            out.add(sampleFor(part.getType()));
+            out.add(sampleFor(part.getGenericType()));
         }
         return out;
     }

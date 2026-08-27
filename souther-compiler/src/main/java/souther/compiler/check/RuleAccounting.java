@@ -187,13 +187,22 @@ public final class RuleAccounting {
      */
     public sealed interface Why {
 
-        /** The reading that turns a clause into a set of values. */
-        record TheValueReadingSays(UnreadReason why) implements Why {
+        /**
+         * The reading that turns a clause into a set of values.
+         *
+         * <p>Everything it was stopped by, in the order the parts of the clause were met. One
+         * position is named by as many parts as the author wrote about it, and two of them stop
+         * this reading in two ways that are lifted by different work — so a single reason here is a
+         * choice among an author's rules, made where the only thing to choose by is which part came
+         * first.
+         */
+        record TheValueReadingSays(List<UnreadReason> why) implements Why {
 
             public TheValueReadingSays {
-                if (why == null) {
+                if (why == null || why.isEmpty()) {
                     throw new IllegalArgumentException("a reading that stopped says why");
                 }
+                why = List.copyOf(why);
             }
         }
 

@@ -2,6 +2,7 @@ package souther.compiler.values;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -101,7 +102,7 @@ class AChoiceThatAlreadyAdmitsEverythingIsNotWidenedTest {
                         .join(AdmissibleValues.unreadable(Set.of(OTHER),
                                 UnreadReason.FORM_NOT_READ));
 
-        assertEquals(UnreadReason.FORM_NOT_READ, either.whyUnread(OTHER),
+        assertEquals(List.of(UnreadReason.FORM_NOT_READ), either.whyUnread(OTHER),
                 "the alternative beside the unread one may admit nothing, so it vouches for nothing");
     }
 
@@ -133,7 +134,7 @@ class AChoiceThatAlreadyAdmitsEverythingIsNotWidenedTest {
         AdmissibleValues<String> either = is5().join(unread());
 
         assertEquals(ValueSet.ANY, either.at(VALUE));
-        assertEquals(UnreadReason.FORM_NOT_READ, either.whyUnread(VALUE),
+        assertEquals(List.of(UnreadReason.FORM_NOT_READ), either.whyUnread(VALUE),
                 "one alternative admits one value and the other is unknown, so nothing covers it");
     }
 }

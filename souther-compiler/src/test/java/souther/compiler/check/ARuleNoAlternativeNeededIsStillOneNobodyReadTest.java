@@ -98,7 +98,10 @@ class ARuleNoAlternativeNeededIsStillOneNobodyReadTest {
                 .filter(RuleAccounting.Outcome.Unaccounted.class::isInstance)
                 .map(each -> ((RuleAccounting.Outcome.Unaccounted) each).why())
                 .filter(RuleAccounting.Why.TheValueReadingSays.class::isInstance)
-                .map(each -> ((RuleAccounting.Why.TheValueReadingSays) each).why())
+                // Every reason each question was left with, and not one apiece: a question stands
+                // with as many reasons as there are parts of the clause nothing took in, and a
+                // helper taking the first would pass whichever of them the reading met first.
+                .flatMap(each -> ((RuleAccounting.Why.TheValueReadingSays) each).why().stream())
                 .toList();
     }
 
