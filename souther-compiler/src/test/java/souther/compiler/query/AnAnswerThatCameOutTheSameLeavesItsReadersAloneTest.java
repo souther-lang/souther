@@ -88,24 +88,51 @@ class AnAnswerThatCameOutTheSameLeavesItsReadersAloneTest {
     }
 
     /**
-     * And a reading of an input came out the same.
+     * A reader of the reading of an input, and of nothing else.
      *
-     * <p>Without a reader of its own here, because it has none that reads only it: every measure
-     * that takes a denominator from this reading also reads the module's shapes and its check, and
-     * an edit that reaches the reading reaches those. So what is held to is the reading, and what it
-     * buys is that a measure asking again is a measure that finds the same denominator rather than
-     * one that has to be told the answer moved.
+     * <p>Every measure that takes a denominator from that reading also reads the module's shapes
+     * and its check, and an edit that reaches the reading reaches those — so no question this
+     * compiler asks would stay put for the reading's sake alone, and one that did would be saying
+     * something about the measures rather than about the reading. What is wanted is the edge, so
+     * the edge is what this is: it asks, and answers with nothing of its own.
+     *
+     * <p>Not one of the questions this compiler declares. What is declared is read off the classes
+     * the compiler was compiled to ({@link DeclaredQuestions}), and this was compiled with the
+     * tests.
+     */
+    private record WhoeverReadsTheReading(String name) implements Key<Boolean> {
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Boolean> compute(Db db) {
+            return Answer.of(db.ask(new Adequacy.Inputs(name)).present());
+        }
+    }
+
+    /**
+     * And a reading of an input that came out the same leaves what reads it alone.
+     *
+     * <p>The reading is what every measure takes its denominator from, so what this holds to is
+     * that asking again after an edit that said nothing about any input costs a reader nothing.
      */
     @Test
-    void aReadingOfAnInputThatCameOutTheSame() {
+    void aReadingOfAnInputThatCameOutTheSameLeavesItsReaderAlone() {
         Compilation c = started();
         Answer<?> inputs = c.db().ask(new Adequacy.Inputs("shop.orders"));
+        Answer<?> reader = c.db().ask(new WhoeverReadsTheReading("shop.orders"));
 
         edited(c);
+        c.db().ask(new WhoeverReadsTheReading("shop.orders"));
 
         Answer<?> again = c.db().ask(new Adequacy.Inputs("shop.orders"));
         assertNotSame(inputs, again, "the edit reached the reading, so it ran again");
         assertEquals(inputs, again,
                 "and an input nothing was said about is read to the same positions");
+        assertSame(reader, c.db().ask(new WhoeverReadsTheReading("shop.orders")),
+                "so whatever reads that reading and nothing else is not asked again");
     }
 }
