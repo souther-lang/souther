@@ -83,6 +83,20 @@ class AFieldListIsOfferedForTheValueTheDotIsTakenOffTest {
                 labelsAfterTheDot(model("keep(\"(\", request.\n")));
     }
 
+    /**
+     * And a dot inside one is text too.
+     *
+     * <p>What a dot is is what the reading of the text makes it, and a rule of this server's own
+     * about the character before the cursor would call the end of {@code "a."} a member position —
+     * offering nothing where every name in scope may be written.
+     */
+    @Test
+    void aDotInsideALiteralIsNotOneAMemberFollows() {
+        List<String> offered = labelsAfterTheDot(model("keep(\"a.\"\n"));
+
+        assertTrue(offered.contains("submit"), "this is not a member position: " + offered);
+    }
+
     @Test
     void andNothingElseThatIsInScope() {
         List<String> offered = labelsAfterTheDot(model("request.\n"));

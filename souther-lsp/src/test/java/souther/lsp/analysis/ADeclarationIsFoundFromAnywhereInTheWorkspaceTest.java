@@ -89,6 +89,25 @@ class ADeclarationIsFoundFromAnywhereInTheWorkspaceTest {
                 "`lib` exposes those two; `Hidden` is not one of them");
     }
 
+    /**
+     * And the language's own library is a namespace like any other.
+     *
+     * <p>It carries no bare names — everything in it is reached through a qualifier — so a member
+     * list after {@code List.} is not a fringe of this question but most of it. What is offered is
+     * its published surface, which is the set of qualified names a module outside the reserved
+     * namespace may write.
+     */
+    @Test
+    void theLibraryOffersWhatItPublishesUnderTheQualifier() {
+        List<String> offered = labelsOf(afterTheDotOn(MODEL + "\nlet other (x) = List.\n"));
+
+        assertFalse(offered.isEmpty(), "`List.` is where a library name is written");
+        assertTrue(offered.contains("map"), "found: " + offered);
+        for (String each : offered) {
+            assertFalse(each.contains("."), each + " is reached under its own qualifier");
+        }
+    }
+
     @Test
     void whatIsOfferedIsPaintedAsWhatItIs() {
         List<CompletionItem> offered = afterTheDotOn(MODEL + "\nlet other (x) = l.\n");

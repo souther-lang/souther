@@ -83,7 +83,7 @@ public final class SemanticSnapshot {
      * nothing for both still knows which of them it was told.
      */
     public Optional<MemberReceiver> memberReceiverAround(SourcePos cursor) {
-        return memberReceiverOf(sites.innermostContaining(cursor));
+        return receiverOf(sites.innermostContaining(cursor));
     }
 
     /**
@@ -94,7 +94,11 @@ public final class SemanticSnapshot {
      * an occurrence is one occurrence while a place is inside several.
      */
     public Optional<MemberReceiver> memberReceiverOf(Region extent) {
-        return switch (sites.written(extent)) {
+        return receiverOf(sites.site(extent));
+    }
+
+    private Optional<MemberReceiver> receiverOf(SourceSiteId site) {
+        return switch (sites.written(site)) {
             // A field taken off a value. That it is one is already settled: the parser reads
             // `m.name` and `x.field` alike, and this is a field read because a binding was in force
             // where the chain is rooted.
@@ -171,18 +175,25 @@ public final class SemanticSnapshot {
     }
 
     /**
-     * The behavior the name written over {@code extent} reaches, and what it declares it takes.
+     * The behavior the name written over {@code cursor} reaches, and what it declares it takes.
      *
      * <p>Asked of the callee and not of the call. A call is written over everything in it, brackets
      * included, and the last of those may not be typed yet — the name is written before any of that
      * and says which declaration this is about.
      *
+     * <p>Given a place in that name rather than its extent. How far a name is written is a question
+     * this already answers, and a caller measuring it from the tree would be measuring it a second
+     * way: a syntax node runs over the trivia in front of it, and a name reached through a module is
+     * one occurrence over the whole run. Both are answered by asking which occurrence covers a
+     * place.
+     *
      * <p>Empty where the name reaches no behavior: a helper, a local holding a function, a name that
-     * resolves to nothing. What those take is not written on a `behavior` line, and there is no
+     * resolves to nothing. What those take is not written on a {@code behavior} line, and there is no
      * declaration here to show.
      */
-    public Optional<CalledBehavior> calledAt(Region extent) {
-        if (!(sites.written(extent) instanceof Hir.Var.Denoting called)
+    public Optional<CalledBehavior> calledAt(SourcePos cursor) {
+        SourceSiteId site = sites.innermostContaining(cursor);
+        if (site == null || !(sites.written(site) instanceof Hir.Var.Denoting called)
                 || !(called.reachedAs().denotes() instanceof ValueName.Behavior reached)) {
             return Optional.empty();
         }
@@ -204,7 +215,7 @@ public final class SemanticSnapshot {
             takes.add(new CalledBehavior.Takes(written.get(at).name(),
                     new TypeFact(sig.inputTypes().get(at), new Evidence.Declared())));
         }
-        return Optional.of(new CalledBehavior(reached.name(), List.copyOf(takes)));
+        return Optional.of(new CalledBehavior(reached.name(), List.copyOf(takes), site.extent()));
     }
 
     /** The parameters {@code behavior} is declared with, or null where the module declares no such
@@ -230,9 +241,19 @@ public final class SemanticSnapshot {
      * to say, and this reading has not asked it.
      */
     public List<Published> namesIn(MemberReceiver.Namespace namespace) {
-        if (!(namespace instanceof MemberReceiver.Namespace.OfModule(String named, Region _))) {
-            return List.of();
-        }
+        // Every namespace there is, and no arm reached by not being the others. A kind narrowed by
+        // what it is not is a default the compiler cannot see, and the one nobody wrote an answer
+        // for comes back as the same empty list a namespace with nothing in it would.
+        return switch (namespace) {
+            case MemberReceiver.Namespace.OfModule(String named, Region _) -> offeredBy(named);
+            case MemberReceiver.Namespace.OfLibrary(String qualifier, Region _) ->
+                    offeredUnder(qualifier);
+        };
+    }
+
+    /** What a module of this compilation publishes, in the order its {@code exposing} line writes
+     *  them. */
+    private List<Published> offeredBy(String named) {
         Answer<Hir.Module> offering = db.ask(new Names.Resolved(named));
         if (!offering.present()) {
             return List.of();
@@ -242,6 +263,35 @@ public final class SemanticSnapshot {
         for (String name : offered.exposing()) {
             published(offered, name).ifPresent(out::add);
         }
+        return List.copyOf(out);
+    }
+
+    /**
+     * What the language's own library publishes under {@code qualifier}.
+     *
+     * <p>Its published surface is every qualified name a module outside the reserved namespace may
+     * write, which is what an author writing {@code List.} may write — the library carries no bare
+     * names, so the qualifier is how all of it is reached and the list under one is a slice of that
+     * surface.
+     *
+     * <p>Each is a definition. What the library publishes is operations, and the reserved namespace
+     * declares no data an importer names this way.
+     */
+    private List<Published> offeredUnder(String qualifier) {
+        List<Published> out = new ArrayList<>();
+        String under = qualifier + ".";
+        for (String published : symbols.library().published()) {
+            if (published.startsWith(under)) {
+                String member = published.substring(under.length());
+                // One segment. A name published deeper is reached through the qualifier it is
+                // published under, and offering it here would offer something to write that does
+                // not parse where it was offered.
+                if (member.indexOf('.') < 0) {
+                    out.add(new Published.ADefinition(member));
+                }
+            }
+        }
+        out.sort(java.util.Comparator.comparing(Published::name));
         return List.copyOf(out);
     }
 

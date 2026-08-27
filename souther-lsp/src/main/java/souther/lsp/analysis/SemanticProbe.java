@@ -145,7 +145,7 @@ final class SemanticProbe {
      */
     private static Repair inserting(String text, int cursor, String name, String closers) {
         boolean naming = !name.isEmpty();
-        if (naming && (cursor == 0 || text.charAt(cursor - 1) != '.')) {
+        if (naming && !aDotEndsAt(text, cursor)) {
             return null;
         }
         if (!naming && closers.isEmpty()) {
@@ -155,6 +155,35 @@ final class SemanticProbe {
                 ? text.substring(0, cursor) + name + text.substring(cursor) + closers
                 : text + closers;
         return new Repair(repaired, naming ? cursor : text.length());
+    }
+
+    /**
+     * Whether the token that ends at {@code cursor} is a {@code .}.
+     *
+     * <p>One statement of it, for the two readers that need it: what the probe puts in, and what the
+     * editor calls a member position. Read apart they could disagree, and where they did the editor
+     * would call a place a member position while the probe supplied no member to it — which is an
+     * empty answer given for a reason nobody meant.
+     *
+     * <p>Asked of the reading the language does. A dot is not always a field's: {@code .5} is a
+     * number, and one inside a string literal is part of the string. Neither is a rule this has to
+     * hold, since the token stream is the same one the parser goes on to read.
+     */
+    static boolean aDotEndsAt(String text, int cursor) {
+        if (text == null || cursor <= 0 || cursor > text.length()) {
+            return false;
+        }
+        int at = 0;
+        for (GreenToken token : CstLexer.lex(text).tokens()) {
+            at += token.width();
+            if (at == cursor) {
+                return token.kind() == SyntaxKind.DOT;
+            }
+            if (at > cursor) {
+                return false;
+            }
+        }
+        return false;
     }
 
     /**

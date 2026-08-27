@@ -88,10 +88,16 @@ public final class AuthoredSites {
         return extent != null && byExtent.containsKey(extent) ? new SourceSiteId(extent) : null;
     }
 
-    /** What was written over {@code extent}, or null where nothing was. The identity's whole content
-     *  is the extent, so this is that occurrence and not another one that happens to be there. */
-    Hir.Expr written(Region extent) {
-        return extent == null ? null : byExtent.get(extent);
+    /**
+     * What was written at {@code site}.
+     *
+     * <p>Takes the identity and not the characters. An extent is how a site is found and an id is
+     * that it was: only this walk mints one, so a reader holding one is holding an occurrence this
+     * revision was found to have, and there is no way to ask about a stretch of source that is not
+     * one.
+     */
+    Hir.Expr written(SourceSiteId site) {
+        return site == null ? null : byExtent.get(site.extent());
     }
 
     /**
@@ -107,14 +113,14 @@ public final class AuthoredSites {
      * true of a region that is nowhere and so true of everything — an answer a lookup must never
      * give.
      */
-    Region innermostContaining(SourcePos at) {
+    SourceSiteId innermostContaining(SourcePos at) {
         Region narrowest = null;
         for (Region extent : byExtent.keySet()) {
             if (contains(extent, at) && (narrowest == null || contains(narrowest, extent))) {
                 narrowest = extent;
             }
         }
-        return narrowest;
+        return narrowest == null ? null : new SourceSiteId(narrowest);
     }
 
     /** Whether {@code at} is within {@code extent} — from its start inclusive to its end exclusive,

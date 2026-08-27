@@ -1521,17 +1521,15 @@ public final class Analyzer {
             return Optional.empty();
         }
         SyntaxNode call = enclosingCall(CstParser.parse(parsed).root(), cursor);
-        SyntaxToken callee = call == null ? null : firstIdent(call);
+        SyntaxNode applies = call == null ? null : calleeOf(call);
+        SyntaxToken callee = applies == null ? null : firstIdent(applies);
         if (callee == null) {
             return Optional.empty();
         }
         LineIndex lines = new LineIndex(parsed, new SourceId(uri));
-        Region at = new Region(lines.posOf(callee.start()), lines.posOf(callee.end()));
-        if (reading != null && !reading.mayBeRead(at)) {
-            return Optional.empty();
-        }
         Optional<SemanticSnapshot> snapshot = SemanticSnapshot.of(compilation.db(), module);
-        return snapshot.flatMap(reads -> reads.calledAt(at))
+        return snapshot.flatMap(reads -> reads.calledAt(lines.posOf(callee.start())))
+                .filter(called -> reading == null || reading.mayBeRead(called.writtenAt()))
                 .map(called -> shown(called, snapshot.orElseThrow(),
                         argumentAt(call, cursor)));
     }
@@ -1558,6 +1556,8 @@ public final class Analyzer {
     /**
      * The innermost application the cursor is inside, or null where it is in none.
      *
+     * <p>See {@link #calleeOf} for what a call applies.
+     *
      * <p>Inside its brackets and not up to the end of it: a cursor that has just closed a call is
      * past that call and writing what holds it, and showing the one it closed would answer about the
      * argument it has finished rather than the one it is on.
@@ -1571,6 +1571,23 @@ public final class Analyzer {
             }
         }
         return innermost;
+    }
+
+    /**
+     * What {@code call} applies: whatever stands in front of the argument list.
+     *
+     * <p>A place in it is all that is taken from here. How far the name written there runs is the
+     * census's to say — a behavior reached through a module is written {@code m.submit} and is one
+     * occurrence over the whole run, and a syntax node runs over the trivia in front of it, so
+     * neither end of this node is where anything was written.
+     */
+    private static SyntaxNode calleeOf(SyntaxNode call) {
+        for (SyntaxElement each : call.children()) {
+            if (each instanceof SyntaxNode node && node.kind() != SyntaxKind.ARG_LIST) {
+                return node;
+            }
+        }
+        return null;
     }
 
     private static List<SyntaxNode> callsIn(SyntaxNode node) {
@@ -1835,20 +1852,19 @@ public final class Analyzer {
     /**
      * Whether the cursor is where a member is written: straight after a {@code .}.
      *
-     * <p>Read off the characters and not off the tree, and that is the point. Whether this reading
-     * can say what the members are varies — a source it cannot finish, a module that will not
-     * resolve, a receiver no declaration speaks for — and none of that changes what the author is
-     * writing. A member position that fell back to the names in scope when the answer was not
-     * reached would offer the whole language after a {@code .} exactly when it knows least.
+     * <p>Read off what is written and not off what could be answered, and that is the point.
+     * Whether this reading can say what the members are varies — a source it cannot finish, a module
+     * that will not resolve, a receiver no declaration speaks for — and none of that changes what
+     * the author is writing. A member position that fell back to the names in scope when the answer
+     * was not reached would offer the whole language after a {@code .} exactly when it knows least.
      *
-     * <p>A {@code .} after a digit is not one. {@code 1.} is a decimal being typed and the next
-     * character is a digit, not a field.
+     * <p>Which token, and not which character. Whether a {@code .} is a field's is a question the
+     * language answers when it reads the text: {@code .5} is a number, a dot inside a string literal
+     * is part of the string, and a rule of this reading's own about digits and quotes would be that
+     * reading written a second time and free to differ from the one the parser goes on to use.
      */
     private static boolean takingSomethingOffSomething(String text, int cursor) {
-        if (cursor <= 0 || cursor > text.length() || text.charAt(cursor - 1) != '.') {
-            return false;
-        }
-        return cursor < 2 || !Character.isDigit(text.charAt(cursor - 2));
+        return SemanticProbe.aDotEndsAt(text, cursor);
     }
 
     /** What a namespace offers, painted as what the offering module declares it to be. */

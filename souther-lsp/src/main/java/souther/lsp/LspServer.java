@@ -532,10 +532,17 @@ public final class LspServer {
     }
 
     /**
-     * One answer per place asked about, each nested outwards.
+     * One answer per place asked about, in the order they were asked, each nested outwards.
      *
-     * <p>The protocol takes the widening as a chain rather than a list, so what the analyzer answers
-     * innermost first is built up from the outside in — the widest is what has no parent.
+     * <p>The protocol pairs a result with a position by where it sits in the list, so a place with
+     * nothing written on it — a blank line, the space between two tokens — is answered rather than
+     * left out. Left out, every place after it would be given another place's widening, which is a
+     * wrong answer where dropping the one is merely no answer. What such a place is answered with is
+     * itself: a range covering nothing, at the position, which widens to nothing because nothing is
+     * there.
+     *
+     * <p>The widening is a chain rather than a list, so what the analyzer answers innermost first is
+     * built up from the outside in — the widest is what has no parent.
      */
     private Object selectionRanges(JsonNode params) {
         Params.PositionsParams p = InboundDecoders.decode(InboundDecoders.POSITIONS_PARAMS, params)
@@ -556,9 +563,9 @@ public final class LspServer {
                 }
                 nested = here;
             }
-            if (nested != null) {
-                out.add(nested);
-            }
+            out.add(nested == null
+                    ? Map.of("range", rangeJson(new Range(at, at)))
+                    : nested);
         }
         return out;
     }
