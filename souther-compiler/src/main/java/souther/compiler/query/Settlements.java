@@ -5,6 +5,7 @@ import souther.compiler.execute.BoundaryValues;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.partition.Axis;
 import souther.compiler.partition.BehaviorInputs;
+import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.InputClassifications;
@@ -86,11 +87,17 @@ public record Settlements(List<OfferItem> requested,
         List<OfferItem> requested = new ArrayList<>();
         SequencedMap<OfferItem, RowKey> composedFor = new LinkedHashMap<>();
         SequencedMap<RowKey, Map<OfferItem, Settlement>> byRow = new LinkedHashMap<>();
+        // How each behavior reads the lines the module's declarations own. A behavior's own account
+        // holds the lines it is owed a row at and none of these — that is what the account is for —
+        // so a walk that looked only there would find no reading of a declared line anywhere and
+        // answer that no row stands at one, of rows composed to stand at exactly that.
+        Map<BorderObligationPoint, Map<String, List<BorderAssessment>>> declaredReadings =
+                readingsOfTheDeclaredLines(db, module, offering.request().boundaries());
         Map<String, OneBehavior> reading = new LinkedHashMap<>();
         for (Map.Entry<String, Adequacy.Filling> behavior : offering.searched().entrySet()) {
             OneBehavior read = OneBehavior.of(db, module, behavior.getKey(), behavior.getValue(),
                     sigs == null ? null : sigs.get(behavior.getKey()), building, trials,
-                    offering.request().boundaries());
+                    offering.request().boundaries(), declaredReadings);
             reading.put(behavior.getKey(), read);
             requested.addAll(read.owed());
             composedFor.putAll(read.composed(behavior.getValue()));
@@ -128,6 +135,33 @@ public record Settlements(List<OfferItem> requested,
     }
 
     /**
+     * Which behaviors read each line a declaration owns, and what each of their readings is.
+     *
+     * <p>Asked of the debts and not of any behavior. A line a declaration draws is read wherever the
+     * type is carried, and where a row written in one behavior's terms stands is a question about
+     * that behavior's reading of it — so the readings are what a row is put to, one per position
+     * that meets the line.
+     */
+    private static Map<BorderObligationPoint, Map<String, List<BorderAssessment>>>
+            readingsOfTheDeclaredLines(Db db, String module, boolean boundaries) {
+        Map<BorderObligationPoint, Map<String, List<BorderAssessment>>> out = new LinkedHashMap<>();
+        if (!boundaries) {
+            return out;
+        }
+        Adequacy.DeclaredBoundaries account = db.ask(new Adequacy.DeclaredBorders(module)).value();
+        if (account == null) {
+            return out;
+        }
+        for (Adequacy.DeclaredDebt owed : account.owed()) {
+            Map<String, List<BorderAssessment>> here =
+                    out.computeIfAbsent(owed.debt().point(), _ -> new LinkedHashMap<>());
+            owed.debt().met().forEach((reading, at) ->
+                    here.computeIfAbsent(reading.behavior(), _ -> new ArrayList<>()).add(at));
+        }
+        return out;
+    }
+
+    /**
      * One behavior's own reading of a candidate: what it is asked for, and how a row of it is read.
      *
      * <p>Made once per behavior and not once per row. What a row is read against — where its
@@ -137,13 +171,17 @@ public record Settlements(List<OfferItem> requested,
     private record OneBehavior(String behavior, BehaviorInputs where, List<Axis> axes, Sig sig,
                                BoundaryValues building, Generator.Trial trial,
                                List<Generator.ClassOwed> classes, List<Generator.ArmOwed> arms,
-                               Map<OfferItem.APointOfALine, OwedBoundaryPoint> points) {
+                               Map<OfferItem.APointOfALine, OwedBoundaryPoint> owedHere,
+                               Map<OfferItem.APointOfALine, List<AtAPoint>> reads) {
 
         static OneBehavior of(Db db, String module, String behavior, Adequacy.Filling filling,
                               Sig sig, BoundaryValues building,
-                              souther.compiler.execute.RowTrials trials, boolean boundaries) {
+                              souther.compiler.execute.RowTrials trials, boolean boundaries,
+                              Map<BorderObligationPoint, Map<String, List<BorderAssessment>>>
+                                      declared) {
             Generator.Subject subject = filling.composed().plan().subject();
-            Map<OfferItem.APointOfALine, OwedBoundaryPoint> points = new LinkedHashMap<>();
+            Map<OfferItem.APointOfALine, OwedBoundaryPoint> owedHere = new LinkedHashMap<>();
+            Map<OfferItem.APointOfALine, List<AtAPoint>> reads = new LinkedHashMap<>();
             if (boundaries) {
                 List<BorderAssessment> edges =
                         db.ask(new Adequacy.BoundarySearch(module, behavior)).value();
@@ -151,16 +189,32 @@ public record Settlements(List<OfferItem> requested,
                     // One entry per point, which is what a row standing there answers. Two readings
                     // of one line at one role are one thing to be told about, and the walk that
                     // offers the rows takes the same view.
-                    OwedBoundaryPoint.oneForEachPoint(OwedBoundaryPoint.across(edges))
-                            .forEach(point -> points.put(
-                                    new OfferItem.APointOfALine(point.owed()), point));
+                    for (OwedBoundaryPoint point
+                            : OwedBoundaryPoint.oneForEachPoint(OwedBoundaryPoint.across(edges))) {
+                        OfferItem.APointOfALine item =
+                                new OfferItem.APointOfALine(point.owed());
+                        owedHere.put(item, point);
+                        reads.computeIfAbsent(item, _ -> new ArrayList<>())
+                                .add(new AtAPoint(point.line(), point.item().criterion()));
+                    }
                 }
             }
+            // And this behavior's readings of the lines the declarations own, which its own account
+            // holds none of.
+            declared.forEach((point, byBehavior) -> {
+                for (BorderAssessment at : byBehavior.getOrDefault(behavior, List.of())) {
+                    if (at.at(point.role()) instanceof ItemAssessment.Owed owed) {
+                        reads.computeIfAbsent(new OfferItem.APointOfALine(point),
+                                _ -> new ArrayList<>())
+                                .add(new AtAPoint(at.border(), owed.criterion()));
+                    }
+                }
+            });
             return new OneBehavior(behavior, subject.inputs(), subject.axes(), sig, building,
                     sig == null || trials == null ? Generator.Trial.NOTHING_RUNS
                             : Adequacy.runningRowsOf(trials, behavior, sig),
                     filling.composed().plan().classesOwed(), filling.composed().plan().armsOwed(),
-                    points);
+                    owedHere, reads);
         }
 
         /**
@@ -186,7 +240,7 @@ public record Settlements(List<OfferItem> requested,
                             RowKey.of(behavior, filling.composed().rowFor(built.row())));
                 }
             }
-            points.forEach((item, point) -> {
+            owedHere.forEach((item, point) -> {
                 if (point.item().attempt() instanceof ItemAssessment.Attempt.Built built) {
                     out.put(item, RowKey.of(behavior, built.row()));
                 }
@@ -199,7 +253,7 @@ public record Settlements(List<OfferItem> requested,
             List<OfferItem> out = new ArrayList<>();
             classes.forEach(each -> out.add(new OfferItem.AClass(each)));
             arms.forEach(each -> out.add(new OfferItem.AnArm(each)));
-            out.addAll(points.keySet());
+            out.addAll(owedHere.keySet());
             return out;
         }
 
@@ -294,26 +348,46 @@ public record Settlements(List<OfferItem> requested,
          * the walk that reads a written row against the point reads this one.
          */
         private Settlement atThePoint(OneRow read, OfferItem.APointOfALine at) {
-            OwedBoundaryPoint point = points.get(at);
-            if (point == null) {
+            List<AtAPoint> here = reads.get(at);
+            if (here == null || here.isEmpty()) {
+                // No reading of this line in this behavior. A row written here has no value on the
+                // line at all, which is a row that does not settle the point rather than one
+                // nothing could tell about.
                 return new Settlement.DoesNotSettle();
             }
             if (read.values() == null) {
                 return read.undetermined();
             }
             ObservedInputs row = new ObservedInputs(read.values(), read.watched());
-            return switch (StandingAtAPoint.met(point.line().cut().of(), where, List.of(row),
-                    point.item().criterion(), point.line().origin().comparisonAt())) {
-                case YES -> new Settlement.Settles();
-                case NO -> new Settlement.DoesNotSettle();
-                case NOT_WATCHED ->
-                        new Settlement.Undetermined(Settlement.Reason.NO_ACCOUNT_OF_THE_RUN);
-                case UNREADABLE -> new Settlement.Undetermined(
-                        Settlement.Reason.THE_VALUES_COULD_NOT_BE_READ);
-            };
+            // Existential over the readings, the way a point met at one position of a behavior is
+            // met: a row standing on the line anywhere the behavior reads it is a row at the point.
+            Settlement answer = new Settlement.DoesNotSettle();
+            for (AtAPoint one : here) {
+                Settlement said = switch (StandingAtAPoint.met(one.line().cut().of(), where,
+                        List.of(row), one.criterion(), one.line().origin().comparisonAt())) {
+                    case YES -> new Settlement.Settles();
+                    case NO -> new Settlement.DoesNotSettle();
+                    case NOT_WATCHED ->
+                            new Settlement.Undetermined(Settlement.Reason.NO_ACCOUNT_OF_THE_RUN);
+                    case UNREADABLE -> new Settlement.Undetermined(
+                            Settlement.Reason.THE_VALUES_COULD_NOT_BE_READ);
+                };
+                if (said.settles()) {
+                    return said;
+                }
+                if (said instanceof Settlement.Undetermined) {
+                    answer = said;
+                }
+            }
+            return answer;
         }
 
     }
+
+    /** One position's reading of one line, as a row is put to it: the border this behavior met and
+     *  what a row there has to do. */
+    private record AtAPoint(souther.compiler.partition.Border line,
+                            souther.compiler.partition.Criterion criterion) {}
 
     /**
      * One row of the offering, read.
@@ -324,6 +398,7 @@ public record Settlements(List<OfferItem> requested,
      *                    has: the two are found out separately and one failing is not the other
      *                    failing
      */
+
     private record OneRow(List<ObservedValue> values, Settlement.Reason whyNotBuilt,
                           Generator.Watched watched) {
 
