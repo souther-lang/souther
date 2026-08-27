@@ -482,7 +482,7 @@ public final class Adequacy {
         public record Counted() {}
 
         /** Why the signature has no numbers. */
-        public enum NotASum implements souther.compiler.observe.NotApplicableReason {
+        public enum NotASum implements NotApplicableReason {
             /** Neither the output nor any input is a sum, so there is no case anywhere for a row to
              *  cover and no row could make one. Held rather than read back from the two empty case
              *  sets below it: a reader that counted them would be answering a different question —
@@ -491,7 +491,7 @@ public final class Adequacy {
         }
 
         /** The same, for a measurement nobody asked for. */
-        public enum NoRows implements souther.compiler.observe.NotMeasuredReason {
+        public enum NoRows implements NotMeasuredReason {
             /** No row names this behavior, so nothing was established about it either way. */
             NO_ROWS
         }
@@ -2106,7 +2106,7 @@ public final class Adequacy {
          * about it, the build has to ask before the classes are generated, and a row has to name the
          * behavior before any of it is about this one.
          */
-        public enum NotAsked implements souther.compiler.observe.NotMeasuredReason {
+        public enum NotAsked implements NotMeasuredReason {
             /** The build did not ask for the arms, which cost a second run of every row. */
             NOT_ASKED,
             /** No row names this behavior. The measurement is opted into by writing one, and
@@ -2124,7 +2124,7 @@ public final class Adequacy {
          * All of them are the model's answer rather than a run's, so none waits on the
          * instrumentation — which is what lets this be asked before the level is (issue #955).
          */
-        public enum NoArms implements souther.compiler.observe.NotApplicableReason {
+        public enum NoArms implements NotApplicableReason {
             /** A {@code >->} composition or a behavior with no {@code let}. Its arms, where it has
              *  any, are its stages' and are measured there. */
             NO_BODY,
@@ -2149,7 +2149,7 @@ public final class Adequacy {
 
         /** The rows ran without instrumentation, so what they went through went with it. The one
          *  reason here that is a measurement started and not finished. */
-        public enum Unreadable implements souther.compiler.observe.FailureReason {
+        public enum Unreadable implements FailureReason {
             UNREADABLE
         }
 
@@ -2165,7 +2165,7 @@ public final class Adequacy {
          * answered with. That claim is about the model and this is about the compile, and the two
          * were one answer while the measure read the elaborated bodies for both (issue #996).
          */
-        public enum Unelaborated implements souther.compiler.observe.FailureReason {
+        public enum Unelaborated implements FailureReason {
             BODIES_NOT_ELABORATED
         }
 
@@ -2531,13 +2531,13 @@ public final class Adequacy {
 
         /** Why a reading was not made. Its own enum: what the level did not ask for is not one of
          *  the ways a reading that was made came out. */
-        public enum NotAsked implements souther.compiler.observe.NotMeasuredReason {
+        public enum NotAsked implements NotMeasuredReason {
             /** This build does not read rows, so nothing was seen and nothing is owed about it. */
             ROWS_NOT_ASKED
         }
 
         /** Nothing came back at all, so a measure over what remains is over none of them. */
-        public enum Unavailable implements souther.compiler.observe.FailureReason {
+        public enum Unavailable implements FailureReason {
             ROWS_UNAVAILABLE
         }
 

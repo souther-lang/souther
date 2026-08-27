@@ -5,8 +5,11 @@ package souther.compiler.observe;
  *
  * <p>Which reasons a measure can have stays the measure's own business. What is not the measure's is
  * which kind of no-number a reason is, and that is now the reason's <em>type</em> rather than
- * something it answers: {@link NotApplicableReason}, {@link NotMeasuredReason} and
- * {@link FailureReason} are three interfaces and a constant implements exactly one.
+ * something it answers: {@link souther.compiler.query.NotApplicableReason},
+ * {@link souther.compiler.query.NotMeasuredReason} and {@link souther.compiler.query.FailureReason}
+ * are three interfaces and a constant implements exactly one. Each of them names its arms, which it
+ * can do only where they are written — so the three stand with the measures and this stands with
+ * what reads a measure.
  *
  * <p>It used to answer {@code status()} and {@code somethingWasUnreadable()}, and a measure whose
  * status and reason disagreed was refused where the value was built. A check over a state the type

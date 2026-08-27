@@ -1,7 +1,5 @@
 package souther.compiler.query;
 
-import souther.compiler.observe.FailureReason;
-import souther.compiler.observe.NotApplicableReason;
 import souther.compiler.partition.ClosureGap;
 import souther.compiler.partition.MeasureClosure;
 

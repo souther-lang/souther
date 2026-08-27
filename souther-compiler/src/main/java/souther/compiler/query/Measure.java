@@ -1,7 +1,6 @@
 package souther.compiler.query;
 
 import souther.compiler.observe.MeasureReason;
-import souther.compiler.observe.NotApplicableReason;
 
 import java.util.Objects;
 import java.util.Optional;

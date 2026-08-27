@@ -1,6 +1,5 @@
 package souther.compiler.query;
 
-import souther.compiler.observe.NotApplicableReason;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
@@ -56,7 +55,7 @@ public record InputCaseEvidence(int at, Set<TypeSymbol> declared, Set<TypeSymbol
     }
 
     /** No row names this behavior. */
-    public enum NoRows implements souther.compiler.observe.NotMeasuredReason {
+    public enum NoRows implements NotMeasuredReason {
         NO_ROWS
     }
 
