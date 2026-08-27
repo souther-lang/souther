@@ -27,7 +27,7 @@ import java.util.List;
  * class is, and the walk reaches it by being at the object. A step for it would be a word no walk
  * writes.
  */
-record Locus(List<Locus.Step> steps) {
+record Locus(List<Locus.Step> steps) implements Trail<Locus> {
 
     /**
      * One place in one answer, as both detectors name one and the register is keyed by.
@@ -161,10 +161,17 @@ record Locus(List<Locus.Step> steps) {
      * relative to it, and every path that reaches the pair again writes those out again from where it
      * stands — so the steps are joined rather than a rendered path being cut at a length.
      */
-    Locus followedBy(Locus inner) {
+    @Override
+    public Locus followedBy(Locus inner) {
         List<Step> out = new ArrayList<>(steps);
         out.addAll(inner.steps());
         return new Locus(out);
+    }
+
+    /** What {@code longer} adds to this, which is the way down from where this stops. */
+    @Override
+    public Locus from(Locus longer) {
+        return new Locus(List.copyOf(longer.steps().subList(steps.size(), longer.steps().size())));
     }
 
     /**

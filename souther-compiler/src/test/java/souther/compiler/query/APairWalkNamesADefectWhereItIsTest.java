@@ -90,6 +90,51 @@ class APairWalkNamesADefectWhereItIsTest {
         assertEquals(Set.of(), gaps(walked), "nothing stopped this walk");
     }
 
+    /** Something that is a number the way its author says it is, and says only which object. */
+    private static final class ANumberOfItsOwn extends Number {
+
+        /** What extending a number brings with it, and what nothing here is about. */
+        private static final long serialVersionUID = 1L;
+
+        @Override
+        public int intValue() {
+            return 1;
+        }
+
+        @Override
+        public long longValue() {
+            return 1;
+        }
+
+        @Override
+        public float floatValue() {
+            return 1;
+        }
+
+        @Override
+        public double doubleValue() {
+            return 1;
+        }
+    }
+
+    /**
+     * A number of somebody's own that says only which object it is is the same thing said twice.
+     *
+     * <p>What the language settles is a list of things ({@link AnswerShape#isLeaf}) and not whatever
+     * extends one of them. Read as one, this walk would ask it and take its no for an answer — and a
+     * no from something the walk asked nothing about is a compile that did not reproduce, which
+     * sends whoever reads it after the compiler rather than after the thing in the answer.
+     */
+    @Test
+    void aNumberOfSomebodysOwnThatSaysOnlyWhichObjectIsNotTwoDifferentAnswers() {
+        Covered<Divergence> walked =
+                Divergence.between(new ANumberOfItsOwn(), new ANumberOfItsOwn());
+
+        assertEquals(Set.of(" " + ANumberOfItsOwn.class.getName() + " THE_SAME_THING_TWICE"),
+                found(walked), "said as what it is rather than as two answers");
+        assertEquals(Set.of(), gaps(walked), "nothing stopped this walk");
+    }
+
     /**
      * A container comparing its members by address is the same thing said twice.
      *

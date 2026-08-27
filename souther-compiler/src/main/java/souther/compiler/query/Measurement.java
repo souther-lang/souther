@@ -1,7 +1,5 @@
 package souther.compiler.query;
 
-import souther.compiler.observe.FailureReason;
-import souther.compiler.observe.NotMeasuredReason;
 
 import java.util.Optional;
 

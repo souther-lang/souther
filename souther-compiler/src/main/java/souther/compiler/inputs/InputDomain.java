@@ -146,6 +146,35 @@ public final class InputDomain {
     }
 
     /**
+     * Two of these are one where they read one input the same way.
+     *
+     * <p>The question it answers is whether a reading taken again came to what the last one came
+     * to. Every measure that needs a denominator reads this, and what stops the work an edit costs
+     * is the answer holding it comparing equal to the one it replaces — so a reading that came back
+     * saying only which run made it would put every measure of every behavior through again.
+     *
+     * <p>What the walk was given and what it produced, and not {@link #byPath}, which is the
+     * positions under the paths they were read at. A reading that reached the same positions and
+     * disagreed here would be this class disagreeing with itself.
+     */
+    @Override
+    public boolean equals(Object other) {
+        return other instanceof InputDomain that
+                && positions.equals(that.positions)
+                && read.equals(that.read)
+                && parameters.equals(that.parameters)
+                && roots.equals(that.roots)
+                && java.util.Objects.equals(policy, that.policy)
+                && reach.equals(that.reach)
+                && placed.equals(that.placed);
+    }
+
+    @Override
+    public int hashCode() {
+        return java.util.Objects.hash(positions, read, parameters, roots, policy, reach, placed);
+    }
+
+    /**
      * One thing a behavior is applied to: what it is called, what it holds, and which binding a body
      * reads it as.
      *

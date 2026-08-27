@@ -400,7 +400,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
                                  int unknown) {}
 
         /** Why the combinations have no numbers. */
-        public enum NoRows implements souther.compiler.observe.NotMeasuredReason {
+        public enum NoRows implements NotMeasuredReason {
             /** No row names this behavior, so nothing sits anywhere. */
             NO_ROWS
         }
@@ -539,7 +539,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
         public static final Reading ANSWERED = new Reading(Reach.EVERY_RULE, true);
 
         /** Why a position has no coverage numbers. */
-        public enum NoRows implements souther.compiler.observe.NotMeasuredReason {
+        public enum NoRows implements NotMeasuredReason {
             /** No row names this behavior. An absence of evidence is not a set of gaps, so the
              *  classes nothing sits in are not classes nothing reaches. */
             NO_ROWS

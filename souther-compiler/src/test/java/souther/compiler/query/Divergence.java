@@ -93,9 +93,16 @@ record Divergence(Locus at, String cause, Divergence.Kind kind) {
             this.budget = budget;
         }
 
+        /**
+         * What the language says the meaning of, which is {@link AnswerShape}'s to say.
+         *
+         * <p>The same list as the walk of one store reads. Written again here, one of them had a
+         * rule admitting whatever extends a number, so a thing whose equality is an address came
+         * back from this walk as two compiles answering different things — true of the objects and
+         * wrong about the compiler.
+         */
         private static boolean opaque(Class<?> c) {
-            return c == String.class || Number.class.isAssignableFrom(c) || c == Boolean.class
-                    || c == Character.class || c.isEnum();
+            return AnswerShape.isLeaf(c);
         }
 
         private void say(Locus at, Class<?> c, Kind kind) {
@@ -375,6 +382,15 @@ record Divergence(Locus at, String cause, Divergence.Kind kind) {
             }
         }
 
+        /**
+         * Which contract a thing is read under.
+         *
+         * <p>What a thing claims and not whether it keeps it. This walk holds two of them together
+         * and pairs what they hold by what the members say, so a map whose equality is which
+         * objects were put in it is paired like any other and then asked its own answer — which is
+         * where it is named. Refusing it the contract here would take away the pairing and leave
+         * the naming to a walk of its fields, which belong to a module that opens nothing.
+         */
         private static Contract contractOf(Object each) {
             if (each instanceof List<?>) {
                 return Contract.A_LIST;

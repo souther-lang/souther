@@ -32,6 +32,27 @@ public final class Claims {
     }
 
     /**
+     * Two of these are one where they judged the same claims the same way.
+     *
+     * <p>The question it answers is whether a check that ran again came to what the last one came
+     * to. This is reached from what a module's check answers with, and what stops the work an edit
+     * costs is that answer comparing equal to the one it replaces — so a reading of the same claims
+     * against the same arrivals that came back saying only which run made it would leave every
+     * reader of the check running again.
+     *
+     * <p>Over the judged claims and nothing else, which is the whole of what one of these is.
+     */
+    @Override
+    public boolean equals(Object other) {
+        return other instanceof Claims that && judged.equals(that.judged);
+    }
+
+    @Override
+    public int hashCode() {
+        return judged.hashCode();
+    }
+
+    /**
      * Every claim {@code claims} makes, judged against {@code read}.
      *
      * <p>A claim naming a position the reading has none of is unproven rather than anything else:

@@ -61,7 +61,7 @@ class EveryWayASearchFallsShortIsBuiltHereTest {
             gaps.addAll(some);
         }
         if (aScanOfSomethingUnloadable()
-                instanceof Covered.Partly<String>(List<String> _, List<Gap> some)) {
+                instanceof Covered.Partly<Class<?>>(List<Class<?>> _, List<Gap> some)) {
             gaps.addAll(some);
         }
         if (twoStoresAskedDifferently()
@@ -100,13 +100,13 @@ class EveryWayASearchFallsShortIsBuiltHereTest {
     }
 
     /** A place to count keys in, holding something that is not a class. */
-    private static Covered<String> aScanOfSomethingUnloadable() throws Exception {
+    private static Covered<Class<?>> aScanOfSomethingUnloadable() throws Exception {
         Path root = Files.createTempDirectory("souther-scan");
         Path where = root.resolve("souther/compiler/query");
         Files.createDirectories(where);
         Files.writeString(where.resolve("NotAClass.class"), "this is not a class file");
         try {
-            return EveryQuestionThisCompilerDeclaresIsReachedOrOutsideABatchRunTest.scanOf(root);
+            return DeclaredQuestions.scanOf(root);
         } finally {
             delete(root);
         }

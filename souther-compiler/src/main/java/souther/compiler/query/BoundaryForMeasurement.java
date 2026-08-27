@@ -1,7 +1,6 @@
 package souther.compiler.query;
 
 import souther.compiler.check.Sig;
-import souther.compiler.observe.FailureReason;
 
 import java.util.Map;
 

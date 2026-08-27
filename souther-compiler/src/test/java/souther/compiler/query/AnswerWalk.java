@@ -1,12 +1,8 @@
 package souther.compiler.query;
 
-import java.lang.reflect.Array;
 import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
-import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -22,10 +18,9 @@ import java.util.Set;
  * ever disagree over it, and a class whose {@code equals} rests on an address has one and is found
  * only by comparing.
  *
- * <p><b>The object before what it holds.</b> Whether a thing means anything by {@code equals} is
- * asked of it first, and only then is it walked into. Asked the other way round — walk a container,
- * ask a plain object — an array is stepped through and never questioned, and an array's equality is
- * its address whatever it holds.
+ * <p>What is here is what an object is — {@link WhatStandsHere.Facts} answered of one. The order
+ * those answers are read in is {@link WhatStandsHere}'s and the walking is {@link Traversal}'s, so
+ * that this and the walk of the declarations cannot come apart over a rule either of them keeps.
  *
  * <p><b>From the answer and not from its value.</b> An answer is what it holds and what the compile
  * said getting there, and {@code Db} compares both to stop work. Started at the value, this would
@@ -42,21 +37,29 @@ final class AnswerWalk {
         }
     }
 
-    /** What the walk found and how much of the store it covered, beside how much of it there was
-     *  — which is what says a walk reached the answers a caller is asking about at all. */
-    record Walked(int visited, Set<String> classes, Covered<Found> covered) {}
+    /**
+     * What the walk found and how much of the store it went into, beside what it met on the way —
+     * which is what says a walk reached the answers a caller is asking about at all.
+     *
+     * @param opened how many things it went into what they hold, which counts neither a leaf nor
+     *               something it stopped at
+     */
+    record Walked(int opened, Set<String> classes, Covered<Found> covered) {}
 
     private AnswerWalk() {
     }
 
     /** Everything {@code db} holds, walked. */
     static Walked of(Db db) {
-        Scan scan = new Scan();
-        db.everyAnswer().forEach((key, answer) -> {
-            scan.question = key.getClass().getName();
-            scan.at(answer, Locus.ROOT);
-        });
-        return scan.walked();
+        List<Found> out = new ArrayList<>();
+        List<Gap> gaps = new ArrayList<>();
+        Set<String> classes = new LinkedHashSet<>();
+        int visited = 0;
+        for (Map.Entry<Key<?>, Answer<?>> each : db.everyAnswer().entrySet()) {
+            visited += into(each.getKey().getClass().getName(), each.getValue(), out, gaps,
+                    classes);
+        }
+        return new Walked(visited, classes, Covered.of(List.copyOf(out), List.copyOf(gaps)));
     }
 
     /**
@@ -68,153 +71,179 @@ final class AnswerWalk {
      * it anything, comes back from one looking exactly like a walk that did neither.
      */
     static Walked of(String question, Object root) {
-        Scan scan = new Scan();
-        scan.question = question;
-        scan.at(root, Locus.ROOT);
-        return scan.walked();
+        List<Found> out = new ArrayList<>();
+        List<Gap> gaps = new ArrayList<>();
+        Set<String> classes = new LinkedHashSet<>();
+        int visited = into(question, root, out, gaps, classes);
+        return new Walked(visited, classes, Covered.of(List.copyOf(out), List.copyOf(gaps)));
     }
 
-    /** Whether {@code type} says what it is, rather than which object it is. */
-    private static boolean declaresEquals(Class<?> type) {
-        try {
-            return type.getMethod("equals", Object.class).getDeclaringClass() != Object.class;
-        } catch (NoSuchMethodException none) {
-            return false;
+    private static int into(String question, Object root, List<Found> out, List<Gap> gaps,
+                            Set<String> classes) {
+        OfOneStore facts = new OfOneStore(question, classes);
+        Traversal<Object, Locus> walk = new Traversal<>(facts);
+        facts.walk = walk;
+        walk.at(root, Locus.ROOT);
+        switch (walk.covered()) {
+            case Covered.Whole<Traversal.Stopped<Locus>>(List<Traversal.Stopped<Locus>> all) ->
+                    all.forEach(each -> out.add(
+                            new Found(question, each.offender(), each.where())));
+            case Covered.Partly<Traversal.Stopped<Locus>>(
+                    List<Traversal.Stopped<Locus>> all, List<Gap> fellShort) -> {
+                all.forEach(each -> out.add(
+                        new Found(question, each.offender(), each.where())));
+                gaps.addAll(fellShort);
+            }
         }
+        return walk.opened();
     }
 
     /**
-     * One walk of everything a store holds.
+     * What one object is, and nothing about the order to ask it in.
      *
-     * <p>Every place and not every object. One object under an answer is held by however many paths
-     * hold it, and each of those is a place the answer exposes it — so what is remembered per object
-     * is what was found under it, written out again at each path that reaches it. Remembered as
-     * "already seen", the second path would come back with nothing and a register of places would
-     * hold whichever path the walk happened to take first.
+     * <p>Everything here is asked of the object in front of the walk. What may stand somewhere is
+     * not a question a store can be asked — the object standing there is the answer — so what is
+     * closed and what is a sum are the declarations' business and are said to be settled here.
      */
-    private static final class Scan {
+    private static final class OfOneStore implements Traversal.Walking<Object, Locus> {
 
-        private final Map<Object, List<Found>> settled = new IdentityHashMap<>();
-        private final Set<Object> walking = Collections.newSetFromMap(new IdentityHashMap<>());
-        private final Set<Object> visited = Collections.newSetFromMap(new IdentityHashMap<>());
-        private final Set<String> classes = new LinkedHashSet<>();
-        private final List<Found> out = new ArrayList<>();
-        private final List<Gap> gaps = new ArrayList<>();
-        /** Which answer the walk is inside, so a place says which question holds it. */
-        private String question = "";
+        private final String question;
+        private final Set<String> classes;
+        private Traversal<Object, Locus> walk;
 
-        Walked walked() {
-            return new Walked(visited.size(), classes, Covered.of(out, gaps));
+        OfOneStore(String question, Set<String> classes) {
+            this.question = question;
+            this.classes = classes;
         }
 
-        /** @return whether what is under {@code each} was covered, so a caller may remember it */
-        boolean at(Object each, Locus where) {
-            if (each == null) {
-                return true;
-            }
-            // The leaves. A boxed number, a string, a case of an enumeration and a class are values
-            // by the language, and asking them again would be asking about the JDK.
-            if (each instanceof String || each instanceof Number || each instanceof Boolean
-                    || each instanceof Character || each instanceof Enum<?>
-                    || each instanceof Class<?>) {
-                return true;
-            }
-            List<Found> already = settled.get(each);
-            if (already != null) {
-                already.forEach(found -> out.add(new Found(
-                        question, found.offender(), where.followedBy(found.at()))));
-                return true;
-            }
-            if (!walking.add(each)) {
-                gaps.add(new Gap(Gap.Why.A_GRAPH_THAT_LOOPS,
-                        question + where.asText() + " " + each.getClass().getName()));
-                return false;
-            }
-            visited.add(each);
-            int before = out.size();
-            boolean whole;
-            try {
-                whole = under(each, where);
-            } finally {
-                walking.remove(each);
-            }
-            if (whole) {
-                List<Found> mine = new ArrayList<>();
-                for (Found found : out.subList(before, out.size())) {
-                    mine.add(new Found(found.question(), found.offender(),
-                            new Locus(found.at().steps()
-                                    .subList(where.steps().size(), found.at().steps().size()))));
-                }
-                settled.put(each, List.copyOf(mine));
-            }
-            return whole;
+        @Override
+        public boolean bound(Object node) {
+            return true;
         }
 
-        private boolean under(Object each, Locus where) {
-            classes.add(each.getClass().getName());
-            if (!declaresEquals(each.getClass())) {
-                // A lambda's class name carries the JVM's own counter, which differs per run. What
-                // is left is what the type is called, which is what the other walk calls it too, so
-                // a register keyed by what was found holds one line for a thing whichever met it.
-                out.add(new Found(question,
-                        each.getClass().getTypeName().replaceFirst("/0x[0-9a-f]+$", ""), where));
-                return true;    // what it holds is unreachable through an equality that never holds
-            }
-            if (each instanceof Collection<?> items) {
-                boolean whole = true;
-                for (Object item : items) {
-                    whole &= at(item, where.then(new Locus.Step.Element()));
-                }
-                return whole;
-            }
-            // What an absence may be hiding. Read through rather than walked into: the field under
-            // it belongs to `java.base`, which opens nothing to this, so an answer holding one of
-            // these would have every object beneath it go unasked.
-            if (each instanceof Optional<?> maybe) {
-                return maybe.isEmpty() || at(maybe.get(), where.then(new Locus.Step.Present()));
-            }
-            if (each instanceof Map<?, ?> entries) {
-                boolean whole = true;
-                for (Map.Entry<?, ?> entry : entries.entrySet()) {
-                    whole &= at(entry.getKey(), where.then(new Locus.Step.MapKey()));
-                    whole &= at(entry.getValue(), where.then(new Locus.Step.MapValue()));
-                }
-                return whole;
-            }
-            if (each.getClass().isArray()) {
-                boolean whole = true;
-                for (int i = 0; i < Array.getLength(each); i++) {
-                    whole &= at(Array.get(each, i), where.then(new Locus.Step.Element()));
-                }
-                return whole;
-            }
-            return fieldsOf(each, where);
+        @Override
+        public Class<?> classOf(Object node) {
+            classes.add(node.getClass().getName());
+            return node.getClass();
         }
 
-        private boolean fieldsOf(Object each, Locus where) {
-            boolean whole = true;
-            for (Class<?> at = each.getClass(); at != null && at != Object.class;
-                    at = at.getSuperclass()) {
-                for (Field field : at.getDeclaredFields()) {
-                    if (Modifier.isStatic(field.getModifiers()) || field.getType().isPrimitive()) {
-                        continue;
-                    }
-                    Object held;
-                    try {
-                        field.setAccessible(true);
-                        held = field.get(each);
-                    } catch (RuntimeException | ReflectiveOperationException opaque) {
-                        // A field this cannot open is a subtree it did not ask about. Said out loud,
-                        // because what is under it would otherwise be counted as looked at and clean.
-                        gaps.add(new Gap(Gap.Why.A_FIELD_THAT_WOULD_NOT_OPEN,
-                                question + where.thenMember(at, field.getName()).asText()));
-                        whole = false;
-                        continue;
-                    }
-                    whole &= at(held, where.thenMember(at, field.getName()));
-                }
+        /**
+         * Whether what is here stands for what it holds.
+         *
+         * <p>Asked of what it turned out to be and not of what anything was written as: a store
+         * hands over the object, and its class is what the walk has.
+         */
+        @Override
+        public boolean aContainer(Object node) {
+            return AnswerShape.keepsThatContract(node.getClass());
+        }
+
+        @Override
+        public Covered<WhatStandsHere.Under<Object, Locus>> held(Object node, Locus where) {
+            List<WhatStandsHere.Under<Object, Locus>> out = new ArrayList<>();
+            switch (node) {
+                case Collection<?> items -> items.forEach(each ->
+                        under(out, where.then(new Locus.Step.Element()), each));
+                // What an absence may be hiding. Read through rather than walked into: the field
+                // under it belongs to `java.base`, which opens nothing to this.
+                case Optional<?> maybe -> maybe.ifPresent(each ->
+                        under(out, where.then(new Locus.Step.Present()), each));
+                case Map<?, ?> entries -> entries.forEach((key, value) -> {
+                    under(out, where.then(new Locus.Step.MapKey()), key);
+                    under(out, where.then(new Locus.Step.MapValue()), value);
+                });
+                default -> throw new IllegalStateException("not a container: " + node.getClass());
             }
-            return whole;
+            return Covered.of(List.copyOf(out), List.of());
+        }
+
+        /** Nothing is at a place that holds nothing, and nothing is what it says about itself. */
+        private static void under(List<WhatStandsHere.Under<Object, Locus>> out, Locus where,
+                                  Object held) {
+            if (held != null) {
+                out.add(new WhatStandsHere.Under<>(where, held));
+            }
+        }
+
+        /** An object is of the class it is of, and what else that class permits is a question
+         *  about the declarations rather than about this. */
+        @Override
+        public boolean closedFamily(Object node) {
+            return false;
+        }
+
+        @Override
+        public Covered<WhatStandsHere.Under<Object, Locus>> arms(Object node, Locus where) {
+            return Covered.of(List.of(), List.of());
+        }
+
+        @Override
+        public boolean itselfStands(Object node) {
+            return true;
+        }
+
+        @Override
+        public boolean closesWhatStandsHere(Object node) {
+            return true;
+        }
+
+        @Override
+        public Covered<WhatStandsHere.Under<Object, Locus>> members(Object node, Locus where) {
+            List<WhatStandsHere.Under<Object, Locus>> out = new ArrayList<>();
+            List<Gap> fellShort = new ArrayList<>();
+            for (Field field : AnswerShape.fieldsOf(node.getClass())) {
+                Locus at = where.thenMember(field.getDeclaringClass(), field.getName());
+                Object held;
+                try {
+                    field.setAccessible(true);
+                    held = field.get(node);
+                } catch (RuntimeException | ReflectiveOperationException opaque) {
+                    // A field this cannot open is a subtree it did not ask about, and what comes
+                    // back says so: read as everything this holds, it would be a thing half looked
+                    // at that nothing could tell from one looked at whole.
+                    fellShort.add(new Gap(Gap.Why.A_FIELD_THAT_WOULD_NOT_OPEN,
+                            question + at.asText()));
+                    continue;
+                }
+                under(out, at, held);
+            }
+            return Covered.of(List.copyOf(out), List.copyOf(fellShort));
+        }
+
+        /** Two objects are the same thing when they are the same object. */
+        @Override
+        public Object keyOf(Object node) {
+            return new Itself(node);
+        }
+
+        @Override
+        public String named(Object node) {
+            // A lambda's class name carries the JVM's own counter, which differs per run. What is
+            // left is what the type is called, which is what the other walk calls it too, so a
+            // register keyed by what was found holds one line for a thing whichever met it.
+            return node.getClass().getTypeName().replaceFirst("/0x[0-9a-f]+$", "");
+        }
+
+        /** An object graph that holds itself is one nobody meant to walk, and what is under it went
+         *  unasked. */
+        @Override
+        public Gap aLoop(Object node, Locus where) {
+            return new Gap(Gap.Why.A_GRAPH_THAT_LOOPS,
+                    question + where.asText() + " " + node.getClass().getName());
+        }
+    }
+
+    /** One object, by which object it is. */
+    private record Itself(Object held) {
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Itself that && that.held == held;
+        }
+
+        @Override
+        public int hashCode() {
+            return System.identityHashCode(held);
         }
     }
 }

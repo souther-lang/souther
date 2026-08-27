@@ -47,15 +47,24 @@ import java.util.Set;
  *
  * <p>Two rules run through the rest of them, and an answer can break either one.
  *
- * <p>A node is a value. What {@code equals} says is what stops work, so an answer says what it
- * means and not where it came from; an answer that never equals the one it replaces leaves nothing
- * downstream of it ever kept, while every test of what the compiler says stays green. That rules
- * out a kind of thing and not a missing method: an object that reads this store when it is asked —
- * a registry, a scope over one, a loader — is the same as another when the store is, which is where
- * it came from. Those are built inside a {@code compute} and used there, which is also what makes
- * their reads land on the question being answered. {@link Names#derivedSymbols} is one, handed out
- * and not kept, and {@code EverythingAnAnswerHoldsMeansSomethingTest} is what says which answers still
- * break the rule.
+ * <p>A computed node is a value. What {@code equals} says is what stops work, so such an answer says
+ * what it means and not where it came from; one that never equals the answer it replaces leaves
+ * nothing downstream of it ever kept, while every test of what the compiler says stays green. That
+ * rules out a kind of thing and not a missing method: an object that reads this store when it is
+ * asked — a registry, a scope over one, a loader — is the same as another when the store is, which
+ * is where it came from. Those are built inside a {@code compute} and used there, which is also what
+ * makes their reads land on the question being answered. {@link Names#derivedSymbols} is one, handed
+ * out and not kept.
+ *
+ * <p>A supplied node is whatever was supplied. An {@link Input} is not computed and its answer is
+ * what somebody handed in, so what its equality decides is not whether a compile came to the same
+ * thing — it is whether the outside changed. A way of running something may be handed in that way
+ * and there is no compute to build it inside; what it costs is that a new one reads as a change,
+ * which is a conservative answer about the outside rather than a wrong answer about a compile.
+ *
+ * <p>{@code EverythingAnAnswerHoldsMeansSomethingTest} is what says which answers still break the
+ * first rule, and {@code EveryAnswerThisCompilerDeclaresIsSettledTest} what says which of the two a
+ * question is read under.
  *
  * <p>An edge is what its consumer means. A collection gathered per module is an index, and a
  * question asked per definition depends on the entries it reaches rather than on the index. Read

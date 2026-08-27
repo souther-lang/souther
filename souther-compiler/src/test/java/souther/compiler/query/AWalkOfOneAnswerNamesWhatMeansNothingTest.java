@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -177,5 +178,74 @@ class AWalkOfOneAnswerNamesWhatMeansNothingTest {
         assertEquals(Set.of("A_FIELD_THAT_WOULD_NOT_OPEN Q.Dated#at.LocalDateTime#date",
                         "A_FIELD_THAT_WOULD_NOT_OPEN Q.Dated#at.LocalDateTime#time"),
                 gaps(walked), "and says which fields");
+    }
+
+    /**
+     * What the language ships that says it keeps none of the contract is held to saying so.
+     *
+     * <p>The rule that reads a thing for what it holds rests on comparing it comparing them, and
+     * the language ships one that says it does the opposite. Named and not noticed, this walk would
+     * read one for its entries and never ask the map itself — so what is named is held to failing
+     * the very thing the rule claims, and a name here that turned out to keep it would be something
+     * excluded for nothing.
+     */
+    @Test
+    void whatIsNamedAsKeepingNoneOfTheContractKeepsNoneOfIt() {
+        Set<String> keptItAfterAll = new TreeSet<>();
+        for (Class<?> each : AnswerShape.whichKeepNoneOfIt()) {
+            if (HowAnAnswerHoldsThings.twoOfThemSayingTheSameThingAreEqual(each)) {
+                keptItAfterAll.add(each.getName());
+            }
+        }
+
+        assertEquals(Set.of(), keptItAfterAll,
+                "named as keeping none of the contract, and keeping it");
+    }
+
+    /**
+     * And what is read for what it holds keeps it.
+     *
+     * <p>The other half, over what a store actually holds rather than over a list somebody wrote:
+     * every container met while walking one is asked whether two of it saying the same thing are
+     * the same thing. One that is not would be read for its members and never asked, which is the
+     * shape the name above exists for.
+     */
+    @Test
+    void whatIsReadForWhatItHoldsKeepsTheContract() {
+        Set<String> saidNo = new TreeSet<>();
+        for (Supplier<Object> each : HowAnAnswerHoldsThings.all()) {
+            Object one = each.get();
+            if (AnswerShape.keepsThatContract(one.getClass()) && !one.equals(each.get())) {
+                saidNo.add(one.getClass().getName());
+            }
+        }
+
+        assertEquals(Set.of(), saidNo, "read for what it holds, and comparing two of them does not"
+                + " compare what they hold");
+    }
+
+    /** And two ways down to one of those. */
+    private record BothWays(Dated one, Dated two) {}
+
+    /**
+     * A thing the walk got only part way into is not put away as looked at.
+     *
+     * <p>What is remembered per thing is what was found under it, and it may be remembered only
+     * where that is the whole of what is there. Remembered after a walk that could not open half of
+     * it, the next path to hold the same thing is told there was nothing to see — and the place
+     * where the walk fell short is a place the register never hears about, while the walk that met
+     * it says it covered everything.
+     */
+    @Test
+    void aThingTheWalkGotPartWayIntoIsNotRememberedAsWalked() {
+        Dated shared = new Dated(java.time.LocalDateTime.of(2026, 1, 1, 0, 0));
+
+        AnswerWalk.Walked walked = AnswerWalk.of("Q", new BothWays(shared, shared));
+
+        assertEquals(Set.of("A_FIELD_THAT_WOULD_NOT_OPEN Q.BothWays#one.Dated#at.LocalDateTime#date",
+                        "A_FIELD_THAT_WOULD_NOT_OPEN Q.BothWays#one.Dated#at.LocalDateTime#time",
+                        "A_FIELD_THAT_WOULD_NOT_OPEN Q.BothWays#two.Dated#at.LocalDateTime#date",
+                        "A_FIELD_THAT_WOULD_NOT_OPEN Q.BothWays#two.Dated#at.LocalDateTime#time"),
+                gaps(walked), "the walk fell short at both places that hold it");
     }
 }

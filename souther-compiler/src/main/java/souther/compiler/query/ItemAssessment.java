@@ -267,7 +267,7 @@ public sealed interface ItemAssessment {
         record NoHit() implements Coverage {}
 
         /** Why the question was not put. */
-        enum NotAsked implements souther.compiler.observe.NotMeasuredReason {
+        enum NotAsked implements NotMeasuredReason {
             /** The build asked for no measurement at all, so no row was read against any line.
              *  Said by every line whatever drew it, unlike the two below. */
             NOT_ASKED,
@@ -294,7 +294,7 @@ public sealed interface ItemAssessment {
         }
 
         /** Why the question was put and could not be answered. */
-        enum CouldNotAsk implements souther.compiler.observe.FailureReason {
+        enum CouldNotAsk implements FailureReason {
             /** The rows ran without instrumentation, so no row can be shown to have reached the
              *  comparison. Never a reason for an invariant's line. */
             ARMS_UNREADABLE;
@@ -347,7 +347,7 @@ public sealed interface ItemAssessment {
                         "a debt is what its readings came to, and this is none of them");
             }
             WeakeningSet unread = WeakeningSet.none();
-            souther.compiler.observe.NotMeasuredReason unasked = null;
+            NotMeasuredReason unasked = null;
             boolean missed = false;
             for (Measurement<Coverage> reading : readings) {
                 // Found is found. Said before anything else is looked at, so that no accounting of

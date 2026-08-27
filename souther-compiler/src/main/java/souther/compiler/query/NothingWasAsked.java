@@ -1,6 +1,5 @@
 package souther.compiler.query;
 
-import souther.compiler.observe.NotMeasuredReason;
 
 /**
  * The build asked for no measurement at all, so this measure was not made.
