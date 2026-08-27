@@ -53,12 +53,8 @@ class ALeafIsNotAnAbsenceTest {
     }
 
     private StructuralInspection under(Type type) {
-        return under(type, true);
-    }
-
-    private StructuralInspection under(Type type, boolean deeper) {
         TypeView view = TypeView.of(type, symbols);
-        return StructuralInspection.of(ReadablePosition.of(view).shape(), deeper,
+        return StructuralInspection.of(ReadablePosition.of(view).shape(),
                 Distinctions.ofType(view, symbols));
     }
 
@@ -137,12 +133,6 @@ class ALeafIsNotAnAbsenceTest {
         assertEquals(java.util.Set.of("hour", "room"), decomposed.under().keySet());
     }
 
-    /** A record the walk may not go into is a reaching declined, not a record with nothing in it. */
-    @Test
-    void aRecordTheWalkMayNotEnterIsBlockedRatherThanEmpty() {
-        assertEquals(blocked(new BlockReason.DepthLimit()), under(named("Slot"), false));
-    }
-
     private static StructuralInspection blocked(BlockReason.AboutThePosition why) {
         return retained(new StructuralInspection.Continuation.Blocked(why));
     }
@@ -165,12 +155,6 @@ class ALeafIsNotAnAbsenceTest {
             assertInstanceOf(StructuralInspection.Retained.class, under(carrier),
                     () -> "and is still to be answered for: " + carrier);
         }
-    }
-
-    /** And the walk stopping is the walk's own answer, said as the depth it is. */
-    @Test
-    void aSequenceTheWalkMayNotEnterIsStoppedByTheDepthAndNotByItsShape() {
-        assertEquals(blocked(new BlockReason.DepthLimit()), under(Type.list(named("Slot")), false));
     }
 
     /**

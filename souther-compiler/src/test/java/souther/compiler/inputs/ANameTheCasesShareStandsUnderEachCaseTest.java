@@ -135,20 +135,36 @@ class ANameTheCasesShareStandsUnderEachCaseTest {
 
                 data Paging = { limit: Int }
                 data A = { ...Paging, x: Int }
-                data B = { ...Paging, y: Int }
+                data B = { ...Paging, deeper: Q }
                 data Q = A | B
 
-                data Held = { q: Q }
-                data Outer = { held: Held }
+                data Outer = { q: Q }
 
                 data Ok
 
                 behavior read : (o: Outer) -> Ok
                 """, "read");
 
-        assertEquals(List.of(), read.positionsNamed(TermPath.of("o"), "held.q.limit"));
-        assertTrue(read.reach().crossings().isEmpty(),
-                "the sum is as deep as this reading goes, so its cases put no field anywhere");
+        // The sum under `B` is where the input returns to `Q`, so the reading stops before its
+        // cases and the name a case would carry stands nowhere.
+        TermPath returns = pathOf(read, "o.q@B.deeper");
+        assertEquals(List.of(), read.positionsNamed(returns, "limit"));
+        assertTrue(read.reach().crossings().stream().noneMatch(each -> each.at().equals(returns)),
+                "the reading stopped there, so its cases put no field anywhere: "
+                        + read.reach().crossings());
+        // And the sum this one returns to was entered, so the absence above is the stop and not a
+        // name that crosses nowhere in this model.
+        assertEquals(List.of("o.q@A.limit", "o.q@B.limit"),
+                spelled(read.positionsNamed(TermPath.of("o"), "q.limit")));
+    }
+
+    /** The position this reading made at {@code spelled}. */
+    private static TermPath pathOf(InputDomain read, String spelled) {
+        return read.positions().stream().map(Position::path)
+                .filter(each -> each.toString().equals(spelled))
+                .findFirst().orElseThrow(() -> new AssertionError(
+                        "no position at " + spelled + " among " + read.positions().stream()
+                                .map(Position::path).toList()));
     }
 
     /** The paths, spelled the way a report names them. */

@@ -31,7 +31,8 @@ public final class ReportedReason {
             case BlockReason.RuleAboutADerivedValue _ ->
                     UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE;
             case BlockReason.TypeUnresolved _ -> UndividedPosition.Reason.TYPE_UNRESOLVED;
-            case BlockReason.DepthLimit _ -> UndividedPosition.Reason.DEPTH_LIMIT;
+            case BlockReason.RecursiveExpansion _ ->
+                    UndividedPosition.Reason.RETURNS_TO_A_DECLARATION_ALREADY_READ;
             case BlockReason.UnsupportedTraversal _ ->
                     UndividedPosition.Reason.UNSUPPORTED_TRAVERSAL;
             case BlockReason.UnreadComparisonForm _ ->

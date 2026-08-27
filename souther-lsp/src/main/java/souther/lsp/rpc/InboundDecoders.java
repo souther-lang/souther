@@ -58,6 +58,16 @@ public final class InboundDecoders {
             combine(field("textDocument", field("uri", string()).asDecoder()), field("position", POSITION))
                     .map(Params.PositionParams::new);
 
+    /** {@code { query }} */
+    public static final Decoder<JsonNode, Params.Query> QUERY =
+            field("query", string()).asDecoder().map(Params.Query::new);
+
+    /** {@code { textDocument: { uri }, positions: [ { line, character }, ... ] }} */
+    public static final Decoder<JsonNode, Params.PositionsParams> POSITIONS_PARAMS =
+            combine(field("textDocument", field("uri", string()).asDecoder()),
+                    field("positions", list(POSITION)))
+                    .map(Params.PositionsParams::new);
+
     /** {@code { textDocument: { uri }, position: { line, character }, newName }} */
     public static final Decoder<JsonNode, Params.RenameParams> RENAME =
             combine(flat(POSITION_PARAMS), field("newName", string()))
@@ -65,10 +75,10 @@ public final class InboundDecoders {
                             new Params.RenameParams(pos.uri(), pos.position(), newName));
 
     /** {@code { textDocument: { uri }, range: { start, end } }} — the codeAction context is ignored. */
-    public static final Decoder<JsonNode, Params.CodeActionParams> CODE_ACTION =
+    public static final Decoder<JsonNode, Params.RangeParams> DOC_RANGE =
             combine(field("textDocument", field("uri", string()).asDecoder()),
                     field("range", combine(field("start", POSITION), field("end", POSITION)).map(Range::new)))
-                    .map(Params.CodeActionParams::new);
+                    .map(Params.RangeParams::new);
 
     /** Decodes {@code node} with {@code decoder}, or empty on any validation failure — a malformed
      * request is dropped rather than crashing the server. */

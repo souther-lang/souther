@@ -660,6 +660,10 @@ public final class Adequacy {
             if (souther.compiler.check.TypeOps.holdsAnErroneousType(settled.value())) {
                 return Answer.absent();
             }
+            // What the behaviors state about their own answers, which name locations of an input as
+            // readily as a body does and reach them by the same paths.
+            Map<String, souther.compiler.check.StatedContract> stated =
+                    db.ask(new Bodies.StatedContracts(name)).value();
             Map<String, InputDomain> out = new LinkedHashMap<>();
             for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
                 if (!(behavior instanceof Hir.SpecBehavior spec)) {
@@ -673,11 +677,94 @@ public final class Adequacy {
                     // all the same.
                     Answer<Hir.FnDef> fn = db.ask(new Bodies.SettledFn(name, spec.name()));
                     out.put(spec.name(), InputDomain.of(spec, fn.present() ? fn.value() : null,
-                            sig, scope.value(), db.ask(new Front.Reading()).value()));
+                            sig, scope.value(), db.ask(new Front.Reading()).value(),
+                            // What this behavior's body reads, so the reading is closed over the
+                            // paths its measurement names as well as the ones the enumeration
+                            // finds. Asked as the reading is made and never after it: one that
+                            // grew a position when somebody looked one up would answer a question
+                            // differently depending on what had been asked before it.
+                            demandOf(db, name, spec, fn.present() ? fn.value() : null,
+                                    scope.value(), statedOf(stated, spec))));
                 }
             }
             return Answer.of(Ordered.map(out));
         }
+    }
+
+    /**
+     * The finite input paths one behavior's measurement is going to name.
+     *
+     * <p>Read off the body with a path environment and nothing else — no reading of the input, which
+     * is what is being built. Which location a name stands for is settled by the parameters, the
+     * bindings on the way and the case an arm selects; whether a row is ever written there is the
+     * reading's answer, asked of the reading afterwards about the path this produced.
+     *
+     * <p>Both producers, because either alone leaves the other's rules about a position this had
+     * not been told about. A body is where most of them are written and an injected behavior has
+     * none at all, and a clause of the behavior draws its lines whether or not anything implements
+     * it.
+     */
+    private static souther.compiler.inputs.InputDemand demandOf(
+            Db db, String module, Hir.SpecBehavior spec, Hir.FnDef fn, Symbols symbols,
+            souther.compiler.check.StatedContract stated) {
+        return statedIn(stated, symbols, bodyIn(db, module, spec, fn, symbols));
+    }
+
+    /** The locations the implementation reads, or none where nothing implements the behavior. */
+    private static souther.compiler.inputs.InputDemand bodyIn(
+            Db db, String module, Hir.SpecBehavior spec, Hir.FnDef fn, Symbols symbols) {
+        Bodies.CheckedBody checked = fn == null ? null
+                : db.ask(new Bodies.CheckedBehavior(module, spec.name())).value();
+        if (checked == null) {
+            return souther.compiler.inputs.InputDemand.NONE;
+        }
+        Map<souther.compiler.types.BindingId, String> parameters = new LinkedHashMap<>();
+        for (int i = 0; i < fn.params().size() && i < spec.params().size(); i++) {
+            souther.compiler.types.BindingId binding = fn.params().get(i).binder().binding();
+            if (binding != null) {
+                parameters.put(binding, spec.params().get(i).name());
+            }
+        }
+        return souther.compiler.inputs.InputDemand.of(checked.body(),
+                souther.compiler.inputs.InputReads.ofParameters(parameters, checked.elements()),
+                symbols);
+    }
+
+    /**
+     * And the locations the behavior's own clauses name, added to them.
+     *
+     * <p>A second source and not a second reading. What draws a line on an input is written in a
+     * body or in an {@code ensures}, and a reading built over one of them answers about the rules of
+     * the other by not having the position they are about — which is the same silence a depth used
+     * to produce, arriving from the other producer. An injected behavior has no body at all and
+     * still states rules.
+     *
+     * <p>The parameters under the bindings the declaration gave them, which is not what a body binds:
+     * a clause names them where it was written.
+     */
+    private static souther.compiler.inputs.InputDemand statedIn(
+            souther.compiler.check.StatedContract stated, Symbols symbols,
+            souther.compiler.inputs.InputDemand demand) {
+        if (stated == null || stated.isEmpty()) {
+            return demand;
+        }
+        Map<souther.compiler.types.BindingId, String> parameters = new LinkedHashMap<>();
+        for (souther.compiler.core.Contract.Param param : stated.params()) {
+            parameters.putIfAbsent(param.binding(), param.name());
+        }
+        souther.compiler.inputs.InputPaths names =
+                souther.compiler.inputs.InputReads.ofWhatIsDeclared(parameters);
+        souther.compiler.inputs.InputDemand out = demand;
+        for (souther.compiler.check.StatedContract.StatedRule rule : stated.rules()) {
+            for (souther.compiler.check.StatedContract.Conjunct conjunct : rule.conjuncts()) {
+                souther.compiler.core.Core said = conjunct.stated().orNull();
+                if (said != null) {
+                    out = out.and(souther.compiler.inputs.InputDemand
+                            .of(said, names, symbols).paths());
+                }
+            }
+        }
+        return out;
     }
 
     /**
@@ -1344,7 +1431,7 @@ public final class Adequacy {
                             symbols, policy);
             return Answer.of(Coverages.merged(Coverages.searched(measured, inputs,
                     probing(spec.name(), divided, sig, symbols, policy, parameters,
-                            constructing(db, name),
+                            constructing(db, name), runningRowsOf(trialling(db, name), behavior, sig),
                             domain),
                     domain.quantities(symbols), divided.reaching())));
         }
@@ -1361,7 +1448,8 @@ public final class Adequacy {
                 String behavior,
                 souther.compiler.partition.Partitions.Partitioning partitioning, Sig sig,
                 Symbols symbols, souther.compiler.check.ReadingPolicy policy,
-                List<String> parameters, BoundaryValues building, InputDomain domain) {
+                List<String> parameters, BoundaryValues building, Generator.Trial trial,
+                InputDomain domain) {
             if (building == null) {
                 return null;
             }
@@ -1378,9 +1466,23 @@ public final class Adequacy {
                         java.util.function.Function<souther.compiler.inputs.NumericTerm,
                                 souther.compiler.check.Carrier> carrier,
                         java.util.Map<souther.compiler.inputs.NumericTerm,
-                                souther.compiler.numeric.Place> fixing) {
+                                souther.compiler.numeric.Place> fixing,
+                        souther.compiler.partition.Reachability.Reaching reaching) {
                     return built(() ->
-                            Generator.probeFixing(subject, label, carrier, fixing, check));
+                            Generator.probeFixing(subject, label, carrier, fixing, reaching, check));
+                }
+
+                @Override
+                public RowAsRead read(
+                        List<souther.compiler.partition.FixtureTemplate> inputs) {
+                    try {
+                        return RowAsRead.of(sig, building, trial, inputs);
+                    } catch (LinkageError _) {
+                        // The generated classes would not link, so nothing here can say where the
+                        // row went. Which is what a row nothing built reads as, and is not a row
+                        // seen to stand somewhere else.
+                        return RowAsRead.nothingRead();
+                    }
                 }
 
                 private Generator.BoundaryAttempt built(
@@ -3380,8 +3482,8 @@ public final class Adequacy {
             // What a value is declared to be, asked of the one walk that answers it. A second
             // reading of a definition's type here would be a second answer about what a row may
             // name, differing from the reading that builds the row at whatever either forgot.
-            souther.compiler.check.FixtureEvidence evidence =
-                    new souther.compiler.check.FixtureEvidence(symbols, values);
+            souther.compiler.check.DeclaredTypeEvidence evidence =
+                    new souther.compiler.check.DeclaredTypeEvidence(symbols, values);
             Map<TypeSymbol, List<String>> stated = new LinkedHashMap<>();
             for (Map.Entry<String, Hir.FnDef> each : values.entrySet()) {
                 if (!each.getValue().params().isEmpty()

@@ -78,13 +78,20 @@ class AReportSaysWhatRegionARowWasLookedForInTest {
                 .findFirst().orElseThrow(() -> new AssertionError(human));
     }
 
-    /** A condition on the way that nothing could take in is said, beside what the search came to. */
+    /**
+     * A condition on the way that nothing could take in is said, beside what the search came to.
+     *
+     * <p>The sentence names what the row was composed against rather than what the region
+     * represents, because the region is no longer the whole of it: a condition may be represented
+     * there and still be one no value was composed under, and both leave the same gap between what
+     * the row was built to be and what reaches the line.
+     */
     @Test
     void aConditionTheRegionDoesNotAccountForIsSaid() {
         String line = about("ON point check/p.low = 11", NOTHING_READS_IT);
 
-        assertTrue(line.contains("not every condition on the way to the line is represented in the"
-                + " region searched"), line);
+        assertTrue(line.contains("not every condition on the way to the line is one the row was"
+                + " composed against"), line);
         assertTrue(line.contains(
                         "a condition that is neither a comparison nor a combination of them (17:8)"),
                 "named for the shape this reading stopped at, and where it is written: " + line);

@@ -506,19 +506,36 @@ final class Coverages {
 
         /**
          * What building a row for {@code label} came to, with each position of the item fixed
-         * where {@code fixing} puts it, or null where the attempt could not be made at all — which
-         * leaves the point unknown rather than refused.
+         * where {@code fixing} puts it and the rest of the row built to reach the border, or null
+         * where the attempt could not be made at all — which leaves the point unknown rather than
+         * refused.
          *
          * <p>One method, whatever the border was drawn on. What the row is for is the coverage item
          * and what is fixed to build it is a placement that stands for it; a side of a border is met
          * by a row anywhere in it, so a row labelled by the places a search happened to compose
          * would name a witness as though it were the item.
+         *
+         * @param reaching what the row has to be to arrive at the border at all. Handed in beside
+         *                 the placement rather than left out: the placement is about the positions
+         *                 the item names and a condition above the line is about the others, and a
+         *                 row is one row
          */
         souther.compiler.partition.Generator.BoundaryAttempt attempt(
                 String label,
                 java.util.function.Function<souther.compiler.inputs.NumericTerm,
                         souther.compiler.check.Carrier> on,
-                Map<souther.compiler.inputs.NumericTerm, Place> fixing);
+                Map<souther.compiler.inputs.NumericTerm, Place> fixing,
+                souther.compiler.partition.Reachability.Reaching reaching);
+
+        /**
+         * A composed row built and run, so that what it turned out to be can be asked.
+         *
+         * <p>The same reading a written row goes through ({@link RowAsRead}). A candidate is a row
+         * nobody has been handed yet and is otherwise a row like any other, so what it stands at is
+         * read by the walk that reads the file's rows and never by a second account written where
+         * the candidate was composed.
+         */
+        RowAsRead read(java.util.List<souther.compiler.partition.FixtureTemplate> inputs);
     }
 
     /**
@@ -772,10 +789,13 @@ final class Coverages {
                                                 souther.compiler.partition.WayToTheBorder within,
                                                 souther.compiler.inputs.Quantities rules) {
         BorderQuantity quantity = border.cut().of();
-        // Built here and gone when the search is. A region is a way of asking about values rather
-        // than something that says what it is, so it is what the walk runs against and never what
-        // the answer keeps; the account it was built from is what travels.
-        souther.compiler.inputs.SearchRegion region = within.narrowing(rules.region());
+        java.util.Optional<souther.compiler.coverage.ComparisonOccurrence> site =
+                border.origin().comparisonAt();
+        // Built here and gone when the search is. What a row has to be to arrive is a way of asking
+        // about values rather than something that says what it is, so it is what the walk runs
+        // against and never what the answer keeps; the account it was built from is what travels.
+        souther.compiler.partition.Reachability reaching =
+                souther.compiler.partition.Reachability.of(within, rules.region());
         return new OneSearchOfABorder() {
 
             @Override
@@ -786,13 +806,25 @@ final class Coverages {
                     return new ItemAssessment.Attempt.Unavailable(
                             ItemAssessment.Attempt.Reason.NO_CLASSES);
                 }
+                // A way one position would have to take two of its cases to reach, which no value
+                // is. Said in that word and not in the one for a walk that tried what the rules
+                // leave and reached nothing: nothing was walked here, and what settles it is that
+                // the two cases are not in one value.
+                if (!(reaching instanceof souther.compiler.partition.Reachability.Reaching able)) {
+                    return new ItemAssessment.Attempt.Unresolved(
+                            new souther.compiler.partition.Generator.UnresolvedCombination(
+                                    java.util.List.of(label),
+                                    souther.compiler.partition.Generator.UnresolvedCombination
+                                            .Reason.ONE_POSITION_CANNOT_BE_BOTH), within);
+                }
                 // Where a row would have to stand is asked of the quantity, and finding one there of
                 // the realizer. What it composes is a candidate and no part of the item: another row
                 // in the same side is at the point as much as this one would be, so what the row is
                 // offered for goes in beside it rather than being read back off it.
-                return switch (realizer.realize(quantity.standingAt(criterion), region)) {
+                return switch (realizer.realize(quantity.standingAt(criterion), able.region())) {
                     case Realization.Found found -> whatCameOfIt(
-                            probe.attempt(label, quantity::carrierOf, found.fixing()),
+                            standingThere(probe, quantity, where, criterion, site, label,
+                                    probe.attempt(label, quantity::carrierOf, found.fixing(), able)),
                             label, within);
                     // And the two ways of finding nothing are not one answer. A walk of the whole
                     // of what the rules leave that reaches no value settles the point; a search
@@ -882,6 +914,62 @@ final class Coverages {
         };
     }
 
+    /**
+     * A candidate the walk that reads a row at a point was seen to stand there, or a search that
+     * composed a row and did not.
+     *
+     * <p><b>The one thing that says a row is at a point.</b> {@link StandingAtAPoint} answers it for
+     * the rows in the file and for the rows a person is being offered, so a candidate goes through
+     * it before it is offered rather than after somebody has been handed it. What a search knows
+     * while it is composing is narrower — that each position it fixed reads back at the place it was
+     * fixed at — and a row can pass that and turn back above the comparison, which is exactly the
+     * disagreement this removes: the generator and the reading are no longer two accounts of one
+     * model, because the generator asks the reading.
+     *
+     * <p><b>Where it fails open, and where it does not.</b> The two halves of standing at a point
+     * are not the same question. Whether the values are at the level is read off the row and is
+     * this compiler's to answer; whether the comparison was answered takes something having watched
+     * the run, which is not. So a row nothing watched is offered — the values were seen at the
+     * level and the rest is a thing nobody could put a question about — and a row whose values
+     * could not be read at the point is not: that is the walk unable to confirm the half this
+     * compiler owns, of a value this compiler has just built, which is the two readings coming
+     * apart in the one place this exists to close.
+     *
+     * <p>So what holds of an offered row is that its values were seen at the point, and the run
+     * either reached the comparison or was not watched. Kept open at both, an answer that used to
+     * be a disagreement could go on being one under another name, and the measure would go green
+     * over it.
+     *
+     * <p>An answer about this search and never about the model. A row composed here that does not
+     * stand at the point says the way to the border was not composed against in full; the point is
+     * owed the same row it was owed before, and nothing here says one cannot be written.
+     */
+    private static souther.compiler.partition.Generator.BoundaryAttempt standingThere(
+            Probe probe, BorderQuantity quantity, BehaviorInputs where, Criterion criterion,
+            java.util.Optional<souther.compiler.coverage.ComparisonOccurrence> site, String label,
+            souther.compiler.partition.Generator.BoundaryAttempt made) {
+        if (!(made instanceof souther.compiler.partition.Generator.BoundaryAttempt.Built built)) {
+            return made;
+        }
+        souther.compiler.partition.ObservedInputs read =
+                probe.read(built.row().inputs()).asInputs();
+        if (read == null) {
+            return made;   // nothing built it, so nothing here can say where it went
+        }
+        return switch (StandingAtAPoint.met(quantity, where, List.of(read), criterion, site)) {
+            case YES, NOT_WATCHED -> made;
+            // Carrying what the composer could not compose against. This is the outcome that most
+            // needs it: a row was built and was not seen reaching the point, and whether some
+            // condition above the line went unused is the first thing that would explain it.
+            case NO, UNREADABLE -> new souther.compiler.partition.Generator.BoundaryAttempt.Unresolved(
+                    new souther.compiler.partition.Generator.UnresolvedCombination(
+                            List.of(label),
+                            souther.compiler.partition.Generator.UnresolvedCombination.Reason
+                                    .NO_CERTIFIED_WITNESS),
+                    built.unrepresented());
+        };
+    }
+
     /** A search that came to nothing at {@code subject}, which is what a point is written as. */
     private static ItemAssessment.Attempt nothingComposedOne(
             String subject, souther.compiler.partition.WayToTheBorder within) {
@@ -915,10 +1003,15 @@ final class Coverages {
                             List.of(subject),
                             souther.compiler.partition.Generator.UnresolvedCombination.Reason
                                     .LINKAGE_FAILED), within);
+            // The way as the walk left it, and beside it what the composer could not act on. Two
+            // stages and two answers: a condition the walk stated stays stated, and writing the
+            // composer's own failure onto the way would have one condition wearing two of the
+            // walk's words.
             case souther.compiler.partition.Generator.BoundaryAttempt.Built built ->
-                    new ItemAssessment.Attempt.Built(built.row(), within);
+                    new ItemAssessment.Attempt.Built(built.row(), within, built.unrepresented());
             case souther.compiler.partition.Generator.BoundaryAttempt.Unresolved left ->
-                    new ItemAssessment.Attempt.Unresolved(left.why(), within);
+                    new ItemAssessment.Attempt.Unresolved(left.why(), within,
+                            left.unrepresented());
         };
     }
 

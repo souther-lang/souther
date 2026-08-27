@@ -162,8 +162,15 @@ public record UndividedPosition(TermPath at, Why why) {
          * line would send a reader after the wrong thing entirely.
          */
         UNSUPPORTED_PARTITION_SHAPE,
-        /** The walk stopped before it reached the fields under this position. */
-        DEPTH_LIMIT,
+        /**
+         * The input returns here to a declaration it has already been through, and what is under
+         * this position was not read again.
+         *
+         * <p>A position whose values are values of a type the path has already met. What stands
+         * under it is what stands under that one, so a reader is told the return rather than a list
+         * of positions repeating for as long as anybody keeps reading.
+         */
+        RETURNS_TO_A_DECLARATION_ALREADY_READ,
         /**
          * The type at this position could not be interpreted, so nothing about its values is
          * established. A model carrying one compiles, which is why this is a word a report writes

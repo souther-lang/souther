@@ -421,11 +421,35 @@ public sealed interface ItemAssessment {
             /** What the way to the point took in and what it could not, which is what says how much
              *  the outcome beside it is worth. */
             souther.compiler.partition.WayToTheBorder way();
+
+            /**
+             * And what the way did state that no value was composed under.
+             *
+             * <p>Beside the way rather than on it. What the walk came to is the walk's answer and a
+             * condition it stated stays stated; that the composer could not act on one is a fact
+             * about a later stage, and written onto the way it would be one condition wearing two
+             * of the walk's answers. Both halves are put together where a reader wants one list
+             * ({@link #unaccountedFor()}).
+             */
+            List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed();
         }
 
         /** A value at the point, built and accepted by the module's own decoders. */
         record Built(Generator.GeneratedRow row,
-                     souther.compiler.partition.WayToTheBorder way) implements Searched {}
+                     souther.compiler.partition.WayToTheBorder way,
+                     List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed)
+                implements Searched {
+
+            public Built {
+                uncomposed = List.copyOf(uncomposed);
+            }
+
+            /** A row composed where the whole way was stated and used. */
+            public Built(Generator.GeneratedRow row,
+                         souther.compiler.partition.WayToTheBorder way) {
+                this(row, way, List.of());
+            }
+        }
 
         /**
          * The search ran and no row came of it.
@@ -440,7 +464,20 @@ public sealed interface ItemAssessment {
          * much the other half is worth, so it carries the way like every other outcome of a search.
          */
         record Unresolved(Generator.UnresolvedCombination why,
-                          souther.compiler.partition.WayToTheBorder way) implements Searched {}
+                          souther.compiler.partition.WayToTheBorder way,
+                          List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed)
+                implements Searched {
+
+            public Unresolved {
+                uncomposed = List.copyOf(uncomposed);
+            }
+
+            /** A search that came to nothing where the whole way was stated and used. */
+            public Unresolved(Generator.UnresolvedCombination why,
+                              souther.compiler.partition.WayToTheBorder way) {
+                this(why, way, List.of());
+            }
+        }
 
         /**
          * A search was asked for and there was nothing to run it against.
@@ -465,12 +502,18 @@ public sealed interface ItemAssessment {
         }
 
         /**
-         * What the search ran over that the way to the point does not account for.
+         * Every condition on the way that the row this came to was not composed against, and which
+         * stage let each one go.
          *
          * <p>Asked of the attempt because the attempt is what holds both halves: which conditions
-         * were left out of the region, and whether this outcome is one they bear on. Answered at a
-         * renderer instead, the two halves were a pair of conditions written into a sentence, and
-         * the only way to ask what they came to was to compile a model that produced the sentence.
+         * were left out, and whether this outcome is one they bear on. Answered at a renderer
+         * instead, the two halves were a pair of conditions written into a sentence, and the only
+         * way to ask what they came to was to compile a model that produced the sentence.
+         *
+         * <p>Put together here and kept apart everywhere else. A condition the walk had no words
+         * for and one it stated that nothing could compose a value under leave the same gap for a
+         * reader and are different facts to act on, so what comes back is one list of two shapes
+         * rather than one shape that has lost which of them it was.
          *
          * <p>Empty where nothing was left out, and empty where the outcome settles the point on its
          * own: a walk of the whole of what the rules leave that reaches no value proves there is
@@ -478,12 +521,17 @@ public sealed interface ItemAssessment {
          * empty box leaves what it contains empty too. Empty for a row that was built, which is a
          * point answered rather than a search to account for, and for a search nobody made.
          */
-        default List<souther.compiler.partition.OnTheWay.Declined> unaccountedFor() {
-            return switch (this) {
-                case Built _, Unavailable _ -> List.of();
-                case Unresolved left -> left.why().reason().provesInfeasible()
-                        ? List.of() : left.way().declined();
-            };
+        default List<souther.compiler.partition.ReachabilityGap> unaccountedFor() {
+            if (!(this instanceof Unresolved left) || left.why().reason().provesInfeasible()) {
+                return List.of();
+            }
+            List<souther.compiler.partition.ReachabilityGap> out = new java.util.ArrayList<>();
+            // The walk's, said as the stage it happened at. A condition it had no words for is one
+            // nothing downstream ever saw.
+            left.way().declined().forEach(each ->
+                    out.add(new souther.compiler.partition.ReachabilityGap.Unstated(each)));
+            out.addAll(left.uncomposed());
+            return List.copyOf(out);
         }
     }
 

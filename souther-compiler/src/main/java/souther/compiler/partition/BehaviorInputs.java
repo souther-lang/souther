@@ -165,6 +165,73 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, Symbols 
     }
 
     /**
+     * What the declarations put at {@code path}, or null where they put nothing there.
+     *
+     * <p>The same walk {@link #occurrencesAt} takes, with the values left out. A position's type is
+     * a fact about the declarations and a row is not needed to ask it — which is what a caller
+     * composing a value at a position wants, since there is no row yet.
+     *
+     * <p><b>Here because the walk is here.</b> How a step of a path moves the type is one rule with
+     * several cases — a field is reached through the names its record is written under, an element
+     * is what a sequence holds, a refinement is the position read as one of its cases — and written
+     * a second time for a caller that only wanted the type, the two would agree until one of them
+     * learned a step the other did not.
+     *
+     * <p>Null where the path and the declarations disagree, and null for a path this behavior has no
+     * parameter for. Neither is a position with a type nothing could name: they are paths that name
+     * no position of these inputs at all.
+     */
+    public Type declaredAt(TermPath path) {
+        int at = indexOf(path);
+        if (at < 0) {
+            return null;
+        }
+        Type here = types.get(at);
+        for (TermPath.Step step : path.steps()) {
+            here = stepping(step, here, symbols);
+            if (here == null) {
+                return null;
+            }
+        }
+        return here;
+    }
+
+    /**
+     * The type one step reaches from {@code from}, or null where the step is not one this position
+     * takes.
+     *
+     * <p>Exhaustive over {@link TermPath.Step}, with no {@code default}, and the one place a step is
+     * turned into a type. A step added later stops this compiling rather than arriving as a walk
+     * that quietly takes it one way here and another way where a row is read.
+     */
+    static Type stepping(TermPath.Step step, Type from, Symbols symbols) {
+        TypeView view = TypeView.of(from, symbols);
+        return switch (step) {
+            case TermPath.Step.Field named -> {
+                // Null at a sum whose cases share a spread, deliberately. A shared field is
+                // readable at every value of the sum and is not by itself a constructible child of
+                // it, since a value there is one of the cases. {@link StructuralDescent} answers
+                // the constructible question, so taking the field as a step here would give this
+                // reader a descent wider than the construction it has to agree with.
+                StructuralDescent.Children children = StructuralDescent.of(view.shape());
+                yield children == null ? null : children.under().get(named.name());
+            }
+            case TermPath.Step.Element _ -> view.shape() instanceof Shape.Sequence sequence
+                    ? sequence.element() : null;
+            // What a sum's case holds is the value the sum held, and what an optional holds is at
+            // no name of its own — so both narrow the type at this position and nothing is
+            // descended into.
+            case TermPath.Step.Refine refine -> switch (refine.refinement()) {
+                case Refinement.SumCase one -> view.shape() instanceof Shape.Sum
+                        ? Type.ref(one.leaf()) : null;
+                case Refinement.Presence presence ->
+                        !(view.shape() instanceof Shape.Optional optional) ? null
+                                : presence.present() ? optional.element() : view.declared();
+            };
+        };
+    }
+
+    /**
      * The value at {@code path}, or null where there is not one readable value there.
      *
      * <p>For a position one value stands at. A position inside a sequence has as many as were
@@ -207,13 +274,12 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, Symbols 
             }
             switch (step) {
                 case TermPath.Step.Field named -> {
-                    StructuralDescent.Children children = StructuralDescent.of(view.shape());
-                    if (children == null || !(here instanceof ObservedValue.Constructed made)) {
+                    Type next = stepping(step, type, symbols);
+                    if (next == null || !(here instanceof ObservedValue.Constructed made)) {
                         return false;
                     }
-                    Type next = children.under().get(named.name());
                     ObservedValue held = made.field(named.name());
-                    if (next == null || held == null) {
+                    if (held == null) {
                         return false;
                     }
                     out.add(new Standing(held, next, reached.then(named.name()), at));
@@ -223,8 +289,8 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, Symbols 
                 // and what a class comes to over them is the caller's to decide. A list holding
                 // none is a step taken: the walk arrived and the row wrote nothing there.
                 case TermPath.Step.Element _ -> {
-                    if (!(view.shape() instanceof Shape.Sequence sequence)
-                            || !(here instanceof ObservedValue.Sequence written)) {
+                    Type element = stepping(step, type, symbols);
+                    if (element == null || !(here instanceof ObservedValue.Sequence written)) {
                         return false;
                     }
                     // Keyed by the step, which is this path with the step taken. Two positions
@@ -233,8 +299,7 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, Symbols 
                     for (int i = 0; i < written.elements().size(); i++) {
                         Map<TermPath, Integer> deeper = new java.util.LinkedHashMap<>(at);
                         deeper.put(inside, i);
-                        out.add(new Standing(written.elements().get(i), sequence.element(),
-                                inside, deeper));
+                        out.add(new Standing(written.elements().get(i), element, inside, deeper));
                     }
                 }
                 // The value stays where it is and what may stand there narrows. A row whose value
@@ -243,7 +308,7 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, Symbols 
                 // a row nothing could read gives. What refuses the step is the type and the path
                 // disagreeing about what is at this position, which is nothing about the row.
                 case TermPath.Step.Refine refine -> {
-                    Type narrowed = narrowing(refine.refinement(), view, here);
+                    Type narrowed = stepping(step, type, symbols);
                     if (narrowed == null) {
                         return false;
                     }
@@ -254,27 +319,6 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, Symbols 
                 }
             }
             return true;
-        }
-
-        /**
-         * The type standing here once {@code refinement} has narrowed it, or null where the
-         * position's shape is not one that refinement is of.
-         *
-         * <p>Null is the walk and the declaration disagreeing, which is the same thing a field
-         * step answers null for: nothing went wrong with the row.
-         *
-         * <p>Nothing is descended into. What a sum's case holds is the value the sum held, and what
-         * an optional holds is at no name of its own — so both narrow the type at this position and
-         * leave the value where it is.
-         */
-        private static Type narrowing(Refinement refinement, TypeView view, ObservedValue here) {
-            return switch (refinement) {
-                case Refinement.SumCase one -> view.shape() instanceof Shape.Sum
-                        ? Type.ref(one.leaf()) : null;
-                case Refinement.Presence presence ->
-                        !(view.shape() instanceof Shape.Optional optional) ? null
-                                : presence.present() ? optional.element() : view.declared();
-            };
         }
 
         /** Whether the value written here is one {@code refinement} leaves standing. */

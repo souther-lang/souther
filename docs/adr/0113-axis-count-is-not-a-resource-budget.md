@@ -72,7 +72,8 @@ reading reaches is offered to the readers that measure it. A reading may still f
 understand one; what it may not do is select the subject away to save work.
 
 The distinction is the whole of the rule and is easy to lose. Souther already has readings that stop
-— a walk that goes two levels into a value and no further, a clause whose alternatives
+— a walk that stops where a path returns to a declaration already open on it, a clause whose
+alternatives
 `ReadingPolicy` will not hold apart, a rule this compiler cannot turn into a line. None of those is
 a budget choosing which evidence to keep: every position is still there, and what the reading could
 not do with it is reported at that position (`notRead`, `rulesNotReached`,

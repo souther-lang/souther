@@ -39,8 +39,24 @@ public enum LspMethod {
     HOVER("textDocument/hover", new Advertisement.StaticCapability("hoverProvider", true)),
     DEFINITION("textDocument/definition", new Advertisement.StaticCapability("definitionProvider", true)),
     REFERENCES("textDocument/references", new Advertisement.StaticCapability("referencesProvider", true)),
-    // invoked completion; no trigger characters
-    COMPLETION("textDocument/completion", new Advertisement.StaticCapability("completionProvider", Map.of())),
+    // A `.` opens the list, because what may be written after one is a different set from what may
+    // be written anywhere else and an author who has to ask for it does not know that.
+    COMPLETION("textDocument/completion",
+            new Advertisement.StaticCapability("completionProvider",
+                    Map.of("triggerCharacters", List.of(".")))),
+    INLAY_HINT("textDocument/inlayHint",
+            new Advertisement.StaticCapability("inlayHintProvider", true)),
+    DOCUMENT_HIGHLIGHT("textDocument/documentHighlight",
+            new Advertisement.StaticCapability("documentHighlightProvider", true)),
+    SELECTION_RANGE("textDocument/selectionRange",
+            new Advertisement.StaticCapability("selectionRangeProvider", true)),
+    WORKSPACE_SYMBOL("workspace/symbol",
+            new Advertisement.StaticCapability("workspaceSymbolProvider", true)),
+    // `(` and `,` open it: a signature is wanted when an argument is begun, and every argument is
+    // begun by one of the two.
+    SIGNATURE_HELP("textDocument/signatureHelp",
+            new Advertisement.StaticCapability("signatureHelpProvider",
+                    Map.of("triggerCharacters", List.of("(", ",")))),
     CODE_ACTION("textDocument/codeAction",
             new Advertisement.StaticCapability("codeActionProvider",
                     Map.of("resolveProvider", true))),

@@ -42,7 +42,8 @@ Only what the model states. A position the model draws no line through has **no 
 report names it as *not derivable* rather than dividing it.
 
 A type states classes: `Bool` is two, an optional is two, a sum is its leaf cases. A record is not a
-class — it is taken apart field by field, two levels deep. A threshold states where one class ends:
+class — it is taken apart field by field, down every path that opens no declaration twice. A
+threshold states where one class ends:
 an invariant bounds what can exist, and a `guard`'s comparison against a constant divides what a row
 can write. Thresholds at one position merge into one partition and are intersected with what the
 position admits.

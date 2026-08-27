@@ -2,10 +2,14 @@ package souther.compiler.partition;
 
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.Symbols;
+import souther.compiler.core.Core;
 import souther.compiler.coverage.ComparisonOccurrence;
 import souther.compiler.diag.Citation;
+import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.SearchRegion;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.NumericDomain.LinearForm;
 import souther.compiler.numeric.NumericDomain.Rel;
 
@@ -114,6 +118,41 @@ public record ReachingCuts(Map<ComparisonOccurrence, List<OnTheWay>> byCompariso
             case Condition.NotRead not -> List.of(new OnTheWay.Declined(
                     Citation.of(not.at().pos()), new OnTheWay.Why.NoWordsForTheShape()));
         };
+    }
+
+    /**
+     * What reaching {@code arm} of {@code match} establishes about this input.
+     *
+     * <p>Beside {@link #stating} because it is the other half of one question. Both say what a row
+     * that got here has already turned out to be; they differ in the vocabulary the answer lands in,
+     * and a fork's answer is not a cut — which case a value is has no arithmetic and states nothing
+     * about any order.
+     *
+     * <p><b>The narrowing and never the arm.</b> What a search can compose against is a position
+     * read as one of its cases; "the second arm was taken" is a fact about the text. So what is
+     * carried is the scrutinee's position with the arm's case on it, and where this reading cannot
+     * arrive at one — a scrutinee no position holds, an arm answering for several cases, a case the
+     * declarations leave no position at — nothing is invented and the arm is declined.
+     *
+     * <p>Never empty, for the reason {@link #stating} is never empty: an arm that established
+     * nothing and an arm nothing could be read of are the two answers a walk has to tell apart, and
+     * a silence is both of them.
+     */
+    static OnTheWay entering(Core.Match match, Core.Case arm, InputReads reads, Symbols symbols) {
+        Citation at = Citation.of(arm.pos());
+        if (arm.caseTypes().size() != 1) {
+            return new OnTheWay.Declined(at, new OnTheWay.Why.ForkArmNotReadAsANarrowing());
+        }
+        TermPath scrutinee = reads.pathOf(match.scrutinee(), symbols);
+        // The position that is narrowed, and not the narrowed one. A case declaring no field has
+        // nothing under it and this reading holds no position there, which is what it is for; what
+        // has to exist is the position the case is a case of, since that is what a row writes a
+        // value at and what a requirement on the way is keyed by.
+        if (scrutinee == null || reads.read().at(scrutinee) == null) {
+            return new OnTheWay.Declined(at, new OnTheWay.Why.ForkArmNotReadAsANarrowing());
+        }
+        return new OnTheWay.Narrowed(at,
+                scrutinee.refine(Refinement.sumCase(arm.caseTypes().get(0))));
     }
 
     /**

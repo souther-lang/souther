@@ -291,61 +291,71 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
             data Quick
             data Slow
             data Mode = Quick | Slow
-            data Inner = { flag: Flag }
-            data Middle = { inner: Inner }
-            data Outer = { middle: Middle }
+            data Nil
+            data Cons = { flag: Flag, tail: Chain }
+            data Chain = Nil | Cons
             data Answer = Int
 
-            behavior pick : (o: Outer, mode: Mode) -> Answer
+            behavior pick : (c: Chain, mode: Mode) -> Answer
                 constructs Answer
 
-            let pick (o, mode) = match o.middle.inner.flag with
-                | On  -> Answer(1)
-                | Off -> unreachable "the probe never passes Off"
+            let pick (c, mode) = match c with
+                | Nil -> Answer(0)
+                | Cons as k -> match k.tail with
+                    | Nil -> Answer(0)
+                    | Cons as m -> match m.flag with
+                        | On  -> Answer(1)
+                        | Off -> unreachable "the probe never passes Off"
 
             example pick
-                | "on" : (Outer { middle = Middle { inner = Inner { flag = On } } }, Quick)
+                | "on" : (Cons { flag = On, tail = Cons { flag = On, tail = Nil } }, Quick)
                         -> Answer(1)
             """;
 
     /**
-     * And so is one about a position deeper than the walk goes.
+     * And so is one written several links into a recursive value.
      *
-     * <p>Two levels is as deep as a report reads into what a parameter holds. A claim below that is
-     * about a position nothing was read about, which is what the verdict says — and saying it is
-     * the whole difference from a claim quietly acted on.
+     * <p>The position is there — the body names it, so the reading was built over it — and what the
+     * claim is not is proven: the arm stands inside another, and what reaches it is not read here.
+     * Which is the verdict, and saying it is the whole difference from a claim quietly acted on.
      */
     @Test
-    void aClaimBelowWhereTheWalkStopsIsSaid() {
+    void aClaimSeveralLinksIntoARecursiveValueIsSaid() {
         String deep = """
                 module example.probe
 
                 data On
                 data Off
                 data Flag = On | Off
-                data Inner = { flag: Flag }
-                data Middle = { inner: Inner }
-                data Outer = { middle: Middle }
+                data Nil
+                data Cons = { flag: Flag, tail: Chain }
+                data Chain = Nil | Cons
                 data Answer = Int
 
-                behavior pick : (o: Outer) -> Answer
+                behavior pick : (c: Chain) -> Answer
                     constructs Answer
 
-                let pick (o) = match o.middle.inner.flag with
-                    | On  -> Answer(1)
-                    | Off -> unreachable "the probe never passes Off"
+                let pick (c) = match c with
+                    | Nil -> Answer(0)
+                    | Cons as k -> match k.tail with
+                        | Nil -> Answer(0)
+                        | Cons as m -> match m.flag with
+                            | On  -> Answer(1)
+                            | Off -> unreachable "the probe never passes Off"
 
                 example pick
-                    | "on" : (Outer { middle = Middle { inner = Inner { flag = On } } }) -> Answer(1)
+                    | "on" : (Cons { flag = On, tail = Cons { flag = On, tail = Nil } })
+                            -> Answer(1)
                 """;
 
         String report = reportOn(deep);
 
-        assertTrue(partitionOf(deep).axes().isEmpty(),
-                "nothing was read this far into the value");
-        assertTrue(report.contains("`Off` at `o.middle.inner.flag` is declared unreachable: "
-                        + "the probe never passes Off, and nothing here proves it: "
-                        + "nothing was read about this case"),
+        assertTrue(partitionOf(deep).axes().stream().anyMatch(
+                        each -> each.path().toString().equals("c@Cons.tail@Cons.flag")),
+                "the body names this position, so the reading has it");
+        assertTrue(report.contains("`Off` is declared unreachable: the probe never passes Off, "
+                        + "and nothing here proves it: this arm is inside another, and what "
+                        + "reaches it is not read here"),
                 () -> "said where no axis carries it:\n" + report);
     }
 
@@ -406,11 +416,11 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
     void aClaimOffTheAxesIsNotCountedInTheLineThatCountsThem() {
         String report = reportOn(OFF_THE_AXES);
 
-        assertTrue(partitionLineOf(report).startsWith("partition   axes 1   equivalence partitions"),
+        assertTrue(partitionLineOf(report).startsWith("partition   axes 5   equivalence partitions"),
                 () -> "the counts are over the positions it has axes for:\n" + report);
         assertFalse(partitionLineOf(report).contains("excluded"),
                 () -> "and nothing left the denominator this line counts:\n" + report);
-        assertTrue(report.contains("`Off` at `o.middle.inner.flag` is declared unreachable"),
+        assertTrue(report.contains("`Off` is declared unreachable"),
                 () -> "and the claim is said under its own name:\n" + report);
     }
 

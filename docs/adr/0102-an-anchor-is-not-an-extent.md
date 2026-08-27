@@ -156,6 +156,18 @@ author wrote has to be spelled by the characters it points at, part by part, che
 source. It is what found the third place a spelling was being measured at an anchor — the prelude
 rewrite that replaces one library call with another — after the two the deleted table accounted for.
 
+An extent on the authored tree identifies the occurrence it covers; an extent on a rewritten one does
+not. Within one revision of one source no two authored expressions are written over the same
+characters, so a reader that has verified as much may key a fact about an occurrence on its extent —
+which is what an editor asking what a semantic fact is about needs, an occurrence being the thing it
+asks about and a position being how it points. Nothing of the kind survives a pass. A rewrite carries
+an extent across on purpose, and helper expansion stamps a call site's extent over the whole of a
+copied prelude body, so two copies of one body wear the extent of the call they were placed in. Which
+of the two a position is in is not the file it names — a copy spliced into a file is quoted from that
+file — but whether the code was written at it, which is `SourcePos.wasCopiedHere`. An identity for an
+authored site is therefore minted once, by a walk of the authored tree that refuses the revision when
+two of its expressions collide, and is never reconstructed from a node a pass produced.
+
 ## References
 
 - `[#compile-errors]` — what a report points at

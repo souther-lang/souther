@@ -49,6 +49,11 @@ import souther.compiler.diag.ReportContext;
 import souther.compiler.diag.SourceContext;
 import souther.compiler.diag.Shown;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.sites.DeclaredParameter;
+import souther.compiler.sites.CalledBehavior;
+import souther.compiler.sites.MemberReceiver;
+import souther.compiler.sites.Published;
+import souther.compiler.sites.SemanticSnapshot;
 import souther.compiler.cst.SyntaxElement;
 import souther.compiler.cst.SyntaxKind;
 import souther.compiler.cst.SyntaxNode;
@@ -60,13 +65,17 @@ import souther.compiler.frontend.CstFrontend;
 import souther.lsp.protocol.CodeAction;
 import souther.lsp.protocol.CodeLens;
 import souther.lsp.protocol.CompletionItem;
+import souther.lsp.protocol.DocumentHighlight;
 import souther.lsp.protocol.DocumentSymbol;
 import souther.lsp.protocol.Hover;
+import souther.lsp.protocol.InlayHint;
 import souther.lsp.protocol.Location;
 import souther.lsp.protocol.LspDiagnostic;
 import souther.lsp.protocol.Position;
 import souther.lsp.protocol.Range;
+import souther.lsp.protocol.SignatureHelp;
 import souther.lsp.protocol.TextEdit;
+import souther.lsp.protocol.WorkspaceSymbol;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -118,6 +127,17 @@ public final class Analyzer {
 
     /** What the last compile that could answer said each document owes a declaration for. */
     private final LastAnswered<List<CompletionItem>> behaviorsOwed = new LastAnswered<>();
+
+    /**
+     * The compile of the document being typed in, finished off where the author has not finished it.
+     *
+     * <p>Its own store and not the workspace's, and what it keeps is answers about the source it was
+     * last given rather than answers to fall back on. Every question is put to the buffer as it
+     * stands; an answer from an earlier revision is never handed over because this one could not be
+     * reached, which is what {@link LastAnswered} is for and what a receiver must not be read
+     * through — the fields of the type that used to be there wear the shape of a right answer.
+     */
+    private final SemanticProbe probe = new SemanticProbe();
 
     /**
      * How much of what the rows cover this editor was told to measure. Off by default.
@@ -348,19 +368,38 @@ public final class Analyzer {
      * every change.
      */
     private Compilation compileOf(ModuleGraph graph) {
-        Map<String, String> clean = new LinkedHashMap<>();
+        Sorted sorted = sorted(graph);
+        return compileOf(graph, pathCompiledAgainst(), sorted.joining(), sorted.broken());
+    }
+
+    /** The workspace as a compile takes it: what can join one, and the modules of what cannot. */
+    private record Sorted(Map<String, String> joining, Set<String> broken) {}
+
+    /**
+     * Which documents can join a compile, sorted once.
+     *
+     * <p>Once because a document is one of the two and not the other, and a second reading of that
+     * here would be a second answer free to differ from the one the compile was built from — the
+     * probe compiles the same workspace with one document standing in for itself, and the rest of it
+     * has to be the rest of it.
+     */
+    private Sorted sorted(ModuleGraph graph) {
+        Map<String, String> joining = new LinkedHashMap<>();
         Set<String> broken = new HashSet<>();
         for (String uri : graph.uris()) {
             String text = graph.text(uri);
             Reading reading = readingOf(uri, text);
             if (reading.parses()) {
-                clean.put(uri, text);
+                joining.put(uri, text);
             } else if (reading.declares() != null) {
                 broken.add(reading.declares());
             }
         }
-        return compileOf(graph, compiledAgainst == null ? souther.compiler.meta.ModulePath.EMPTY
-                : compiledAgainst, clean, broken);
+        return new Sorted(joining, broken);
+    }
+
+    private souther.compiler.meta.ModulePath pathCompiledAgainst() {
+        return compiledAgainst == null ? souther.compiler.meta.ModulePath.EMPTY : compiledAgainst;
     }
 
     /**
@@ -1402,16 +1441,20 @@ public final class Analyzer {
      * {@link NamesFromElsewhere}) — a document that does not parse is held out of the compile, and
      * that is the document being typed in.
      *
-     * <p>This is name completion, not context-sensitive member completion — a {@code .} field list is
-     * ADR-deferred, so every reachable name is offered regardless of the position's expected type.
-     * One item per label follows from that: which namespace a position is in is not being read, so
-     * two entities of one spelling cannot be told apart by anything but the label, and the nearest is
-     * offered. That is a limit of this list, not a property of the language.
+     * <p>This is name completion. Every reachable name is offered wherever the cursor is, because
+     * nothing here reads what the position denotes or what type is expected at it. One item per label
+     * follows from that: which namespace a position is in is not being read, so two entities of one
+     * spelling cannot be told apart by anything but the label, and the nearest is offered. That is a
+     * limit of this list, not a property of the language.
      */
     public List<CompletionItem> completions(String uri, Position pos, ModuleGraph graph) {
         String text = graph.text(uri);
         if (text == null) {
             return List.of();
+        }
+        List<CompletionItem> members = membersAt(uri, text, pos, graph);
+        if (members != null) {
+            return members;
         }
         SyntaxNode root = CstParser.parse(text).root();
         Compilation compilation = compileOf(graph);
@@ -1447,6 +1490,427 @@ public final class Analyzer {
             byLabel.putIfAbsent(keyword, new CompletionItem(keyword, CompletionItem.KEYWORD, null));
         }
         return new ArrayList<>(byLabel.values());
+    }
+
+    /**
+     * What the call the cursor is inside declares it takes, and which of those is being written.
+     *
+     * <p>Empty where the cursor is in no call, or in one whose callee is not a behavior — a helper
+     * and a local holding a function have nothing declared on a {@code behavior} line to show.
+     *
+     * <p>The two halves come from different places on purpose. What the declaration says is read at
+     * the callee's name, which is written before the brackets and so before anything a probe put in.
+     * Which argument is being written is counted in the source the author left, so a bracket
+     * supplied to make the line parse is not one of the commas.
+     *
+     * <p>Empty where the author is writing an argument the declaration has no parameter for. There
+     * is no way to say "none of them" among parameters that exist: the protocol reads an active
+     * parameter outside the list as none given and marks the first, so a fourth argument to a
+     * behavior taking three would be answered by pointing at the first — which is not what a reader
+     * is writing, and is a worse answer than not writing the signature out.
+     *
+     * <p>A behavior that takes nothing is not that case. It has nothing to mark and the protocol
+     * asks for no mark, so its signature is written out like any other — and seeing that it takes
+     * nothing is most of what a reader who has just opened its brackets wants.
+     */
+    public Optional<SignatureHelp> signatureHelp(String uri, Position pos, ModuleGraph graph) {
+        String text = graph.text(uri);
+        if (text == null) {
+            return Optional.empty();
+        }
+        int cursor = new LineIndex(text).offsetOf(pos.line(), pos.character());
+        Sorted sorted = sorted(graph);
+        Map<String, String> rest = new LinkedHashMap<>(sorted.joining());
+        rest.remove(uri);
+        // The buffer as it stands where it parses, and finished off where it does not: a call is
+        // asked about while its closing bracket is not typed, which is most of the time.
+        SemanticProbe.Reading reading =
+                probe.of(rest, sorted.broken(), pathCompiledAgainst(), uri, text, cursor);
+        Compilation compilation = reading == null ? compileOf(graph) : reading.compilation();
+        String parsed = reading == null ? text : reading.repaired();
+        String module = moduleOf(compilation, graph, uri);
+        if (module == null) {
+            return Optional.empty();
+        }
+        SyntaxNode call = enclosingCall(CstParser.parse(parsed).root(), cursor);
+        SyntaxNode applies = call == null ? null : calleeOf(call);
+        SyntaxToken callee = applies == null ? null : firstIdent(applies);
+        if (callee == null) {
+            return Optional.empty();
+        }
+        LineIndex lines = new LineIndex(parsed, new SourceId(uri));
+        Optional<SemanticSnapshot> snapshot = SemanticSnapshot.of(compilation.db(), module);
+        int argument = argumentAt(call, cursor);
+        return snapshot.flatMap(reads -> reads.calledAt(lines.posOf(callee.start())))
+                .filter(called -> reading == null || reading.mayBeRead(called.writtenAt()))
+                .filter(called -> called.takes().isEmpty() || argument < called.takes().size())
+                .map(called -> shown(called, snapshot.orElseThrow(), argument));
+    }
+
+    /**
+     * The declaration written out, as a reader reads a signature.
+     *
+     * <p>A parameter whose type this module has no name for is shown by its name alone. What is
+     * being told is which parameter is being written, and the name says that; a spelling worked out
+     * some other way would say something else as well, and be wrong.
+     */
+    private static SignatureHelp shown(CalledBehavior called, SemanticSnapshot snapshot,
+                                       int argument) {
+        List<String> parameters = new ArrayList<>();
+        for (CalledBehavior.Takes takes : called.takes()) {
+            parameters.add(snapshot.spellingOf(takes.type().type())
+                    .map(spelling -> takes.name() + ": " + spelling)
+                    .orElse(takes.name()));
+        }
+        return new SignatureHelp(called.name() + "(" + String.join(", ", parameters) + ")",
+                parameters,
+                parameters.isEmpty() ? java.util.OptionalInt.empty()
+                        : java.util.OptionalInt.of(argument));
+    }
+
+    /**
+     * The innermost application the cursor is inside, or null where it is in none.
+     *
+     * <p>See {@link #calleeOf} for what a call applies.
+     *
+     * <p>Inside its brackets and not up to the end of it: a cursor that has just closed a call is
+     * past that call and writing what holds it, and showing the one it closed would answer about the
+     * argument it has finished rather than the one it is on.
+     */
+    private static SyntaxNode enclosingCall(SyntaxNode root, int cursor) {
+        SyntaxNode innermost = null;
+        for (SyntaxNode node : callsIn(root)) {
+            if (node.start() <= cursor && cursor < node.end()
+                    && (innermost == null || node.start() >= innermost.start())) {
+                innermost = node;
+            }
+        }
+        return innermost;
+    }
+
+    /**
+     * What {@code call} applies: whatever stands in front of the argument list.
+     *
+     * <p>A place in it is all that is taken from here. How far the name written there runs is the
+     * census's to say — a behavior reached through a module is written {@code m.submit} and is one
+     * occurrence over the whole run, and a syntax node runs over the trivia in front of it, so
+     * neither end of this node is where anything was written.
+     */
+    private static SyntaxNode calleeOf(SyntaxNode call) {
+        for (SyntaxElement each : call.children()) {
+            if (each instanceof SyntaxNode node && node.kind() != SyntaxKind.ARG_LIST) {
+                return node;
+            }
+        }
+        return null;
+    }
+
+    private static List<SyntaxNode> callsIn(SyntaxNode node) {
+        List<SyntaxNode> out = new ArrayList<>();
+        if (node.kind() == SyntaxKind.APPLY_EXPR) {
+            out.add(node);
+        }
+        for (SyntaxNode child : node.childNodes()) {
+            out.addAll(callsIn(child));
+        }
+        return out;
+    }
+
+    /**
+     * Which argument of {@code call} the cursor is writing.
+     *
+     * <p>The commas the argument list itself holds, and no others. The parser writes an argument
+     * list as its brackets, its arguments and the commas between them, so a comma inside a nested
+     * call, a tuple or a construction is that one's and is not a child here — counted in the
+     * characters instead, it would have to be told from those by brackets, and a bracket in a string
+     * literal would tell it wrong.
+     */
+    private static int argumentAt(SyntaxNode call, int cursor) {
+        SyntaxNode arguments = call.child(SyntaxKind.ARG_LIST).orElse(null);
+        if (arguments == null) {
+            return 0;
+        }
+        int written = 0;
+        for (SyntaxElement each : arguments.children()) {
+            if (each instanceof SyntaxToken token && token.kind() == SyntaxKind.COMMA
+                    && token.start() < cursor) {
+                written++;
+            }
+        }
+        return written;
+    }
+
+    /**
+     * Every declaration in the workspace whose name holds {@code query}, wherever it is written.
+     *
+     * <p>The projection {@code documentSymbol} answers with, put to every document instead of one.
+     * What a file declares is read off its own syntax, so a file that will not compile is searched
+     * like any other — and the name an author is looking for is often in the file they are in the
+     * middle of.
+     *
+     * <p>The fields inside a declaration are left out. What this is for is reaching a declaration,
+     * and a field is reached by opening the one it belongs to; a workspace of records would answer
+     * mostly with {@code name} and {@code id}.
+     *
+     * <p>An empty query names everything, which is what the protocol says it means: a client sending
+     * one is asking for the workspace's declarations to choose from.
+     */
+    public List<WorkspaceSymbol> workspaceSymbols(String query, ModuleGraph graph) {
+        List<WorkspaceSymbol> found = new ArrayList<>();
+        for (String uri : graph.uris()) {
+            String text = graph.text(uri);
+            if (text == null) {
+                continue;
+            }
+            for (DocumentSymbol symbol : documentSymbols(text)) {
+                if (holds(symbol.name(), query)) {
+                    found.add(new WorkspaceSymbol(symbol.name(), symbol.kind(),
+                            new Location(uri, symbol.selectionRange())));
+                }
+            }
+        }
+        return List.copyOf(found);
+    }
+
+    /** Whether {@code name} is one {@code query} is looking for, ignoring case — an author typing a
+     *  name to jump to types it the way it comes to hand. */
+    private static boolean holds(String name, String query) {
+        return query == null || query.isEmpty()
+                || name.toLowerCase(java.util.Locale.ROOT)
+                        .contains(query.toLowerCase(java.util.Locale.ROOT));
+    }
+
+    /**
+     * Every place in this document that means what the cursor is on.
+     *
+     * <p>The references answer, kept to one document. It is asked the same way and answers about the
+     * same thing — what a name resolves to, and not what spells the same. Two locals of one spelling
+     * are two names and are highlighted apart, which is the whole of why this is not a search for
+     * the characters.
+     *
+     * <p>Which of them binds the name is the difference between asking for the declaration and not,
+     * so it is that difference: a place in both is where the name is bound, and a place only in the
+     * wider answer is where it is read.
+     */
+    public List<DocumentHighlight> documentHighlights(String uri, Position pos, ModuleGraph graph) {
+        List<Range> reads = here(uri, references(uri, pos, graph, false));
+        List<DocumentHighlight> out = new ArrayList<>();
+        for (Range at : here(uri, references(uri, pos, graph, true))) {
+            out.add(new DocumentHighlight(at,
+                    reads.contains(at) ? DocumentHighlight.READ : DocumentHighlight.WRITE));
+        }
+        return List.copyOf(out);
+    }
+
+    /** The ranges of {@code found} that are in {@code uri}. A reference in another file is a
+     *  reference and is not something this document paints. */
+    private static List<Range> here(String uri, List<Location> found) {
+        List<Range> out = new ArrayList<>();
+        for (Location each : found) {
+            if (uri.equals(each.uri())) {
+                out.add(each.range());
+            }
+        }
+        return out;
+    }
+
+    /**
+     * What a widening selection takes in, from what the cursor is on outwards.
+     *
+     * <p>Syntax and nothing else. What a reader means by widening a selection is the next thing they
+     * wrote around it — an arm of a {@code guard}, a {@code { }} block, the declaration around that
+     * — and the tree the parser built is exactly that nesting. Nothing here asks what a name means,
+     * and a document that does not compile widens the same way, because the question was never about
+     * meaning.
+     *
+     * <p>Innermost first, each containing the one before it, with a range repeated by a node that
+     * covers exactly what its child does left out — widening that takes in nothing is a keystroke
+     * that did nothing.
+     */
+    public List<Range> selectionRanges(String uri, Position pos, ModuleGraph graph) {
+        String text = graph.text(uri);
+        if (text == null) {
+            return List.of();
+        }
+        LineIndex lines = new LineIndex(text);
+        int at = lines.offsetOf(pos.line(), pos.character());
+        List<Range> widening = new ArrayList<>();
+        SyntaxToken on = tokenAt(CstParser.parse(text).root(), at);
+        if (on != null) {
+            widening.add(tokenRange(lines, on));
+        }
+        for (SyntaxNode node = on == null ? null : on.parent(); node != null;
+                node = node.parent()) {
+            Range around = nodeRange(lines, node);
+            if (widening.isEmpty() || !around.equals(widening.get(widening.size() - 1))) {
+                widening.add(around);
+            }
+        }
+        return List.copyOf(widening);
+    }
+
+    /** The token {@code at} falls in, taking the one that starts there over the one that ends there:
+     *  a cursor between two tokens is on the one it is about to type into. */
+    private SyntaxToken tokenAt(SyntaxNode root, int at) {
+        SyntaxToken previous = null;
+        for (SyntaxToken token : meaningfulTokens(root)) {
+            if (token.start() <= at && at < token.end()) {
+                return token;
+            }
+            if (token.end() == at) {
+                previous = token;
+            }
+        }
+        return previous;
+    }
+
+    /**
+     * The types a {@code let}'s parameters arrive as, to be drawn where the names are written.
+     *
+     * <p>A signature is written once, on the {@code behavior} line, and the implementation repeats
+     * none of it. What is shown here is that declaration carried to where the author is working, and
+     * not inference shown to them — which is why it is answered from the signature and stands
+     * whether or not the body checks.
+     *
+     * <p>Only where the type can be written the way this module writes it. A hint naming a type the
+     * author has no name for would be showing them something they cannot type.
+     *
+     * <p>Read from the workspace's compile and not through a probe. A hint is drawn on a document
+     * that is being read rather than one mid-keystroke, and what is wanted is what the file says.
+     */
+    public List<InlayHint> inlayHints(String uri, Range within, ModuleGraph graph) {
+        Compilation compilation = compileOf(graph);
+        String module = moduleOf(compilation, graph, uri);
+        String text = graph.text(uri);
+        if (module == null || text == null) {
+            return List.of();
+        }
+        Optional<SemanticSnapshot> snapshot = SemanticSnapshot.of(compilation.db(), module);
+        if (snapshot.isEmpty()) {
+            return List.of();
+        }
+        List<InlayHint> hints = new ArrayList<>();
+        for (DeclaredParameter parameter : snapshot.get().parametersIn(new SourceId(uri))) {
+            Position after = editorPosition(parameter.writtenAt().end());
+            if (!within(within, after)) {
+                continue;
+            }
+            // The type in the label, and that it is held to a rule of its own in what a reader gets
+            // by asking. A label is what is taken in without looking, and a second thing written
+            // into one is read as part of the type's name.
+            snapshot.get().spellingOf(parameter.type().type()).ifPresent(spelling ->
+                    hints.add(new InlayHint(after, ": " + spelling,
+                            parameter.heldToARule() ? spelling + " has an invariant" : null,
+                            false)));
+        }
+        return List.copyOf(hints);
+    }
+
+    /** Whether {@code at} is in the range the client asked about, ends included — a hint drawn at
+     *  the very end of what is on screen is on screen. */
+    private static boolean within(Range range, Position at) {
+        return range == null || (!before(at, range.start()) && !before(range.end(), at));
+    }
+
+    /**
+     * The fields of what the cursor is taking something off, or null where it is taking nothing off
+     * anything.
+     *
+     * <p>Null and not an empty list, because the two mean different things to the caller: nothing may
+     * be written after a {@code .} on a value with no fields, and every reachable name may be
+     * written where there is no {@code .} at all. A member list replaces the name list rather than
+     * joining it — what a field read admits is a field of that value and not whatever else is in
+     * scope.
+     *
+     * <p>Read from the source as it stands, through a probe: the line a field list is wanted on is
+     * one the parser cannot finish, so the document is out of the workspace's compile at exactly the
+     * moment this is asked. What the probe answers about is the buffer now, and what may be taken
+     * from it stops where the probe put anything in — which the receiver clears and the access
+     * around it does not.
+     */
+    private List<CompletionItem> membersAt(String uri, String text, Position pos, ModuleGraph graph) {
+        int cursor = new LineIndex(text).offsetOf(pos.line(), pos.character());
+        if (!takingSomethingOffSomething(text, cursor)) {
+            return null;
+        }
+        Sorted sorted = sorted(graph);
+        Map<String, String> rest = new LinkedHashMap<>(sorted.joining());
+        rest.remove(uri);
+        SemanticProbe.Reading reading =
+                probe.of(rest, sorted.broken(), pathCompiledAgainst(), uri, text, cursor);
+        if (reading == null) {
+            return List.of();
+        }
+        String module = moduleOf(reading.compilation(), graph, uri);
+        if (module == null) {
+            return List.of();
+        }
+        Optional<SemanticSnapshot> snapshot =
+                SemanticSnapshot.of(reading.compilation().db(), module);
+        if (snapshot.isEmpty()) {
+            return List.of();
+        }
+        SourcePos at = new LineIndex(text, new SourceId(uri)).posOf(cursor);
+        Optional<MemberReceiver> receiver = snapshot.get().memberReceiverAround(at);
+        if (receiver.isEmpty() || !reading.mayBeRead(receiver.get().writtenAt())) {
+            return List.of();
+        }
+        return switch (receiver.get()) {
+            case MemberReceiver.Value held -> fields(snapshot.get(), held);
+            case MemberReceiver.Namespace in -> published(snapshot.get(), in);
+            // A value the declarations say nothing about is still a receiver: a field read is what
+            // was written, and every name in scope is not what may be written after it.
+            case MemberReceiver.UntypedValue _ -> List.of();
+        };
+    }
+
+    /**
+     * Whether the cursor is where a member is written: straight after a {@code .}.
+     *
+     * <p>Read off what is written and not off what could be answered, and that is the point.
+     * Whether this reading can say what the members are varies — a source it cannot finish, a module
+     * that will not resolve, a receiver no declaration speaks for — and none of that changes what
+     * the author is writing. A member position that fell back to the names in scope when the answer
+     * was not reached would offer the whole language after a {@code .} exactly when it knows least.
+     *
+     * <p>Which token, and not which character. Whether a {@code .} is a field's is a question the
+     * language answers when it reads the text: {@code .5} is a number, a dot inside a string literal
+     * is part of the string, and a rule of this reading's own about digits and quotes would be that
+     * reading written a second time and free to differ from the one the parser goes on to use.
+     */
+    private static boolean takingSomethingOffSomething(String text, int cursor) {
+        return SemanticProbe.aDotEndsAt(text, cursor);
+    }
+
+    /** What a namespace offers, painted as what the offering module declares it to be. */
+    private static List<CompletionItem> published(SemanticSnapshot snapshot,
+                                                  MemberReceiver.Namespace in) {
+        List<CompletionItem> out = new ArrayList<>();
+        for (Published offered : snapshot.namesIn(in)) {
+            out.add(new CompletionItem(offered.name(), switch (offered) {
+                case Published.AType _ -> CompletionItem.CLASS;
+                case Published.ABehavior _ -> CompletionItem.INTERFACE;
+                case Published.ADefinition _ -> CompletionItem.FUNCTION;
+            }, null));
+        }
+        return List.copyOf(out);
+    }
+
+    /**
+     * What a value's fields are, as an editor offers them: the name to write, and what it is.
+     *
+     * <p>The type only where this module has a name for it. A field may be declared as something the
+     * module reading it neither declares nor imports, and an offer carrying a spelling worked out
+     * some other way would show the author a name they cannot write. The field is still offered —
+     * it is there to be read, and what it is is the part that cannot be said.
+     */
+    private static List<CompletionItem> fields(SemanticSnapshot snapshot,
+                                               MemberReceiver.Value held) {
+        List<CompletionItem> out = new ArrayList<>();
+        snapshot.fieldsOf(held.type()).forEach((field, is) ->
+                out.add(new CompletionItem(field, CompletionItem.FIELD,
+                        snapshot.spellingOf(is).orElse(null))));
+        return List.copyOf(out);
     }
 
     /**

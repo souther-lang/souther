@@ -8,14 +8,15 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * Every question this compiler declares is one a run over the corpus reaches, or one a batch run has
- * no input for.
+ * Every question this compiler declares is one a run over the corpus reaches, or one written down as
+ * outside a run — for want of the input it takes, or for want of anything that reads its answer.
  *
  * <p>A question nobody asks is a question nothing checks. What is kept in an answer, whether two
  * compiles of one source answer alike, what a report says — every one of those is held against the
@@ -28,10 +29,17 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * added and not registered is the day it says the coverage is whole. What a run reaches is the union
  * of what this project's own operations ask for. Between them:
  *
- * <pre>declared = reached ⊎ what a batch run has no input for</pre>
+ * <pre>declared = reached ⊎ what a batch run has no input for ⊎ what no batch result reads</pre>
  *
- * <p>and the union is disjoint, so a question in the second set that a run turns out to reach is a
- * failure as much as one in neither.
+ * <p>and the union is disjoint, so a question written down as outside a run that a run turns out to
+ * reach is a failure as much as one in neither.
+ *
+ * <p>Two ways of being outside a run and not one, because they are refuted by different things. The
+ * first is refuted by a corpus: write a source that puts a cursor somewhere and the question becomes
+ * askable. The second is refuted by a consumer: the input has been there all along, and what is
+ * missing is anything in a batch result that depends on the answer. Held as one set, a question of
+ * the second kind would be excused by a sentence written about the first, which is true of none of
+ * them.
  *
  * <p><b>Operations and not questions.</b> What is run below is what this project does — analyse and
  * report, offer rows, ask what a module declares, build at the level a build measures at. Which
@@ -67,6 +75,30 @@ class EveryQuestionThisCompilerDeclaresIsReachedOrOutsideABatchRunTest {
             "souther.compiler.query.Names$ValueDenotedAt",
             "souther.compiler.query.Names$ValueUsesOf",
             "souther.compiler.query.Shapes$InvariantCapabilities");
+
+    /**
+     * The questions no batch result reads, and why each of them does not.
+     *
+     * <p>A batch run can put these: they take a module name, which it has. What it has no use for is
+     * the answer — nothing a compilation produces rests on one, because what does is outside the
+     * compiler. Asking one from an operation here to make this arithmetic balance would file a
+     * dependency in the graph that no reader of the result stands behind, and every question this
+     * test exists to notice could be excused the same way.
+     *
+     * <p>One entry per question, each with its own reason. There is no rule of the form "everything a
+     * tooling boundary asks belongs here": what a package a key was written in says about who reads
+     * it is nothing, and a rule of that shape would admit the next key without anyone stating why it
+     * is not read. A reason is written where the exemption is claimed, so a claim that stops being
+     * true is a line that has to be edited.
+     *
+     * <p>And it is a claim that expires. {@link #andNothingReachedIsWrittenDownAsOutsideARun} fails
+     * on an entry here that a run does reach, so the day a batch result comes to read one of these,
+     * the line saying nothing does is the thing that has to go.
+     */
+    private static final Map<String, String> NO_BATCH_CONSUMER = Map.of(
+            Sites.Authored.class.getName(),
+            "where a module's source was written, occurrence by occurrence — a projection for a"
+                    + " reader outside the compiler, and no answer of a batch compilation reads it");
 
     /** What the scan counted, whether or not it read everything it found. */
     private static Set<String> declared() throws Exception {
@@ -152,32 +184,58 @@ class EveryQuestionThisCompilerDeclaresIsReachedOrOutsideABatchRunTest {
                 .forEach(key -> reached.add(key.getClass().getName()));
     }
 
+    /** What is written down as outside a run, whichever of the two reasons it is outside for. */
+    private static Set<String> outsideARun() {
+        Set<String> out = new TreeSet<>(NO_INPUT_IN_A_BATCH_RUN);
+        out.addAll(NO_BATCH_CONSUMER.keySet());
+        return out;
+    }
+
     @Test
-    void whatIsDeclaredAndNotReachedIsExactlyWhatABatchRunHasNoInputFor() throws Exception {
+    void whatIsDeclaredAndNotReachedIsExactlyWhatIsWrittenDownAsOutsideARun() throws Exception {
         Set<String> unreached = new TreeSet<>(declared());
         unreached.removeAll(reached());
 
-        assertEquals(new TreeSet<>(NO_INPUT_IN_A_BATCH_RUN), unreached,
+        assertEquals(outsideARun(), unreached,
                 "a question this compiler declares that no run of the corpus asks. Either an"
                         + " operation above is missing one, or the question takes an input a batch"
-                        + " run does not have and belongs in the set beside it");
+                        + " run does not have, or nothing a batch run produces reads its answer —"
+                        + " and the last two are the two sets beside it");
     }
 
     /**
      * And nothing is in both.
      *
-     * <p>The other half of the partition. A question written down as one a batch run cannot put, and
-     * then put by one, is a line nobody would ever be made to remove — the set above would go on
-     * excusing a question that no longer needs excusing, and the next one filed beside it would
-     * inherit the excuse.
+     * <p>The other half of the partition. A question written down as one a run does not put, and then
+     * put by one, is a line nobody would ever be made to remove — the sets above would go on excusing
+     * a question that no longer needs excusing, and the next one filed beside it would inherit the
+     * excuse. It is what makes the second set an account of where the compiler stands today rather
+     * than a list things are added to.
      */
     @Test
-    void andNothingReachedIsWrittenDownAsOutOfReach() {
+    void andNothingReachedIsWrittenDownAsOutsideARun() {
         Set<String> both = new TreeSet<>(reached());
-        both.retainAll(NO_INPUT_IN_A_BATCH_RUN);
+        both.retainAll(outsideARun());
 
         assertEquals(Set.of(), both,
-                "a question a run reaches and this says a batch run has no input for");
+                "a question a run reaches and this says is outside one");
+    }
+
+    /**
+     * And the two reasons for being outside a run are two.
+     *
+     * <p>A question in both would be excused twice and refuted by neither: removing the entry that
+     * has stopped being true leaves the other one standing, and nothing says which of the two was the
+     * reason.
+     */
+    @Test
+    void andNoQuestionIsOutsideARunForBothReasons() {
+        Set<String> both = new TreeSet<>(NO_INPUT_IN_A_BATCH_RUN);
+        both.retainAll(NO_BATCH_CONSUMER.keySet());
+
+        assertEquals(Set.of(), both,
+                "a question written down as one a batch run cannot put and as one whose answer"
+                        + " nothing reads");
     }
 
     /**

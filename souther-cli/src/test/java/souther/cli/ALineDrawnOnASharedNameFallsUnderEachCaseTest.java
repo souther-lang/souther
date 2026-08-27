@@ -273,31 +273,33 @@ class ALineDrawnOnASharedNameFallsUnderEachCaseTest {
 
                 data Paging = { limit: Int }
                 data A = { ...Paging, x: Int }
-                data B = { ...Paging, y: Int }
+                data B = { ...Paging, q: Q }
                 data Q = A | B
-                data Held = { q: Q }
-                data Outer = { held: Held }
+                data Outer = { q: Q }
 
                 data Ok
                 data No
 
                 behavior read : (o: Outer, cap: Int) -> Ok | No
 
-                let read (o, cap) = {
-                    guard o.held.q.limit < cap else No
-                    Ok
-                }
+                let read (o, cap) =
+                    match o.q with
+                        | A -> Ok
+                        | B as b -> {
+                            guard b.q.limit < cap else No
+                            Ok
+                          }
                 """);
 
         assertTrue(report.contains("borders 1"),
                 () -> "one line, not one per case of a sum nothing was filed under:\n" + report);
-        assertTrue(report.contains("read/o.held.q.limit ="),
+        assertTrue(report.contains("read/o.q@B.q.limit ="),
                 () -> "and it is at the name the model wrote, which is where it was measured:\n"
                         + report);
-        assertTrue(report.contains("not read: o.held.q@A (the walk stopped before reaching what is "
-                        + "under it)"),
-                () -> "the reading of the case says where it stopped:\n" + report);
-        assertTrue(report.contains("nothing here could build a representative for o.held.q.limit"),
+        assertFalse(report.contains("read/o.q@B.q@A.limit"),
+                () -> "the reading stopped before the cases, so nothing was filed under them:\n"
+                        + report);
+        assertTrue(report.contains("nothing here could build a representative for o.q@B.q.limit"),
                 () -> "and the generator is what says nothing can be written there:\n" + report);
         assertFalse(report.contains("how those positions pair up is not worked out"),
                 () -> "nothing was filed, so no pairing was ever in question:\n" + report);

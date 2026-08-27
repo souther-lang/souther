@@ -122,11 +122,11 @@ public sealed interface StructuralInspection {
          *
          * <p>Not one reason but three kinds of reason, and they are not the same claim about the
          * model. A traversal this compiler cannot express and a type it could not interpret say
-         * something about what is there; a {@link BlockReason.DepthLimit} says only that <em>this
-         * reader</em> stopped here, and a reader that goes further finds the positions it declined
-         * to look at. Read as "the model puts nothing reachable under this position", the third is a
-         * claim nobody made — and it is the one that had a second walk built beside this one,
-         * because everything past the reading's depth looked unreachable rather than unasked.
+         * something about what is there; a {@link BlockReason.RecursiveExpansion} says the path
+         * returned to a declaration it had already opened, and the positions under it are the ones
+         * above it again. Read as "the model puts nothing reachable under this position", the third
+         * is a claim nobody made — and it is the one that had a second walk built beside this one,
+         * because everything the reading did not enter looked unreachable rather than unasked.
          *
          * <p>{@code why} is the reason this position is left with if nothing else answers for it,
          * not a verdict. A rule a body writes may still draw a line on this same position — a
@@ -174,31 +174,26 @@ public sealed interface StructuralInspection {
      * answered here, so a shape admitted later is a compile error rather than a position that
      * quietly has nothing under it.
      *
+     * <p><b>What is under a shape and how far one reading follows it are two questions, and only
+     * the first is answered here.</b> A reading that has already opened the declaration this
+     * position names stops before it, and it stops there by answering {@link #stoppedAt} instead of
+     * asking this — so nothing about one walk's history is decided in the one statement of what a
+     * type structurally has.
+     *
      * @param shape    the position's shape, already proved to be one a partition is derived from
-     * @param deeper   whether this reading goes on down, which only a position made of positions can
-     *                 be stopped by. The reading's own answer and not the type's: how far a report is
-     *                 about one input is what it settles, and a reader that wants what is under a
-     *                 position this stopped at asks {@link StructuralDescent} rather than being told
-     *                 there is nothing there
      * @param declared the distinctions the position's type states, as the one reading of them
      *                 answered ({@link Distinctions#ofType}). Handed in rather than read again: what
      *                 a sum's cases are is one fact, and a second reading of it here would be the
      *                 branches and the classes disagreeing about which cases a position has
      */
-    static StructuralInspection of(Shape.ReadablePositionShape shape, boolean deeper,
-                                   List<Case> declared) {
+    static StructuralInspection of(Shape.ReadablePositionShape shape, List<Case> declared) {
         return switch (shape) {
-            // Made of positions, and read one level down — unless this reading stops here, which is
-            // a reading that declines to look rather than a record with nothing in it.
-            case Shape.Product product -> deeper
-                    ? new Decomposed(StructuralDescent.of(product))
-                    : stopped(new BlockReason.DepthLimit());
-            // What a sequence holds is one position, reached whether or not this reading stops
-            // here — and the sequence goes on standing either way, since its own length is a number
-            // rules are written about.
-            case Shape.Sequence sequence -> deeper
-                    ? new Retained(new Continuation.Elements(sequence.element()))
-                    : stopped(new BlockReason.DepthLimit());
+            // Made of positions, and read one level down.
+            case Shape.Product product -> new Decomposed(StructuralDescent.of(product));
+            // What a sequence holds is one position — and the sequence goes on standing beside it,
+            // since its own length is a number rules are written about.
+            case Shape.Sequence sequence ->
+                    new Retained(new Continuation.Elements(sequence.element()));
             // The sum stands and each of its cases continues on its own. Not made of positions:
             // what a case declares is under the case and not under the sum, which is why this is a
             // continuation rather than a decomposition, and why the sum keeps the classes it has.
@@ -209,18 +204,26 @@ public sealed interface StructuralInspection {
             // optional holds is at no name of its own, so the position under it is `x@Some`.
             case Shape.Optional _ ->
                     new Retained(new Continuation.Branches(branchesOf(shape, declared)));
-            case Shape.Mapping _ -> stopped(new BlockReason.UnsupportedTraversal(
+            case Shape.Mapping _ -> stoppedAt(new BlockReason.UnsupportedTraversal(
                     BlockReason.Traversal.MAPPING_CONTENT));
             // Nothing was interpreted, so there is nothing to be made of. A model carrying one
             // compiles, which is why this is answered rather than refused.
-            case Shape.Unresolved _ -> stopped(new BlockReason.TypeUnresolved());
+            case Shape.Unresolved _ -> stoppedAt(new BlockReason.TypeUnresolved());
             // Nothing follows. A value of one of these is one value — which is a different
             // statement from the position having no classes, and this makes neither.
             case Shape.Scalar _, Shape.Unit _ -> new Retained(new Continuation.None());
         };
     }
 
-    private static StructuralInspection stopped(BlockReason.AboutThePosition why) {
+    /**
+     * The position stands and nothing under it was read, for a reason its reader has and this
+     * classification does not.
+     *
+     * <p>The one way anything but {@link #of} produces an inspection, so that a reader stopping a
+     * walk of its own writes the same value as a shape that cannot be entered — and what becomes of
+     * such a position is decided in one place for both.
+     */
+    static StructuralInspection stoppedAt(BlockReason.AboutThePosition why) {
         return new Retained(new Continuation.Blocked(why));
     }
 

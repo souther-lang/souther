@@ -95,6 +95,23 @@ public record SourcePos(int line, int column, Placement placement) {
         return placement.isTheSameTextAs(other.placement);
     }
 
+    /**
+     * Whether this comes before {@code other} in the text they are in.
+     *
+     * <p>Which text they are in is not asked here. Two places in different files have no order
+     * between them, and a caller comparing them has already settled that they are comparable, which
+     * {@link #isInTheSameTextAs} answers.
+     *
+     * <p>Here rather than in each reader that has to know. A region asking whether a place falls
+     * inside it, a walk asking which occurrence is the narrowest one written over a cursor, a
+     * reading asking how far into a source an answer reaches — all of them are asking what a line
+     * and a column mean in order, and three accounts of that are three chances for one of them to be
+     * written the other way round.
+     */
+    public boolean isBefore(SourcePos other) {
+        return line != other.line ? line < other.line : column < other.column;
+    }
+
     /** Whether the code at this position was copied here rather than written at it — what sizes an
      *  underline, and what tells an empty literal the author wrote from one that arrived inside a
      *  copied body. Not whether a reader can be sent here, which is {@link DiagnosticPlace}'s. */
