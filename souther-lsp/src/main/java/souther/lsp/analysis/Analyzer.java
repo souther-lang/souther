@@ -1807,27 +1807,30 @@ public final class Analyzer {
      */
     private List<CompletionItem> membersAt(String uri, String text, Position pos, ModuleGraph graph) {
         int cursor = new LineIndex(text).offsetOf(pos.line(), pos.character());
+        if (!takingSomethingOffSomething(text, cursor)) {
+            return null;
+        }
         Sorted sorted = sorted(graph);
         Map<String, String> rest = new LinkedHashMap<>(sorted.joining());
         rest.remove(uri);
         SemanticProbe.Reading reading =
                 probe.of(rest, sorted.broken(), pathCompiledAgainst(), uri, text, cursor);
         if (reading == null) {
-            return null;
+            return List.of();
         }
         String module = moduleOf(reading.compilation(), graph, uri);
         if (module == null) {
-            return null;
+            return List.of();
         }
         Optional<SemanticSnapshot> snapshot =
                 SemanticSnapshot.of(reading.compilation().db(), module);
         if (snapshot.isEmpty()) {
-            return null;
+            return List.of();
         }
         SourcePos at = new LineIndex(text, new SourceId(uri)).posOf(cursor);
         Optional<MemberReceiver> receiver = snapshot.get().memberReceiverAround(at);
         if (receiver.isEmpty() || !reading.mayBeRead(receiver.get().writtenAt())) {
-            return null;
+            return List.of();
         }
         return switch (receiver.get()) {
             case MemberReceiver.Value held -> fields(snapshot.get(), held);
@@ -1836,6 +1839,25 @@ public final class Analyzer {
             // was written, and every name in scope is not what may be written after it.
             case MemberReceiver.UntypedValue _ -> List.of();
         };
+    }
+
+    /**
+     * Whether the cursor is where a member is written: straight after a {@code .}.
+     *
+     * <p>Read off the characters and not off the tree, and that is the point. Whether this reading
+     * can say what the members are varies — a source it cannot finish, a module that will not
+     * resolve, a receiver no declaration speaks for — and none of that changes what the author is
+     * writing. A member position that fell back to the names in scope when the answer was not
+     * reached would offer the whole language after a {@code .} exactly when it knows least.
+     *
+     * <p>A {@code .} after a digit is not one. {@code 1.} is a decimal being typed and the next
+     * character is a digit, not a field.
+     */
+    private static boolean takingSomethingOffSomething(String text, int cursor) {
+        if (cursor <= 0 || cursor > text.length() || text.charAt(cursor - 1) != '.') {
+            return false;
+        }
+        return cursor < 2 || !Character.isDigit(text.charAt(cursor - 2));
     }
 
     /** What a namespace offers, painted as what the offering module declares it to be. */
