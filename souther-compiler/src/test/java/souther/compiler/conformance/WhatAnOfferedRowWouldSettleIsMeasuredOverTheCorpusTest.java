@@ -31,12 +31,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * What is asserted is the shape: the table is total, the items are what was asked for, and no row
  * composed for something is read as not settling it.
  *
- * <p><b>Of this corpus, and not of every model.</b> Over souther-examples that last one does not
- * hold: twenty-four points there have a row composed at them that this walk reads as standing
- * somewhere else, which is the search and this reading of one model coming to two answers. It costs
- * no row — what a row was composed for keeps it whatever this walk can tell — but it is a
- * disagreement, and it is written down here rather than left to be found by whoever strengthens the
- * assertion next.
+ * <p><b>Of this corpus, and not of every model.</b> There are models where that last one does not
+ * hold: a point the search composed a row at, which this walk reads as standing somewhere else. It
+ * costs no row — what a row was composed for keeps it whatever this walk can tell — but it is the
+ * search and this reading coming to two answers about one model, so this asserts what it has seen
+ * rather than a law. Whoever strengthens it to {@code Settles} should expect to be told where.
  */
 class WhatAnOfferedRowWouldSettleIsMeasuredOverTheCorpusTest {
 
@@ -85,8 +84,8 @@ class WhatAnOfferedRowWouldSettleIsMeasuredOverTheCorpusTest {
 
                 // What the searches composed a row for, against what the rows turn out to settle.
                 // A row composed for an item and read as not settling it is the generator and this
-                // walk reading one model two ways. Held of this corpus: over souther-examples there
-                // are points where the two disagree, which is said above.
+                // walk reading one model two ways. Held of this corpus, and not of every model,
+                // which is said above.
                 settlements.composedFor().forEach((item, row) -> {
                     Map<OfferItem, Settlement> here = settlements.byRow().get(row);
                     if (here != null) {
