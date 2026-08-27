@@ -409,7 +409,7 @@ public final class InteractionCells {
                 return null;
             }
             case Condition.Side one -> {
-                int axis = axisAt(axes, one.at());
+                int axis = axisOf(axes, one.at());
                 if (axis < 0) {
                     return null;
                 }
@@ -455,12 +455,38 @@ public final class InteractionCells {
     }
 
     /**
+     * The axis measuring {@code term}, or -1 where none does.
+     *
+     * <p>The number and never the path it is read from. A location may be measured at more than one
+     * number — which hour of a time it is and which minute — and those are one path: asked by path,
+     * a comparison about the second of them is answered by the first's axis, which carries no cut
+     * of that comparison and so narrows nothing. The condition then goes missing without a word
+     * (issue #1140).
+     *
+     * <p>Exact and not the nearest. The reading that named this condition and the reading that made
+     * the axis ask {@link souther.compiler.inputs.InputNumber} for the number, so a name worn over
+     * a type is already looked through on both sides and there is nothing left for a match to be
+     * lenient about.
+     */
+    private static int axisOf(List<Axis> axes, souther.compiler.inputs.NumericTerm term) {
+        for (int i = 0; i < axes.size(); i++) {
+            if (axes.get(i).term().equals(term)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /**
      * Which position the condition is about, allowing for the names a value is written under.
      *
      * <p>{@code total.value} and {@code total} are one position where {@code Total} is a name worn
      * over an {@code Int}: the body reads through the name and the partition divides the position
      * the name is at. The longest match wins, so a record whose own field is divided keeps its own
      * axis rather than being answered by the record's.
+     *
+     * <p>For a case of a union, which is about the location and not about a number of it. What a
+     * comparison is about is {@link #axisOf}'s, exactly.
      */
     private static int axisAt(List<Axis> axes, TermPath path) {
         int found = -1;

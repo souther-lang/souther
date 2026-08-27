@@ -47,4 +47,10 @@ public final class InputNumber {
         TermPath path = reads.pathOf(e, symbols);
         return path == null ? null : new NumericTerm.ValueOf(path);
     }
+
+    /** The number a comparison is about, from whichever side names one. */
+    public static NumericTerm compared(Core.Binary comparison, InputReads reads, Symbols symbols) {
+        NumericTerm left = of(comparison.left(), reads, symbols);
+        return left != null ? left : of(comparison.right(), reads, symbols);
+    }
 }

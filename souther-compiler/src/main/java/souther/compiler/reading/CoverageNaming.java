@@ -8,7 +8,9 @@ import souther.compiler.coverage.ControlPointId;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.ForkOccurrence;
 import souther.compiler.flow.Naming;
+import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 
 import java.util.ArrayList;
@@ -87,8 +89,7 @@ final class CoverageNaming implements Naming<Outcome> {
             return null;
         }
         ComparisonOccurrence site = plan.comparisonAt(comparison).orElse(null);
-        TermPath at = firstOf(reads.pathOf(comparison.left(), symbols),
-                reads.pathOf(comparison.right(), symbols));
+        NumericTerm at = InputNumber.compared(comparison, reads, symbols);
         if (site == null || at == null) {
             return null;
         }
@@ -165,10 +166,6 @@ final class CoverageNaming implements Naming<Outcome> {
 
     private static Outcome one(Decision decision) {
         return new Outcome(List.of(decision));
-    }
-
-    private static TermPath firstOf(TermPath left, TermPath right) {
-        return left != null ? left : right;
     }
 
     /**
