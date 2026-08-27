@@ -404,7 +404,7 @@ final class AnswerClosure {
      * under a judgement that still reads as if it had not.
      */
     private record KnownDeclared(TypePath.Place place, Problem problem,
-                                 DeclaredAnswerWalk.Why why) {}
+                                 Traversal.Why why) {}
 
     /** A place, written the way the walk of declarations writes one. */
     private static TypePath.Place declared(String question, String offender,
@@ -429,7 +429,7 @@ final class AnswerClosure {
     /** The classes a module compiled to, held by the name each is emitted under. */
     private static KnownDeclared classes(String question, TypePath.Step... steps) {
         return new KnownDeclared(declared(question, "byte[]", steps), BYTES,
-                DeclaredAnswerWalk.Why.AN_ARRAY);
+                Traversal.Why.AN_ARRAY);
     }
 
     /** One way down, and then another. */
@@ -449,7 +449,7 @@ final class AnswerClosure {
     private static KnownDeclared generationReader(String offender, TypePath.Step... under) {
         return new KnownDeclared(
                 declared(Q + "Adequacy$Generated", offender, then(A_SUBJECT, under)),
-                GENERATION_READERS, DeclaredAnswerWalk.Why.NO_EQUALITY);
+                GENERATION_READERS, Traversal.Why.SAYS_NOTHING_OF_ITSELF);
     }
 
     /**
@@ -464,7 +464,7 @@ final class AnswerClosure {
             into.add(new KnownDeclared(declared(question, "souther.compiler.check.NarrowedEnd",
                     then(under, arm("souther.compiler.check.NarrowedBounds$Reading"),
                             part("souther.compiler.check.NarrowedBounds$Reading", end))),
-                    NARROWED_END, DeclaredAnswerWalk.Why.NO_EQUALITY));
+                    NARROWED_END, Traversal.Why.SAYS_NOTHING_OF_ITSELF));
         }
     }
 
@@ -486,7 +486,7 @@ final class AnswerClosure {
                             arm(owner), part(owner, "atom"),
                             part("souther.compiler.check.FactSubject", "identity"),
                             part("souther.compiler.check.Term", "of"))),
-                    A_TERM_HOLDS_ANYTHING, DeclaredAnswerWalk.Why.AN_OPEN_CLASS));
+                    A_TERM_HOLDS_ANYTHING, Traversal.Why.SAYS_NOTHING_OF_ITSELF));
         }
     }
 
@@ -520,23 +520,23 @@ final class AnswerClosure {
             classes(Q + "Output$EvaluationLinked",
                     part("souther.compiler.generated.EvaluationArtifact", "classes"), MAP_VALUE),
             new KnownDeclared(declared(Q + "Front$Library", "souther.compiler.stdlib.Stdlib"),
-                    STDLIB, DeclaredAnswerWalk.Why.NO_EQUALITY),
+                    STDLIB, Traversal.Why.SAYS_NOTHING_OF_ITSELF),
             new KnownDeclared(declared(Q + "Bodies$Expanding", "souther.compiler.stdlib.Stdlib",
                     part(Q + "Bodies$Expanding$Of", "table"),
                     part("souther.compiler.check.HelperTable", "stdlib")), STDLIB,
-                    DeclaredAnswerWalk.Why.NO_EQUALITY),
+                    Traversal.Why.SAYS_NOTHING_OF_ITSELF),
             new KnownDeclared(declared(Q + "Front$Path", "souther.compiler.meta.ModulePath"),
-                    MODULE_PATH, DeclaredAnswerWalk.Why.AN_OPEN_INTERFACE),
+                    MODULE_PATH, Traversal.Why.NOTHING_CLOSES_IT),
             new KnownDeclared(
                     declared(Q + "Front$ExampleDeadline", "souther.compiler.examples.Deadline"),
-                    A_DEADLINE, DeclaredAnswerWalk.Why.AN_OPEN_INTERFACE),
+                    A_DEADLINE, Traversal.Why.NOTHING_CLOSES_IT),
             // The way of asking, which is where the declarations stop. What a walk of a store goes
             // on to reach through it is the store itself, written down above.
             new KnownDeclared(declared(Q + "Names$ModuleScope",
                     "souther.compiler.check.Resolve$Elsewhere",
                     part("souther.compiler.check.Scoping$Scoped", "values"),
                     part("souther.compiler.check.Resolve$Values", "elsewhere")), A_STORE,
-                    DeclaredAnswerWalk.Why.AN_OPEN_INTERFACE),
+                    Traversal.Why.NOTHING_CLOSES_IT),
             generationReader("souther.compiler.check.Symbols",
                     part("souther.compiler.partition.Generator$Subject", "inputs"),
                     part("souther.compiler.partition.BehaviorInputs", "symbols")),
@@ -547,13 +547,13 @@ final class AnswerClosure {
             new KnownDeclared(declared(Q + "Names$Resolution",
                     "souther.compiler.diag.CompileException",
                     part("souther.compiler.check.Resolve$Resolution", "unresolved"), HELD),
-                    AN_EXCEPTION, DeclaredAnswerWalk.Why.AN_OPEN_CLASS),
+                    AN_EXCEPTION, Traversal.Why.SAYS_NOTHING_OF_ITSELF),
             // Under the question that declares reports of its own, which is where a walk of the
             // declarations meets what every answer holds.
             new KnownDeclared(declared(Q + "Names$Cycles", "souther.compiler.diag.Diagnostic",
                     part(Q + "Names$Cycles$Of", "reported"), MAP_VALUE,
                     part(Q + "Report", "diagnostic")), A_REPORT,
-                    DeclaredAnswerWalk.Why.NO_EQUALITY)));
+                    Traversal.Why.SAYS_NOTHING_OF_ITSELF)));
         // A reading of an input holds its positions twice — in the order they were read, and under
         // the paths they were read at — so everything under a position is two places the answer
         // exposes it.
@@ -573,8 +573,8 @@ final class AnswerClosure {
     }
 
     /** Every place a declaration is written down for, and what the walk stops on there. */
-    static Map<TypePath.Place, DeclaredAnswerWalk.Why> declaredPlaces() {
-        Map<TypePath.Place, DeclaredAnswerWalk.Why> out = new LinkedHashMap<>();
+    static Map<TypePath.Place, Traversal.Why> declaredPlaces() {
+        Map<TypePath.Place, Traversal.Why> out = new LinkedHashMap<>();
         DECLARED.forEach(each -> out.put(each.place(), each.why()));
         return out;
     }

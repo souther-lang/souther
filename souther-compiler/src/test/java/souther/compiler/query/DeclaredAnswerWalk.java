@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.GenericArrayType;
+import java.lang.reflect.Modifier;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.lang.reflect.TypeVariable;
@@ -9,11 +10,9 @@ import java.lang.reflect.WildcardType;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 
 /**
  * What a question declares it answers with, walked as the declarations wrote it.
@@ -24,54 +23,23 @@ import java.util.Set;
  * corpus puts is invisible to the first, and what a declaration allows is wider than what any run
  * happened to build.
  *
- * <p><b>It stops where an equality stops.</b> A type that says nothing by {@code equals} is named
- * and the walk goes no further under it, exactly as the walk of objects does — what is under such a
- * type is unreachable through an equality that never holds, and reporting it would be reporting the
- * consequences of the thing already reported.
+ * <p>What is here is what a declared type is — {@link Node} and the answers about one. The order
+ * those answers are read in is {@link WhatStandsHere}'s, and the walking is {@link Traversal}'s, so
+ * that a rule this keeps and the walk of a store does not is a rule neither of them can keep alone.
  *
- * <p><b>What a declaration does not settle is a finding and not a silence.</b> An interface nothing
- * closes could be anything at all when a compile puts something there, and an array says which
- * object it is however its elements compare — so both are named here rather than walked into and
- * found clean. A sum that is closed is walked into every arm, which is what makes the difference
- * between the two worth having.
- *
- * <p>A type that reaches itself is walked once. A declaration that holds another of its own kind is
- * a shape and not a defect, so meeting one again is the end of that path rather than a gap: what is
- * under it has been asked about already, at the place it was first met.
+ * <p><b>A type is what it is together with what its letters are bound to.</b> One declaration
+ * reached under two sets of arguments is two shapes and holds two things, so that pair is what says
+ * whether this has been here before.
  */
 final class DeclaredAnswerWalk {
 
+    /** A declared type, with whatever the way here bound its letters to. */
+    record Node(Type type, Map<TypeVariable<?>, Type> bound) {}
+
     /** One type in one place, and why the walk stopped there. */
-    record Found(TypePath.Place place, Why why) {}
+    record Found(TypePath.Place place, Traversal.Why why) {}
 
-    /** What a declaration failed to settle, or what it settled on that cannot compare. */
-    enum Why {
-        /** An array, which says which object it is however its elements compare. */
-        AN_ARRAY,
-        /** A class that says nothing by {@code equals}. */
-        NO_EQUALITY,
-        /** An interface nothing closes, so what stands here is not settled by the declaration. */
-        AN_OPEN_INTERFACE,
-        /**
-         * A class nothing closes, which is the same absence as the one above.
-         *
-         * <p>Something that says what it is and can still be extended says what it is about the
-         * part it declares. What stands here may be of anything that extends it, holding whatever
-         * that holds and meaning it however it likes — so a walk that opened the members it can see
-         * would be reporting on a type nothing said would be the one there.
-         */
-        AN_OPEN_CLASS,
-        /** A type variable or a wildcard nothing here binds, so what stands here is not settled
-         *  either. */
-        NOT_BOUND
-    }
-
-    /**
-     * What a walk of the declarations found, and how much of them it opened.
-     *
-     * @param opened how many types it went into the members of, which is what says a walk that
-     *               found nothing looked at something
-     */
+    /** What a walk of the declarations found, and how much of them it opened. */
     record Walked(List<Found> found, int opened) {}
 
     /** Everything the questions in {@code keys} declare that cannot be compared as a value. */
@@ -80,16 +48,27 @@ final class DeclaredAnswerWalk {
         int opened = 0;
         for (Class<?> key : keys) {
             Type answered = answeredBy(key);
-            Walk walk = new Walk(key.getName(), out);
-            if (answered == null) {
-                out.add(new Found(TypePath.ROOT.of(key.getName(), Key.class.getTypeName()),
-                        Why.NOT_BOUND));
-                continue;
-            }
-            walk.at(answered, TypePath.ROOT);
+            Traversal<Node, TypePath> walk = new Traversal<>(new OfTheDeclarations());
+            walk.at(new Node(answered == null ? Key.class : answered, Map.of()), TypePath.ROOT);
             opened += walk.opened();
+            for (Traversal.Stopped<TypePath> each : found(walk)) {
+                out.add(new Found(each.where().of(key.getName(), each.offender()), each.why()));
+            }
         }
         return new Walked(List.copyOf(out), opened);
+    }
+
+    /** What one walk of one declaration came to. A walk of types has nowhere to fall short: what it
+     *  cannot settle it says at the place, and a type that reaches itself ends that path. */
+    private static List<Traversal.Stopped<TypePath>> found(Traversal<Node, TypePath> walk) {
+        return switch (walk.covered()) {
+            case Covered.Whole<Traversal.Stopped<TypePath>>(
+                    List<Traversal.Stopped<TypePath>> all) -> all;
+            case Covered.Partly<Traversal.Stopped<TypePath>>(
+                    List<Traversal.Stopped<TypePath>> all, List<Gap> gaps) ->
+                    throw new IllegalStateException("a walk of declarations fell short: " + gaps
+                            + ", having found " + all);
+        };
     }
 
     /**
@@ -104,7 +83,7 @@ final class DeclaredAnswerWalk {
         return answeredBy(key, Map.of());
     }
 
-    private static Type answeredBy(Class<?> at, Map<String, Type> bound) {
+    private static Type answeredBy(Class<?> at, Map<TypeVariable<?>, Type> bound) {
         for (Type each : at.getGenericInterfaces()) {
             if (each instanceof ParameterizedType wrote
                     && wrote.getRawType() instanceof Class<?> raw) {
@@ -112,11 +91,11 @@ final class DeclaredAnswerWalk {
                     return substituted(wrote.getActualTypeArguments()[0], bound);
                 }
                 if (Key.class.isAssignableFrom(raw)) {
-                    Map<String, Type> under = new LinkedHashMap<>();
+                    Map<TypeVariable<?>, Type> under = new LinkedHashMap<>();
                     TypeVariable<?>[] letters = raw.getTypeParameters();
-                    Type[] wrotten = wrote.getActualTypeArguments();
-                    for (int i = 0; i < letters.length && i < wrotten.length; i++) {
-                        under.put(letters[i].getName(), substituted(wrotten[i], bound));
+                    Type[] arguments = wrote.getActualTypeArguments();
+                    for (int i = 0; i < letters.length && i < arguments.length; i++) {
+                        under.put(letters[i], substituted(arguments[i], bound));
                     }
                     Type found = answeredBy(raw, under);
                     if (found != null) {
@@ -136,190 +115,201 @@ final class DeclaredAnswerWalk {
         return at.getSuperclass() == null ? null : answeredBy(at.getSuperclass(), bound);
     }
 
-    /** {@code type} with whatever {@code bound} says about the letters in it put in its place. */
-    private static Type substituted(Type type, Map<String, Type> bound) {
+    /**
+     * {@code type} with whatever {@code bound} says about the letters in it put in its place.
+     *
+     * <p>By the letter and not by what it is called. Two declarations may each write {@code T} and
+     * they are two letters; read by name, what one of them was bound to would be read as the
+     * other's.
+     */
+    private static Type substituted(Type type, Map<TypeVariable<?>, Type> bound) {
         return type instanceof TypeVariable<?> letter
-                ? bound.getOrDefault(letter.getName(), type) : type;
+                ? bound.getOrDefault(letter, type) : type;
     }
 
     /**
-     * A type walked with the letters in it bound as they were where it was met.
+     * What the declarations say about one type, and nothing about the order to ask it in.
      *
-     * <p>The pair and not the type. One declaration reached twice under different arguments is two
-     * shapes, and what is under it is two answers — remembered by the type alone, the second would
-     * come back as walked already and whatever it holds would go unasked.
+     * <p>Every question here is answered of the type in front of it. Where a type is written with
+     * arguments, what stands under it is read with those arguments in the letters' place, which is
+     * what {@link Node} carries.
      */
-    private record Reached(Class<?> type, Map<String, Type> bound) {}
+    private static final class OfTheDeclarations
+            implements Traversal.Walking<Node, TypePath> {
 
-    private static final class Walk {
-
-        private final String question;
-        private final List<Found> out;
-        /** What was found under each type this has been into, as the way down from that type, so
-         *  that every path reaching it says the same things about it. */
-        private final Map<Reached, List<Found>> settled = new LinkedHashMap<>();
-        /** What this is inside at the moment, so a declaration that reaches itself stops. */
-        private final Set<Reached> walking = new LinkedHashSet<>();
-        private int opened;
-
-        Walk(String question, List<Found> out) {
-            this.question = question;
-            this.out = out;
-        }
-
-        /** How many types this went into the members of. */
-        int opened() {
-            return opened;
-        }
-
-        private void say(TypePath where, String offender, Why why) {
-            out.add(new Found(where.of(question, offender), why));
-        }
-
-        void at(Type type, TypePath where) {
-            at(type, where, Map.of());
-        }
-
-        private void at(Type type, TypePath where, Map<String, Type> bound) {
-            switch (type) {
-                case Class<?> raw -> ofClass(raw, where, bound);
-                case ParameterizedType wrote -> ofParameterized(wrote, where, bound);
-                case GenericArrayType array -> say(where, array.getTypeName(), Why.AN_ARRAY);
-                case TypeVariable<?> letter -> {
-                    Type found = bound.get(letter.getName());
-                    if (found == null) {
-                        say(where, letter.getTypeName(), Why.NOT_BOUND);
-                        return;
-                    }
-                    at(found, where, bound);
-                }
-                // What stands under a bound is anything the bound admits, which is the same question
-                // as a member declared as the bound — so it is asked that way and not refused for
-                // being written with a `?`.
-                case WildcardType wildcard -> {
-                    Type[] upper = wildcard.getUpperBounds();
-                    if (upper.length != 1) {
-                        say(where, wildcard.getTypeName(), Why.NOT_BOUND);
-                        return;
-                    }
-                    at(upper[0], where, bound);
-                }
-                default -> say(where, type.getTypeName(), Why.NOT_BOUND);
+        /** What is written here once every letter and every {@code ?} has been followed. */
+        private static Type settled(Node node) {
+            Type type = node.type();
+            if (type instanceof TypeVariable<?> letter) {
+                Type found = node.bound().get(letter);
+                return found == null || found == letter ? null : settled(new Node(found,
+                        node.bound()));
             }
+            if (type instanceof WildcardType wildcard) {
+                // What stands under a bound is anything the bound admits, which is the same
+                // question as a member declared as the bound.
+                Type[] upper = wildcard.getUpperBounds();
+                return upper.length == 1 ? settled(new Node(upper[0], node.bound())) : null;
+            }
+            return type;
         }
 
-        private void ofParameterized(ParameterizedType wrote, TypePath where,
-                                     Map<String, Type> bound) {
-            if (!(wrote.getRawType() instanceof Class<?> raw)) {
-                say(where, wrote.getTypeName(), Why.NOT_BOUND);
-                return;
-            }
-            if (held(raw, wrote.getActualTypeArguments(), where, bound)) {
-                return;
-            }
-            // Something of its own that takes arguments. What it holds is its members, read with
-            // the arguments this declaration wrote put in the letters' place.
-            Map<String, Type> under = new LinkedHashMap<>();
+        /** The class a settled type is of, or null where it is one this cannot name. */
+        private static Class<?> raw(Node node) {
+            Type type = settled(node);
+            return switch (type) {
+                case Class<?> named -> named;
+                case ParameterizedType wrote when wrote.getRawType() instanceof Class<?> named ->
+                        named;
+                case GenericArrayType _ -> Object[].class;
+                case null, default -> null;
+            };
+        }
+
+        /** What the declaration wrote in the letters' place, where it wrote any. */
+        private static Type[] arguments(Node node) {
+            return settled(node) instanceof ParameterizedType wrote
+                    ? wrote.getActualTypeArguments() : new Type[0];
+        }
+
+        /** Everything a type this is inside binds, so that what is under it is read as written. */
+        private static Map<TypeVariable<?>, Type> boundUnder(Node node, Class<?> raw) {
+            Map<TypeVariable<?>, Type> under = new LinkedHashMap<>(node.bound());
             TypeVariable<?>[] letters = raw.getTypeParameters();
-            Type[] arguments = wrote.getActualTypeArguments();
+            Type[] arguments = arguments(node);
             for (int i = 0; i < letters.length && i < arguments.length; i++) {
-                under.put(letters[i].getName(), substituted(arguments[i], bound));
+                under.put(letters[i], substituted(arguments[i], node.bound()));
             }
-            ofClass(raw, where, under);
+            return under;
         }
 
         /**
-         * A container the JDK declares, walked by what the declaration says it holds.
+         * What an arm binds, worked out from what the sum above it was written with.
          *
-         * @return whether this was one
+         * <p>An arm has letters of its own, and which of the sum's arguments each of them takes is
+         * said by how the arm names the sum: {@code Partial<T> implements Measurement<T>} passes
+         * its own letter through, and another arm may pass something else or nothing at all. Read
+         * from the sum's letters instead, an arm whose letter is spelled the same would take a
+         * binding meant for a different declaration.
          */
-        private boolean held(Class<?> raw, Type[] arguments, TypePath where,
-                             Map<String, Type> bound) {
-            if ((Collection.class.isAssignableFrom(raw) || raw == Optional.class)
-                    && arguments.length == 1) {
-                at(arguments[0], where.then(new TypePath.Step.Argument("held")), bound);
-                return true;
+        private static Map<TypeVariable<?>, Type> boundForArm(Node node, Class<?> sum,
+                                                              Class<?> arm) {
+            Map<TypeVariable<?>, Type> under = new LinkedHashMap<>(node.bound());
+            Map<TypeVariable<?>, Type> ofTheSum = boundUnder(node, sum);
+            for (Type each : arm.isInterface() || sum.isInterface()
+                    ? arm.getGenericInterfaces() : new Type[]{arm.getGenericSuperclass()}) {
+                if (each instanceof ParameterizedType wrote && wrote.getRawType() == sum) {
+                    Type[] passed = wrote.getActualTypeArguments();
+                    TypeVariable<?>[] letters = sum.getTypeParameters();
+                    for (int i = 0; i < passed.length && i < letters.length; i++) {
+                        if (passed[i] instanceof TypeVariable<?> letter
+                                && ofTheSum.get(letters[i]) != null) {
+                            under.put(letter, ofTheSum.get(letters[i]));
+                        }
+                    }
+                }
             }
-            if (Map.class.isAssignableFrom(raw) && arguments.length == 2) {
-                at(arguments[0], where.then(new TypePath.Step.Argument("key")), bound);
-                at(arguments[1], where.then(new TypePath.Step.Argument("value")), bound);
-                return true;
-            }
-            return false;
+            return under;
         }
 
-        private void ofClass(Class<?> raw, TypePath where, Map<String, Type> bound) {
-            if (AnswerShape.isLeaf(raw)) {
-                return;
+        @Override
+        public boolean bound(Node node) {
+            return raw(node) != null;
+        }
+
+        @Override
+        public Class<?> classOf(Node node) {
+            return raw(node);
+        }
+
+        @Override
+        public boolean aContainer(Node node) {
+            Class<?> raw = raw(node);
+            int written = arguments(node).length;
+            return (Collection.class.isAssignableFrom(raw) || raw == Optional.class)
+                    ? written == 1
+                    : Map.class.isAssignableFrom(raw) && written == 2;
+        }
+
+        @Override
+        public List<WhatStandsHere.Under<Node, TypePath>> held(Node node, TypePath where) {
+            Type[] arguments = arguments(node);
+            List<WhatStandsHere.Under<Node, TypePath>> out = new ArrayList<>();
+            List<String> named = arguments.length == 2 ? List.of("key", "value") : List.of("held");
+            for (int i = 0; i < arguments.length; i++) {
+                out.add(new WhatStandsHere.Under<>(
+                        where.then(new TypePath.Step.Argument(named.get(i))),
+                        new Node(arguments[i], node.bound())));
             }
-            if (raw.isArray()) {
-                say(where, raw.getTypeName(), Why.AN_ARRAY);
-                return;
+            return List.copyOf(out);
+        }
+
+        @Override
+        public boolean closedFamily(Node node) {
+            return raw(node).isSealed();
+        }
+
+        @Override
+        public List<WhatStandsHere.Under<Node, TypePath>> arms(Node node, TypePath where) {
+            Class<?> sum = raw(node);
+            List<WhatStandsHere.Under<Node, TypePath>> out = new ArrayList<>();
+            for (Class<?> arm : sum.getPermittedSubclasses()) {
+                out.add(new WhatStandsHere.Under<>(
+                        where.then(new TypePath.Step.Arm(arm.getTypeName())),
+                        new Node(arm, boundForArm(node, sum, arm))));
             }
-            // A container written without its arguments holds whatever anybody put in it.
-            if (Collection.class.isAssignableFrom(raw) || Map.class.isAssignableFrom(raw)
-                    || raw == Optional.class) {
-                say(where, raw.getTypeName(), Why.NOT_BOUND);
-                return;
-            }
-            // A sum, whichever way it is written. What stands here is one of its arms, and the walk
-            // takes all of them: an arm carries what the type above it declares, so nothing is left
-            // behind by going down rather than opening the sum itself.
-            if (raw.isSealed()) {
-                for (Class<?> arm : raw.getPermittedSubclasses()) {
-                    at(arm, where.then(new TypePath.Step.Arm(arm.getTypeName())), bound);
-                }
-                return;
-            }
-            if (raw.isInterface()) {
-                say(where, raw.getTypeName(), Why.AN_OPEN_INTERFACE);
-                return;
-            }
-            // Something that can still be extended says what it says about the part it declares,
-            // and a walk that read that would be reporting on a type nothing said would be the one
-            // standing here. Asked before the equality, because whatever stands here brings its
-            // own: writing one on what is declared would not settle what is compared.
-            if (!java.lang.reflect.Modifier.isFinal(raw.getModifiers())) {
-                say(where, raw.getTypeName(), Why.AN_OPEN_CLASS);
-                return;
-            }
-            if (!AnswerShape.declaresEquals(raw)) {
-                say(where, raw.getTypeName(), Why.NO_EQUALITY);
-                return;
-            }
-            Reached reached = new Reached(raw, bound);
-            List<Found> already = settled.get(reached);
-            if (already != null) {
-                already.forEach(each -> out.add(new Found(
-                        where.followedBy(each.place().at()).of(question, each.place().offender()),
-                        each.why())));
-                return;
-            }
-            // Nothing under a type this is already inside, which is a declaration that reaches
-            // itself. What is under it is being asked about where it was first met, and following
-            // it again is the same question one step further down forever.
-            if (!walking.add(reached)) {
-                return;
-            }
-            opened++;
-            int before = out.size();
+            return List.copyOf(out);
+        }
+
+        /**
+         * Whether a thing of this may itself be built.
+         *
+         * <p>Nothing is ever of an interface or of something abstract: what stands there is of
+         * something under it, which is a different question from what this declares.
+         */
+        @Override
+        public boolean itselfStands(Node node) {
+            Class<?> raw = raw(node);
+            return !raw.isInterface() && !Modifier.isAbstract(raw.getModifiers());
+        }
+
+        @Override
+        public boolean closesWhatStandsHere(Node node) {
+            return Modifier.isFinal(raw(node).getModifiers());
+        }
+
+        @Override
+        public List<WhatStandsHere.Under<Node, TypePath>> members(Node node, TypePath where) {
+            Class<?> raw = raw(node);
+            Map<TypeVariable<?>, Type> under = boundUnder(node, raw);
+            List<WhatStandsHere.Under<Node, TypePath>> out = new ArrayList<>();
             for (Field field : AnswerShape.fieldsOf(raw)) {
-                at(field.getGenericType(),
-                        where.thenMember(field.getDeclaringClass(), field.getName()), bound);
+                out.add(new WhatStandsHere.Under<>(
+                        where.thenMember(field.getDeclaringClass(), field.getName()),
+                        new Node(field.getGenericType(), under)));
             }
-            walking.remove(reached);
-            // What was found under this type, as the way down from it rather than from the answer,
-            // so that the next path to reach it says the same things about it. Written out at every
-            // path that gets here, for the reason a place is a place: one type held two ways is two
-            // places the answer exposes it, and a register keyed by the first path taken would move
-            // with the order the members happen to be declared in.
-            List<Found> mine = new ArrayList<>();
-            for (Found each : out.subList(before, out.size())) {
-                mine.add(new Found(
-                        where.from(each.place().at()).of(question, each.place().offender()),
-                        each.why()));
-            }
-            settled.put(reached, List.copyOf(mine));
+            return List.copyOf(out);
+        }
+
+        /** A type and what its letters are bound to, which is what makes two of these one shape. */
+        @Override
+        public Object keyOf(Node node) {
+            return new Node(settled(node), node.bound());
+        }
+
+        @Override
+        public String named(Node node) {
+            Type type = settled(node);
+            return type == null ? node.type().getTypeName()
+                    : type instanceof ParameterizedType wrote
+                            ? wrote.getRawType().getTypeName() : type.getTypeName();
+        }
+
+        /** A declaration that reaches itself is a shape and not a defect: what is under it is being
+         *  asked about where it was first met, so this path ends here. */
+        @Override
+        public Gap aLoop(Node node, TypePath where) {
+            return null;
         }
     }
 

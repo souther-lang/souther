@@ -15,7 +15,7 @@ import java.util.List;
  * has to take every arm, and which one it is under is the difference between two places that
  * otherwise read alike. So the two paths are two things rather than one with a step nobody writes.
  */
-record TypePath(List<TypePath.Step> steps) {
+record TypePath(List<TypePath.Step> steps) implements Trail<TypePath> {
 
     static final TypePath ROOT = new TypePath(List.of());
 
@@ -58,14 +58,16 @@ record TypePath(List<TypePath.Step> steps) {
     }
 
     /** This path, and then {@code rest} from where it gets to. */
-    TypePath followedBy(TypePath rest) {
+    @Override
+    public TypePath followedBy(TypePath rest) {
         List<Step> out = new ArrayList<>(steps);
         out.addAll(rest.steps());
         return new TypePath(List.copyOf(out));
     }
 
     /** What {@code longer} adds to this, which is the way down from where this stops. */
-    TypePath from(TypePath longer) {
+    @Override
+    public TypePath from(TypePath longer) {
         return new TypePath(List.copyOf(longer.steps().subList(steps.size(),
                 longer.steps().size())));
     }

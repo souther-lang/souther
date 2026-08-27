@@ -76,7 +76,7 @@ class EveryAnswerThisCompilerDeclaresCouldBeAValueTest {
      */
     @Test
     void theOnlyDeclarationsThatCouldNotBeAValueAreTheOnesWrittenDown() throws Exception {
-        Map<TypePath.Place, DeclaredAnswerWalk.Why> found = new LinkedHashMap<>();
+        Map<TypePath.Place, Traversal.Why> found = new LinkedHashMap<>();
         DeclaredAnswerWalk.of(questions()).found()
                 .forEach(each -> found.put(each.place(), each.why()));
         Map<TypePath.Place, String> reasons = AnswerClosure.declaredReasons();
