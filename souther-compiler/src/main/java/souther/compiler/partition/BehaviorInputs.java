@@ -208,14 +208,11 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, Symbols 
         TypeView view = TypeView.of(from, symbols);
         return switch (step) {
             case TermPath.Step.Field named -> {
-                // Null at a sum whose cases share a spread, and that is an answer this gives on
-                // purpose rather than a shape nobody thought of. A field of the shared part does
-                // stand at every value here and is readable; it is not constructible, because a
-                // value here is one of the cases. {@link StructuralDescent} is asked both
-                // questions, and the sum is the one shape where they part company — so reading the
-                // shared field here would be a third place that knows the difference, beside the
-                // two that already work around it. The narrow answer is the one that stays true
-                // whichever way that is settled.
+                // Null at a sum whose cases share a spread, deliberately. A shared field is
+                // readable at every value of the sum and is not by itself a constructible child of
+                // it, since a value there is one of the cases. {@link StructuralDescent} answers
+                // the constructible question, so taking the field as a step here would give this
+                // reader a descent wider than the construction it has to agree with.
                 StructuralDescent.Children children = StructuralDescent.of(view.shape());
                 yield children == null ? null : children.under().get(named.name());
             }

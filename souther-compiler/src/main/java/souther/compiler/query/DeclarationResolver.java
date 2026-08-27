@@ -102,12 +102,12 @@ public final class DeclarationResolver {
                         walked.put(reading, new SearchCoverage.ReadingSearch.Unavailable());
                 case ReadingEvidence.Searched(ItemAssessment.Attempt attempt) -> {
                     switch (attempt) {
-                        case ItemAssessment.Attempt.Built(var row, var _) ->
+                        case ItemAssessment.Attempt.Built(var row, var _, var _) ->
                                 // The line is answered. Which reading answered it is where the row
                                 // goes and not what the answer is.
                                 { return new DeclarationResolution.Generated(
                                         reading.behavior(), row); }
-                        case ItemAssessment.Attempt.Unresolved(var why, var _) ->
+                        case ItemAssessment.Attempt.Unresolved(var why, var _, var _) ->
                                 walked.put(reading,
                                         new SearchCoverage.ReadingSearch.Attempted(why));
                         // A search that ran with nothing to run against. Said in the words the

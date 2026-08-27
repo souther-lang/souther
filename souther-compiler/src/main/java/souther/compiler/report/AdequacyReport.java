@@ -1581,22 +1581,46 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * the wider box would be this report deciding something it has not been shown.
      */
     private static String whatTheRegionLeftOut(
-            List<souther.compiler.partition.OnTheWay.Declined> left,
+            List<souther.compiler.partition.ReachabilityGap> left,
             SourceNameResolver names, SourceId declaredIn) {
         if (left.isEmpty()) {
             return "";
         }
-        StringBuilder out = new StringBuilder("; not every condition on the way to the line is"
-                + " represented in the region searched: ");
+        StringBuilder out = new StringBuilder("; not every condition on the way to the line is one"
+                + " the row was composed against: ");
         for (int i = 0; i < left.size(); i++) {
             out.append(i == 0 ? "" : ", ")
-                    .append(whyDeclined(left.get(i).why()))
+                    .append(whyLeftOut(left.get(i)))
                     // The place last and in brackets, as every other line of this report writes
                     // one. Written into the sentence, it lands after a verb and reads as part of
                     // what the sentence says rather than as where to look.
                     .append(" (").append(left.get(i).at().said(names, declaredIn)).append(")");
         }
         return out.toString();
+    }
+
+    /**
+     * What became of one condition, in the words a reader acts on.
+     *
+     * <p>The stage first, because it is what an author would do something about: a condition this
+     * reading has no words for is one to write differently, and one it read and could not compose a
+     * value under is one this compiler is short of a way to build.
+     */
+    private static String whyLeftOut(souther.compiler.partition.ReachabilityGap gap) {
+        return switch (gap) {
+            case souther.compiler.partition.ReachabilityGap.Unstated(var condition) ->
+                    whyDeclined(condition.why());
+            case souther.compiler.partition.ReachabilityGap.Uncomposed(var _, var why) ->
+                    switch (why) {
+                        case souther.compiler.partition.ReachabilityGap.Why
+                                .NoValueComposedForItsPositions _ ->
+                                "a condition on positions nothing here composed a value at";
+                        case souther.compiler.partition.ReachabilityGap.Why
+                                .TwoNumbersAtOneLocation _ ->
+                                "a condition on another number taken where this row is already"
+                                        + " being written for one";
+                    };
+        };
     }
 
     /**
@@ -1627,8 +1651,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     "an outcome that states one of two things";
             case souther.compiler.partition.OnTheWay.Why.ForkArmNotReadAsANarrowing _ ->
                     "an arm of a fork this reading could not read as a narrowing of a position";
-            case souther.compiler.partition.OnTheWay.Why.NoValueComposedForItsPositions _ ->
-                    "a condition on positions nothing here could compose a value at";
         };
     }
 

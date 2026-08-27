@@ -2286,10 +2286,10 @@ public final class Generator {
          * <p>Empty is the ordinary case and says so: every condition the walk stated was one this
          * put a value under.
          */
-        List<OnTheWay.Declined> unrepresented();
+        List<ReachabilityGap.Uncomposed> unrepresented();
 
         /** A value with the edge in it, built and accepted. */
-        record Built(GeneratedRow row, List<OnTheWay.Declined> unrepresented)
+        record Built(GeneratedRow row, List<ReachabilityGap.Uncomposed> unrepresented)
                 implements BoundaryAttempt {
 
             public Built {
@@ -2298,7 +2298,7 @@ public final class Generator {
         }
 
         /** No row came of it, and why. Never a statement that none exists. */
-        record Unresolved(UnresolvedCombination why, List<OnTheWay.Declined> unrepresented)
+        record Unresolved(UnresolvedCombination why, List<ReachabilityGap.Uncomposed> unrepresented)
                 implements BoundaryAttempt {
 
             public Unresolved {
@@ -2475,7 +2475,7 @@ public final class Generator {
     private static Standing alsoOnTheWay(Subject subject, Map<NumericTerm, Place> fixing,
                                          Reachability.Reaching reaching) {
         Map<NumericTerm, Place> out = new LinkedHashMap<>(fixing);
-        List<OnTheWay.Declined> unrepresented = new ArrayList<>();
+        List<ReachabilityGap.Uncomposed> unrepresented = new ArrayList<>();
         java.util.Set<TermPath> taken = new java.util.LinkedHashSet<>();
         fixing.keySet().forEach(term -> taken.add(term.path()));
         souther.compiler.inputs.SearchRegion here = reaching.region();
@@ -2510,8 +2510,9 @@ public final class Generator {
             Map<NumericTerm, Place> standing = shared ? null
                     : NumericWitness.of(here, owing, term -> carrierOf(subject, term));
             if (standing == null) {
-                unrepresented.add(new OnTheWay.Declined(cut.at(),
-                        new OnTheWay.Why.NoValueComposedForItsPositions()));
+                unrepresented.add(new ReachabilityGap.Uncomposed(cut, shared
+                        ? new ReachabilityGap.Why.TwoNumbersAtOneLocation()
+                        : new ReachabilityGap.Why.NoValueComposedForItsPositions()));
                 continue;
             }
             for (Map.Entry<NumericTerm, Place> each : standing.entrySet()) {
@@ -2534,7 +2535,7 @@ public final class Generator {
      * arrive there, and an account of the attempt that did not say so would have an author reading
      * "no row was seen reaching it" beside a way that says everything on it was taken in.
      */
-    private record Standing(Map<NumericTerm, Place> at, List<OnTheWay.Declined> unrepresented) {}
+    private record Standing(Map<NumericTerm, Place> at, List<ReachabilityGap.Uncomposed> unrepresented) {}
 
     /**
      * The order a number taken at a position of this subject is measured on, or null where the

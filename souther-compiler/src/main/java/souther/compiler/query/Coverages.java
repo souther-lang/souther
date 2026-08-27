@@ -1003,34 +1003,16 @@ final class Coverages {
                             List.of(subject),
                             souther.compiler.partition.Generator.UnresolvedCombination.Reason
                                     .LINKAGE_FAILED), within);
+            // The way as the walk left it, and beside it what the composer could not act on. Two
+            // stages and two answers: a condition the walk stated stays stated, and writing the
+            // composer's own failure onto the way would have one condition wearing two of the
+            // walk's words.
             case souther.compiler.partition.Generator.BoundaryAttempt.Built built ->
-                    new ItemAssessment.Attempt.Built(built.row(),
-                            alsoUnused(within, built.unrepresented()));
+                    new ItemAssessment.Attempt.Built(built.row(), within, built.unrepresented());
             case souther.compiler.partition.Generator.BoundaryAttempt.Unresolved left ->
-                    new ItemAssessment.Attempt.Unresolved(left.why(),
-                            alsoUnused(within, left.unrepresented()));
+                    new ItemAssessment.Attempt.Unresolved(left.why(), within,
+                            left.unrepresented());
         };
-    }
-
-    /**
-     * The way, with what the composer could not compose against written onto it.
-     *
-     * <p>Both stages on one account, because an author asking what is not represented wants the
-     * same thing from either: a condition the walk could not state, and one it stated that nothing
-     * could put a value under, leave the same gap between what a row was built to be and what
-     * reaches the border. Written here, where the outcome of a search is turned into what a reader
-     * of the point holds, and nowhere else.
-     */
-    private static souther.compiler.partition.WayToTheBorder alsoUnused(
-            souther.compiler.partition.WayToTheBorder within,
-            List<souther.compiler.partition.OnTheWay.Declined> unrepresented) {
-        if (unrepresented.isEmpty()) {
-            return within;
-        }
-        List<souther.compiler.partition.OnTheWay> whole =
-                new ArrayList<>(within.onTheWay());
-        whole.addAll(unrepresented);
-        return new souther.compiler.partition.WayToTheBorder(whole);
     }
 
     /**

@@ -66,14 +66,14 @@ public sealed interface OnTheWay {
     record Declined(Citation at, Why why) implements OnTheWay {}
 
     /**
-     * What stopped a condition on the way from bearing on where a row was looked for.
+     * What stopped a condition from being stated in either vocabulary.
      *
-     * <p>Two stages and one list, because an author reading it wants the same thing from both: a
-     * condition the walk could not state, and a condition it stated that nothing could compose a
-     * value under, leave the same gap between what a row was built to be and what reaches the
-     * border. Kept apart, one of them would be the half that is never printed.
+     * <p>The walk's own answers and no other stage's. A condition this stated and something later
+     * could not act on is still stated — it keeps the answer given here and what became of it
+     * downstream is {@link ReachabilityGap}'s. Written as another word here, one condition would
+     * wear two of these.
      *
-     * <p>Each says what this compiler did rather than what the model says. A condition an author
+     * <p>Each says what this reading did rather than what the model says. A condition an author
      * wrote plainly is here wherever nothing here has a way of carrying it, so nothing read off one
      * of these says a row cannot be written, and a word going away is a capability gained rather
      * than a model changed.
@@ -122,15 +122,5 @@ public sealed interface OnTheWay {
          */
         record ForkArmNotReadAsANarrowing() implements Why {}
 
-        /**
-         * A cut the walk took in that nothing could put a value under.
-         *
-         * <p>Said of the whole cut, because a cut over two positions is one statement about the
-         * pair. One of them put where the cut admits and the other left to its own declared range
-         * is not half of the condition holding — it is the condition not holding, with a position
-         * pinned on the strength of it. So a cut this cannot place every position of is placed at
-         * none of them, and the fact that it was handed one it could not act on is here.
-         */
-        record NoValueComposedForItsPositions() implements Why {}
     }
 }
