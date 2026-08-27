@@ -53,17 +53,25 @@ class AClauseOfATypeDoesNotPartItsValuesTest {
     /** And a bound another declaration took in is still a bound. */
     @Test
     void aBoundADeclarationTookInPartsNothingEither() {
+        Endpoint at = Endpoint.inclusive(Count.of(100));
         assertNull(Border.partedBy(aLineAt(100),
-                        OriginRef.NarrowedOrigin.of(aBound(), aDeclarationHoldingTheEnd())),
+                        OriginRef.NarrowedOrigin.of(aBound(), at, aDeclarationHolding(at))),
                 "taking an end in moves where the position stops, which is not dividing it");
     }
 
-    /** A reading answering that one declaration holds the end it was asked about. */
-    private static MatchedEndAttribution aDeclarationHoldingTheEnd() {
-        Endpoint at = Endpoint.inclusive(Count.of(100));
+    /**
+     * A reading answering that one declaration holds {@code at} on the side {@link #aBound()}
+     * placed.
+     *
+     * <p>The side is the bound's, because a bound is answered for by the end it placed. Written as
+     * the other one, this fixture said a minimum had been taken in by whatever holds a maximum —
+     * which is the pairing the origin refuses, and which is why it refuses it here rather than
+     * downstream where the two are one number.
+     */
+    private static MatchedEndAttribution aDeclarationHolding(Endpoint at) {
         return AReadingOfAPosition
-                .withAnUpperEndAt(at, TypeSymbols.declared(new TypeKey("example.weigh", "Held")))
-                .matching(EndSide.UPPER, at).orElseThrow();
+                .withALowerEndAt(at, TypeSymbols.declared(new TypeKey("example.weigh", "Held")))
+                .matching(EndSide.LOWER, at).orElseThrow();
     }
 
     /** While a comparison in a body does part them, which is why a run can stop at a line at all. */

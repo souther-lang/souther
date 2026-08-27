@@ -173,16 +173,17 @@ final class LocalInspection {
             put(into, carrier, end.value(),
                     new OriginRef.InvariantOrigin(from.rule(), from.conjunct(), side,
                             end.at().inclusive()),
-                    took);
+                    end.at(), took);
         }
     }
 
     private static void put(Map<String, Cut> into, Carrier carrier, Place at,
-                            OriginRef.InvariantOrigin drawnBy, MatchedEndAttribution took) {
+                            OriginRef.InvariantOrigin drawnBy, Endpoint cutAt,
+                            MatchedEndAttribution took) {
         // The rule as the end already names it. Narrowing is the one thing said here, and it is
         // said about the rule rather than in place of it: which declarations took the end in is a
         // fact about this reading of the position, and what drew the end is not.
-        OriginRef origin = OriginRef.NarrowedOrigin.of(drawnBy, took);
+        OriginRef origin = OriginRef.NarrowedOrigin.of(drawnBy, cutAt, took);
         Cut cut = Cut.at(carrier, at, origin);
         into.merge(cut.key(), cut, (had, _) -> had.and(origin));
     }
