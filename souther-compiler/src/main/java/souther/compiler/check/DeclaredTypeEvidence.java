@@ -122,16 +122,42 @@ public record DeclaredTypeEvidence(Symbols symbols, Map<String, Hir.FnDef> value
      * different answers about which field of what is being read.
      */
     public Type fieldTypeOf(Type record, String field) {
+        return fieldsOf(record).get(field);
+    }
+
+    /**
+     * Every field a value of {@code record} has, in the order its declaration lays them out.
+     *
+     * <p>Which fields a type has is said here and asked here. A reader after one of them and a
+     * reader listing them for an author are asking the same question, and answering it in two places
+     * would be two accounts of what a declaration wrote — the one that forgot a rule would forget it
+     * for whoever read it.
+     *
+     * <p>Empty for anything that is not a declared data type. A list has no fields to take, and
+     * neither has a type this reading's module cannot see.
+     */
+    public Map<String, Type> fieldsOf(Type record) {
         if (!(record instanceof Type.Ref r)) {
-            return null;
+            return Map.of();
         }
         TypeSymbol named = r.name();
         if (isNewtype(named)) {
             // A newtype declares one field, and it is what it wraps (ADR-0032).
-            return "value".equals(field) ? shapeOf(newtypeBaseType(named, symbols)) : null;
+            Type wraps = shapeOf(newtypeBaseType(named, symbols));
+            return wraps == null ? Map.of() : Map.of(NEWTYPE_FIELD, wraps);
         }
-        return shapeOf(fieldTypes(named, symbols).get(field));
+        Map<String, Type> out = new LinkedHashMap<>();
+        fieldTypes(named, symbols).forEach((field, written) -> {
+            Type is = shapeOf(written);
+            if (is != null) {
+                out.put(field, is);
+            }
+        });
+        return out;
     }
+
+    /** What a newtype's one field is called (ADR-0032). */
+    private static final String NEWTYPE_FIELD = "value";
 
     /** The body a name stands for, where it names a value of this reading's own. */
     public Hir.Expr valueBody(String name) {

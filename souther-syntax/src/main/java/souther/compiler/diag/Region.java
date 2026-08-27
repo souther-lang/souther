@@ -42,12 +42,7 @@ public record Region(SourcePos start, SourcePos end) {
         if (!outer.start.isInTheSameTextAs(inner.start)) {
             return false;
         }
-        return !before(inner.start, outer.start) && !before(outer.end, inner.end);
-    }
-
-    /** Whether {@code a} comes before {@code b} in the file they share. */
-    private static boolean before(SourcePos a, SourcePos b) {
-        return a.line() != b.line() ? a.line() < b.line() : a.column() < b.column();
+        return !inner.start.isBefore(outer.start) && !outer.end.isBefore(inner.end);
     }
 
     /**

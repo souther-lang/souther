@@ -1,13 +1,18 @@
 package souther.lsp.analysis;
 
+import souther.compiler.cst.CstLexer;
 import souther.compiler.cst.CstParser;
+import souther.compiler.cst.GreenToken;
 import souther.compiler.cst.LineIndex;
+import souther.compiler.cst.SyntaxKind;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
 import souther.compiler.source.SourceId;
 
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -86,9 +91,9 @@ final class SemanticProbe {
             if (!extent.end().isInTheSameTextAs(firstInserted)) {
                 return true;
             }
-            return extent.end().line() != firstInserted.line()
-                    ? extent.end().line() < firstInserted.line()
-                    : extent.end().column() <= firstInserted.column();
+            // Ends at it as well as before it: an extent that stops where the insertion begins
+            // covers none of it.
+            return !firstInserted.isBefore(extent.end());
         }
     }
 
@@ -108,17 +113,87 @@ final class SemanticProbe {
         if (text == null || cursor < 0 || cursor > text.length() || parses(text)) {
             return null;
         }
-        Repair afterADot = cursor > 0 && text.charAt(cursor - 1) == '.'
-                ? new Repair(text.substring(0, cursor) + SENTINEL + text.substring(cursor), cursor)
-                : null;
-        if (afterADot != null && parses(afterADot.text())) {
-            return afterADot;
+        String closers = unclosed(text);
+        // Both, and either, and in that order. An author reaching for a field of an argument has
+        // left two things unfinished at once — `keep(request.` — and a policy that could apply one
+        // repair or the other would answer that with nothing while answering each half of it. What
+        // decides between them is the parser: the first that makes a source is the source.
+        Repair[] tried = {
+            inserting(text, cursor, SENTINEL, closers),
+            inserting(text, cursor, SENTINEL, ""),
+            inserting(text, cursor, "", closers),
+        };
+        for (Repair candidate : tried) {
+            if (candidate != null && parses(candidate.text())) {
+                return candidate;
+            }
         }
-        // A call whose closing bracket has not been typed yet. Appended at the end rather than at
-        // the cursor: an argument may still be being written after it, and what is wanted is that
-        // the call closes somewhere, not that it closes here.
-        Repair closed = new Repair(text + ")", text.length());
-        return parses(closed.text()) ? closed : null;
+        return null;
+    }
+
+    /**
+     * The text with {@code name} put at the cursor and {@code closers} at the end, or null where
+     * there is nothing to put.
+     *
+     * <p>A name only where the cursor is straight after a {@code .}: elsewhere there is no missing
+     * name, and one put in would be a name the author did not write standing where they are typing.
+     * The brackets go at the end rather than at the cursor because an argument may still be being
+     * written after it, and what is wanted is that the call closes somewhere.
+     *
+     * <p>The insertion is where the earlier of the two is, which is the cursor whenever a name went
+     * in — everything before that is the source, character for character, and is what may be read.
+     */
+    private static Repair inserting(String text, int cursor, String name, String closers) {
+        boolean naming = !name.isEmpty();
+        if (naming && (cursor == 0 || text.charAt(cursor - 1) != '.')) {
+            return null;
+        }
+        if (!naming && closers.isEmpty()) {
+            return null;
+        }
+        String repaired = naming
+                ? text.substring(0, cursor) + name + text.substring(cursor) + closers
+                : text + closers;
+        return new Repair(repaired, naming ? cursor : text.length());
+    }
+
+    /**
+     * The brackets {@code text} opens and does not close, innermost first, as the characters that
+     * would close them.
+     *
+     * <p>Asked of the lexer rather than counted in the characters. A bracket inside a string
+     * literal or a comment is text, and a reading that counted those would close a call the author
+     * never opened — which is a source that parses and says something else.
+     */
+    private static String unclosed(String text) {
+        Deque<SyntaxKind> open = new ArrayDeque<>();
+        for (GreenToken token : CstLexer.lex(text).tokens()) {
+            switch (token.kind()) {
+                case LPAREN, LBRACKET, LBRACE -> open.push(token.kind());
+                case RPAREN -> popIf(open, SyntaxKind.LPAREN);
+                case RBRACKET -> popIf(open, SyntaxKind.LBRACKET);
+                case RBRACE -> popIf(open, SyntaxKind.LBRACE);
+                default -> { }
+            }
+        }
+        StringBuilder closers = new StringBuilder();
+        for (SyntaxKind each : open) {
+            closers.append(switch (each) {
+                case LPAREN -> ')';
+                case LBRACKET -> ']';
+                case LBRACE -> '}';
+                default -> throw new IllegalStateException("not a bracket: " + each);
+            });
+        }
+        return closers.toString();
+    }
+
+    /** Closes the innermost bracket where it is the one being closed. A closer with nothing open, or
+     *  with something else open, is the author's mistake and not a bracket this supplies. */
+    private static void popIf(Deque<SyntaxKind> open, SyntaxKind opener) {
+        if (open.peek() == opener) {
+            open.pop();
+        }
     }
 
     /**
@@ -149,13 +224,6 @@ final class SemanticProbe {
         // reads as "the author wrote this" about all of them.
         return new Reading(compile, uri, repair.text(),
                 new LineIndex(text, new SourceId(uri)).posOf(repair.firstInserted()));
-    }
-
-    /** Forgets the compile it was keeping. What a probe holds is a second store of every answer the
-     *  workspace's holds, and a workspace nobody is typing in has no use for one. */
-    void forget() {
-        compile = null;
-        compiledAgainst = null;
     }
 
     private static boolean parses(String text) {

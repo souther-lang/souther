@@ -90,10 +90,9 @@ class SemanticProbeBenchmark {
         SemanticProbe kept = new SemanticProbe();
         double probed = medianMillis(round -> through(kept, byId, edited, module, round), ROUNDS);
 
-        double first = medianMillis(round -> {
-            kept.forget();
-            through(kept, byId, edited, module, round);
-        }, ROUNDS / 4);
+        // A probe that keeps nothing between rounds, which is what one built per keystroke would be.
+        double first = medianMillis(
+                round -> through(new SemanticProbe(), byId, edited, module, round), ROUNDS / 4);
 
         // The workspace built from nothing, so that what a kept store is worth can be read off both
         // of them the same way. A ratio of steady state to cold that is the same for the two says the

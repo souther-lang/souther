@@ -121,17 +121,13 @@ public final class AuthoredSites {
      *  which is what a region is, and in the text the region is in. */
     private static boolean contains(Region extent, SourcePos at) {
         return extent.start().isInTheSameTextAs(at)
-                && !before(at, extent.start()) && before(at, extent.end());
+                && !at.isBefore(extent.start()) && at.isBefore(extent.end());
     }
 
     /** Whether {@code outer} covers the whole of {@code inner}, ends allowed to meet. */
     private static boolean contains(Region outer, Region inner) {
         return outer.start().isInTheSameTextAs(inner.start())
-                && !before(inner.start(), outer.start()) && !before(outer.end(), inner.end());
-    }
-
-    private static boolean before(SourcePos a, SourcePos b) {
-        return a.line() != b.line() ? a.line() < b.line() : a.column() < b.column();
+                && !inner.start().isBefore(outer.start()) && !outer.end().isBefore(inner.end());
     }
 
     @Override

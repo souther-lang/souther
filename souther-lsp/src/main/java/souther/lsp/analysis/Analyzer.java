@@ -1533,7 +1533,7 @@ public final class Analyzer {
         Optional<SemanticSnapshot> snapshot = SemanticSnapshot.of(compilation.db(), module);
         return snapshot.flatMap(reads -> reads.calledAt(at))
                 .map(called -> shown(called, snapshot.orElseThrow(),
-                        argumentAt(call, text, cursor)));
+                        argumentAt(call, cursor)));
     }
 
     /**
@@ -1585,32 +1585,23 @@ public final class Analyzer {
     }
 
     /**
-     * Which argument of {@code call} the cursor is writing, counted in the source the author left.
+     * Which argument of {@code call} the cursor is writing.
      *
-     * <p>Commas at the top of the argument list and no deeper: a comma inside a nested call, a tuple
-     * or a construction belongs to that, and counting it would move the reader along a signature they
-     * are not in.
+     * <p>The commas the argument list itself holds, and no others. The parser writes an argument
+     * list as its brackets, its arguments and the commas between them, so a comma inside a nested
+     * call, a tuple or a construction is that one's and is not a child here — counted in the
+     * characters instead, it would have to be told from those by brackets, and a bracket in a string
+     * literal would tell it wrong.
      */
-    private static int argumentAt(SyntaxNode call, String text, int cursor) {
+    private static int argumentAt(SyntaxNode call, int cursor) {
         SyntaxNode arguments = call.child(SyntaxKind.ARG_LIST).orElse(null);
         if (arguments == null) {
             return 0;
         }
-        int from = arguments.start();
-        // The list's own bracket, where the list is written over it, so that what follows is read at
-        // the depth the arguments are at rather than one inside it.
-        if (from < text.length() && text.charAt(from) == '(') {
-            from++;
-        }
         int written = 0;
-        int depth = 0;
-        for (int at = from; at < Math.min(cursor, text.length()); at++) {
-            char each = text.charAt(at);
-            if (each == '(' || each == '[' || each == '{') {
-                depth++;
-            } else if (each == ')' || each == ']' || each == '}') {
-                depth--;
-            } else if (each == ',' && depth == 0) {
+        for (SyntaxElement each : arguments.children()) {
+            if (each instanceof SyntaxToken token && token.kind() == SyntaxKind.COMMA
+                    && token.start() < cursor) {
                 written++;
             }
         }

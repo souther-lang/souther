@@ -37,6 +37,7 @@ class AFieldListIsOfferedForTheValueTheDotIsTakenOffTest {
 
                 data Draft = { plannedCost: Cost, note: Text }
 
+                behavior keep : (d: Draft) -> Int
                 behavior submit : (request: Draft) -> Int
                 let submit (request) = \
                 """ + body;
@@ -53,6 +54,33 @@ class AFieldListIsOfferedForTheValueTheDotIsTakenOffTest {
         assertEquals(List.of("amount", "currency"),
                 labelsAfterTheDot(model("request.plannedCost.\n")),
                 "`plannedCost` is a `Cost`, which another module's data declaration says");
+    }
+
+    /**
+     * And where two things are unfinished at once.
+     *
+     * <p>An author reaching for a field of an argument has left a call unclosed and a name unwritten
+     * — {@code keep(request.} — which is one of the commonest places a field list is wanted and the
+     * one a repair policy that could do either but not both answers with nothing.
+     */
+    @Test
+    void aFieldOfAnArgumentInACallThatIsNotClosedYet() {
+        assertEquals(List.of("plannedCost", "note"),
+                labelsAfterTheDot(model("keep(request.\n")),
+                "the call has no closing bracket and the name has no field yet");
+        assertEquals(List.of("amount", "currency"),
+                labelsAfterTheDot(model("keep(request.plannedCost.\n")),
+                "and a second step of it is still two things unfinished");
+        assertEquals(List.of("plannedCost", "note"),
+                labelsAfterTheDot(model("[request.\n")),
+                "a bracket is a bracket");
+    }
+
+    /** And a bracket written inside a string is text, not something to close. */
+    @Test
+    void aBracketInsideALiteralIsNotOneThatWasOpened() {
+        assertEquals(List.of("plannedCost", "note"),
+                labelsAfterTheDot(model("keep(\"(\", request.\n")));
     }
 
     @Test
