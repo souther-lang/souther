@@ -1344,7 +1344,7 @@ public final class Adequacy {
                             symbols, policy);
             return Answer.of(Coverages.merged(Coverages.searched(measured, inputs,
                     probing(spec.name(), divided, sig, symbols, policy, parameters,
-                            constructing(db, name),
+                            constructing(db, name), runningRowsOf(trialling(db, name), behavior, sig),
                             domain),
                     domain.quantities(symbols), divided.reaching())));
         }
@@ -1361,7 +1361,8 @@ public final class Adequacy {
                 String behavior,
                 souther.compiler.partition.Partitions.Partitioning partitioning, Sig sig,
                 Symbols symbols, souther.compiler.check.ReadingPolicy policy,
-                List<String> parameters, BoundaryValues building, InputDomain domain) {
+                List<String> parameters, BoundaryValues building, Generator.Trial trial,
+                InputDomain domain) {
             if (building == null) {
                 return null;
             }
@@ -1382,6 +1383,19 @@ public final class Adequacy {
                         souther.compiler.partition.Reachability.Reaching reaching) {
                     return built(() ->
                             Generator.probeFixing(subject, label, carrier, fixing, reaching, check));
+                }
+
+                @Override
+                public RowAsRead read(
+                        List<souther.compiler.partition.FixtureTemplate> inputs) {
+                    try {
+                        return RowAsRead.of(sig, building, trial, inputs);
+                    } catch (LinkageError _) {
+                        // The generated classes would not link, so nothing here can say where the
+                        // row went. Which is what a row nothing built reads as, and is not a row
+                        // seen to stand somewhere else.
+                        return RowAsRead.nothingRead();
+                    }
                 }
 
                 private Generator.BoundaryAttempt built(

@@ -526,6 +526,16 @@ final class Coverages {
                         souther.compiler.check.Carrier> on,
                 Map<souther.compiler.inputs.NumericTerm, Place> fixing,
                 souther.compiler.partition.Reachability.Reaching reaching);
+
+        /**
+         * A composed row built and run, so that what it turned out to be can be asked.
+         *
+         * <p>The same reading a written row goes through ({@link RowAsRead}). A candidate is a row
+         * nobody has been handed yet and is otherwise a row like any other, so what it stands at is
+         * read by the walk that reads the file's rows and never by a second account written where
+         * the candidate was composed.
+         */
+        RowAsRead read(java.util.List<souther.compiler.partition.FixtureTemplate> inputs);
     }
 
     /**
@@ -779,6 +789,8 @@ final class Coverages {
                                                 souther.compiler.partition.WayToTheBorder within,
                                                 souther.compiler.inputs.Quantities rules) {
         BorderQuantity quantity = border.cut().of();
+        java.util.Optional<souther.compiler.coverage.ComparisonOccurrence> site =
+                border.origin().comparisonAt();
         // Built here and gone when the search is. What a row has to be to arrive is a way of asking
         // about values rather than something that says what it is, so it is what the walk runs
         // against and never what the answer keeps; the account it was built from is what travels.
@@ -809,7 +821,8 @@ final class Coverages {
                 // offered for goes in beside it rather than being read back off it.
                 return switch (realizer.realize(quantity.standingAt(criterion), able.region())) {
                     case Realization.Found found -> whatCameOfIt(
-                            probe.attempt(label, quantity::carrierOf, found.fixing(), able),
+                            standingThere(probe, quantity, where, criterion, site, label,
+                                    probe.attempt(label, quantity::carrierOf, found.fixing(), able)),
                             label, within);
                     // And the two ways of finding nothing are not one answer. A walk of the whole
                     // of what the rules leave that reaches no value settles the point; a search
@@ -896,6 +909,51 @@ final class Coverages {
                     part.value() instanceof ItemAssessment.Coverage.Hit ? 3 : 2;
             case Measurement.NotMeasured<ItemAssessment.Coverage> _,
                  Measurement.FailedToMeasure<ItemAssessment.Coverage> _ -> 0;
+        };
+    }
+
+    /**
+     * A candidate the walk that reads a row at a point was seen to stand there, or a search that
+     * composed a row and did not.
+     *
+     * <p><b>The one thing that says a row is at a point.</b> {@link StandingAtAPoint} answers it for
+     * the rows in the file and for the rows a person is being offered, so a candidate goes through
+     * it before it is offered rather than after somebody has been handed it. What a search knows
+     * while it is composing is narrower — that each position it fixed reads back at the place it was
+     * fixed at — and a row can pass that and turn back above the comparison, which is exactly the
+     * disagreement this removes: the generator and the reading are no longer two accounts of one
+     * model, because the generator asks the reading.
+     *
+     * <p><b>Fail-open, and the law that leaves.</b> A row nothing built the values of, a row nothing
+     * watched run, and a row whose values could not be read at the point are all offered. None of
+     * them is a row seen to stand somewhere else — they are rows nothing found anything out about —
+     * and refusing them would answer a question nobody could put with the worst of the two answers.
+     * So what holds of an offered row is that nothing observed it not to stand at its point, and not
+     * that it stands there.
+     *
+     * <p>An answer about this search and never about the model. A row composed here that does not
+     * stand at the point says the way to the border was not composed against in full; the point is
+     * owed the same row it was owed before, and nothing here says one cannot be written.
+     */
+    private static souther.compiler.partition.Generator.BoundaryAttempt standingThere(
+            Probe probe, BorderQuantity quantity, BehaviorInputs where, Criterion criterion,
+            java.util.Optional<souther.compiler.coverage.ComparisonOccurrence> site, String label,
+            souther.compiler.partition.Generator.BoundaryAttempt made) {
+        if (!(made instanceof souther.compiler.partition.Generator.BoundaryAttempt.Built built)) {
+            return made;
+        }
+        souther.compiler.partition.ObservedInputs read =
+                probe.read(built.row().inputs()).asInputs();
+        if (read == null) {
+            return made;   // nothing built it, so nothing here can say where it went
+        }
+        return switch (StandingAtAPoint.met(quantity, where, List.of(read), criterion, site)) {
+            case YES, NOT_WATCHED, UNREADABLE -> made;
+            case NO -> new souther.compiler.partition.Generator.BoundaryAttempt.Unresolved(
+                    new souther.compiler.partition.Generator.UnresolvedCombination(
+                            List.of(label),
+                            souther.compiler.partition.Generator.UnresolvedCombination.Reason
+                                    .NO_CERTIFIED_WITNESS));
         };
     }
 

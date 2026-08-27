@@ -2,7 +2,6 @@ package souther.compiler.query;
 
 import souther.compiler.check.Sig;
 import souther.compiler.execute.BoundaryValues;
-import souther.compiler.observe.ObservedValue;
 import souther.compiler.partition.Axis;
 import souther.compiler.partition.BehaviorInputs;
 import souther.compiler.partition.BorderObligationPoint;
@@ -253,10 +252,10 @@ public record Settlements(List<OfferItem> requested,
                 // sit and what running it recorded — does not change between the questions put to
                 // it, and reading it per item would be the same row read as many times as this run
                 // happens to be asked about, at the price of running it that many times.
-                OneRow one = read == null ? OneRow.nothingRead() : read.read(row.inputs());
+                RowAsRead one = read == null ? RowAsRead.nothingRead() : read.read(row.inputs());
                 Map<OfferItem, Settlement> here = new LinkedHashMap<>();
                 for (OfferItem item : items) {
-                    here.put(item, read == null ? one.undetermined() : read.settlementOf(one, item));
+                    here.put(item, read == null ? undetermined(one) : read.settlementOf(one, item));
                 }
                 byRow.put(row.key(), Collections.unmodifiableMap(here));
             }
@@ -419,38 +418,12 @@ public record Settlements(List<OfferItem> requested,
             return out;
         }
 
-        /**
-         * The row as the two things every question here is put to.
-         *
-         * <p>Made once. The values are built through this module's own decoders and the account is
-         * what running it recorded — and a row read again for the next item would be run again for
-         * it, which is the same row asked to do the same thing as many times as this run has
-         * questions.
-         */
-        OneRow read(List<FixtureTemplate> inputs) {
-            Generator.Watched watched = trial.run(inputs);
-            if (building == null || sig == null) {
-                return new OneRow(null, Settlement.Reason.NOTHING_BUILT_THE_VALUES, watched);
-            }
-            List<ObservedValue> values = new ArrayList<>();
-            for (int at = 0; at < inputs.size(); at++) {
-                if (at >= sig.ins().size()) {
-                    return new OneRow(null, Settlement.Reason.NOTHING_BUILT_THE_VALUES, watched);
-                }
-                switch (building.build(sig.ins().get(at), inputs.get(at).value())) {
-                    case BoundaryValues.Built.Value(var observed) -> values.add(observed);
-                    // The model would not take the value the row names. Told apart from having
-                    // nothing to build against: this found something out about the row, and that
-                    // found nothing out at all.
-                    case BoundaryValues.Built.Refused _ -> {
-                        return new OneRow(null, Settlement.Reason.THE_VALUES_WERE_REFUSED, watched);
-                    }
-                }
-            }
-            return new OneRow(List.copyOf(values), null, watched);
+        /** The row as the two things every question here is put to ({@link RowAsRead}). */
+        RowAsRead read(List<FixtureTemplate> inputs) {
+            return RowAsRead.of(sig, building, trial, inputs);
         }
 
-        Settlement settlementOf(OneRow row, OfferItem item) {
+        Settlement settlementOf(RowAsRead row, OfferItem item) {
             return switch (item) {
                 case OfferItem.AClass(var owed) -> inClass(row, owed);
                 case OfferItem.AnArm(var owed) -> throughArm(row, owed);
@@ -465,12 +438,12 @@ public record Settlements(List<OfferItem> requested,
          * another one is not something a row written here has a value at — which is a row that does
          * not settle it rather than one nothing could tell about.
          */
-        private Settlement inClass(OneRow row, Generator.ClassOwed owed) {
+        private Settlement inClass(RowAsRead row, Generator.ClassOwed owed) {
             if (!behavior.equals(owed.at().behavior())) {
                 return new Settlement.DoesNotSettle();
             }
             if (row.values() == null) {
-                return row.undetermined();
+                return undetermined(row);
             }
             Classification at =
                     InputClassifications.of(row.values(), where, axes).get(owed.at());
@@ -493,7 +466,7 @@ public record Settlements(List<OfferItem> requested,
          * — and where there is none, this says so rather than reading the absence as a row that
          * missed.
          */
-        private Settlement throughArm(OneRow row, Generator.ArmOwed owed) {
+        private Settlement throughArm(RowAsRead row, Generator.ArmOwed owed) {
             return switch (row.watched()) {
                 case Generator.Watched.Ran(var account) -> account.taken().contains(owed.probe())
                         ? new Settlement.Settles() : new Settlement.DoesNotSettle();
@@ -509,7 +482,7 @@ public record Settlements(List<OfferItem> requested,
          * behavior's readings do not meet is one a row written here does not settle. Where they do,
          * the walk that reads a written row against the point reads this one.
          */
-        private Settlement atThePoint(OneRow read, OfferItem.APointOfALine at) {
+        private Settlement atThePoint(RowAsRead read, OfferItem.APointOfALine at) {
             List<AtAPoint> here = reads.get(at);
             if (here == null || here.isEmpty()) {
                 // No reading of this line in this behavior. A row written here has no value on the
@@ -518,9 +491,9 @@ public record Settlements(List<OfferItem> requested,
                 return new Settlement.DoesNotSettle();
             }
             if (read.values() == null) {
-                return read.undetermined();
+                return undetermined(read);
             }
-            ObservedInputs row = new ObservedInputs(read.values(), read.watched());
+            ObservedInputs row = read.asInputs();
             // Existential over the readings, the way a point met at one position of a behavior is
             // met: a row standing on the line anywhere the behavior reads it is a row at the point.
             Settlement answer = new Settlement.DoesNotSettle();
@@ -551,27 +524,8 @@ public record Settlements(List<OfferItem> requested,
     private record AtAPoint(souther.compiler.partition.Border line,
                             souther.compiler.partition.Criterion criterion) {}
 
-    /**
-     * One row of the offering, read.
-     *
-     * @param values      what its inputs build to, or null where they do not all build
-     * @param whyNotBuilt why they did not, where they did not, and null where they did
-     * @param watched     what running it recorded, which a row whose values would not build still
-     *                    has: the two are found out separately and one failing is not the other
-     *                    failing
-     */
-
-    private record OneRow(List<ObservedValue> values, Settlement.Reason whyNotBuilt,
-                          Generator.Watched watched) {
-
-        static OneRow nothingRead() {
-            return new OneRow(null, Settlement.Reason.NOTHING_BUILT_THE_VALUES,
-                    new Generator.Watched.NoAccount());
-        }
-
-        /** What an item that needs the values is told, where they are not here. */
-        Settlement undetermined() {
-            return new Settlement.Undetermined(whyNotBuilt);
-        }
+    /** What an item that needs the values is told, where they are not here. */
+    private static Settlement undetermined(RowAsRead row) {
+        return new Settlement.Undetermined(row.whyNotRead());
     }
 }

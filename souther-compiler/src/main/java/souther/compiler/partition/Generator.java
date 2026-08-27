@@ -2499,6 +2499,13 @@ public final class Generator {
      * offered at an edge it does not stand on". Asked through the reading a row's own values are
      * read by, so nothing here is a second account of where a value stands.
      *
+     * <p><b>A prune and not the acceptance of the row.</b> What a candidate can be held to here is
+     * one parameter's value against one place, which is cheap and is less than the question. Whether
+     * a row stands at a point takes the whole row and what running it recorded, and it is
+     * {@code StandingAtAPoint}'s — asked of every row that is offered, after it is composed. So a
+     * candidate this lets through is one worth going on with, and never one this has declared to be
+     * a row at the point.
+     *
      * @param refused set where a candidate was turned away for this and nothing else, which is what
      *                tells a search that ran out of candidates from one that certified none
      */
