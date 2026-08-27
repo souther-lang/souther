@@ -271,7 +271,9 @@ final class AnswerClosure {
             "a name nothing resolved is answered with what was raised where it was read. What it "
                     + "says is where the name is and what is wrong with it, and two compiles that "
                     + "found the same thing found the same thing — so that is what it wants an "
-                    + "equality over, and being one object per raise is not it");
+                    + "equality over, and being one object per raise is not it. An equality alone "
+                    + "would not finish it: anything may extend what is thrown, so what stands "
+                    + "here is settled by what a raise happens to be of");
 
     /** What a term holds beside its parts, declared as anything at all. */
     private static final Problem A_TERM_HOLDS_ANYTHING =
@@ -294,7 +296,10 @@ final class AnswerClosure {
             "a report says what this compile found, and two compiles that found the same thing "
                     + "found the same thing — so what it wants is equality over what it says. "
                     + "Reached because an answer is its value and its reports together, which is "
-                    + "what the store compares to stop work");
+                    + "what the store compares to stop work. A walk of a store meets it without a "
+                    + "question, because the reports are the half every answer has and which one "
+                    + "happened to speak is the scenario's business; a walk of the declarations "
+                    + "meets it under whichever question declares reports of its own");
 
     private static final Set<Observation> BOTH_EVERYWHERE = Set.of(
             walked(Scenario.VALID_CORPUS), compared(Scenario.VALID_CORPUS),
@@ -390,9 +395,16 @@ final class AnswerClosure {
                     Set.of(walked(Scenario.A_MODULE_SPOKEN_ABOUT),
                             compared(Scenario.A_MODULE_SPOKEN_ABOUT))));
 
-    /** One place a declaration puts something that cannot be compared as a value, and what is
-     *  wrong there. */
-    private record KnownDeclared(TypePath.Place place, Problem problem) {}
+    /**
+     * One place, what is wrong with what is there, and what the walk of the declarations stopped on.
+     *
+     * <p>The third is the walk's own word and is held to like everything else. What a thing is is a
+     * judgement somebody made; where the declarations run out is what a walk saw, and the day a
+     * place starts failing for another reason is the day something about the declaration moved
+     * under a judgement that still reads as if it had not.
+     */
+    private record KnownDeclared(TypePath.Place place, Problem problem,
+                                 DeclaredAnswerWalk.Why why) {}
 
     /** A place, written the way the walk of declarations writes one. */
     private static TypePath.Place declared(String question, String offender,
@@ -416,20 +428,77 @@ final class AnswerClosure {
 
     /** The classes a module compiled to, held by the name each is emitted under. */
     private static KnownDeclared classes(String question, TypePath.Step... steps) {
-        return new KnownDeclared(declared(question, "byte[]", steps), BYTES);
+        return new KnownDeclared(declared(question, "byte[]", steps), BYTES,
+                DeclaredAnswerWalk.Why.AN_ARRAY);
     }
+
+    /** One way down, and then another. */
+    private static TypePath.Step[] then(TypePath.Step[] first, TypePath.Step... rest) {
+        List<TypePath.Step> out = new java.util.ArrayList<>(List.of(first));
+        out.addAll(List.of(rest));
+        return out.toArray(new TypePath.Step[0]);
+    }
+
+    /** Down to what a generation is asked for on behalf of. */
+    private static final TypePath.Step[] A_SUBJECT = {
+            part(Q + "Adequacy$Filling", "composed"),
+            part("souther.compiler.partition.FillResult", "plan"),
+            part("souther.compiler.partition.GenerationPlan", "subject")};
 
     /** What a generation's subject carries to go on asking with, under the plan that holds it. */
     private static KnownDeclared generationReader(String offender, TypePath.Step... under) {
-        List<TypePath.Step> steps = new java.util.ArrayList<>(List.of(
-                part(Q + "Adequacy$Filling", "composed"),
-                part("souther.compiler.partition.FillResult", "plan"),
-                part("souther.compiler.partition.GenerationPlan", "subject")));
-        steps.addAll(List.of(under));
         return new KnownDeclared(
-                declared(Q + "Adequacy$Generated", offender, steps.toArray(new TypePath.Step[0])),
-                GENERATION_READERS);
+                declared(Q + "Adequacy$Generated", offender, then(A_SUBJECT, under)),
+                GENERATION_READERS, DeclaredAnswerWalk.Why.NO_EQUALITY);
     }
+
+    /**
+     * Both ends of one range, which are one thing to fix met twice.
+     *
+     * <p>A range has a lower end and an upper one and they are of a type. Written as one place, the
+     * register would say which of the two the walk happens to reach first.
+     */
+    private static void bothEndsOfARange(List<KnownDeclared> into, String question,
+                                         TypePath.Step... under) {
+        for (String end : List.of("lower", "upper")) {
+            into.add(new KnownDeclared(declared(question, "souther.compiler.check.NarrowedEnd",
+                    then(under, arm("souther.compiler.check.NarrowedBounds$Reading"),
+                            part("souther.compiler.check.NarrowedBounds$Reading", end))),
+                    NARROWED_END, DeclaredAnswerWalk.Why.NO_EQUALITY));
+        }
+    }
+
+    /**
+     * What a term holds beside its parts, reached through each way a projection falls short.
+     *
+     * <p>Every cause a projection reports names the atom it is about, and the atom is a term. So
+     * this is one member of one type, met once under each of them.
+     */
+    private static void whatATermHolds(List<KnownDeclared> into, TypePath.Step... under) {
+        for (String cause : List.of("Lossy", "Rounded")) {
+            String owner = "souther.compiler.check.ProjectionEvidence$Cause$" + cause;
+            into.add(new KnownDeclared(declared(Q + "Adequacy$Inputs", "java.lang.Object",
+                    then(under,
+                            part("souther.compiler.inputs.ReadPosition", "projection"),
+                            arm("souther.compiler.check.ProjectionEvidence$NotCertified"),
+                            part("souther.compiler.check.ProjectionEvidence$NotCertified",
+                                    "causes"), HELD,
+                            arm(owner), part(owner, "atom"),
+                            part("souther.compiler.check.FactSubject", "identity"),
+                            part("souther.compiler.check.Term", "of"))),
+                    A_TERM_HOLDS_ANYTHING, DeclaredAnswerWalk.Why.AN_OPEN_CLASS));
+        }
+    }
+
+    /** Down to a position of a reading of an input, by each way the reading holds one. */
+    private static final TypePath.Step[] EVERY_POSITION = {
+            MAP_VALUE, part("souther.compiler.inputs.InputDomain", "positions"), HELD,
+            arm("souther.compiler.inputs.ReadPosition")};
+
+    /** And the same positions under the paths they were read at. */
+    private static final TypePath.Step[] BY_PATH = {
+            MAP_VALUE, part("souther.compiler.inputs.InputDomain", "byPath"), MAP_VALUE,
+            arm("souther.compiler.inputs.ReadPosition")};
 
     /**
      * Every place a question's own declaration puts something that cannot be compared as a value.
@@ -439,7 +508,10 @@ final class AnswerClosure {
      * what it answers with, and what a declaration allows is wider than what a run happened to
      * build.
      */
-    private static final List<KnownDeclared> DECLARED = List.of(
+    private static final List<KnownDeclared> DECLARED = everyDeclaredPlace();
+
+    private static List<KnownDeclared> everyDeclaredPlace() {
+        List<KnownDeclared> out = new java.util.ArrayList<>(List.of(
             classes(Q + "Output$All", MAP_VALUE),
             classes(Q + "Output$Classes", MAP_VALUE),
             classes(Q + "Output$Linked", MAP_VALUE),
@@ -448,21 +520,23 @@ final class AnswerClosure {
             classes(Q + "Output$EvaluationLinked",
                     part("souther.compiler.generated.EvaluationArtifact", "classes"), MAP_VALUE),
             new KnownDeclared(declared(Q + "Front$Library", "souther.compiler.stdlib.Stdlib"),
-                    STDLIB),
+                    STDLIB, DeclaredAnswerWalk.Why.NO_EQUALITY),
             new KnownDeclared(declared(Q + "Bodies$Expanding", "souther.compiler.stdlib.Stdlib",
                     part(Q + "Bodies$Expanding$Of", "table"),
-                    part("souther.compiler.check.HelperTable", "stdlib")), STDLIB),
+                    part("souther.compiler.check.HelperTable", "stdlib")), STDLIB,
+                    DeclaredAnswerWalk.Why.NO_EQUALITY),
             new KnownDeclared(declared(Q + "Front$Path", "souther.compiler.meta.ModulePath"),
-                    MODULE_PATH),
+                    MODULE_PATH, DeclaredAnswerWalk.Why.AN_OPEN_INTERFACE),
             new KnownDeclared(
                     declared(Q + "Front$ExampleDeadline", "souther.compiler.examples.Deadline"),
-                    A_DEADLINE),
+                    A_DEADLINE, DeclaredAnswerWalk.Why.AN_OPEN_INTERFACE),
             // The way of asking, which is where the declarations stop. What a walk of a store goes
             // on to reach through it is the store itself, written down above.
             new KnownDeclared(declared(Q + "Names$ModuleScope",
                     "souther.compiler.check.Resolve$Elsewhere",
                     part("souther.compiler.check.Scoping$Scoped", "values"),
-                    part("souther.compiler.check.Resolve$Values", "elsewhere")), A_STORE),
+                    part("souther.compiler.check.Resolve$Values", "elsewhere")), A_STORE,
+                    DeclaredAnswerWalk.Why.AN_OPEN_INTERFACE),
             generationReader("souther.compiler.check.Symbols",
                     part("souther.compiler.partition.Generator$Subject", "inputs"),
                     part("souther.compiler.partition.BehaviorInputs", "symbols")),
@@ -473,28 +547,35 @@ final class AnswerClosure {
             new KnownDeclared(declared(Q + "Names$Resolution",
                     "souther.compiler.diag.CompileException",
                     part("souther.compiler.check.Resolve$Resolution", "unresolved"), HELD),
-                    AN_EXCEPTION),
+                    AN_EXCEPTION, DeclaredAnswerWalk.Why.AN_OPEN_CLASS),
             // Under the question that declares reports of its own, which is where a walk of the
             // declarations meets what every answer holds.
             new KnownDeclared(declared(Q + "Names$Cycles", "souther.compiler.diag.Diagnostic",
                     part(Q + "Names$Cycles$Of", "reported"), MAP_VALUE,
-                    part(Q + "Report", "diagnostic")), A_REPORT),
-            new KnownDeclared(declared(Q + "Adequacy$Inputs", "java.lang.Object",
-                    MAP_VALUE,
-                    part("souther.compiler.inputs.InputDomain", "positions"), HELD,
-                    arm("souther.compiler.inputs.ReadPosition"),
-                    part("souther.compiler.inputs.ReadPosition", "projection"),
-                    arm("souther.compiler.check.ProjectionEvidence$NotCertified"),
-                    part("souther.compiler.check.ProjectionEvidence$NotCertified", "causes"), HELD,
-                    arm("souther.compiler.check.ProjectionEvidence$Cause$Lossy"),
-                    part("souther.compiler.check.ProjectionEvidence$Cause$Lossy", "atom"),
-                    part("souther.compiler.check.FactSubject", "identity"),
-                    part("souther.compiler.check.Term", "of")), A_TERM_HOLDS_ANYTHING));
+                    part(Q + "Report", "diagnostic")), A_REPORT,
+                    DeclaredAnswerWalk.Why.NO_EQUALITY)));
+        // A reading of an input holds its positions twice — in the order they were read, and under
+        // the paths they were read at — so everything under a position is two places the answer
+        // exposes it.
+        for (TypePath.Step[] positions : List.of(EVERY_POSITION, BY_PATH)) {
+            bothEndsOfARange(out, Q + "Adequacy$Inputs",
+                    then(positions, part("souther.compiler.inputs.ReadPosition", "narrowedEnds")));
+            whatATermHolds(out, positions);
+        }
+        // The same ends, reached where an axis carries what the reading left the position.
+        bothEndsOfARange(out, Q + "Adequacy$Divided",
+                part("souther.compiler.partition.Partitions$Partitioning", "axes"), HELD,
+                part("souther.compiler.partition.Axis", "narrowed"));
+        bothEndsOfARange(out, Q + "Adequacy$Generated",
+                then(A_SUBJECT, part("souther.compiler.partition.Generator$Subject", "axes"), HELD,
+                        part("souther.compiler.partition.Axis", "narrowed")));
+        return List.copyOf(out);
+    }
 
-    /** Every place a declaration is written down for. */
-    static Set<TypePath.Place> declaredPlaces() {
-        Set<TypePath.Place> out = new java.util.LinkedHashSet<>();
-        DECLARED.forEach(each -> out.add(each.place()));
+    /** Every place a declaration is written down for, and what the walk stops on there. */
+    static Map<TypePath.Place, DeclaredAnswerWalk.Why> declaredPlaces() {
+        Map<TypePath.Place, DeclaredAnswerWalk.Why> out = new LinkedHashMap<>();
+        DECLARED.forEach(each -> out.put(each.place(), each.why()));
         return out;
     }
 

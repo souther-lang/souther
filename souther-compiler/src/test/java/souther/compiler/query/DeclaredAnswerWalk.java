@@ -52,14 +52,32 @@ final class DeclaredAnswerWalk {
         NO_EQUALITY,
         /** An interface nothing closes, so what stands here is not settled by the declaration. */
         AN_OPEN_INTERFACE,
+        /**
+         * A class nothing closes, which is the same absence as the one above.
+         *
+         * <p>Something that says what it is and can still be extended says what it is about the
+         * part it declares. What stands here may be of anything that extends it, holding whatever
+         * that holds and meaning it however it likes — so a walk that opened the members it can see
+         * would be reporting on a type nothing said would be the one there.
+         */
+        AN_OPEN_CLASS,
         /** A type variable or a wildcard nothing here binds, so what stands here is not settled
          *  either. */
         NOT_BOUND
     }
 
+    /**
+     * What a walk of the declarations found, and how much of them it opened.
+     *
+     * @param opened how many types it went into the members of, which is what says a walk that
+     *               found nothing looked at something
+     */
+    record Walked(List<Found> found, int opened) {}
+
     /** Everything the questions in {@code keys} declare that cannot be compared as a value. */
-    static List<Found> of(List<Class<?>> keys) {
+    static Walked of(List<Class<?>> keys) {
         List<Found> out = new ArrayList<>();
+        int opened = 0;
         for (Class<?> key : keys) {
             Type answered = answeredBy(key);
             Walk walk = new Walk(key.getName(), out);
@@ -69,8 +87,9 @@ final class DeclaredAnswerWalk {
                 continue;
             }
             walk.at(answered, TypePath.ROOT);
+            opened += walk.opened();
         }
-        return List.copyOf(out);
+        return new Walked(List.copyOf(out), opened);
     }
 
     /**
@@ -123,17 +142,34 @@ final class DeclaredAnswerWalk {
                 ? bound.getOrDefault(letter.getName(), type) : type;
     }
 
+    /**
+     * A type walked with the letters in it bound as they were where it was met.
+     *
+     * <p>The pair and not the type. One declaration reached twice under different arguments is two
+     * shapes, and what is under it is two answers — remembered by the type alone, the second would
+     * come back as walked already and whatever it holds would go unasked.
+     */
+    private record Reached(Class<?> type, Map<String, Type> bound) {}
+
     private static final class Walk {
 
         private final String question;
         private final List<Found> out;
-        /** Types already walked under this question, so a declaration that reaches itself is
-         *  followed once. */
-        private final Set<String> walked = new LinkedHashSet<>();
+        /** What was found under each type this has been into, as the way down from that type, so
+         *  that every path reaching it says the same things about it. */
+        private final Map<Reached, List<Found>> settled = new LinkedHashMap<>();
+        /** What this is inside at the moment, so a declaration that reaches itself stops. */
+        private final Set<Reached> walking = new LinkedHashSet<>();
+        private int opened;
 
         Walk(String question, List<Found> out) {
             this.question = question;
             this.out = out;
+        }
+
+        /** How many types this went into the members of. */
+        int opened() {
+            return opened;
         }
 
         private void say(TypePath where, String offender, Why why) {
@@ -226,29 +262,64 @@ final class DeclaredAnswerWalk {
                 say(where, raw.getTypeName(), Why.NOT_BOUND);
                 return;
             }
-            if (raw.isInterface()) {
-                if (!raw.isSealed()) {
-                    say(where, raw.getTypeName(), Why.AN_OPEN_INTERFACE);
-                    return;
-                }
+            // A sum, whichever way it is written. What stands here is one of its arms, and the walk
+            // takes all of them: an arm carries what the type above it declares, so nothing is left
+            // behind by going down rather than opening the sum itself.
+            if (raw.isSealed()) {
                 for (Class<?> arm : raw.getPermittedSubclasses()) {
                     at(arm, where.then(new TypePath.Step.Arm(arm.getTypeName())), bound);
                 }
+                return;
+            }
+            if (raw.isInterface()) {
+                say(where, raw.getTypeName(), Why.AN_OPEN_INTERFACE);
+                return;
+            }
+            // Something that can still be extended says what it says about the part it declares,
+            // and a walk that read that would be reporting on a type nothing said would be the one
+            // standing here. Asked before the equality, because whatever stands here brings its
+            // own: writing one on what is declared would not settle what is compared.
+            if (!java.lang.reflect.Modifier.isFinal(raw.getModifiers())) {
+                say(where, raw.getTypeName(), Why.AN_OPEN_CLASS);
                 return;
             }
             if (!AnswerShape.declaresEquals(raw)) {
                 say(where, raw.getTypeName(), Why.NO_EQUALITY);
                 return;
             }
-            // An abstract class that says what it is still leaves what stands here to whatever
-            // extends it, and nothing closes that.
-            if (!walked.add(raw.getTypeName() + " " + bound)) {
+            Reached reached = new Reached(raw, bound);
+            List<Found> already = settled.get(reached);
+            if (already != null) {
+                already.forEach(each -> out.add(new Found(
+                        where.followedBy(each.place().at()).of(question, each.place().offender()),
+                        each.why())));
                 return;
             }
+            // Nothing under a type this is already inside, which is a declaration that reaches
+            // itself. What is under it is being asked about where it was first met, and following
+            // it again is the same question one step further down forever.
+            if (!walking.add(reached)) {
+                return;
+            }
+            opened++;
+            int before = out.size();
             for (Field field : AnswerShape.fieldsOf(raw)) {
                 at(field.getGenericType(),
                         where.thenMember(field.getDeclaringClass(), field.getName()), bound);
             }
+            walking.remove(reached);
+            // What was found under this type, as the way down from it rather than from the answer,
+            // so that the next path to reach it says the same things about it. Written out at every
+            // path that gets here, for the reason a place is a place: one type held two ways is two
+            // places the answer exposes it, and a register keyed by the first path taken would move
+            // with the order the members happen to be declared in.
+            List<Found> mine = new ArrayList<>();
+            for (Found each : out.subList(before, out.size())) {
+                mine.add(new Found(
+                        where.from(each.place().at()).of(question, each.place().offender()),
+                        each.why()));
+            }
+            settled.put(reached, List.copyOf(mine));
         }
     }
 

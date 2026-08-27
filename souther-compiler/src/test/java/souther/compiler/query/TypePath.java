@@ -57,6 +57,19 @@ record TypePath(List<TypePath.Step> steps) {
         return then(new Step.Member(owner.getTypeName(), name));
     }
 
+    /** This path, and then {@code rest} from where it gets to. */
+    TypePath followedBy(TypePath rest) {
+        List<Step> out = new ArrayList<>(steps);
+        out.addAll(rest.steps());
+        return new TypePath(List.copyOf(out));
+    }
+
+    /** What {@code longer} adds to this, which is the way down from where this stops. */
+    TypePath from(TypePath longer) {
+        return new TypePath(List.copyOf(longer.steps().subList(steps.size(),
+                longer.steps().size())));
+    }
+
     /** This path as text, with each kind of step spelled as itself. */
     String asText() {
         StringBuilder out = new StringBuilder();

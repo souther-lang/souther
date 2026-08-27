@@ -2,10 +2,9 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
-import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -47,32 +46,43 @@ class EveryAnswerThisCompilerDeclaresCouldBeAValueTest {
     }
 
     /**
-     * The walk reaches the declarations this is about.
+     * The walk goes into what these questions declare.
      *
-     * <p>The control the assertion below needs. Every question walked without meeting anything says
-     * the same thing as a walk that stopped at the first member of every answer, and the difference
-     * is the whole of what is being claimed.
+     * <p>The control the assertion below needs. A walk that stopped at the first member of every
+     * answer would find nothing and say the same thing as one that found nothing because there is
+     * nothing to find.
+     *
+     * <p>Counted as types opened rather than as places found, so it says nothing about how much
+     * this compiler owes: what is written down below goes to nought one day and this still holds.
      */
     @Test
-    void theWalkReachesWhatTheseQuestionsDeclare() throws Exception {
+    void theWalkGoesIntoWhatTheseQuestionsDeclare() throws Exception {
         List<Class<?>> questions = questions();
+        DeclaredAnswerWalk.Walked walked = DeclaredAnswerWalk.of(questions);
 
         assertTrue(questions.size() > 100,
                 () -> "a vocabulary of " + questions.size() + " is not this compiler's");
-        assertTrue(DeclaredAnswerWalk.of(questions).stream()
-                        .anyMatch(each -> each.place().question().endsWith("Output$Classes")),
-                "the walk did not reach what a module compiles to, which is the shape it is about");
+        assertTrue(walked.opened() > 500,
+                () -> "a walk that went into " + walked.opened() + " types is not reading what "
+                        + questions.size() + " questions declare");
     }
 
-    /** And what it finds is the places written down, and no others. */
+    /**
+     * And what it finds is the places written down, stopping on what is written down beside each.
+     *
+     * <p>What the walk stopped on is held to as well as where. A place that starts failing for
+     * another reason is something about that declaration having moved under a judgement that still
+     * reads as though it had not.
+     */
     @Test
     void theOnlyDeclarationsThatCouldNotBeAValueAreTheOnesWrittenDown() throws Exception {
-        Set<TypePath.Place> found = new LinkedHashSet<>();
-        DeclaredAnswerWalk.of(questions()).forEach(each -> found.add(each.place()));
+        Map<TypePath.Place, DeclaredAnswerWalk.Why> found = new LinkedHashMap<>();
+        DeclaredAnswerWalk.of(questions()).found()
+                .forEach(each -> found.put(each.place(), each.why()));
         Map<TypePath.Place, String> reasons = AnswerClosure.declaredReasons();
 
-        assertEquals(new java.util.HashSet<>(AnswerClosure.declaredPlaces()),
-                new java.util.HashSet<>(found),
+        assertEquals(new java.util.HashMap<>(AnswerClosure.declaredPlaces()),
+                new java.util.HashMap<>(found),
                 () -> "a place a question declares that cannot be compared as a value. What each "
                         + "written-down place is: " + reasons);
     }
