@@ -926,12 +926,19 @@ final class Coverages {
      * disagreement this removes: the generator and the reading are no longer two accounts of one
      * model, because the generator asks the reading.
      *
-     * <p><b>Fail-open, and the law that leaves.</b> A row nothing built the values of, a row nothing
-     * watched run, and a row whose values could not be read at the point are all offered. None of
-     * them is a row seen to stand somewhere else — they are rows nothing found anything out about —
-     * and refusing them would answer a question nobody could put with the worst of the two answers.
-     * So what holds of an offered row is that nothing observed it not to stand at its point, and not
-     * that it stands there.
+     * <p><b>Where it fails open, and where it does not.</b> The two halves of standing at a point
+     * are not the same question. Whether the values are at the level is read off the row and is
+     * this compiler's to answer; whether the comparison was answered takes something having watched
+     * the run, which is not. So a row nothing watched is offered — the values were seen at the
+     * level and the rest is a thing nobody could put a question about — and a row whose values
+     * could not be read at the point is not: that is the walk unable to confirm the half this
+     * compiler owns, of a value this compiler has just built, which is the two readings coming
+     * apart in the one place this exists to close.
+     *
+     * <p>So what holds of an offered row is that its values were seen at the point, and the run
+     * either reached the comparison or was not watched. Kept open at both, an answer that used to
+     * be a disagreement could go on being one under another name, and the measure would go green
+     * over it.
      *
      * <p>An answer about this search and never about the model. A row composed here that does not
      * stand at the point says the way to the border was not composed against in full; the point is
@@ -950,11 +957,11 @@ final class Coverages {
             return made;   // nothing built it, so nothing here can say where it went
         }
         return switch (StandingAtAPoint.met(quantity, where, List.of(read), criterion, site)) {
-            case YES, NOT_WATCHED, UNREADABLE -> made;
+            case YES, NOT_WATCHED -> made;
             // Carrying what the composer could not compose against. This is the outcome that most
             // needs it: a row was built and was not seen reaching the point, and whether some
             // condition above the line went unused is the first thing that would explain it.
-            case NO -> new souther.compiler.partition.Generator.BoundaryAttempt.Unresolved(
+            case NO, UNREADABLE -> new souther.compiler.partition.Generator.BoundaryAttempt.Unresolved(
                     new souther.compiler.partition.Generator.UnresolvedCombination(
                             List.of(label),
                             souther.compiler.partition.Generator.UnresolvedCombination.Reason

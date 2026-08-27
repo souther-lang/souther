@@ -2411,7 +2411,15 @@ public final class Generator {
                     certifying(check, subject, p, standing, builtOn, uncertified);
             Map<TermPath, List<FixtureTemplate>> here = new LinkedHashMap<>();
             for (NumericTerm term : standing.keySet()) {
-                if (term.path().head().equals(head)) {
+                // A position the way also narrows is not fixed at a value here. What has to hold of
+                // it is one thing said two ways — a place the item asks for, and a case the way
+                // says the value turned out to be — and one location is decided once: the narrowing
+                // says how the value is built and the place says which of the values built that way
+                // is accepted ({@link #certifying}). Handed over as both, it is a position with two
+                // accounts, which is what {@link ConstructionPlan} refuses and what it is right to
+                // refuse.
+                if (term.path().head().equals(head)
+                        && reaching.requirements().at(term.path()) == null) {
                     here.put(term.path(), decided.get(term.path()));
                 }
             }
@@ -2480,11 +2488,19 @@ public final class Generator {
             Map<NumericTerm, Place> placing = new LinkedHashMap<>();
             souther.compiler.inputs.SearchRegion after = here;
             for (NumericTerm term : cut.cut().form().coefs().keySet()) {
-                // A position the item already fixes, or one an earlier cut settled, or one at a
-                // location the item writes. What a row writes at a location is one value, and the
-                // second thing asked of it is not this one's to decide over the item's.
-                if (taken.contains(term.path())) {
+                // This very number already stands somewhere: the item asked for it, or an earlier
+                // cut did. Nothing to place, and the cut is answered at it either way.
+                if (out.containsKey(term)) {
                     continue;
+                }
+                // Another number taken at the same location. A row writes one value where a
+                // location is, and that one value would have to answer both — a string of a length
+                // and the string itself is the shape of it. Nothing here composes a value to two
+                // numbers at once, so the cut is one this could not put a value under, and it says
+                // so rather than going on without it.
+                if (taken.contains(term.path())) {
+                    after = null;
+                    break;
                 }
                 after = placing(subject, term, after, placing);
                 if (after == null) {

@@ -15,6 +15,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.NumericDomain.LinearForm;
 import souther.compiler.numeric.NumericDomain.Rel;
+import souther.compiler.numeric.Place;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
@@ -41,9 +42,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * none — and then the fact that it was handed a condition it could not act on is carried out with
  * the answer, because a row composed without it may not arrive and nothing else would say why.
  *
+ * <p><b>What a location holds and what is measured there are two things.</b> A row writes one value
+ * where a location is, and a location may have more than one number taken at it — the length of a
+ * string beside the string. Keyed by the location, the second of them is dropped for the first; and
+ * a condition above the line dropped without a word is the composer having been handed the way and
+ * quietly not using it.
+ *
  * <p>Held here rather than against a model, because what is under test is the rule and not which
- * models happen to reach it. A position the model divides nowhere is what the composer has no order
- * for, and naming one directly says that without a search for a model that produces one.
+ * models happen to reach it. Naming the terms directly says which case is which, where a search for
+ * a model that produces one would leave that to be read off the answer.
  */
 class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
 
@@ -52,7 +59,9 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
 
             data Amount = Int
                 invariant value >= 0 && value <= 100
-            data Req = { cost: Amount }
+            data Code = String
+                invariant String.length(value) >= 4
+            data Req = { cost: Amount, code: Code }
             data Res = { n: Int }
 
             behavior f : (r: Req) -> Res
@@ -67,7 +76,7 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
      */
     @Test
     void aCutNamingAPositionWithNoOrderIsCarriedOutWithTheAnswer() {
-        Generator.BoundaryAttempt attempt = composing(
+        Generator.BoundaryAttempt attempt = composing(costAxis(), Count.of(100),
                 cut(new NumericTerm.ValueOf(TermPath.of("r").then("elsewhere"))));
 
         assertEquals(1, attempt.unrepresented().size(),
@@ -79,6 +88,30 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
     }
 
     /**
+     * A cut naming another number taken at a location the item already writes is on it too.
+     *
+     * <p>The item fixes how long the string is; the condition above the line is about the string
+     * itself. One location, two numbers, and the one value a row writes there would have to answer
+     * both — which is not something this composes. Dropped for sharing a location with the item's
+     * own number, the condition would go unmet by a row nothing said anything about.
+     */
+    @Test
+    void aCutNamingAnotherNumberAtALocationTheItemWritesIsSaidToo() {
+        Axis length = codeAxis();
+        assertInstanceOf(NumericTerm.TakenOf.class, length.term(),
+                "the item's own number here is one taken of the location");
+
+        Generator.BoundaryAttempt attempt = composing(length, Count.of(4),
+                cut(new NumericTerm.ValueOf(length.term().path())));
+
+        assertEquals(1, attempt.unrepresented().size(),
+                "one location, two numbers, and nothing composes a value to both: "
+                        + attempt.unrepresented());
+        assertInstanceOf(OnTheWay.Why.NoValueComposedForItsPositions.class,
+                attempt.unrepresented().get(0).why());
+    }
+
+    /**
      * And a cut it can place every position of is not on it.
      *
      * <p>The other half, so that an empty account means what it says. Asserted of the same
@@ -87,7 +120,8 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
      */
     @Test
     void aCutItCanPlaceIsNotSaidToBeUnrepresented() {
-        Generator.BoundaryAttempt attempt = composing(cut(costOf()));
+        Generator.BoundaryAttempt attempt =
+                composing(costAxis(), Count.of(100), cut(costAxis().term()));
 
         assertTrue(attempt.unrepresented().isEmpty(),
                 "every condition it was handed was one it put a value under: "
@@ -103,23 +137,27 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
                 new ReachingCuts.Cut(LinearForm.atom(over), Rel.GE));
     }
 
-    /** The one position this model divides, which the composer has an order for. */
-    private static NumericTerm costOf() {
-        return axis().term();
-    }
-
-    /** A row composed at {@code r.cost = 100}, with {@code taken} on the way to it. */
-    private static Generator.BoundaryAttempt composing(OnTheWay.TakenIn taken) {
-        Axis axis = axis();
-        return Generator.probeFixing(subject(), "r.cost = 100",
+    /** A row composed with {@code axis} at {@code at}, and {@code taken} on the way to it. */
+    private static Generator.BoundaryAttempt composing(Axis axis, Place at, OnTheWay.TakenIn taken) {
+        return Generator.probeFixing(subject(), axis.path() + " = " + at,
                 _ -> axis.term().answeredOn(axis.type(), symbols()),
-                Map.of(axis.term(), Count.of(100)),
+                Map.of(axis.term(), at),
                 new Reachability.Reaching(domain().quantities(symbols()).region(),
                         Requirements.NONE, List.of(taken)),
                 Generator.CandidateCheck.ANY);
     }
 
-    // The compilation, read once and answered from. Every helper above asks it for one thing, and a
+    /** The number one position's own content is. */
+    private static Axis costAxis() {
+        return axisAt("r.cost");
+    }
+
+    /** And a number taken of a position rather than held by it. */
+    private static Axis codeAxis() {
+        return axisAt("r.code");
+    }
+
+    // The compilation, read once and answered from. Every helper below asks it for one thing, and a
     // compile apiece would be the same model built as many times as this file has questions.
     private static final Compilation COMPILATION = compiled();
 
@@ -151,10 +189,10 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
         return read;
     }
 
-    private static Axis axis() {
+    private static Axis axisAt(String path) {
         return Partitions.of(spec().name(), domain(), symbols(), ReadAs.THE_COMPILATION_DOES)
                 .axes().stream()
-                .filter(each -> each.path().toString().equals("r.cost")).findFirst().orElseThrow();
+                .filter(each -> each.path().toString().equals(path)).findFirst().orElseThrow();
     }
 
     private static Generator.Subject subject() {
