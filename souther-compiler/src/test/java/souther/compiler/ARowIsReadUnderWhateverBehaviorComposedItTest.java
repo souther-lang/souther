@@ -6,16 +6,19 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.DeclarationResolution;
 import souther.compiler.query.DeclaredRows;
 import souther.compiler.query.GenerationScope;
+import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.query.OfferItem;
 import souther.compiler.query.Composition;
-import souther.compiler.query.Offering;
 import souther.compiler.query.OfferingRequest;
 import souther.compiler.query.RowKey;
 import souther.compiler.query.Settlement;
 import souther.compiler.query.Settlements;
 
+import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -27,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>A line a declaration draws is owed a row once over every behavior carrying the type, and the
  * row is composed by whichever reading could compose it. That behavior need not be one anything else
  * was asked about — an offering holds the row under it either way, which is what
- * {@link Offering#composed} says in as many words.
+ * {@link Composition#composed} says in as many words.
  *
  * <p>Read off the searches instead, such a row has no reading at all: every question put to it comes
  * back as one nothing could tell about, so nothing it stands at can make another row redundant and
@@ -49,7 +52,10 @@ class ARowIsReadUnderWhateverBehaviorComposedItTest {
 
             behavior take : (code: Code, amount: Amount) -> Ok
 
-            let take (code, amount) = Ok
+            let take (code, amount) = {
+                guard amount.value > 50 else Ok
+                Ok
+            }
             """;
 
     @Test
@@ -63,7 +69,7 @@ class ARowIsReadUnderWhateverBehaviorComposedItTest {
                 "a declaration's line is owed a row and one behavior composed it: " + declared);
 
         // The offering a run makes when nothing was asked of the carrier itself. Which is the state
-        // `Offering.composed` is written for, and the one a reader off the searches cannot read.
+        // `Composition.composed` is written for, and the one a reader off the searches cannot read.
         Composition composed = Composition.composed(
                 OfferingRequest.overTheModule("example.carried", true), Map.of(), declared);
         assertFalse(composed.rows().isEmpty(), "the row is offered under its carrier: " + composed);
@@ -83,6 +89,44 @@ class ARowIsReadUnderWhateverBehaviorComposedItTest {
                     "a row composed by a behavior nothing else was asked of settles what it was"
                             + " composed for");
         });
+    }
+
+    /**
+     * And nothing this run did not ask of it comes back as work.
+     *
+     * <p>The behavior draws a line of its own, and a run that asked it for nothing has no search of
+     * it: what it holds is a row somebody else's line needed. Asked for the search while reading
+     * that row, the run would make the search it had decided not to make, and the behavior's own
+     * points would arrive as items nobody was set — which is a candidate standing at one of them
+     * becoming the only offer for work nobody asked for.
+     */
+    @Test
+    void andNothingOfItsOwnIsAskedForWhereNothingWasAskedOfIt() {
+        Compilation compilation = Compilation.ofSource(DECLARED, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        DeclaredRows declared = Adequacy.generatedForDeclarationsOf(compilation.db(),
+                "example.carried", new GenerationScope.Module());
+        Composition composed = Composition.composed(
+                OfferingRequest.overTheModule("example.carried", true), Map.of(), declared);
+        Settlements table = Settlements.of(compilation.db(), composed);
+
+        // The behavior has lines of its own, so this says something.
+        assertFalse(Adequacy.generatedOf(compilation.db(), "example.carried").isEmpty(),
+                "the model under test has a behavior with a search of its own to be asked for");
+
+        Set<BorderObligationPoint> asked = new LinkedHashSet<>();
+        for (OfferItem item : table.requested()) {
+            if (item instanceof OfferItem.APointOfALine(var point)) {
+                asked.add(point);
+            }
+        }
+        assertEquals(new LinkedHashSet<>(declared.resolved().keySet().stream()
+                        .filter(point -> !(declared.resolved().get(point).resolution()
+                                instanceof DeclarationResolution.NoSearch))
+                        .toList()),
+                asked,
+                "only the declarations' points are asked about, and none of the behavior's own");
     }
 
     @Test

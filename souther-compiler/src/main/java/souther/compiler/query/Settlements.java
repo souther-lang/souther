@@ -304,6 +304,20 @@ public record Settlements(List<OfferItem> requested,
                                Map<OfferItem.APointOfALine, OwedBoundaryPoint> owedHere,
                                Map<OfferItem.APointOfALine, List<AtAPoint>> reads) {
 
+        /**
+         * A reader for one behavior, and what this run asked of that behavior.
+         *
+         * <p><b>Two things, and a carrier may have only the first.</b> How a row is read is what its
+         * positions are and what runs it; what this run asked for is a search's answer, and a
+         * behavior that composed a row for somebody else's line was asked nothing. Read together,
+         * the account of a behavior nothing was searched for is fetched to build it — which asks the
+         * search this run had decided not to make, and puts its points into a universe as work
+         * nobody was set.
+         *
+         * @param filling what this run asked of the behavior, or null where it asked nothing. A
+         *                carrier with rows and no filling still has its rows read: what it holds is
+         *                a row somebody else's line needed
+         */
         static OneBehavior of(Db db, String module, String behavior, Adequacy.Filling filling,
                               Sig sig, BoundaryValues building,
                               souther.compiler.execute.RowTrials trials, boolean boundaries,
@@ -318,7 +332,11 @@ public record Settlements(List<OfferItem> requested,
             }
             Map<OfferItem.APointOfALine, OwedBoundaryPoint> owedHere = new LinkedHashMap<>();
             Map<OfferItem.APointOfALine, List<AtAPoint>> reads = new LinkedHashMap<>();
-            if (boundaries) {
+            // Its own account, where this run asked it for rows and nowhere else. Whether the
+            // search was made is what `searched` says, and asking for it here would make it: the
+            // behavior would come back owing points at its own lines, which are not work this run
+            // set anybody.
+            if (boundaries && filling != null) {
                 List<BorderAssessment> edges =
                         db.ask(new Adequacy.BoundarySearch(module, behavior)).value();
                 if (edges != null) {
@@ -339,7 +357,9 @@ public record Settlements(List<OfferItem> requested,
                 }
             }
             // And this behavior's readings of the lines the declarations own, which its own account
-            // holds none of.
+            // holds none of. Read whether or not anything was asked of the behavior: a row written
+            // under it stands where it stands, and that is how it answers the line it was composed
+            // for.
             declared.forEach((point, byBehavior) -> {
                 for (BorderAssessment at : byBehavior.getOrDefault(behavior, List.of())) {
                     if (at.at(point.role()) instanceof ItemAssessment.Owed owed) {
@@ -350,8 +370,7 @@ public record Settlements(List<OfferItem> requested,
                 }
             });
             // What this behavior was asked to offer a row for, which is the search's answer and
-            // is nothing where nothing asked it. A behavior with rows and no search of its own is
-            // owed no class and no arm here: what it holds is a row somebody else's line needed.
+            // is nothing where nothing asked it.
             return new OneBehavior(behavior, read.where(), read.axes(), sig, building,
                     sig == null || trials == null ? Generator.Trial.NOTHING_RUNS
                             : Adequacy.runningRowsOf(trials, behavior, sig),

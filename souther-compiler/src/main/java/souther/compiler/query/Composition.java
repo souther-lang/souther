@@ -45,8 +45,7 @@ public record Composition(OfferingRequest request, SequencedMap<String, List<Off
      *
      * <p>Not what a person is handed. A row here may answer what another here answers, and which of
      * them goes out is settled by asking — {@link Adequacy#offeredFor} is where that happens, and
-     * what it hands back is the offering. So {@link #answered} is empty on one of these, which says
-     * nobody has asked rather than that the rows answer nothing.
+     * what it hands back is the offering. So what it answers is a question nobody has put yet.
      *
      * <p>Walked in the order the behaviors were asked about, and within a behavior the cells before
      * the lines. The order a person is offered the rows in is the order they were composed in, and a
@@ -124,22 +123,6 @@ public record Composition(OfferingRequest request, SequencedMap<String, List<Off
         List<Generator.GeneratedRow> out = new ArrayList<>(own);
         out.addAll(owed);
         return List.copyOf(out);
-    }
-
-    /**
-     * Every row of this, as an offering, for a caller with no store to ask what they settle.
-     *
-     * <p>Which is what a test that builds its fillings by hand has: there is nothing to run the
-     * rows against and nothing to read their values with, so no row can be shown to answer what
-     * another answers and every one of them goes out. Nothing is said to be answered either — the
-     * question was not put — so the block says of every finding what the search came to.
-     *
-     * <p>Named, so that it is a thing a caller asks for. The reduction is what
-     * {@link Adequacy#offeredFor} does, and a caller with a store that came through here instead
-     * would be choosing to skip it.
-     */
-    public Offering offeringEverything() {
-        return new Offering(request, rows, searched, declared, java.util.Set.of());
     }
 
     /** How many pieces of work this holds, which is what a block says at the top of it. */
