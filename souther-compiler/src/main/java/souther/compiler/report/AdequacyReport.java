@@ -1581,16 +1581,16 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * the wider box would be this report deciding something it has not been shown.
      */
     private static String whatTheRegionLeftOut(
-            List<souther.compiler.partition.OnTheWay.Declined> left,
+            List<souther.compiler.partition.ReachabilityGap> left,
             SourceNameResolver names, SourceId declaredIn) {
         if (left.isEmpty()) {
             return "";
         }
-        StringBuilder out = new StringBuilder("; not every condition on the way to the line is"
-                + " represented in the region searched: ");
+        StringBuilder out = new StringBuilder("; not every condition on the way to the line is one"
+                + " the row was composed against: ");
         for (int i = 0; i < left.size(); i++) {
             out.append(i == 0 ? "" : ", ")
-                    .append(whyDeclined(left.get(i).why()))
+                    .append(whyLeftOut(left.get(i)))
                     // The place last and in brackets, as every other line of this report writes
                     // one. Written into the sentence, it lands after a verb and reads as part of
                     // what the sentence says rather than as where to look.
@@ -1600,10 +1600,34 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     /**
+     * What became of one condition, in the words a reader acts on.
+     *
+     * <p>The stage first, because it is what an author would do something about: a condition this
+     * reading has no words for is one to write differently, and one it read and could not compose a
+     * value under is one this compiler is short of a way to build.
+     */
+    private static String whyLeftOut(souther.compiler.partition.ReachabilityGap gap) {
+        return switch (gap) {
+            case souther.compiler.partition.ReachabilityGap.Unstated(var condition) ->
+                    whyDeclined(condition.why());
+            case souther.compiler.partition.ReachabilityGap.Uncomposed(var _, var why) ->
+                    switch (why) {
+                        case souther.compiler.partition.ReachabilityGap.Why
+                                .NoValueComposedForItsPositions _ ->
+                                "a condition on positions nothing here composed a value at";
+                        case souther.compiler.partition.ReachabilityGap.Why
+                                .TwoNumbersAtOneLocation _ ->
+                                "a condition on another number taken where this row is already"
+                                        + " being written for one";
+                    };
+        };
+    }
+
+    /**
      * What stopped one condition on the way from narrowing the search, in the words a reader acts
      * on.
      *
-     * <p>One phrase per shape rather than one for all three. What an author does about a condition
+     * <p>One phrase per shape rather than one for all of them. What an author does about a condition
      * this reading has no words for is not what they do about a comparison it could not turn into a
      * cut, and neither is what they do about an arm that states one of two things — a single "was
      * not read" for all of them is the vocabulary being kept apart in the compiler and put back
@@ -1625,6 +1649,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     "a comparison this reading could not turn into a cut";
             case souther.compiler.partition.OnTheWay.Why.OneOfTwoThings _ ->
                     "an outcome that states one of two things";
+            case souther.compiler.partition.OnTheWay.Why.ForkArmNotReadAsANarrowing _ ->
+                    "an arm of a fork this reading could not read as a narrowing of a position";
         };
     }
 
@@ -1659,9 +1685,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case NO_VALUES_WERE_ASKED_FOR ->
                     "this build composed no values, so no row was written for " + at;
             case LINKAGE_FAILED -> "the generated classes would not link";
+            // "it" and not "the combination": a point of a line gets this word too, and a row
+            // composed for one is not composed for a combination of classes.
             case NO_CERTIFIED_WITNESS ->
-                    "no row composed for " + at + " was seen reaching it, which does not make the"
-                            + " combination unreachable";
+                    "no row composed for " + at + " was seen reaching it, which does not make it"
+                            + " unreachable";
             case THE_POSITION_WAS_WITHHELD ->
                     "a row's value at that position could not be read, so no class of it was"
                             + " looked for";

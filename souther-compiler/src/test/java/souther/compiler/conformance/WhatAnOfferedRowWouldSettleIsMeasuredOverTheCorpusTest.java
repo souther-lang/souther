@@ -31,11 +31,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * What is asserted is the shape: the table is total, the items are what was asked for, and no row
  * composed for something is read as not settling it.
  *
- * <p><b>Of this corpus, and not of every model.</b> There are models where that last one does not
- * hold: a point the search composed a row at, which this walk reads as standing somewhere else. It
- * costs no row — what a row was composed for keeps it whatever this walk can tell — but it is the
- * search and this reading coming to two answers about one model, so this asserts what it has seen
- * rather than a law. Whoever strengthens it to {@code Settles} should expect to be told where.
+ * <p><b>That last one holds of every model, and this measures it.</b> A composed row goes through
+ * this walk before it is offered, so the search and this reading are not two accounts that have to
+ * agree — the search asks this one. What the corpus adds is that the rows are still there: a gate
+ * that refused everything would satisfy the same sentence with nothing behind it.
+ *
+ * <p><b>And it is the weaker of the two sentences it could be.</b> What holds is that no offered row
+ * is <em>observed</em> not to settle its point, which is not that every offered row settles it: a
+ * row nothing watched run, and a row whose values could not be read at the point, are offered and
+ * come back {@code Undetermined} here. Strengthening the assertion to {@code Settles} would be
+ * asserting something nothing establishes.
  */
 class WhatAnOfferedRowWouldSettleIsMeasuredOverTheCorpusTest {
 
@@ -83,9 +88,8 @@ class WhatAnOfferedRowWouldSettleIsMeasuredOverTheCorpusTest {
                 }
 
                 // What the searches composed a row for, against what the rows turn out to settle.
-                // A row composed for an item and read as not settling it is the generator and this
-                // walk reading one model two ways. Held of this corpus, and not of every model,
-                // which is said above.
+                // A row composed for an item and read as not settling it is a row that went out
+                // without being put to this walk, which is what offering one goes through.
                 settlements.composedFor().forEach((item, row) -> {
                     Map<OfferItem, Settlement> here = settlements.byRow().get(row);
                     if (here != null) {

@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.diag.Citation;
+import souther.compiler.inputs.TermPath;
 
 /**
  * One condition on the way to a comparison, and what became of it.
@@ -11,6 +12,13 @@ import souther.compiler.diag.Citation;
  * either question asks the same list — split into two at the seam, "nothing stood on the way" and
  * "everything on the way was taken in" come out as the same empty answer, which is the reading a
  * report cannot make and the one an author needs.
+ *
+ * <p><b>Every condition is one of these, and which is not a choice about the shape it was written
+ * in.</b> A condition either lands in a vocabulary a search can compose against — the arithmetic's
+ * ({@link TakenIn}) or the positions' ({@link Narrowed}) — or it is {@link Declined}. So a fork this
+ * reading learns to walk later widens what a search can reach and can never quietly leave a
+ * condition off: a reader that cannot state one says so here, and a row composed under a declined
+ * condition is a row that may not arrive rather than a row nothing knew about.
  *
  * <p>Collected where the condition is met and never worked out afterwards from where a comparison
  * sits, which is the rule {@link souther.compiler.reach.PathDecision} is written to as well.
@@ -30,16 +38,45 @@ public sealed interface OnTheWay {
     /** A condition the arithmetic took in, and the cut it came to. */
     record TakenIn(Citation at, ReachingCuts.Cut cut) implements OnTheWay {}
 
+    /**
+     * A condition that says which values a position is one of, as the position it narrows.
+     *
+     * <p>What a fork on a sum states. Reaching the arm is the scrutinee having turned out to be the
+     * case the arm selects, and that is a narrowing of the position the scrutinee is at — which is
+     * a thing a row can be composed to be, while "this arm was taken" is not.
+     *
+     * <p>The narrowed position and not the pair it is made of. What has to hold of the parameter
+     * for such a position to exist in it is {@link TermPath#requirements()}, which is where every
+     * other reader of a narrowing asks; carried as a position and a refinement side by side, this
+     * would be the one place that splits them its own way.
+     *
+     * @param position the scrutinee's position with the arm's case narrowed onto it
+     */
+    record Narrowed(Citation at, TermPath position) implements OnTheWay {
+
+        public Narrowed {
+            if (position == null || !position.narrowsWhatItReaches()) {
+                throw new IllegalArgumentException(
+                        "a narrowing on the way is a position read as one of its cases: " + position);
+            }
+        }
+    }
+
     /** A condition nothing here could turn into a cut, and what stopped it. */
     record Declined(Citation at, Why why) implements OnTheWay {}
 
     /**
-     * What stopped a condition from becoming a cut.
+     * What stopped a condition from being stated in either vocabulary.
      *
-     * <p>Three shapes, and each says what this reading did rather than what the model says. A
-     * condition an author wrote plainly is here wherever the arithmetic has no way of carrying it,
-     * so nothing read off one of these says a row cannot be written, and a word going away is a
-     * capability gained rather than a model changed.
+     * <p>The walk's own answers and no other stage's. A condition this stated and something later
+     * could not act on is still stated — it keeps the answer given here and what became of it
+     * downstream is {@link ReachabilityGap}'s. Written as another word here, one condition would
+     * wear two of these.
+     *
+     * <p>Each says what this reading did rather than what the model says. A condition an author
+     * wrote plainly is here wherever nothing here has a way of carrying it, so nothing read off one
+     * of these says a row cannot be written, and a word going away is a capability gained rather
+     * than a model changed.
      *
      * <p><b>Not the reason the same comparison gets for drawing no line.</b>
      * {@link UnreadComparison} answers why a comparison did not become a boundary, which is a
@@ -74,5 +111,16 @@ public sealed interface OnTheWay {
          * names neither, and taking either would exclude rows that arrive.
          */
         record OneOfTwoThings() implements Why {}
+
+        /**
+         * An arm of a fork this reading could not state as a narrowing of a position.
+         *
+         * <p>A fork on something no position holds — an expression the walk cannot follow back to
+         * one, an arm answering for several cases at once, a case the reading of the declarations
+         * has no position for. Each of those leaves the same thing unsaid, which is which values of
+         * the input reach this arm, so they arrive here as one word.
+         */
+        record ForkArmNotReadAsANarrowing() implements Why {}
+
     }
 }

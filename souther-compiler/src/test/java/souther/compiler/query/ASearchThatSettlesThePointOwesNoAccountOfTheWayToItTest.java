@@ -52,14 +52,21 @@ class ASearchThatSettlesThePointOwesNoAccountOfTheWayToItTest {
                 new Generator.UnresolvedCombination(List.of("p.x = 11"), to), way());
     }
 
-    /** A search that settled nothing owes the account: the box it looked in is half the answer. */
+    /**
+     * A search that settled nothing owes the account: the box it looked in is half the answer.
+     *
+     * <p>Owed as what stage let the condition go and not as the walk's word for it alone. The same
+     * list holds conditions this reading had no words for and conditions it stated that nothing
+     * composed a value under, and a reader acts differently on the two — so each says which it is,
+     * and a walk's decline arrives wearing the stage it happened at.
+     */
     @Test
     void aSearchThatSettledNothingOwesWhatTheWayLeftOut() {
-        assertEquals(List.of(LEFT_OUT),
+        assertEquals(List.of(new souther.compiler.partition.ReachabilityGap.Unstated(LEFT_OUT)),
                 came(Generator.UnresolvedCombination.Reason.SEARCH_LIMIT).unaccountedFor());
-        assertEquals(List.of(LEFT_OUT),
+        assertEquals(List.of(new souther.compiler.partition.ReachabilityGap.Unstated(LEFT_OUT)),
                 came(Generator.UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS).unaccountedFor());
-        assertEquals(List.of(LEFT_OUT),
+        assertEquals(List.of(new souther.compiler.partition.ReachabilityGap.Unstated(LEFT_OUT)),
                 came(Generator.UnresolvedCombination.Reason.LINKAGE_FAILED).unaccountedFor());
     }
 

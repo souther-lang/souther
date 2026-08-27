@@ -121,6 +121,7 @@ class ABoundaryRowWearsEveryNameThePositionDeclaresTest {
                                 ignored -> axis.term().answeredOn(axis.type(), symbols),
                                 java.util.Map.of(axis.term(),
                                         ((Level.OnACarrier) each.at()).at()),
+                                Reachability.untouched(domain.quantities(symbols).region()),
                                 Generator.CandidateCheck.ANY)
                                 instanceof Generator.BoundaryAttempt.Built built
                                         ? String.join(", ", built.row().inputs().stream()

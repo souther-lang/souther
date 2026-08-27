@@ -148,11 +148,16 @@ final class ComparisonReadings {
             // the arm binds is the scrutinee's position narrowed to that case, so a comparison
             // written inside an arm draws its line on a position the reading of the input has —
             // read without it, every rule an author writes inside a `match` was about nothing.
+            //
+            // The same narrowing is what a row has to be for the arm to be reached at all, so it
+            // goes onto the account beside the conditions a guard states. Walked without it, a line
+            // inside an arm was owed a row by a walk that had been told nothing stood on the way to
+            // it, and the row composed for it was written in whichever arm the values fell in.
             case Core.Match match -> {
                 walk(match.scrutinee(), plan, reads, symbols, flow, assumed, live, each, out);
                 for (Core.Case arm : match.cases()) {
                     walk(arm.body(), plan, reads.insideArm(match, arm, symbols), symbols, flow,
-                            assumed, live, each, out);
+                            entering(match, arm, reads, assumed, symbols), live, each, out);
                 }
             }
             default -> Core.forEachChild(e, child ->
@@ -195,6 +200,15 @@ final class ComparisonReadings {
                                          List<OnTheWay> assumed, Symbols symbols) {
         List<OnTheWay> out = new ArrayList<>(assumed);
         out.addAll(ReachingCuts.stating(Condition.of(node, reads), holding, symbols));
+        return List.copyOf(out);
+    }
+
+    /** The same, for what standing inside one arm of a fork establishes ({@link
+     *  ReachingCuts#entering}). */
+    private static List<OnTheWay> entering(Core.Match match, Core.Case arm, InputReads reads,
+                                           List<OnTheWay> assumed, Symbols symbols) {
+        List<OnTheWay> out = new ArrayList<>(assumed);
+        out.add(ReachingCuts.entering(match, arm, reads, symbols));
         return List.copyOf(out);
     }
 }
