@@ -138,7 +138,7 @@ public final class LinesWhereTheyFall {
                         "`" + term + "` is measured at " + term.path() + " and this reading puts "
                                 + "nothing there, though the term was made of what stands at it");
             }
-            made.add(Axis.pendingAt(new AxisId(behavior, term.toString()), term, type,
+            made.add(Axis.pendingAt(AxisId.of(behavior, term), term, type,
                     ReadingResidue.NOTHING, null, null));
         }
         return made;

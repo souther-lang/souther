@@ -132,6 +132,10 @@ class ATermMayNameAPositionTheWalkStoppedShortOfTest {
                 guard List.all(i -> i.inner.a < i.inner.b, cart.items) else No { why = 0 }
                 Yes { v = 1 }
             }
+
+            example f
+                | "under" : (Cart { items = [ Item { inner = Inner { a = 1, b = 2 } } ] })
+                    -> Yes { v = 1 }
             """;
 
     /**
@@ -146,9 +150,7 @@ class ATermMayNameAPositionTheWalkStoppedShortOfTest {
     void andSoIsOneUnderWhatASequenceHolds() {
         String report = report(UNDER_WHAT_A_SEQUENCE_HOLDS);
 
-        assertTrue(report.contains("cart.items[*].inner.a"), report);
-        assertTrue(report.contains("cart.items[*].inner.b"), report);
-        assertTrue(report.contains("borders 1"), report);
+        assertTrue(report.contains("f/cart.items[*].inner.a = cart.items[*].inner.b"), report);
     }
 
     private static String report(String model) {

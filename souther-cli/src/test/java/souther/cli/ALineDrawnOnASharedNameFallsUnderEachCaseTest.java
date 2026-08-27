@@ -299,6 +299,8 @@ class ALineDrawnOnASharedNameFallsUnderEachCaseTest {
         assertFalse(report.contains("read/o.q@B.q@A.limit"),
                 () -> "the reading stopped before the cases, so nothing was filed under them:\n"
                         + report);
+        assertTrue(report.contains("nothing here could build a representative for o.q@B.q.limit"),
+                () -> "and the generator is what says nothing can be written there:\n" + report);
         assertFalse(report.contains("how those positions pair up is not worked out"),
                 () -> "nothing was filed, so no pairing was ever in question:\n" + report);
     }

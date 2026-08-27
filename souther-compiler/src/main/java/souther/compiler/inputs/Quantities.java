@@ -43,9 +43,9 @@ import java.util.Optional;
  *
  * <p><b>Whose positions, and owned is not the same as known about.</b> A term is queryable where
  * what it sits under is something this behavior takes. The walk that reads an input's positions
- * stops where a report stops being about anything an author would call one input, and nothing stops
- * a rule from naming what is under that — such a term is answered for, with what it guarantees of
- * itself and nothing the declarations relate it to. Which numbers a path is measured at is not
+ * stops where a path returns to a declaration already open on it, and nothing stops a rule from
+ * naming what is under that — such a term is answered for, with what it guarantees of itself and
+ * nothing the declarations relate it to. Which numbers a path is measured at is not
  * settled by that reading either: a bare list nothing bounds becomes an axis about its length where
  * a body measures it. What is refused is a term under something this behavior does not take, which
  * no reading of this input could ever answer for — read as an emptiness it would be a bug wearing
