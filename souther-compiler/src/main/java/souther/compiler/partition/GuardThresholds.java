@@ -541,7 +541,7 @@ public final class GuardThresholds {
         // ({@link ComparisonAssessment}). What is added here is what meeting the line takes, which
         // is a guard's own answer and no other rule's.
         ComparisonAssessment read =
-                ComparisonAssessment.of(behavior, each, reads, symbols, quantities, null);
+                ComparisonAssessment.of(behavior, each, reads, symbols, quantities, null, false);
         assessed.add(each);
         publish(behavior, each, plan, reads, symbols, read, withoutALine);
         switch (read) {

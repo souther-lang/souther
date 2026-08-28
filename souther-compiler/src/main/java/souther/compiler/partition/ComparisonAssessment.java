@@ -182,7 +182,8 @@ sealed interface ComparisonAssessment {
      * null where the comparison is written in a body and there is nothing to be the answer.
      */
     static ComparisonAssessment of(String behavior, Core.Binary comparison, InputReads reads,
-                                   Symbols symbols, Quantities quantities, BindingId answer) {
+                                   Symbols symbols, Quantities quantities, BindingId answer,
+                                   boolean drawnByAnInvariant) {
         // Asked first, and of the whole comparison. A rule that reads the answer anywhere in it is
         // one this reading does not put on the input space, whichever side the answer is on and
         // whatever else stands beside it: `value.n + query.offset <= 20` is about the answer and
@@ -195,7 +196,8 @@ sealed interface ComparisonAssessment {
             return aboutNoPosition(comparison, reads, symbols);
         }
         return switch (Cutting.read(behavior, comparison, reads, symbols, quantities)) {
-            case Cutting.Read.Cuts cuts -> onTheQuantity(comparison, cuts.cutting(), quantities);
+            case Cutting.Read.Cuts cuts ->
+                    onTheQuantity(comparison, cuts.cutting(), quantities, drawnByAnInvariant);
             // Read to the end and cutting nothing, which is a fact about the rule and not a limit
             // of this compiler: `a <= a` holds of every row.
             case Cutting.Read.CutsNothing _ -> new CutsNothing();
@@ -228,7 +230,8 @@ sealed interface ComparisonAssessment {
 
     /** What a line comes to on the input space, from the quantity it is on. */
     private static ComparisonAssessment onTheQuantity(Core.Binary comparison, Cutting cutting,
-                                                      Quantities quantities) {
+                                                      Quantities quantities,
+                                                      boolean drawnByAnInvariant) {
         // Whether there is an input at all, before anything is asked about where its values run.
         // A quantity is a function of the input, so where the rules admit no input they admit no
         // value of any quantity — and every question below is about one quantity's values against
@@ -242,6 +245,7 @@ sealed interface ComparisonAssessment {
         // looking for a limit of this compiler that is not there.
         if (!Border.reaches(cutting.at(), cutting.seam(),
                 Border.satisfyingSide(cutting.holdsAtTheValue(), cutting.valueBelongsBelow()),
+                Border.ordersAroundTheCut(drawnByAnInvariant, cutting.singles()),
                 cutting.within())) {
             return new OutsideTheDomain(cutting);
         }

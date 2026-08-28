@@ -1,8 +1,10 @@
 package souther.compiler.partition;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.Location;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
+import souther.compiler.types.Type;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.ClauseWithoutAnEnd;
 import souther.compiler.inputs.InputDomain;
@@ -74,7 +76,7 @@ public final class DeclaredThresholds {
         // No answer to be read, because a declaration's clause is about the values a type admits and
         // there is nothing a behavior answered for it to be about.
         ComparisonAssessment assessed = ComparisonAssessment.of(behavior, comparison,
-                InputReads.ofADeclaredClause(inputs, roots), symbols, quantities, null);
+                InputReads.ofADeclaredClause(inputs, roots), symbols, quantities, null, true);
         // Only the quantity that is on no position. Why this drew no line where it drew none is not
         // said here: the reading of ends already answered for this clause at each position it names,
         // and a second sentence about one rule is two answers to one question.
@@ -129,13 +131,27 @@ public final class DeclaredThresholds {
      * the model states at those positions is said by the reading that filed the rule there.
      */
     private static Map<BindingId, TermPath> rootsOf(ClauseWithoutAnEnd clause, Symbols symbols) {
-        if (!(symbols.declarations().declaration(clause.rule().clause().id().declaredOn())
-                instanceof Hir.Data data)) {
-            return Map.of();
-        }
         Map<BindingId, TermPath> roots = new LinkedHashMap<>();
-        TypeOps.fieldBindings(clause.rule().clause().id().declaredOn(), data, symbols)
-                .forEach((field, binding) -> roots.put(binding, clause.at().then(field)));
+        // Both the declaration that wrote the clause and the one it was read under, because a name
+        // wrapped round a record is a governing declaration of its own: the record's clauses are
+        // read under the name, and what their reads are bound to is the name's. Either alone
+        // answers for one of the two spellings and finds nothing in the other, over one record and
+        // one rule.
+        //
+        // And each name is a step of the path only where the language says it is. A name wrapped
+        // round a value is not one, so what a newtype calls its value stands where the newtype
+        // stands — stepped into all the same, every read under the name would be one position
+        // further down than the position it is at.
+        for (souther.compiler.types.TypeSymbol.AtModule declaration
+                : List.of(clause.rule().clause().id().declaredOn(), clause.readUnder())) {
+            if (!(symbols.declarations().declaration(declaration) instanceof Hir.Data data)) {
+                continue;
+            }
+            Type of = Type.ref(declaration);
+            TypeOps.fieldBindings(declaration, data, symbols).forEach((field, binding) ->
+                    roots.putIfAbsent(binding, Location.isStep(of, field, symbols)
+                            ? clause.at().then(field) : clause.at()));
+        }
         return roots;
     }
 

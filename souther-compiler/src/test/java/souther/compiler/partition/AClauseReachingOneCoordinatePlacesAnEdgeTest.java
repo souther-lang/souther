@@ -315,7 +315,9 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
                     partition   not applicable (the rules of this behavior divide no position)
                       · no line: invariant Span #1 — it relates two positions rather than dividing one, about `v.startsAt`
                       · no line: invariant Span #1 — it relates two positions rather than dividing one, about `v.endsAt`
-                    border      not applicable (the rules of this behavior draw no line)
+                    border      borders 1   coverage items 1/2   excluded 2
+                      · no OFF point is owed at v.startsAt = v.endsAt (invariant Span #1): excluded — the rules leave no value there
+                      · no OUT point is owed at v.startsAt = v.endsAt (invariant Span #1): excluded — the rules leave no value there
                 """), report);
     }
 

@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import souther.compiler.check.RuleRef;
 import souther.compiler.core.Core;
+import souther.compiler.types.TypeSymbol;
 
 /**
  * One conjunct of a declaration's clause that placed no end, and where the value it is written about
@@ -26,11 +27,17 @@ import souther.compiler.core.Core;
  *                 the declaration that wrote it, and a field an include brought in keeps that
  *                 declaration's binding, so the names under this path are what the clause reads
  *                 whichever declaration wrote it
+ * @param readUnder the declaration this reading was made under, which is not always the one the
+ *                 clause was written on. A name wrapped round a record is a governing declaration of
+ *                 its own and the record's clauses are read under it, so what its reads are bound to
+ *                 is that name's — matched against the writing declaration's bindings alone, a
+ *                 clause under a name names no position at all
  */
-public record ClauseWithoutAnEnd(RuleRef.Invariant rule, int conjunct, Core part, TermPath at) {
+public record ClauseWithoutAnEnd(RuleRef.Invariant rule, int conjunct, Core part, TermPath at,
+                                 TypeSymbol.AtModule readUnder) {
 
     public ClauseWithoutAnEnd {
-        if (rule == null || part == null || at == null) {
+        if (rule == null || part == null || at == null || readUnder == null) {
             throw new IllegalArgumentException(
                     "a clause is one of a declaration's, is written, and is about a value somewhere");
         }

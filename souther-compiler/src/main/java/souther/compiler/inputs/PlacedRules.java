@@ -465,7 +465,8 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
         java.util.Map<Key, ClauseWithoutAnEnd> once = new java.util.LinkedHashMap<>();
         for (FieldDomains.NoLine each : bounds().noLines()) {
             once.putIfAbsent(new Key(each.from(), each.conjunct()),
-                    new ClauseWithoutAnEnd(each.from(), each.conjunct(), each.part(), root));
+                    new ClauseWithoutAnEnd(each.from(), each.conjunct(), each.part(), root,
+                            bounds().named()));
         }
         return List.copyOf(once.values());
     }

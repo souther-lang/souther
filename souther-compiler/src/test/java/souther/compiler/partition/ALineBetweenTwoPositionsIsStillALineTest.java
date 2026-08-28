@@ -495,8 +495,10 @@ class ALineBetweenTwoPositionsIsStillALineTest {
                 notRead(RULED_OUT_BY_THE_RECORD),
                 "the record's own rule relates them, and the guard's line is outside the distance"
                         + " that rule leaves between them");
-        assertEquals(0, borders(RULED_OUT_BY_THE_RECORD),
-                "the diagonal holds nothing, so there is no border to owe a row at");
+        assertEquals(1, borders(RULED_OUT_BY_THE_RECORD),
+                "the diagonal holds nothing, so the guard has no border to owe a row at — and the"
+                        + " record's own rule, which is what leaves the distance where it is, has"
+                        + " the one line here");
     }
 
     /**

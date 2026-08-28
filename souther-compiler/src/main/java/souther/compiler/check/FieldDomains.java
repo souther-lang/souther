@@ -907,6 +907,18 @@ public final class FieldDomains {
     }
 
     /**
+     * The declaration this reading was made under.
+     *
+     * <p>Which is not always the one a clause it holds was written on. A name wrapped round a record
+     * is read as a governing declaration of its own, and the clauses of the record beneath it are
+     * read under that name — so the bindings its reads carry are this declaration's, and a caller
+     * matching them against the writing declaration's alone finds none of them.
+     */
+    public TypeSymbol.AtModule named() {
+        return named;
+    }
+
+    /**
      * Whether the rules leave the value at {@code path} in {@code data} able to hold nothing.
      *
      * <p>Asked of the domain the rules seed rather than read off the clauses. A rule removes the
