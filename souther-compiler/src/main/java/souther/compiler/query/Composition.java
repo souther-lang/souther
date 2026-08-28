@@ -106,11 +106,11 @@ public record Composition(OfferingRequest request, SequencedMap<String, List<Off
      *
      * <p><b>And not what the behavior's own boundary search built beside it.</b> That search builds
      * at each place a line was met, so a line read at two positions of one behavior comes back with
-     * two rows — measured over a form of two positions, {@code [D(100m), D(0m)]} and
-     * {@code [D(0m), D(100m)]} for one point of one declaration's line. A point is one row to
+     * a row at each — a form of two positions gets one putting the value at the first and one
+     * putting it at the second, for one point of one declaration's line. A point is one row to
      * write, so the second of them is a piece of work nobody is owed, and the two roads differ in
-     * nothing else: every other edge the two produce is the same point, the same behavior and the
-     * same row.
+     * nothing else: every other row either produces is the same row for the same point under the
+     * same behavior.
      *
      * <p>Public because it is a question and not a step of the layout: what is offered at one
      * behavior's lines is what a reader of the block beside that behavior sees, and it is asked

@@ -4182,8 +4182,7 @@ public final class Adequacy {
      * <p><b>Null where no declaration drew the line.</b> A clause names what it is about and a
      * comparison in a body names nothing: what it was drawn on is the term each reading met it at,
      * and a line read at two positions has one for each. Answered with the rule's own name instead,
-     * a report said `the comparison = 100` — a rule's name standing where a quantity's belongs,
-     * which is a word no model wrote.
+     * a report puts a rule's name where a quantity's belongs, which is a word no model wrote.
      */
     private static String axisOf(souther.compiler.partition.BorderObligationId id,
                                  Map<TypeSymbol, souther.compiler.check.DeclaredBorders> read,

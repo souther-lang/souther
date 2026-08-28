@@ -21,10 +21,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * them, so that an edit further down the model does not move what is offered above it
  * ({@link Settlements#keeping}).
  *
- * <p>That order used to be the two searches being asked in turn: a behavior's own boundary rows,
- * and then the rows a declaration's line was owed. One account answers both now, and the order is
- * what {@link BorderAccount#rowsByCarrier} lists them in rather than the order the points happened
- * to be gathered in — which is a fact about a walk and about nothing a reader can see.
+ * <p>One account answers for both kinds of line, so the order is what
+ * {@link BorderAccount#rowsByCarrier} lists them in rather than the order the points were gathered
+ * in — which is a fact about a walk and about nothing a reader can see.
  */
 class ABodysOwnLinesAreOfferedBeforeTheDeclarationsTest {
 

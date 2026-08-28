@@ -12,9 +12,9 @@ import java.util.function.Function;
  * Which reading of an authored line composes the one row it is owed.
  *
  * <p>A row at a line is composed by walking one behavior's inputs, and a line is read wherever the
- * model carries the rule — so this is a search over the readings and not a fold of them (issue
- * #1076). What it does is walk them in the order the module declares them and stop at the first that
- * composed a row.
+ * model carries the rule — so this is a search over the readings and not a fold of them. What it
+ * does is walk them in the order the module declares them and stop at the first that composed a
+ * row.
  *
  * <p><b>Whose the line is makes no difference here.</b> A clause of a {@code data} is read once per
  * position of every behavior carrying the type; a guard on a name the cases of a sum spread is read

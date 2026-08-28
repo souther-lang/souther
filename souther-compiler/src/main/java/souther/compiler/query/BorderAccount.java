@@ -83,9 +83,8 @@ public record BorderAccount(GenerationScope scope,
      * <p><b>The body's own lines first, and the declarations' after them.</b> An order, because what
      * is offered turns on one: a reduction keeps the earlier of two rows that answer the same
      * thing, so that an edit further down the model does not move what is offered above it
-     * ({@link Settlements#keeping}). That order was the two searches being asked in turn, and it
-     * survives the two becoming one account here rather than being left to the order the points
-     * happened to be gathered in — which is a fact about a walk and about nothing a reader can see.
+     * ({@link Settlements#keeping}). Stated here rather than left to the order the points were
+     * gathered in, which is a fact about a walk and about nothing a reader can see.
      *
      * <p>Which is why it is here and not in what the account holds. What is owed and what became of
      * it are the same whichever way they are listed; this is the listing.
