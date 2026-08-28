@@ -2,6 +2,14 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.Carrier;
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.TermOrders;
+import souther.compiler.inputs.TermPath;
+import souther.compiler.numeric.Count;
+import souther.compiler.partition.AxisId;
+import souther.compiler.partition.BorderQuantity;
+import souther.compiler.partition.BoundaryTarget;
 import souther.compiler.partition.Criterion;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.Level;
@@ -34,6 +42,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class WhichReadingComposesTheRowALineIsOwedTest {
 
     private static final String SAID = "String.length(value) = 1";
+
+    private static final Carrier WHOLE = new Carrier.Whole();
 
     /**
      * A walk stops at the first reading that composed a row.
@@ -142,8 +152,8 @@ class WhichReadingComposesTheRowALineIsOwedTest {
      */
     @Test
     void twoReadingsInOneBehaviorAreTwoReadings() {
-        Reading first = new Reading("one", "String.length(x.a)");
-        Reading second = new Reading("one", "String.length(x.b)");
+        Reading first = new Reading("one", aLineAt("one", "x.a"));
+        Reading second = new Reading("one", aLineAt("one", "x.b"));
         SearchCoverage coverage = coverageOf(Map.of(
                         first, new SearchCoverage.ReadingSearch.Attempted(nothingThere()),
                         second, new SearchCoverage.ReadingSearch.Attempted(refused())),
@@ -256,7 +266,15 @@ class WhichReadingComposesTheRowALineIsOwedTest {
 
     /** A reading of the line: one behavior at its one position carrying the type. */
     private static Reading at(String behavior) {
-        return new Reading(behavior, behavior + ".value");
+        return new Reading(behavior, aLineAt(behavior, behavior + ".value"));
+    }
+
+    /** Where a line was read: one position of one behavior, cut at one value. */
+    private static BoundaryTarget aLineAt(String behavior, String path) {
+        return BoundaryTarget.at(
+                new BorderQuantity.OfACoordinate(new AxisId(behavior, path),
+                        new NumericTerm.ValueOf(TermPath.of(path)), TermOrders.itself(WHOLE)),
+                new Level.OnACarrier(WHOLE, Count.of(1)));
     }
 
     /** A point a row is owed at, measured and missed, so a search of it would tell somebody

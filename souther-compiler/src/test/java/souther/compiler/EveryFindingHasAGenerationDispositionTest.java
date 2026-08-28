@@ -360,11 +360,14 @@ class EveryFindingHasAGenerationDispositionTest {
 
         assertFalse(coverage.isEmpty(), "the model under test composes nothing at the line");
         for (SearchCoverage each : coverage) {
-            assertEquals(List.of(
-                            new BorderObligationPointAssessment.Reading("one", "String.length(x.a)"),
-                            new BorderObligationPointAssessment.Reading("one", "String.length(x.b)")),
-                    each.readings(),
-                    "both positions the behavior meets the line at, at every point of it");
+            assertEquals(List.of("one", "one"), each.readings().stream()
+                            .map(BorderObligationPointAssessment.Reading::behavior).toList(),
+                    "one behavior, at every point of the line");
+            assertEquals(List.of("String.length(x.a)", "String.length(x.b)"),
+                    each.readings().stream().map(r -> r.target().left()).toList(),
+                    "both positions it meets the line at");
+            assertEquals(2, java.util.Set.copyOf(each.readings()).size(),
+                    "and they are two readings, which is what a walk of them has to see");
         }
         // Both points of the line, each searched at both positions. The line and the run beside it
         // are two rows to write and neither is composable here, so each of them is answered from
