@@ -29,30 +29,9 @@ public enum Emptiness {
     /** Neither, until what the position admits has been worked out. */
     UNDECIDED;
 
-    /** The settled answer for something already in hand. */
-    public static Emptiness of(boolean empty) {
-        return empty ? EMPTY : NONEMPTY;
-    }
-
     /** Whether this is the settled answer that nothing is admitted. */
     public boolean isEmpty() {
         return this == EMPTY;
-    }
-
-    /**
-     * What a meet of two comes to.
-     *
-     * <p>Empty where either is: a conjunction with an impossible side is impossible, and that is
-     * settled whatever the other side turns out to be. Otherwise as much as is known — two sides
-     * that both admit something may still share nothing.
-     */
-    public Emptiness met(Emptiness other) {
-        if (this == EMPTY || other == EMPTY) {
-            return EMPTY;
-        }
-        // And nothing else is settled, two sides that each admit something included: what they
-        // share is a question about the two of them and not about either.
-        return UNDECIDED;
     }
 
     /**

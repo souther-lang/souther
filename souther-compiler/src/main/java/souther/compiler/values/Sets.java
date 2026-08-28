@@ -3,7 +3,6 @@ package souther.compiler.values;
 import souther.compiler.regex.Language;
 import souther.compiler.regex.Meter;
 import souther.compiler.regex.PatternPlan;
-import souther.compiler.regex.PatternSyntax;
 
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -134,45 +133,6 @@ public final class Sets<A> {
         out.spentElsewhere = spentElsewhere;
         return out;
     }
-
-    /**
-     * The strings {@code syntax} accepts, as the values one position may hold.
-     *
-     * <p>Where a pattern becomes a set, and the only place. A pattern read but not built is a
-     * position this says nothing about, which is what every other rule it cannot use leaves.
-     */
-    public Composed matching(A atom, PatternSyntax syntax) {
-        return admitted(atom, PatternPlan.of(syntax));
-    }
-
-    /** What {@code plan} comes to, out of what the position is allowed. */
-    private Composed admitted(A atom, PatternPlan plan) {
-        return built(atom, meter -> plan.compile(meter));
-    }
-
-    /**
-     * The strings {@code syntax} does not accept, as the values one position may hold.
-     *
-     * <p>What a pattern denied leaves, which is a set as surely as what it stated leaves. Built
-     * here rather than by complementing a language afterwards, because the complement is the
-     * expensive operation — a machine has to be made deterministic before a walk over it can be
-     * turned around — and doing it out there would be doing it where nothing is counting.
-     */
-    public Composed notMatching(A atom, PatternSyntax syntax) {
-        return admitted(atom, EVERY_STRING.less(PatternPlan.of(syntax)));
-    }
-
-    /**
-     * Every string there is, as a plan to take one away from.
-     *
-     * <p>Any symbol, any number of times. Written as the symbols and not as a dot, which leaves out
-     * the five line terminators — a denial that admitted every string but those would refuse values
-     * a model may hold.
-     */
-    private static final PatternPlan EVERY_STRING = PatternPlan.of(
-            new PatternSyntax.Repeated(new PatternSyntax.Symbols(
-                    souther.compiler.regex.CodePoints.EVERYTHING),
-                    0, PatternSyntax.Repeated.NO_CEILING));
 
     /**
      * What two sets neither of which is a language come to, which costs nothing either way.

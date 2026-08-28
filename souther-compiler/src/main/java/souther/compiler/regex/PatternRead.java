@@ -76,6 +76,17 @@ public sealed interface PatternRead {
         /** An escape this has no meaning for, or one with nothing after it. */
         AN_ESCAPE_THIS_DOES_NOT_READ,
 
+        /**
+         * An anchor whose answer is not a property of the pattern.
+         *
+         * <p>{@code ^} and {@code $} are read where the shape says whether everything on that side
+         * of them takes a symbol or nothing on that side does. {@code (a|)^b} is neither: which
+         * strings it accepts is settled by which arm a string took, and this compiler has no shape
+         * for a language written that way. So the pattern is not read, rather than read as one of
+         * the two answers it is not.
+         */
+        AN_ANCHOR_THIS_CANNOT_PLACE,
+
         /** Written more deeply than this reads, which is a limit of the reading and not of the
          *  language. */
         NESTED_TOO_DEEPLY

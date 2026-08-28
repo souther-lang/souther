@@ -55,6 +55,13 @@ public final class PatternParser {
                 // stops before the end.
                 return new PatternRead.NotRead(PatternRead.Unsupported.SOMETHING_UNCLOSED);
             }
+            // Every anchor has to come to something, and what it comes to is settled by where it
+            // stands rather than by how it is written. Asked here so that a pattern this cannot
+            // settle is one it says it did not read: the tree is kept as the author wrote it, and
+            // what the anchors come to is worked out again by whoever builds the machine.
+            if (PatternSyntax.withoutAnchors(syntax) == null) {
+                return new PatternRead.NotRead(PatternRead.Unsupported.AN_ANCHOR_THIS_CANNOT_PLACE);
+            }
             return new PatternRead.Read(syntax);
         } catch (Refused refused) {
             return new PatternRead.NotRead(refused.why);
@@ -77,8 +84,10 @@ public final class PatternParser {
         List<PatternSyntax> parts = new ArrayList<>();
         while (!done() && peek() != '|' && peek() != ')') {
             PatternSyntax one = quantified();
-            // An anchor is nothing to accept, and a group of nothing is nothing. Dropped here
-            // rather than kept as a part of no symbols, so that one written pattern has one tree.
+            // A group of nothing is nothing, and is left out so that one written pattern has one
+            // tree. An anchor is not one of those: where it stands is what decides what it comes
+            // to, so dropping it here would be answering that question with the one place that
+            // cannot see the answer.
             if (!(one instanceof PatternSyntax.Nothing)) {
                 parts.add(one);
             }
@@ -146,11 +155,14 @@ public final class PatternParser {
                         .less(CodePoints.LINE_TERMINATORS));
             }
             case '^', '$' -> {
-                // What is matched is the whole string, so an anchor accepts everything an empty
-                // sequence does and adds nothing.
+                boolean end = peek() == '$';
                 take();
-                return new PatternSyntax.Nothing();
+                return new PatternSyntax.Anchor(end);
             }
+            // A brace that begins no count. Java refuses it, so a pattern holding one names no
+            // language at all — read as an ordinary character it would be this compiler answering
+            // for a pattern the author cannot run.
+            case '{' -> throw new Refused(PatternRead.Unsupported.A_COUNT_THIS_CANNOT_READ);
             case '*', '+', '?' -> throw new Refused(PatternRead.Unsupported.SOMETHING_UNCLOSED);
             case 0 -> throw new Refused(PatternRead.Unsupported.SOMETHING_UNCLOSED);
             default -> {

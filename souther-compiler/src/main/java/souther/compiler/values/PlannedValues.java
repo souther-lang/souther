@@ -532,7 +532,7 @@ public sealed interface PlannedValues<A> {
     }
 
     private static <A> AdmissibleValues<A> resolved(Settled<A> of, Allowance<A> by) {
-        Set<A> gaveUp = new LinkedHashSet<>();
+        Unbuilt<A> gaveUp = new Unbuilt<>();
         Map<A, ValueSet> perPosition = realized(of.perPosition(), by, gaveUp);
         Map<A, ValueSet> guaranteed = promised(of.guaranteed(), by);
         AdmissibleValues.Held<A> held = switch (of.held()) {
@@ -540,10 +540,10 @@ public sealed interface PlannedValues<A> {
             case PlannedHeld.Alternatives<A> boxes -> alternatives(boxes, by, gaveUp);
         };
         return new AdmissibleValues<>(held, perPosition,
-                alsoStanding(of.standing(), gaveUp), of.dropped(),
+                gaveUp.beside(of.standing()), of.dropped(),
                 guaranteed, promised(of.defaultGuaranteed(), by.elsewhere()),
                 of.guaranteedTogether(),
-                of.tangled(), PlannedValues.both(of.widened(), gaveUp));
+                of.tangled(), PlannedValues.both(of.widened(), gaveUp.names()));
     }
 
     /**
@@ -554,7 +554,7 @@ public sealed interface PlannedValues<A> {
      * every box goes, nothing satisfies the rules.
      */
     private static <A> AdmissibleValues.Held<A> alternatives(PlannedHeld.Alternatives<A> boxes,
-                                                             Allowance<A> by, Set<A> gaveUp) {
+                                                             Allowance<A> by, Unbuilt<A> gaveUp) {
         Set<AdmissibleValues.Box<A>> live = new LinkedHashSet<>();
         Set<PlannedHeld.Box<A>> standing = new LinkedHashSet<>();
         for (PlannedHeld.Box<A> box : boxes.boxes()) {
@@ -576,9 +576,7 @@ public sealed interface PlannedValues<A> {
             AdmittedPlan plan = AdmittedPlan.joining(
                     standing.stream().map(box -> box.get(atom)).toList());
             Realization made = by.realizer(atom).of(plan);
-            if (!made.isExact()) {
-                gaveUp.add(atom);
-            }
+            gaveUp.note(atom, made);
             if (!made.upperBound().isAny()) {
                 across.put(atom, made.upperBound());
             }
@@ -589,13 +587,11 @@ public sealed interface PlannedValues<A> {
     /** Each position's description as the set it comes to, the ones nobody could build widened to
      *  every value and written down as such. */
     private static <A> Map<A, ValueSet> realized(Map<A, AdmittedPlan> of, Allowance<A> by,
-                                                 Set<A> gaveUp) {
+                                                 Unbuilt<A> gaveUp) {
         Map<A, ValueSet> out = new LinkedHashMap<>();
         of.forEach((atom, plan) -> {
             Realization made = by.realizer(atom).of(plan);
-            if (!made.isExact()) {
-                gaveUp.add(atom);
-            }
+            gaveUp.note(atom, made);
             out.put(atom, made.upperBound());
         });
         return out;
@@ -620,22 +616,6 @@ public sealed interface PlannedValues<A> {
         return made.isExact() ? made.upperBound() : ValueSet.NONE;
     }
 
-    /** The reasons, and one more at each position whose answer was not built — see
-     *  {@link AdmissibleValues}. */
-    private static <A> Map<A, List<UnreadReason>> alsoStanding(Map<A, List<UnreadReason>> standing,
-                                                               Set<A> gaveUp) {
-        if (gaveUp.isEmpty()) {
-            return standing;
-        }
-        Map<A, List<UnreadReason>> out = new LinkedHashMap<>(standing);
-        gaveUp.forEach(atom -> {
-            List<UnreadReason> why = new ArrayList<>(out.getOrDefault(atom, List.of()));
-            why.add(UnreadReason.EXACT_VALUES_TOO_COSTLY);
-            out.put(atom, why);
-        });
-        return out;
-    }
-
     /** Every subject this reading is filed under — see {@link AdmissibleValues#subjects}. */
     default Set<A> subjects() {
         Set<A> out = new LinkedHashSet<>();
@@ -656,45 +636,6 @@ public sealed interface PlannedValues<A> {
             }
         }
         return Collections.unmodifiableSet(out);
-    }
-
-    /** The same reading under other names — see {@link AdmissibleValues#renamed}. */
-    default <B> PlannedValues<B> renamed(java.util.function.Function<A, B> naming) {
-        return switch (this) {
-            case Choice<A> it -> new Choice<>(it.left().renamed(naming),
-                    it.right().renamed(naming), it.apart());
-            case Settled<A> it -> new Settled<>(renamedHeld(it.held(), naming),
-                    renamedKeys(it.perPosition(), naming), renamedKeys(it.standing(), naming),
-                    it.dropped(), renamedKeys(it.guaranteed(), naming), it.defaultGuaranteed(),
-                    it.guaranteedTogether(), renamedNames(it.tangled(), naming),
-                    renamedNames(it.widened(), naming));
-        };
-    }
-
-    private static <A, B> PlannedHeld<B> renamedHeld(PlannedHeld<A> held,
-                                                     java.util.function.Function<A, B> naming) {
-        return switch (held) {
-            case PlannedHeld.Nothing<A> _ -> new PlannedHeld.Nothing<B>();
-            case PlannedHeld.Alternatives<A> it -> {
-                Set<PlannedHeld.Box<B>> boxes = new LinkedHashSet<>();
-                it.boxes().forEach(box -> boxes.add(
-                        new PlannedHeld.Box<>(renamedKeys(box.at(), naming))));
-                yield new PlannedHeld.Alternatives<>(boxes);
-            }
-        };
-    }
-
-    private static <A, B, V> Map<B, V> renamedKeys(Map<A, V> of,
-                                                   java.util.function.Function<A, B> naming) {
-        Map<B, V> out = new LinkedHashMap<>();
-        of.forEach((position, value) -> out.put(naming.apply(position), value));
-        return out;
-    }
-
-    private static <A, B> Set<B> renamedNames(Set<A> of, java.util.function.Function<A, B> naming) {
-        Set<B> out = new LinkedHashSet<>();
-        of.forEach(position -> out.add(naming.apply(position)));
-        return out;
     }
 
     /** What was said, which is what is not every value: a position nothing narrowed is held by

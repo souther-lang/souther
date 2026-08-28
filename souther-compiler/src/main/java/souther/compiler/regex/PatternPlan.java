@@ -106,6 +106,23 @@ public final class PatternPlan {
         return new PatternPlan(new Step.Of(syntax));
     }
 
+    /**
+     * The plan for every string {@code syntax} does not accept.
+     *
+     * <p>Said as a plan rather than worked out by complementing a language afterwards, because the
+     * complement is the expensive operation — a machine has to be made deterministic before a walk
+     * over it can be turned around — and a plan is what says which spending is worth doing.
+     *
+     * <p>Every string is written as the symbols and not as a dot, which leaves out the five line
+     * terminators: a denial that admitted every string but those would refuse values a model may
+     * hold.
+     */
+    public static PatternPlan notMatching(PatternSyntax syntax) {
+        return of(new PatternSyntax.Repeated(
+                new PatternSyntax.Symbols(CodePoints.EVERYTHING),
+                0, PatternSyntax.Repeated.NO_CEILING)).less(of(syntax));
+    }
+
     /** The plan for what both hold. */
     public PatternPlan and(PatternPlan other) {
         return new PatternPlan(new Step.Both(step, other.step));
@@ -119,6 +136,149 @@ public final class PatternPlan {
     /** The plan for what this holds and that does not. */
     public PatternPlan less(PatternPlan other) {
         return new PatternPlan(new Step.Less(step, other.step));
+    }
+
+    /**
+     * Two plans are the same plan where they say the same steps over the same patterns.
+     *
+     * <p>What is compared is what would be built and not what it would come to. Two spellings of
+     * one language are two plans here, which is what they are to whoever has to build them: telling
+     * them apart by their strings means making both machines, which is the work a plan exists to
+     * arrange rather than to do.
+     */
+    @Override
+    public boolean equals(Object other) {
+        return this == other || other instanceof PatternPlan it && step.equals(it.step);
+    }
+
+    @Override
+    public int hashCode() {
+        return step.hashCode();
+    }
+
+    /**
+     * How many states building this would take, as far as its shape says.
+     *
+     * <p>For a caller deciding which of several plans to work out first. Read off the shape and
+     * never off the strings: which of two patterns makes the smaller machine is a question about
+     * the machines, and asking it means building both. What a repetition written {@code {300}} says
+     * about itself is enough — three hundred copies of something is three hundred times what that
+     * costs — and that is what tells a large pattern from a small one.
+     *
+     * <p>Never more than {@link #ENOUGH}, so that a repetition of a repetition of a repetition is a
+     * large number rather than one that has gone round.
+     */
+    public long states() {
+        return states(step);
+    }
+
+    /** More than anything this compiler builds, which is where a count stops climbing. */
+    private static final long ENOUGH = 999_999_999L;
+
+    private static long states(Step step) {
+        return switch (step) {
+            case Step.Of it -> states(it.syntax());
+            case Step.Both it -> both(states(it.one()), states(it.other()));
+            case Step.Either it -> Math.min(ENOUGH, states(it.one()) + states(it.other()) + 2);
+            // The complement has to make the machine deterministic first, which is the one step
+            // whose cost is not about the size of what it started from.
+            case Step.Less it -> both(states(it.one()), Math.min(ENOUGH, states(it.other()) * 2));
+        };
+    }
+
+    private static long both(long one, long other) {
+        return one > ENOUGH / Math.max(1, other) ? ENOUGH : one * other;
+    }
+
+    private static long states(PatternSyntax syntax) {
+        return switch (syntax) {
+            case PatternSyntax.Nothing _, PatternSyntax.Never _, PatternSyntax.Anchor _ -> 0;
+            case PatternSyntax.Symbols _ -> 1;
+            case PatternSyntax.InTurn it -> {
+                long out = 0;
+                for (PatternSyntax each : it.parts()) {
+                    out = Math.min(ENOUGH, out + states(each));
+                }
+                yield out;
+            }
+            case PatternSyntax.EitherOf it -> {
+                long out = 1;
+                for (PatternSyntax each : it.arms()) {
+                    out = Math.min(ENOUGH, out + states(each) + 1);
+                }
+                yield out;
+            }
+            // The copies it is written out as: the floor, and one more where the ceiling is open.
+            case PatternSyntax.Repeated it -> {
+                long once = states(it.what());
+                long many = it.unbounded() ? it.least() + 1L : it.most();
+                yield once > ENOUGH / Math.max(1, many) ? ENOUGH : once * many + 1;
+            }
+        };
+    }
+
+    /**
+     * The whole of what this plan says, written out for a caller putting several of them in an
+     * order.
+     *
+     * <p>Its own, because the steps are its own: nothing outside sees them, and an order read off
+     * something else would be an order over a part of what a plan is.
+     */
+    public void writtenInto(StringBuilder out) {
+        written(step, out);
+    }
+
+    private static void written(Step step, StringBuilder out) {
+        switch (step) {
+            case Step.Of it -> {
+                out.append("0;");
+                written(it.syntax(), out);
+            }
+            case Step.Both it -> {
+                out.append("1;");
+                written(it.one(), out);
+                written(it.other(), out);
+            }
+            case Step.Either it -> {
+                out.append("2;");
+                written(it.one(), out);
+                written(it.other(), out);
+            }
+            case Step.Less it -> {
+                out.append("3;");
+                written(it.one(), out);
+                written(it.other(), out);
+            }
+        }
+    }
+
+    private static void written(PatternSyntax syntax, StringBuilder out) {
+        switch (syntax) {
+            case PatternSyntax.Nothing _ -> out.append("0;");
+            case PatternSyntax.Never _ -> out.append("1;");
+            case PatternSyntax.Anchor it -> out.append("2;").append(it.end() ? '$' : '^')
+                    .append(';');
+            case PatternSyntax.Symbols it -> {
+                out.append("3;").append(it.held().ranges().size()).append(';');
+                it.held().ranges().forEach(each ->
+                        out.append(each.from()).append('-').append(each.to()).append(','));
+                out.append(';');
+            }
+            case PatternSyntax.InTurn it -> {
+                out.append("4;").append(it.parts().size()).append(';');
+                it.parts().forEach(each -> written(each, out));
+            }
+            // The arms as they are written. A choice accepts what its arms accept in any order, and
+            // which order that is cannot be asked without building them.
+            case PatternSyntax.EitherOf it -> {
+                out.append("5;").append(it.arms().size()).append(';');
+                it.arms().forEach(each -> written(each, out));
+            }
+            case PatternSyntax.Repeated it -> {
+                out.append("6;").append(it.least()).append(',').append(it.most()).append(';');
+                written(it.what(), out);
+            }
+        }
     }
 
     /**

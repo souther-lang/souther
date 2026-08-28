@@ -1,5 +1,6 @@
 package souther.compiler.values;
 
+import souther.compiler.regex.Language;
 import souther.compiler.regex.Meter;
 
 import java.util.ArrayList;
@@ -53,9 +54,33 @@ final class Realizer {
             case AdmittedPlan.Everything _ -> new Realization.Exact(ValueSet.ANY);
             case AdmittedPlan.Nothing _ -> new Realization.Exact(ValueSet.NONE);
             case AdmittedPlan.Of it -> new Realization.Exact(it.set());
+            case AdmittedPlan.Pattern it -> pattern(it);
             case AdmittedPlan.Both it -> met(it.parts());
             case AdmittedPlan.Either it -> joined(it.parts());
         };
+    }
+
+    /**
+     * The machine for one pattern, made here rather than where the pattern was read.
+     *
+     * <p>Because it is spending, and this is where a position's spending is arranged. A pattern met
+     * with three written strings is a question about three strings — built where it was read, it
+     * was a machine nobody needed, and the position had that much less for the meet it did need.
+     *
+     * <p>Kept like everything else, so the same pattern written into three rules is one machine.
+     * Which is also why nothing is named here: the machine is the pattern's, not any rule's, and a
+     * rule that asked for one refused says so where it asked.
+     */
+    private Realization pattern(AdmittedPlan.Pattern plan) {
+        Language made = plan.plan().compile(meter);
+        if (made != null) {
+            return new Realization.Exact(ValueSet.matching(made));
+        }
+        // The one place the machine limit is about a rule. What was being built is a pattern
+        // somebody wrote, so a machine larger than a machine may be is that pattern's size — the
+        // same one asked for first, out of a full allowance, would have been refused the same way.
+        return meter.stoppedBy() == Meter.Stopped.ONE_MACHINE
+                ? new Realization.OverTheMachineLimit() : new Realization.OverTheAnswerLimit();
     }
 
     /**
@@ -79,12 +104,12 @@ final class Realizer {
                 rest.add(each);
             }
         }
-        // The written values first, and that is the whole of the trick. A meet with them is a
+        // The written values first, and that is the whole of the choosing. A meet with them is a
         // question about the values they name — asked of each, which builds nothing whatever the
-        // other side is — so the answer to all of it is settled without a machine. Folded in the
-        // order the parts arrived, the two languages would meet each other first wherever the
-        // author wrote them first, and the same rules would cost a product one way round and
-        // nothing the other.
+        // other side is — so the answer to all of it is settled without a machine. What is left
+        // after them is folded in the order the plan holds it, which the plan settled from what its
+        // parts are; either order taken from how the parts arrived would cost a product one way
+        // round and nothing the other, for rules that are the same rules.
         ValueSet out = written;
         for (AdmittedPlan each : rest) {
             Realization one = of(each);
@@ -132,7 +157,16 @@ final class Realizer {
         return outcome(Sets.joinedUnder(one, other, meter));
     }
 
-    private static Realization outcome(ValueSet made) {
-        return made == null ? new Realization.TooCostly() : new Realization.Exact(made);
+    /**
+     * What putting two of a position's sets together came to.
+     *
+     * <p>A refusal here is about the answer whichever limit said no. What was being built is what
+     * two rules leave between them, and no author wrote it: two patterns each small on its own have
+     * a meet the size of their product, so a machine larger than a machine may be is as much a fact
+     * about the pair as an allowance run down is. Named as one of the rules, it would tell an
+     * author to rewrite something that is not why.
+     */
+    private Realization outcome(ValueSet made) {
+        return made == null ? new Realization.OverTheAnswerLimit() : new Realization.Exact(made);
     }
 }

@@ -68,10 +68,17 @@ final class Automaton {
      * knows what that answer is for.
      */
     static Automaton of(PatternSyntax syntax, Meter meter) {
+        // What the anchors come to, worked out before anything is made of them. Whoever read the
+        // pattern has already asked whether they can be settled, so what comes back here is a tree.
+        PatternSyntax placed = PatternSyntax.withoutAnchors(syntax);
+        if (placed == null) {
+            throw new IllegalArgumentException(
+                    "a pattern whose anchors have no answer is not read, so nothing builds it");
+        }
         Building building = new Building(meter.making());
         try {
             int start = building.state();
-            int accept = building.build(syntax, start);
+            int accept = building.build(placed, start);
             BitSet accepting = new BitSet();
             accepting.set(accept);
             return new Automaton(building.frozenSteps(), building.frozenFree(), accepting);
@@ -438,6 +445,31 @@ final class Automaton {
         return size() == 1 && accepting.get(START);
     }
 
+    /**
+     * The whole table written out, for a caller putting machines in an order.
+     *
+     * <p>Read off the canonical machine, so two machines accepting the same strings write the same
+     * thing and two accepting different strings do not — which is {@link #sameAs} spelled as
+     * something that can be compared for less as well as for equal. The number beside it
+     * ({@link #shape}) is a hash of the same table and agrees with it on equality only: two
+     * different tables may hash alike, and an order that broke its ties on the hash would put the
+     * same pair in either order on different runs.
+     */
+    void writtenInto(StringBuilder out) {
+        out.append(steps.size());
+        for (int at = 0; at < steps.size(); at++) {
+            out.append(accepting.get(at) ? "!" : ".");
+            for (Step each : steps.get(at)) {
+                out.append(each.to()).append(':');
+                for (CodePoints.Range range : each.over().ranges()) {
+                    out.append(range.from()).append('-').append(range.to()).append(',');
+                }
+                out.append(';');
+            }
+            out.append('/');
+        }
+    }
+
     /** A number that agrees with {@link #sameAs}, read off the same table. */
     int shape() {
         int out = accepting.hashCode();
@@ -771,6 +803,12 @@ final class Automaton {
         int build(PatternSyntax syntax, int from) {
             return switch (syntax) {
                 case PatternSyntax.Nothing _ -> from;
+                // Nothing leads out of it, so nothing after it is reached and no string gets to
+                // the end: a state made and left where it is says exactly that.
+                case PatternSyntax.Never _ -> state();
+                // Read before anything is built, so there are none left by the time this runs.
+                case PatternSyntax.Anchor _ -> throw new IllegalStateException(
+                        "an anchor is read into what it comes to before a machine is made of it");
                 case PatternSyntax.Symbols it -> {
                     int to = state();
                     step(from, it.held(), to);

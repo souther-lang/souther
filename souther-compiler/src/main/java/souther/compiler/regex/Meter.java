@@ -17,11 +17,28 @@ package souther.compiler.regex;
  * <p>Two limits, because two things can go wrong. One machine may be larger than anything this
  * will hold, and a great many small ones may be more than it will do in all — a plan of cheap meets
  * is affordable at every step and not as a whole.
+ *
+ * <p><b>And which of them refused is kept, because they are not the same fact.</b> One machine over
+ * the first limit is a machine somebody wrote and can write differently; a build stopped by the
+ * second is one this answer had already spent its allowance on, and the same machine asked for
+ * first would have been made. A caller told only that nothing came back has to guess between them,
+ * and the guess it can make from what it holds is the wrong one — it names the rule it was reading.
  */
 public final class Meter {
 
+    /** Which of the two limits refused a state. */
+    public enum Stopped {
+
+        /** One machine came to more states than a machine may have. */
+        ONE_MACHINE,
+
+        /** What this answer has built came to more than it may build in all. */
+        THE_ANSWER
+    }
+
     private final int mostStates;
     private int left;
+    private Stopped stopped;
 
     /**
      * @param mostStates how many states one machine may hold
@@ -39,6 +56,23 @@ public final class Meter {
     /** How much of the whole allowance is left, which is what a caller reports having spent. */
     public int left() {
         return left;
+    }
+
+    /**
+     * Which limit refused the state that stopped the construction that just came back with nothing,
+     * or null where nothing has been refused.
+     *
+     * <p>The last refusal, which is that construction's, because a refusal stops the construction
+     * it happened in: every place a state is refused abandons what it was making there and then, so
+     * a refusal recorded here has been read by the caller it belongs to before another can happen.
+     *
+     * <p>What is answered is which limit said no, and not what would have happened under some other
+     * allowance. Working that out means building the machine a second way to see how far it gets,
+     * which is the spending this exists to stop — so the question this can answer honestly is the
+     * one about the limit that actually refused.
+     */
+    public Stopped stoppedBy() {
+        return stopped;
     }
 
     /** One machine about to be made, counting its own states as well as this meter's. */
@@ -74,7 +108,15 @@ public final class Meter {
             if (many < 0) {
                 throw new IllegalArgumentException("a machine is made of no fewer than no states");
             }
-            if (many > mostStates - (long) mine || many > left) {
+            // The machine's own limit first where both are over. What is being answered is which
+            // limit refused this request, and a request larger than any machine may be is one no
+            // allowance would have let through — so it is that, whatever else is also true of it.
+            if (many > mostStates - (long) mine) {
+                stopped = Stopped.ONE_MACHINE;
+                return false;
+            }
+            if (many > left) {
+                stopped = Stopped.THE_ANSWER;
                 return false;
             }
             mine += (int) many;

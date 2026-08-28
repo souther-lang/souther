@@ -192,6 +192,18 @@ public final class Language {
         return machine.shape();
     }
 
+    /**
+     * The whole of what this language is, written out for a caller putting several of them in an
+     * order.
+     *
+     * <p>Agrees with {@link #equals} both ways, being read off the same canonical table, and unlike
+     * {@link #hashCode} it says which of two unequal ones comes first without ever saying that of
+     * two equal ones. Costs nothing to ask: the machine it reads was built when the language was.
+     */
+    public void writtenInto(StringBuilder out) {
+        machine.writtenInto(out);
+    }
+
     @Override
     public String toString() {
         String some = some();

@@ -164,15 +164,15 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
         if (!(said instanceof PatternRead.Read read)) {
             return null;
         }
-        ValueSet made = states ? allowed.matching(position, read.syntax())
-                : allowed.notMatching(position, read.syntax());
-        // And where this pattern's own machine was more than a rule is allowed, the position is
-        // left standing with that as its reason. About this rule and naming it, which is what an
-        // author can act on — the other way a pattern can cost too much is what a position's rules
-        // come to between them, and that names no rule and is answered where they are put together.
-        return made == null
-                ? PlannedValues.unreadable(Set.of(position), UnreadReason.PATTERN_TOO_COSTLY)
-                : PlannedValues.at(position, AdmittedPlan.of(made));
+        // Named and not built. What the position finally admits is met out of every rule that
+        // reached it, and a pattern met with three written strings is a question about three
+        // strings — built here, it would be a machine nobody needed and the position would have
+        // that much less for the meet it does need. So what is said is which machine would answer
+        // this rule, and whether one is ever made of it is settled where the position's plan is
+        // worked out under its allowance.
+        return PlannedValues.at(position, new AdmittedPlan.Pattern(
+                states ? souther.compiler.regex.PatternPlan.of(read.syntax())
+                        : souther.compiler.regex.PatternPlan.notMatching(read.syntax())));
     }
 
     /** What one comparison of a position with a value says, or nothing where it is not one. */

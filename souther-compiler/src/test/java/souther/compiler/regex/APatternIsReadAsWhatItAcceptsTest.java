@@ -25,6 +25,11 @@ class APatternIsReadAsWhatItAcceptsTest {
         return assertInstanceOf(PatternRead.Read.class, said, regex).syntax();
     }
 
+    /** The strings {@code regex} accepts, which is where an anchor's answer shows. */
+    private static Language accepted(String regex) {
+        return PatternPlan.of(read(regex)).compile(PatternPlan.Budget.OF_ADMITTED_VALUES);
+    }
+
     private static PatternRead.Unsupported refused(String regex) {
         PatternRead said = PatternParser.read(regex);
         return assertInstanceOf(PatternRead.NotRead.class, said, regex).why();
@@ -145,10 +150,35 @@ class APatternIsReadAsWhatItAcceptsTest {
                 digits.not(), "the capital is what the small one leaves");
     }
 
-    /** An anchor says where a match sits, and the whole string is what is matched. */
+    /**
+     * An anchor says where a match sits, and what that comes to is not the anchor's own.
+     *
+     * <p>Kept in the tree, because the answer is settled by where it stands: at the edge it asks
+     * for nothing, and after something that must take a symbol it asks for a position no string
+     * has. Read as adding nothing wherever it appeared, {@code a^b} was accepted as {@code ab}.
+     */
     @Test
-    void anAnchorAddsNothingToWhatIsAccepted() {
-        assertEquals(read("abc"), read("^abc$"));
+    void anAnchorIsKeptAndWhatItComesToIsReadFromWhereItStands() {
+        assertEquals(new PatternSyntax.Anchor(false), read("^"));
+        assertInstanceOf(PatternSyntax.InTurn.class, read("^abc$"),
+                "the anchors are still in the tree");
+
+        assertEquals(accepted("abc"), accepted("^abc$"),
+                "at the edges they ask for nothing");
+        assertTrue(accepted("a^b").isEmpty(),
+                "no position is both after an a and at the start, so no string is accepted");
+        assertTrue(accepted("a$b").isEmpty(), "and the same at the other end");
+        assertEquals(accepted("a"), accepted("^a$|a^b"),
+                "an arm nothing satisfies leaves the choice its other arms");
+    }
+
+    /** A pattern whose anchor has no answer is not read at all. */
+    @Test
+    void anAnchorWhosePlaceIsNotSettledIsRefused() {
+        assertEquals(PatternRead.Unsupported.AN_ANCHOR_THIS_CANNOT_PLACE, refused("(a|)^b"),
+                "what is before it sometimes takes a symbol and sometimes does not");
+        assertEquals(PatternRead.Unsupported.AN_ANCHOR_THIS_CANNOT_PLACE, refused("(^a)*"),
+                "how many copies come before it is the string's answer and not the pattern's");
     }
 
     /** Every construct outside the subset is refused, and says which it was. */

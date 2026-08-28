@@ -48,12 +48,9 @@ public sealed interface AdmittedPlan {
     /**
      * A set one rule says the position admits, worked out already.
      *
-     * <p>Every leaf is one of these, and every one of them exists: the values an equality names,
-     * the values a denial leaves, the strings a pattern accepts. What a rule could not be turned
-     * into at all — a pattern outside the subset this reads, or one whose own machine is more than
-     * a rule is allowed — never becomes a leaf, and is stopped where the rule is read. So a failure
-     * here is always about the answer and never about one of the rules, which is the difference a
-     * reader is owed and the difference this arrangement is for.
+     * <p>The values an equality names, the values a denial leaves, and a set some other reading
+     * arrived at and handed on. What is here has been built: whoever made it paid for it, and
+     * asking what it holds asks for nothing more.
      */
     record Of(ValueSet set) implements AdmittedPlan {
 
@@ -68,6 +65,31 @@ public sealed interface AdmittedPlan {
          *  rule wrote out do. A language is the other kind. */
         boolean isFree() {
             return !(set instanceof ValueSet.Matching);
+        }
+    }
+
+    /**
+     * The strings a pattern accepts, named rather than made.
+     *
+     * <p>A machine, and it is not built here. What it costs to build is what this plan exists to
+     * arrange — a pattern met with three written strings is a question about three strings, and
+     * building the pattern to find that out is the spending the arrangement was for. So the leaf is
+     * the pattern as written, and whether a machine is ever made of it is settled by what the plan
+     * comes to and by what the position has left ({@link Realizer}).
+     *
+     * <p>Named by how it is written and not by what it accepts, for the same reason: two spellings
+     * of one language are told apart by building both, which is the question being deferred. So
+     * they are two leaves, which is also what they cost.
+     *
+     * @param plan what would be built, which is the pattern a rule stated or every string less the
+     *             pattern a rule denied
+     */
+    record Pattern(souther.compiler.regex.PatternPlan plan) implements AdmittedPlan {
+
+        public Pattern {
+            if (plan == null) {
+                throw new IllegalArgumentException("a pattern leaf names some pattern");
+            }
         }
     }
 
@@ -93,12 +115,23 @@ public sealed interface AdmittedPlan {
         }
     }
 
+    /**
+     * The parts, in the order a plan holds parts in.
+     *
+     * <p>Sorted by what each of them is ({@link PlanOrder}) rather than kept as they arrived. A set
+     * is equal to a set however either was filled, so two clauses stating the same rules the other
+     * way round are one plan already — but a set filled in two orders is walked in two orders, and
+     * whoever works the plan out does one thing before another. Held in an order the plan itself
+     * decides, what is built first is the same for the same plan, and so is what it costs.
+     */
     private static Set<AdmittedPlan> held(Set<AdmittedPlan> parts, String how) {
         if (parts == null || parts.size() < 2) {
             throw new IllegalArgumentException(
                     "a plan of one part is that part, so nothing here is " + how + " alone");
         }
-        return Collections.unmodifiableSet(new LinkedHashSet<>(parts));
+        List<AdmittedPlan> order = new ArrayList<>(parts);
+        order.sort(java.util.Comparator.comparing(PlanOrder::of));
+        return Collections.unmodifiableSet(new LinkedHashSet<>(order));
     }
 
     /** The plan that is one set already known. */

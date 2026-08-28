@@ -49,14 +49,27 @@ class WhatARuleCostsDoesNotTurnOnWhereItIsWrittenTest {
             "    invariant two = String.matches(\"x|b{300}\", value)",
             "    invariant three = value == \"x\"");
 
-    private static String model(List<Integer> order) {
+    /**
+     * The same three, with the third stated as a pattern rather than as a written value.
+     *
+     * <p>Which takes away the one thing that made the first set easy. A written value is met by
+     * asking it of the other sides, so a reading that puts the written values first is in the same
+     * place whatever order they arrived in — and a reading that did nothing else would pass the
+     * test above while every pair of patterns still met in the order somebody wrote them.
+     */
+    private static final List<String> ALL_PATTERNS = List.of(
+            "    invariant one = String.matches(\"x|a{300}\", value)",
+            "    invariant two = String.matches(\"x|b{300}\", value)",
+            "    invariant three = String.matches(\"x\", value)");
+
+    private static String model(List<String> rules, List<Integer> order) {
         StringBuilder out = new StringBuilder("module demo\n\ndata Code = String\n");
-        order.forEach(each -> out.append(RULES.get(each)).append('\n'));
+        order.forEach(each -> out.append(rules.get(each)).append('\n'));
         return out.toString();
     }
 
-    private static AdmissibleSet admitted(List<Integer> order) {
-        Compilation compilation = Compilation.ofSource(model(order), "Main");
+    private static AdmissibleSet admitted(List<String> rules, List<Integer> order) {
+        Compilation compilation = Compilation.ofSource(model(rules, order), "Main");
         compilation.answerEverything();
         assertEquals(List.of(), compilation.diagnostics().values().stream()
                 .flatMap(List::stream).map(each -> each.diagnostic().code()).toList(),
@@ -69,19 +82,44 @@ class WhatARuleCostsDoesNotTurnOnWhereItIsWrittenTest {
                 .admits(FieldDomains.THE_VALUE);
     }
 
+    private static final List<List<Integer>> ORDERS = List.of(
+            List.of(0, 1, 2), List.of(0, 2, 1), List.of(1, 0, 2),
+            List.of(1, 2, 0), List.of(2, 0, 1), List.of(2, 1, 0));
+
     /** The same three rules in every order, and one answer between them. */
     @Test
     void everyOrderOfTheSameRulesLeavesTheSameAnswer() {
-        List<List<Integer>> orders = List.of(
-                List.of(0, 1, 2), List.of(0, 2, 1), List.of(1, 0, 2),
-                List.of(1, 2, 0), List.of(2, 0, 1), List.of(2, 1, 0));
-        AdmissibleSet first = admitted(orders.get(0));
+        AdmissibleSet first = admitted(RULES, ORDERS.get(0));
 
-        for (List<Integer> order : orders) {
-            assertEquals(first, admitted(order),
+        for (List<Integer> order : ORDERS) {
+            assertEquals(first, admitted(RULES, order),
                     "the values and the account of them, written as " + order);
         }
         assertEquals(AdmissibleSet.READ_IN_FULL, first.completeness(),
                 "and every one of them is read in full, since nothing here has to be built");
+    }
+
+    /**
+     * And the same where every rule is a pattern, which is where the order is the whole of it.
+     *
+     * <p>Nothing can be hoisted here: all three sides are machines, so whichever two meet first is
+     * a machine somebody has to make, and the three ways of pairing them cost three different
+     * things. What is asserted is that the reading picks one of them from the rules and not from
+     * the writing — so the answer and the account of it are the same six times.
+     *
+     * <p>Not that it picks the cheapest. Which pairing is cheapest is a question about the machines
+     * and cannot be asked without building them, which is the spending being arranged; what a model
+     * is owed is that its answer does not turn on where its author put the rules.
+     */
+    @Test
+    void theSameHoldsWhereEveryRuleIsAPattern() {
+        AdmissibleSet first = admitted(ALL_PATTERNS, ORDERS.get(0));
+
+        for (List<Integer> order : ORDERS) {
+            assertEquals(first, admitted(ALL_PATTERNS, order),
+                    "the values and the account of them, written as " + order);
+        }
+        assertEquals(AdmissibleSet.READ_IN_FULL, first.completeness(),
+                "and the small one is met first, so nothing large is built");
     }
 }
