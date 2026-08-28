@@ -454,8 +454,8 @@ public final class FieldDomains {
     }
 
     /**
-     * The declaration whose clause could have moved where the coordinate at {@code path} stops, or
-     * null where none did.
+     * The declarations that moved where the coordinate at {@code path} stops, and none where the
+     * ones relating it to something else left it where it would be without them.
      *
      * <p>Which declaration wrote the relation, and not which value the position sits in. The same
      * relation can be written on the record, on a record inside it, or on a name wrapped round
@@ -464,8 +464,9 @@ public final class FieldDomains {
      *
      * <p>Several where several hold it, in one order whoever found them. Which of them settled the
      * number is not always a question this can answer — a bound arrives along a path through the
-     * differences and clauses can reach an end only together — and where it cannot, the set is what
-     * is known and is handed over as it is.
+     * differences and clauses can reach an end only together — and {@link EndNarrowing} says which
+     * of its questions an answer came out of, including the one where none of them told the
+     * candidates apart.
      */
     private List<TypeSymbol.AtModule> narrowedBy(String path, boolean lower) {
         List<TypeSymbol.AtModule> candidates = narrowers.get(path);
@@ -477,71 +478,21 @@ public final class FieldDomains {
         if (end == null) {
             return List.of();
         }
-        // Which of them is holding this end, asked by taking each away. A candidate is a declaration
-        // that wrote a relation about this coordinate, which is not the same as one that decided
-        // where it stops: a second relation reaching a value the first has already passed changes
-        // nothing, and naming it would make an edge's identity turn on a clause that moved it
-        // nowhere.
-        List<TypeSymbol.AtModule> held = new ArrayList<>();
-        for (TypeSymbol.AtModule each : candidates) {
-            if (!ends(end, without(each::equals), path, lower)) {
-                held.add(each);
-            }
-        }
-        if (!held.isEmpty()) {
-            return inDeclarationOrder(held);
-        }
-        // None on its own: two or more of them say what the edge says, and taking away any one
-        // leaves the others saying it. Which is not a reason to name one — each is as much the
-        // answer as the others — and not a reason to name all of them either. A candidate that
-        // moves this end nowhere when it is the only one left moved it nowhere here, and it is out
-        // whatever the rest of them are doing.
-        Endpoint bare = endOf(without(candidates::contains), path, lower);
-        List<TypeSymbol.AtModule> saying = new ArrayList<>();
-        for (TypeSymbol.AtModule each : candidates) {
-            if (!ends(bare, without(name -> candidates.contains(name) && !name.equals(each)),
-                    path, lower)) {
-                saying.add(each);
-            }
-        }
-        return inDeclarationOrder(saying.isEmpty() ? candidates : saying);
-    }
-
-    /** In one order, whoever found them. Several of these are one answer and the answer is what a
-     * line is told apart by, so an order read off the walk that collected them would make two
-     * readings of one edge into two lines.
-     *
-     * <p>The declaration's own order and not its name alone. Two declarations holding one end can be
-     * written in two modules — an inner record's clause and an outer record's reaching the same
-     * coordinate at the same value — and two modules may each declare a {@code Span}, so a name is
-     * not what tells those two apart. */
-    private static List<TypeSymbol.AtModule> inDeclarationOrder(List<TypeSymbol.AtModule> found) {
-        return found.stream().sorted().toList();
-    }
-
-    private Endpoint endOf(FieldDomains read, String path, boolean lower) {
-        NumericDomain.Bounds bounds = read.byField.get(path);
-        return bounds == null ? null : lower ? bounds.min() : bounds.max();
+        return EndNarrowing.read(end, candidates,
+                removed -> endWithout(removed, path, lower)).names();
     }
 
     /**
-     * Whether {@code end} is where {@code other} leaves this coordinate on the side asked for.
+     * Where the coordinate at {@code path} stops on the side asked for, read again without the
+     * clauses of the declarations {@code removed} names.
      *
-     * <p>Whether the end moved, which is a question about where the coordinate stops and not about
-     * what the two readings hold: {@link Endpoint#sameAs} and not a derived equality. The two are
-     * different questions here and not two spellings of one — a decimal's scale says which grid a
-     * quantity was rounded onto, so the layer these ends come from keeps representations apart where
-     * they carry something, and {@code 5} and {@code 5.00} are one place held two ways.
-     *
-     * <p>So this does not rest on every end arriving here already written the one way. Nothing
-     * states that, and the reading below is under no obligation to make it true.
-     *
-     * <p>An end neither reading has is the same absence, which is why a null on both sides is true
-     * here and is not {@link Endpoint#sameAs}'s answer: that one is asked of an end that is there.
+     * <p>The one way a counterfactual reading is asked for here. Which reading an end is compared
+     * against is the whole of what {@link EndNarrowing} means by an answer, and a second way of
+     * standing one up is a second place for that comparison to be written a different way round.
      */
-    private boolean ends(Endpoint end, FieldDomains other, String path, boolean lower) {
-        Endpoint theirs = endOf(other, path, lower);
-        return end == null ? theirs == null : end.sameAs(theirs);
+    private Endpoint endWithout(Set<TypeSymbol.AtModule> removed, String path, boolean lower) {
+        NumericDomain.Bounds bounds = without(removed::contains).byField.get(path);
+        return bounds == null ? null : lower ? bounds.min() : bounds.max();
     }
 
     /** This value read again without the clauses of the declarations {@code skip} names. */
@@ -1096,7 +1047,8 @@ public final class FieldDomains {
     public NarrowedBounds at(String path) {
         NumericDomain.Bounds here = byField.get(path);
         // The ends now and the names when they are asked for. Answering who holds an end reads this
-        // declaration again once per candidate that wrote a relation about the coordinate, and the
+        // declaration again without the clauses of every declaration that wrote a relation about
+        // the coordinate, and again per candidate where taking them away moved the end, and the
         // callers standing a fixture in a field's range ask a field at a time and read only the
         // ends.
         return here == null ? NarrowedBounds.NOTHING
